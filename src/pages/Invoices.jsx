@@ -251,6 +251,10 @@ export const Invoices = () => {
     const resolveTaxLabel = (item) => {
       if (item?.tax) return item.tax;
       const rate = Number(item?.taxRate ?? item?.tax_rate ?? 0);
+      const hasAnyTaxData =
+        rate > 0 ||
+        taxesRaw.some((t) => Number(t?.amount ?? 0) > 0 || Number(t?.taxRate ?? t?.tax_rate ?? 0) > 0);
+      if (!hasAnyTaxData) return 'Exempt';
       if (!rate) return 'CGST + SGST 18%';
       const hasIgst = taxesRaw.some((t) => String(t?.name || '').toUpperCase().includes('IGST'));
       if (hasIgst) return `IGST ${rate}%`;
