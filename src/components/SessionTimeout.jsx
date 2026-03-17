@@ -2,33 +2,43 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useLazyRefreshSessionQuery } from "../Services/apiSlice";
+import { useAuth } from "../contexts/AuthContext";
 
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
 const PING_INTERVAL_MS = 5 * 60 * 1000;
 
 const SessionTimeout = ({ children }) => {
   const navigate = useNavigate();
+  const { token, logout } = useAuth();
   const [isInitializing, setIsInitializing] = useState(true);
   const lastActivityRef = useRef(Date.now());
   const lastPingRef = useRef(Date.now());
+  const sessionVersionRef = useRef(0);
   const [triggerPing] = useLazyRefreshSessionQuery();
+  const logoutInProgressRef = useRef(false);
 
   const handleLogout = useCallback(() => {
-    sessionStorage.removeItem("token");
-    sessionStorage.removeItem("user");
+    if (logoutInProgressRef.current) return;
+    logoutInProgressRef.current = true;
 
-    navigate("/login");
+    logout();
+
+    navigate("/login", { replace: true });
     toast.error("Session Expired", {
       description: "You have been logged out due to inactivity.",
       duration: 5000,
     });
-  }, [navigate]);
+  }, [logout, navigate]);
 
-  const pingSession = useCallback(async () => {
+  const pingSession = useCallback(async (versionAtCall = sessionVersionRef.current) => {
     try {
       await triggerPing().unwrap();
     } catch (error) {
-      if ([401, 403, 405, 500].includes(error?.status)) {
+      // Ignore stale responses from previous sessions.
+      if (versionAtCall !== sessionVersionRef.current) return;
+
+      // Only auth failures should force logout.
+      if ([401, 403].includes(error?.status)) {
         handleLogout();
       } else {
         console.error("Session ping failed:", error);
@@ -42,25 +52,33 @@ const SessionTimeout = ({ children }) => {
 
     if (now - lastPingRef.current > PING_INTERVAL_MS) {
       lastPingRef.current = now;
-      pingSession();
+      pingSession(sessionVersionRef.current);
     }
   }, [pingSession]);
 
   useEffect(() => {
-    const token = sessionStorage.getItem("token");
     if (!token) {
+      logoutInProgressRef.current = false;
       setIsInitializing(false);
       return;
     }
 
-    pingSession().finally(() => {
+    setIsInitializing(true);
+    logoutInProgressRef.current = false;
+    sessionVersionRef.current += 1;
+    lastActivityRef.current = Date.now();
+    lastPingRef.current = Date.now();
+
+    const activeVersion = sessionVersionRef.current;
+    pingSession(activeVersion).finally(() => {
+      // Ignore stale completion from older sessions.
+      if (activeVersion !== sessionVersionRef.current) return;
       lastPingRef.current = Date.now();
       setIsInitializing(false);
     });
-  }, [pingSession]);
+  }, [token, pingSession]);
 
   useEffect(() => {
-    const token = sessionStorage.getItem("token");
     if (!token) return;
 
     const events = [
@@ -100,7 +118,7 @@ const SessionTimeout = ({ children }) => {
       clearInterval(intervalId);
       if (timeout) clearTimeout(timeout);
     };
-  }, [handleLogout, updateActivity]);
+  }, [token, handleLogout, updateActivity]);
 
   if (isInitializing) {
     return null;
