@@ -1,18 +1,20 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { useLoginMutation, useRegisterMutation } from '../Services/apiSlice';
+import { useCorporateLoginMutation, useLoginMutation, useRegisterMutation } from '../Services/apiSlice';
 
 const AuthContext = createContext(null);
+const AUTH_PROVIDER = import.meta.env.VITE_AUTH_PROVIDER ?? "ap";
 
 export const AuthProvider = ({ children }) => {
   const [loginMutation] = useLoginMutation();
+  const [corporateLoginMutation] = useCorporateLoginMutation();
   const [registerMutation] = useRegisterMutation();
   const [user, setUser] = useState(null);
-  const [token, setToken] = useState(localStorage.getItem('token'));
+  const [token, setToken] = useState(sessionStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('user');
-    const storedToken = localStorage.getItem('token');
+    const storedUser = sessionStorage.getItem('user');
+    const storedToken = sessionStorage.getItem('token');
     
     if (storedUser && storedToken) {
       setUser(JSON.parse(storedUser));
@@ -22,14 +24,36 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const login = async (email, password) => {
+    if (AUTH_PROVIDER === "corporate") {
+      const response = await corporateLoginMutation({ email, otp: password }).unwrap();
+      const tokenValue = response?.authToken;
+      const userData =
+        response?.user ||
+        response?.corporateUser ||
+        response?.data?.user ||
+        { name: email, role: "Admin" };
+
+      if (tokenValue) {
+        setToken(tokenValue);
+        setUser(userData);
+        sessionStorage.setItem("token", tokenValue);
+        sessionStorage.setItem("user", JSON.stringify(userData));
+        if (response?.validTill) {
+          sessionStorage.setItem("tokenExpiry", String(response.validTill));
+        }
+        return userData;
+      }
+      throw new Error("Corporate login did not return authToken");
+    }
+
     const response = await loginMutation({ email, password }).unwrap();
     const { access_token, user: userData } = response;
-    
+
     setToken(access_token);
     setUser(userData);
-    localStorage.setItem('token', access_token);
-    localStorage.setItem('user', JSON.stringify(userData));
-    
+    sessionStorage.setItem("token", access_token);
+    sessionStorage.setItem("user", JSON.stringify(userData));
+
     return userData;
   };
 
@@ -39,8 +63,8 @@ export const AuthProvider = ({ children }) => {
     
     setToken(access_token);
     setUser(userData);
-    localStorage.setItem('token', access_token);
-    localStorage.setItem('user', JSON.stringify(userData));
+    sessionStorage.setItem('token', access_token);
+    sessionStorage.setItem('user', JSON.stringify(userData));
     
     return userData;
   };
@@ -48,8 +72,9 @@ export const AuthProvider = ({ children }) => {
   const logout = () => {
     setToken(null);
     setUser(null);
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+    sessionStorage.removeItem('token');
+    sessionStorage.removeItem('user');
+    sessionStorage.removeItem('tokenExpiry');
   };
 
   return (

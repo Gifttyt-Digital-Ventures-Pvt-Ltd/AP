@@ -20,6 +20,8 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { useSidebar } from '../components/Layout';
 
+const FILE_BASE_URL = import.meta.env.VITE_BACKEND_URL ?? '';
+
 // GST Treatment Options
 const GST_TREATMENTS = [
   { value: 'Regular', label: 'Regular' },
@@ -78,11 +80,9 @@ const INVOICE_SOURCES = [
 export const Invoices = () => {
   const {
     data: invoicesData = [],
-    refetch: refetchInvoices,
   } = useGetInvoicesQuery();
   const {
     data: vendorsData = [],
-    refetch: refetchVendors,
   } = useGetVendorsQuery();
   const [scanInvoice] = useScanInvoiceMutation();
   const [bulkUploadInvoices] = useBulkUploadInvoicesMutation();
@@ -112,6 +112,8 @@ export const Invoices = () => {
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [uploadPreviewError, setUploadPreviewError] = useState(false);
+  const [viewPreviewError, setViewPreviewError] = useState(false);
   
   // Enhanced form data for both upload and edit
   const [formData, setFormData] = useState(null);
@@ -120,6 +122,28 @@ export const Invoices = () => {
   const [invoiceHistory, setInvoiceHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [viewTab, setViewTab] = useState('details');
+  const [bulkPreviewOpen, setBulkPreviewOpen] = useState(false);
+  const [bulkPreviewItems, setBulkPreviewItems] = useState([]);
+  const [bulkCreating, setBulkCreating] = useState(false);
+  const [bulkEditOpen, setBulkEditOpen] = useState(false);
+  const [bulkEditItemId, setBulkEditItemId] = useState('');
+  const [bulkEditForm, setBulkEditForm] = useState(null);
+  const [bulkEditPreviewError, setBulkEditPreviewError] = useState(false);
+  const [bulkEditFileURL, setBulkEditFileURL] = useState(null);
+
+  const openSingleFilePicker = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
+  };
+
+  const openBulkFilePicker = () => {
+    if (bulkFileInputRef.current) {
+      bulkFileInputRef.current.value = '';
+      bulkFileInputRef.current.click();
+    }
+  };
 
   // Hide/show sidebar based on mode
   useEffect(() => {
@@ -133,21 +157,29 @@ export const Invoices = () => {
     setHideSidebar(editDialogOpen);
   }, [editDialogOpen, setHideSidebar]);
 
-  const fetchInvoices = async () => {
-    try {
-      await refetchInvoices();
-    } catch {
-      toast.error('Failed to load invoices');
-    }
-  };
+  useEffect(() => {
+    setUploadPreviewError(false);
+  }, [uploadedFileURL, uploadedFile]);
 
-  const fetchVendors = async () => {
-    try {
-      await refetchVendors();
-    } catch {
-      console.error('Failed to fetch vendors');
+  useEffect(() => {
+    setViewPreviewError(false);
+  }, [selectedInvoice, viewDialogOpen]);
+
+  useEffect(() => {
+    if (!bulkEditOpen || !bulkEditItemId) {
+      setBulkEditFileURL(null);
+      return;
     }
-  };
+    const selected = bulkPreviewItems.find((item) => item.id === bulkEditItemId);
+    if (!selected?.file) {
+      setBulkEditFileURL(null);
+      return;
+    }
+    const url = URL.createObjectURL(selected.file);
+    setBulkEditFileURL(url);
+    return () => URL.revokeObjectURL(url);
+  }, [bulkEditOpen, bulkEditItemId, bulkPreviewItems]);
+
 
   // Check if vendor exists in system
   const findVendorByName = (vendorName) => {
@@ -157,40 +189,180 @@ export const Invoices = () => {
     );
   };
 
+  const normalizeScannedInvoice = (scanResponse = {}) => {
+    const toDateOnly = (value) => {
+      if (!value) return '';
+      const d = new Date(value);
+      return Number.isNaN(d.getTime()) ? '' : format(d, 'yyyy-MM-dd');
+    };
+
+    const lineItemsRaw = Array.isArray(scanResponse?.line_items)
+      ? scanResponse.line_items
+      : Array.isArray(scanResponse?.items)
+        ? scanResponse.items
+        : [];
+    const taxesRaw = Array.isArray(scanResponse?.taxes) ? scanResponse.taxes : [];
+
+    const resolveTaxLabel = (item) => {
+      if (item?.tax) return item.tax;
+      const rate = Number(item?.taxRate ?? item?.tax_rate ?? 0);
+      if (!rate) return 'CGST + SGST 18%';
+      const hasIgst = taxesRaw.some((t) => String(t?.name || '').toUpperCase().includes('IGST'));
+      if (hasIgst) return `IGST ${rate}%`;
+      return `CGST + SGST ${rate}%`;
+    };
+
+    const lineItems = lineItemsRaw.map((item) => {
+      const quantity = Number(item?.quantity ?? item?.qty ?? 1) || 1;
+      const unitPrice = Number(item?.unit_price ?? item?.unitPrice ?? item?.price ?? 0) || 0;
+      const amount = Number(item?.amount ?? item?.lineTotal ?? quantity * unitPrice) || 0;
+      return {
+        description: item?.description ?? item?.name ?? '',
+        quantity,
+        unit_price: unitPrice,
+        amount,
+        hsn_sac: item?.hsn_sac ?? item?.hsnSac ?? '',
+        tax: resolveTaxLabel(item),
+      };
+    });
+
+    const computedAmount = lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+
+    return {
+      vendor_name: scanResponse?.vendor_name ?? scanResponse?.vendorName ?? scanResponse?.merchant ?? '',
+      vendor_gstin: scanResponse?.vendor_gstin ?? scanResponse?.vendorGstin ?? '',
+      vendor_address:
+        scanResponse?.address ??
+        scanResponse?.vendor_address ??
+        scanResponse?.vendorAddress ??
+        '',
+      invoice_number: scanResponse?.invoice_number ?? scanResponse?.invoiceNumber ?? '',
+      invoice_date:
+        toDateOnly(scanResponse?.invoice_date ?? scanResponse?.invoiceDate ?? scanResponse?.datetime) ||
+        format(new Date(), 'yyyy-MM-dd'),
+      due_date:
+        toDateOnly(scanResponse?.due_date ?? scanResponse?.dueDate ?? scanResponse?.datetime) ||
+        format(new Date(), 'yyyy-MM-dd'),
+      line_items: lineItems,
+      amount: Number(scanResponse?.amount ?? scanResponse?.total ?? scanResponse?.subtotal ?? computedAmount) || 0,
+      currency: scanResponse?.currency ?? 'INR',
+      file_id: scanResponse?.file_id ?? scanResponse?.fileId ?? null,
+      file_hash: scanResponse?.file_hash ?? scanResponse?.fileHash ?? null,
+      original_filename: scanResponse?.original_filename ?? scanResponse?.originalFileName ?? null,
+    };
+  };
+
+  const toCreateInvoicePayload = (invoiceData = {}) => ({
+    vendor_name: invoiceData.vendor_name || '',
+    invoice_number: invoiceData.invoice_number || '',
+    vendor_id: invoiceData.vendor_id || findVendorByName(invoiceData.vendor_name)?.id || '',
+    invoice_date: invoiceData.invoice_date || format(new Date(), 'yyyy-MM-dd'),
+    due_date: invoiceData.due_date || format(new Date(), 'yyyy-MM-dd'),
+    amount: Number(invoiceData.amount || 0),
+    currency: invoiceData.currency || 'INR',
+    billing_address: invoiceData.billing_address || invoiceData.vendor_address || '',
+    gstin: invoiceData.gstin || invoiceData.vendor_gstin || '',
+    source_of_supply: invoiceData.source_of_supply || invoiceData.place_of_supply || '',
+    destination_of_supply: invoiceData.destination_of_supply || invoiceData.place_of_supply || '',
+    location: invoiceData.location || invoiceData.place_of_supply || '',
+    line_items: (invoiceData.line_items || []).map((item) => ({
+      description: item.description || '',
+      quantity: Number(item.quantity || 1),
+      unit_price: Number(item.unit_price ?? item.amount ?? 0),
+      amount: Number(item.amount ?? (Number(item.quantity || 1) * Number(item.unit_price ?? 0))),
+    })),
+    memo: invoiceData.notes?.join?.('\n') || '',
+    file_id: invoiceData.file_id || null,
+    file_hash: invoiceData.file_hash || null,
+    original_file_name: invoiceData.original_filename || null,
+    source: 'Upload',
+    source_email: null,
+    file_category: 'Expense Invoice',
+  });
+
+  const toLocalDateTimeString = (value) => {
+    if (!value) return value;
+    if (typeof value !== 'string') return value;
+    return /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value;
+  };
+
+  const buildInvoiceMultipartPayload = (invoicePayload, file = null) => {
+    const multipartPayload = new FormData();
+    if (file) {
+      multipartPayload.append('file', file);
+    }
+    multipartPayload.append(
+      'invoice',
+      new Blob(
+        [
+          JSON.stringify({
+            invoiceNumber: invoicePayload.invoice_number,
+            vendorId: invoicePayload.vendor_id || null,
+            invoiceDate: toLocalDateTimeString(invoicePayload.invoice_date),
+            dueDate: toLocalDateTimeString(invoicePayload.due_date),
+            amount: invoicePayload.amount,
+            currency: invoicePayload.currency,
+            lineItems: (invoicePayload.line_items || []).map((item) => ({
+              description: item.description,
+              quantity: item.quantity,
+              unitPrice: item.unit_price,
+              amount: item.amount,
+            })),
+            memo: invoicePayload.memo || '',
+            fileId: invoicePayload.file_id || null,
+            fileHash: invoicePayload.file_hash || null,
+            originalFileName: invoicePayload.original_file_name || file?.name || null,
+            source: invoicePayload.source,
+            sourceEmail: invoicePayload.source_email,
+            fileCategory: invoicePayload.file_category,
+          }),
+        ],
+        { type: 'application/json' }
+      )
+    );
+    return multipartPayload;
+  };
+
   // Initialize form data for new invoice
   const initializeFormData = (extractedData = null) => {
     const matchedVendor = extractedData?.vendor_name ? findVendorByName(extractedData.vendor_name) : null;
-    
+    const notesText = Array.isArray(extractedData?.notes) ? extractedData.notes.join('\n') : '';
+    const extractedGstin = extractedData?.billing_gstin || extractedData?.vendor_gstin || '';
+    const extractedAddress =
+      extractedData?.address ||
+      extractedData?.vendor_address ||
+      extractedData?.billing_address ||
+      '';
     return {
       vendor_name: extractedData?.vendor_name || '',
       vendor_id: matchedVendor?.id || '',
       vendor_matched: !!matchedVendor,
-      vendor_gstin: extractedData?.vendor_gstin || '',
-      vendor_address: extractedData?.vendor_address || '',
+      vendor_gstin: extractedData?.vendor_gstin || extractedData?.billing_gstin || '',
+      vendor_address: extractedAddress,
       invoice_number: extractedData?.invoice_number || '',
       invoice_date: extractedData?.invoice_date || format(new Date(), 'yyyy-MM-dd'),
       due_date: extractedData?.due_date || format(new Date(), 'yyyy-MM-dd'),
-      billing_address: extractedData?.vendor_address || '',
-      gst_treatment: 'Regular',
-      gstin: extractedData?.vendor_gstin || '',
-      source_of_supply: 'Karnataka',
-      destination_of_supply: 'Karnataka',
-      location: 'Karnataka Registration',
-      reverse_charges: 'Not Applicable',
-      discounts_level: 'At Line Item Level',
-      file_category: 'Expense Invoice',
-      source: 'Upload',
+      billing_address: extractedAddress,
+      gst_treatment: extractedData?.gst_treatment || 'Regular',
+      gstin: extractedGstin,
+      source_of_supply: extractedData?.source_of_supply || extractedData?.place_of_supply || '',
+      destination_of_supply: extractedData?.destination_of_supply || extractedData?.place_of_supply || '',
+      location: extractedData?.location || extractedData?.place_of_supply || '',
+      reverse_charges: extractedData?.reverse_charges || 'Not Applicable',
+      discounts_level: extractedData?.discounts_level || 'At Line Item Level',
+      file_category: extractedData?.file_category || 'Expense Invoice',
+      source: extractedData?.source || 'Upload',
       source_email: '',
       line_items: extractedData?.line_items?.length > 0 ? extractedData.line_items.map(item => ({
         description: item.description || '',
-        ledger: 'Cloud Services',
-        tax: 'CGST + SGST 18%',
+        ledger: item.ledger || 'Cloud Services',
+        tax: item.tax || 'CGST + SGST 18%',
         quantity: item.quantity || 1,
         unit_rate: item.unit_price || item.amount || 0,
-        discount: 0,
-        discount_type: '%',
-        hsn_sac: '',
-        eligible_for_itc: true
+        discount: item.discount || 0,
+        discount_type: item.discount_type || '%',
+        hsn_sac: item.hsn_sac || '',
+        eligible_for_itc: item.eligible_for_itc ?? true
       })) : [{
         description: '',
         ledger: 'Cloud Services',
@@ -202,7 +374,7 @@ export const Invoices = () => {
         hsn_sac: '',
         eligible_for_itc: true
       }],
-      description: '',
+      description: extractedData?.description || notesText || '',
       tds: '',
       amount: extractedData?.amount || 0,
       currency: extractedData?.currency || 'INR',
@@ -227,16 +399,30 @@ export const Invoices = () => {
 
     try {
       const response = await scanInvoice(formDataUpload).unwrap();
+      const normalizedResponse =
+        response?.data ??
+        response?.result ??
+        response?.extracted_data ??
+        response;
 
-      setExtractedData(response);
-      setFormData(initializeFormData(response));
+      if (!normalizedResponse || typeof normalizedResponse !== 'object') {
+        throw new Error('Scan API returned empty response');
+      }
+
+      const extractedInvoice = normalizeScannedInvoice(normalizedResponse);
+      setExtractedData(extractedInvoice);
+      setFormData(initializeFormData(extractedInvoice));
       toast.success('Invoice scanned successfully!');
     } catch (error) {
       console.error('Scan error:', error);
       setExtractedData(null);
       setFormData(initializeFormData());
       
-      const errorMessage = error?.data?.detail || 'Failed to scan invoice';
+      const errorMessage =
+        error?.data?.detail ||
+        error?.data?.message ||
+        error?.message ||
+        'Failed to scan invoice';
       toast.error(
         <div className="space-y-2">
           <p className="font-bold text-base">Scan Failed!</p>
@@ -263,26 +449,166 @@ export const Invoices = () => {
     try {
       const response = await bulkUploadInvoices(formDataUpload).unwrap();
 
-      const { total, successful, results } = response;
-      toast.success(`Successfully uploaded ${successful} of ${total} invoices`, { duration: 5000 });
+      const total = Number(response?.total ?? 0);
+      const successful = Number(response?.successful ?? 0);
+      const results = Array.isArray(response?.results) ? response.results : [];
 
-      const failures = results.filter(r => r.status === 'failed');
-      failures.forEach(failure => {
-        toast.error(
-          <div className="space-y-2">
-            <p className="font-bold text-sm">X {failure.filename}</p>
-            <p className="text-xs whitespace-pre-line">{failure.error}</p>
-          </div>,
-          { duration: 8000 }
-        );
+      const normalizedResults = results.map((r) => ({
+        ...r,
+        status: (r?.status || '').toLowerCase(),
+        extracted: r?.extractedData ?? r?.extracted_data ?? null,
+      }));
+
+      const fileMap = new Map(
+        Array.from(files).map((file) => [String(file.name || '').toLowerCase(), file])
+      );
+
+      const previewItems = normalizedResults.map((result, index) => {
+        const isExtracted = result.status === 'success' && result.extracted && typeof result.extracted === 'object';
+        const normalizedInvoice = isExtracted ? normalizeScannedInvoice(result.extracted) : null;
+        const invoicePayload = normalizedInvoice ? toCreateInvoicePayload(normalizedInvoice) : null;
+        const matchingFile = fileMap.get(String(result?.filename || '').toLowerCase()) || null;
+        const vendorMissing = Boolean(invoicePayload) && !invoicePayload.vendor_id;
+        return {
+          id: `${result?.filename || 'file'}-${index}`,
+          filename: result?.filename || 'Unknown file',
+          status: result.status,
+          error: vendorMissing
+            ? `Vendor "${normalizedInvoice?.vendor_name || 'Unknown'}" not found`
+            : (result?.error || result?.message || ''),
+          selected: Boolean(invoicePayload && !vendorMissing),
+          invoicePayload,
+          file: matchingFile,
+        };
       });
 
-      fetchInvoices();
-      setActiveTab('list');
+      setBulkPreviewItems(previewItems);
+      setBulkPreviewOpen(true);
+      toast.success(`Extracted ${successful} of ${total} files. Review and confirm to create invoices.`, {
+        duration: 5000,
+      });
     } catch (error) {
       const errorMessage = error?.data?.detail || 'Bulk upload failed';
       toast.error(errorMessage, { duration: 6000 });
     }
+  };
+
+  const handleCreateBulkInvoices = async () => {
+    const selectedItems = bulkPreviewItems.filter((item) => item.selected && item.invoicePayload);
+    if (selectedItems.length === 0) {
+      toast.error('No extracted invoices selected for creation');
+      return;
+    }
+
+    setBulkCreating(true);
+    try {
+      const outcomes = await Promise.allSettled(
+        selectedItems.map((item) =>
+          createInvoice(buildInvoiceMultipartPayload(item.invoicePayload, item.file)).unwrap()
+        )
+      );
+      const createdCount = outcomes.filter((o) => o.status === 'fulfilled').length;
+      const failedCount = outcomes.length - createdCount;
+
+      toast.success(
+        `Created ${createdCount} invoice${createdCount === 1 ? '' : 's'}${failedCount ? `, ${failedCount} failed` : ''}.`,
+        { duration: 5000 }
+      );
+
+      if (failedCount > 0) {
+        outcomes.forEach((outcome, index) => {
+          if (outcome.status === 'rejected') {
+            const item = selectedItems[index];
+            toast.error(`Failed: ${item.filename}`);
+          }
+        });
+      }
+
+      setBulkPreviewOpen(false);
+      setBulkPreviewItems([]);
+      setActiveTab('list');
+    } finally {
+      setBulkCreating(false);
+    }
+  };
+
+  const openBulkEditDialog = (item) => {
+    if (!item?.invoicePayload) return;
+    setBulkEditPreviewError(false);
+    setBulkEditItemId(item.id);
+    setBulkEditForm({
+      vendor_name: item.invoicePayload.vendor_name || '',
+      invoice_number: item.invoicePayload.invoice_number || '',
+      invoice_date: item.invoicePayload.invoice_date || format(new Date(), 'yyyy-MM-dd'),
+      due_date: item.invoicePayload.due_date || format(new Date(), 'yyyy-MM-dd'),
+      amount: Number(item.invoicePayload.amount || 0),
+      currency: item.invoicePayload.currency || 'INR',
+      billing_address: item.invoicePayload.billing_address || '',
+      gstin: item.invoicePayload.gstin || '',
+      source_of_supply: item.invoicePayload.source_of_supply || '',
+      destination_of_supply: item.invoicePayload.destination_of_supply || '',
+      location: item.invoicePayload.location || '',
+      memo: item.invoicePayload.memo || '',
+      line_items: (item.invoicePayload.line_items || []).map((line) => ({
+        description: line.description || '',
+        quantity: Number(line.quantity || 1),
+        unit_price: Number(line.unit_price || 0),
+        amount: Number(line.amount || (Number(line.quantity || 1) * Number(line.unit_price || 0))),
+        hsn_sac: line.hsn_sac || '',
+        tax: line.tax || 'CGST + SGST 18%',
+      })),
+    });
+    setBulkEditOpen(true);
+  };
+
+  const updateBulkEditLineItem = (index, field, value) => {
+    setBulkEditForm((prev) => {
+      if (!prev) return prev;
+      const nextLines = prev.line_items.map((line, i) => {
+        if (i !== index) return line;
+        const updated = { ...line, [field]: value };
+        if (field === 'quantity' || field === 'unit_price') {
+          updated.amount = Number(updated.quantity || 0) * Number(updated.unit_price || 0);
+        }
+        return updated;
+      });
+      return { ...prev, line_items: nextLines };
+    });
+  };
+
+  const saveBulkEditChanges = () => {
+    if (!bulkEditForm || !bulkEditItemId) return;
+    const matchedVendorId = findVendorByName(bulkEditForm.vendor_name)?.id || '';
+    setBulkPreviewItems((prev) =>
+      prev.map((item) => {
+        if (item.id !== bulkEditItemId) return item;
+        const updatedPayload = {
+          ...item.invoicePayload,
+          ...bulkEditForm,
+          vendor_id: matchedVendorId,
+          line_items: bulkEditForm.line_items.map((line) => ({
+            description: line.description,
+            quantity: Number(line.quantity || 0),
+            unit_price: Number(line.unit_price || 0),
+            amount: Number(line.amount || 0),
+            hsn_sac: line.hsn_sac || '',
+            tax: line.tax || 'CGST + SGST 18%',
+          })),
+        };
+        const vendorMissing = !matchedVendorId;
+        return {
+          ...item,
+          invoicePayload: updatedPayload,
+          selected: !vendorMissing,
+          error: vendorMissing
+            ? `Vendor "${bulkEditForm.vendor_name || 'Unknown'}" not found`
+            : '',
+        };
+      })
+    );
+    setBulkEditOpen(false);
+    setBulkEditForm(null);
+    setBulkEditItemId('');
   };
 
   // Calculate line item subtotal
@@ -377,7 +703,6 @@ export const Invoices = () => {
       const response = await createVendor(vendorData).unwrap();
       
       // Update vendors list
-      await fetchVendors();
       
       // Update form with new vendor ID
       setFormData(prev => ({
@@ -409,38 +734,48 @@ export const Invoices = () => {
     if (!formData) return;
 
     const totals = calculateTotals(formData.line_items);
+    const invoicePayload = {
+      invoice_number: formData.invoice_number,
+      vendor_id: formData.vendor_id || '',
+      invoice_date: formData.invoice_date,
+      due_date: formData.due_date,
+      amount: totals.total,
+      currency: formData.currency || 'INR',
+      line_items: formData.line_items.map(item => ({
+        description: item.description,
+        quantity: item.quantity,
+        unit_price: item.unit_rate,
+        amount: calculateLineItemSubtotal(item)
+      })),
+      memo: formData.description,
+      file_id: formData.file_id,
+      file_hash: formData.file_hash,
+      original_file_name: formData.original_file_name,
+      source: formData.source || 'Upload',
+      source_email: formData.source === 'Email' ? formData.source_email : null,
+      file_category: formData.file_category || 'Expense Invoice'
+    };
+    if (!invoicePayload.vendor_id) {
+      toast.error('Please select or add a vendor before creating invoice');
+      return;
+    }
 
     try {
-      await createInvoice({
-        invoice_number: formData.invoice_number,
-        vendor_id: formData.vendor_id || '',
-        invoice_date: formData.invoice_date,
-        due_date: formData.due_date,
-        amount: totals.total,
-        currency: formData.currency || 'INR',
-        line_items: formData.line_items.map(item => ({
-          description: item.description,
-          quantity: item.quantity,
-          unit_price: item.unit_rate,
-          amount: calculateLineItemSubtotal(item)
-        })),
-        memo: formData.description,
-        file_id: formData.file_id,
-        file_hash: formData.file_hash,
-        original_file_name: formData.original_file_name,
-        source: formData.source || 'Upload',
-        source_email: formData.source === 'Email' ? formData.source_email : null,
-        file_category: formData.file_category || 'Expense Invoice'
-      }).unwrap();
+      if (uploadedFile) {
+        const multipartPayload = buildInvoiceMultipartPayload(invoicePayload, uploadedFile);
+        await createInvoice(multipartPayload).unwrap();
+      } else {
+        await createInvoice(invoicePayload).unwrap();
+      }
 
       toast.success('Invoice added successfully');
-      fetchInvoices();
       setUploadedFile(null);
       setUploadedFileURL(null);
       setExtractedData(null);
       setFormData(null);
       setActiveTab('list');
     } catch (error) {
+      console.log(error)
       const errorMessage = error?.data?.detail || 'Failed to add invoice';
       toast.error(
         <div className="space-y-2">
@@ -461,15 +796,58 @@ export const Invoices = () => {
     setLoadingHistory(true);
     try {
       const response = await getInvoiceHistory(invoice.id).unwrap();
-      setInvoiceHistory(Array.isArray(response) ? response : []);
+      const rawHistory = Array.isArray(response)
+        ? response
+        : Array.isArray(response?.history)
+          ? response.history
+          : Array.isArray(response?.data)
+            ? response.data
+            : Array.isArray(response?.results)
+              ? response.results
+              : Array.isArray(response?.content)
+                ? response.content
+                : [];
+
+      const normalizedHistory = rawHistory.map((entry, index) => ({
+        id:
+          entry.id ||
+          entry.recordId ||
+          `${entry.userId || entry.user_id || 'user'}-${entry.timestamp || index}-${index}`,
+        action_type: entry.action_type || entry.actionType || entry.action || 'Updated',
+        action_description:
+          entry.action_description ||
+          entry.actionDescription ||
+          `${entry.action || entry.actionType || 'Updated'} by ${
+            entry.userName || entry.user_name || 'User'
+          }`,
+        timestamp: entry.timestamp || entry.createdAt || new Date().toISOString(),
+        user_name: entry.user_name || entry.userName || 'Unknown',
+        user_role: entry.user_role || entry.userRole || entry.level || '-',
+        changes: Array.isArray(entry.changes) ? entry.changes : [],
+      }));
+      setInvoiceHistory(normalizedHistory);
     } catch (error) {
       console.error('Failed to fetch invoice history:', error);
+      toast.error('Failed to load invoice history');
     } finally {
       setLoadingHistory(false);
     }
   };
 
   const handleEditInvoice = (invoice) => {
+    const sourceOfSupply =
+      invoice.source_of_supply ||
+      invoice.place_of_supply ||
+      '';
+    const destinationOfSupply =
+      invoice.destination_of_supply ||
+      invoice.place_of_supply ||
+      '';
+    const locationValue =
+      invoice.location ||
+      invoice.place_of_supply ||
+      '';
+
     setSelectedInvoice(invoice);
     setFormData({
       vendor_name: invoice.vendor_name || '',
@@ -477,27 +855,27 @@ export const Invoices = () => {
       invoice_number: invoice.invoice_number,
       invoice_date: format(new Date(invoice.invoice_date), 'yyyy-MM-dd'),
       due_date: format(new Date(invoice.due_date), 'yyyy-MM-dd'),
-      billing_address: '',
-      gst_treatment: 'Regular',
-      gstin: '',
-      source_of_supply: 'Karnataka',
-      destination_of_supply: 'Karnataka',
-      location: 'Karnataka Registration',
-      reverse_charges: 'Not Applicable',
-      discounts_level: 'At Line Item Level',
+      billing_address: invoice.billing_address || invoice.vendor_address || '',
+      gst_treatment: invoice.gst_treatment || 'Regular',
+      gstin: invoice.gstin || invoice.vendor_gstin || '',
+      source_of_supply: sourceOfSupply,
+      destination_of_supply: destinationOfSupply,
+      location: locationValue,
+      reverse_charges: invoice.reverse_charges || 'Not Applicable',
+      discounts_level: invoice.discounts_level || 'At Line Item Level',
       file_category: invoice.file_category || 'Expense Invoice',
       source: invoice.source || 'Upload',
       source_email: invoice.source_email || '',
       line_items: invoice.line_items?.length > 0 ? invoice.line_items.map(item => ({
         description: item.description || '',
-        ledger: 'Cloud Services',
-        tax: 'CGST + SGST 18%',
+        ledger: item.ledger || 'Cloud Services',
+        tax: item.tax || 'CGST + SGST 18%',
         quantity: item.quantity || 1,
         unit_rate: item.unit_price || item.amount || 0,
-        discount: 0,
-        discount_type: '%',
-        hsn_sac: '',
-        eligible_for_itc: true
+        discount: item.discount || 0,
+        discount_type: item.discount_type || '%',
+        hsn_sac: item.hsn_sac || '',
+        eligible_for_itc: item.eligible_for_itc ?? true
       })) : [{
         description: '',
         ledger: 'Cloud Services',
@@ -530,6 +908,12 @@ export const Invoices = () => {
           invoice_date: new Date(formData.invoice_date).toISOString(),
           due_date: new Date(formData.due_date).toISOString(),
           amount: totals.total,
+          line_items: formData.line_items.map((item) => ({
+            description: item.description,
+            quantity: item.quantity,
+            unit_price: item.unit_rate,
+            amount: calculateLineItemSubtotal(item),
+          })),
           memo: formData.description,
           file_category: formData.file_category,
           source: formData.source,
@@ -538,7 +922,6 @@ export const Invoices = () => {
       }).unwrap();
 
       toast.success('Invoice updated successfully');
-      fetchInvoices();
       setEditDialogOpen(false);
       setSelectedInvoice(null);
       setFormData(null);
@@ -555,7 +938,6 @@ export const Invoices = () => {
     try {
       await deleteInvoice(invoice.id).unwrap();
       toast.success('Invoice deleted successfully');
-      fetchInvoices();
     } catch (error) {
       toast.error('Failed to delete invoice');
     }
@@ -604,9 +986,22 @@ export const Invoices = () => {
   );
 
   // Get file URL for invoice preview - either from uploaded file or backend
+  const withBaseUrl = (url) => {
+    if (!url) return null;
+    if (typeof url !== 'string') return null;
+    if (url.startsWith('http://') || url.startsWith('https://')) return url;
+    return `${FILE_BASE_URL}${url.startsWith('/') ? url : `/${url}`}`;
+  };
+
   const getInvoiceFileUrl = (invoice) => {
+    if (invoice?.invoice_file_url) {
+      return withBaseUrl(invoice.invoice_file_url);
+    }
+    if (invoice?.receipt_file_url) {
+      return withBaseUrl(invoice.receipt_file_url);
+    }
     if (invoice?.file_id) {
-      return `/api/files/${invoice.file_id}`;
+      return withBaseUrl(`/files/${invoice.file_id}`);
     }
     return null;
   };
@@ -622,16 +1017,21 @@ export const Invoices = () => {
     return imageExtensions.some(ext => filename?.toLowerCase().endsWith(ext));
   };
 
-  // PDF Preview Component
-  const PDFPreview = ({ fileURL, file, zoom = 100, invoice = null }) => {
-    const [imageError, setImageError] = React.useState(false);
-    
+  // PDF preview renderer (avoid inline component remounts that can cause flicker)
+  const renderPdfPreview = ({
+    fileURL,
+    file,
+    zoom = 100,
+    invoice = null,
+    imageError = false,
+    setImageError = () => {},
+  } = {}) => {
     // Determine the actual URL to use
     const displayUrl = fileURL || getInvoiceFileUrl(invoice);
     const fileName = file?.name || invoice?.original_file_name || 'Invoice.pdf';
     const isPdf = file?.type?.includes('pdf') || isPdfFile(fileName);
     const isImage = file?.type?.includes('image') || isImageFile(fileName);
-    const hasFile = displayUrl && (file || invoice?.file_id);
+    const hasFile = Boolean(displayUrl);
 
     return (
       <div className="bg-gray-100 rounded-lg overflow-hidden h-full flex flex-col">
@@ -686,8 +1086,8 @@ export const Invoices = () => {
     );
   };
 
-  // Invoice Form Component (for both upload and edit) - Compact Design
-  const InvoiceForm = ({ isEdit = false, hideActions = false }) => {
+  // Invoice form renderer (avoid inline component remounts that can steal input focus)
+  const renderInvoiceForm = ({ isEdit = false, hideActions = false } = {}) => {
     if (!formData) return null;
     const totals = calculateTotals(formData.line_items);
 
@@ -1174,14 +1574,28 @@ export const Invoices = () => {
           <p className="text-muted-foreground">Upload and manage all invoices</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={() => bulkFileInputRef.current?.click()} data-testid="bulk-upload-button">
+          <Button
+            variant="outline"
+            onClick={openBulkFilePicker}
+            data-testid="bulk-upload-button"
+            disabled={scanning}
+          >
             <Upload className="h-4 w-4 mr-2" />
             Bulk Upload
           </Button>
           <input ref={bulkFileInputRef} type="file" accept="image/*,.pdf" multiple onChange={handleBulkFileUpload} className="hidden" />
-          <Button onClick={() => fileInputRef.current?.click()} data-testid="upload-invoice-button">
-            <Sparkles className="h-4 w-4 mr-2" />
-            Upload Invoice
+          <Button onClick={openSingleFilePicker} data-testid="upload-invoice-button" disabled={scanning}>
+            {scanning ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                Extracting...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4 mr-2" />
+                Upload Invoice
+              </>
+            )}
           </Button>
           <input ref={fileInputRef} type="file" accept="image/*,.pdf" onChange={handleSingleFileUpload} className="hidden" />
         </div>
@@ -1309,9 +1723,15 @@ export const Invoices = () => {
                 </Button>
               </div>
               
-              <div className="grid grid-cols-1 lg:grid-cols-[35%_65%] gap-3 h-[calc(100%-40px)]">
+              <div className="relative grid grid-cols-1 lg:grid-cols-[35%_65%] gap-3 h-[calc(100%-40px)]">
                 {/* Left: PDF Preview (35% width) */}
-                <PDFPreview fileURL={uploadedFileURL} file={uploadedFile} zoom={pdfZoom} />
+                {renderPdfPreview({
+                  fileURL: uploadedFileURL,
+                  file: uploadedFile,
+                  zoom: pdfZoom,
+                  imageError: uploadPreviewError,
+                  setImageError: setUploadPreviewError,
+                })}
 
               {/* Right: Form (65% width) */}
               <div className="bg-white rounded-lg border shadow-sm p-4 flex flex-col overflow-hidden">
@@ -1323,7 +1743,7 @@ export const Invoices = () => {
                 ) : (
                   <>
                     <div className="flex-1 overflow-y-auto pr-2">
-                      <InvoiceForm isEdit={false} hideActions={true} />
+                      {renderInvoiceForm({ isEdit: false, hideActions: true })}
                     </div>
                     {/* Fixed Action Buttons at Bottom */}
                     <div className="flex gap-3 pt-4 mt-4 border-t bg-white">
@@ -1350,11 +1770,357 @@ export const Invoices = () => {
                   </>
                 )}
               </div>
+              {scanning && (
+                <div className="absolute inset-0 z-20 bg-white/80 backdrop-blur-sm rounded-lg flex flex-col items-center justify-center">
+                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4"></div>
+                  <p className="text-sm font-medium text-primary">Extracting bill details...</p>
+                  <p className="text-xs text-muted-foreground mt-1">Please wait while AI reads your invoice</p>
+                </div>
+              )}
             </div>
             </div>
           )}
         </TabsContent>
       </Tabs>
+
+      <Dialog open={bulkPreviewOpen} onOpenChange={(open) => !bulkCreating && setBulkPreviewOpen(open)}>
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto" data-testid="bulk-preview-dialog">
+          <DialogHeader>
+            <DialogTitle>Review Bulk Invoices</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-3">
+            <div className="flex items-center justify-between text-sm">
+              <div className="text-muted-foreground">
+                {bulkPreviewItems.filter((i) => i.invoicePayload).length} extracted successfully out of {bulkPreviewItems.length}
+              </div>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={
+                    bulkPreviewItems.filter((i) => i.invoicePayload).length > 0 &&
+                    bulkPreviewItems
+                      .filter((i) => i.invoicePayload)
+                      .every((i) => i.selected)
+                  }
+                  onChange={(e) =>
+                    setBulkPreviewItems((prev) =>
+                      prev.map((item) =>
+                        item.invoicePayload ? { ...item, selected: e.target.checked } : item
+                      )
+                    )
+                  }
+                />
+                <span>Select all extracted</span>
+              </label>
+            </div>
+
+            <div className="border rounded-lg overflow-hidden min-h-0">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50 border-b">
+                  <tr>
+                    <th className="p-3 text-left w-12">Pick</th>
+                    <th className="p-3 text-left">File</th>
+                    <th className="p-3 text-left">Vendor</th>
+                    <th className="p-3 text-left">Invoice #</th>
+                    <th className="p-3 text-right">Amount</th>
+                    <th className="p-3 text-left">Status</th>
+                    <th className="p-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+              </table>
+              <div className="max-h-[52vh] overflow-y-auto">
+                <table className="w-full text-sm">
+                  <tbody>
+                    {bulkPreviewItems.map((item) => (
+                      <tr key={item.id} className="border-b last:border-b-0">
+                        <td className="p-3 w-12">
+                          <input
+                            type="checkbox"
+                            disabled={!item.invoicePayload}
+                            checked={Boolean(item.selected && item.invoicePayload)}
+                            onChange={(e) =>
+                              setBulkPreviewItems((prev) =>
+                                prev.map((row) =>
+                                  row.id === item.id ? { ...row, selected: e.target.checked } : row
+                                )
+                              )
+                            }
+                          />
+                        </td>
+                        <td className="p-3">{item.filename}</td>
+                        <td className="p-3">{item.invoicePayload?.vendor_name || '-'}</td>
+                        <td className="p-3 font-['JetBrains_Mono']">{item.invoicePayload?.invoice_number || '-'}</td>
+                        <td className="p-3 text-right font-['JetBrains_Mono']">
+                          {item.invoicePayload ? `₹${Number(item.invoicePayload.amount || 0).toLocaleString('en-IN')}` : '-'}
+                        </td>
+                        <td className="p-3">
+                          {item.invoicePayload ? (
+                            <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">
+                              Extracted
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800 border border-red-200">
+                              {item.error || 'Extraction failed'}
+                            </span>
+                          )}
+                        </td>
+                        <td className="p-3 text-right">
+                          <div className="flex justify-end gap-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => openBulkEditDialog(item)}
+                              disabled={!item.invoicePayload}
+                            >
+                              Edit
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() =>
+                                setBulkPreviewItems((prev) => prev.filter((row) => row.id !== item.id))
+                              }
+                            >
+                              Remove
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <Button
+                variant="outline"
+                onClick={() => setBulkPreviewOpen(false)}
+                className="flex-1"
+                disabled={bulkCreating}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleCreateBulkInvoices}
+                className="flex-1"
+                disabled={
+                  bulkCreating ||
+                  bulkPreviewItems.filter((i) => i.selected && i.invoicePayload).length === 0
+                }
+                data-testid="bulk-create-confirm-btn"
+              >
+                {bulkCreating ? 'Creating...' : `Create Selected (${bulkPreviewItems.filter((i) => i.selected && i.invoicePayload).length})`}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkEditOpen} onOpenChange={(open) => !bulkCreating && setBulkEditOpen(open)}>
+        <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto" data-testid="bulk-edit-dialog">
+          <DialogHeader>
+            <DialogTitle>Edit Extracted Invoice</DialogTitle>
+          </DialogHeader>
+          {bulkEditForm && (
+            <div className="grid grid-cols-1 lg:grid-cols-[35%_65%] gap-4 lg:max-h-[78vh] min-h-0">
+              <div className="border rounded-lg overflow-hidden h-full min-h-[500px]">
+                {renderPdfPreview({
+                  fileURL: bulkEditFileURL,
+                  file: bulkPreviewItems.find((item) => item.id === bulkEditItemId)?.file || null,
+                  zoom: pdfZoom,
+                  imageError: bulkEditPreviewError,
+                  setImageError: setBulkEditPreviewError,
+                })}
+              </div>
+              <div className="space-y-4 overflow-y-auto pr-2 min-h-0">
+              <datalist id="bulk-vendor-options">
+                {vendors.map((v) => (
+                  <option key={v.id} value={v.name} />
+                ))}
+              </datalist>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">Vendor Name</Label>
+                  <Input
+                    list="bulk-vendor-options"
+                    value={bulkEditForm.vendor_name}
+                    onChange={(e) => setBulkEditForm((prev) => ({ ...prev, vendor_name: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Invoice Number</Label>
+                  <Input
+                    value={bulkEditForm.invoice_number}
+                    onChange={(e) => setBulkEditForm((prev) => ({ ...prev, invoice_number: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Invoice Date</Label>
+                  <Input
+                    type="date"
+                    value={bulkEditForm.invoice_date}
+                    onChange={(e) => setBulkEditForm((prev) => ({ ...prev, invoice_date: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Due Date</Label>
+                  <Input
+                    type="date"
+                    value={bulkEditForm.due_date}
+                    onChange={(e) => setBulkEditForm((prev) => ({ ...prev, due_date: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Amount</Label>
+                  <Input
+                    type="number"
+                    value={bulkEditForm.amount}
+                    onChange={(e) => setBulkEditForm((prev) => ({ ...prev, amount: Number(e.target.value || 0) }))}
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Currency</Label>
+                  <Input
+                    value={bulkEditForm.currency}
+                    onChange={(e) => setBulkEditForm((prev) => ({ ...prev, currency: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-xs">Billing Address</Label>
+                <textarea
+                  value={bulkEditForm.billing_address}
+                  onChange={(e) => setBulkEditForm((prev) => ({ ...prev, billing_address: e.target.value }))}
+                  className="w-full min-h-[70px] rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
+              </div>
+
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50 border-b">
+                    <tr>
+                      <th className="p-2 text-left">Description</th>
+                      <th className="p-2 text-left w-28">HSN/SAC</th>
+                      <th className="p-2 text-left w-40">Tax</th>
+                      <th className="p-2 text-right w-24">Qty</th>
+                      <th className="p-2 text-right w-28">Unit Price</th>
+                      <th className="p-2 text-right w-28">Amount</th>
+                      <th className="p-2 text-right w-14"></th>
+                    </tr>
+                  </thead>
+                </table>
+                <div className="max-h-[30vh] overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <tbody>
+                      {bulkEditForm.line_items.map((line, index) => (
+                        <tr key={index} className="border-b last:border-b-0">
+                          <td className="p-2">
+                            <Input
+                              value={line.description}
+                              onChange={(e) => updateBulkEditLineItem(index, 'description', e.target.value)}
+                            />
+                          </td>
+                          <td className="p-2">
+                            <Input
+                              value={line.hsn_sac}
+                              onChange={(e) => updateBulkEditLineItem(index, 'hsn_sac', e.target.value)}
+                            />
+                          </td>
+                          <td className="p-2">
+                            <select
+                              value={line.tax || 'CGST + SGST 18%'}
+                              onChange={(e) => updateBulkEditLineItem(index, 'tax', e.target.value)}
+                              className="h-10 w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
+                            >
+                              {TAX_RATES.map((tax) => (
+                                <option key={tax.value} value={tax.value}>
+                                  {tax.label}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td className="p-2">
+                            <Input
+                              type="number"
+                              value={line.quantity}
+                              onChange={(e) => updateBulkEditLineItem(index, 'quantity', Number(e.target.value || 0))}
+                            />
+                          </td>
+                          <td className="p-2">
+                            <Input
+                              type="number"
+                              value={line.unit_price}
+                              onChange={(e) => updateBulkEditLineItem(index, 'unit_price', Number(e.target.value || 0))}
+                            />
+                          </td>
+                          <td className="p-2">
+                            <Input
+                              type="number"
+                              value={line.amount}
+                              onChange={(e) => updateBulkEditLineItem(index, 'amount', Number(e.target.value || 0))}
+                            />
+                          </td>
+                          <td className="p-2 text-right">
+                            {bulkEditForm.line_items.length > 1 && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() =>
+                                  setBulkEditForm((prev) => ({
+                                    ...prev,
+                                    line_items: prev.line_items.filter((_, i) => i !== index),
+                                  }))
+                                }
+                              >
+                                <X className="h-4 w-4" />
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <div className="flex justify-between">
+                <Button
+                  variant="outline"
+                  onClick={() =>
+                    setBulkEditForm((prev) => ({
+                      ...prev,
+                      line_items: [
+                        ...prev.line_items,
+                        {
+                          description: '',
+                          quantity: 1,
+                          unit_price: 0,
+                          amount: 0,
+                          hsn_sac: '',
+                          tax: 'CGST + SGST 18%',
+                        },
+                      ],
+                    }))
+                  }
+                >
+                  Add Line
+                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setBulkEditOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button onClick={saveBulkEditChanges}>Save Changes</Button>
+                </div>
+              </div>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* View Invoice Dialog - Split Screen */}
       <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
@@ -1363,7 +2129,12 @@ export const Invoices = () => {
             <div className="grid grid-cols-1 lg:grid-cols-[35%_65%] h-[85vh]">
               {/* Left: PDF/Image Preview (35% width) */}
               <div className="border-r h-full">
-                <PDFPreview invoice={selectedInvoice} zoom={pdfZoom} />
+                {renderPdfPreview({
+                  invoice: selectedInvoice,
+                  zoom: pdfZoom,
+                  imageError: viewPreviewError,
+                  setImageError: setViewPreviewError,
+                })}
               </div>
 
               {/* Right: Invoice Details (65% width) */}
@@ -1526,6 +2297,11 @@ export const Invoices = () => {
       {/* Edit Invoice Dialog - Full Screen (Sidebar hidden) */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
         <DialogContent className="max-w-[95vw] max-h-[95vh] p-0" data-testid="edit-invoice-dialog">
+          <DialogHeader className="sr-only">
+            <DialogTitle>
+              Edit Invoice {selectedInvoice?.invoice_number || ''}
+            </DialogTitle>
+          </DialogHeader>
           {selectedInvoice && formData && (
             <div className="h-[90vh]">
               {/* Header with Back */}
@@ -1554,12 +2330,17 @@ export const Invoices = () => {
               <div className="grid grid-cols-1 lg:grid-cols-[35%_65%] h-[calc(100%-50px)]">
                 {/* Left: PDF Preview (35% width) */}
                 <div className="border-r h-full">
-                  <PDFPreview invoice={selectedInvoice} zoom={pdfZoom} />
+                  {renderPdfPreview({
+                    invoice: selectedInvoice,
+                    zoom: pdfZoom,
+                    imageError: viewPreviewError,
+                    setImageError: setViewPreviewError,
+                  })}
                 </div>
 
                 {/* Right: Edit Form (65% width) */}
                 <div className="p-4 overflow-y-auto">
-                  <InvoiceForm isEdit={true} />
+                  {renderInvoiceForm({ isEdit: true })}
                 </div>
               </div>
             </div>

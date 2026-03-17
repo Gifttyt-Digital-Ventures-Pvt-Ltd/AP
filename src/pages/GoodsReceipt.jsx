@@ -93,11 +93,72 @@ export const GoodsReceipt = () => {
   const [createGrn] = useCreateGrnMutation();
   const [postGrn] = usePostGrnMutation();
 
-  const grns = Array.isArray(grnsData) ? grnsData : [];
+  const normalizePoLineItem = (item = {}) => ({
+    ...item,
+    item_description: item.item_description ?? item.description ?? '',
+    unit_of_measure: item.unit_of_measure ?? item.uom ?? '',
+    unit_price: item.unit_price ?? item.unitPrice ?? 0,
+    gst_rate: item.gst_rate ?? item.gstRate ?? 0,
+    tax_amount: item.tax_amount ?? item.taxAmount ?? 0,
+    total_amount: item.total_amount ?? item.totalAmount ?? item.amount ?? 0,
+    received_quantity: item.received_quantity ?? item.receivedQuantity ?? 0,
+    invoiced_quantity: item.invoiced_quantity ?? item.invoicedQuantity ?? 0,
+  });
+
+  const normalizePurchaseOrder = (po = {}) => ({
+    ...po,
+    po_number: po.po_number ?? po.poNumber,
+    vendor_id: po.vendor_id ?? po.vendorId,
+    vendor_name: po.vendor_name ?? po.vendorName,
+    po_date: po.po_date ?? po.poDate,
+    expected_delivery_date: po.expected_delivery_date ?? po.expectedDeliveryDate,
+    total_amount: po.total_amount ?? po.totalAmount ?? 0,
+    tax_amount: po.tax_amount ?? po.taxAmount ?? 0,
+    subtotal: po.subtotal ?? 0,
+    line_items: Array.isArray(po.line_items)
+      ? po.line_items.map(normalizePoLineItem)
+      : Array.isArray(po.lineItems)
+        ? po.lineItems.map(normalizePoLineItem)
+        : [],
+  });
+
+  const normalizeGrnLineItem = (item = {}) => ({
+    ...item,
+    line_number: item.line_number ?? item.lineNumber,
+    item_description: item.item_description ?? item.itemDescription ?? item.description ?? '',
+    received_quantity: item.received_quantity ?? item.receivedQuantity ?? 0,
+    accepted_quantity: item.accepted_quantity ?? item.acceptedQuantity ?? 0,
+    rejected_quantity: item.rejected_quantity ?? item.rejectedQuantity ?? 0,
+    rejection_reason: item.rejection_reason ?? item.rejectionReason ?? '',
+    line_amount: item.line_amount ?? item.lineAmount ?? item.amount ?? 0,
+  });
+
+  const normalizeGrn = (grn = {}) => ({
+    ...grn,
+    grn_number: grn.grn_number ?? grn.grnNumber,
+    po_id: grn.po_id ?? grn.poId,
+    po_number: grn.po_number ?? grn.poNumber,
+    vendor_id: grn.vendor_id ?? grn.vendorId,
+    vendor_name: grn.vendor_name ?? grn.vendorName,
+    receipt_date: grn.receipt_date ?? grn.receiptDate,
+    line_items: Array.isArray(grn.line_items)
+      ? grn.line_items.map(normalizeGrnLineItem)
+      : Array.isArray(grn.lineItems)
+        ? grn.lineItems.map(normalizeGrnLineItem)
+        : [],
+    total_received_value: grn.total_received_value ?? grn.totalReceivedValue ?? 0,
+    delivery_note_number: grn.delivery_note_number ?? grn.deliveryNoteNumber ?? '',
+    received_by: grn.received_by ?? grn.receivedBy ?? '',
+    received_by_name: grn.received_by_name ?? grn.receivedByName ?? '',
+    created_at: grn.created_at ?? grn.createdAt,
+    created_by_name: grn.created_by_name ?? grn.createdByName ?? '',
+  });
+
+  const grns = Array.isArray(grnsData) ? grnsData.map(normalizeGrn) : [];
   const purchaseOrders = [
     ...(Array.isArray(approvedPOsData) ? approvedPOsData : []),
     ...(Array.isArray(partialPOsData) ? partialPOsData : []),
-  ];
+  ].map(normalizePurchaseOrder);
   const [selectedPO, setSelectedPO] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -139,11 +200,12 @@ export const GoodsReceipt = () => {
 
   const handleSelectPO = async (poId) => {
     try {
-      const po = await getPurchaseOrderById(poId).unwrap();
+      const poResponse = await getPurchaseOrderById(poId).unwrap();
+      const po = normalizePurchaseOrder(poResponse);
       setSelectedPO(po);
       
       // Initialize line items from PO
-      const lineItems = po.line_items.map(item => ({
+      const lineItems = po.line_items.map((item) => ({
         po_line_item_id: item.id,
         item_description: item.item_description,
         ordered_quantity: item.quantity,
@@ -750,8 +812,8 @@ export const GoodsReceipt = () => {
                     <TableBody>
                       {selectedGRN.line_items?.map((item, idx) => (
                         <TableRow key={idx}>
-                          <TableCell>{item.line_number}</TableCell>
-                          <TableCell>{item.item_description}</TableCell>
+                          <TableCell>{item.line_number ?? idx + 1}</TableCell>
+                          <TableCell>{item.item_description || '-'}</TableCell>
                           <TableCell>{item.received_quantity}</TableCell>
                           <TableCell className="text-green-600">{item.accepted_quantity}</TableCell>
                           <TableCell className="text-red-600">

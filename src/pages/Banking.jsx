@@ -1,22 +1,21 @@
 import React, { useEffect, useState } from 'react';
-import { useGetBankAccountsQuery } from '../Services/apiSlice';
+import { useGetBankAccountsQuery, useGetTransactionsQuery } from '../Services/apiSlice';
 import { Button } from '../components/ui/button';
 import { Input } from '../components/ui/input';
-import { Search, ChevronDown, Eye, Share2 } from 'lucide-react';
+import { Search, ChevronDown, Eye, EyeOff, Share2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
 export const Banking = () => {
   const { data: bankAccounts = [], isError: bankAccountsError } = useGetBankAccountsQuery();
+  const { data: transactionsData = [], isError: transactionsError } = useGetTransactionsQuery({});
   const [selectedAccount, setSelectedAccount] = useState(null);
-  const [transactions, setTransactions] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-  const [dateFilter, setDateFilter] = useState('all');
   const [showFullAccount, setShowFullAccount] = useState(false);
-
-  useEffect(() => {
-    generateMockTransactions();
-  }, []);
+  const [showAvailableBalance, setShowAvailableBalance] = useState(false);
+  const [showDateFilter, setShowDateFilter] = useState(false);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
 
   useEffect(() => {
     if (bankAccountsError) {
@@ -25,72 +24,38 @@ export const Banking = () => {
   }, [bankAccountsError]);
 
   useEffect(() => {
+    if (transactionsError) {
+      toast.error('Failed to load transactions');
+    }
+  }, [transactionsError]);
+
+  useEffect(() => {
     if (!selectedAccount && Array.isArray(bankAccounts) && bankAccounts.length > 0) {
       setSelectedAccount(bankAccounts[0]);
     }
   }, [bankAccounts, selectedAccount]);
 
-  const generateMockTransactions = () => {
-    // Mock transaction data for demonstration
-    const mockData = [
-      {
-        id: 1,
-        vendor: 'Netlify',
-        ref_number: '02/24-25',
-        date: new Date('2024-06-02'),
-        withdrawal: 90720,
-        deposit: null,
-        closing_balance: 2020245.04,
-        authorized_by: 'Vinay Agrawal',
-        type: 'withdrawal'
-      },
-      {
-        id: 2,
-        vendor: '********792-001',
-        ref_number: 'ICICI N2415102865',
-        date: new Date('2024-06-01'),
-        withdrawal: null,
-        deposit: 110000,
-        closing_balance: 1109365.04,
-        authorized_by: null,
-        type: 'deposit'
-      },
-      {
-        id: 3,
-        vendor: 'Disha CD',
-        ref_number: '#001001',
-        date: new Date('2024-05-12'),
-        withdrawal: 4000,
-        deposit: null,
-        closing_balance: 965.04,
-        authorized_by: 'Vinay Agrawal',
-        type: 'withdrawal'
-      },
-      {
-        id: 4,
-        vendor: 'Netlify',
-        ref_number: '01/24-25',
-        date: new Date('2024-05-02'),
-        withdrawal: 99120,
-        deposit: null,
-        closing_balance: 4985.04,
-        authorized_by: 'Vinay Agrawal',
-        type: 'withdrawal'
-      },
-      {
-        id: 5,
-        vendor: '********92-001',
-        ref_number: 'ICICI N2412397495',
-        date: new Date('2024-05-02'),
-        withdrawal: null,
-        deposit: 100000,
-        closing_balance: 1041985.04,
-        authorized_by: null,
-        type: 'deposit'
-      }
-    ];
-    setTransactions(mockData);
-  };
+  const transactions = Array.isArray(transactionsData) ? transactionsData : [];
+  const selectedAccountTransactions = transactions
+    .filter((txn) => {
+      if (!selectedAccount) return true;
+      const accountName = (selectedAccount.account_name || '').toLowerCase();
+      const bankName = (selectedAccount.bank_name || '').toLowerCase();
+      const txnAccount = (txn.account || '').toLowerCase();
+      return !txnAccount || txnAccount === accountName || txnAccount === bankName;
+    })
+    .map((txn) => ({
+      id: txn.id,
+      vendor: txn.vendor_name || txn.counterparty || txn.description || '-',
+      ref_number: String(txn.reference_number || txn.ref_number || txn.id || '-'),
+      date: txn.date ? new Date(txn.date) : new Date(),
+      withdrawal: txn.is_credit ? null : Number(txn.amount || 0),
+      deposit: txn.is_credit ? Number(txn.amount || 0) : null,
+      closing_balance: Number(txn.running_balance ?? txn.closing_balance ?? 0),
+      authorized_by: txn.reviewed_by_name || txn.authorized_by || null,
+      type: txn.is_credit ? 'deposit' : 'withdrawal'
+    }))
+    .sort((a, b) => b.date - a.date);
 
   const handleShareAccount = () => {
     if (!selectedAccount) return;
@@ -118,12 +83,27 @@ Currency: ${selectedAccount.currency}
     `);
   };
 
-  const filteredTransactions = transactions.filter(transaction =>
-    transaction.vendor.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    transaction.ref_number.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredTransactions = selectedAccountTransactions.filter((transaction) => {
+    const matchesSearch =
+      transaction.vendor.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      transaction.ref_number.toLowerCase().includes(searchTerm.toLowerCase());
 
-  const availableBalance = selectedAccount ? 7842138.00 : 0;
+    if (!matchesSearch) return false;
+
+    const txnDate = new Date(transaction.date);
+    const fromDate = dateFrom ? new Date(dateFrom) : null;
+    const toDate = dateTo ? new Date(dateTo) : null;
+
+    if (fromDate && txnDate < fromDate) return false;
+    if (toDate) {
+      const toDateEnd = new Date(toDate);
+      toDateEnd.setHours(23, 59, 59, 999);
+      if (txnDate > toDateEnd) return false;
+    }
+    return true;
+  });
+
+  const availableBalance = selectedAccountTransactions[0]?.closing_balance ?? 0;
 
   return (
     <div data-testid="banking-page" className="h-full">
@@ -140,7 +120,9 @@ Currency: ${selectedAccount.currency}
             
             <div className="flex flex-wrap items-center gap-4 text-sm">
               <span className="font-['JetBrains_Mono'] bg-secondary/50 px-3 py-1 rounded border border-border">
-                {showFullAccount ? selectedAccount.account_number : `D*************${selectedAccount.account_number.slice(-4)}`}
+                {showFullAccount
+                  ? (selectedAccount.account_number || '-')
+                  : `D*************${(selectedAccount.account_number || '').slice(-4)}`}
               </span>
               <button 
                 onClick={() => setShowFullAccount(!showFullAccount)}
@@ -172,9 +154,25 @@ Currency: ${selectedAccount.currency}
 
       {/* Available Balance Card */}
       <div className="bg-secondary/30 rounded-lg p-6 mb-8 border border-border">
-        <p className="text-sm text-muted-foreground mb-2">Available Balance</p>
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-sm text-muted-foreground">Available Balance</p>
+          <button
+            type="button"
+            onClick={() => setShowAvailableBalance((prev) => !prev)}
+            className="flex items-center gap-1 text-accent hover:text-accent/80 font-medium text-sm"
+            data-testid="toggle-available-balance"
+          >
+            {showAvailableBalance ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {showAvailableBalance ? 'Hide Balance' : 'Show Balance'}
+          </button>
+        </div>
         <p className="text-5xl font-bold font-['JetBrains_Mono'] text-primary">
-          ₹{availableBalance.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          {showAvailableBalance
+            ? `INR ${availableBalance.toLocaleString('en-IN', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })}`
+            : 'INR ******'}
         </p>
       </div>
 
@@ -182,11 +180,45 @@ Currency: ${selectedAccount.currency}
       <div>
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-2xl font-semibold font-['Manrope']">Recent Transactions</h2>
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" onClick={() => setShowDateFilter(!showDateFilter)}>
             Select a Date
-            <ChevronDown className="h-4 w-4 ml-2" />
+            <ChevronDown
+              className={`h-4 w-4 ml-2 transition-transform duration-200 ${showDateFilter ? 'rotate-180' : 'rotate-0'}`}
+            />
           </Button>
         </div>
+        {showDateFilter && (
+          <div className="mb-4 flex flex-wrap items-end gap-3">
+            <div>
+              <label className="text-xs text-muted-foreground">From</label>
+              <Input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="h-9"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">To</label>
+              <Input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="h-9"
+              />
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setDateFrom('');
+                setDateTo('');
+              }}
+            >
+              Clear
+            </Button>
+          </div>
+        )}
 
         {/* Search */}
         <div className="mb-6">

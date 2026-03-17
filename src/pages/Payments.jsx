@@ -15,15 +15,21 @@ import { Plus, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 
+const safeLower = (value) => String(value ?? '').toLowerCase();
+
+const safeFormatDate = (value, pattern = 'dd MMM yy') => {
+  if (!value) return '-';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '-' : format(date, pattern);
+};
+
 export const Payments = () => {
   const {
     data: paymentsData = [],
-    refetch: refetchPayments,
     isError: paymentsError,
   } = useGetPaymentsQuery();
   const {
     data: invoicesData = [],
-    refetch: refetchApprovedInvoices,
     isError: invoicesError,
   } = useGetInvoicesQuery({ status: 'Pending Payment' });
   const {
@@ -43,8 +49,29 @@ export const Payments = () => {
     notes: ''
   });
 
-  const payments = Array.isArray(paymentsData) ? paymentsData : [];
-  const invoices = Array.isArray(invoicesData) ? invoicesData : [];
+  const normalizePayment = (payment = {}) => ({
+    ...payment,
+    invoice_number: payment.invoice_number ?? payment.invoiceNumber,
+    vendor_name: payment.vendor_name ?? payment.vendorName,
+    payment_date: payment.payment_date ?? payment.paymentDate,
+    payment_method: payment.payment_method ?? payment.paymentMethod,
+    reference_number: payment.reference_number ?? payment.referenceNumber,
+  });
+
+  const normalizeInvoice = (invoice = {}) => ({
+    ...invoice,
+    invoice_number: invoice.invoice_number ?? invoice.invoiceNumber,
+    vendor_name: invoice.vendor_name ?? invoice.vendorName,
+    invoice_date: invoice.invoice_date ?? invoice.invoiceDate,
+    due_date: invoice.due_date ?? invoice.dueDate,
+  });
+
+  const payments = Array.isArray(paymentsData)
+    ? paymentsData.map(normalizePayment)
+    : [];
+  const invoices = Array.isArray(invoicesData)
+    ? invoicesData.map(normalizeInvoice)
+    : [];
   const bankAccounts = Array.isArray(bankAccountsData) ? bankAccountsData : [];
 
   useEffect(() => {
@@ -71,7 +98,6 @@ export const Payments = () => {
     try {
       const response = await bulkReleasePayments().unwrap();
       toast.success(response?.message || 'Bulk payments released');
-      await Promise.all([refetchPayments(), refetchApprovedInvoices()]);
     } catch (error) {
       toast.error('Failed to release bulk payments');
     }
@@ -87,7 +113,6 @@ export const Payments = () => {
       toast.success('Payment recorded successfully');
       setDialogOpen(false);
       resetForm();
-      await Promise.all([refetchPayments(), refetchApprovedInvoices()]);
     } catch (error) {
       toast.error(error?.data?.detail || 'Failed to record payment');
     }
@@ -105,13 +130,13 @@ export const Payments = () => {
   };
 
   const filteredPayments = payments.filter(payment =>
-    payment.vendor_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    payment.invoice_number.toLowerCase().includes(searchTerm.toLowerCase())
+    safeLower(payment.vendor_name).includes(safeLower(searchTerm)) ||
+    safeLower(payment.invoice_number).includes(safeLower(searchTerm))
   );
 
   const filteredPendingInvoices = invoices.filter(invoice =>
-    invoice.vendor_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    invoice.invoice_number.toLowerCase().includes(searchTerm.toLowerCase())
+    safeLower(invoice.vendor_name).includes(safeLower(searchTerm)) ||
+    safeLower(invoice.invoice_number).includes(safeLower(searchTerm))
   );
 
   const totalPendingAmount = invoices.reduce((sum, inv) => sum + inv.amount, 0);
@@ -312,10 +337,10 @@ export const Payments = () => {
                       ₹{invoice.amount.toLocaleString('en-IN')}
                     </td>
                     <td className="p-4 text-sm text-muted-foreground">
-                      {format(new Date(invoice.invoice_date), 'dd MMM yy')}
+                      {safeFormatDate(invoice.invoice_date)}
                     </td>
                     <td className="p-4 text-sm text-muted-foreground">
-                      {format(new Date(invoice.due_date), 'dd MMM yy')}
+                      {safeFormatDate(invoice.due_date)}
                     </td>
                     <td className="p-4">
                       <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border bg-blue-100 text-blue-800 border-blue-200">
@@ -360,7 +385,7 @@ export const Payments = () => {
                       ₹{payment.amount.toLocaleString('en-IN')}
                     </td>
                     <td className="p-4 text-sm text-muted-foreground">
-                      {format(new Date(payment.payment_date), 'dd MMM yy')}
+                      {safeFormatDate(payment.payment_date)}
                     </td>
                     <td className="p-4 text-sm">{payment.payment_method}</td>
                     <td className="p-4 text-sm font-['JetBrains_Mono']">{payment.reference_number || '-'}</td>

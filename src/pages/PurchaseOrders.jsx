@@ -87,6 +87,12 @@ const formatDate = (dateStr) => {
   });
 };
 
+const truncateText = (value, max = 12) => {
+  const text = String(value ?? '');
+  if (!text) return '-';
+  return text.length > max ? `${text.substring(0, max)}...` : text;
+};
+
 export const PurchaseOrders = () => {
   const {
     data: purchaseOrdersData = [],
@@ -122,12 +128,70 @@ export const PurchaseOrders = () => {
   const [createPurchaseOrder] = useCreatePurchaseOrderMutation();
   const [submitPurchaseOrder] = useSubmitPurchaseOrderMutation();
   const [approvePurchaseOrder] = useApprovePurchaseOrderMutation();
-  const purchaseOrders = Array.isArray(purchaseOrdersData) ? purchaseOrdersData : [];
-  const pendingApprovals = Array.isArray(pendingApprovalsData) ? pendingApprovalsData : [];
+  const normalizePoLineItem = (item = {}) => ({
+    ...item,
+    item_description: item.item_description ?? item.description ?? '',
+    hsn_sac_code: item.hsn_sac_code ?? item.hsnSac ?? '',
+    unit_of_measure: item.unit_of_measure ?? item.uom ?? 'NOS',
+    unit_price: item.unit_price ?? item.unitPrice ?? 0,
+    gst_rate: item.gst_rate ?? item.gstRate ?? 0,
+    tax_amount: item.tax_amount ?? item.taxAmount ?? 0,
+    total_amount: item.total_amount ?? item.totalAmount ?? item.amount ?? 0,
+    gl_account_id: item.gl_account_id ?? item.glAccountId ?? '',
+    cost_center_id: item.cost_center_id ?? item.costCenterId ?? '',
+  });
+
+  const normalizePurchaseOrder = (po = {}) => ({
+    ...po,
+    po_number: po.po_number ?? po.poNumber,
+    vendor_id: po.vendor_id ?? po.vendorId,
+    vendor_name: po.vendor_name ?? po.vendorName,
+    po_date: po.po_date ?? po.poDate,
+    expected_delivery_date: po.expected_delivery_date ?? po.expectedDeliveryDate,
+    line_items: Array.isArray(po.line_items)
+      ? po.line_items.map(normalizePoLineItem)
+      : Array.isArray(po.lineItems)
+        ? po.lineItems.map(normalizePoLineItem)
+        : [],
+    subtotal: po.subtotal ?? 0,
+    tax_amount: po.tax_amount ?? po.taxAmount ?? 0,
+    total_amount: po.total_amount ?? po.totalAmount ?? 0,
+    shipping_address: po.shipping_address ?? po.shippingAddress ?? '',
+    billing_address: po.billing_address ?? po.billingAddress ?? '',
+    po_type: po.po_type ?? po.poType ?? 'Standard',
+    created_by_name: po.created_by_name ?? po.createdByName ?? '',
+    approval_records: po.approval_records ?? po.approvalRecords ?? po.approvals ?? [],
+  });
+
+  const normalizeGlAccount = (account = {}) => ({
+    ...account,
+    account_code: account.account_code ?? account.accountCode ?? '',
+    account_name: account.account_name ?? account.accountName ?? '',
+    account_type: account.account_type ?? account.accountType ?? '',
+    is_active: account.is_active ?? account.isActive ?? true,
+  });
+
+  const normalizeCostCenter = (center = {}) => ({
+    ...center,
+    cost_center_code: center.cost_center_code ?? center.costCenterCode ?? '',
+    cost_center_name: center.cost_center_name ?? center.costCenterName ?? '',
+  });
+
+  const normalizeHsnSacCode = (code = {}) => ({
+    ...code,
+    hsn_sac_code: code.hsn_sac_code ?? code.hsnSacCode ?? code.code ?? '',
+  });
+
+  const purchaseOrders = Array.isArray(purchaseOrdersData)
+    ? purchaseOrdersData.map(normalizePurchaseOrder)
+    : [];
+  const pendingApprovals = Array.isArray(pendingApprovalsData)
+    ? pendingApprovalsData.map(normalizePurchaseOrder)
+    : [];
   const vendors = Array.isArray(vendorsData) ? vendorsData : [];
-  const glAccounts = Array.isArray(glAccountsData) ? glAccountsData : [];
-  const costCenters = Array.isArray(costCentersData) ? costCentersData : [];
-  const hsnSacCodes = Array.isArray(hsnSacCodesData) ? hsnSacCodesData : [];
+  const glAccounts = Array.isArray(glAccountsData) ? glAccountsData.map(normalizeGlAccount) : [];
+  const costCenters = Array.isArray(costCentersData) ? costCentersData.map(normalizeCostCenter) : [];
+  const hsnSacCodes = Array.isArray(hsnSacCodesData) ? hsnSacCodesData.map(normalizeHsnSacCode) : [];
   const loading =
     purchaseOrdersLoading ||
     pendingApprovalsLoading ||
@@ -217,7 +281,16 @@ export const PurchaseOrders = () => {
 
     setCreating(true);
     try {
-      const data = await createPurchaseOrder(poForm).unwrap();
+      const payload = {
+        ...poForm,
+        line_items: poForm.line_items.map((item) => ({
+          ...item,
+          quantity: Number(item.quantity) || 0,
+          unit_price: Number(item.unit_price) || 0,
+          gst_rate: Number(item.gst_rate) || 0,
+        })),
+      };
+      const data = await createPurchaseOrder(payload).unwrap();
       toast.success(`Purchase Order ${data?.po?.po_number || ''} created successfully`);
       setShowCreateDialog(false);
       resetForm();
@@ -609,14 +682,14 @@ export const PurchaseOrders = () => {
 
       {/* Create PO Dialog */}
       <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent className="flex flex-col w-[95vw] max-w-4xl max-h-[90vh] overflow-hidden p-0">
+          <DialogHeader className="px-6 pt-6 pb-2">
             <DialogTitle>Create Purchase Order</DialogTitle>
           </DialogHeader>
           
-          <div className="space-y-6">
+          <div className="space-y-6 overflow-y-auto px-6 pb-4">
             {/* Basic Information */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>PO Type</Label>
                 <Select 
@@ -673,7 +746,7 @@ export const PurchaseOrders = () => {
             </div>
 
             {/* Addresses */}
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Shipping Address</Label>
                 <Textarea
@@ -704,8 +777,8 @@ export const PurchaseOrders = () => {
                 </Button>
               </div>
 
-              <div className="border rounded-lg overflow-hidden">
-                <Table>
+              <div className="border rounded-lg max-w-full overflow-x-auto">
+                <Table className="min-w-[1100px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead className="w-[200px]">Description *</TableHead>
@@ -741,8 +814,8 @@ export const PurchaseOrders = () => {
                             </SelectTrigger>
                             <SelectContent>
                               {hsnSacCodes.map(h => (
-                                <SelectItem key={h.id} value={h.code}>
-                                  {h.code} - {h.description.substring(0, 15)}...
+                                <SelectItem key={h.id} value={String(h.hsn_sac_code || h.code || h.id)}>
+                                  {(h.hsn_sac_code || h.code || '-') + ' - ' + truncateText(h.description ?? h.name ?? '', 15)}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -754,6 +827,7 @@ export const PurchaseOrders = () => {
                             value={item.quantity}
                             onChange={(e) => updateLineItem(idx, 'quantity', parseFloat(e.target.value) || 0)}
                             min="1"
+                            className="min-w-[100px]"
                             data-testid={`line-item-qty-${idx}`}
                           />
                         </TableCell>
@@ -777,9 +851,19 @@ export const PurchaseOrders = () => {
                         <TableCell>
                           <Input
                             type="number"
-                            value={item.unit_price}
-                            onChange={(e) => updateLineItem(idx, 'unit_price', parseFloat(e.target.value) || 0)}
+                            value={item.unit_price ?? ''}
+                            onChange={(e) => {
+                              const rawValue = e.target.value;
+                              if (rawValue === '') {
+                                updateLineItem(idx, 'unit_price', '');
+                                return;
+                              }
+                              const parsedValue = Number(rawValue);
+                              if (Number.isNaN(parsedValue)) return;
+                              updateLineItem(idx, 'unit_price', parsedValue);
+                            }}
                             min="0"
+                            className="min-w-[120px]"
                             data-testid={`line-item-price-${idx}`}
                           />
                         </TableCell>
@@ -811,7 +895,7 @@ export const PurchaseOrders = () => {
                             <SelectContent>
                               {glAccounts.map(g => (
                                 <SelectItem key={g.id} value={g.id}>
-                                  {g.account_code} - {g.account_name.substring(0, 12)}...
+                                  {g.account_code} - {truncateText(g.account_name, 12)}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -828,7 +912,7 @@ export const PurchaseOrders = () => {
                             <SelectContent>
                               {costCenters.map(c => (
                                 <SelectItem key={c.id} value={c.id}>
-                                  {c.cost_center_code}
+                                  {c.cost_center_code || '-'}
                                 </SelectItem>
                               ))}
                             </SelectContent>
@@ -879,7 +963,7 @@ export const PurchaseOrders = () => {
             </div>
           </div>
 
-          <DialogFooter>
+          <DialogFooter className="px-6 pb-6 pt-2">
             <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
               Cancel
             </Button>
@@ -960,17 +1044,28 @@ export const PurchaseOrders = () => {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {selectedPO.line_items?.map((item, idx) => (
-                        <TableRow key={idx}>
-                          <TableCell>{item.line_number}</TableCell>
-                          <TableCell>{item.item_description}</TableCell>
-                          <TableCell>{item.hsn_sac_code || '-'}</TableCell>
-                          <TableCell>{item.quantity} {item.unit_of_measure}</TableCell>
-                          <TableCell>{formatCurrency(item.unit_price)}</TableCell>
-                          <TableCell>{formatCurrency(item.igst_amount || 0)}</TableCell>
-                          <TableCell className="font-medium">{formatCurrency(item.line_amount + (item.igst_amount || 0))}</TableCell>
-                        </TableRow>
-                      ))}
+                      {selectedPO.line_items?.map((item, idx) => {
+                        const lineNumber = item.line_number ?? item.lineNumber ?? idx + 1;
+                        const description = item.item_description ?? item.description ?? '-';
+                        const hsnSacCode = item.hsn_sac_code ?? item.hsnSac ?? '-';
+                        const quantity = Number(item.quantity ?? 0);
+                        const uom = item.unit_of_measure ?? item.uom ?? '';
+                        const unitPrice = Number(item.unit_price ?? item.unitPrice ?? 0);
+                        const taxAmount = Number(item.tax_amount ?? item.taxAmount ?? item.igst_amount ?? item.igstAmount ?? 0);
+                        const totalAmount = Number(item.total_amount ?? item.totalAmount ?? item.line_amount ?? item.lineAmount ?? item.amount ?? 0);
+
+                        return (
+                          <TableRow key={idx}>
+                            <TableCell>{lineNumber}</TableCell>
+                            <TableCell>{description}</TableCell>
+                            <TableCell>{hsnSacCode || '-'}</TableCell>
+                            <TableCell>{quantity} {uom}</TableCell>
+                            <TableCell>{formatCurrency(unitPrice)}</TableCell>
+                            <TableCell>{formatCurrency(taxAmount)}</TableCell>
+                            <TableCell className="font-medium">{formatCurrency(totalAmount)}</TableCell>
+                          </TableRow>
+                        );
+                      })}
                     </TableBody>
                   </Table>
                 </CardContent>

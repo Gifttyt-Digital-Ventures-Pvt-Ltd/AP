@@ -183,8 +183,8 @@ export const PaymentBatches = () => {
         refetchBankAccounts(),
       ]);
     } catch (error) {
-      console.error('Error refreshing data:', error);
-      toast.error('Failed to refresh payment batches');
+      console.error('Error refreshing payment batch data:', error);
+      toast.error('Failed to refresh payment batch data');
     }
   };
 
@@ -216,8 +216,8 @@ export const PaymentBatches = () => {
     try {
       await submitPaymentBatch(batchId).unwrap();
       toast.success('Batch submitted for approval');
-      fetchData();
       setShowViewDialog(false);
+      fetchData();
     } catch (error) {
       toast.error(error?.data?.detail || 'Failed to submit batch');
     }
@@ -248,8 +248,8 @@ export const PaymentBatches = () => {
     try {
       const data = await processPaymentBatch(batchId).unwrap();
       toast.success(data?.message || 'Batch processed');
-      fetchData();
       setShowViewDialog(false);
+      fetchData();
     } catch (error) {
       toast.error(error?.data?.detail || 'Failed to process batch');
     } finally {

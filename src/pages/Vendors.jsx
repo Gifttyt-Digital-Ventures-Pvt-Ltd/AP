@@ -16,9 +16,9 @@ import { toast } from 'sonner';
 export const Vendors = () => {
   const {
     data: vendorsData = [],
-    refetch: refetchVendors,
     isError: vendorsError,
   } = useGetVendorsQuery();
+
   const [createVendor] = useCreateVendorMutation();
   const [updateVendor] = useUpdateVendorMutation();
   const [deleteVendor] = useDeleteVendorMutation();
@@ -81,7 +81,6 @@ export const Vendors = () => {
       }
       setDialogOpen(false);
       resetForm();
-      refetchVendors();
     } catch (error) {
       toast.error('Failed to save vendor');
     }
@@ -124,7 +123,6 @@ export const Vendors = () => {
     try {
       await deleteVendor(id).unwrap();
       toast.success('Vendor deleted successfully');
-      refetchVendors();
     } catch (error) {
       toast.error('Failed to delete vendor');
     }

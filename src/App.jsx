@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import SessionTimeout from "./components/SessionTimeout";
 import { Toaster } from "./components/ui/sonner";
 import { Layout } from "./components/Layout";
 import { Login } from "./pages/Login";
@@ -188,7 +189,9 @@ function App() {
     <div className="App">
       <BrowserRouter>
         <AuthProvider>
-          <AppContent />
+          <SessionTimeout>
+            <AppContent />
+          </SessionTimeout>
         </AuthProvider>
       </BrowserRouter>
     </div>

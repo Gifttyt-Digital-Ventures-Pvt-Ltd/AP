@@ -113,30 +113,39 @@ export const Settings = () => {
   useEffect(() => {
     if (organisationData) {
       setOrgDetails(organisationData);
-      setOrgForm({
-        company_name: organisationData.company_name || '',
-        legal_name: organisationData.legal_name || '',
-        gstin: organisationData.gstin || '',
-        pan: organisationData.pan || '',
-        cin: organisationData.cin || '',
-        address_line1: organisationData.address_line1 || '',
-        address_line2: organisationData.address_line2 || '',
-        city: organisationData.city || '',
-        state: organisationData.state || '',
-        pincode: organisationData.pincode || '',
-        country: organisationData.country || 'India',
-        email: organisationData.email || '',
-        phone: organisationData.phone || '',
-        website: organisationData.website || '',
-        bank_name: organisationData.bank_name || '',
-        account_number: organisationData.account_number || '',
-        ifsc_code: organisationData.ifsc_code || '',
-        account_holder_name: organisationData.account_holder_name || ''
+      
+      // Only initialize the form if it's currently empty or has not been loaded yet
+      // This prevents overwriting user edits during background refetches
+      setOrgForm(prev => {
+        const isFormEmpty = !prev.company_name && !prev.email && !prev.phone;
+        if (isFormEmpty || !orgDetails) {
+          return {
+            company_name: organisationData.company_name || '',
+            legal_name: organisationData.legal_name || '',
+            gstin: organisationData.gstin || '',
+            pan: organisationData.pan || '',
+            cin: organisationData.cin || '',
+            address_line1: organisationData.address_line1 || '',
+            address_line2: organisationData.address_line2 || '',
+            city: organisationData.city || '',
+            state: organisationData.state || '',
+            pincode: organisationData.pincode || '',
+            country: organisationData.country || 'India',
+            email: organisationData.email || '',
+            phone: organisationData.phone || '',
+            website: organisationData.website || '',
+            bank_name: organisationData.bank_name || '',
+            account_number: organisationData.account_number || '',
+            ifsc_code: organisationData.ifsc_code || '',
+            account_holder_name: organisationData.account_holder_name || ''
+          };
+        }
+        return prev;
       });
     } else {
       setOrgDetails(null);
     }
-  }, [organisationData]);
+  }, [organisationData, orgDetails]);
 
   useEffect(() => {
     if (bankAccountsError) {
@@ -192,16 +201,13 @@ export const Settings = () => {
     try {
       if (orgDetails) {
         // Update existing
-        const response = await updateOrganisation(orgForm).unwrap();
-        setOrgDetails(response);
+        await updateOrganisation(orgForm).unwrap();
         toast.success('Organisation details updated successfully');
       } else {
         // Create new
-        const response = await createOrganisation(orgForm).unwrap();
-        setOrgDetails(response);
+        await createOrganisation(orgForm).unwrap();
         toast.success('Organisation details created successfully');
       }
-      refetchOrganisation();
     } catch (error) {
       const errorMessage = error?.data?.detail || 'Failed to save organisation details';
       toast.error(errorMessage);

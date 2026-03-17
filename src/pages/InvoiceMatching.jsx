@@ -62,6 +62,7 @@ const statusColors = {
   'Matched': 'bg-green-500',
   'Partial Match': 'bg-yellow-500',
   'Mismatch': 'bg-red-500',
+  'Exception': 'bg-red-500',
   'Resolved': 'bg-blue-500',
   'Pending': 'bg-gray-500'
 };
@@ -70,6 +71,7 @@ const statusIcons = {
   'Matched': CheckCircle,
   'Partial Match': AlertTriangle,
   'Mismatch': XCircle,
+  'Exception': AlertTriangle,
   'Resolved': CheckCheck,
   'Pending': RefreshCw
 };
@@ -90,6 +92,12 @@ const formatDate = (dateStr) => {
     month: 'short',
     year: 'numeric'
   });
+};
+
+const formatPercent = (value) => {
+  const num = Number(value);
+  if (Number.isNaN(num)) return '0.00';
+  return num.toFixed(2);
 };
 
 export const InvoiceMatching = () => {
@@ -117,10 +125,58 @@ export const InvoiceMatching = () => {
   const [matchInvoice] = useMatchInvoiceMutation();
   const [resolveInvoiceMatch] = useResolveInvoiceMatchMutation();
 
-  const matchings = Array.isArray(matchingsData) ? matchingsData : [];
-  const pendingMatchings = Array.isArray(pendingMatchingsData) ? pendingMatchingsData : [];
+  const normalizeMatchType = (value) => {
+    if (!value) return 'TWO_WAY';
+    const normalized = String(value).toUpperCase();
+    if (normalized === 'TWO_WAY' || normalized === '2_WAY') return 'TWO_WAY';
+    if (normalized === 'THREE_WAY' || normalized === '3_WAY') return 'THREE_WAY';
+    return normalized;
+  };
+
+  const normalizeMatchingStatus = (value) => {
+    if (!value) return 'Pending';
+    const normalized = String(value).toLowerCase();
+    if (normalized === 'exception') return 'Exception';
+    if (normalized === 'partial_match' || normalized === 'partial match') return 'Partial Match';
+    if (normalized === 'mismatch') return 'Mismatch';
+    if (normalized === 'matched') return 'Matched';
+    if (normalized === 'resolved') return 'Resolved';
+    return value;
+  };
+
+  const normalizeMatching = (m = {}) => ({
+    ...m,
+    invoice_id: m.invoice_id ?? m.invoiceId ?? '',
+    invoice_number: m.invoice_number ?? m.invoiceNumber ?? '',
+    po_id: m.po_id ?? m.poId ?? '',
+    po_number: m.po_number ?? m.poNumber ?? '',
+    grn_id: m.grn_id ?? m.grnId ?? '',
+    grn_number: m.grn_number ?? m.grnNumber ?? '',
+    vendor_id: m.vendor_id ?? m.vendorId ?? '',
+    vendor_name: m.vendor_name ?? m.vendorName ?? '',
+    match_type: normalizeMatchType(m.match_type ?? m.matching_type ?? m.matchingType),
+    match_status: normalizeMatchingStatus(m.match_status ?? m.status),
+    invoice_amount: Number(m.invoice_amount ?? m.invoiceAmount ?? 0),
+    po_amount: Number(m.po_amount ?? m.poAmount ?? 0),
+    amount_variance: Number(m.amount_variance ?? m.amountVariance ?? 0),
+    amount_variance_pct: Number(m.amount_variance_pct ?? m.variancePercentage ?? 0),
+    quantity_variance_pct: Number(m.quantity_variance_pct ?? m.quantityVariancePct ?? 0),
+    price_variance_pct: Number(m.price_variance_pct ?? m.priceVariancePct ?? 0),
+    exception_reason: m.exception_reason ?? m.exceptionReason ?? '',
+  });
+
+  const normalizeInvoice = (inv = {}) => ({
+    ...inv,
+    invoice_number: inv.invoice_number ?? inv.invoiceNumber ?? '',
+    vendor_name: inv.vendor_name ?? inv.vendorName ?? '',
+    matching_id: inv.matching_id ?? inv.matchingId ?? '',
+    amount: Number(inv.amount ?? 0),
+  });
+
+  const matchings = Array.isArray(matchingsData) ? matchingsData.map(normalizeMatching) : [];
+  const pendingMatchings = Array.isArray(pendingMatchingsData) ? pendingMatchingsData.map(normalizeMatching) : [];
   const invoices = Array.isArray(invoicesData)
-    ? invoicesData.filter((inv) => !inv.matching_id)
+    ? invoicesData.map(normalizeInvoice).filter((inv) => !inv.matching_id)
     : [];
   const loading = matchingsLoading || pendingMatchingsLoading || statsLoading || invoicesLoading;
   const [activeTab, setActiveTab] = useState('all');
@@ -173,11 +229,72 @@ export const InvoiceMatching = () => {
     }
   };
 
+  const normalizeMatchCandidates = (data = {}, selectedInvoice = null) => {
+    const invoice = data.invoice ?? data.selected_invoice ?? data.selectedInvoice ?? {};
+    const poCandidatesRaw =
+      data.po_candidates ?? data.poCandidates ?? data.purchase_orders ?? data.purchaseOrders ?? [];
+    const grnCandidatesRaw =
+      data.grn_candidates ?? data.grnCandidates ?? data.goods_receipt_notes ?? data.goodsReceiptNotes ?? [];
+
+    const poCandidates = Array.isArray(poCandidatesRaw)
+      ? poCandidatesRaw.map((po) => ({
+          ...po,
+          po_id: po.po_id ?? po.poId ?? po.id ?? '',
+          po_number: po.po_number ?? po.poNumber ?? '',
+          po_date: po.po_date ?? po.poDate,
+          po_amount: po.po_amount ?? po.poAmount ?? po.total_amount ?? po.totalAmount ?? 0,
+          amount_variance: po.amount_variance ?? po.amountVariance ?? 0,
+          variance_pct: po.variance_pct ?? po.variancePct ?? 0,
+        }))
+      : [];
+
+    const grnCandidates = Array.isArray(grnCandidatesRaw)
+      ? grnCandidatesRaw.map((grn) => ({
+          ...grn,
+          grn_id: grn.grn_id ?? grn.grnId ?? grn.id ?? '',
+          grn_number: grn.grn_number ?? grn.grnNumber ?? '',
+          po_number: grn.po_number ?? grn.poNumber ?? '',
+          receipt_date: grn.receipt_date ?? grn.receiptDate,
+        }))
+      : [];
+
+    return {
+      ...data,
+      invoice: {
+        ...selectedInvoice,
+        ...invoice,
+        invoice_number:
+          invoice.invoice_number ??
+          invoice.invoiceNumber ??
+          selectedInvoice?.invoice_number ??
+          selectedInvoice?.invoiceNumber ??
+          '',
+        vendor_name:
+          invoice.vendor_name ??
+          invoice.vendorName ??
+          selectedInvoice?.vendor_name ??
+          selectedInvoice?.vendorName ??
+          '',
+        amount: invoice.amount ?? selectedInvoice?.amount ?? 0,
+      },
+      po_candidates: poCandidates,
+      grn_candidates: grnCandidates,
+    };
+  };
+
   const handleSelectInvoice = async (invoiceId) => {
     try {
+      const selectedInvoice = invoices.find((inv) => inv.id === invoiceId) ?? null;
       const data = await getInvoiceMatchingCandidates(invoiceId).unwrap();
-      setMatchCandidates(data);
-      setMatchForm(prev => ({ ...prev, invoice_id: invoiceId }));
+      const normalizedData = normalizeMatchCandidates(data, selectedInvoice);
+      setMatchCandidates(normalizedData);
+      setMatchForm((prev) => ({
+        ...prev,
+        invoice_id: invoiceId,
+        po_id: '',
+        grn_id: '',
+        match_type: 'TWO_WAY',
+      }));
     } catch (error) {
       toast.error('Failed to get matching candidates');
     }
@@ -256,12 +373,49 @@ export const InvoiceMatching = () => {
 
   const filteredMatchings = matchings.filter(m => {
     const matchesSearch = 
-      m.invoice_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.po_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      m.vendor_name?.toLowerCase().includes(searchQuery.toLowerCase());
+      String(m.invoice_number || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      String(m.po_number || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      String(m.vendor_name || '').toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus = statusFilter === 'all' || m.match_status === statusFilter;
     return matchesSearch && matchesStatus;
   });
+
+  const statsData = stats && typeof stats === 'object' ? stats : {};
+  const totalMatchingsCount = Number(
+    statsData.total_matchings ?? statsData.totalMatchings ?? statsData.total ?? 0
+  );
+  const matchedCount = Number(
+    statsData.matched?.count ?? statsData.matched_count ?? statsData.matchedCount ?? statsData.matched ?? 0
+  );
+  const partialMatchCount = Number(
+    statsData.partial_match?.count ??
+      statsData.partialMatch?.count ??
+      statsData.partial_match_count ??
+      statsData.partialMatchCount ??
+      0
+  );
+  const mismatchCount = Number(
+    statsData.mismatch?.count ??
+      statsData.mismatch_count ??
+      statsData.mismatchCount ??
+      statsData.exceptions ??
+      0
+  );
+  const resolvedCount = Number(
+    statsData.resolved?.count ?? statsData.resolved_count ?? statsData.resolvedCount ?? 0
+  );
+  const twoWayCount = matchings.filter((m) => m.match_type === 'TWO_WAY').length;
+  const threeWayCount = matchings.filter((m) => m.match_type === 'THREE_WAY').length;
+
+  const getPerformMatchDisabledReason = () => {
+    if (matching) return 'Matching is in progress...';
+    if (!matchForm.invoice_id) return 'Select an invoice';
+    if (!matchForm.po_id) return 'Select a purchase order';
+    if (matchForm.match_type === 'THREE_WAY' && !matchForm.grn_id) return 'Select a GRN for 3-way match';
+    return '';
+  };
+  const performMatchDisabledReason = getPerformMatchDisabledReason();
+  const isPerformMatchDisabled = Boolean(performMatchDisabledReason);
 
   if (loading) {
     return (
@@ -299,7 +453,7 @@ export const InvoiceMatching = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Total Matchings</p>
-                  <p className="text-2xl font-bold">{stats.total_matchings}</p>
+                  <p className="text-2xl font-bold">{totalMatchingsCount}</p>
                 </div>
                 <Link2 className="h-8 w-8 text-muted-foreground" />
               </div>
@@ -310,7 +464,7 @@ export const InvoiceMatching = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Matched</p>
-                  <p className="text-2xl font-bold text-green-600">{stats.matched.count}</p>
+                  <p className="text-2xl font-bold text-green-600">{matchedCount}</p>
                 </div>
                 <CheckCircle className="h-8 w-8 text-green-500" />
               </div>
@@ -321,7 +475,7 @@ export const InvoiceMatching = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Partial Match</p>
-                  <p className="text-2xl font-bold text-yellow-600">{stats.partial_match.count}</p>
+                  <p className="text-2xl font-bold text-yellow-600">{partialMatchCount}</p>
                 </div>
                 <AlertTriangle className="h-8 w-8 text-yellow-500" />
               </div>
@@ -332,7 +486,7 @@ export const InvoiceMatching = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Mismatch</p>
-                  <p className="text-2xl font-bold text-red-600">{stats.mismatch.count}</p>
+                  <p className="text-2xl font-bold text-red-600">{mismatchCount}</p>
                 </div>
                 <XCircle className="h-8 w-8 text-red-500" />
               </div>
@@ -343,7 +497,7 @@ export const InvoiceMatching = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Resolved</p>
-                  <p className="text-2xl font-bold text-blue-600">{stats.resolved.count}</p>
+                  <p className="text-2xl font-bold text-blue-600">{resolvedCount}</p>
                 </div>
                 <CheckCheck className="h-8 w-8 text-blue-500" />
               </div>
@@ -358,13 +512,13 @@ export const InvoiceMatching = () => {
           <Card>
             <CardContent className="pt-4">
               <p className="text-sm text-muted-foreground">2-Way Matches</p>
-              <p className="text-xl font-bold">{stats.by_match_type?.two_way || 0}</p>
+              <p className="text-xl font-bold">{twoWayCount}</p>
             </CardContent>
           </Card>
           <Card>
             <CardContent className="pt-4">
               <p className="text-sm text-muted-foreground">3-Way Matches</p>
-              <p className="text-xl font-bold">{stats.by_match_type?.three_way || 0}</p>
+              <p className="text-xl font-bold">{threeWayCount}</p>
             </CardContent>
           </Card>
         </div>
@@ -404,6 +558,7 @@ export const InvoiceMatching = () => {
                 <SelectItem value="Matched">Matched</SelectItem>
                 <SelectItem value="Partial Match">Partial Match</SelectItem>
                 <SelectItem value="Mismatch">Mismatch</SelectItem>
+                <SelectItem value="Exception">Exception</SelectItem>
                 <SelectItem value="Resolved">Resolved</SelectItem>
               </SelectContent>
             </Select>
@@ -458,7 +613,7 @@ export const InvoiceMatching = () => {
                               <TrendingDown className="h-3 w-3 text-green-500" />
                             ) : null}
                             <span className={m.tolerance_exceeded ? 'text-red-600' : 'text-green-600'}>
-                              {m.amount_variance_pct}%
+                              {formatPercent(m.amount_variance_pct)}%
                             </span>
                           </div>
                         </TableCell>
@@ -481,7 +636,7 @@ export const InvoiceMatching = () => {
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
-                            {(m.match_status === 'Mismatch' || m.match_status === 'Partial Match') && (
+                            {(m.match_status === 'Mismatch' || m.match_status === 'Partial Match' || m.match_status === 'Exception') && (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -546,7 +701,7 @@ export const InvoiceMatching = () => {
                         </TableCell>
                         <TableCell>
                           <span className="text-red-600 font-medium">
-                            {formatCurrency(m.amount_variance)} ({m.amount_variance_pct}%)
+                            {formatCurrency(m.amount_variance)} ({formatPercent(m.amount_variance_pct)}%)
                           </span>
                         </TableCell>
                         <TableCell>{m.quantity_variance_pct}%</TableCell>
@@ -651,8 +806,14 @@ export const InvoiceMatching = () => {
                     </CardContent>
                   </Card>
                   <Card 
-                    className={`cursor-pointer transition-all ${matchForm.match_type === 'THREE_WAY' ? 'ring-2 ring-primary' : ''} ${matchCandidates.grn_candidates?.length === 0 ? 'opacity-50' : ''}`}
-                    onClick={() => matchCandidates.grn_candidates?.length > 0 && setMatchForm(prev => ({ ...prev, match_type: 'THREE_WAY' }))}
+                    className={`cursor-pointer transition-all ${matchForm.match_type === 'THREE_WAY' ? 'ring-2 ring-primary' : ''}`}
+                    onClick={() =>
+                      setMatchForm((prev) => ({
+                        ...prev,
+                        match_type: 'THREE_WAY',
+                        grn_id: prev.grn_id || '',
+                      }))
+                    }
                   >
                     <CardContent className="pt-4">
                       <div className="flex items-center gap-3">
@@ -664,7 +825,7 @@ export const InvoiceMatching = () => {
                         <div>
                           <p className="font-semibold">3-Way Matching</p>
                           <p className="text-xs text-muted-foreground">Invoice vs PO vs GRN</p>
-                          {matchCandidates.grn_candidates?.length === 0 && (
+                          {matchForm.match_type === 'THREE_WAY' && matchCandidates.grn_candidates?.length === 0 && (
                             <p className="text-xs text-red-500">No GRNs available</p>
                           )}
                         </div>
@@ -709,7 +870,7 @@ export const InvoiceMatching = () => {
                         <TableCell>{formatCurrency(po.po_amount)}</TableCell>
                         <TableCell>
                           <span className={po.variance_pct <= 5 ? 'text-green-600' : po.variance_pct <= 15 ? 'text-yellow-600' : 'text-red-600'}>
-                            {formatCurrency(po.amount_variance)} ({po.variance_pct}%)
+                            {formatCurrency(po.amount_variance)} ({formatPercent(po.variance_pct)}%)
                           </span>
                         </TableCell>
                         <TableCell>
@@ -801,7 +962,7 @@ export const InvoiceMatching = () => {
             </Button>
             <Button 
               onClick={handlePerformMatch} 
-              disabled={matching || !matchForm.po_id}
+              disabled={isPerformMatchDisabled}
               data-testid="perform-match-btn"
             >
               {matching && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
@@ -809,6 +970,11 @@ export const InvoiceMatching = () => {
               Perform {matchForm.match_type === 'TWO_WAY' ? '2-Way' : '3-Way'} Match
             </Button>
           </DialogFooter>
+          {isPerformMatchDisabled && (
+            <p className="text-xs text-muted-foreground text-right">
+              {performMatchDisabledReason}
+            </p>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -873,7 +1039,7 @@ export const InvoiceMatching = () => {
                     <div className="text-center p-4 bg-muted rounded-lg">
                       <p className="text-sm text-muted-foreground">Amount Variance</p>
                       <p className={`text-2xl font-bold ${selectedMatching.amount_variance_pct > selectedMatching.tolerance_settings?.amount ? 'text-red-600' : 'text-green-600'}`}>
-                        {selectedMatching.amount_variance_pct}%
+                        {formatPercent(selectedMatching.amount_variance_pct)}%
                       </p>
                       <p className="text-xs text-muted-foreground">
                         {formatCurrency(selectedMatching.amount_variance)}
@@ -915,7 +1081,7 @@ export const InvoiceMatching = () => {
             <Button variant="outline" onClick={() => setShowViewDialog(false)}>
               Close
             </Button>
-            {selectedMatching && (selectedMatching.match_status === 'Mismatch' || selectedMatching.match_status === 'Partial Match') && (
+            {selectedMatching && (selectedMatching.match_status === 'Mismatch' || selectedMatching.match_status === 'Partial Match' || selectedMatching.match_status === 'Exception') && (
               <Button onClick={() => {
                 setShowViewDialog(false);
                 setShowResolveDialog(true);
@@ -939,7 +1105,7 @@ export const InvoiceMatching = () => {
               <div className="p-4 bg-muted rounded-lg">
                 <p><strong>Invoice:</strong> {selectedMatching.invoice_number}</p>
                 <p><strong>PO:</strong> {selectedMatching.po_number}</p>
-                <p><strong>Variance:</strong> {formatCurrency(selectedMatching.amount_variance)} ({selectedMatching.amount_variance_pct}%)</p>
+                <p><strong>Variance:</strong> {formatCurrency(selectedMatching.amount_variance)} ({formatPercent(selectedMatching.amount_variance_pct)}%)</p>
                 <p><strong>Status:</strong> {selectedMatching.match_status}</p>
               </div>
 

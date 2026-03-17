@@ -13,6 +13,12 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { useAuth } from '../contexts/AuthContext';
 
+const safeFormatDate = (value, pattern = 'dd MMM yy') => {
+  if (!value) return '-';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? '-' : format(date, pattern);
+};
+
 export const Approvals = () => {
   const { data: pendingApprovalsData = [], refetch: refetchPendingApprovals } =
     useGetPendingApprovalsQuery();
@@ -24,8 +30,27 @@ export const Approvals = () => {
   const [actionType, setActionType] = useState('');
   const { user } = useAuth();
 
-  const pendingInvoices = Array.isArray(pendingApprovalsData) ? pendingApprovalsData : [];
-  const allInvoices = Array.isArray(allInvoicesData) ? allInvoicesData : [];
+  const normalizeInvoice = (invoice = {}) => ({
+    ...invoice,
+    invoice_number: invoice.invoice_number ?? invoice.invoiceNumber,
+    vendor_name: invoice.vendor_name ?? invoice.vendorName,
+    vendor_id: invoice.vendor_id ?? invoice.vendorId,
+    invoice_date: invoice.invoice_date ?? invoice.invoiceDate,
+    due_date: invoice.due_date ?? invoice.dueDate,
+    payment_date: invoice.payment_date ?? invoice.paymentDate,
+    source_email: invoice.source_email ?? invoice.sourceEmail,
+    file_category: invoice.file_category ?? invoice.fileCategory,
+    original_file_name: invoice.original_file_name ?? invoice.originalFileName,
+    created_by_name: invoice.created_by_name ?? invoice.createdByName,
+    approval_records: invoice.approval_records ?? invoice.approvalRecords,
+  });
+
+  const pendingInvoices = Array.isArray(pendingApprovalsData)
+    ? pendingApprovalsData.map(normalizeInvoice)
+    : [];
+  const allInvoices = Array.isArray(allInvoicesData)
+    ? allInvoicesData.map(normalizeInvoice)
+    : [];
 
   const handleApprovalAction = async (invoice, action) => {
     setSelectedInvoice(invoice);
@@ -42,9 +67,15 @@ export const Approvals = () => {
           comments,
         },
       }).unwrap();
-      toast.success(`Invoice ${actionType}d successfully`, {
-        description: 'Payment has been approved and moved to payments tab',
-        className: 'bg-emerald-50 border-emerald-200 text-emerald-900'
+      const approved = actionType === 'Approved';
+      const verb = approved ? 'approved' : 'rejected';
+      toast.success(`Invoice ${verb} successfully`, {
+        description: approved
+          ? 'Payment has been approved and moved to payments tab'
+          : 'Invoice has been rejected',
+        className: approved
+          ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+          : 'bg-red-50 border-red-200 text-red-900'
       });
       setDialogOpen(false);
       setComments('');
@@ -170,25 +201,34 @@ export const Approvals = () => {
                         </div>
                       </td>
                       <td className="p-4 text-sm text-muted-foreground">
-                        {invoice.payment_date
-                          ? format(new Date(invoice.payment_date), 'dd MMM yy')
-                          : '-'}
+                        {safeFormatDate(invoice.payment_date || invoice.paymentDate)}
                       </td>
                       <td className="p-4 text-sm text-muted-foreground">
-                        {format(new Date(invoice.due_date), 'dd MMM yy')}
+                        {safeFormatDate(invoice.due_date || invoice.dueDate)}
                       </td>
                       <td className="p-4 text-sm text-muted-foreground">
-                        {format(new Date(invoice.invoice_date), 'dd MMM yy')}
+                        {safeFormatDate(invoice.invoice_date || invoice.invoiceDate)}
                       </td>
                       <td className="p-4 text-right">
-                        <Button
-                          size="sm"
-                          onClick={() => handleApprovalAction(invoice, 'approve')}
-                          data-testid={`approve-button-${invoice.id}`}
-                        >
-                          <CheckCircle className="h-4 w-4 mr-2" />
-                          Approve
-                        </Button>
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleApprovalAction(invoice, 'Approved')}
+                            data-testid={`approve-button-${invoice.id}`}
+                          >
+                            <CheckCircle className="h-4 w-4 mr-2" />
+                            Approve
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => handleApprovalAction(invoice, 'Rejected')}
+                            data-testid={`reject-button-${invoice.id}`}
+                          >
+                            <XCircle className="h-4 w-4 mr-2" />
+                            Reject
+                          </Button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -230,7 +270,7 @@ export const Approvals = () => {
                       </span>
                     </td>
                     <td className="p-4 text-sm text-muted-foreground">
-                      {format(new Date(invoice.due_date), 'dd MMM yy')}
+                      {safeFormatDate(invoice.due_date || invoice.dueDate)}
                     </td>
                   </tr>
                 ))}
@@ -286,7 +326,7 @@ export const Approvals = () => {
         <DialogContent data-testid="approval-dialog">
           <DialogHeader>
             <DialogTitle>
-              {actionType === 'approve' ? 'Approve Invoice' : 'Reject Invoice'}
+              {actionType === 'Approved' ? 'Approve Invoice' : 'Reject Invoice'}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
@@ -335,7 +375,7 @@ export const Approvals = () => {
                 onClick={submitApproval}
                 data-testid="approval-confirm"
               >
-                {actionType === 'approve' ? (
+                {actionType === 'Approved' ? (
                   <>
                     <CheckCircle className="h-4 w-4 mr-2" />
                     Approve
