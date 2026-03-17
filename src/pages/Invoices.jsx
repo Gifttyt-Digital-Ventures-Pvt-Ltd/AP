@@ -125,11 +125,25 @@ export const Invoices = () => {
   const [bulkPreviewOpen, setBulkPreviewOpen] = useState(false);
   const [bulkPreviewItems, setBulkPreviewItems] = useState([]);
   const [bulkCreating, setBulkCreating] = useState(false);
+  const [bulkExtracting, setBulkExtracting] = useState(false);
+  const [bulkExtractTotalFiles, setBulkExtractTotalFiles] = useState(0);
+  const [bulkExtractStartedAt, setBulkExtractStartedAt] = useState(null);
+  const [bulkExtractElapsedSeconds, setBulkExtractElapsedSeconds] = useState(0);
+  const [bulkExtractProgress, setBulkExtractProgress] = useState(0);
+  const [bulkProgress, setBulkProgress] = useState({
+    total: 0,
+    processed: 0,
+    success: 0,
+    failed: 0,
+    startedAt: null,
+  });
+  const [bulkElapsedSeconds, setBulkElapsedSeconds] = useState(0);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [bulkEditItemId, setBulkEditItemId] = useState('');
   const [bulkEditForm, setBulkEditForm] = useState(null);
   const [bulkEditPreviewError, setBulkEditPreviewError] = useState(false);
   const [bulkEditFileURL, setBulkEditFileURL] = useState(null);
+  const [bulkAddingVendorItemId, setBulkAddingVendorItemId] = useState('');
 
   const openSingleFilePicker = () => {
     if (fileInputRef.current) {
@@ -179,6 +193,37 @@ export const Invoices = () => {
     setBulkEditFileURL(url);
     return () => URL.revokeObjectURL(url);
   }, [bulkEditOpen, bulkEditItemId, bulkPreviewItems]);
+
+  useEffect(() => {
+    if (!bulkCreating || !bulkProgress.startedAt) {
+      setBulkElapsedSeconds(0);
+      return;
+    }
+    const timerId = setInterval(() => {
+      const elapsed = Math.max(0, Math.floor((Date.now() - bulkProgress.startedAt) / 1000));
+      setBulkElapsedSeconds(elapsed);
+    }, 1000);
+
+    return () => clearInterval(timerId);
+  }, [bulkCreating, bulkProgress.startedAt]);
+
+  useEffect(() => {
+    if (!bulkExtracting || !bulkExtractStartedAt) {
+      setBulkExtractElapsedSeconds(0);
+      setBulkExtractProgress(0);
+      return;
+    }
+    const timerId = setInterval(() => {
+      const elapsed = Math.max(0, Math.floor((Date.now() - bulkExtractStartedAt) / 1000));
+      setBulkExtractElapsedSeconds(elapsed);
+      // Simulated determinate progress until API returns (caps at 95%)
+      setBulkExtractProgress((prev) => {
+        const target = Math.min(95, 12 + elapsed * 8);
+        return target > prev ? target : prev;
+      });
+    }, 1000);
+    return () => clearInterval(timerId);
+  }, [bulkExtracting, bulkExtractStartedAt]);
 
 
   // Check if vendor exists in system
@@ -438,6 +483,12 @@ export const Invoices = () => {
   const handleBulkFileUpload = async (e) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+    setBulkProgress({ total: 0, processed: 0, success: 0, failed: 0, startedAt: null });
+    setBulkElapsedSeconds(0);
+    setBulkExtracting(true);
+    setBulkExtractTotalFiles(files.length);
+    setBulkExtractStartedAt(Date.now());
+    setBulkExtractProgress(8);
 
     const formDataUpload = new FormData();
     Array.from(files).forEach(file => {
@@ -472,7 +523,7 @@ export const Invoices = () => {
         return {
           id: `${result?.filename || 'file'}-${index}`,
           filename: result?.filename || 'Unknown file',
-          status: result.status,
+          status: vendorMissing ? 'failed' : result.status,
           error: vendorMissing
             ? `Vendor "${normalizedInvoice?.vendor_name || 'Unknown'}" not found`
             : (result?.error || result?.message || ''),
@@ -490,43 +541,72 @@ export const Invoices = () => {
     } catch (error) {
       const errorMessage = error?.data?.detail || 'Bulk upload failed';
       toast.error(errorMessage, { duration: 6000 });
+    } finally {
+      setBulkExtractProgress(100);
+      setBulkExtracting(false);
     }
   };
 
   const handleCreateBulkInvoices = async () => {
-    const selectedItems = bulkPreviewItems.filter((item) => item.selected && item.invoicePayload);
+    const selectedItems = bulkPreviewItems.filter(
+      (item) => item.selected && item.invoicePayload && item.status !== 'uploaded'
+    );
     if (selectedItems.length === 0) {
       toast.error('No extracted invoices selected for creation');
       return;
     }
 
     setBulkCreating(true);
+    setBulkProgress({
+      total: selectedItems.length,
+      processed: 0,
+      success: 0,
+      failed: 0,
+      startedAt: Date.now(),
+    });
     try {
-      const outcomes = await Promise.allSettled(
-        selectedItems.map((item) =>
-          createInvoice(buildInvoiceMultipartPayload(item.invoicePayload, item.file)).unwrap()
-        )
-      );
-      const createdCount = outcomes.filter((o) => o.status === 'fulfilled').length;
-      const failedCount = outcomes.length - createdCount;
+      let createdCount = 0;
+      let failedCount = 0;
+
+      for (const [index, item] of selectedItems.entries()) {
+        try {
+          await createInvoice(buildInvoiceMultipartPayload(item.invoicePayload, item.file)).unwrap();
+          createdCount += 1;
+          setBulkPreviewItems((prev) =>
+            prev.map((row) =>
+              row.id === item.id ? { ...row, status: 'uploaded', selected: false, error: '' } : row
+            )
+          );
+        } catch (error) {
+          failedCount += 1;
+          setBulkPreviewItems((prev) =>
+            prev.map((row) =>
+              row.id === item.id
+                ? {
+                    ...row,
+                    status: 'upload_failed',
+                    error: error?.data?.detail || error?.data?.message || 'Upload failed',
+                    selected: false,
+                  }
+                : row
+            )
+          );
+          toast.error(`Failed: ${item.filename}`);
+        } finally {
+          const processed = index + 1;
+          setBulkProgress((prev) => ({
+            ...prev,
+            processed,
+            success: createdCount,
+            failed: failedCount,
+          }));
+        }
+      }
 
       toast.success(
         `Created ${createdCount} invoice${createdCount === 1 ? '' : 's'}${failedCount ? `, ${failedCount} failed` : ''}.`,
         { duration: 5000 }
       );
-
-      if (failedCount > 0) {
-        outcomes.forEach((outcome, index) => {
-          if (outcome.status === 'rejected') {
-            const item = selectedItems[index];
-            toast.error(`Failed: ${item.filename}`);
-          }
-        });
-      }
-
-      setBulkPreviewOpen(false);
-      setBulkPreviewItems([]);
-      setActiveTab('list');
     } finally {
       setBulkCreating(false);
     }
@@ -609,6 +689,79 @@ export const Invoices = () => {
     setBulkEditOpen(false);
     setBulkEditForm(null);
     setBulkEditItemId('');
+  };
+
+  const handleAddVendorForBulkItem = async (itemId) => {
+    const row = bulkPreviewItems.find((item) => item.id === itemId);
+    const payload = row?.invoicePayload;
+    const vendorName = payload?.vendor_name?.trim();
+
+    if (!row || !payload || !vendorName) {
+      toast.error('Vendor name is required');
+      return;
+    }
+
+    const existingVendor = findVendorByName(vendorName);
+    if (existingVendor?.id) {
+      setBulkPreviewItems((prev) =>
+        prev.map((item) =>
+          item.id === itemId
+            ? {
+                ...item,
+                invoicePayload: { ...item.invoicePayload, vendor_id: existingVendor.id },
+                selected: item.status !== 'uploaded',
+                error: '',
+                status: item.status === 'failed' ? 'success' : item.status,
+              }
+            : item
+        )
+      );
+      toast.success(`Vendor "${vendorName}" matched`);
+      return;
+    }
+
+    setBulkAddingVendorItemId(itemId);
+    try {
+      const vendorData = {
+        name: vendorName,
+        vendor_type: 'Company',
+        gstin: payload.gstin || payload.vendor_gstin || '',
+        address_line1: payload.billing_address || '',
+        pan: '',
+        bank_name: '',
+        account_number: '',
+        ifsc_code: '',
+        category: 'Supplier',
+        email: null,
+        phone: '',
+      };
+
+      const createdVendor = await createVendor(vendorData).unwrap();
+      const newVendorId = createdVendor?.id;
+      if (!newVendorId) {
+        throw new Error('Vendor created but id missing');
+      }
+
+      setBulkPreviewItems((prev) =>
+        prev.map((item) =>
+          item.id === itemId
+            ? {
+                ...item,
+                invoicePayload: { ...item.invoicePayload, vendor_id: newVendorId },
+                selected: item.status !== 'uploaded',
+                error: '',
+                status: item.status === 'failed' ? 'success' : item.status,
+              }
+            : item
+        )
+      );
+      toast.success(`Vendor "${vendorName}" added`);
+    } catch (error) {
+      const errorMessage = error?.data?.detail || error?.message || 'Failed to add vendor';
+      toast.error(typeof errorMessage === 'string' ? errorMessage : 'Failed to add vendor');
+    } finally {
+      setBulkAddingVendorItemId('');
+    }
   };
 
   // Calculate line item subtotal
@@ -956,6 +1109,29 @@ export const Invoices = () => {
       'Rejected': 'bg-red-100 text-red-800 border-red-200'
     };
     return statusMap[status] || 'bg-gray-100 text-gray-800';
+  };
+
+  const formatDuration = (totalSeconds) => {
+    const mins = Math.floor(totalSeconds / 60);
+    const secs = totalSeconds % 60;
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+  };
+
+  const formatBulkStatusLabel = (status) => {
+    const normalized = String(status || '').toLowerCase();
+    if (normalized === 'success' || normalized === 'extracted') return 'Extracted';
+    if (normalized === 'uploaded') return 'Uploaded';
+    if (normalized === 'upload_failed') return 'Upload Failed';
+    if (normalized === 'failed' || normalized === 'error') return 'Extraction Failed';
+    return 'Unknown';
+  };
+
+  const getBulkStatusBadgeClass = (status) => {
+    const normalized = String(status || '').toLowerCase();
+    if (normalized === 'uploaded') return 'bg-blue-100 text-blue-800 border-blue-200';
+    if (normalized === 'success' || normalized === 'extracted') return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+    if (normalized === 'upload_failed' || normalized === 'failed' || normalized === 'error') return 'bg-red-100 text-red-800 border-red-200';
+    return 'bg-gray-100 text-gray-800 border-gray-200';
   };
 
   const getHistoryIcon = (actionType) => {
@@ -1783,8 +1959,31 @@ export const Invoices = () => {
         </TabsContent>
       </Tabs>
 
+      <Dialog open={bulkExtracting}>
+        <DialogContent className="max-w-md" data-testid="bulk-extract-loader-dialog">
+          <DialogHeader>
+            <DialogTitle>Uploading & Extracting Invoices</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Processing {bulkExtractTotalFiles} file{bulkExtractTotalFiles === 1 ? '' : 's'}...
+            </p>
+            <div className="h-2 w-full rounded bg-muted overflow-hidden">
+              <div
+                className="h-full bg-primary transition-all duration-700"
+                style={{ width: `${bulkExtractProgress}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-xs text-muted-foreground">
+              <span>Please wait, do not close this window.</span>
+              <span>{Math.round(bulkExtractProgress)}% • {formatDuration(bulkExtractElapsedSeconds)}</span>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={bulkPreviewOpen} onOpenChange={(open) => !bulkCreating && setBulkPreviewOpen(open)}>
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto" data-testid="bulk-preview-dialog">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto overflow-x-hidden" data-testid="bulk-preview-dialog">
           <DialogHeader>
             <DialogTitle>Review Bulk Invoices</DialogTitle>
           </DialogHeader>
@@ -1798,15 +1997,17 @@ export const Invoices = () => {
                 <input
                   type="checkbox"
                   checked={
-                    bulkPreviewItems.filter((i) => i.invoicePayload).length > 0 &&
+                    bulkPreviewItems.filter((i) => i.invoicePayload && i.status !== 'uploaded').length > 0 &&
                     bulkPreviewItems
-                      .filter((i) => i.invoicePayload)
+                      .filter((i) => i.invoicePayload && i.status !== 'uploaded')
                       .every((i) => i.selected)
                   }
                   onChange={(e) =>
                     setBulkPreviewItems((prev) =>
                       prev.map((item) =>
-                        item.invoicePayload ? { ...item, selected: e.target.checked } : item
+                        item.invoicePayload && item.status !== 'uploaded'
+                          ? { ...item, selected: e.target.checked }
+                          : item
                       )
                     )
                   }
@@ -1815,9 +2016,33 @@ export const Invoices = () => {
               </label>
             </div>
 
-            <div className="border rounded-lg overflow-hidden min-h-0">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/50 border-b">
+            {(bulkCreating || bulkProgress.processed > 0) && (
+              <div className="rounded-lg border bg-muted/30 p-3 space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium">
+                    Upload Progress: {bulkProgress.processed}/{bulkProgress.total}
+                  </span>
+                  <span className="text-muted-foreground">
+                    Time: {formatDuration(bulkElapsedSeconds)}
+                  </span>
+                </div>
+                <div className="h-2 w-full rounded bg-muted overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all"
+                    style={{
+                      width: `${bulkProgress.total > 0 ? (bulkProgress.processed / bulkProgress.total) * 100 : 0}%`,
+                    }}
+                  />
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Uploaded: {bulkProgress.success} | Failed: {bulkProgress.failed}
+                </div>
+              </div>
+            )}
+
+            <div className="border rounded-lg min-h-0 max-w-full overflow-auto max-h-[52vh]">
+              <table className="w-full min-w-[900px] text-sm">
+                <thead className="bg-muted/50 border-b sticky top-0 z-10">
                   <tr>
                     <th className="p-3 text-left w-12">Pick</th>
                     <th className="p-3 text-left">File</th>
@@ -1828,16 +2053,13 @@ export const Invoices = () => {
                     <th className="p-3 text-right">Actions</th>
                   </tr>
                 </thead>
-              </table>
-              <div className="max-h-[52vh] overflow-y-auto">
-                <table className="w-full text-sm">
-                  <tbody>
+                <tbody>
                     {bulkPreviewItems.map((item) => (
                       <tr key={item.id} className="border-b last:border-b-0">
                         <td className="p-3 w-12">
                           <input
                             type="checkbox"
-                            disabled={!item.invoicePayload}
+                            disabled={!item.invoicePayload || item.status === 'uploaded'}
                             checked={Boolean(item.selected && item.invoicePayload)}
                             onChange={(e) =>
                               setBulkPreviewItems((prev) =>
@@ -1855,23 +2077,32 @@ export const Invoices = () => {
                           {item.invoicePayload ? `₹${Number(item.invoicePayload.amount || 0).toLocaleString('en-IN')}` : '-'}
                         </td>
                         <td className="p-3">
-                          {item.invoicePayload ? (
-                            <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">
-                              Extracted
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-red-100 text-red-800 border border-red-200">
-                              {item.error || 'Extraction failed'}
-                            </span>
+                          <span
+                            className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium border ${getBulkStatusBadgeClass(item.status)}`}
+                          >
+                            {formatBulkStatusLabel(item.status)}
+                          </span>
+                          {item.error && (
+                            <p className="text-[11px] text-red-600 mt-1">{item.error}</p>
                           )}
                         </td>
                         <td className="p-3 text-right">
                           <div className="flex justify-end gap-2">
+                            {item.invoicePayload && !item.invoicePayload.vendor_id && (
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                onClick={() => handleAddVendorForBulkItem(item.id)}
+                                disabled={bulkCreating || bulkExtracting || bulkAddingVendorItemId === item.id}
+                              >
+                                {bulkAddingVendorItemId === item.id ? 'Adding...' : 'Add Vendor'}
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               variant="outline"
                               onClick={() => openBulkEditDialog(item)}
-                              disabled={!item.invoicePayload}
+                              disabled={!item.invoicePayload || bulkAddingVendorItemId === item.id}
                             >
                               Edit
                             </Button>
@@ -1888,9 +2119,8 @@ export const Invoices = () => {
                         </td>
                       </tr>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                </tbody>
+              </table>
             </div>
 
             <div className="flex gap-3 pt-2">
@@ -1907,11 +2137,13 @@ export const Invoices = () => {
                 className="flex-1"
                 disabled={
                   bulkCreating ||
-                  bulkPreviewItems.filter((i) => i.selected && i.invoicePayload).length === 0
+                  bulkPreviewItems.filter((i) => i.selected && i.invoicePayload && i.status !== 'uploaded').length === 0
                 }
                 data-testid="bulk-create-confirm-btn"
               >
-                {bulkCreating ? 'Creating...' : `Create Selected (${bulkPreviewItems.filter((i) => i.selected && i.invoicePayload).length})`}
+                {bulkCreating
+                  ? 'Creating...'
+                  : `Create Selected (${bulkPreviewItems.filter((i) => i.selected && i.invoicePayload && i.status !== 'uploaded').length})`}
               </Button>
             </div>
           </div>
@@ -1919,7 +2151,7 @@ export const Invoices = () => {
       </Dialog>
 
       <Dialog open={bulkEditOpen} onOpenChange={(open) => !bulkCreating && setBulkEditOpen(open)}>
-        <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto" data-testid="bulk-edit-dialog">
+        <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto overflow-x-hidden" data-testid="bulk-edit-dialog">
           <DialogHeader>
             <DialogTitle>Edit Extracted Invoice</DialogTitle>
           </DialogHeader>
@@ -1999,7 +2231,7 @@ export const Invoices = () => {
                 />
               </div>
 
-              <div className="border rounded-lg overflow-hidden">
+              <div className="border rounded-lg overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-muted/50 border-b">
                     <tr>
