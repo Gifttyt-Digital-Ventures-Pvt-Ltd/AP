@@ -185,9 +185,13 @@ function AppContent() {
 }
 
 function App() {
+  const baseUrl = import.meta.env.BASE_URL || "/";
+  const normalizedBase = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
+  const routerBasename = normalizedBase || "/";
+
   return (
     <div className="App">
-      <BrowserRouter>
+      <BrowserRouter basename={routerBasename}>
         <AuthProvider>
           <SessionTimeout>
             <AppContent />
