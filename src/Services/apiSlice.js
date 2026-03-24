@@ -245,7 +245,16 @@ export const apiSlice = createApi({
       invalidatesTags: ["Auth"],
     }),
     refreshSession: builder.query({
-      query: () => ({ url: "/session/ping", method: "GET" }),
+      query: (token) => ({
+        url: "/session/ping",
+        method: "GET",
+        headers: token
+          ? {
+              Authorization: `Bearer ${token}`,
+              authToken: token,
+            }
+          : undefined,
+      }),
       providesTags: ["Auth"],
     }),
 

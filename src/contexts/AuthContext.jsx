@@ -34,13 +34,13 @@ export const AuthProvider = ({ children }) => {
         { name: email, role: "Admin" };
 
       if (tokenValue) {
-        setToken(tokenValue);
-        setUser(userData);
         sessionStorage.setItem("token", tokenValue);
         sessionStorage.setItem("user", JSON.stringify(userData));
         if (response?.validTill) {
           sessionStorage.setItem("tokenExpiry", String(response.validTill));
         }
+        setToken(tokenValue);
+        setUser(userData);
         return userData;
       }
       throw new Error("Corporate login did not return authToken");
@@ -49,10 +49,10 @@ export const AuthProvider = ({ children }) => {
     const response = await loginMutation({ email, password }).unwrap();
     const { access_token, user: userData } = response;
 
-    setToken(access_token);
-    setUser(userData);
     sessionStorage.setItem("token", access_token);
     sessionStorage.setItem("user", JSON.stringify(userData));
+    setToken(access_token);
+    setUser(userData);
 
     return userData;
   };
@@ -61,10 +61,10 @@ export const AuthProvider = ({ children }) => {
     const response = await registerMutation({ email, password, name, role }).unwrap();
     const { access_token, user: userData } = response;
     
-    setToken(access_token);
-    setUser(userData);
     sessionStorage.setItem('token', access_token);
     sessionStorage.setItem('user', JSON.stringify(userData));
+    setToken(access_token);
+    setUser(userData);
     
     return userData;
   };
