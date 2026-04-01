@@ -5,6 +5,11 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "";
 const baseQuery = fetchBaseQuery({
   baseUrl: BACKEND_URL,
   prepareHeaders: (headers) => {
+    const skipAuth = headers.get("x-skip-auth") === "true";
+    if (skipAuth) {
+      headers.delete("x-skip-auth");
+      return headers;
+    }
     const token = sessionStorage.getItem("token");
     if (token && !headers.has("Authorization")) {
       headers.set("Authorization", `Bearer ${token}`);
@@ -241,6 +246,25 @@ export const apiSlice = createApi({
         url: "/session/corporate/login",
         method: "POST",
         body: credentials,
+        headers: { "x-skip-auth": "true" },
+      }),
+      invalidatesTags: ["Auth"],
+    }),
+    getCorporatesByEmail: builder.mutation({
+      query: ({ email }) => ({
+        url: "/session/corporate/getCorporates",
+        method: "POST",
+        body: { email },
+        headers: { "x-skip-auth": "true" },
+      }),
+      invalidatesTags: ["Auth"],
+    }),
+    sendCorporateLoginOtp: builder.mutation({
+      query: ({ email, corpId }) => ({
+        url: "/session/corporate/sendLoginOTP",
+        method: "POST",
+        body: { email, corpId },
+        headers: { "x-skip-auth": "true" },
       }),
       invalidatesTags: ["Auth"],
     }),
@@ -806,6 +830,8 @@ export const {
   useLoginMutation,
   useRegisterMutation,
   useCorporateLoginMutation,
+  useGetCorporatesByEmailMutation,
+  useSendCorporateLoginOtpMutation,
   useLazyRefreshSessionQuery,
   useGetDashboardStatsQuery,
   useGetExecutiveDashboardQuery,
