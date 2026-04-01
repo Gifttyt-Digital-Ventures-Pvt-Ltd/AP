@@ -100,6 +100,7 @@ export const Transactions = () => {
   const [periodStart, setPeriodStart] = useState('');
   const [periodEnd, setPeriodEnd] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [isDragOverUploadZone, setIsDragOverUploadZone] = useState(false);
 
   // Filters
   const [statusFilter, setStatusFilter] = useState('');
@@ -149,8 +150,7 @@ export const Transactions = () => {
     setTransactionQueryParams(buildTransactionQueryParams(dateFilter));
   };
 
-  const handleFileUpload = async (e) => {
-    const file = e.target.files[0];
+  const handleStatementUpload = async (file) => {
     if (!file) return;
 
     if (!periodStart || !periodEnd) {
@@ -178,6 +178,32 @@ export const Transactions = () => {
     } finally {
       setUploading(false);
     }
+  };
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    await handleStatementUpload(file);
+  };
+
+  const handleUploadZoneDragOver = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverUploadZone(true);
+  };
+
+  const handleUploadZoneDragLeave = (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverUploadZone(false);
+  };
+
+  const handleUploadZoneDrop = async (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragOverUploadZone(false);
+
+    const droppedFile = e.dataTransfer?.files?.[0];
+    await handleStatementUpload(droppedFile);
   };
 
   const handleDeleteStatement = async (statementId) => {
@@ -584,8 +610,16 @@ export const Transactions = () => {
 
             {/* Drop Zone */}
             <div 
-              className="border-2 border-dashed border-gray-200 rounded-lg p-8 text-center cursor-pointer hover:border-primary hover:bg-gray-50 transition-colors"
+              className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
+                isDragOverUploadZone
+                  ? 'border-primary bg-gray-50'
+                  : 'border-gray-200 hover:border-primary hover:bg-gray-50'
+              }`}
               onClick={() => fileInputRef.current?.click()}
+              onDragOver={handleUploadZoneDragOver}
+              onDragEnter={handleUploadZoneDragOver}
+              onDragLeave={handleUploadZoneDragLeave}
+              onDrop={handleUploadZoneDrop}
             >
               <div className="inline-flex items-center justify-center w-12 h-12 bg-blue-100 rounded-full mb-3">
                 <FileText className="h-6 w-6 text-blue-600" />
