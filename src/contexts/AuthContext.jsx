@@ -1,5 +1,11 @@
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { useCorporateLoginMutation, useLoginMutation, useRegisterMutation } from '../Services/apiSlice';
+import {
+  useCorporateLoginMutation,
+  useGetCorporatesByEmailMutation,
+  useLoginMutation,
+  useRegisterMutation,
+  useSendCorporateLoginOtpMutation,
+} from '../Services/apiSlice';
 
 const AuthContext = createContext(null);
 const AUTH_PROVIDER = import.meta.env.VITE_AUTH_PROVIDER ?? "ap";
@@ -7,6 +13,8 @@ const AUTH_PROVIDER = import.meta.env.VITE_AUTH_PROVIDER ?? "ap";
 export const AuthProvider = ({ children }) => {
   const [loginMutation] = useLoginMutation();
   const [corporateLoginMutation] = useCorporateLoginMutation();
+  const [getCorporatesMutation] = useGetCorporatesByEmailMutation();
+  const [sendCorporateLoginOtpMutation] = useSendCorporateLoginOtpMutation();
   const [registerMutation] = useRegisterMutation();
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(sessionStorage.getItem('token'));
@@ -23,9 +31,13 @@ export const AuthProvider = ({ children }) => {
     setLoading(false);
   }, []);
 
-  const login = async (email, password) => {
+  const login = async (email, password, corpId = null) => {
     if (AUTH_PROVIDER === "corporate") {
-      const response = await corporateLoginMutation({ email, otp: password }).unwrap();
+      const response = await corporateLoginMutation({
+        email,
+        otp: password,
+        ...(corpId ? { corpId } : {}),
+      }).unwrap();
       const tokenValue = response?.authToken;
       const userData =
         response?.user ||
@@ -34,13 +46,13 @@ export const AuthProvider = ({ children }) => {
         { name: email, role: "Admin" };
 
       if (tokenValue) {
-        setToken(tokenValue);
-        setUser(userData);
         sessionStorage.setItem("token", tokenValue);
         sessionStorage.setItem("user", JSON.stringify(userData));
         if (response?.validTill) {
           sessionStorage.setItem("tokenExpiry", String(response.validTill));
         }
+        setToken(tokenValue);
+        setUser(userData);
         return userData;
       }
       throw new Error("Corporate login did not return authToken");
@@ -49,22 +61,30 @@ export const AuthProvider = ({ children }) => {
     const response = await loginMutation({ email, password }).unwrap();
     const { access_token, user: userData } = response;
 
-    setToken(access_token);
-    setUser(userData);
     sessionStorage.setItem("token", access_token);
     sessionStorage.setItem("user", JSON.stringify(userData));
+    setToken(access_token);
+    setUser(userData);
 
     return userData;
+  };
+
+  const getCorporatesByEmail = async (email) => {
+    return getCorporatesMutation({ email }).unwrap();
+  };
+
+  const sendCorporateLoginOtp = async (email, corpId) => {
+    return sendCorporateLoginOtpMutation({ email, corpId }).unwrap();
   };
 
   const register = async (email, password, name, role = 'Maker') => {
     const response = await registerMutation({ email, password, name, role }).unwrap();
     const { access_token, user: userData } = response;
     
-    setToken(access_token);
-    setUser(userData);
     sessionStorage.setItem('token', access_token);
     sessionStorage.setItem('user', JSON.stringify(userData));
+    setToken(access_token);
+    setUser(userData);
     
     return userData;
   };
@@ -78,7 +98,16 @@ export const AuthProvider = ({ children }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, token, login, register, logout, loading }}>
+    <AuthContext.Provider value={{
+      user,
+      token,
+      login,
+      register,
+      logout,
+      loading,
+      getCorporatesByEmail,
+      sendCorporateLoginOtp,
+    }}>
       {children}
     </AuthContext.Provider>
   );

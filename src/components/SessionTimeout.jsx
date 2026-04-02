@@ -30,9 +30,11 @@ const SessionTimeout = ({ children }) => {
     });
   }, [logout, navigate]);
 
-  const pingSession = useCallback(async (versionAtCall = sessionVersionRef.current) => {
+  const pingSession = useCallback(async (versionAtCall = sessionVersionRef.current, tokenAtCall = token) => {
+    if (!tokenAtCall) return;
+
     try {
-      await triggerPing().unwrap();
+      await triggerPing(tokenAtCall).unwrap();
     } catch (error) {
       // Ignore stale responses from previous sessions.
       if (versionAtCall !== sessionVersionRef.current) return;
@@ -44,7 +46,7 @@ const SessionTimeout = ({ children }) => {
         console.error("Session ping failed:", error);
       }
     }
-  }, [triggerPing, handleLogout]);
+  }, [triggerPing, handleLogout, token]);
 
   const updateActivity = useCallback(() => {
     const now = Date.now();
@@ -52,9 +54,9 @@ const SessionTimeout = ({ children }) => {
 
     if (now - lastPingRef.current > PING_INTERVAL_MS) {
       lastPingRef.current = now;
-      pingSession(sessionVersionRef.current);
+      pingSession(sessionVersionRef.current, token);
     }
-  }, [pingSession]);
+  }, [pingSession, token]);
 
   useEffect(() => {
     if (!token) {
@@ -70,7 +72,7 @@ const SessionTimeout = ({ children }) => {
     lastPingRef.current = Date.now();
 
     const activeVersion = sessionVersionRef.current;
-    pingSession(activeVersion).finally(() => {
+    pingSession(activeVersion, token).finally(() => {
       // Ignore stale completion from older sessions.
       if (activeVersion !== sessionVersionRef.current) return;
       lastPingRef.current = Date.now();

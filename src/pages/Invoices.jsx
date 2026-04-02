@@ -1270,6 +1270,9 @@ export const Invoices = () => {
   const renderInvoiceForm = ({ isEdit = false, hideActions = false } = {}) => {
     if (!formData) return null;
     const totals = calculateTotals(formData.line_items);
+    const tdsRate = Number.parseFloat(String(formData.tds || '').replace('%', '')) || 0;
+    const tdsAmount = Math.round(((totals.subTotal * tdsRate) / 100) * 100) / 100;
+    const netPayable = Math.max(Math.round((totals.total - tdsAmount) * 100) / 100, 0);
 
     return (
       <div className="space-y-4">
@@ -1705,11 +1708,15 @@ export const Invoices = () => {
                 <option value="10%">10%</option>
               </select>
             </div>
-            <span>₹0.00</span>
+            <span>₹{tdsAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
           </div>
-          <div className="flex justify-between text-sm font-bold pt-1.5 border-t">
+          <div className="flex justify-between text-sm pt-1.5 border-t">
             <span>Total</span>
             <span>₹{totals.total.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
+          </div>
+          <div className="flex justify-between text-sm font-bold pt-1.5 border-t">
+            <span>Net Payable</span>
+            <span>₹{netPayable.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
           </div>
         </div>
 
@@ -2586,4 +2593,5 @@ export const Invoices = () => {
     </div>
   );
 };
+
 
