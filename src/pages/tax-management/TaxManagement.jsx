@@ -1,16 +1,15 @@
 import React, { useState } from 'react';
+import { useGetInvoicesQuery, useGetVendorsQuery } from '../../Services/apis/invoicesVendorsApi';
 import {
   useGetGstEntriesQuery,
   useGetGstSummaryQuery,
   useGetTdsEntriesQuery,
   useGetTdsSummaryQuery,
   useGetTdsSectionsQuery,
-  useGetInvoicesQuery,
-  useGetVendorsQuery,
   useCalculateGstMutation,
   useCalculateTdsMutation,
   useGenerateForm16aMutation,
-} from '../../Services/apiSlice';
+} from '../../Services/apis/taxApi';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';

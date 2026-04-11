@@ -5,7 +5,7 @@ import {
   useGetVendorAnalyticsQuery,
   useGetTaxReportsQuery,
   useGetPaymentAnalyticsQuery,
-} from '../../Services/apiSlice';
+} from '../../Services/apis/dashboardReportsApi';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Badge } from '../../components/ui/badge';

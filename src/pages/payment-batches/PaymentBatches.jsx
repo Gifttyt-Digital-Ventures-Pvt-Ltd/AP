@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
+import { useGetInvoicesQuery } from '../../Services/apis/invoicesVendorsApi';
+import { useGetBankAccountsQuery } from '../../Services/apis/approvalsPaymentsBankingApi';
 import {
   useGetPaymentBatchesQuery,
   useGetPendingPaymentBatchApprovalsQuery,
   useGetPaymentBatchStatsQuery,
-  useGetInvoicesQuery,
-  useGetBankAccountsQuery,
   useCreatePaymentBatchMutation,
   useSubmitPaymentBatchMutation,
   useApprovePaymentBatchMutation,
   useProcessPaymentBatchMutation,
   useGeneratePaymentBatchFileMutation,
-} from '../../Services/apiSlice';
+} from '../../Services/apis/paymentBatchesApi';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';

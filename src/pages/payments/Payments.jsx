@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { useGetInvoicesQuery } from '../../Services/apis/invoicesVendorsApi';
 import {
   useGetPaymentsQuery,
-  useGetInvoicesQuery,
   useGetBankAccountsQuery,
   useBulkReleasePaymentsMutation,
   useCreatePaymentMutation,
-} from '../../Services/apiSlice';
+} from '../../Services/apis/approvalsPaymentsBankingApi';
 import { Input } from '../../components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Search } from 'lucide-react';

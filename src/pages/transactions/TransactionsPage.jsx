@@ -1,9 +1,9 @@
 import React, { useState, useRef } from 'react';
+import { useGetInvoicesQuery } from '../../Services/apis/invoicesVendorsApi';
 import {
   useGetStatementsQuery,
   useGetTransactionsQuery,
   useGetLedgersQuery,
-  useGetInvoicesQuery,
   useUploadStatementMutation,
   useDeleteStatementMutation,
   useUpdateTransactionMutation,
@@ -12,7 +12,7 @@ import {
   useLazyGetTransactionInvoiceQuery,
   useUploadTransactionVoucherMutation,
   useLinkTransactionInvoiceMutation,
-} from '../../Services/apiSlice';
+} from '../../Services/apis/transactionsApi';
 import { format } from 'date-fns';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { useGetBankAccountsQuery, useGetTransactionsQuery } from '../../Services/apiSlice';
+import { useGetBankAccountsQuery } from '../../Services/apis/approvalsPaymentsBankingApi';
+import { useGetTransactionsQuery } from '../../Services/apis/transactionsApi';
 import { toast } from 'sonner';
 import BankingHeader from './components/BankingHeader';
 import AvailableBalanceCard from './components/AvailableBalanceCard';

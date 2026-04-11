@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
+import { useGetInvoicesQuery } from '../../Services/apis/invoicesVendorsApi';
 import {
   useGetInvoiceMatchingQuery,
   useGetPendingInvoiceMatchingQuery,
   useGetInvoiceMatchingStatsQuery,
-  useGetInvoicesQuery,
   useLazyGetInvoiceMatchingCandidatesQuery,
   useMatchInvoiceMutation,
   useResolveInvoiceMatchMutation,
-} from '../../Services/apiSlice';
+} from '../../Services/apis/invoiceMatchingApi';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';

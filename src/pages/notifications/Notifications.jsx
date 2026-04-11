@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   useGetNotificationsQuery,
   useGetPendingNotificationsQuery,
-} from '../../Services/apiSlice';
+} from '../../Services/apis/notificationsApi';
 import { Button } from '../../components/ui/button';
 import {
   Table,

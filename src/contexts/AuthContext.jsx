@@ -3,7 +3,7 @@ import {
   useCorporateLoginMutation,
   useGetCorporatesByEmailMutation,
   useSendCorporateLoginOtpMutation,
-} from '../Services/apiSlice';
+} from '../Services/serviceApi';
 
 const AuthContext = createContext(null);
 

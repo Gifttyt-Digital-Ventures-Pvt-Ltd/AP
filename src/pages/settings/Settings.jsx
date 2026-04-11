@@ -2,10 +2,12 @@ import React, { useEffect, useState } from 'react';
 import {
   useGetBankAccountsQuery,
   useCreateBankAccountMutation,
+} from '../../Services/apis/approvalsPaymentsBankingApi';
+import {
   useGetOrganisationQuery,
   useCreateOrganisationMutation,
   useUpdateOrganisationMutation,
-} from '../../Services/apiSlice';
+} from '../../Services/apis/settingsApi';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';

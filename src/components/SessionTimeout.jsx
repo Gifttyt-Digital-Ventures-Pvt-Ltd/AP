@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { useLazyRefreshSessionQuery } from "../Services/apiSlice";
+import { useLazyRefreshSessionQuery } from "../Services/serviceApi";
 import { useAuth } from "../contexts/AuthContext";
 
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000;

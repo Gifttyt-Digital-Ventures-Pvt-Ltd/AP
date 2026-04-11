@@ -9,7 +9,7 @@ import {
   useLazyGetInvoiceHistoryQuery,
   useUpdateInvoiceMutation,
   useDeleteInvoiceMutation,
-} from '../../Services/apiSlice';
+} from '../../Services/apis/invoicesVendorsApi';
 import { Plus, Pencil, Clock, CheckCircle2, XCircle, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
