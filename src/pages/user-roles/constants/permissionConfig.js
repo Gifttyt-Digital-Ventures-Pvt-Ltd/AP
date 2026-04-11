@@ -104,7 +104,6 @@ export const PERMISSION_GROUPS = [
 // Human-readable permission labels ported from AP_User Roles ViewRoleDialog.
 export const PERMISSION_LABELS = {
   "dashboard-view": "Dashboard - View Only",
-  "dashboard-widgets": "Dashboard - Specific Widget(s) Access",
   "vendors-view": "Vendors - View Only",
   "vendors-manage": "Vendors - Manage (Add, Delete, Edit)",
   "vendors-approve": "Vendors - Approve",
@@ -145,7 +144,6 @@ export const ROLE_TEMPLATES = [
     permissionsCount: 28,
     permissions: [
       "dashboard-view",
-      "dashboard-widgets",
       "vendors-view",
       "vendors-manage",
       "vendors-approve",
