@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect } from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import SessionTimeout from "./components/SessionTimeout";
 import { Toaster } from "./components/ui/sonner";
@@ -19,20 +19,24 @@ import GoodsReceipt from "./pages/goods-receipt/GoodsReceipt";
 import InvoiceMatching from "./pages/invoice-matching/InvoiceMatching";
 import PaymentBatches from "./pages/payment-batches/PaymentBatches";
 import Notifications from "./pages/notifications/Notifications";
-const Settings = lazy(() => import("./pages/settings/Settings"));
-const TaxManagement = lazy(() => import("./pages/tax-management/TaxManagement"));
-const Reports = lazy(() => import("./pages/reports/Reports"));
+const loadSettingsPage = () => import("./pages/settings/Settings");
+const loadTaxManagementPage = () => import("./pages/tax-management/TaxManagement");
+const loadReportsPage = () => import("./pages/reports/Reports");
+
+const Settings = lazy(loadSettingsPage);
+const TaxManagement = lazy(loadTaxManagementPage);
+const Reports = lazy(loadReportsPage);
 
 const PageFallback = () => (
-  <div className="min-h-screen flex items-center justify-center">
-    <div className="text-center">
+  <div className="min-h-[60vh] rounded-xl border border-border bg-card/50 flex items-center justify-center">
+    <div className="text-center px-6">
       <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto"></div>
       <p className="mt-3 text-muted-foreground">Loading page...</p>
     </div>
   </div>
 );
 
-const ProtectedRoute = ({ children }) => {
+const ProtectedRoute = () => {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -50,149 +54,78 @@ const ProtectedRoute = ({ children }) => {
     return <Navigate to="/login" replace />;
   }
 
-  return <Layout>{children}</Layout>;
+  return (
+    <Layout>
+      <Outlet />
+    </Layout>
+  );
 };
 
 function AppContent() {
+  useEffect(() => {
+    const preloadRoutes = () => {
+      loadSettingsPage();
+      loadTaxManagementPage();
+      loadReportsPage();
+    };
+
+    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
+      const idleHandle = window.requestIdleCallback(preloadRoutes, { timeout: 2000 });
+      return () => {
+        window.cancelIdleCallback?.(idleHandle);
+      };
+    }
+
+    const timer = window.setTimeout(preloadRoutes, 1200);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, []);
+
   return (
     <>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route
-          path="/dashboard"
-          element={
-            <ProtectedRoute>
-              <Dashboard />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/vendors"
-          element={
-            <ProtectedRoute>
-              <Vendors />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/invoices"
-          element={
-            <ProtectedRoute>
-              <InvoicesPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/approvals"
-          element={
-            <ProtectedRoute>
-              <Approvals />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/payments"
-          element={
-            <ProtectedRoute>
-              <Payments />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/banking"
-          element={
-            <ProtectedRoute>
-              <Banking />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/settings"
-          element={
-            <ProtectedRoute>
+        <Route element={<ProtectedRoute />}>
+          <Route path="/dashboard" element={<Dashboard />} />
+          <Route path="/vendors" element={<Vendors />} />
+          <Route path="/invoices" element={<InvoicesPage />} />
+          <Route path="/approvals" element={<Approvals />} />
+          <Route path="/payments" element={<Payments />} />
+          <Route path="/banking" element={<Banking />} />
+          <Route
+            path="/settings"
+            element={
               <Suspense fallback={<PageFallback />}>
                 <Settings />
               </Suspense>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/user-roles"
-          element={
-            <ProtectedRoute>
-              <UserRoles />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/transactions"
-          element={
-            <ProtectedRoute>
-              <TransactionsPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/purchase-orders"
-          element={
-            <ProtectedRoute>
-              <PurchaseOrdersPage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/goods-receipt"
-          element={
-            <ProtectedRoute>
-              <GoodsReceipt />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/tax-management"
-          element={
-            <ProtectedRoute>
+            }
+          />
+          <Route path="/user-roles" element={<UserRoles />} />
+          <Route path="/transactions" element={<TransactionsPage />} />
+          <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
+          <Route path="/goods-receipt" element={<GoodsReceipt />} />
+          <Route
+            path="/tax-management"
+            element={
               <Suspense fallback={<PageFallback />}>
                 <TaxManagement />
               </Suspense>
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/invoice-matching"
-          element={
-            <ProtectedRoute>
-              <InvoiceMatching />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/payment-batches"
-          element={
-            <ProtectedRoute>
-              <PaymentBatches />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/notifications"
-          element={
-            <ProtectedRoute>
-              <Notifications />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/reports"
-          element={
-            <ProtectedRoute>
+            }
+          />
+          <Route path="/invoice-matching" element={<InvoiceMatching />} />
+          <Route path="/payment-batches" element={<PaymentBatches />} />
+          <Route path="/notifications" element={<Notifications />} />
+          <Route
+            path="/reports"
+            element={
               <Suspense fallback={<PageFallback />}>
                 <Reports />
               </Suspense>
-            </ProtectedRoute>
-          }
-        />
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
+            }
+          />
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+        </Route>
       </Routes>
       <Toaster position="top-right" />
     </>

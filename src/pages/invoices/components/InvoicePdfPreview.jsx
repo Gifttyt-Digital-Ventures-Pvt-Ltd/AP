@@ -37,7 +37,7 @@ export const InvoicePdfPreview = ({
           )}
         </div>
       </div>
-      <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-gray-200">
+      <div className="flex-1 overflow-auto p-4 flex items-center justify-center bg-gray-200 scrollbar-thin-muted">
         {hasFile && !imageError ? (
           isPdf ? (
             <iframe src={displayUrl} className="bg-white shadow-lg w-full h-full" style={{ minHeight: "600px" }} title="Invoice PDF" />

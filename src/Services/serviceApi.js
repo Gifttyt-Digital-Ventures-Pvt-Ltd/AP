@@ -4,6 +4,7 @@ const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "";
 
 const baseQuery = fetchBaseQuery({
   baseUrl: BACKEND_URL,
+  timeout: 20000,
   prepareHeaders: (headers) => {
     const skipAuth = headers.get("x-skip-auth") === "true";
     if (skipAuth) {

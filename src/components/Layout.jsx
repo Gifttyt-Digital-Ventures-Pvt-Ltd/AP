@@ -1,4 +1,4 @@
-import React, { useState, createContext, useContext } from 'react';
+import React, { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { Button } from './ui/button';
@@ -36,6 +36,7 @@ export const Layout = ({ children }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const mainContentRef = useRef(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [hideSidebar, setHideSidebar] = useState(false);
 
@@ -64,6 +65,10 @@ export const Layout = ({ children }) => {
   };
 
   const isActive = (path) => location.pathname === path;
+  const handleNavigate = (path) => {
+    if (location.pathname === path) return;
+    navigate(path);
+  };
 
   const canAccessRoute = (roles) => {
     if (roles.includes('all')) return true;
@@ -74,6 +79,11 @@ export const Layout = ({ children }) => {
       role.toUpperCase() === userRole.toUpperCase()
     );
   };
+
+  useEffect(() => {
+    if (!mainContentRef.current) return;
+    mainContentRef.current.scrollTo({ top: 0, behavior: 'auto' });
+  }, [location.pathname]);
 
   return (
     <SidebarContext.Provider value={{ hideSidebar, setHideSidebar }}>
@@ -102,7 +112,7 @@ export const Layout = ({ children }) => {
               </Button>
             </div>
 
-            <nav className="flex-1 min-h-0 overflow-y-auto p-4 space-y-2" data-testid="sidebar-nav">
+            <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-none p-4 space-y-2" data-testid="sidebar-nav">
               {menuItems.map((item) => {
                 if (!canAccessRoute(item.roles)) return null;
                 
@@ -110,7 +120,7 @@ export const Layout = ({ children }) => {
                 return (
                   <button
                     key={item.path}
-                    onClick={() => navigate(item.path)}
+                    onClick={() => handleNavigate(item.path)}
                     className={`w-full flex items-center gap-3 px-3 py-2 rounded-md transition-all ${
                       isActive(item.path)
                         ? 'bg-primary text-primary-foreground'
@@ -146,7 +156,11 @@ export const Layout = ({ children }) => {
         )}
 
         {/* Main Content */}
-        <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain" data-testid="main-content">
+        <main
+          ref={mainContentRef}
+          className="flex-1 min-h-0 overflow-y-auto overscroll-contain"
+          data-testid="main-content"
+        >
           <div className={hideSidebar ? "p-4 min-h-full" : "p-6 md:p-8 lg:p-12 min-h-full"}>
             {children}
           </div>

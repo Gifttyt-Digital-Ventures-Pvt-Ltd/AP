@@ -26,10 +26,14 @@ const ViewDialog = ({
 }) => {
   return (
     <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
-      <DialogContent className="max-w-6xl max-h-[90vh] p-0" data-testid="view-invoice-dialog">
+      <DialogContent
+        className="w-[96vw] max-w-6xl h-[90vh] max-h-[90vh] p-0 overflow-hidden"
+        data-testid="view-invoice-dialog"
+      >
         {selectedInvoice && (
-          <div className="grid grid-cols-1 lg:grid-cols-[35%_65%] h-[85vh]">
-            <div className="border-r h-full">
+          /* Keep both panes constrained to the dialog height so content scrolls inside, not outside. */
+          <div className="grid grid-cols-1 lg:grid-cols-[35%_65%] h-full min-h-0">
+            <div className="border-r h-full min-h-0 overflow-hidden">
               {renderPdfPreview({
                 invoice: selectedInvoice,
                 zoom: pdfZoom,
@@ -38,23 +42,24 @@ const ViewDialog = ({
               })}
             </div>
 
-            <div className="p-6 overflow-y-auto">
-              <DialogHeader className="mb-6">
-                <DialogTitle className="text-2xl font-bold flex items-center justify-between">
-                  <span>Invoice {selectedInvoice.invoice_number}</span>
-                  <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getStatusBadgeClass(selectedInvoice.status)}`}>
-                    {selectedInvoice.status}
-                  </span>
-                </DialogTitle>
-              </DialogHeader>
+            <div className="min-h-0 overflow-hidden flex flex-col">
+              <div className="p-6 min-h-0 overflow-y-auto flex-1 scrollbar-thin-muted">
+                <DialogHeader className="mb-6">
+                  <DialogTitle className="text-2xl font-bold flex items-center justify-between">
+                    <span>Invoice {selectedInvoice.invoice_number}</span>
+                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getStatusBadgeClass(selectedInvoice.status)}`}>
+                      {selectedInvoice.status}
+                    </span>
+                  </DialogTitle>
+                </DialogHeader>
 
-              <Tabs value={viewTab} onValueChange={setViewTab} className="w-full">
-                <TabsList className="grid w-full grid-cols-2 mb-4">
-                  <TabsTrigger value="details"><FileText className="h-4 w-4 mr-2" />Details</TabsTrigger>
-                  <TabsTrigger value="history"><History className="h-4 w-4 mr-2" />History ({invoiceHistory.length})</TabsTrigger>
-                </TabsList>
+                <Tabs value={viewTab} onValueChange={setViewTab} className="w-full">
+                  <TabsList className="grid w-full grid-cols-2 mb-4">
+                    <TabsTrigger value="details"><FileText className="h-4 w-4 mr-2" />Details</TabsTrigger>
+                    <TabsTrigger value="history"><History className="h-4 w-4 mr-2" />History ({invoiceHistory.length})</TabsTrigger>
+                  </TabsList>
 
-                <TabsContent value="details" className="space-y-6">
+                  <TabsContent value="details" className="space-y-6">
                   <div className="space-y-4">
                     <h3 className="text-lg font-semibold">Vendor Details</h3>
                     <div className="grid grid-cols-2 gap-4">
@@ -106,7 +111,7 @@ const ViewDialog = ({
                   </div>
                 </TabsContent>
 
-                <TabsContent value="history" className="space-y-4">
+                  <TabsContent value="history" className="space-y-4">
                   {loadingHistory ? (
                     <div className="flex items-center justify-center py-12">
                       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -161,14 +166,24 @@ const ViewDialog = ({
                       </div>
                     </div>
                   )}
-                </TabsContent>
-              </Tabs>
+                  </TabsContent>
+                </Tabs>
+              </div>
 
-              <div className="flex gap-3 pt-4 mt-4 border-t">
-                <Button variant="outline" onClick={() => setViewDialogOpen(false)} className="flex-1">Close</Button>
+              <div className="flex gap-3 p-4 border-t bg-background shrink-0">
+                <Button variant="outline" onClick={() => setViewDialogOpen(false)} className="flex-1">
+                  Close
+                </Button>
                 {canEdit(selectedInvoice.status) && (
-                  <Button onClick={() => { setViewDialogOpen(false); handleEditInvoice(selectedInvoice); }} className="flex-1">
-                    <Pencil className="h-4 w-4 mr-2" />Edit Invoice
+                  <Button
+                    onClick={() => {
+                      setViewDialogOpen(false);
+                      handleEditInvoice(selectedInvoice);
+                    }}
+                    className="flex-1"
+                  >
+                    <Pencil className="h-4 w-4 mr-2" />
+                    Edit Invoice
                   </Button>
                 )}
               </div>
