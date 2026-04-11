@@ -77,13 +77,13 @@ export const Layout = ({ children }) => {
 
   return (
     <SidebarContext.Provider value={{ hideSidebar, setHideSidebar }}>
-      <div className="flex h-screen bg-background" data-testid="layout-container">
+      <div className="flex h-screen overflow-hidden bg-background" data-testid="layout-container">
         {/* Sidebar - Hidden when hideSidebar is true */}
         {!hideSidebar && (
           <aside
             className={`${
               sidebarOpen ? 'w-64' : 'w-16'
-            } border-r border-border bg-card transition-all duration-300 flex flex-col`}
+            } border-r border-border bg-card transition-all duration-300 flex flex-col min-h-0`}
             data-testid="sidebar"
           >
             <div className="p-4 border-b border-border flex items-center justify-between">
@@ -102,7 +102,7 @@ export const Layout = ({ children }) => {
               </Button>
             </div>
 
-            <nav className="flex-1 p-4 space-y-2" data-testid="sidebar-nav">
+            <nav className="flex-1 min-h-0 overflow-y-auto p-4 space-y-2" data-testid="sidebar-nav">
               {menuItems.map((item) => {
                 if (!canAccessRoute(item.roles)) return null;
                 
@@ -146,8 +146,8 @@ export const Layout = ({ children }) => {
         )}
 
         {/* Main Content */}
-        <main className="flex-1 overflow-y-auto" data-testid="main-content">
-          <div className={hideSidebar ? "p-4" : "p-6 md:p-8 lg:p-12"}>
+        <main className="flex-1 min-h-0 overflow-y-auto overscroll-contain" data-testid="main-content">
+          <div className={hideSidebar ? "p-4 min-h-full" : "p-6 md:p-8 lg:p-12 min-h-full"}>
             {children}
           </div>
         </main>

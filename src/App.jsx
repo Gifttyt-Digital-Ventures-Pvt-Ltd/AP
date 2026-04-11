@@ -1,27 +1,36 @@
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import SessionTimeout from "./components/SessionTimeout";
 import { Toaster } from "./components/ui/sonner";
 import { Layout } from "./components/Layout";
-import { Login } from "./pages/Login";
-import { Dashboard } from "./pages/Dashboard";
-import { Vendors } from "./pages/Vendors";
-import { Invoices } from "./pages/Invoices";
-import { Approvals } from "./pages/Approvals";
-import { Payments } from "./pages/Payments";
-import { Settings } from "./pages/Settings";
-import { Banking } from "./pages/Banking";
-import { UserRoles } from "./pages/UserRoles";
-import { Transactions } from "./pages/Transactions";
-import { PurchaseOrders } from "./pages/PurchaseOrders";
-import { GoodsReceipt } from "./pages/GoodsReceipt";
-import { TaxManagement } from "./pages/TaxManagement";
-import { InvoiceMatching } from "./pages/InvoiceMatching";
-import PaymentBatches from "./pages/PaymentBatches";
-import Notifications from "./pages/Notifications";
-import Reports from "./pages/Reports";
+import Login from "./pages/login/Login";
+import Dashboard from "./pages/dashboard/Dashboard";
+import Vendors from "./pages/vendors/Vendors";
+import InvoicesPage from "./pages/invoices/InvoicesPage";
+import Approvals from "./pages/approvals/Approvals";
+import Payments from "./pages/payments/Payments";
+import Banking from "./pages/banking/Banking";
+import UserRoles from "./pages/user-roles/UserRoles";
+import TransactionsPage from "./pages/transactions/TransactionsPage";
+import PurchaseOrdersPage from "./pages/purchase-orders/PurchaseOrdersPage";
+import GoodsReceipt from "./pages/goods-receipt/GoodsReceipt";
+import InvoiceMatching from "./pages/invoice-matching/InvoiceMatching";
+import PaymentBatches from "./pages/payment-batches/PaymentBatches";
+import Notifications from "./pages/notifications/Notifications";
+const Settings = lazy(() => import("./pages/settings/Settings"));
+const TaxManagement = lazy(() => import("./pages/tax-management/TaxManagement"));
+const Reports = lazy(() => import("./pages/reports/Reports"));
+
+const PageFallback = () => (
+  <div className="min-h-screen flex items-center justify-center">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-primary mx-auto"></div>
+      <p className="mt-3 text-muted-foreground">Loading page...</p>
+    </div>
+  </div>
+);
 
 const ProtectedRoute = ({ children }) => {
   const { user, loading } = useAuth();
@@ -69,7 +78,7 @@ function AppContent() {
           path="/invoices"
           element={
             <ProtectedRoute>
-              <Invoices />
+              <InvoicesPage />
             </ProtectedRoute>
           }
         />
@@ -101,7 +110,9 @@ function AppContent() {
           path="/settings"
           element={
             <ProtectedRoute>
-              <Settings />
+              <Suspense fallback={<PageFallback />}>
+                <Settings />
+              </Suspense>
             </ProtectedRoute>
           }
         />
@@ -117,7 +128,7 @@ function AppContent() {
           path="/transactions"
           element={
             <ProtectedRoute>
-              <Transactions />
+              <TransactionsPage />
             </ProtectedRoute>
           }
         />
@@ -125,7 +136,7 @@ function AppContent() {
           path="/purchase-orders"
           element={
             <ProtectedRoute>
-              <PurchaseOrders />
+              <PurchaseOrdersPage />
             </ProtectedRoute>
           }
         />
@@ -141,7 +152,9 @@ function AppContent() {
           path="/tax-management"
           element={
             <ProtectedRoute>
-              <TaxManagement />
+              <Suspense fallback={<PageFallback />}>
+                <TaxManagement />
+              </Suspense>
             </ProtectedRoute>
           }
         />
@@ -173,7 +186,9 @@ function AppContent() {
           path="/reports"
           element={
             <ProtectedRoute>
-              <Reports />
+              <Suspense fallback={<PageFallback />}>
+                <Reports />
+              </Suspense>
             </ProtectedRoute>
           }
         />
