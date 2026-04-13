@@ -5,10 +5,10 @@ import {
   useGetDashboardStatsQuery,
   useGetExecutiveDashboardQuery,
   useGetApReportsQuery,
-  useGetInvoicesQuery,
-  useGetPurchaseOrdersQuery,
-  useGetPaymentBatchStatsQuery,
-} from '../../Services/apiSlice';
+} from '../../Services/apis/dashboardReportsApi';
+import { useGetInvoicesQuery } from '../../Services/apis/invoicesVendorsApi';
+import { useGetPurchaseOrdersQuery } from '../../Services/apis/purchaseOrdersMasterDataApi';
+import { useGetPaymentBatchStatsQuery } from '../../Services/apis/paymentBatchesApi';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';

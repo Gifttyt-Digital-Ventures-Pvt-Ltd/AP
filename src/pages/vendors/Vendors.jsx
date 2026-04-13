@@ -4,7 +4,7 @@ import {
   useCreateVendorMutation,
   useUpdateVendorMutation,
   useDeleteVendorMutation,
-} from '../../Services/apiSlice';
+} from '../../Services/apis/invoicesVendorsApi';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';

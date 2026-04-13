@@ -72,6 +72,30 @@ code {
   * {
     @apply border-border;
   }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.35);
+    border-radius: 9999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+
   body {
     @apply bg-background text-foreground;
   }
@@ -123,5 +147,41 @@ code {
     border-right-color: inherit;
     border-top-color: inherit;
     border-bottom-color: inherit;
+  }
+}
+
+@layer utilities {
+  /* Compact scrollbar variant used in dense dialogs/panels. */
+  .scrollbar-thin-muted {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+  }
+
+  .scrollbar-thin-muted::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-thin-muted::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin-muted::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.35);
+    border-radius: 9999px;
+  }
+
+  .scrollbar-thin-muted::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+
+  /* Hides scrollbar while preserving scroll behavior. */
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
   }
 }

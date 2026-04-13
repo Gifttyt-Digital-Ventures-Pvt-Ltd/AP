@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
-import { useLazyRefreshSessionQuery } from "../Services/apiSlice";
+import { useLazyRefreshSessionQuery } from "../Services/serviceApi";
 import { useAuth } from "../contexts/AuthContext";
 
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
@@ -14,6 +14,8 @@ const SessionTimeout = ({ children }) => {
   const lastActivityRef = useRef(Date.now());
   const lastPingRef = useRef(Date.now());
   const sessionVersionRef = useRef(0);
+  const initializedTokenRef = useRef(null);
+  const handleLogoutRef = useRef(() => {});
   const [triggerPing] = useLazyRefreshSessionQuery();
   const logoutInProgressRef = useRef(false);
 
@@ -30,6 +32,10 @@ const SessionTimeout = ({ children }) => {
     });
   }, [logout, navigate]);
 
+  useEffect(() => {
+    handleLogoutRef.current = handleLogout;
+  }, [handleLogout]);
+
   const pingSession = useCallback(async (versionAtCall = sessionVersionRef.current, tokenAtCall = token) => {
     if (!tokenAtCall) return;
 
@@ -41,12 +47,12 @@ const SessionTimeout = ({ children }) => {
 
       // Only auth failures should force logout.
       if ([401, 403].includes(error?.status)) {
-        handleLogout();
+        handleLogoutRef.current();
       } else {
         console.error("Session ping failed:", error);
       }
     }
-  }, [triggerPing, handleLogout, token]);
+  }, [triggerPing, token]);
 
   const updateActivity = useCallback(() => {
     const now = Date.now();
@@ -61,10 +67,19 @@ const SessionTimeout = ({ children }) => {
   useEffect(() => {
     if (!token) {
       logoutInProgressRef.current = false;
+      initializedTokenRef.current = null;
       setIsInitializing(false);
       return;
     }
 
+    // Only block UI for the first validation of a new token.
+    // Route changes should never blank the entire app shell.
+    if (initializedTokenRef.current === token) {
+      setIsInitializing(false);
+      return;
+    }
+
+    initializedTokenRef.current = token;
     setIsInitializing(true);
     logoutInProgressRef.current = false;
     sessionVersionRef.current += 1;

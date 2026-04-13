@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
+import { useGetVendorsQuery } from '../../Services/apis/invoicesVendorsApi';
 import {
   useGetPurchaseOrdersQuery,
   useGetPendingPurchaseOrderApprovalsQuery,
-  useGetVendorsQuery,
   useGetGlAccountsQuery,
   useGetCostCentersQuery,
   useGetHsnSacCodesQuery,
@@ -10,7 +10,7 @@ import {
   useCreatePurchaseOrderMutation,
   useSubmitPurchaseOrderMutation,
   useApprovePurchaseOrderMutation,
-} from '../../Services/apiSlice';
+} from '../../Services/apis/purchaseOrdersMasterDataApi';
 import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Badge } from '../../components/ui/badge';
 import { toast } from 'sonner';

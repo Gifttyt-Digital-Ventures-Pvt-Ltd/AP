@@ -5,7 +5,7 @@ import {
   useGetVendorAnalyticsQuery,
   useGetTaxReportsQuery,
   useGetPaymentAnalyticsQuery,
-} from '../../Services/apiSlice';
+} from '../../Services/apis/dashboardReportsApi';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Badge } from '../../components/ui/badge';
@@ -149,8 +149,11 @@ const Reports = () => {
 
   if (loading && !executiveData) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="min-h-[60vh] rounded-xl border border-border bg-card/50 flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+          <p className="mt-3 text-sm text-muted-foreground">Loading reports...</p>
+        </div>
       </div>
     );
   }

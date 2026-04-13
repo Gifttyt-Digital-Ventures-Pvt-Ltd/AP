@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
+import { useGetPendingApprovalsQuery } from '../../Services/apis/approvalsPaymentsBankingApi';
 import {
-  useGetPendingApprovalsQuery,
   useGetInvoicesQuery,
   useApproveInvoiceMutation,
-} from '../../Services/apiSlice';
+} from '../../Services/apis/invoicesVendorsApi';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { toast } from 'sonner';
 import { format } from 'date-fns';

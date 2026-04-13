@@ -1,30 +1,67 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  useGetUsersQuery,
+  useDeleteUserMutation,
   useGetRolesQuery,
+  useGetUsersQuery,
   useInviteUserMutation,
   useUpdateUserRoleMutation,
   useUpdateUserStatusMutation,
-  useDeleteUserMutation,
-} from '../../Services/apiSlice';
+} from '../../Services/apis/usersApi';
 import { Button } from '../../components/ui/button';
-import { Input } from '../../components/ui/input';
-import { Label } from '../../components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { 
-  Users, Shield, UserPlus, Pencil, Trash2, Check, X, 
-  FileText, CreditCard, Building2, Eye, Settings, BarChart3,
-  Upload, CheckCircle, Ban, ShieldAlert
-} from 'lucide-react';
 import { toast } from 'sonner';
-import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
+import { Shield, ShieldAlert, UserPlus, Users } from 'lucide-react';
+import { PERMISSION_GROUPS, PERMISSION_LABELS, ROLE_TEMPLATES } from './constants/permissionConfig';
+import { toLocalDraftRole, toTemplateUiRole, toUiRole } from './utils/roleAdapters';
+import InviteUserDialog from './components/InviteUserDialog';
+import AddRoleDialog from './components/AddRoleDialog';
+import ViewRoleDialog from './components/ViewRoleDialog';
+import RolesTab from './components/RolesTab';
+import UsersTable from './components/UsersTable';
+
+const sortPermissions = (permissions = []) => [...permissions].sort();
+
+const samePermissionSet = (left = [], right = []) => {
+  const a = sortPermissions(left);
+  const b = sortPermissions(right);
+  if (a.length !== b.length) return false;
+  return a.every((value, index) => value === b[index]);
+};
+
+const normalizeRoleToken = (value = '') =>
+  String(value)
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ')
+    .replace(/\s+/g, ' ');
+
+const includesRoleName = (roles = [], candidate = '') => {
+  const normalizedCandidate = normalizeRoleToken(candidate);
+  if (!normalizedCandidate) return false;
+  return roles.some((roleName) => normalizeRoleToken(roleName) === normalizedCandidate);
+};
 
 const UserRoles = () => {
   const [activeTab, setActiveTab] = useState('users');
   const [accessDenied, setAccessDenied] = useState(false);
+  const [roleDialogMode, setRoleDialogMode] = useState('view');
+  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [addRoleDialogOpen, setAddRoleDialogOpen] = useState(false);
+  const [viewRoleDialogOpen, setViewRoleDialogOpen] = useState(false);
+  const [selectedRole, setSelectedRole] = useState(null);
+  const [localDraftRoles, setLocalDraftRoles] = useState([]);
+  const [localRoleOverrides, setLocalRoleOverrides] = useState({});
+  const [localDeletedRoleKeys, setLocalDeletedRoleKeys] = useState([]);
+
+  const [inviteForm, setInviteForm] = useState({
+    name: '',
+    email: '',
+    role: ROLE_TEMPLATES[0]?.name || 'Admin',
+    password: 'Welcome@123',
+  });
+
   const { user: currentUser } = useAuth();
   const navigate = useNavigate();
   const isAdmin = currentUser?.role?.toUpperCase() === 'ADMIN';
@@ -36,28 +73,17 @@ const UserRoles = () => {
     isError: usersError,
     refetch: refetchUsers,
   } = useGetUsersQuery(undefined, { skip: shouldSkip });
+
   const {
     data: rolesData = [],
     isLoading: rolesLoading,
     isError: rolesError,
   } = useGetRolesQuery(undefined, { skip: shouldSkip });
+
   const [inviteUser] = useInviteUserMutation();
   const [updateUserRole] = useUpdateUserRoleMutation();
   const [updateUserStatus] = useUpdateUserStatusMutation();
   const [deleteUser] = useDeleteUserMutation();
-
-  // Dialog states
-  const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [selectedUser, setSelectedUser] = useState(null);
-
-  // Form state
-  const [inviteForm, setInviteForm] = useState({
-    name: '',
-    email: '',
-    role: 'Viewer',
-    password: 'Welcome@123'
-  });
 
   useEffect(() => {
     if (currentUser) {
@@ -66,25 +92,105 @@ const UserRoles = () => {
   }, [currentUser]);
 
   useEffect(() => {
-    if (usersError) {
-      toast.error('Failed to load users');
-    }
+    if (usersError) toast.error('Failed to load users');
   }, [usersError]);
 
   useEffect(() => {
-    if (rolesError) {
-      toast.error('Failed to load roles');
-    }
+    if (rolesError) toast.error('Failed to load roles');
   }, [rolesError]);
+
+  const users = useMemo(() => (Array.isArray(usersData) ? usersData : []), [usersData]);
+  const backendRoles = useMemo(() => {
+    const rows = Array.isArray(rolesData) ? rolesData : [];
+    return rows.map((role) => toUiRole(role, users));
+  }, [rolesData, users]);
+
+  // Ensures all source roles are represented even when backend does not return each role row.
+  const sourceFallbackRoles = useMemo(() => {
+    const backendTemplateIds = new Set(backendRoles.map((role) => role.templateId).filter(Boolean));
+    return ROLE_TEMPLATES
+      .filter((template) => !backendTemplateIds.has(template.id))
+      .map((template) => toTemplateUiRole(template, users));
+  }, [backendRoles, users]);
+
+  const baseRoles = useMemo(() => {
+    return [...backendRoles, ...sourceFallbackRoles];
+  }, [backendRoles, sourceFallbackRoles]);
+
+  const backendRoleByKey = useMemo(() => {
+    return baseRoles.reduce((acc, role) => {
+      acc[role.key] = role;
+      return acc;
+    }, {});
+  }, [baseRoles]);
+
+  const mergedBackendRoles = useMemo(() => {
+    return baseRoles
+      .map((role) => {
+        const override = localRoleOverrides[role.key];
+        if (!override) return role;
+        return {
+          ...role,
+          ...override,
+          permissionsCount: Array.isArray(override.permissions)
+            ? override.permissions.length
+            : role.permissionsCount,
+          isLocalOverride: true,
+        };
+      })
+      .filter((role) => !localDeletedRoleKeys.includes(role.key));
+  }, [baseRoles, localRoleOverrides, localDeletedRoleKeys]);
+
+  const allRoles = useMemo(() => {
+    return [...mergedBackendRoles, ...localDraftRoles];
+  }, [mergedBackendRoles, localDraftRoles]);
+
+  // Keeps user role dropdowns aligned with source role templates plus any live backend role names.
+  const availableRoles = useMemo(() => {
+    const orderedRoles = ROLE_TEMPLATES.map((template) => template.name);
+    users.forEach((user) => {
+      const userRoleName = String(user?.role || '').trim();
+      if (userRoleName && !includesRoleName(orderedRoles, userRoleName)) {
+        orderedRoles.push(userRoleName);
+      }
+    });
+    localDraftRoles.forEach((role) => {
+      if (role?.name && !includesRoleName(orderedRoles, role.name)) {
+        orderedRoles.push(role.name);
+      }
+    });
+    return orderedRoles;
+  }, [users, localDraftRoles]);
+
+  useEffect(() => {
+    if (!availableRoles.length) return;
+    setInviteForm((prev) => {
+      const matchedRole = availableRoles.find(
+        (roleName) => normalizeRoleToken(roleName) === normalizeRoleToken(prev.role)
+      );
+      if (matchedRole && matchedRole === prev.role) return prev;
+      if (matchedRole) return { ...prev, role: matchedRole };
+      return { ...prev, role: availableRoles[0] };
+    });
+  }, [availableRoles]);
+
+  const loading = !currentUser || (!accessDenied && (usersLoading || rolesLoading));
 
   const handleInviteUser = async (e) => {
     e.preventDefault();
     try {
       const response = await inviteUser(inviteForm).unwrap();
       toast.success(`User ${inviteForm.name} created successfully!`);
-      toast.info(`Temporary password: ${response?.temp_password}`);
+      if (response?.temp_password) {
+        toast.info(`Temporary password: ${response.temp_password}`);
+      }
       setInviteDialogOpen(false);
-      setInviteForm({ name: '', email: '', role: 'Viewer', password: 'Welcome@123' });
+      setInviteForm({
+        name: '',
+        email: '',
+        role: availableRoles[0] || ROLE_TEMPLATES[0]?.name || 'Admin',
+        password: 'Welcome@123',
+      });
       refetchUsers();
     } catch (error) {
       toast.error(error?.data?.detail || 'Failed to create user');
@@ -124,77 +230,100 @@ const UserRoles = () => {
     }
   };
 
-  const users = Array.isArray(usersData) ? usersData : [];
-  const roles = Array.isArray(rolesData) ? rolesData : [];
-  const loading = !currentUser || (!accessDenied && (usersLoading || rolesLoading));
-
-  const getRoleBadgeClass = (role) => {
-    const roleColors = {
-      'Admin': 'bg-purple-100 text-purple-800 border-purple-200',
-      'Maker': 'bg-blue-100 text-blue-800 border-blue-200',
-      'Checker': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      'Approver': 'bg-emerald-100 text-emerald-800 border-emerald-200',
-      'Accountant': 'bg-cyan-100 text-cyan-800 border-cyan-200',
-      'Viewer': 'bg-gray-100 text-gray-800 border-gray-200'
-    };
-    return roleColors[role] || 'bg-gray-100 text-gray-800 border-gray-200';
+  // Local draft role creation (session-only).
+  const handleCreateLocalRole = ({ name, description, permissions }) => {
+    const localId = `local-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const draftRole = toLocalDraftRole({
+      id: localId,
+      name,
+      description,
+      permissions,
+    });
+    setLocalDraftRoles((prev) => [...prev, draftRole]);
+    toast.success('Local role draft created');
   };
 
-  const getPermissionIcon = (permission) => {
-    const icons = {
-      'invoice_upload': Upload,
-      'invoice_view': Eye,
-      'invoice_edit': Pencil,
-      'invoice_delete': Trash2,
-      'invoice_approve': CheckCircle,
-      'payment_approve': CreditCard,
-      'payment_release': CreditCard,
-      'vendor_create': Building2,
-      'vendor_edit': Building2,
-      'vendor_delete': Building2,
-      'banking_view': CreditCard,
-      'banking_manage': CreditCard,
-      'user_manage': Users,
-      'reports_view': BarChart3,
-      'settings_manage': Settings
-    };
-    return icons[permission] || FileText;
-  };
+  const handleDeleteRole = (role) => {
+    if (!role) return;
+    if (!window.confirm(`Delete role "${role.name}" locally for this session?`)) return;
 
-  const formatPermissionName = (permission) => {
-    return permission
-      .split('_')
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(' ');
-  };
-
-  const permissionGroups = [
-    {
-      name: 'Invoice Management',
-      icon: FileText,
-      permissions: ['invoice_upload', 'invoice_view', 'invoice_edit', 'invoice_delete', 'invoice_approve']
-    },
-    {
-      name: 'Payment Management',
-      icon: CreditCard,
-      permissions: ['payment_approve', 'payment_release']
-    },
-    {
-      name: 'Vendor Management',
-      icon: Building2,
-      permissions: ['vendor_create', 'vendor_edit', 'vendor_delete']
-    },
-    {
-      name: 'Banking',
-      icon: CreditCard,
-      permissions: ['banking_view', 'banking_manage']
-    },
-    {
-      name: 'Administration',
-      icon: Settings,
-      permissions: ['user_manage', 'reports_view', 'settings_manage']
+    if (role.isLocalDraft) {
+      setLocalDraftRoles((prev) => prev.filter((item) => item.id !== role.id));
+      toast.success('Local draft role deleted');
+    } else {
+      setLocalDeletedRoleKeys((prev) => (prev.includes(role.key) ? prev : [...prev, role.key]));
+      setLocalRoleOverrides((prev) => {
+        const next = { ...prev };
+        delete next[role.key];
+        return next;
+      });
+      toast.success('Backend role hidden locally (not deleted from server)');
     }
-  ];
+
+    if (selectedRole?.id === role.id) {
+      setSelectedRole(null);
+      setViewRoleDialogOpen(false);
+    }
+  };
+
+  // Local edit behavior for both backend roles and local drafts.
+  const handleSaveRoleLocalChanges = (editedRole) => {
+    if (editedRole.isLocalDraft) {
+      setLocalDraftRoles((prev) =>
+        prev.map((role) =>
+          role.id === editedRole.id
+            ? {
+                ...role,
+                name: editedRole.name,
+                description: editedRole.description,
+                permissions: editedRole.permissions,
+                permissionsCount: editedRole.permissions.length,
+              }
+            : role
+        )
+      );
+      toast.success('Local draft updated');
+      return;
+    }
+
+    const backendBase = backendRoleByKey[editedRole.key];
+    if (!backendBase) return;
+
+    const hasMeaningfulChange =
+      editedRole.name !== backendBase.name ||
+      (editedRole.description || '') !== (backendBase.description || '') ||
+      !samePermissionSet(editedRole.permissions, backendBase.permissions);
+
+    setLocalRoleOverrides((prev) => {
+      if (!hasMeaningfulChange) {
+        const next = { ...prev };
+        delete next[editedRole.key];
+        return next;
+      }
+      return {
+        ...prev,
+        [editedRole.key]: {
+          name: editedRole.name,
+          description: editedRole.description,
+          permissions: editedRole.permissions,
+        },
+      };
+    });
+
+    toast.success('Local override saved (not persisted)');
+  };
+
+  const handleRoleCardClick = (role) => {
+    setSelectedRole(role);
+    setRoleDialogMode('view');
+    setViewRoleDialogOpen(true);
+  };
+
+  const handleRoleCardEdit = (role) => {
+    setSelectedRole(role);
+    setRoleDialogMode('edit');
+    setViewRoleDialogOpen(true);
+  };
 
   if (loading) {
     return (
@@ -223,7 +352,6 @@ const UserRoles = () => {
 
   return (
     <div data-testid="user-roles-page">
-      {/* Header */}
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-4xl md:text-5xl font-bold font-['Manrope'] text-primary mb-2">
@@ -237,7 +365,6 @@ const UserRoles = () => {
         </Button>
       </div>
 
-      {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="mb-6">
           <TabsTrigger value="users" data-testid="tab-users">
@@ -246,252 +373,60 @@ const UserRoles = () => {
           </TabsTrigger>
           <TabsTrigger value="roles" data-testid="tab-roles">
             <Shield className="h-4 w-4 mr-2" />
-            Roles & Permissions
+            Roles & Permissions ({allRoles.length})
           </TabsTrigger>
         </TabsList>
 
-        {/* Users Tab */}
         <TabsContent value="users">
-          <div className="bg-card border border-border rounded-lg overflow-hidden">
-            <table className="w-full">
-              <thead className="bg-muted/50 border-b border-border">
-                <tr>
-                  <th className="p-4 text-left text-sm font-medium">User</th>
-                  <th className="p-4 text-left text-sm font-medium">Role</th>
-                  <th className="p-4 text-left text-sm font-medium">Status</th>
-                  <th className="p-4 text-left text-sm font-medium">Created</th>
-                  <th className="p-4 text-right text-sm font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((user) => (
-                  <tr key={user.id} className="border-b border-border last:border-0 hover:bg-muted/30">
-                    <td className="p-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
-                          <span className="text-sm font-semibold text-primary">
-                            {user.name?.split(' ').map(n => n[0]).join('').toUpperCase()}
-                          </span>
-                        </div>
-                        <div>
-                          <p className="font-medium">{user.name}</p>
-                          <p className="text-sm text-muted-foreground">{user.email}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="p-4">
-                      <select
-                        value={user.role}
-                        onChange={(e) => handleUpdateRole(user.id, e.target.value)}
-                        disabled={user.id === currentUser?.id}
-                        className={`px-3 py-1.5 rounded-full text-sm font-medium border cursor-pointer ${getRoleBadgeClass(user.role)} ${user.id === currentUser?.id ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        data-testid={`role-select-${user.id}`}
-                      >
-                        <option value="Admin">Admin</option>
-                        <option value="Maker">Maker</option>
-                        <option value="Checker">Checker</option>
-                        <option value="Approver">Approver</option>
-                        <option value="Accountant">Accountant</option>
-                        <option value="Viewer">Viewer</option>
-                      </select>
-                    </td>
-                    <td className="p-4">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${
-                        user.is_active 
-                          ? 'bg-emerald-100 text-emerald-800' 
-                          : 'bg-red-100 text-red-800'
-                      }`}>
-                        {user.is_active ? (
-                          <>
-                            <Check className="h-3 w-3 mr-1" />
-                            Active
-                          </>
-                        ) : (
-                          <>
-                            <X className="h-3 w-3 mr-1" />
-                            Inactive
-                          </>
-                        )}
-                      </span>
-                    </td>
-                    <td className="p-4 text-sm text-muted-foreground">
-                      {user.created_at ? format(new Date(user.created_at), 'dd MMM yyyy') : '-'}
-                    </td>
-                    <td className="p-4">
-                      <div className="flex items-center justify-end gap-2">
-                        {user.id !== currentUser?.id && (
-                          <>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleToggleStatus(user.id, user.is_active)}
-                              title={user.is_active ? 'Deactivate' : 'Activate'}
-                              data-testid={`toggle-status-${user.id}`}
-                            >
-                              {user.is_active ? (
-                                <Ban className="h-4 w-4 text-yellow-600" />
-                              ) : (
-                                <CheckCircle className="h-4 w-4 text-emerald-600" />
-                              )}
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleDeleteUser(user.id, user.name)}
-                              title="Delete User"
-                              data-testid={`delete-user-${user.id}`}
-                            >
-                              <Trash2 className="h-4 w-4 text-red-500" />
-                            </Button>
-                          </>
-                        )}
-                        {user.id === currentUser?.id && (
-                          <span className="text-xs text-muted-foreground italic">You</span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <UsersTable
+            users={users}
+            availableRoles={availableRoles}
+            currentUserId={currentUser?.id}
+            handleUpdateRole={handleUpdateRole}
+            handleToggleStatus={handleToggleStatus}
+            handleDeleteUser={handleDeleteUser}
+          />
         </TabsContent>
 
-        {/* Roles & Permissions Tab */}
         <TabsContent value="roles">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Role Cards */}
-            {roles.map((role) => (
-              <div 
-                key={role.name} 
-                className="bg-card border border-border rounded-lg p-6"
-                data-testid={`role-card-${role.name}`}
-              >
-                <div className="flex items-center gap-3 mb-4">
-                  <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${getRoleBadgeClass(role.name)}`}>
-                    <Shield className="h-6 w-6" />
-                  </div>
-                  <div>
-                    <h3 className="text-lg font-semibold">{role.name}</h3>
-                    <p className="text-sm text-muted-foreground">{role.description}</p>
-                  </div>
-                </div>
-
-                <div className="space-y-4">
-                  {permissionGroups.map((group) => (
-                    <div key={group.name}>
-                      <div className="flex items-center gap-2 mb-2">
-                        <group.icon className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm font-medium text-muted-foreground">{group.name}</span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {group.permissions.map((perm) => {
-                          const hasPermission = role.permissions[perm];
-                          return (
-                            <span
-                              key={perm}
-                              className={`inline-flex items-center px-2 py-1 rounded text-xs ${
-                                hasPermission
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : 'bg-gray-100 text-gray-400 line-through'
-                              }`}
-                            >
-                              {hasPermission ? (
-                                <Check className="h-3 w-3 mr-1" />
-                              ) : (
-                                <X className="h-3 w-3 mr-1" />
-                              )}
-                              {formatPermissionName(perm).replace(group.name.split(' ')[0] + ' ', '')}
-                            </span>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
+          <RolesTab
+            roles={allRoles}
+            onRoleClick={handleRoleCardClick}
+            onEditRole={handleRoleCardEdit}
+            onDeleteRole={handleDeleteRole}
+            onOpenCreateDialog={() => setAddRoleDialogOpen(true)}
+          />
         </TabsContent>
       </Tabs>
 
-      {/* Invite User Dialog */}
-      <Dialog open={inviteDialogOpen} onOpenChange={setInviteDialogOpen}>
-        <DialogContent className="max-w-md" data-testid="invite-user-dialog">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-bold flex items-center gap-2">
-              <UserPlus className="h-5 w-5" />
-              Add New User
-            </DialogTitle>
-          </DialogHeader>
+      <InviteUserDialog
+        open={inviteDialogOpen}
+        setOpen={setInviteDialogOpen}
+        inviteForm={inviteForm}
+        setInviteForm={setInviteForm}
+        availableRoles={availableRoles}
+        handleInviteUser={handleInviteUser}
+      />
 
-          <form onSubmit={handleInviteUser} className="space-y-4 mt-4">
-            <div>
-              <Label htmlFor="name">Full Name *</Label>
-              <Input
-                id="name"
-                value={inviteForm.name}
-                onChange={(e) => setInviteForm({ ...inviteForm, name: e.target.value })}
-                placeholder="Enter full name"
-                required
-              />
-            </div>
+      <AddRoleDialog
+        open={addRoleDialogOpen}
+        onOpenChange={setAddRoleDialogOpen}
+        permissionGroups={PERMISSION_GROUPS}
+        onSave={handleCreateLocalRole}
+      />
 
-            <div>
-              <Label htmlFor="email">Email Address *</Label>
-              <Input
-                id="email"
-                type="email"
-                value={inviteForm.email}
-                onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
-                placeholder="user@company.com"
-                required
-              />
-            </div>
-
-            <div>
-              <Label htmlFor="role">Role *</Label>
-              <select
-                id="role"
-                value={inviteForm.role}
-                onChange={(e) => setInviteForm({ ...inviteForm, role: e.target.value })}
-                className="w-full px-3 py-2 border border-border rounded-md bg-background"
-              >
-                <option value="Viewer">Viewer</option>
-                <option value="Maker">Maker (Invoice Uploader)</option>
-                <option value="Checker">Checker (First Approver)</option>
-                <option value="Approver">Approver (Final Approver)</option>
-                <option value="Accountant">Accountant (Payments)</option>
-                <option value="Admin">Admin (Full Access)</option>
-              </select>
-            </div>
-
-            <div>
-              <Label htmlFor="password">Temporary Password</Label>
-              <Input
-                id="password"
-                type="text"
-                value={inviteForm.password}
-                onChange={(e) => setInviteForm({ ...inviteForm, password: e.target.value })}
-                placeholder="Welcome@123"
-              />
-              <p className="text-xs text-muted-foreground mt-1">
-                User should change this on first login
-              </p>
-            </div>
-
-            <div className="flex gap-3 pt-4">
-              <Button type="button" variant="outline" onClick={() => setInviteDialogOpen(false)} className="flex-1">
-                Cancel
-              </Button>
-              <Button type="submit" className="flex-1">
-                <UserPlus className="h-4 w-4 mr-2" />
-                Create User
-              </Button>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
+      <ViewRoleDialog
+        open={viewRoleDialogOpen}
+        onOpenChange={(open) => {
+          setViewRoleDialogOpen(open);
+          if (!open) setRoleDialogMode('view');
+        }}
+        role={selectedRole}
+        startInEditMode={roleDialogMode === 'edit'}
+        permissionGroups={PERMISSION_GROUPS}
+        permissionLabels={PERMISSION_LABELS}
+        onSave={handleSaveRoleLocalChanges}
+      />
     </div>
   );
 };
