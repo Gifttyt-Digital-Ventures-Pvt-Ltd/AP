@@ -98,7 +98,7 @@ export const Layout = ({ children }) => {
           >
             <div className="p-4 border-b border-border flex items-center justify-between">
               {sidebarOpen && (
-                <h1 className="text-xl font-bold font-['Manrope'] text-primary" data-testid="app-title">
+                <h1 className="text-xl font-bold  text-primary" data-testid="app-title">
                   AP Portal
                 </h1>
               )}
@@ -169,3 +169,4 @@ export const Layout = ({ children }) => {
     </SidebarContext.Provider>
   );
 };
+

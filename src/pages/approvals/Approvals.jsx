@@ -140,7 +140,7 @@ const Approvals = () => {
   return (
     <div data-testid="approvals-page">
       <div className="mb-8">
-        <h1 className="text-4xl md:text-5xl font-bold font-['Manrope'] text-primary mb-2" data-testid="approvals-title">
+        <h1 className="text-4xl md:text-5xl font-bold  text-primary mb-2" data-testid="approvals-title">
           Approvals
         </h1>
         <p className="text-muted-foreground">Review and approve invoices</p>
@@ -201,3 +201,4 @@ const Approvals = () => {
 };
 
 export default Approvals;
+

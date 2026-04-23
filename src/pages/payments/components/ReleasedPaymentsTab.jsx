@@ -21,14 +21,14 @@ const ReleasedPaymentsTab = ({ filteredPayments, safeFormatDate }) => (
             className="border-b border-border hover:bg-muted/50 transition-colors"
             data-testid={`payment-row-${payment.id}`}
           >
-            <td className="p-4 font-['JetBrains_Mono'] font-medium">{payment.invoice_number}</td>
+            <td className="p-4  font-medium">{payment.invoice_number}</td>
             <td className="p-4">{payment.vendor_name}</td>
-            <td className="p-4 font-['JetBrains_Mono'] font-semibold">
+            <td className="p-4  font-semibold">
               {'\u20B9'}{payment.amount.toLocaleString('en-IN')}
             </td>
             <td className="p-4 text-sm text-muted-foreground">{safeFormatDate(payment.payment_date)}</td>
             <td className="p-4 text-sm">{payment.payment_method}</td>
-            <td className="p-4 text-sm font-['JetBrains_Mono']">{payment.reference_number || '-'}</td>
+            <td className="p-4 text-sm ">{payment.reference_number || '-'}</td>
           </tr>
         ))}
       </tbody>
@@ -42,3 +42,4 @@ const ReleasedPaymentsTab = ({ filteredPayments, safeFormatDate }) => (
 );
 
 export default ReleasedPaymentsTab;
+

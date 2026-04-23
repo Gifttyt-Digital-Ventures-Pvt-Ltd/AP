@@ -354,7 +354,7 @@ const UserRoles = () => {
     <div data-testid="user-roles-page">
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-4xl md:text-5xl font-bold font-['Manrope'] text-primary mb-2">
+          <h1 className="text-4xl md:text-5xl font-bold  text-primary mb-2">
             User Roles & Access
           </h1>
           <p className="text-muted-foreground">Manage user permissions and access rights</p>
@@ -432,3 +432,4 @@ const UserRoles = () => {
 };
 
 export default UserRoles;
+

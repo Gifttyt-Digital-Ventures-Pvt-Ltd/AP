@@ -166,7 +166,7 @@ const Vendors = () => {
     <div data-testid="vendors-page">
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-4xl md:text-5xl font-bold font-['Manrope'] text-primary mb-2" data-testid="vendors-title">
+          <h1 className="text-4xl md:text-5xl font-bold  text-primary mb-2" data-testid="vendors-title">
             Vendors
           </h1>
           <p className="text-muted-foreground">Manage your vendor relationships</p>
@@ -627,10 +627,10 @@ const Vendors = () => {
                     <div className="text-muted-foreground">{vendor.mobile || vendor.phone || '-'}</div>
                   </div>
                 </td>
-                <td className="p-4 font-['JetBrains_Mono'] text-sm">
+                <td className="p-4  text-sm">
                   {vendor.pan || '-'}
                 </td>
-                <td className="p-4 font-['JetBrains_Mono'] text-sm">
+                <td className="p-4  text-sm">
                   {vendor.gstin ? `${vendor.gstin.substring(0, 4)}...${vendor.gstin.slice(-4)}` : '-'}
                 </td>
                 <td className="p-4 text-right">
@@ -668,3 +668,4 @@ const Vendors = () => {
 };
 
 export default Vendors;
+

@@ -1,4 +1,146 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Manrope:wght@400;500;600;700;800&display=swap");
+@font-face {
+  font-family: "Switzer";
+  src: url("./assets/fonts/Switzer-Thin.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 100;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("./assets/fonts/Switzer-ThinItalic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 100;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("./assets/fonts/Switzer-Extralight.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 200;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("./assets/fonts/Switzer-ExtralightItalic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 200;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("./assets/fonts/Switzer-Light.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 300;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("./assets/fonts/Switzer-LightItalic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 300;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("./assets/fonts/Switzer-Regular.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("./assets/fonts/Switzer-Italic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("./assets/fonts/Switzer-Medium.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("./assets/fonts/Switzer-MediumItalic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 500;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("./assets/fonts/Switzer-Semibold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("./assets/fonts/Switzer-SemiboldItalic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 600;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("./assets/fonts/Switzer-Bold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("./assets/fonts/Switzer-BoldItalic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 700;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("./assets/fonts/Switzer-Extrabold.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("./assets/fonts/Switzer-ExtraboldItalic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 800;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("./assets/fonts/Switzer-Black.woff2") format("woff2");
+  font-style: normal;
+  font-weight: 900;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: "Switzer";
+  src: url("./assets/fonts/Switzer-BlackItalic.woff2") format("woff2");
+  font-style: italic;
+  font-weight: 900;
+  font-display: swap;
+}
 
 @tailwind base;
 @tailwind components;
@@ -7,7 +149,7 @@
 body {
   margin: 0;
   font-family:
-    "Inter",
+    "Switzer",
     -apple-system,
     BlinkMacSystemFont,
     "Segoe UI",
@@ -19,52 +161,95 @@ body {
 
 code {
   font-family:
-    "JetBrains Mono", source-code-pro, Menlo, Monaco, Consolas, monospace;
+    "Switzer",
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    "Roboto",
+    sans-serif;
 }
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 164 78% 9%;
-    --card: 0 0% 100%;
-    --card-foreground: 164 78% 9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 164 78% 9%;
-    --primary: 164 78% 9%;
-    --primary-foreground: 0 0% 98%;
-    --secondary: 40 5% 96%;
-    --secondary-foreground: 164 78% 9%;
-    --muted: 40 5% 96%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --accent: 199 89% 48%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
-    --ring: 164 78% 9%;
+    --background: #ffffff;
+    --background-rgb: 255 255 255;
+    --foreground: #05291f;
+    --foreground-rgb: 5 41 31;
+    --card: #ffffff;
+    --card-rgb: 255 255 255;
+    --card-foreground: #05291f;
+    --card-foreground-rgb: 5 41 31;
+    --popover: #ffffff;
+    --popover-rgb: 255 255 255;
+    --popover-foreground: #05291f;
+    --popover-foreground-rgb: 5 41 31;
+    --primary: #05291f;
+    --primary-rgb: 5 41 31;
+    --primary-foreground: #fafafa;
+    --primary-foreground-rgb: 250 250 250;
+    --secondary: #f5f5f4;
+    --secondary-rgb: 245 245 244;
+    --secondary-foreground: #05291f;
+    --secondary-foreground-rgb: 5 41 31;
+    --muted: #f5f5f4;
+    --muted-rgb: 245 245 244;
+    --muted-foreground: #71717a;
+    --muted-foreground-rgb: 113 113 122;
+    --accent: #0da2e7;
+    --accent-rgb: 13 162 231;
+    --accent-foreground: #fafafa;
+    --accent-foreground-rgb: 250 250 250;
+    --destructive: #ef4444;
+    --destructive-rgb: 239 68 68;
+    --destructive-foreground: #fafafa;
+    --destructive-foreground-rgb: 250 250 250;
+    --border: #e4e4e7;
+    --border-rgb: 228 228 231;
+    --input: #e4e4e7;
+    --input-rgb: 228 228 231;
+    --ring: #05291f;
+    --ring-rgb: 5 41 31;
     --radius: 0.5rem;
   }
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 240 10% 3.9%;
-    --card-foreground: 0 0% 98%;
-    --popover: 240 10% 3.9%;
-    --popover-foreground: 0 0% 98%;
-    --primary: 0 0% 98%;
-    --primary-foreground: 240 5.9% 10%;
-    --secondary: 240 3.7% 15.9%;
-    --secondary-foreground: 0 0% 98%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --accent: 199 89% 48%;
-    --accent-foreground: 0 0% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
-    --ring: 240 4.9% 83.9%;
+    --background: #09090b;
+    --background-rgb: 9 9 11;
+    --foreground: #fafafa;
+    --foreground-rgb: 250 250 250;
+    --card: #09090b;
+    --card-rgb: 9 9 11;
+    --card-foreground: #fafafa;
+    --card-foreground-rgb: 250 250 250;
+    --popover: #09090b;
+    --popover-rgb: 9 9 11;
+    --popover-foreground: #fafafa;
+    --popover-foreground-rgb: 250 250 250;
+    --primary: #fafafa;
+    --primary-rgb: 250 250 250;
+    --primary-foreground: #18181b;
+    --primary-foreground-rgb: 24 24 27;
+    --secondary: #27272a;
+    --secondary-rgb: 39 39 42;
+    --secondary-foreground: #fafafa;
+    --secondary-foreground-rgb: 250 250 250;
+    --muted: #27272a;
+    --muted-rgb: 39 39 42;
+    --muted-foreground: #a1a1aa;
+    --muted-foreground-rgb: 161 161 170;
+    --accent: #0da2e7;
+    --accent-rgb: 13 162 231;
+    --accent-foreground: #fafafa;
+    --accent-foreground-rgb: 250 250 250;
+    --destructive: #7f1d1d;
+    --destructive-rgb: 127 29 29;
+    --destructive-foreground: #fafafa;
+    --destructive-foreground-rgb: 250 250 250;
+    --border: #27272a;
+    --border-rgb: 39 39 42;
+    --input: #27272a;
+    --input-rgb: 39 39 42;
+    --ring: #d4d4d8;
+    --ring-rgb: 212 212 216;
   }
 }
 
@@ -75,7 +260,7 @@ code {
 
   * {
     scrollbar-width: thin;
-    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+    scrollbar-color: rgb(var(--muted-foreground-rgb) / 0.35) transparent;
   }
 
   *::-webkit-scrollbar {
@@ -88,12 +273,12 @@ code {
   }
 
   *::-webkit-scrollbar-thumb {
-    background: hsl(var(--muted-foreground) / 0.35);
+    background: rgb(var(--muted-foreground-rgb) / 0.35);
     border-radius: 9999px;
   }
 
   *::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--muted-foreground) / 0.5);
+    background: rgb(var(--muted-foreground-rgb) / 0.5);
   }
 
   body {
@@ -105,7 +290,7 @@ code {
   h4,
   h5,
   h6 {
-    font-family: "Manrope", sans-serif;
+    font-family: "Switzer", sans-serif;
   }
 }
 
@@ -154,7 +339,7 @@ code {
   /* Compact scrollbar variant used in dense dialogs/panels. */
   .scrollbar-thin-muted {
     scrollbar-width: thin;
-    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+    scrollbar-color: rgb(var(--muted-foreground-rgb) / 0.35) transparent;
   }
 
   .scrollbar-thin-muted::-webkit-scrollbar {
@@ -167,12 +352,12 @@ code {
   }
 
   .scrollbar-thin-muted::-webkit-scrollbar-thumb {
-    background: hsl(var(--muted-foreground) / 0.35);
+    background: rgb(var(--muted-foreground-rgb) / 0.35);
     border-radius: 9999px;
   }
 
   .scrollbar-thin-muted::-webkit-scrollbar-thumb:hover {
-    background: hsl(var(--muted-foreground) / 0.5);
+    background: rgb(var(--muted-foreground-rgb) / 0.5);
   }
 
   /* Hides scrollbar while preserving scroll behavior. */

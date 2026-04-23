@@ -67,14 +67,14 @@ const TransactionsTable = ({ filteredTransactions }) => (
                 <p className="text-xs text-muted-foreground">{format(transaction.date, 'h:mm a')}</p>
               </div>
             </td>
-            <td className="p-4 text-sm font-['JetBrains_Mono']">{transaction.ref_number}</td>
-            <td className="p-4 text-right font-['JetBrains_Mono'] font-semibold">
+            <td className="p-4 text-sm ">{transaction.ref_number}</td>
+            <td className="p-4 text-right  font-semibold">
               {transaction.withdrawal ? `\u20B9${transaction.withdrawal.toLocaleString('en-IN')}` : '-'}
             </td>
-            <td className="p-4 text-right font-['JetBrains_Mono'] font-semibold text-emerald-600">
+            <td className="p-4 text-right  font-semibold text-emerald-600">
               {transaction.deposit ? `+ \u20B9${transaction.deposit.toLocaleString('en-IN')}` : '-'}
             </td>
-            <td className="p-4 text-right font-['JetBrains_Mono'] font-semibold">
+            <td className="p-4 text-right  font-semibold">
               {'\u20B9'}
               {transaction.closing_balance.toLocaleString('en-IN', {
                 minimumFractionDigits: 2,
@@ -112,3 +112,4 @@ const TransactionsTable = ({ filteredTransactions }) => (
 );
 
 export default TransactionsTable;
+

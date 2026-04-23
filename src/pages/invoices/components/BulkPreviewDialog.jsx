@@ -113,8 +113,8 @@ const BulkPreviewDialog = ({
                     </td>
                     <td className="p-3">{item.filename}</td>
                     <td className="p-3">{item.invoicePayload?.vendor_name || '-'}</td>
-                    <td className="p-3 font-['JetBrains_Mono']">{item.invoicePayload?.invoice_number || '-'}</td>
-                    <td className="p-3 text-right font-['JetBrains_Mono']">
+                    <td className="p-3 ">{item.invoicePayload?.invoice_number || '-'}</td>
+                    <td className="p-3 text-right ">
                       {item.invoicePayload ? `\u20B9${Number(item.invoicePayload.amount || 0).toLocaleString('en-IN')}` : '-'}
                     </td>
                     <td className="p-3">
@@ -191,3 +191,4 @@ const BulkPreviewDialog = ({
 };
 
 export default BulkPreviewDialog;
+

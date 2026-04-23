@@ -64,7 +64,7 @@ const ViewDialog = ({
                     <h3 className="text-lg font-semibold">Vendor Details</h3>
                     <div className="grid grid-cols-2 gap-4">
                       <div><Label className="text-xs text-muted-foreground">Vendor Name</Label><p className="font-medium">{selectedInvoice.vendor_name}</p></div>
-                      <div><Label className="text-xs text-muted-foreground">Bill Number</Label><p className="font-['JetBrains_Mono'] font-medium">{selectedInvoice.invoice_number}</p></div>
+                      <div><Label className="text-xs text-muted-foreground">Bill Number</Label><p className=" font-medium">{selectedInvoice.invoice_number}</p></div>
                       <div><Label className="text-xs text-muted-foreground">Billing Date</Label><p className="font-medium">{format(new Date(selectedInvoice.invoice_date), "MMMM do, yyyy")}</p></div>
                       <div><Label className="text-xs text-muted-foreground">Due Date</Label><p className="font-medium">{format(new Date(selectedInvoice.due_date), "MMMM do, yyyy")}</p></div>
                     </div>
@@ -72,7 +72,7 @@ const ViewDialog = ({
 
                   <div className="p-4 bg-primary/5 rounded-lg border">
                     <Label className="text-xs text-muted-foreground">Total Amount</Label>
-                    <p className="text-3xl font-bold font-['JetBrains_Mono'] text-primary">₹{selectedInvoice.amount.toLocaleString("en-IN")}</p>
+                    <p className="text-3xl font-bold  text-primary">₹{selectedInvoice.amount.toLocaleString("en-IN")}</p>
                   </div>
 
                   {selectedInvoice.line_items && selectedInvoice.line_items.length > 0 && (
@@ -92,9 +92,9 @@ const ViewDialog = ({
                             {selectedInvoice.line_items.map((item, index) => (
                               <tr key={index} className="border-b last:border-0">
                                 <td className="p-3 text-sm">{item.description}</td>
-                                <td className="p-3 text-sm text-right font-['JetBrains_Mono']">{item.quantity || "-"}</td>
-                                <td className="p-3 text-sm text-right font-['JetBrains_Mono']">{item.unit_price ? `₹${item.unit_price.toLocaleString("en-IN")}` : "-"}</td>
-                                <td className="p-3 text-sm text-right font-['JetBrains_Mono'] font-semibold">₹{item.amount.toLocaleString("en-IN")}</td>
+                                <td className="p-3 text-sm text-right ">{item.quantity || "-"}</td>
+                                <td className="p-3 text-sm text-right ">{item.unit_price ? `₹${item.unit_price.toLocaleString("en-IN")}` : "-"}</td>
+                                <td className="p-3 text-sm text-right  font-semibold">₹{item.amount.toLocaleString("en-IN")}</td>
                               </tr>
                             ))}
                           </tbody>
@@ -196,3 +196,4 @@ const ViewDialog = ({
 };
 
 export default ViewDialog;
+

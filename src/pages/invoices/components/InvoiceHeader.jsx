@@ -14,7 +14,7 @@ const InvoiceHeader = ({
   return (
     <div className="flex justify-between items-center mb-8">
       <div>
-        <h1 className="text-4xl md:text-5xl font-bold font-['Manrope'] text-primary mb-2" data-testid="invoices-title">
+        <h1 className="text-4xl md:text-5xl font-bold  text-primary mb-2" data-testid="invoices-title">
           Invoices
         </h1>
         <p className="text-muted-foreground">Upload and manage all invoices</p>
@@ -45,3 +45,4 @@ const InvoiceHeader = ({
 };
 
 export default InvoiceHeader;
+

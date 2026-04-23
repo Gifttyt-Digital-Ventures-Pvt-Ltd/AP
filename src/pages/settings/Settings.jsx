@@ -34,7 +34,7 @@ const ZohoLogo = () => (
 
 // Tally Logo Component
 const TallyLogo = () => (
-  <div className="text-2xl font-bold italic" style={{ fontFamily: 'serif', color: '#D32F2F' }}>
+  <div className="text-2xl font-bold italic" style={{ color: '#D32F2F' }}>
     <span style={{ color: '#D32F2F' }}>Tally</span>
     <span className="text-xs align-super text-gray-500">.ERP9</span>
   </div>
@@ -335,7 +335,7 @@ const Settings = () => {
   return (
     <div data-testid="settings-page">
       <div className="mb-8">
-        <h1 className="text-4xl md:text-5xl font-bold font-['Manrope'] text-primary mb-2" data-testid="settings-title">
+        <h1 className="text-4xl md:text-5xl font-bold  text-primary mb-2" data-testid="settings-title">
           Settings
         </h1>
         <p className="text-muted-foreground">Manage your account settings and integrations</p>
@@ -351,7 +351,7 @@ const Settings = () => {
         <TabsContent value="organisation">
           <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
             <div className="mb-6">
-              <h3 className="text-xl font-semibold font-['Manrope'] mb-1 flex items-center gap-2">
+              <h3 className="text-xl font-semibold  mb-1 flex items-center gap-2">
                 <Building2 className="h-5 w-5 text-primary" />
                 Organisation Details
               </h3>
@@ -376,7 +376,7 @@ const Settings = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <code className="bg-blue-100 text-blue-800 px-3 py-1.5 rounded-md font-['JetBrains_Mono'] text-sm">
+                        <code className="bg-blue-100 text-blue-800 px-3 py-1.5 rounded-md  text-sm">
                           {orgDetails.platform_email}
                         </code>
                         <Button 
@@ -649,7 +649,7 @@ const Settings = () => {
           <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
             <div className="flex justify-between items-center mb-6">
               <div>
-                <h3 className="text-xl font-semibold font-['Manrope'] mb-1">Bank Accounts</h3>
+                <h3 className="text-xl font-semibold  mb-1">Bank Accounts</h3>
                 <p className="text-sm text-muted-foreground">Connect your bank accounts for seamless payments</p>
               </div>
                             <BankAccountDialog
@@ -674,12 +674,12 @@ const Settings = () => {
                     <p className="text-sm text-muted-foreground">
                       {account.bank_name} - {account.account_type}
                     </p>
-                    <p className="text-xs font-['JetBrains_Mono'] text-muted-foreground mt-1">
+                    <p className="text-xs  text-muted-foreground mt-1">
                       **** {account.account_number.slice(-4)}
                     </p>
                   </div>
                   <div className="flex items-center gap-4">
-                    <span className="text-sm font-['JetBrains_Mono'] font-semibold">{account.currency}</span>
+                    <span className="text-sm  font-semibold">{account.currency}</span>
                     <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                       account.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-800'
                     }`}>
@@ -937,3 +937,4 @@ const Settings = () => {
 };
 
 export default Settings;
+

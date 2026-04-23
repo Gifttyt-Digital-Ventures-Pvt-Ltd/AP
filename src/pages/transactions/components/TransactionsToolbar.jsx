@@ -8,7 +8,7 @@ const TransactionsToolbar = ({
   return (
     <>
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold font-['Manrope']">Transactions</h1>
+        <h1 className="text-2xl font-bold ">Transactions</h1>
       </div>
 
       <TabsList className="bg-gray-100 p-1">
@@ -37,3 +37,4 @@ const TransactionsToolbar = ({
 };
 
 export default TransactionsToolbar;
+

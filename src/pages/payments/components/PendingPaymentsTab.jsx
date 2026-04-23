@@ -15,7 +15,7 @@ const PendingPaymentsTab = ({
         <div className="flex justify-between items-center">
           <div>
             <p className="text-sm font-medium">Total Pending Amount</p>
-            <p className="text-2xl font-bold font-['JetBrains_Mono'] text-accent">
+            <p className="text-2xl font-bold  text-accent">
               {'\u20B9'}{totalPendingAmount.toLocaleString('en-IN')}
             </p>
           </div>
@@ -45,9 +45,9 @@ const PendingPaymentsTab = ({
               className="border-b border-border hover:bg-muted/50 transition-colors"
               data-testid={`pending-invoice-row-${invoice.id}`}
             >
-              <td className="p-4 font-['JetBrains_Mono'] font-medium">{invoice.invoice_number}</td>
+              <td className="p-4  font-medium">{invoice.invoice_number}</td>
               <td className="p-4">{invoice.vendor_name}</td>
-              <td className="p-4 font-['JetBrains_Mono'] font-semibold">
+              <td className="p-4  font-semibold">
                 {'\u20B9'}{invoice.amount.toLocaleString('en-IN')}
               </td>
               <td className="p-4 text-sm text-muted-foreground">{safeFormatDate(invoice.invoice_date)}</td>
@@ -71,3 +71,4 @@ const PendingPaymentsTab = ({
 );
 
 export default PendingPaymentsTab;
+

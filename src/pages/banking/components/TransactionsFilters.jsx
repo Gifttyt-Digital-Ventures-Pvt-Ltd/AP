@@ -16,7 +16,7 @@ const TransactionsFilters = ({
 }) => (
   <>
     <div className="flex items-center justify-between mb-6">
-      <h2 className="text-2xl font-semibold font-['Manrope']">Recent Transactions</h2>
+      <h2 className="text-2xl font-semibold ">Recent Transactions</h2>
       <Button variant="outline" size="sm" onClick={() => setShowDateFilter(!showDateFilter)}>
         Select a Date
         <ChevronDown
@@ -64,3 +64,4 @@ const TransactionsFilters = ({
 );
 
 export default TransactionsFilters;
+

@@ -32,7 +32,7 @@ const NeedsApprovalTable = ({
               data-testid={`approval-row-${invoice.id}`}
             >
               <td className="p-4">{invoice.vendor_name}</td>
-              <td className="p-4 font-['JetBrains_Mono'] font-semibold">
+              <td className="p-4  font-semibold">
                 {invoice.amount.toLocaleString()} {invoice.currency}
               </td>
               <td className="p-4">
@@ -90,3 +90,4 @@ const NeedsApprovalTable = ({
 );
 
 export default NeedsApprovalTable;
+

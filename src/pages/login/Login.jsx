@@ -141,7 +141,7 @@ const Login = () => {
       >
         <div className="mb-8 text-center">
           <h1
-            className="text-3xl font-bold font-['Manrope'] text-primary mb-2"
+            className="text-3xl font-bold  text-primary mb-2"
             data-testid="login-title"
           >
             AP Portal
@@ -254,3 +254,4 @@ const Login = () => {
 };
 
 export default Login;
+

@@ -5,7 +5,7 @@ import { Button } from '../../../components/ui/button';
 const PaymentsHeader = ({ invoicesCount, handleBulkRelease, paymentDialog }) => (
   <div className="flex justify-between items-center mb-8">
     <div>
-      <h1 className="text-4xl md:text-5xl font-bold font-['Manrope'] text-primary mb-2" data-testid="payments-title">
+      <h1 className="text-4xl md:text-5xl font-bold  text-primary mb-2" data-testid="payments-title">
         Payments
       </h1>
       <p className="text-muted-foreground">Track and release payments</p>
@@ -28,3 +28,4 @@ const PaymentsHeader = ({ invoicesCount, handleBulkRelease, paymentDialog }) => 
 );
 
 export default PaymentsHeader;
+

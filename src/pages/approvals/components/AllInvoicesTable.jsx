@@ -16,9 +16,9 @@ const AllInvoicesTable = ({ allInvoices, getStatusBadgeClass, formatStatus }) =>
       <tbody>
         {allInvoices.map((invoice) => (
           <tr key={invoice.id} className="border-b border-border hover:bg-muted/50 transition-colors">
-            <td className="p-4 font-['JetBrains_Mono'] font-medium">{invoice.invoice_number}</td>
+            <td className="p-4  font-medium">{invoice.invoice_number}</td>
             <td className="p-4">{invoice.vendor_name}</td>
-            <td className="p-4 font-['JetBrains_Mono'] font-semibold">
+            <td className="p-4  font-semibold">
               {invoice.amount.toLocaleString()} {invoice.currency}
             </td>
             <td className="p-4">
@@ -35,3 +35,4 @@ const AllInvoicesTable = ({ allInvoices, getStatusBadgeClass, formatStatus }) =>
 );
 
 export default AllInvoicesTable;
+
