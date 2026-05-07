@@ -17,6 +17,8 @@ const VoucherDialog = ({
   voucherFile,
   handleUploadVoucher,
   uploadingVoucher,
+  canUploadVouchers,
+  canLinkInvoices,
 }) => {
   return (
     <Dialog open={voucherModalOpen} onOpenChange={setVoucherModalOpen}>
@@ -42,7 +44,12 @@ const VoucherDialog = ({
               <Link2 className="h-4 w-4 text-blue-600" />
               <h4 className="font-medium">Link Existing Invoice</h4>
             </div>
-            <Button variant="outline" className="w-full" onClick={() => setLinkInvoiceModalOpen(true)}>
+            <Button
+              variant="outline"
+              className="w-full"
+              onClick={() => setLinkInvoiceModalOpen(true)}
+              disabled={!canLinkInvoices}
+            >
               Select from System Invoices
             </Button>
           </div>
@@ -61,7 +68,12 @@ const VoucherDialog = ({
                 <Label className="text-sm">Voucher File</Label>
                 <input type="file" ref={voucherFileInputRef} onChange={(e) => setVoucherFile(e.target.files[0])} accept=".pdf,.png,.jpg,.jpeg" className="hidden" />
                 <div className="mt-1 flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => voucherFileInputRef.current?.click()}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => voucherFileInputRef.current?.click()}
+                    disabled={!canUploadVouchers}
+                  >
                     <Upload className="h-4 w-4 mr-1" />
                     Choose File
                   </Button>
@@ -69,7 +81,11 @@ const VoucherDialog = ({
                 </div>
               </div>
 
-              <Button onClick={handleUploadVoucher} disabled={uploadingVoucher || !voucherFile || !voucherNumber} className="w-full">
+              <Button
+                onClick={handleUploadVoucher}
+                disabled={uploadingVoucher || !voucherFile || !voucherNumber || !canUploadVouchers}
+                className="w-full"
+              >
                 {uploadingVoucher ? (
                   <>
                     <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />

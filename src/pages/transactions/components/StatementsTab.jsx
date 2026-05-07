@@ -30,6 +30,8 @@ const StatementsTab = ({
   getStatusBadge,
   handleDownloadStatement,
   handleDeleteStatement,
+  canUploadStatements,
+  canDeleteStatements,
 }) => {
   return (
     <TabsContent value="upload" className="space-y-6">
@@ -55,7 +57,12 @@ const StatementsTab = ({
           </div>
           <div className="flex items-end">
             <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".pdf,.csv,.xlsx" className="hidden" data-testid="file-input" />
-            <Button onClick={() => fileInputRef.current?.click()} disabled={uploading || !periodStart || !periodEnd} className="w-full h-9" data-testid="upload-btn">
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploading || !periodStart || !periodEnd || !canUploadStatements}
+              className="w-full h-9"
+              data-testid="upload-btn"
+            >
               {uploading ? (
                 <>
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
@@ -75,7 +82,10 @@ const StatementsTab = ({
           className={`border-2 border-dashed rounded-lg p-8 text-center cursor-pointer transition-colors ${
             isDragOverUploadZone ? "border-primary bg-gray-50" : "border-gray-200 hover:border-primary hover:bg-gray-50"
           }`}
-          onClick={() => fileInputRef.current?.click()}
+          onClick={() => {
+            if (!canUploadStatements) return;
+            fileInputRef.current?.click();
+          }}
           onDragOver={handleUploadZoneDragOver}
           onDragEnter={handleUploadZoneDragOver}
           onDragLeave={handleUploadZoneDragLeave}
@@ -157,7 +167,12 @@ const StatementsTab = ({
                         <button onClick={() => handleDownloadStatement(stmt.id)} className="p-1.5 hover:bg-gray-100 rounded text-gray-500 hover:text-gray-700" title="Download">
                           <Download className="h-4 w-4" />
                         </button>
-                        <button onClick={() => handleDeleteStatement(stmt.id)} className="p-1.5 hover:bg-red-50 rounded text-gray-500 hover:text-red-600" title="Delete">
+                        <button
+                          onClick={() => handleDeleteStatement(stmt.id)}
+                          className="p-1.5 hover:bg-red-50 rounded text-gray-500 hover:text-red-600"
+                          title="Delete"
+                          disabled={!canDeleteStatements}
+                        >
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>

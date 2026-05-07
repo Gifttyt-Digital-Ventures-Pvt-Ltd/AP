@@ -1,10 +1,12 @@
 import { lazy, Suspense, useEffect } from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route, Navigate, Outlet } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { RBACProvider, useRBAC } from "./contexts/RBACContext";
 import SessionTimeout from "./components/SessionTimeout";
 import { Toaster } from "./components/ui/sonner";
 import { Layout } from "./components/Layout";
+import AccessDeniedState from "./components/common/AccessDeniedState";
 import Login from "./pages/login/Login";
 import Dashboard from "./pages/dashboard/Dashboard";
 import Vendors from "./pages/vendors/Vendors";
@@ -38,8 +40,10 @@ const PageFallback = () => (
 
 const ProtectedRoute = () => {
   const { user, loading } = useAuth();
+  const { isLoaded: rbacLoaded, canAccessRoute } = useRBAC();
+  const location = useLocation();
 
-  if (loading) {
+  if (loading || !rbacLoaded) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
@@ -54,9 +58,15 @@ const ProtectedRoute = () => {
     return <Navigate to="/login" replace />;
   }
 
+  const canVisitPage = canAccessRoute(location.pathname);
+
   return (
     <Layout>
-      <Outlet />
+      {canVisitPage ? (
+        <Outlet />
+      ) : (
+        <AccessDeniedState description="You do not have the required permissions to access this page. Contact your administrator if this seems incorrect." />
+      )}
     </Layout>
   );
 };
@@ -142,7 +152,9 @@ function App() {
       <BrowserRouter basename={routerBasename}>
         <AuthProvider>
           <SessionTimeout>
-            <AppContent />
+            <RBACProvider>
+              <AppContent />
+            </RBACProvider>
           </SessionTimeout>
         </AuthProvider>
       </BrowserRouter>

@@ -1,10 +1,3 @@
-const normalizeRoleToken = (value = "") =>
-  String(value)
-    .trim()
-    .toLowerCase()
-    .replace(/[_-]+/g, " ")
-    .replace(/\s+/g, " ");
-
 // Exact permission catalog ported from AP_User Roles source dialogs.
 export const PERMISSION_GROUPS = [
   {
@@ -92,6 +85,13 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    title: "Vendor Approval Workflow",
+    permissions: [
+      { id: "vendor-workflow-view", label: "View Only" },
+      { id: "vendor-workflow-manage", label: "Manage (Add, Delete, Edit)" },
+    ],
+  },
+  {
     title: "Settings",
     permissions: [
       { id: "settings-org", label: "Manage Organisation Details" },
@@ -117,6 +117,7 @@ export const PERMISSION_LABELS = {
   "pi-approve": "PI - Approve",
   "pi-view": "PI - View Only",
   "invoice-maker": "Invoice - Maker",
+  "invoice-view": "Invoice - View Only",
   "invoice-checker": "Invoice - Checker",
   "invoice-approver": "Invoice - Approver",
   "matching-manage": "Invoice Matching - Manage",
@@ -130,124 +131,9 @@ export const PERMISSION_LABELS = {
   "banking-full": "Banking - Full Access",
   "roles-view": "Manage Roles - View Only",
   "roles-manage": "Manage Roles - Manage",
+  "vendor-workflow-view": "Vendor Approval Workflow - View Only",
+  "vendor-workflow-manage": "Vendor Approval Workflow - Manage",
   "settings-org": "Settings - Manage Organisation",
   "settings-banking": "Settings - Manage Banking",
   "settings-interaction": "Settings - Interaction Rules",
-};
-
-// Source role definitions used as exact templates/fallbacks in the AP page.
-export const ROLE_TEMPLATES = [
-  {
-    id: "1",
-    name: "Admin",
-    description: "Full system access with all permissions",
-    permissionsCount: 28,
-    permissions: [
-      "dashboard-view",
-      "vendors-view",
-      "vendors-manage",
-      "vendors-approve",
-      "po-manage",
-      "po-approve",
-      "grn-manage",
-      "grn-approve",
-      "invoice-maker",
-      "invoice-checker",
-      "invoice-approver",
-      "matching-manage",
-      "approval-full",
-      "payments-manage",
-      "tax-manage",
-      "reports-full",
-      "banking-full",
-      "roles-manage",
-      "settings-org",
-      "settings-banking",
-      "settings-interaction",
-    ],
-    users: ["John Doe", "Sarah Chen"],
-  },
-  {
-    id: "2",
-    name: "Finance Manager",
-    description: "Manage invoices, payments, and financial reports",
-    permissionsCount: 15,
-    permissions: [
-      "dashboard-view",
-      "invoice-maker",
-      "invoice-checker",
-      "invoice-approver",
-      "matching-manage",
-      "payments-manage",
-      "tax-manage",
-      "reports-full",
-      "banking-full",
-    ],
-    users: ["Michael Brown", "Emily Johnson", "David Wilson"],
-  },
-  {
-    id: "3",
-    name: "Procurement Officer",
-    description: "Handle purchase orders and vendor management",
-    permissionsCount: 12,
-    permissions: [
-      "dashboard-view",
-      "vendors-view",
-      "vendors-manage",
-      "po-manage",
-      "po-approve",
-      "grn-manage",
-      "grn-approve",
-    ],
-    users: ["Lisa Anderson", "James Taylor"],
-  },
-  {
-    id: "4",
-    name: "Approver",
-    description: "Approve invoices and payment requests",
-    permissionsCount: 8,
-    permissions: [
-      "dashboard-view",
-      "invoice-approver",
-      "approval-full",
-      "po-approve",
-      "grn-approve",
-    ],
-    users: ["Robert Martinez"],
-  },
-];
-
-const TEMPLATE_ALIASES = {
-  1: ["admin", "administrator"],
-  2: ["finance manager", "finance_manager", "finance-manager", "finance"],
-  3: [
-    "procurement officer",
-    "procurement_officer",
-    "procurement manager",
-    "procurement-manager",
-    "procurement",
-  ],
-  4: ["approver"],
-};
-
-// Resolves backend role names (including aliases) to source templates.
-export const getRoleTemplateByName = (roleName = "") => {
-  const normalizedRoleName = normalizeRoleToken(roleName);
-  if (!normalizedRoleName) return null;
-
-  const directTemplate = ROLE_TEMPLATES.find((template) => {
-    return (
-      normalizeRoleToken(template.name) === normalizedRoleName ||
-      normalizeRoleToken(template.id) === normalizedRoleName
-    );
-  });
-  if (directTemplate) return directTemplate;
-
-  const matchedEntry = Object.entries(TEMPLATE_ALIASES).find(([, aliases]) =>
-    aliases.some((alias) => normalizeRoleToken(alias) === normalizedRoleName),
-  );
-  if (!matchedEntry) return null;
-
-  const [templateId] = matchedEntry;
-  return ROLE_TEMPLATES.find((template) => template.id === templateId) || null;
 };

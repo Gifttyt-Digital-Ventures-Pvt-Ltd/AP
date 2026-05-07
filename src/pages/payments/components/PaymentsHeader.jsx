@@ -2,7 +2,13 @@ import React from 'react';
 import { Button } from '../../../components/ui/button';
 
 // Page header with global payment actions.
-const PaymentsHeader = ({ invoicesCount, handleBulkRelease, paymentDialog }) => (
+const PaymentsHeader = ({
+  invoicesCount,
+  handleBulkRelease,
+  canBulkRelease,
+  paymentDialog,
+  batchDialogTrigger,
+}) => (
   <div className="flex justify-between items-center mb-8">
     <div>
       <h1 className="text-4xl md:text-5xl font-bold font-['Manrope'] text-primary mb-2" data-testid="payments-title">
@@ -14,14 +20,15 @@ const PaymentsHeader = ({ invoicesCount, handleBulkRelease, paymentDialog }) => 
       {invoicesCount > 0 && (
         <Button
           variant="default"
-          size="lg"
           onClick={handleBulkRelease}
           data-testid="bulk-release-button"
           className="bg-accent hover:bg-accent/90"
+          disabled={!canBulkRelease}
         >
           Release All Payments ({invoicesCount})
         </Button>
       )}
+      {batchDialogTrigger}
       {paymentDialog}
     </div>
   </div>

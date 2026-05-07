@@ -33,6 +33,7 @@ import TransactionsTab from './components/TransactionsTab';
 import ReviewDialog from './components/ReviewDialog';
 import VoucherDialog from './components/VoucherDialog';
 import LinkInvoiceDialog from './components/LinkInvoiceDialog';
+import { useActionGuard } from '../../hooks/useActionGuard';
 
 const TransactionsPage = () => {
   const [transactionQueryParams, setTransactionQueryParams] = useState({});
@@ -58,6 +59,7 @@ const TransactionsPage = () => {
   const [getTransactionInvoice] = useLazyGetTransactionInvoiceQuery();
   const [uploadTransactionVoucher] = useUploadTransactionVoucherMutation();
   const [linkTransactionInvoice] = useLinkTransactionInvoiceMutation();
+  const { guardAction, canPerformAction } = useActionGuard();
 
   const statements = Array.isArray(statementsData) ? statementsData : [];
   const transactions = Array.isArray(transactionsData) ? transactionsData : [];
@@ -118,6 +120,13 @@ const TransactionsPage = () => {
   // Link invoice modal state
   const [linkInvoiceModalOpen, setLinkInvoiceModalOpen] = useState(false);
   const [invoiceSearchTerm, setInvoiceSearchTerm] = useState('');
+  const canUploadStatements = canPerformAction('transactions.uploadStatement');
+  const canDeleteStatements = canPerformAction('transactions.deleteStatement');
+  const canUpdateTransactions = canPerformAction('transactions.update');
+  const canReviewTransactions = canPerformAction('transactions.review');
+  const canUndoTransactions = canPerformAction('transactions.undo');
+  const canUploadVouchers = canPerformAction('transactions.uploadVoucher');
+  const canLinkInvoices = canPerformAction('transactions.linkInvoice');
 
   const buildTransactionQueryParams = (dateFilter = appliedDateFilter) => {
     const params = {};
@@ -135,6 +144,7 @@ const TransactionsPage = () => {
   };
 
   const handleStatementUpload = async (file) => {
+    if (!guardAction('transactions.uploadStatement')) return;
     if (!file) return;
 
     if (!periodStart || !periodEnd) {
@@ -191,6 +201,7 @@ const TransactionsPage = () => {
   };
 
   const handleDeleteStatement = async (statementId) => {
+    if (!guardAction('transactions.deleteStatement')) return;
     if (!window.confirm('Are you sure? This will delete all associated transactions.')) return;
     
     try {
@@ -211,6 +222,7 @@ const TransactionsPage = () => {
   };
 
   const handleUpdateTransaction = async (transactionId, field, value) => {
+    if (!guardAction('transactions.update')) return;
     try {
       await updateTransaction({
         transactionId,
@@ -223,6 +235,7 @@ const TransactionsPage = () => {
   };
 
   const handleMarkReviewed = async (transactionId) => {
+    if (!guardAction('transactions.review')) return;
     try {
       await reviewTransaction(transactionId).unwrap();
       toast.success('Transaction marked as reviewed');
@@ -233,6 +246,7 @@ const TransactionsPage = () => {
   };
 
   const handleUndoReview = async (transactionId) => {
+    if (!guardAction('transactions.undo')) return;
     try {
       await undoTransaction(transactionId).unwrap();
       toast.success('Transaction moved back to Review Needed');
@@ -269,6 +283,7 @@ const TransactionsPage = () => {
 
   // Open voucher upload modal
   const handleOpenVoucherModal = (txn) => {
+    if (!guardAction('transactions.uploadVoucher')) return;
     setSelectedTransactionForVoucher(txn);
     setVoucherNumber('');
     setVoucherFile(null);
@@ -277,6 +292,7 @@ const TransactionsPage = () => {
 
   // Upload voucher
   const handleUploadVoucher = async () => {
+    if (!guardAction('transactions.uploadVoucher')) return;
     if (!voucherFile || !voucherNumber) {
       toast.error('Please provide voucher number and file');
       return;
@@ -304,6 +320,7 @@ const TransactionsPage = () => {
 
   // Link existing invoice
   const handleLinkInvoice = async (invoiceId) => {
+    if (!guardAction('transactions.linkInvoice')) return;
     try {
       await linkTransactionInvoice({
         transactionId: selectedTransactionForVoucher.id,
@@ -528,6 +545,8 @@ const TransactionsPage = () => {
           getStatusBadge={getStatusBadge}
           handleDownloadStatement={handleDownloadStatement}
           handleDeleteStatement={handleDeleteStatement}
+          canUploadStatements={canUploadStatements}
+          canDeleteStatements={canDeleteStatements}
         />
 
         {/* Review Needed Tab */}
@@ -781,6 +800,7 @@ const TransactionsPage = () => {
                             value={txn.transaction_type}
                             onChange={(e) => handleUpdateTransaction(txn.id, 'transaction_type', e.target.value)}
                             className="h-8 w-full rounded border px-2 text-sm bg-white"
+                            disabled={!canUpdateTransactions}
                           >
                             {TRANSACTION_TYPES.map(type => (
                               <option key={type} value={type}>{type}</option>
@@ -792,6 +812,7 @@ const TransactionsPage = () => {
                             value={txn.ledger || ''}
                             onChange={(e) => handleUpdateTransaction(txn.id, 'ledger', e.target.value)}
                             className={`h-8 w-full rounded border px-2 text-sm bg-white ${!txn.ledger ? 'text-gray-400' : ''}`}
+                            disabled={!canUpdateTransactions}
                           >
                             <option value="">Select Ledger</option>
                             {ledgerOptions.map(ledger => (
@@ -821,6 +842,7 @@ const TransactionsPage = () => {
                                 onClick={() => handleMarkReviewed(txn.id)}
                                 className="p-1.5 hover:bg-green-100 rounded text-green-500 hover:text-green-700"
                                 title="Mark as Reviewed"
+                                disabled={!canReviewTransactions}
                               >
                                 <Check className="h-5 w-5" />
                               </button>
@@ -830,6 +852,7 @@ const TransactionsPage = () => {
                               onClick={() => handleOpenVoucherModal(txn)}
                               className="flex items-center gap-1 px-2 py-1 text-xs text-amber-600 bg-amber-50 hover:bg-amber-100 rounded border border-amber-200"
                               title="Add voucher or link invoice"
+                              disabled={!canUploadVouchers}
                             >
                               <Plus className="h-3 w-3" />
                               <span>Voucher missing</span>
@@ -1065,6 +1088,7 @@ const TransactionsPage = () => {
                             onClick={() => handleUndoReview(txn.id)}
                             className="p-1.5 hover:bg-amber-100 rounded text-gray-400 hover:text-amber-600"
                             title="Undo - Move back to Review Needed"
+                            disabled={!canUndoTransactions}
                           >
                             <RotateCcw className="h-5 w-5" />
                           </button>
@@ -1113,6 +1137,8 @@ const TransactionsPage = () => {
         voucherFile={voucherFile}
         handleUploadVoucher={handleUploadVoucher}
         uploadingVoucher={uploadingVoucher}
+        canUploadVouchers={canUploadVouchers}
+        canLinkInvoices={canLinkInvoices}
       />
 
       <LinkInvoiceDialog
@@ -1122,16 +1148,13 @@ const TransactionsPage = () => {
         setInvoiceSearchTerm={setInvoiceSearchTerm}
         filteredInvoicesForLinking={filteredInvoicesForLinking}
         handleLinkInvoice={handleLinkInvoice}
+        canLinkInvoices={canLinkInvoices}
       />
     </div>
   );
 };
 
 export default TransactionsPage;
-
-
-
-
 
 
 

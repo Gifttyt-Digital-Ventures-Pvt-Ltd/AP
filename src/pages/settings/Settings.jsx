@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import BankAccountDialog from './components/BankAccountDialog';
 import ZohoConfigDialog from './components/ZohoConfigDialog';
 import TallyConfigDialog from './components/TallyConfigDialog';
+import { useActionGuard } from '../../hooks/useActionGuard';
 
 // Zoho Logo Component - Four interlocking rounded squares
 const ZohoLogo = () => (
@@ -67,6 +68,7 @@ const Settings = () => {
   const [createBankAccount] = useCreateBankAccountMutation();
   const [createOrganisation] = useCreateOrganisationMutation();
   const [updateOrganisation] = useUpdateOrganisationMutation();
+  const { guardAction, canPerformAction } = useActionGuard();
   const bankAccounts = Array.isArray(bankAccountsData) ? bankAccountsData : [];
   const [dialogOpen, setDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -113,6 +115,10 @@ const Settings = () => {
     account_holder_name: ''
   });
   const [emailCopied, setEmailCopied] = useState(false);
+  const canCreateBankAccount = canPerformAction('settings.createBankAccount');
+  const canCreateOrganisationDetails = canPerformAction('settings.createOrganisation');
+  const canUpdateOrganisationDetails = canPerformAction('settings.updateOrganisation');
+  const canSaveOrganisation = orgDetails ? canUpdateOrganisationDetails : canCreateOrganisationDetails;
 
   useEffect(() => {
     if (organisationData) {
@@ -196,6 +202,8 @@ const Settings = () => {
 
   const handleOrgSave = async (e) => {
     e.preventDefault();
+    const orgAction = orgDetails ? 'settings.updateOrganisation' : 'settings.createOrganisation';
+    if (!guardAction(orgAction)) return;
     if (!orgForm.company_name) {
       toast.error('Company name is required');
       return;
@@ -231,6 +239,7 @@ const Settings = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!guardAction('settings.createBankAccount')) return;
     try {
       await createBankAccount(formData).unwrap();
       toast.success('Bank account added successfully');
@@ -626,7 +635,12 @@ const Settings = () => {
 
                 {/* Save Button */}
                 <div className="flex justify-end pt-4 border-t">
-                  <Button type="submit" disabled={orgSaving} className="min-w-[150px]" data-testid="org-save-btn">
+                  <Button
+                    type="submit"
+                    disabled={orgSaving || !canSaveOrganisation}
+                    className="min-w-[150px]"
+                    data-testid="org-save-btn"
+                  >
                     {orgSaving ? (
                       <>
                         <Loader2 className="h-4 w-4 mr-2 animate-spin" />
@@ -659,6 +673,7 @@ const Settings = () => {
                 formData={formData}
                 setFormData={setFormData}
                 handleSubmit={handleSubmit}
+                canCreateBankAccount={canCreateBankAccount}
               />
             </div>
 

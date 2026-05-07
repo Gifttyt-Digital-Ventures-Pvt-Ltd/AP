@@ -1,0 +1,220 @@
+const normalizeToken = (value = "") =>
+  String(value)
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .replace(/_+/g, "_");
+
+const mapVendorPermission = (permissionType) => {
+  if (permissionType === "VIEW") return "vendors-view";
+  if (permissionType === "MANAGE") return "vendors-manage";
+  if (permissionType === "APPROVER" || permissionType === "APPROVE") return "vendors-approve";
+  return null;
+};
+
+const mapPurchaseOrderPermission = (permissionType) => {
+  if (permissionType === "VIEW") return "po-view";
+  if (permissionType === "MANAGE") return "po-manage";
+  if (permissionType === "APPROVER" || permissionType === "APPROVE") return "po-approve";
+  return null;
+};
+
+const mapGrnPermission = (permissionType) => {
+  if (permissionType === "VIEW") return "grn-view";
+  if (permissionType === "MANAGE") return "grn-manage";
+  if (permissionType === "APPROVER" || permissionType === "APPROVE") return "grn-approve";
+  return null;
+};
+
+const mapPiPermission = (permissionType) => {
+  if (permissionType === "VIEW") return "pi-view";
+  if (permissionType === "MANAGE") return "pi-manage";
+  if (permissionType === "APPROVER" || permissionType === "APPROVE") return "pi-approve";
+  return null;
+};
+
+const mapInvoicePermission = (permissionType) => {
+  if (permissionType === "VIEW") return "invoice-view";
+  if (permissionType === "MAKER" || permissionType === "MANAGE") return "invoice-maker";
+  if (permissionType === "CHECKER") return "invoice-checker";
+  if (permissionType === "APPROVER" || permissionType === "APPROVE") return "invoice-approver";
+  return null;
+};
+
+const mapInvoiceMatchingPermission = (permissionType) => {
+  if (permissionType === "VIEW") return "matching-view";
+  if (permissionType === "MANAGE") return "matching-manage";
+  return null;
+};
+
+const mapApprovalPermission = (permissionType) => {
+  if (["FULL", "APPROVER", "APPROVE", "MANAGE", "VIEW"].includes(permissionType)) {
+    return "approval-full";
+  }
+  return null;
+};
+
+const mapPaymentsPermission = (permissionType) => {
+  if (permissionType === "VIEW") return "payments-view";
+  if (permissionType === "MANAGE") return "payments-manage";
+  return null;
+};
+
+const mapTaxPermission = (permissionType) => {
+  if (permissionType === "VIEW") return "tax-view";
+  if (permissionType === "MANAGE") return "tax-manage";
+  return null;
+};
+
+const mapReportsPermission = (permissionType) => {
+  if (["FULL", "VIEW", "MANAGE"].includes(permissionType)) return "reports-full";
+  return null;
+};
+
+const mapBankingPermission = (permissionType) => {
+  if (["FULL", "VIEW", "MANAGE"].includes(permissionType)) return "banking-full";
+  return null;
+};
+
+const mapRolesPermission = (permissionType) => {
+  if (permissionType === "VIEW") return "roles-view";
+  if (permissionType === "MANAGE") return "roles-manage";
+  return null;
+};
+
+const mapSettingsPermission = (permissionType) => {
+  if (permissionType === "ORG" || permissionType === "ORGANISATION" || permissionType === "ORGANIZATION") {
+    return "settings-org";
+  }
+  if (permissionType === "BANKING") return "settings-banking";
+  if (permissionType === "INTERACTION") return "settings-interaction";
+  return null;
+};
+
+const mapVendorWorkflowPermission = (permissionType) => {
+  if (permissionType === "VIEW") return "vendor-workflow-view";
+  if (permissionType === "MANAGE") return "vendor-workflow-manage";
+  return null;
+};
+
+export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput) => {
+  const screen = normalizeToken(screenInput);
+  const permissionType = normalizeToken(permissionTypeInput);
+
+  if (screen === "DASHBOARD") {
+    return permissionType === "VIEW" ? "dashboard-view" : null;
+  }
+
+  if (screen === "VENDORS" || screen === "VENDOR") {
+    return mapVendorPermission(permissionType);
+  }
+
+  if (
+    screen === "PURCHASE_ORDER" ||
+    screen === "PURCHASE_ORDERS" ||
+    screen === "PO"
+  ) {
+    return mapPurchaseOrderPermission(permissionType);
+  }
+
+  if (screen === "GRN" || screen === "GOODS_RECEIPT" || screen === "GOODS_RECEIPT_NOTE") {
+    return mapGrnPermission(permissionType);
+  }
+
+  if (screen === "PI" || screen === "PURCHASE_INVOICE") {
+    return mapPiPermission(permissionType);
+  }
+
+  if (screen === "INVOICE" || screen === "INVOICES") {
+    return mapInvoicePermission(permissionType);
+  }
+
+  if (screen === "INVOICE_MATCHING" || screen === "MATCHING") {
+    return mapInvoiceMatchingPermission(permissionType);
+  }
+
+  if (screen === "APPROVAL" || screen === "APPROVALS") {
+    return mapApprovalPermission(permissionType);
+  }
+
+  if (
+    screen === "PAYMENTS" ||
+    screen === "PAYMENT" ||
+    screen === "PAYMENT_BATCHES" ||
+    screen === "PAYMENT_BATCH"
+  ) {
+    return mapPaymentsPermission(permissionType);
+  }
+
+  if (screen === "TAX" || screen === "TAX_MANAGEMENT") {
+    return mapTaxPermission(permissionType);
+  }
+
+  if (screen === "REPORTS" || screen === "REPORT") {
+    return mapReportsPermission(permissionType);
+  }
+
+  if (screen === "BANKING" || screen === "BANK") {
+    return mapBankingPermission(permissionType);
+  }
+
+  if (screen === "ROLES" || screen === "USER_ROLES" || screen === "MANAGE_ROLE") {
+    return mapRolesPermission(permissionType);
+  }
+
+  if (screen === "SETTINGS") {
+    return mapSettingsPermission(permissionType);
+  }
+
+  if (
+    screen === "VENDOR_APPROVAL_WORKFLOW" ||
+    screen === "VENDOR_WORKFLOW" ||
+    screen === "APPROVAL_WORKFLOW" ||
+    screen === "WORKFLOW"
+  ) {
+    return mapVendorWorkflowPermission(permissionType);
+  }
+
+  return null;
+};
+
+const getPermissionsArrayFromResponse = (response) => {
+  const directPermissions = response?.permissions;
+  if (Array.isArray(directPermissions)) return directPermissions;
+
+  const nestedPermissions = response?.data?.permissions;
+  if (Array.isArray(nestedPermissions)) return nestedPermissions;
+
+  return [];
+};
+
+export const normalizeCustomRolePermissionsResponse = (response) => {
+  const permissionsRaw = getPermissionsArrayFromResponse(response);
+  const canonicalSet = new Set();
+  const unmappedPermissions = [];
+
+  permissionsRaw.forEach((entry) => {
+    const canonicalPermission = mapScreenPermissionToCanonical(
+      entry?.screen,
+      entry?.permissionType,
+    );
+
+    if (canonicalPermission) {
+      canonicalSet.add(canonicalPermission);
+      return;
+    }
+
+    unmappedPermissions.push({
+      screen: entry?.screen ?? null,
+      permissionType: entry?.permissionType ?? null,
+    });
+  });
+
+  return {
+    raw: response ?? null,
+    permissionsRaw,
+    canonicalPermissions: Array.from(canonicalSet),
+    unmappedPermissions,
+  };
+};

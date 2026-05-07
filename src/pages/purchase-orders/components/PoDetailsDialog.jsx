@@ -16,6 +16,8 @@ const PoDetailsDialog = ({
   handleSubmitForApproval,
   submitting,
   setShowApprovalDialog,
+  canManagePo,
+  canApprovePo,
 }) => {
   return (
     <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
@@ -149,14 +151,14 @@ const PoDetailsDialog = ({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => setShowViewDialog(false)}>Close</Button>
-          {selectedPO?.status === "Draft" && (
+          {selectedPO?.status === "Draft" && canManagePo && (
             <Button onClick={() => handleSubmitForApproval(selectedPO.id)} disabled={submitting} data-testid="submit-for-approval-btn">
               {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               <Send className="h-4 w-4 mr-2" />
               Submit for Approval
             </Button>
           )}
-          {selectedPO?.status === "Pending Approval" && (
+          {selectedPO?.status === "Pending Approval" && canApprovePo && (
             <Button
               onClick={() => {
                 setShowViewDialog(false);

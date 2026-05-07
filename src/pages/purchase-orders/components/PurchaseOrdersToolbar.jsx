@@ -9,6 +9,7 @@ const PurchaseOrdersToolbar = ({
   setShowCreateDialog,
   stats,
   formatCurrency,
+  canManagePo,
 }) => {
   return (
     <>
@@ -18,16 +19,18 @@ const PurchaseOrdersToolbar = ({
           <p className="text-muted-foreground">Manage purchase orders with multi-level approvals</p>
         </div>
         <div className="flex gap-2">
-          {glAccounts.length === 0 && (
+          {glAccounts.length === 0 && canManagePo && (
             <Button variant="outline" onClick={seedMasterData} data-testid="seed-master-btn">
               <Plus className="h-4 w-4 mr-2" />
               Seed Master Data
             </Button>
           )}
-          <Button onClick={() => setShowCreateDialog(true)} data-testid="create-po-btn">
-            <Plus className="h-4 w-4 mr-2" />
-            Create PO
-          </Button>
+          {canManagePo && (
+            <Button onClick={() => setShowCreateDialog(true)} data-testid="create-po-btn">
+              <Plus className="h-4 w-4 mr-2" />
+              Create PO
+            </Button>
+          )}
         </div>
       </div>
 

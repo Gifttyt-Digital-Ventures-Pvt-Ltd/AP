@@ -14,6 +14,7 @@ const Form16ADialog = ({
   vendors,
   calculating,
   handleGenerateForm16A,
+  canManageTax,
 }) => (
   <Dialog open={open} onOpenChange={setOpen}>
     <DialogContent>
@@ -69,7 +70,11 @@ const Form16ADialog = ({
 
       <DialogFooter>
         <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-        <Button onClick={handleGenerateForm16A} disabled={calculating} data-testid="submit-form16a-btn">
+        <Button
+          onClick={handleGenerateForm16A}
+          disabled={calculating || !canManageTax}
+          data-testid="submit-form16a-btn"
+        >
           {calculating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
           <FileText className="h-4 w-4 mr-2" />
           Generate Certificate

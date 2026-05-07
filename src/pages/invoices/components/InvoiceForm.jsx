@@ -22,6 +22,8 @@ export const InvoiceForm = ({
   setActiveTab,
   handleUpdateInvoice,
   handleAddInvoice,
+  canAddVendor = true,
+  canSubmit = true,
   GST_TREATMENTS,
   INDIAN_STATES,
   FILE_CATEGORIES,
@@ -55,6 +57,7 @@ export const InvoiceForm = ({
             className="bg-amber-600 hover:bg-amber-700 text-white h-7 text-xs"
             size="sm"
             data-testid="add-vendor-from-invoice-btn"
+            disabled={!canAddVendor}
           >
             <Plus className="h-3 w-3 mr-1" />
             Add Vendor
@@ -370,7 +373,11 @@ export const InvoiceForm = ({
           >
             Cancel
           </Button>
-          <Button onClick={isEdit ? handleUpdateInvoice : handleAddInvoice} className="flex-1">
+          <Button
+            onClick={isEdit ? handleUpdateInvoice : handleAddInvoice}
+            className="flex-1"
+            disabled={!canSubmit}
+          >
             {isEdit ? "Update Invoice" : "Add Invoice"}
           </Button>
         </div>

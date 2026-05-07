@@ -17,6 +17,7 @@ const GstCalculationDialog = ({
   indianStates,
   calculating,
   handleCalculateGST,
+  canManageTax,
 }) => (
   <Dialog open={open} onOpenChange={setOpen}>
     <DialogContent>
@@ -111,7 +112,11 @@ const GstCalculationDialog = ({
 
       <DialogFooter>
         <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-        <Button onClick={handleCalculateGST} disabled={calculating} data-testid="submit-gst-calc-btn">
+        <Button
+          onClick={handleCalculateGST}
+          disabled={calculating || !canManageTax}
+          data-testid="submit-gst-calc-btn"
+        >
           {calculating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
           Calculate GST
         </Button>

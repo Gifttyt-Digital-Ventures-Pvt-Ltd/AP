@@ -1,14 +1,57 @@
-import { getRoleTemplateByName } from '../constants/permissionConfig';
+import { mapScreenPermissionToCanonical } from "../../../utils/rbacPermissions";
+
+const CUSTOM_ROLE_PERMISSION_MAP = {
+  "dashboard-view": { screen: "DASHBOARD", permissionType: "VIEW" },
+  "vendors-view": { screen: "VENDORS", permissionType: "VIEW" },
+  "vendors-manage": { screen: "VENDORS", permissionType: "MANAGE" },
+  "vendors-approve": { screen: "VENDORS", permissionType: "APPROVE" },
+  "po-view": { screen: "PURCHASE_ORDER", permissionType: "VIEW" },
+  "po-manage": { screen: "PURCHASE_ORDER", permissionType: "MANAGE" },
+  "po-approve": { screen: "PURCHASE_ORDER", permissionType: "APPROVE" },
+  "grn-view": { screen: "GRN", permissionType: "VIEW" },
+  "grn-manage": { screen: "GRN", permissionType: "MANAGE" },
+  "grn-approve": { screen: "GRN", permissionType: "APPROVE" },
+  "pi-view": { screen: "PI", permissionType: "VIEW" },
+  "pi-manage": { screen: "PI", permissionType: "MANAGE" },
+  "pi-approve": { screen: "PI", permissionType: "APPROVE" },
+  "invoice-view": { screen: "INVOICE", permissionType: "VIEW" },
+  "invoice-maker": { screen: "INVOICE", permissionType: "MAKER" },
+  "invoice-checker": { screen: "INVOICE", permissionType: "CHECKER" },
+  "invoice-approver": { screen: "INVOICE", permissionType: "APPROVER" },
+  "matching-view": { screen: "INVOICE_MATCHING", permissionType: "VIEW" },
+  "matching-manage": { screen: "INVOICE_MATCHING", permissionType: "MANAGE" },
+  "approval-full": { screen: "APPROVAL", permissionType: "FULL" },
+  "payments-view": { screen: "PAYMENTS", permissionType: "VIEW" },
+  "payments-manage": { screen: "PAYMENTS", permissionType: "MANAGE" },
+  "tax-view": { screen: "TAX_MANAGEMENT", permissionType: "VIEW" },
+  "tax-manage": { screen: "TAX_MANAGEMENT", permissionType: "MANAGE" },
+  "reports-full": { screen: "REPORTS", permissionType: "FULL" },
+  "banking-full": { screen: "BANKING", permissionType: "FULL" },
+  "roles-view": { screen: "MANAGE_ROLE", permissionType: "VIEW" },
+  "roles-manage": { screen: "MANAGE_ROLE", permissionType: "MANAGE" },
+  "vendor-workflow-view": { screen: "VENDOR_APPROVAL_WORKFLOW", permissionType: "VIEW" },
+  "vendor-workflow-manage": { screen: "VENDOR_APPROVAL_WORKFLOW", permissionType: "MANAGE" },
+  "settings-org": { screen: "SETTINGS", permissionType: "ORG" },
+  "settings-banking": { screen: "SETTINGS", permissionType: "BANKING" },
+  "settings-interaction": { screen: "SETTINGS", permissionType: "INTERACTION" },
+};
 
 const toArray = (value) => (Array.isArray(value) ? value : []);
 
-// Normalizes mixed backend permission shapes into a string array.
 export const normalizePermissions = (permissions) => {
   if (!permissions) return [];
   if (Array.isArray(permissions)) {
-    return permissions.filter((item) => typeof item === 'string');
+    if (permissions.every((item) => typeof item === "string")) {
+      return permissions.filter((item) => typeof item === "string");
+    }
+    const fromScreenPermissions = permissions
+      .map((item) =>
+        mapScreenPermissionToCanonical(item?.screen, item?.permissionType),
+      )
+      .filter(Boolean);
+    return fromScreenPermissions;
   }
-  if (typeof permissions === 'object') {
+  if (typeof permissions === "object") {
     return Object.entries(permissions)
       .filter(([, enabled]) => Boolean(enabled))
       .map(([key]) => key);
@@ -16,91 +59,102 @@ export const normalizePermissions = (permissions) => {
   return [];
 };
 
-const normalizeRoleName = (value) => String(value || '').trim();
+const normalizeRoleName = (value) => String(value || "").trim();
 
-const normalizeRoleToken = (value = '') =>
+const normalizeRoleToken = (value = "") =>
   String(value)
     .trim()
     .toLowerCase()
-    .replace(/[_-]+/g, ' ')
-    .replace(/\s+/g, ' ');
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ");
 
-const matchesRole = (candidate, sourceTemplate, fallbackRoleName) => {
+const toUserName = (user) => user?.name || user?.full_name || user?.email || "Unknown User";
+const toUserId = (user) => user?.id || user?.empId || user?.employeeId || null;
+
+const matchesRole = (candidate, roleName) => {
   const candidateRole = normalizeRoleName(candidate?.role || candidate?.role_name || candidate?.title);
-  if (!candidateRole) return false;
-
-  const templateForCandidate = getRoleTemplateByName(candidateRole);
-  if (sourceTemplate && templateForCandidate) {
-    return sourceTemplate.id === templateForCandidate.id;
-  }
-
-  return normalizeRoleToken(candidateRole) === normalizeRoleToken(fallbackRoleName);
+  if (!candidateRole || !roleName) return false;
+  return normalizeRoleToken(candidateRole) === normalizeRoleToken(roleName);
 };
 
-const toUserName = (user) => user?.name || user?.full_name || user?.email || 'Unknown User';
-
-// Converts role API rows into UI cards compatible with local draft roles.
 export const toUiRole = (role = {}, users = []) => {
-  const rawRoleName = normalizeRoleName(role.name || role.role_name || role.title || role.id);
-  const template = getRoleTemplateByName(rawRoleName);
-  const roleName = template?.name || rawRoleName;
+  const roleName = normalizeRoleName(
+    role.roleName || role.name || role.role_name || role.title || role.roleCode || role.role_code || role.id,
+  );
   const backendPermissions = normalizePermissions(role.permissions);
-  const resolvedPermissions = template ? [...template.permissions] : backendPermissions;
-  const matchedUsers = toArray(users).filter((user) => matchesRole(user, template, roleName));
-  const mappedUsers = matchedUsers.map((user) => toUserName(user));
-  const fallbackUsers = template && mappedUsers.length === 0 ? toArray(template.users) : [];
-  const assignedUsers = mappedUsers.length > 0 ? mappedUsers : fallbackUsers;
+  const matchedUsers = toArray(users).filter((user) => matchesRole(user, roleName));
+  const assignedUsersFromRole = toArray(role?.employees || role?.assignedEmployees || role?.users).map((employee) => ({
+    id: toUserId(employee),
+    name: toUserName(employee),
+  }));
+  const matchedAssignedUsers = matchedUsers.map((user) => ({
+    id: toUserId(user),
+    name: toUserName(user),
+  }));
+  const combinedAssignedUsers = [...matchedAssignedUsers, ...assignedUsersFromRole].filter((user) => user?.name);
+  const uniqueAssignedUsers = [];
+  const seenUserKeys = new Set();
+  combinedAssignedUsers.forEach((user) => {
+    const key = String(user.id || normalizeRoleToken(user.name));
+    if (seenUserKeys.has(key)) return;
+    seenUserKeys.add(key);
+    uniqueAssignedUsers.push(user);
+  });
 
   return {
-    id: String(role.id || roleName || `role-${Math.random().toString(36).slice(2, 9)}`),
-    key: String(role.id || template?.id || normalizeRoleToken(roleName)),
-    templateId: template?.id || null,
+    id: String(role.id || role.roleId || roleName || `role-${Math.random().toString(36).slice(2, 9)}`),
+    key: String(role.id || role.roleId || role.roleCode || role.role_code || normalizeRoleToken(roleName)),
+    templateId: null,
     sourceRoleName: roleName,
     name: roleName,
-    description: role.description || role.summary || template?.description || '',
-    permissions: resolvedPermissions,
-    permissionsCount: template?.permissionsCount ?? resolvedPermissions.length,
-    users: assignedUsers,
-    isLocalDraft: false,
-    isLocalOverride: false,
+    description: role.description || role.summary || "",
+    permissions: backendPermissions,
+    permissionsCount: backendPermissions.length,
+    users: uniqueAssignedUsers.map((user) => user.name),
+    assignedUsers: uniqueAssignedUsers,
+    assignedEmployeeIds: uniqueAssignedUsers.map((user) => user.id).filter(Boolean),
+    roleCode: role.roleCode || role.role_code || null,
+    active: role.active !== false,
   };
 };
 
-// Builds a UI role card directly from a source template when backend role rows are missing.
-export const toTemplateUiRole = (template = {}, users = []) => {
-  const roleName = normalizeRoleName(template.name);
-  const matchedUsers = toArray(users).filter((user) => matchesRole(user, template, roleName));
-  const mappedUsers = matchedUsers.map((user) => toUserName(user));
-  const fallbackUsers = mappedUsers.length > 0 ? [] : toArray(template.users);
-  const assignedUsers = mappedUsers.length > 0 ? mappedUsers : fallbackUsers;
-  const resolvedPermissions = normalizePermissions(template.permissions);
+const toRoleCodeToken = (value = "") =>
+  String(value)
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 
-  return {
-    id: String(template.id || normalizeRoleToken(roleName)),
-    key: `template-${template.id || normalizeRoleToken(roleName)}`,
-    templateId: template.id || null,
-    sourceRoleName: roleName,
-    name: roleName,
-    description: template.description || '',
-    permissions: resolvedPermissions,
-    permissionsCount: template.permissionsCount ?? resolvedPermissions.length,
-    users: assignedUsers,
-    isLocalDraft: false,
-    isLocalOverride: false,
-    isTemplateFallback: true,
-  };
+export const buildCustomRoleCode = (roleName = "") => {
+  const token = toRoleCodeToken(roleName);
+  return `CUSTOM_${token || "ROLE"}`;
 };
 
-// Local roles are client-side only by design.
-export const toLocalDraftRole = ({ id, name, description, permissions }) => ({
-  id,
-  key: id,
-  sourceRoleName: name,
-  name,
-  description,
-  permissions: normalizePermissions(permissions),
-  permissionsCount: normalizePermissions(permissions).length,
-  users: [],
-  isLocalDraft: true,
-  isLocalOverride: false,
-});
+export const mapUiPermissionsToCustomRolePayload = (permissions = []) => {
+  const selectedPermissions = normalizePermissions(permissions);
+  const mapped = [];
+  const unmapped = [];
+
+  selectedPermissions.forEach((permissionId) => {
+    const entry = CUSTOM_ROLE_PERMISSION_MAP[permissionId];
+    if (!entry) {
+      unmapped.push(permissionId);
+      return;
+    }
+    mapped.push(entry);
+  });
+
+  const unique = [];
+  const seen = new Set();
+  mapped.forEach((entry) => {
+    const key = `${entry.screen}:${entry.permissionType}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    unique.push(entry);
+  });
+
+  return {
+    permissions: unique,
+    unmappedPermissions: unmapped,
+  };
+};

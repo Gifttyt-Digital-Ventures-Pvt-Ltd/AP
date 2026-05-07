@@ -50,6 +50,7 @@ import {
   Loader2,
   ClipboardCheck
 } from 'lucide-react';
+import { useActionGuard } from '../../hooks/useActionGuard';
 
 const statusColors = {
   'Draft': 'bg-gray-500',
@@ -94,6 +95,7 @@ const GoodsReceipt = () => {
   const [getPurchaseOrderById] = useLazyGetPurchaseOrderByIdQuery();
   const [createGrn] = useCreateGrnMutation();
   const [postGrn] = usePostGrnMutation();
+  const { guardAction, canPerformAction } = useActionGuard();
 
   const normalizePoLineItem = (item = {}) => ({
     ...item,
@@ -173,6 +175,8 @@ const GoodsReceipt = () => {
   const [selectedGRN, setSelectedGRN] = useState(null);
   const [creating, setCreating] = useState(false);
   const [posting, setPosting] = useState(false);
+  const canCreateGrn = canPerformAction('grn.create');
+  const canPostGrn = canPerformAction('grn.post');
 
   const loading =
     grnsLoading || approvedPOsLoading || partialPOsLoading;
@@ -234,6 +238,7 @@ const GoodsReceipt = () => {
   };
 
   const handleCreateGRN = async () => {
+    if (!guardAction('grn.create')) return;
     if (!grnForm.po_id) {
       toast.error('Please select a purchase order');
       return;
@@ -286,6 +291,7 @@ const GoodsReceipt = () => {
   };
 
   const handlePostGRN = async (grnId) => {
+    if (!guardAction('grn.post')) return;
     setPosting(true);
     try {
       const data = await postGrn(grnId).unwrap();
@@ -361,14 +367,16 @@ const GoodsReceipt = () => {
           <h1 className="text-2xl font-bold">Goods Receipt Notes</h1>
           <p className="text-muted-foreground">Record receipt of goods against purchase orders</p>
         </div>
-        <Button 
-          onClick={() => setShowSelectPODialog(true)} 
-          disabled={purchaseOrders.length === 0}
-          data-testid="create-grn-btn"
-        >
-          <Plus className="h-4 w-4 mr-2" />
-          Create GRN
-        </Button>
+        {canCreateGrn && (
+          <Button 
+            onClick={() => setShowSelectPODialog(true)} 
+            disabled={purchaseOrders.length === 0}
+            data-testid="create-grn-btn"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Create GRN
+          </Button>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -723,7 +731,7 @@ const GoodsReceipt = () => {
             <Button variant="outline" onClick={() => { setShowCreateDialog(false); resetForm(); }}>
               Cancel
             </Button>
-            <Button onClick={handleCreateGRN} disabled={creating} data-testid="submit-grn-btn">
+            <Button onClick={handleCreateGRN} disabled={creating || !canCreateGrn} data-testid="submit-grn-btn">
               {creating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               Create GRN
             </Button>
@@ -848,7 +856,7 @@ const GoodsReceipt = () => {
             <Button variant="outline" onClick={() => setShowViewDialog(false)}>
               Close
             </Button>
-            {selectedGRN?.status === 'Draft' && (
+            {selectedGRN?.status === 'Draft' && canPostGrn && (
               <Button 
                 onClick={() => handlePostGRN(selectedGRN.id)} 
                 disabled={posting}
@@ -867,4 +875,3 @@ const GoodsReceipt = () => {
 };
 
 export default GoodsReceipt;
-

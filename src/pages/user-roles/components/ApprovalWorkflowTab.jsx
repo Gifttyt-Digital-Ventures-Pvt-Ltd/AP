@@ -1,0 +1,1272 @@
+import React, { useEffect, useMemo, useState } from 'react';
+import { Button } from '../../../components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
+import { Badge } from '../../../components/ui/badge';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
+import { Input } from '../../../components/ui/input';
+import { Label } from '../../../components/ui/label';
+import { Checkbox } from '../../../components/ui/checkbox';
+import { toast } from 'sonner';
+import {
+  AlertCircle,
+  AlertTriangle,
+  ArrowRight,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Edit,
+  Loader2,
+  Minus,
+  Plus,
+  Power,
+  Search,
+  Trash2,
+} from 'lucide-react';
+import {
+  useCreateWorkflowMutation,
+  useDeleteWorkflowMutation,
+  useGetWorkflowInvoiceApproversQuery,
+  useGetWorkflowTypesQuery,
+  useGetWorkflowsQuery,
+  useSwitchWorkflowMutation,
+  useTestWorkflowMutation,
+  useUpdateWorkflowMutation,
+} from '../../../Services/apis/workflowApi';
+import { useGetCostCentersQuery } from '../../../Services/apis/purchaseOrdersMasterDataApi';
+import {
+  CONDITION_VISIBILITY,
+  FALLBACK_USERS,
+  WORKFLOW_SECTIONS,
+  WORKFLOW_TYPE_BADGE_CLASSES,
+  WORKFLOW_TYPE_LABELS,
+} from '../constants/approvalWorkflowConfig';
+import {
+  getConditionSummary,
+  groupRulesByType,
+  hasCatchAllRule,
+} from '../utils/approvalWorkflowUtils';
+
+const DEFAULT_WORKFLOW_TYPES = Object.keys(WORKFLOW_TYPE_LABELS);
+
+const emptyFormState = {
+  id: '',
+  name: '',
+  type: '',
+  vendorId: '',
+  departmentId: '',
+  minAmount: '',
+  maxAmount: '',
+  approvers: [{ userId: '', userName: '' }],
+  isSequential: false,
+};
+
+const initialsForName = (name = '') => {
+  return name
+    .split(' ')
+    .filter(Boolean)
+    .map((token) => token[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase();
+};
+
+const toStringId = (value) => {
+  if (value === null || value === undefined) return '';
+  return String(value).trim();
+};
+
+const asNumberOrNull = (value) => {
+  if (value === '' || value === null || value === undefined) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+const resolveEntityId = (item, keys = []) => {
+  if (!item || typeof item !== 'object') return '';
+  for (const key of keys) {
+    const value = item[key];
+    if (value !== null && value !== undefined && String(value).trim()) {
+      return String(value).trim();
+    }
+  }
+  return '';
+};
+
+const resolveEntityName = (item, keys = []) => {
+  if (!item || typeof item !== 'object') return '';
+  for (const key of keys) {
+    const value = item[key];
+    if (value !== null && value !== undefined && String(value).trim()) {
+      return String(value).trim();
+    }
+  }
+  return '';
+};
+
+const normalizeEntityList = (items = [], type = 'entity') => {
+  if (!Array.isArray(items)) return [];
+
+  return items
+    .map((item, index) => {
+      if (typeof item === 'string' || typeof item === 'number') {
+        const value = String(item);
+        return {
+          id: value,
+          name: value,
+        };
+      }
+
+      const idKeys =
+        type === 'vendor'
+          ? ['id', 'vendorId', 'vendor_id', 'vendorUUID']
+          : ['id', 'departmentId', 'department_id'];
+      const nameKeys =
+        type === 'vendor'
+          ? ['name', 'vendorName', 'vendor_name', 'legalName']
+          : ['name', 'departmentName', 'department_name'];
+
+      const id = resolveEntityId(item, idKeys);
+      const name = resolveEntityName(item, nameKeys);
+
+      const fallbackId = id || `${type}-${index + 1}`;
+      return {
+        id: fallbackId,
+        name: name || id || `${type}-${index + 1}`,
+      };
+    })
+    .filter((entry) => entry.id);
+};
+
+const normalizeApprovers = (items = []) => {
+  if (!Array.isArray(items)) return [];
+
+  return items
+    .map((item, index) => {
+      const approverId =
+        item?.approverId ?? item?.employeeId ?? item?.userId ?? item?.id ?? item?.approver_id ?? null;
+      const userId = toStringId(approverId);
+      const level = asNumberOrNull(item?.level ?? item?.approvalOrder ?? item?.order);
+
+      return {
+        id: `${userId || 'approver'}-${index}`,
+        userId,
+        userName: String(item?.approverName || item?.name || item?.userName || '').trim(),
+        approvalOrder: level && level > 0 ? level : index + 1,
+      };
+    })
+    .filter((approver) => approver.userId)
+    .sort((left, right) => left.approvalOrder - right.approvalOrder);
+};
+
+const getErrorMessage = (error, fallbackMessage) => {
+  return (
+    error?.data?.detail ||
+    error?.data?.message ||
+    error?.error ||
+    fallbackMessage
+  );
+};
+
+const mapWorkflowToUiRule = (workflow = {}) => {
+  const vendorEntries = normalizeEntityList(workflow.vendor, 'vendor');
+  const departmentEntries = normalizeEntityList(workflow.department, 'department');
+  const approvers = normalizeApprovers(workflow.approvers);
+  const workflowId = workflow.workflowId;
+
+  return {
+    id: toStringId(workflowId),
+    workflowId: asNumberOrNull(workflowId),
+    name: String(workflow.name || '').trim(),
+    type: String(workflow.workflowType || '').trim(),
+    vendorIds: vendorEntries.map((item) => item.id),
+    vendorNames: vendorEntries.map((item) => item.name),
+    departmentIds: departmentEntries.map((item) => item.id),
+    departmentNames: departmentEntries.map((item) => item.name),
+    minAmount: asNumberOrNull(workflow.minAmount),
+    maxAmount: asNumberOrNull(workflow.maxAmount),
+    approvalMode: workflow.isSequential ? 'sequential' : 'parallel',
+    approvers,
+    isActive: workflow.isActive === true,
+  };
+};
+
+const ApproverAvatarChain = ({ approvers = [], approvalMode = 'parallel' }) => {
+  return (
+    <div className="flex items-center gap-2">
+      {approvers.slice(0, 3).map((approver, idx) => (
+        <div key={approver.id} className="flex items-center gap-2">
+          <div
+            className="w-8 h-8 rounded-full bg-primary/10 text-primary text-[11px] font-semibold flex items-center justify-center"
+            title={approver.userName}
+          >
+            {initialsForName(approver.userName)}
+          </div>
+          {approvalMode === 'sequential' && idx < approvers.length - 1 && (
+            <ArrowRight className="h-3 w-3 text-muted-foreground" />
+          )}
+        </div>
+      ))}
+      {approvers.length > 3 && (
+        <div className="w-8 h-8 rounded-full bg-muted text-muted-foreground text-xs font-medium flex items-center justify-center">
+          +{approvers.length - 3}
+        </div>
+      )}
+    </div>
+  );
+};
+
+const WorkflowRuleRow = ({
+  rule,
+  canManageWorkflow,
+  workflowActionLoading,
+  onToggleRule,
+  onEditRule,
+  onDeleteRule,
+}) => {
+  const isGenericRule = rule.type === 'GENERIC';
+  const toggleDisabled = workflowActionLoading || !canManageWorkflow || (isGenericRule && rule.isActive);
+  const deleteDisabled = workflowActionLoading || !canManageWorkflow || isGenericRule;
+
+  return (
+    <div className={`rounded-lg border p-4 transition-colors ${rule.isActive ? 'bg-card hover:bg-muted/30' : 'bg-muted/20 opacity-70'}`}>
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex items-start gap-3 flex-1">
+          <Badge
+            variant="outline"
+            className={`border ${WORKFLOW_TYPE_BADGE_CLASSES[rule.type] || 'bg-gray-100 text-gray-800 border-gray-200'}`}
+          >
+            {WORKFLOW_TYPE_LABELS[rule.type] || rule.type}
+          </Badge>
+          <div className="min-w-0">
+            <p className="font-medium">{rule.name}</p>
+            <p className="text-sm text-muted-foreground">{getConditionSummary(rule)}</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 flex-wrap md:justify-end">
+          <ApproverAvatarChain approvers={rule.approvers} approvalMode={rule.approvalMode} />
+
+          <Badge variant="outline" className={rule.approvalMode === 'sequential' ? 'text-blue-700 border-blue-200 bg-blue-50' : 'text-emerald-700 border-emerald-200 bg-emerald-50'}>
+            {rule.approvalMode === 'sequential' ? 'Sequential' : 'Parallel'}
+          </Badge>
+
+          <div className="flex items-center gap-1">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onToggleRule(rule)}
+              title={rule.isActive ? 'Disable Rule' : 'Enable Rule'}
+              className="h-8 w-8 p-0"
+              disabled={toggleDisabled}
+            >
+              <Power className={`h-4 w-4 ${rule.isActive ? 'text-emerald-600' : 'text-muted-foreground'}`} />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onEditRule(rule)}
+              title="Edit Rule"
+              className="h-8 w-8 p-0"
+              disabled={workflowActionLoading || !canManageWorkflow}
+            >
+              <Edit className="h-4 w-4 text-blue-600" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onDeleteRule(rule)}
+              title="Delete Rule"
+              className="h-8 w-8 p-0"
+              disabled={deleteDisabled}
+            >
+              <Trash2 className="h-4 w-4 text-red-600" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
+  const [showExplainer, setShowExplainer] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingRuleId, setEditingRuleId] = useState('');
+  const [formState, setFormState] = useState(emptyFormState);
+
+  const [tester, setTester] = useState({
+    vendorId: '',
+    departmentId: '',
+    amount: '',
+    tested: false,
+    result: null,
+  });
+
+  const {
+    data: workflowTypesData = [],
+    isLoading: workflowTypesLoading,
+    isError: workflowTypesError,
+  } = useGetWorkflowTypesQuery();
+  const {
+    data: workflowApproversData = [],
+    isLoading: workflowApproversLoading,
+    isError: workflowApproversError,
+  } = useGetWorkflowInvoiceApproversQuery();
+  const {
+    data: workflowsResponse = null,
+    isLoading: workflowsLoading,
+    isFetching: workflowsFetching,
+    isError: workflowsError,
+    refetch: refetchWorkflows,
+  } = useGetWorkflowsQuery();
+  const {
+    data: costCentersData = [],
+    isError: costCentersError,
+  } = useGetCostCentersQuery();
+
+  const [createWorkflow, { isLoading: createWorkflowLoading }] = useCreateWorkflowMutation();
+  const [updateWorkflow, { isLoading: updateWorkflowLoading }] = useUpdateWorkflowMutation();
+  const [switchWorkflow, { isLoading: switchWorkflowLoading }] = useSwitchWorkflowMutation();
+  const [deleteWorkflow, { isLoading: deleteWorkflowLoading }] = useDeleteWorkflowMutation();
+  const [testWorkflow, { isLoading: testWorkflowLoading }] = useTestWorkflowMutation();
+
+  useEffect(() => {
+    if (workflowTypesError) {
+      toast.error('Failed to load workflow types');
+    }
+  }, [workflowTypesError]);
+
+  useEffect(() => {
+    if (workflowApproversError) {
+      toast.error('Failed to load invoice approvers');
+    }
+  }, [workflowApproversError]);
+
+  useEffect(() => {
+    if (workflowsError) {
+      toast.error('Failed to load approval workflows');
+    }
+  }, [workflowsError]);
+  useEffect(() => {
+    if (costCentersError) {
+      toast.error('Failed to load departments');
+    }
+  }, [costCentersError]);
+
+  const rules = useMemo(() => {
+    const grouped = workflowsResponse?.workflowTypeId;
+    if (!grouped || typeof grouped !== 'object') return [];
+
+    return Object.entries(grouped).flatMap(([workflowType, items]) => {
+      if (!Array.isArray(items)) return [];
+      return items.map((workflow) =>
+        mapWorkflowToUiRule({
+          ...workflow,
+          workflowType: workflow.workflowType || workflowType,
+        }),
+      );
+    });
+  }, [workflowsResponse]);
+
+  const groupedRules = useMemo(() => groupRulesByType(rules), [rules]);
+  const noCatchAllRule = !hasCatchAllRule(rules);
+
+  const workflowTypes = useMemo(() => {
+    const types = Array.isArray(workflowTypesData) && workflowTypesData.length > 0
+      ? workflowTypesData
+      : DEFAULT_WORKFLOW_TYPES;
+
+    return types
+      .map((type) => String(type || '').trim())
+      .filter(Boolean);
+  }, [workflowTypesData]);
+
+  const editableWorkflowTypes = useMemo(() => {
+    return workflowTypes.filter((type) => type !== 'GENERIC');
+  }, [workflowTypes]);
+
+  const workflowUsers = useMemo(() => {
+    if (Array.isArray(workflowApproversData) && workflowApproversData.length > 0) {
+      return workflowApproversData
+        .map((user) => ({
+          id: toStringId(user.employeeId),
+          name: String(user.name || '').trim(),
+          role: 'Invoice Approver',
+          email: String(user.email || '').trim(),
+        }))
+        .filter((user) => user.id && user.name);
+    }
+
+    return FALLBACK_USERS;
+  }, [workflowApproversData]);
+
+  const workflowVendors = useMemo(() => {
+    const vendorMap = new Map();
+
+    if (Array.isArray(vendors) && vendors.length > 0) {
+      vendors.forEach((vendor) => {
+        const id = toStringId(vendor.id);
+        const name = String(vendor.name || vendor.vendor_name || '').trim();
+        if (id && name) {
+          vendorMap.set(id, name);
+        }
+      });
+    }
+
+    rules.forEach((rule) => {
+      rule.vendorIds.forEach((vendorId, index) => {
+        if (!vendorMap.has(vendorId)) {
+          vendorMap.set(vendorId, rule.vendorNames[index] || `Vendor ${vendorId}`);
+        }
+      });
+    });
+
+    if (vendorMap.size === 0) {
+      return [];
+    }
+
+    return Array.from(vendorMap.entries()).map(([id, name]) => ({ id, name }));
+  }, [vendors, rules]);
+
+  const workflowDepartments = useMemo(() => {
+    const departmentMap = new Map();
+
+    if (Array.isArray(costCentersData)) {
+      costCentersData.forEach((center) => {
+        const id = toStringId(
+          center?.id ??
+          center?.cost_center_id ??
+          center?.costCenterId,
+        );
+        const name = String(
+          center?.cost_center_name ??
+          center?.costCenterName ??
+          center?.name ??
+          center?.cost_center_code ??
+          center?.costCenterCode ??
+          '',
+        ).trim();
+        if (id && name) {
+          departmentMap.set(id, name);
+        }
+      });
+    }
+
+    rules.forEach((rule) => {
+      rule.departmentIds.forEach((departmentId, index) => {
+        if (!departmentMap.has(departmentId)) {
+          departmentMap.set(departmentId, rule.departmentNames[index] || `Department ${departmentId}`);
+        }
+      });
+    });
+
+    return Array.from(departmentMap.entries()).map(([id, name]) => ({ id, name }));
+  }, [costCentersData, rules]);
+
+  const workflowActionLoading =
+    createWorkflowLoading ||
+    updateWorkflowLoading ||
+    switchWorkflowLoading ||
+    deleteWorkflowLoading;
+
+  const staticDepartment = workflowDepartments[0] || null;
+
+  const openCreateModal = () => {
+    setEditingRuleId('');
+    const defaultType = editableWorkflowTypes[0] || '';
+    const defaultVisibility = CONDITION_VISIBILITY[defaultType];
+    setFormState({
+      ...emptyFormState,
+      type: defaultType,
+      departmentId: defaultVisibility?.showDept ? (staticDepartment?.id || '') : '',
+    });
+    setModalOpen(true);
+  };
+
+  const openEditModal = (rule) => {
+    setEditingRuleId(rule.id);
+    setFormState({
+      id: rule.id,
+      name: rule.name || '',
+      type: rule.type || '',
+      vendorId: rule.vendorIds[0] || '',
+      departmentId: rule.departmentIds[0] || '',
+      minAmount: rule.minAmount !== undefined && rule.minAmount !== null ? String(rule.minAmount) : '',
+      maxAmount: rule.maxAmount !== undefined && rule.maxAmount !== null ? String(rule.maxAmount) : '',
+      approvers: Array.isArray(rule.approvers) && rule.approvers.length > 0
+        ? rule.approvers.map((approver) => ({ userId: approver.userId, userName: approver.userName }))
+        : [{ userId: '', userName: '' }],
+      isSequential: rule.approvalMode === 'sequential',
+    });
+    setModalOpen(true);
+  };
+
+  useEffect(() => {
+    if (!modalOpen) return;
+    const currentVisibility = CONDITION_VISIBILITY[formState.type];
+    if (!currentVisibility?.showDept) return;
+    if (formState.departmentId) return;
+    if (!staticDepartment?.id) return;
+
+    setFormState((prev) => ({
+      ...prev,
+      departmentId: staticDepartment.id,
+    }));
+  }, [modalOpen, formState.type, formState.departmentId, staticDepartment]);
+
+  const closeModal = () => {
+    setModalOpen(false);
+    setEditingRuleId('');
+    setFormState(emptyFormState);
+  };
+
+  const addApprover = () => {
+    setFormState((prev) => ({
+      ...prev,
+      approvers: [...prev.approvers, { userId: '', userName: '' }],
+    }));
+  };
+
+  const removeApprover = (index) => {
+    setFormState((prev) => {
+      const nextApprovers = prev.approvers.filter((_, idx) => idx !== index);
+      return {
+        ...prev,
+        approvers: nextApprovers.length > 0 ? nextApprovers : [{ userId: '', userName: '' }],
+        isSequential: nextApprovers.length > 1 ? prev.isSequential : false,
+      };
+    });
+  };
+
+  const updateApprover = (index, userId) => {
+    setFormState((prev) => {
+      const selectedUser = workflowUsers.find((user) => user.id === userId);
+      const nextApprovers = [...prev.approvers];
+      nextApprovers[index] = {
+        userId,
+        userName: selectedUser?.name || '',
+      };
+      return {
+        ...prev,
+        approvers: nextApprovers,
+      };
+    });
+  };
+
+  const handleToggleRule = async (rule) => {
+    if (!canManageWorkflow) {
+      toast.error('You do not have permission to modify workflows');
+      return;
+    }
+
+    if (rule.type === 'GENERIC' && rule.isActive) {
+      toast.error('Generic workflow cannot be disabled');
+      return;
+    }
+
+    if (rule.workflowId === null || rule.workflowId === undefined) {
+      toast.error('Unable to update workflow: invalid workflow id');
+      return;
+    }
+
+    try {
+      await switchWorkflow({
+        workflowId: rule.workflowId,
+        isActive: !rule.isActive,
+      }).unwrap();
+      toast.success(`Workflow ${rule.isActive ? 'disabled' : 'enabled'}`);
+      refetchWorkflows();
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to update workflow status'));
+    }
+  };
+
+  const handleDeleteRule = async (rule) => {
+    if (!canManageWorkflow) {
+      toast.error('You do not have permission to delete workflows');
+      return;
+    }
+
+    if (rule.type === 'GENERIC') {
+      toast.error('Generic workflow cannot be deleted');
+      return;
+    }
+
+    if (rule.workflowId === null || rule.workflowId === undefined) {
+      toast.error('Unable to delete workflow: invalid workflow id');
+      return;
+    }
+
+    if (!window.confirm(`Delete workflow "${rule.name}"?`)) return;
+
+    try {
+      await deleteWorkflow({ workflowId: rule.workflowId }).unwrap();
+      toast.success('Workflow deleted');
+      refetchWorkflows();
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to delete workflow'));
+    }
+  };
+
+  const handleTestRouting = async () => {
+    if (!tester.vendorId || !tester.departmentId || !tester.amount) return;
+
+    try {
+      const response = await testWorkflow({
+        vendorId: tester.vendorId,
+        departmentId: asNumberOrNull(tester.departmentId),
+        amount: Number(tester.amount || 0),
+      }).unwrap();
+
+      const matchedRule = {
+        id: toStringId(response?.workflowId),
+        name: String(response?.name || '').trim(),
+        type: String(response?.workflowType || '').trim(),
+        approvers: [],
+      };
+
+      setTester((prev) => ({
+        ...prev,
+        tested: true,
+        result: {
+          matched: Boolean(response?.workflowId),
+          rule: matchedRule,
+          reason: response?.workflowId
+            ? `Matched rule "${matchedRule.name}" (type: ${matchedRule.type})`
+            : 'No matching rule found. Invoice flagged for manual review.',
+        },
+      }));
+    } catch (error) {
+      setTester((prev) => ({
+        ...prev,
+        tested: true,
+        result: {
+          matched: false,
+          reason: getErrorMessage(error, 'No matching rule found. Invoice flagged for manual review.'),
+          rule: null,
+        },
+      }));
+    }
+  };
+
+  const validateWorkflowForm = () => {
+    if (!formState.name.trim()) {
+      toast.error('Workflow name is required');
+      return false;
+    }
+
+    if (!formState.type) {
+      toast.error('Please select a workflow type');
+      return false;
+    }
+
+    if (!editingRuleId && formState.type === 'GENERIC') {
+      toast.error('GENERIC workflow is created automatically and cannot be submitted');
+      return false;
+    }
+
+    const visibility = CONDITION_VISIBILITY[formState.type];
+
+    if (visibility?.showVendor && !formState.vendorId) {
+      toast.error('Please select a vendor');
+      return false;
+    }
+
+    if (visibility?.showDept && !formState.departmentId) {
+      toast.error('Please select a department');
+      return false;
+    }
+
+    if (visibility?.showDept && asNumberOrNull(formState.departmentId) === null) {
+      toast.error('Department id must be numeric');
+      return false;
+    }
+
+    if (visibility?.showAmount && !formState.minAmount && !formState.maxAmount) {
+      toast.error('Please enter min amount or max amount');
+      return false;
+    }
+
+    if (formState.approvers.some((approver) => !approver.userId)) {
+      toast.error('Please select all approvers');
+      return false;
+    }
+
+    const selectedIds = formState.approvers.map((approver) => approver.userId);
+    if (new Set(selectedIds).size !== selectedIds.length) {
+      toast.error('Duplicate approvers are not allowed');
+      return false;
+    }
+
+    if (formState.approvers.some((approver) => asNumberOrNull(approver.userId) === null)) {
+      toast.error('Approver id must be numeric');
+      return false;
+    }
+
+    if (visibility?.showAmount) {
+      const minAmount = asNumberOrNull(formState.minAmount);
+      const maxAmount = asNumberOrNull(formState.maxAmount);
+
+      if (minAmount !== null && maxAmount !== null && minAmount > maxAmount) {
+        toast.error('Min amount cannot be greater than max amount');
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const buildWorkflowPayload = () => {
+    const visibility = CONDITION_VISIBILITY[formState.type];
+    const approvers = formState.approvers.map((approver, index) => ({
+      approverId: asNumberOrNull(approver.userId),
+      level: index + 1,
+    }));
+
+    const config = {
+      vendorIds: visibility?.showVendor && formState.vendorId ? [formState.vendorId] : [],
+      departmentIds:
+        visibility?.showDept && formState.departmentId
+          ? [asNumberOrNull(formState.departmentId)]
+          : [],
+    };
+
+    if (visibility?.showAmount) {
+      config.minAmount = asNumberOrNull(formState.minAmount);
+      config.maxAmount = asNumberOrNull(formState.maxAmount);
+    }
+
+    return {
+      workflowName: formState.name.trim(),
+      workflowType: formState.type,
+      approvers,
+      isSequential: formState.isSequential && formState.approvers.length > 1,
+      config,
+      isActive: true,
+    };
+  };
+
+  const handleSaveWorkflow = async (event) => {
+    event.preventDefault();
+
+    if (!canManageWorkflow) {
+      toast.error('You do not have permission to modify workflows');
+      return;
+    }
+
+    if (!validateWorkflowForm()) return;
+
+    try {
+      const payload = buildWorkflowPayload();
+
+      if (!editingRuleId) {
+        await createWorkflow(payload).unwrap();
+        toast.success('Workflow created');
+      } else {
+        const editedRule = rules.find((rule) => rule.id === editingRuleId);
+        if (!editedRule?.workflowId) {
+          toast.error('Unable to update workflow: invalid workflow id');
+          return;
+        }
+
+        if (editedRule.type === 'GENERIC') {
+          await updateWorkflow({
+            workflowId: editedRule.workflowId,
+            approvers: payload.approvers,
+          }).unwrap();
+        } else {
+          await updateWorkflow({
+            workflowId: editedRule.workflowId,
+            ...payload,
+            isActive: editedRule.isActive,
+          }).unwrap();
+        }
+
+        toast.success('Workflow updated');
+      }
+
+      closeModal();
+      refetchWorkflows();
+    } catch (error) {
+      toast.error(getErrorMessage(error, 'Failed to save workflow'));
+    }
+  };
+
+  const isEditingGeneric = editingRuleId && formState.type === 'GENERIC';
+  const visibility = formState.type ? CONDITION_VISIBILITY[formState.type] : null;
+
+  const loading = workflowTypesLoading || workflowApproversLoading || (workflowsLoading && !workflowsResponse);
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-40">
+        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Approval Workflow Tester</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <Label>Vendor</Label>
+              <select
+                value={tester.vendorId}
+                onChange={(event) =>
+                  setTester((prev) => ({
+                    ...prev,
+                    vendorId: event.target.value,
+                    tested: false,
+                  }))
+                }
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="">Select vendor</option>
+                {workflowVendors.map((vendor) => (
+                  <option key={vendor.id} value={vendor.id}>
+                    {vendor.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <Label>Department</Label>
+              <select
+                value={tester.departmentId}
+                onChange={(event) =>
+                  setTester((prev) => ({
+                    ...prev,
+                    departmentId: event.target.value,
+                    tested: false,
+                  }))
+                }
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="">Select department</option>
+                {workflowDepartments.map((department) => (
+                  <option key={department.id} value={department.id}>
+                    {department.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <Label>Amount (₹)</Label>
+              <Input
+                type="number"
+                min="0"
+                placeholder="Enter amount"
+                value={tester.amount}
+                onChange={(event) =>
+                  setTester((prev) => ({
+                    ...prev,
+                    amount: event.target.value,
+                    tested: false,
+                  }))
+                }
+                className="mt-1"
+              />
+            </div>
+          </div>
+
+          <Button
+            className="w-full md:w-auto"
+            onClick={handleTestRouting}
+            disabled={!tester.vendorId || !tester.departmentId || !tester.amount || testWorkflowLoading}
+          >
+            {testWorkflowLoading ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Testing...
+              </>
+            ) : (
+              <>
+                <Search className="h-4 w-4 mr-2" />
+                Find Matching Rule
+              </>
+            )}
+          </Button>
+
+          {tester.tested && tester.result && (
+            <div
+              className={`rounded-lg border-2 p-4 ${
+                tester.result.matched ? 'bg-emerald-50 border-emerald-200' : 'bg-amber-50 border-amber-200'
+              }`}
+            >
+              <div className="flex items-start gap-3">
+                {tester.result.matched ? (
+                  <CheckCircle2 className="h-5 w-5 text-emerald-600 mt-0.5" />
+                ) : (
+                  <AlertCircle className="h-5 w-5 text-amber-600 mt-0.5" />
+                )}
+                <div className="space-y-2">
+                  <p className="text-sm font-medium">{tester.result.reason}</p>
+                  {tester.result.matched && tester.result.rule && (
+                    <div className="text-sm text-muted-foreground">
+                      <p>
+                        Type:{' '}
+                        <span className="font-medium text-foreground">
+                          {WORKFLOW_TYPE_LABELS[tester.result.rule.type] || tester.result.rule.type}
+                        </span>
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card className="bg-muted/30 border-border rounded-xl">
+        <CardContent className="pt-5">
+          <button
+            type="button"
+            onClick={() => setShowExplainer((prev) => !prev)}
+            className="w-full flex items-center justify-between text-left"
+          >
+            <p className="font-medium text-foreground">How matching works</p>
+            {showExplainer ? (
+              <ChevronUp className="h-5 w-5 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="h-5 w-5 text-muted-foreground" />
+            )}
+          </button>
+
+          {showExplainer && (
+            <div className="mt-3 space-y-3">
+              <div className="flex items-start gap-4">
+                <div className="h-8 w-8 rounded-full border border-primary/20 bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
+                  1
+                </div>
+                <p className="text-base leading-7 text-foreground">
+                  <span className="bg-background/80 px-1.5 py-0.5 rounded-sm">
+                    Invoice arrives — vendor, department & amount are extracted
+                  </span>
+                </p>
+              </div>
+
+              <div className="flex items-start gap-4">
+                <div className="h-8 w-8 rounded-full border border-primary/20 bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
+                  2
+                </div>
+                <p className="text-base leading-7 text-foreground">
+                  <span className="bg-background/80 px-1.5 py-0.5 rounded-sm">
+                    Rules checked in priority order:{' '}
+                    <span className="font-semibold">
+                      Vendor+Dept+Amt → Vendor+Dept → Dept+Amt → Vendor+Amt → Dept → Vendor → Amount → Generic
+                    </span>
+                  </span>
+                </p>
+              </div>
+
+              <div className="flex items-start gap-4">
+                <div className="h-8 w-8 rounded-full border border-emerald-300 bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                  <Check className="h-4 w-4" />
+                </div>
+                <p className="text-base leading-7 text-foreground">
+                  <span className="bg-background/80 px-1.5 py-0.5 rounded-sm">
+                    First matching rule fires — approvers are notified in sequence
+                  </span>
+                </p>
+              </div>
+
+              <div className="flex items-start gap-4">
+                <div className="h-8 w-8 rounded-full border border-border bg-background text-muted-foreground flex items-center justify-center">
+                  <Minus className="h-4 w-4" />
+                </div>
+                <p className="text-base leading-7 text-foreground">
+                  <span className="bg-background/80 px-1.5 py-0.5 rounded-sm">
+                    No match — invoice flagged for manual review
+                  </span>
+                </p>
+              </div>
+
+              <div className="border-t border-border pt-3">
+                <p className="text-muted-foreground text-xs">
+                  Tip: always add a Generic rule as a catch-all fallback.
+                </p>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div>
+          <h3 className="text-xl font-semibold">Invoice Approval Workflows</h3>
+          <p className="text-muted-foreground text-sm">
+            Manage routing rules for invoice approvals ({rules.length} rules)
+            {workflowsFetching ? ' · refreshing...' : ''}
+          </p>
+        </div>
+        {canManageWorkflow && (
+          <Button onClick={openCreateModal} disabled={workflowActionLoading || editableWorkflowTypes.length === 0}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Workflow
+          </Button>
+        )}
+      </div>
+
+      {noCatchAllRule && (
+        <div className="rounded-lg border-2 border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
+          <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+          <div>
+            <p className="font-medium text-amber-900">No catch-all rule found</p>
+            <p className="text-sm text-amber-700">
+              Invoices that do not match a specific rule will go to manual review. Add a Generic workflow as fallback.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {!canManageWorkflow && (
+        <div className="rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
+          You have read-only access to workflows.
+        </div>
+      )}
+
+      <Card>
+        <CardContent className="pt-6 space-y-8">
+          {rules.length === 0 && (
+            <div className="text-center py-8 text-sm text-muted-foreground">
+              No workflows found yet.
+            </div>
+          )}
+
+          {WORKFLOW_SECTIONS.map(({ type, priority }) => {
+            const sectionRules = groupedRules[type] || [];
+            if (sectionRules.length === 0) return null;
+
+            return (
+              <div key={type} className="space-y-3">
+                <div className="flex items-center gap-3">
+                  <span className="w-6 h-6 rounded-full bg-muted text-muted-foreground text-xs font-semibold flex items-center justify-center">
+                    {priority}
+                  </span>
+                  <h4 className="font-semibold">{WORKFLOW_TYPE_LABELS[type] || type}</h4>
+                  <div className="h-px bg-border flex-1" />
+                  <span className="text-xs text-muted-foreground">{sectionRules.length} rule(s)</span>
+                </div>
+                <div className="space-y-2">
+                  {sectionRules.map((rule) => (
+                    <WorkflowRuleRow
+                      key={rule.id}
+                      rule={rule}
+                      canManageWorkflow={canManageWorkflow}
+                      workflowActionLoading={workflowActionLoading}
+                      onToggleRule={handleToggleRule}
+                      onEditRule={openEditModal}
+                      onDeleteRule={handleDeleteRule}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </CardContent>
+      </Card>
+
+      <Dialog open={modalOpen} onOpenChange={(open) => (!open ? closeModal() : setModalOpen(open))}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingRuleId ? 'Edit Workflow' : 'Create Workflow'}</DialogTitle>
+          </DialogHeader>
+
+          <form className="space-y-5" onSubmit={handleSaveWorkflow}>
+            <div className="space-y-2">
+              <Label>Workflow Name</Label>
+              <Input
+                value={formState.name}
+                onChange={(event) => setFormState((prev) => ({ ...prev, name: event.target.value }))}
+                placeholder="e.g., High-value marketing invoices"
+                disabled={workflowActionLoading}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Workflow Type</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {(editingRuleId ? workflowTypes : editableWorkflowTypes).map((value) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => {
+                      if (isEditingGeneric) return;
+                      setFormState((prev) => ({ ...prev, type: value }));
+                    }}
+                    disabled={workflowActionLoading || isEditingGeneric}
+                    className={`text-sm px-3 py-2 rounded-md border transition-colors ${
+                      formState.type === value
+                        ? 'bg-primary text-primary-foreground border-primary'
+                        : 'bg-background hover:bg-accent border-input'
+                    } ${isEditingGeneric ? 'opacity-60 cursor-not-allowed' : ''}`}
+                  >
+                    {WORKFLOW_TYPE_LABELS[value] || value}
+                  </button>
+                ))}
+              </div>
+              {!editingRuleId && (
+                <p className="text-xs text-muted-foreground">
+                  Generic workflow is auto-created by the server and cannot be manually created.
+                </p>
+              )}
+            </div>
+
+            {visibility && !isEditingGeneric && (
+              <div className="space-y-4 rounded-lg border p-4 bg-muted/30">
+                <p className="text-sm font-medium">Conditions</p>
+
+                {visibility.showVendor && (
+                  <div className="space-y-2">
+                    <Label>Vendor</Label>
+                    <select
+                      value={formState.vendorId}
+                      onChange={(event) => setFormState((prev) => ({ ...prev, vendorId: event.target.value }))}
+                      className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      disabled={workflowActionLoading}
+                    >
+                      <option value="">Select vendor</option>
+                      {workflowVendors.map((vendor) => (
+                        <option key={vendor.id} value={vendor.id}>
+                          {vendor.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                {visibility.showDept && (
+                  <div className="space-y-2">
+                    <Label>Department</Label>
+                    <Input
+                      value={staticDepartment?.name || 'No department available'}
+                      readOnly
+                      disabled
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      Department is fixed for this workflow setup.
+                    </p>
+                  </div>
+                )}
+
+                {visibility.showAmount && (
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label>Min Amount (₹)</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={formState.minAmount}
+                        onChange={(event) => setFormState((prev) => ({ ...prev, minAmount: event.target.value }))}
+                        placeholder="0"
+                        disabled={workflowActionLoading}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Max Amount (₹)</Label>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={formState.maxAmount}
+                        onChange={(event) => setFormState((prev) => ({ ...prev, maxAmount: event.target.value }))}
+                        placeholder="Unlimited"
+                        disabled={workflowActionLoading}
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label>Approvers</Label>
+                <Button type="button" variant="outline" size="sm" onClick={addApprover} disabled={workflowActionLoading}>
+                  <Plus className="h-4 w-4 mr-1" />
+                  Add Approver
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                {formState.approvers.map((approver, index) => (
+                  <div key={`${approver.userId}-${index}`} className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground w-6">{index + 1}.</span>
+                    <select
+                      value={approver.userId}
+                      onChange={(event) => updateApprover(index, event.target.value)}
+                      className="h-10 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      disabled={workflowActionLoading}
+                    >
+                      <option value="">Select approver</option>
+                      {workflowUsers.map((user) => (
+                        <option key={user.id} value={user.id}>
+                          {user.name} {user.role ? `(${user.role})` : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {formState.approvers.length > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => removeApprover(index)}
+                        disabled={workflowActionLoading}
+                      >
+                        <Trash2 className="h-4 w-4 text-red-600" />
+                      </Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {formState.approvers.length > 1 && (
+                <label className="flex items-center gap-2 text-sm">
+                  <Checkbox
+                    checked={formState.isSequential}
+                    onCheckedChange={(value) =>
+                      setFormState((prev) => ({
+                        ...prev,
+                        isSequential: Boolean(value),
+                      }))
+                    }
+                    disabled={workflowActionLoading}
+                  />
+                  Require sequential approval
+                </label>
+              )}
+            </div>
+
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={closeModal} disabled={workflowActionLoading}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={workflowActionLoading || !canManageWorkflow}>
+                {workflowActionLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    Saving...
+                  </>
+                ) : editingRuleId ? (
+                  'Update Workflow'
+                ) : (
+                  'Create Workflow'
+                )}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+};
+
+export default ApprovalWorkflowTab;
