@@ -11,6 +11,7 @@ const LinkInvoiceDialog = ({
   setInvoiceSearchTerm,
   filteredInvoicesForLinking,
   handleLinkInvoice,
+  canLinkInvoices,
 }) => {
   return (
     <Dialog open={linkInvoiceModalOpen} onOpenChange={setLinkInvoiceModalOpen}>
@@ -53,7 +54,12 @@ const LinkInvoiceDialog = ({
                       <td className="p-3">{inv.vendor_name}</td>
                       <td className="p-3 text-right">₹{inv.amount?.toLocaleString("en-IN")}</td>
                       <td className="p-3 text-center">
-                        <Button size="sm" variant="outline" onClick={() => handleLinkInvoice(inv.id)}>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleLinkInvoice(inv.id)}
+                          disabled={!canLinkInvoices}
+                        >
                           <Link2 className="h-3 w-3 mr-1" />
                           Link
                         </Button>

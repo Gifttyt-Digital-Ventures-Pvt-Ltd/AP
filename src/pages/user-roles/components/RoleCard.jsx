@@ -1,15 +1,12 @@
 import React from 'react';
-import { Badge } from '../../../components/ui/badge';
 import { Pencil, Trash2 } from 'lucide-react';
 
-// Source-inspired role card, extended with local/draft indicators.
+// Source-inspired role card for backend roles.
 const RoleCard = ({
   name,
   description,
   permissionsCount,
   usersCount,
-  isLocalDraft,
-  isLocalOverride,
   onEdit,
   onDelete,
   onClick,
@@ -61,12 +58,6 @@ const RoleCard = ({
       <div className="space-y-2">
         <p className="text-sm text-muted-foreground">{permissionsCount} permissions enabled</p>
         <p className="text-sm text-muted-foreground">{usersCount} assigned users</p>
-        {(isLocalDraft || isLocalOverride) && (
-          <div className="flex gap-2 pt-1">
-            {isLocalDraft && <Badge variant="outline">Local Draft</Badge>}
-            {isLocalOverride && <Badge variant="outline">Local Override</Badge>}
-          </div>
-        )}
       </div>
     </div>
   );

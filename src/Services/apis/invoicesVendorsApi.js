@@ -118,6 +118,32 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
         "Reports",
       ],
     }),
+    getPendingVendorApprovals: builder.query({
+      query: () => ({ url: "/vendors/approvals/pending", method: "GET" }),
+      transformResponse: (response) =>
+        Array.isArray(response)
+          ? response.map(toVendorUiPayload)
+          : [],
+      providesTags: [{ type: "Vendors", id: "PENDING" }],
+    }),
+    approveVendor: builder.mutation({
+      query: ({ id, body }) => ({
+        url: `/vendors/${id}/approve`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: "Vendors", id: "LIST" },
+        { type: "Vendors", id: "PENDING" },
+        { type: "Vendors", id },
+        "Dashboard",
+        "Reports",
+      ],
+    }),
+    getVendorHistory: builder.query({
+      query: (id) => ({ url: `/vendors/${id}/history`, method: "GET" }),
+      providesTags: (result, error, id) => [{ type: "Vendors", id }],
+    }),
   }),
 });
 
@@ -135,4 +161,8 @@ export const {
   useCreateVendorMutation,
   useUpdateVendorMutation,
   useDeleteVendorMutation,
+  useGetPendingVendorApprovalsQuery,
+  useApproveVendorMutation,
+  useGetVendorHistoryQuery,
+  useLazyGetVendorHistoryQuery,
 } = invoicesVendorsApi;

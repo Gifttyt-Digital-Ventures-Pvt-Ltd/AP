@@ -5,14 +5,12 @@ import {
   useGetPaymentBatchesQuery,
   useGetPendingPaymentBatchApprovalsQuery,
   useGetPaymentBatchStatsQuery,
-  useCreatePaymentBatchMutation,
   useSubmitPaymentBatchMutation,
   useApprovePaymentBatchMutation,
   useProcessPaymentBatchMutation,
   useGeneratePaymentBatchFileMutation,
 } from '../../Services/apis/paymentBatchesApi';
 import { Button } from '../../components/ui/button';
-import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import {
   Dialog,
@@ -40,11 +38,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/ta
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Textarea } from '../../components/ui/textarea';
-import { Checkbox } from '../../components/ui/checkbox';
 import { toast } from 'sonner';
 import {
-  Plus,
-  Search,
   Eye,
   CheckCircle,
   XCircle,
@@ -61,6 +56,7 @@ import {
   CheckCheck,
   AlertTriangle
 } from 'lucide-react';
+import { useActionGuard } from '../../hooks/useActionGuard';
 
 const statusColors = {
   'Draft': 'bg-gray-500',
@@ -121,11 +117,11 @@ const PaymentBatches = () => {
     isLoading: bankAccountsLoading,
     refetch: refetchBankAccounts,
   } = useGetBankAccountsQuery();
-  const [createPaymentBatch] = useCreatePaymentBatchMutation();
   const [submitPaymentBatch] = useSubmitPaymentBatchMutation();
   const [approvePaymentBatch] = useApprovePaymentBatchMutation();
   const [processPaymentBatch] = useProcessPaymentBatchMutation();
   const [generatePaymentBatchFile] = useGeneratePaymentBatchFileMutation();
+  const { guardAction, canPerformAction } = useActionGuard();
 
   const batches = Array.isArray(batchesData) ? batchesData : [];
   const pendingBatches = Array.isArray(pendingBatchesData) ? pendingBatchesData : [];
@@ -135,8 +131,6 @@ const PaymentBatches = () => {
   const pendingApproverInvoices = Array.isArray(pendingApproverInvoicesData)
     ? pendingApproverInvoicesData
     : [];
-  const invoices = [...pendingPaymentInvoices, ...pendingApproverInvoices];
-  const bankAccounts = Array.isArray(bankAccountsData) ? bankAccountsData : [];
   const loading =
     batchesLoading ||
     pendingBatchesLoading ||
@@ -148,29 +142,22 @@ const PaymentBatches = () => {
   const [activeTab, setActiveTab] = useState('all');
 
   // Dialog States
-  const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showApproveDialog, setShowApproveDialog] = useState(false);
   const [showFileDialog, setShowFileDialog] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState(null);
   const [generatedFile, setGeneratedFile] = useState(null);
-  const [creating, setCreating] = useState(false);
   const [processing, setProcessing] = useState(false);
-  
-  // Create Form
-  const [createForm, setCreateForm] = useState({
-    batch_date: new Date().toISOString().split('T')[0],
-    payment_method: 'NEFT',
-    bank_account_id: '',
-    invoice_ids: [],
-    remarks: ''
-  });
   
   // Approval Form
   const [approvalForm, setApprovalForm] = useState({
     action: 'Approved',
     comments: ''
   });
+  const canSubmitPaymentBatch = canPerformAction('paymentBatches.submit');
+  const canApprovePaymentBatch = canPerformAction('paymentBatches.approve');
+  const canProcessPaymentBatch = canPerformAction('paymentBatches.process');
+  const canGenerateBatchFile = canPerformAction('paymentBatches.generateFile');
 
   const fetchData = async () => {
     try {
@@ -188,31 +175,8 @@ const PaymentBatches = () => {
     }
   };
 
-  const handleCreateBatch = async () => {
-    if (!createForm.bank_account_id) {
-      toast.error('Please select a bank account');
-      return;
-    }
-    if (createForm.invoice_ids.length === 0) {
-      toast.error('Please select at least one invoice');
-      return;
-    }
-
-    setCreating(true);
-    try {
-      const data = await createPaymentBatch(createForm).unwrap();
-      toast.success(data?.message || 'Batch created');
-      setShowCreateDialog(false);
-      resetCreateForm();
-      fetchData();
-    } catch (error) {
-      toast.error(error?.data?.detail || 'Failed to create batch');
-    } finally {
-      setCreating(false);
-    }
-  };
-
   const handleSubmitBatch = async (batchId) => {
+    if (!guardAction('paymentBatches.submit')) return;
     try {
       await submitPaymentBatch(batchId).unwrap();
       toast.success('Batch submitted for approval');
@@ -224,6 +188,7 @@ const PaymentBatches = () => {
   };
 
   const handleApproveBatch = async () => {
+    if (!guardAction('paymentBatches.approve')) return;
     if (!selectedBatch) return;
     
     setProcessing(true);
@@ -244,6 +209,7 @@ const PaymentBatches = () => {
   };
 
   const handleProcessBatch = async (batchId) => {
+    if (!guardAction('paymentBatches.process')) return;
     setProcessing(true);
     try {
       const data = await processPaymentBatch(batchId).unwrap();
@@ -258,6 +224,7 @@ const PaymentBatches = () => {
   };
 
   const handleGenerateFile = async (batchId) => {
+    if (!guardAction('paymentBatches.generateFile')) return;
     try {
       const data = await generatePaymentBatchFile(batchId).unwrap();
       setGeneratedFile(data);
@@ -283,40 +250,6 @@ const PaymentBatches = () => {
     toast.success('File downloaded');
   };
 
-  const resetCreateForm = () => {
-    setCreateForm({
-      batch_date: new Date().toISOString().split('T')[0],
-      payment_method: 'NEFT',
-      bank_account_id: '',
-      invoice_ids: [],
-      remarks: ''
-    });
-  };
-
-  const toggleInvoiceSelection = (invoiceId) => {
-    setCreateForm(prev => {
-      const ids = prev.invoice_ids.includes(invoiceId)
-        ? prev.invoice_ids.filter(id => id !== invoiceId)
-        : [...prev.invoice_ids, invoiceId];
-      return { ...prev, invoice_ids: ids };
-    });
-  };
-
-  const selectAllInvoices = () => {
-    setCreateForm(prev => ({
-      ...prev,
-      invoice_ids: prev.invoice_ids.length === invoices.length 
-        ? [] 
-        : invoices.map(inv => inv.id)
-    }));
-  };
-
-  const calculateSelectedTotal = () => {
-    return invoices
-      .filter(inv => createForm.invoice_ids.includes(inv.id))
-      .reduce((sum, inv) => sum + (inv.amount || 0), 0);
-  };
-
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -337,10 +270,6 @@ const PaymentBatches = () => {
           <Button variant="outline" onClick={fetchData}>
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
-          </Button>
-          <Button onClick={() => setShowCreateDialog(true)} data-testid="create-batch-btn">
-            <Plus className="h-4 w-4 mr-2" />
-            Create Batch
           </Button>
         </div>
       </div>
@@ -488,7 +417,7 @@ const PaymentBatches = () => {
                           >
                             <Eye className="h-4 w-4" />
                           </Button>
-                          {(batch.status === 'Approved' || batch.status === 'Completed') && (
+                          {(batch.status === 'Approved' || batch.status === 'Completed') && canGenerateBatchFile && (
                             <Button
                               variant="ghost"
                               size="sm"
@@ -544,16 +473,18 @@ const PaymentBatches = () => {
                           <Badge variant="outline">{batch.payment_method}</Badge>
                         </TableCell>
                         <TableCell>
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              setSelectedBatch(batch);
-                              setShowApproveDialog(true);
-                            }}
-                            data-testid={`approve-batch-${batch.id}`}
-                          >
-                            Review
-                          </Button>
+                          {canApprovePaymentBatch && (
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setSelectedBatch(batch);
+                                setShowApproveDialog(true);
+                              }}
+                              data-testid={`approve-batch-${batch.id}`}
+                            >
+                              Review
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))
@@ -564,147 +495,6 @@ const PaymentBatches = () => {
           </Card>
         </TabsContent>
       </Tabs>
-
-      {/* Create Batch Dialog */}
-      <Dialog open={showCreateDialog} onOpenChange={(open) => { if (!open) resetCreateForm(); setShowCreateDialog(open); }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Create Payment Batch</DialogTitle>
-          </DialogHeader>
-          
-          <div className="space-y-6">
-            {/* Batch Details */}
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>Batch Date *</Label>
-                <Input
-                  type="date"
-                  value={createForm.batch_date}
-                  onChange={(e) => setCreateForm(prev => ({ ...prev, batch_date: e.target.value }))}
-                  data-testid="batch-date-input"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label>Payment Method *</Label>
-                <Select 
-                  value={createForm.payment_method} 
-                  onValueChange={(v) => setCreateForm(prev => ({ ...prev, payment_method: v }))}
-                >
-                  <SelectTrigger data-testid="payment-method-select">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="NEFT">NEFT</SelectItem>
-                    <SelectItem value="RTGS">RTGS</SelectItem>
-                    <SelectItem value="IMPS">IMPS</SelectItem>
-                    <SelectItem value="UPI">UPI</SelectItem>
-                    <SelectItem value="Cheque">Cheque</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label>Bank Account *</Label>
-                <Select 
-                  value={createForm.bank_account_id} 
-                  onValueChange={(v) => setCreateForm(prev => ({ ...prev, bank_account_id: v }))}
-                >
-                  <SelectTrigger data-testid="bank-account-select">
-                    <SelectValue placeholder="Select bank account" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {bankAccounts.map(bank => (
-                      <SelectItem key={bank.id} value={bank.id}>
-                        {bank.bank_name} - {bank.account_number}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Invoice Selection */}
-            <div className="space-y-4">
-              <div className="flex justify-between items-center">
-                <Label className="text-lg font-semibold">Select Invoices for Payment</Label>
-                <div className="flex items-center gap-4">
-                  <Button variant="outline" size="sm" onClick={selectAllInvoices}>
-                    {createForm.invoice_ids.length === invoices.length ? 'Deselect All' : 'Select All'}
-                  </Button>
-                  <div className="text-sm">
-                    Selected: <span className="font-bold">{createForm.invoice_ids.length}</span> | 
-                    Total: <span className="font-bold">{formatCurrency(calculateSelectedTotal())}</span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="border rounded-lg max-h-[300px] overflow-y-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[50px]"></TableHead>
-                      <TableHead>Invoice</TableHead>
-                      <TableHead>Vendor</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {invoices.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                          No invoices available for payment
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      invoices.map((inv) => (
-                        <TableRow 
-                          key={inv.id}
-                          className={`cursor-pointer ${createForm.invoice_ids.includes(inv.id) ? 'bg-primary/10' : ''}`}
-                          onClick={() => toggleInvoiceSelection(inv.id)}
-                        >
-                          <TableCell>
-                            <Checkbox
-                              checked={createForm.invoice_ids.includes(inv.id)}
-                              onCheckedChange={() => toggleInvoiceSelection(inv.id)}
-                            />
-                          </TableCell>
-                          <TableCell className="font-medium">{inv.invoice_number}</TableCell>
-                          <TableCell>{inv.vendor_name}</TableCell>
-                          <TableCell>{formatCurrency(inv.amount)}</TableCell>
-                          <TableCell>
-                            <Badge variant="secondary">{inv.status}</Badge>
-                          </TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
-            </div>
-
-            {/* Remarks */}
-            <div className="space-y-2">
-              <Label>Remarks</Label>
-              <Textarea
-                value={createForm.remarks}
-                onChange={(e) => setCreateForm(prev => ({ ...prev, remarks: e.target.value }))}
-                placeholder="Additional notes..."
-                data-testid="batch-remarks-input"
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { resetCreateForm(); setShowCreateDialog(false); }}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreateBatch} disabled={creating} data-testid="submit-batch-btn">
-              {creating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Create Batch
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {/* View Batch Dialog */}
       <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
@@ -817,7 +607,7 @@ const PaymentBatches = () => {
             <Button variant="outline" onClick={() => setShowViewDialog(false)}>
               Close
             </Button>
-            {selectedBatch?.status === 'Draft' && (
+            {selectedBatch?.status === 'Draft' && canSubmitPaymentBatch && (
               <Button onClick={() => handleSubmitBatch(selectedBatch.id)} data-testid="submit-for-approval-btn">
                 <Send className="h-4 w-4 mr-2" />
                 Submit for Approval
@@ -825,15 +615,19 @@ const PaymentBatches = () => {
             )}
             {selectedBatch?.status === 'Approved' && (
               <>
-                <Button variant="outline" onClick={() => handleGenerateFile(selectedBatch.id)}>
-                  <Download className="h-4 w-4 mr-2" />
-                  Generate File
-                </Button>
-                <Button onClick={() => handleProcessBatch(selectedBatch.id)} disabled={processing}>
-                  {processing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                  <Play className="h-4 w-4 mr-2" />
-                  Process Payments
-                </Button>
+                {canGenerateBatchFile && (
+                  <Button variant="outline" onClick={() => handleGenerateFile(selectedBatch.id)}>
+                    <Download className="h-4 w-4 mr-2" />
+                    Generate File
+                  </Button>
+                )}
+                {canProcessPaymentBatch && (
+                  <Button onClick={() => handleProcessBatch(selectedBatch.id)} disabled={processing}>
+                    {processing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                    <Play className="h-4 w-4 mr-2" />
+                    Process Payments
+                  </Button>
+                )}
               </>
             )}
           </DialogFooter>
@@ -893,7 +687,7 @@ const PaymentBatches = () => {
             </Button>
             <Button 
               onClick={handleApproveBatch} 
-              disabled={processing}
+              disabled={processing || !canApprovePaymentBatch}
               variant={approvalForm.action === 'Rejected' ? 'destructive' : 'default'}
               data-testid="confirm-approval-btn"
             >
@@ -954,4 +748,3 @@ const PaymentBatches = () => {
 };
 
 export default PaymentBatches;
-

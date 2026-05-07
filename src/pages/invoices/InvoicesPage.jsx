@@ -31,6 +31,7 @@ import EditDialog from './components/EditDialog';
 import BulkExtractLoaderDialog from './components/BulkExtractLoaderDialog';
 import BulkPreviewDialog from './components/BulkPreviewDialog';
 import BulkEditDialog from './components/BulkEditDialog';
+import { useActionGuard } from '../../hooks/useActionGuard';
 
 const FILE_BASE_URL = import.meta.env.VITE_BACKEND_URL ?? '';
 
@@ -48,6 +49,7 @@ const InvoicesPage = () => {
   const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
   const [updateInvoice] = useUpdateInvoiceMutation();
   const [deleteInvoice] = useDeleteInvoiceMutation();
+  const { guardAction, canPerformAction } = useActionGuard();
   const invoices = Array.isArray(invoicesData) ? invoicesData : [];
   const vendors = Array.isArray(vendorsData) ? vendorsData : [];
   const [searchTerm, setSearchTerm] = useState('');
@@ -61,6 +63,12 @@ const InvoicesPage = () => {
   const [scanning, setScanning] = useState(false);
   const fileInputRef = useRef(null);
   const bulkFileInputRef = useRef(null);
+  const canScanInvoices = canPerformAction('invoices.scan');
+  const canBulkUploadInvoices = canPerformAction('invoices.bulkUpload');
+  const canManageInvoices = canPerformAction('invoices.create');
+  const canUpdateInvoices = canPerformAction('invoices.update');
+  const canDeleteInvoices = canPerformAction('invoices.delete');
+  const canAddVendors = canPerformAction('invoices.addVendor');
   
   // PDF Zoom
   const [pdfZoom, setPdfZoom] = useState(100);
@@ -391,6 +399,7 @@ const InvoicesPage = () => {
   };
 
   const handleSingleFileUpload = async (e) => {
+    if (!guardAction('invoices.scan')) return;
     const file = e.target.files[0];
     if (!file) return;
 
@@ -442,6 +451,7 @@ const InvoicesPage = () => {
   };
 
   const handleBulkFileUpload = async (e) => {
+    if (!guardAction('invoices.bulkUpload')) return;
     const files = e.target.files;
     if (!files || files.length === 0) return;
     setBulkProgress({ total: 0, processed: 0, success: 0, failed: 0, startedAt: null });
@@ -509,6 +519,7 @@ const InvoicesPage = () => {
   };
 
   const handleCreateBulkInvoices = async () => {
+    if (!guardAction('invoices.create')) return;
     const selectedItems = bulkPreviewItems.filter(
       (item) => item.selected && item.invoicePayload && item.status !== 'uploaded'
     );
@@ -653,6 +664,7 @@ const InvoicesPage = () => {
   };
 
   const handleAddVendorForBulkItem = async (itemId) => {
+    if (!guardAction('invoices.addVendor')) return;
     const row = bulkPreviewItems.find((item) => item.id === itemId);
     const payload = row?.invoicePayload;
     const vendorName = payload?.vendor_name?.trim();
@@ -794,6 +806,7 @@ const InvoicesPage = () => {
 
   // Add vendor from scanned invoice data
   const handleAddVendorFromInvoice = async () => {
+    if (!guardAction('invoices.addVendor')) return;
     if (!formData || !formData.vendor_name) {
       toast.error('Vendor name is required');
       return;
@@ -845,6 +858,7 @@ const InvoicesPage = () => {
   };
 
   const handleAddInvoice = async () => {
+    if (!guardAction('invoices.create')) return;
     if (!formData) return;
 
     const totals = calculateTotals(formData.line_items);
@@ -1010,6 +1024,7 @@ const InvoicesPage = () => {
   };
 
   const handleUpdateInvoice = async () => {
+    if (!guardAction('invoices.update')) return;
     if (!selectedInvoice || !formData) return;
 
     const totals = calculateTotals(formData.line_items);
@@ -1045,6 +1060,7 @@ const InvoicesPage = () => {
   };
 
   const handleDeleteInvoice = async (invoice) => {
+    if (!guardAction('invoices.delete')) return;
     if (!window.confirm(`Are you sure you want to delete invoice ${invoice.invoice_number}?`)) {
       return;
     }
@@ -1057,14 +1073,17 @@ const InvoicesPage = () => {
     }
   };
 
-  const canEdit = (status) => ['Pending Checker', 'Pending Approver'].includes(status);
-  const canDelete = (status) => ['Pending Checker', 'Pending Approver'].includes(status);
+  const canEdit = (status) =>
+    canUpdateInvoices && ['Pending Checker', 'Pending Approver', 'Pending Approval'].includes(status);
+  const canDelete = (status) =>
+    canDeleteInvoices && ['Pending Checker', 'Pending Approver', 'Pending Approval'].includes(status);
 
   const getStatusBadgeClass = (status) => {
     const statusMap = {
       'Draft': 'bg-gray-100 text-gray-800 border-gray-200',
       'Pending Checker': 'bg-yellow-100 text-yellow-800 border-yellow-200',
       'Pending Approver': 'bg-yellow-100 text-yellow-800 border-yellow-200',
+      'Pending Approval': 'bg-[#FFF7CC] text-[#7A4A00] border-[#F2D675] rounded-full',
       'Pending Payment': 'bg-blue-100 text-blue-800 border-blue-200',
       'Amount Released': 'bg-emerald-100 text-emerald-800 border-emerald-200',
       'Rejected': 'bg-red-100 text-red-800 border-red-200'
@@ -1170,6 +1189,8 @@ const InvoicesPage = () => {
       setActiveTab={setActiveTab}
       handleUpdateInvoice={handleUpdateInvoice}
       handleAddInvoice={handleAddInvoice}
+      canAddVendor={canAddVendors}
+      canSubmit={isEdit ? canUpdateInvoices : canManageInvoices}
       GST_TREATMENTS={GST_TREATMENTS}
       INDIAN_STATES={INDIAN_STATES}
       FILE_CATEGORIES={FILE_CATEGORIES}
@@ -1183,6 +1204,8 @@ const InvoicesPage = () => {
     <div data-testid="invoices-page">
       <InvoiceHeader
         scanning={scanning}
+        canScanInvoices={canScanInvoices}
+        canBulkUploadInvoices={canBulkUploadInvoices}
         openBulkFilePicker={openBulkFilePicker}
         bulkFileInputRef={bulkFileInputRef}
         handleBulkFileUpload={handleBulkFileUpload}
@@ -1213,6 +1236,7 @@ const InvoicesPage = () => {
         uploadPreviewError={uploadPreviewError}
         setUploadPreviewError={setUploadPreviewError}
         scanning={scanning}
+        canManageInvoices={canManageInvoices}
         renderInvoiceForm={renderInvoiceForm}
         handleAddInvoice={handleAddInvoice}
       />
@@ -1300,9 +1324,6 @@ const InvoicesPage = () => {
 };
 
 export default InvoicesPage;
-
-
-
 
 
 

@@ -15,6 +15,7 @@ const PoApprovalDialog = ({
   setApprovalForm,
   handleApproval,
   submitting,
+  canApprovePo,
 }) => {
   return (
     <Dialog open={showApprovalDialog} onOpenChange={setShowApprovalDialog}>
@@ -60,7 +61,12 @@ const PoApprovalDialog = ({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => setShowApprovalDialog(false)}>Cancel</Button>
-          <Button onClick={handleApproval} disabled={submitting} variant={approvalForm.action === "Rejected" ? "destructive" : "default"} data-testid="confirm-approval-btn">
+          <Button
+            onClick={handleApproval}
+            disabled={submitting || !canApprovePo}
+            variant={approvalForm.action === "Rejected" ? "destructive" : "default"}
+            data-testid="confirm-approval-btn"
+          >
             {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
             {approvalForm.action === "Approved" && <CheckCircle className="h-4 w-4 mr-2" />}
             {approvalForm.action === "Rejected" && <XCircle className="h-4 w-4 mr-2" />}

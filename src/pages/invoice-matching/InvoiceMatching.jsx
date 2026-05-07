@@ -57,6 +57,7 @@ import {
   TrendingUp,
   TrendingDown
 } from 'lucide-react';
+import { useActionGuard } from '../../hooks/useActionGuard';
 
 const statusColors = {
   'Matched': 'bg-green-500',
@@ -124,6 +125,7 @@ const InvoiceMatching = () => {
   const [getInvoiceMatchingCandidates] = useLazyGetInvoiceMatchingCandidatesQuery();
   const [matchInvoice] = useMatchInvoiceMutation();
   const [resolveInvoiceMatch] = useResolveInvoiceMatchMutation();
+  const { guardAction, canPerformAction } = useActionGuard();
 
   const normalizeMatchType = (value) => {
     if (!value) return 'TWO_WAY';
@@ -210,6 +212,8 @@ const InvoiceMatching = () => {
     resolution_notes: '',
     force_approve: false
   });
+  const canMatchInvoices = canPerformAction('matching.match');
+  const canResolveMatches = canPerformAction('matching.resolve');
   
   // Filter State
   const [statusFilter, setStatusFilter] = useState('all');
@@ -301,6 +305,7 @@ const InvoiceMatching = () => {
   };
 
   const handlePerformMatch = async () => {
+    if (!guardAction('matching.match')) return;
     if (!matchForm.invoice_id || !matchForm.po_id) {
       toast.error('Please select an invoice and a PO');
       return;
@@ -334,6 +339,7 @@ const InvoiceMatching = () => {
   };
 
   const handleResolve = async () => {
+    if (!guardAction('matching.resolve')) return;
     if (!selectedMatching || !resolveForm.resolution_notes) {
       toast.error('Please provide resolution notes');
       return;
@@ -438,7 +444,7 @@ const InvoiceMatching = () => {
             <RefreshCw className="h-4 w-4 mr-2" />
             Refresh
           </Button>
-          <Button onClick={() => setShowMatchDialog(true)} data-testid="new-match-btn">
+          <Button onClick={() => setShowMatchDialog(true)} data-testid="new-match-btn" disabled={!canMatchInvoices}>
             <Link2 className="h-4 w-4 mr-2" />
             New Match
           </Button>
@@ -636,7 +642,7 @@ const InvoiceMatching = () => {
                             >
                               <Eye className="h-4 w-4" />
                             </Button>
-                            {(m.match_status === 'Mismatch' || m.match_status === 'Partial Match' || m.match_status === 'Exception') && (
+                            {(m.match_status === 'Mismatch' || m.match_status === 'Partial Match' || m.match_status === 'Exception') && canResolveMatches && (
                               <Button
                                 variant="ghost"
                                 size="sm"
@@ -711,16 +717,18 @@ const InvoiceMatching = () => {
                           </Badge>
                         </TableCell>
                         <TableCell>
-                          <Button
-                            size="sm"
-                            onClick={() => {
-                              setSelectedMatching(m);
-                              setShowResolveDialog(true);
-                            }}
-                            data-testid={`resolve-pending-${m.id}`}
-                          >
-                            Resolve
-                          </Button>
+                          {canResolveMatches && (
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setSelectedMatching(m);
+                                setShowResolveDialog(true);
+                              }}
+                              data-testid={`resolve-pending-${m.id}`}
+                            >
+                              Resolve
+                            </Button>
+                          )}
                         </TableCell>
                       </TableRow>
                     ))
@@ -962,7 +970,7 @@ const InvoiceMatching = () => {
             </Button>
             <Button 
               onClick={handlePerformMatch} 
-              disabled={isPerformMatchDisabled}
+              disabled={isPerformMatchDisabled || !canMatchInvoices}
               data-testid="perform-match-btn"
             >
               {matching && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
@@ -1081,7 +1089,7 @@ const InvoiceMatching = () => {
             <Button variant="outline" onClick={() => setShowViewDialog(false)}>
               Close
             </Button>
-            {selectedMatching && (selectedMatching.match_status === 'Mismatch' || selectedMatching.match_status === 'Partial Match' || selectedMatching.match_status === 'Exception') && (
+            {selectedMatching && canResolveMatches && (selectedMatching.match_status === 'Mismatch' || selectedMatching.match_status === 'Partial Match' || selectedMatching.match_status === 'Exception') && (
               <Button onClick={() => {
                 setShowViewDialog(false);
                 setShowResolveDialog(true);
@@ -1140,7 +1148,7 @@ const InvoiceMatching = () => {
             </Button>
             <Button 
               onClick={handleResolve} 
-              disabled={resolving || !resolveForm.resolution_notes}
+              disabled={resolving || !resolveForm.resolution_notes || !canResolveMatches}
               data-testid="submit-resolution-btn"
             >
               {resolving && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
@@ -1154,4 +1162,3 @@ const InvoiceMatching = () => {
 };
 
 export default InvoiceMatching;
-

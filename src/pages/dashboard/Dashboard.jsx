@@ -2,6 +2,10 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import {
+  useGetCorporateDetailsQuery,
+  useGetCorporateUserDetailsQuery,
+} from '../../Services/apis/corporateApi';
+import {
   useGetDashboardStatsQuery,
   useGetExecutiveDashboardQuery,
   useGetApReportsQuery,
@@ -97,6 +101,8 @@ const CustomTooltip = ({ active, payload, label }) => {
 
 const Dashboard = () => {
   const { user } = useAuth();
+  const { data: corporateContext = null } = useGetCorporateDetailsQuery();
+  const { data: corporateUserContext = null } = useGetCorporateUserDetailsQuery();
   const navigate = useNavigate();
   const {
     data: stats = null,
@@ -205,6 +211,11 @@ const Dashboard = () => {
   const approvalRate = stats?.total_invoices > 0 
     ? ((stats.paid_invoices / stats.total_invoices) * 100).toFixed(1) 
     : 0;
+  const corporateName = String(corporateContext?.corporate?.name || '').trim();
+  const resolvedUserName =
+    String(corporateUserContext?.corporateUser?.name || '').trim() ||
+    String(user?.name || '').trim();
+  const headerName = resolvedUserName || 'User';
   
   const pendingValue = stats?.pending_amount || 0;
   const paidValue = stats?.paid_amount || 0;
@@ -217,9 +228,13 @@ const Dashboard = () => {
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-2xl md:text-3xl font-bold text-primary mb-1" data-testid="dashboard-title">
-            Welcome back, {user?.name?.split(' ')[0] || 'User'}
+            Welcome back, {headerName}
           </h1>
-          <p className="text-muted-foreground">Here's what's happening with your accounts payable today</p>
+          <p className="text-muted-foreground">
+            {corporateName
+              ? `${corporateName} · Here's what's happening with your accounts payable today`
+              : "Here's what's happening with your accounts payable today"}
+          </p>
         </div>
         <Button variant="outline" onClick={fetchAllData} disabled={refreshing} data-testid="refresh-btn">
           <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />

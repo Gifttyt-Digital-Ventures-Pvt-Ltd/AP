@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useRef, createContext, useContext } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useRBAC } from '../contexts/RBACContext';
+import {
+  useGetCorporateDetailsQuery,
+  useGetCorporateUserDetailsQuery,
+} from '../Services/apis/corporateApi';
 import { Button } from './ui/button';
 import {
   LayoutDashboard,
@@ -34,29 +39,38 @@ export const useSidebar = () => useContext(SidebarContext);
 
 export const Layout = ({ children }) => {
   const { user, logout } = useAuth();
+  const { canAccessRoute, isLoaded: rbacLoaded } = useRBAC();
+  const { data: corporateContext = null } = useGetCorporateDetailsQuery();
+  const { data: corporateUserContext = null } = useGetCorporateUserDetailsQuery();
   const navigate = useNavigate();
   const location = useLocation();
   const mainContentRef = useRef(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [hideSidebar, setHideSidebar] = useState(false);
+  const corporateName = String(corporateContext?.corporate?.name || '').trim();
+  const userName =
+    String(corporateUserContext?.corporateUser?.name || '').trim() ||
+    String(user?.name || '').trim();
+  const sidebarPrimaryName = corporateName || userName || 'User';
+  const sidebarSecondaryLabel = userName;
 
   const menuItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard', roles: ['all'] },
-    { icon: Users, label: 'Vendors', path: '/vendors', roles: ['all'] },
-    { icon: ShoppingCart, label: 'Purchase Orders', path: '/purchase-orders', roles: ['all'] },
-    { icon: Package, label: 'Goods Receipt', path: '/goods-receipt', roles: ['all'] },
-    { icon: FileText, label: 'Invoices', path: '/invoices', roles: ['all'] },
-    { icon: Link2, label: 'Invoice Matching', path: '/invoice-matching', roles: ['all'] },
-    { icon: ArrowLeftRight, label: 'Transactions', path: '/transactions', roles: ['all'] },
-    { icon: CheckCircle, label: 'Approvals', path: '/approvals', roles: ['Checker', 'Approver', 'Admin'] },
-    { icon: CreditCard, label: 'Payments', path: '/payments', roles: ['all'] },
-    { icon: Layers, label: 'Payment Batches', path: '/payment-batches', roles: ['Admin', 'Accountant'] },
-    { icon: Calculator, label: 'Tax Management', path: '/tax-management', roles: ['Admin', 'Accountant'] },
-    { icon: BarChart3, label: 'Reports', path: '/reports', roles: ['Admin', 'Accountant', 'Approver'] },
-    { icon: Building2, label: 'Banking', path: '/banking', roles: ['all'] },
-    { icon: Bell, label: 'Notifications', path: '/notifications', roles: ['Admin'] },
-    { icon: Shield, label: 'User Roles', path: '/user-roles', roles: ['Admin'] },
-    { icon: Settings, label: 'Settings', path: '/settings', roles: ['Admin'] }
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
+    { icon: Users, label: 'Vendors', path: '/vendors' },
+    { icon: ShoppingCart, label: 'Purchase Orders', path: '/purchase-orders' },
+    { icon: Package, label: 'Goods Receipt', path: '/goods-receipt' },
+    { icon: FileText, label: 'Invoices', path: '/invoices' },
+    { icon: Link2, label: 'Invoice Matching', path: '/invoice-matching' },
+    { icon: ArrowLeftRight, label: 'Transactions', path: '/transactions' },
+    { icon: CheckCircle, label: 'Approvals', path: '/approvals' },
+    { icon: CreditCard, label: 'Payments', path: '/payments' },
+    { icon: Layers, label: 'Payment Batches', path: '/payment-batches' },
+    { icon: Calculator, label: 'Tax Management', path: '/tax-management' },
+    { icon: BarChart3, label: 'Reports', path: '/reports' },
+    { icon: Building2, label: 'Banking', path: '/banking' },
+    { icon: Bell, label: 'Notifications', path: '/notifications' },
+    { icon: Shield, label: 'User Roles', path: '/user-roles' },
+    { icon: Settings, label: 'Settings', path: '/settings' }
   ];
 
   const handleLogout = () => {
@@ -70,14 +84,9 @@ export const Layout = ({ children }) => {
     navigate(path);
   };
 
-  const canAccessRoute = (roles) => {
-    if (roles.includes('all')) return true;
-    if (!user) return false;
-    // Handle both uppercase and title case role formats
-    const userRole = user.role;
-    return roles.some(role => 
-      role.toUpperCase() === userRole.toUpperCase()
-    );
+  const canShowNavItem = (path) => {
+    if (!rbacLoaded) return false;
+    return canAccessRoute(path);
   };
 
   useEffect(() => {
@@ -114,7 +123,7 @@ export const Layout = ({ children }) => {
 
             <nav className="flex-1 min-h-0 overflow-y-auto scrollbar-none p-4 space-y-2" data-testid="sidebar-nav">
               {menuItems.map((item) => {
-                if (!canAccessRoute(item.roles)) return null;
+                if (!canShowNavItem(item.path)) return null;
                 
                 const Icon = item.icon;
                 return (
@@ -136,10 +145,10 @@ export const Layout = ({ children }) => {
             </nav>
 
             <div className="p-4 border-t border-border">
-              {sidebarOpen && user && (
+              {sidebarOpen && (user || corporateName || userName) && (
                 <div className="mb-4" data-testid="user-info">
-                  <p className="text-sm font-medium">{user.name}</p>
-                  <p className="text-xs text-muted-foreground">{user.role}</p>
+                  <p className="text-sm font-medium">{sidebarPrimaryName}</p>
+                  <p className="text-xs text-muted-foreground">{sidebarSecondaryLabel}</p>
                 </div>
               )}
               <Button

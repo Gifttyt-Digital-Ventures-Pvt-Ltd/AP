@@ -4,6 +4,8 @@ import { Button } from "../../../components/ui/button";
 
 const InvoiceHeader = ({
   scanning,
+  canScanInvoices,
+  canBulkUploadInvoices,
   openBulkFilePicker,
   bulkFileInputRef,
   handleBulkFileUpload,
@@ -20,12 +22,21 @@ const InvoiceHeader = ({
         <p className="text-muted-foreground">Upload and manage all invoices</p>
       </div>
       <div className="flex gap-2">
-        <Button variant="outline" onClick={openBulkFilePicker} data-testid="bulk-upload-button" disabled={scanning}>
+        <Button
+          variant="outline"
+          onClick={openBulkFilePicker}
+          data-testid="bulk-upload-button"
+          disabled={scanning || !canBulkUploadInvoices}
+        >
           <Upload className="h-4 w-4 mr-2" />
           Bulk Upload
         </Button>
         <input ref={bulkFileInputRef} type="file" accept="image/*,.pdf" multiple onChange={handleBulkFileUpload} className="hidden" />
-        <Button onClick={openSingleFilePicker} data-testid="upload-invoice-button" disabled={scanning}>
+        <Button
+          onClick={openSingleFilePicker}
+          data-testid="upload-invoice-button"
+          disabled={scanning || !canScanInvoices}
+        >
           {scanning ? (
             <>
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>

@@ -29,6 +29,7 @@ import PoListTable from './components/PoListTable';
 import PoFormDialog from './components/PoFormDialog';
 import PoDetailsDialog from './components/PoDetailsDialog';
 import PoApprovalDialog from './components/PoApprovalDialog';
+import { useActionGuard } from '../../hooks/useActionGuard';
 
 const PurchaseOrdersPage = () => {
   const {
@@ -65,6 +66,7 @@ const PurchaseOrdersPage = () => {
   const [createPurchaseOrder] = useCreatePurchaseOrderMutation();
   const [submitPurchaseOrder] = useSubmitPurchaseOrderMutation();
   const [approvePurchaseOrder] = useApprovePurchaseOrderMutation();
+  const { guardAction, canPerformAction } = useActionGuard();
   const purchaseOrders = Array.isArray(purchaseOrdersData)
     ? purchaseOrdersData.map(normalizePurchaseOrder)
     : [];
@@ -123,6 +125,8 @@ const PurchaseOrdersPage = () => {
     action: 'Approved',
     comments: ''
   });
+  const canManagePo = canPerformAction('po.create');
+  const canApprovePo = canPerformAction('po.approve');
 
   const fetchData = async () => {
     try {
@@ -141,6 +145,7 @@ const PurchaseOrdersPage = () => {
   };
 
   const seedMasterData = async () => {
+    if (!guardAction('po.seedMasterData')) return;
     try {
       const data = await seedMasterDataMutation().unwrap();
       toast.success(
@@ -153,6 +158,7 @@ const PurchaseOrdersPage = () => {
   };
 
   const handleCreatePO = async () => {
+    if (!guardAction('po.create')) return;
     if (!poForm.vendor_id) {
       toast.error('Please select a vendor');
       return;
@@ -186,6 +192,7 @@ const PurchaseOrdersPage = () => {
   };
 
   const handleSubmitForApproval = async (poId) => {
+    if (!guardAction('po.submit')) return;
     setSubmitting(true);
     try {
       await submitPurchaseOrder(poId).unwrap();
@@ -200,6 +207,7 @@ const PurchaseOrdersPage = () => {
   };
 
   const handleApproval = async () => {
+    if (!guardAction('po.approve')) return;
     if (!selectedPO) return;
     
     setSubmitting(true);
@@ -323,6 +331,7 @@ const PurchaseOrdersPage = () => {
         setShowCreateDialog={setShowCreateDialog}
         stats={stats}
         formatCurrency={formatCurrency}
+        canManagePo={canManagePo}
       />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -347,9 +356,10 @@ const PurchaseOrdersPage = () => {
           statusColors={statusColors}
           setSelectedPO={setSelectedPO}
           setShowViewDialog={setShowViewDialog}
-          pendingApprovals={pendingApprovals}
-          setShowApprovalDialog={setShowApprovalDialog}
-        />
+        pendingApprovals={pendingApprovals}
+        setShowApprovalDialog={setShowApprovalDialog}
+        canApprovePo={canApprovePo}
+      />
       </Tabs>
 
       <PoFormDialog
@@ -382,6 +392,8 @@ const PurchaseOrdersPage = () => {
         handleSubmitForApproval={handleSubmitForApproval}
         submitting={submitting}
         setShowApprovalDialog={setShowApprovalDialog}
+        canManagePo={canManagePo}
+        canApprovePo={canApprovePo}
       />
 
       <PoApprovalDialog
@@ -393,10 +405,10 @@ const PurchaseOrdersPage = () => {
         setApprovalForm={setApprovalForm}
         handleApproval={handleApproval}
         submitting={submitting}
+        canApprovePo={canApprovePo}
       />
     </div>
   );
 };
 
 export default PurchaseOrdersPage;
-

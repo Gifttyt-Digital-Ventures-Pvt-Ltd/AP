@@ -21,6 +21,7 @@ const PoListTable = ({
   setShowViewDialog,
   pendingApprovals,
   setShowApprovalDialog,
+  canApprovePo,
 }) => {
   return (
     <>
@@ -125,16 +126,18 @@ const PoListTable = ({
                         <Eye className="h-4 w-4 mr-1" />
                         View
                       </Button>
-                      <Button
-                        size="sm"
-                        onClick={() => {
-                          setSelectedPO(po);
-                          setShowApprovalDialog(true);
-                        }}
-                        data-testid={`approve-po-${po.id}`}
-                      >
-                        Review
-                      </Button>
+                      {canApprovePo && (
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setSelectedPO(po);
+                            setShowApprovalDialog(true);
+                          }}
+                          data-testid={`approve-po-${po.id}`}
+                        >
+                          Review
+                        </Button>
+                      )}
                     </div>
                   ),
                 },

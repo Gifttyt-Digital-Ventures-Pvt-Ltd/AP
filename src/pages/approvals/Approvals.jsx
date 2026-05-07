@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/ta
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
+import { useActionGuard } from '../../hooks/useActionGuard';
 import NeedsApprovalTable from './components/NeedsApprovalTable';
 import PendingInvoicesTable from './components/PendingInvoicesTable';
 import AllInvoicesTable from './components/AllInvoicesTable';
@@ -30,6 +31,8 @@ const Approvals = () => {
   const [comments, setComments] = useState('');
   const [actionType, setActionType] = useState('');
   const { user } = useAuth();
+  const { guardAction, canPerformAction } = useActionGuard();
+  const canApproveInvoices = canPerformAction('invoices.approve');
 
   const normalizeInvoice = (invoice = {}) => ({
     ...invoice,
@@ -52,12 +55,14 @@ const Approvals = () => {
   const allInvoices = Array.isArray(allInvoicesData) ? allInvoicesData.map(normalizeInvoice) : [];
 
   const handleApprovalAction = (invoice, action) => {
+    if (!guardAction('invoices.approve')) return;
     setSelectedInvoice(invoice);
     setActionType(action);
     setDialogOpen(true);
   };
 
   const submitApproval = async () => {
+    if (!guardAction('invoices.approve')) return;
     try {
       await approveInvoice({
         id: selectedInvoice.id,
@@ -166,6 +171,7 @@ const Approvals = () => {
             getApprovalProgress={getApprovalProgress}
             safeFormatDate={safeFormatDate}
             handleApprovalAction={handleApprovalAction}
+            canApproveInvoices={canApproveInvoices}
           />
         </TabsContent>
 

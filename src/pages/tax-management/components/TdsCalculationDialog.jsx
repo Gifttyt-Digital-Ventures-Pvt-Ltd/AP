@@ -17,6 +17,7 @@ const TdsCalculationDialog = ({
   formatCurrency,
   calculating,
   handleCalculateTDS,
+  canManageTax,
 }) => (
   <Dialog open={open} onOpenChange={setOpen}>
     <DialogContent>
@@ -86,7 +87,11 @@ const TdsCalculationDialog = ({
 
       <DialogFooter>
         <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
-        <Button onClick={handleCalculateTDS} disabled={calculating} data-testid="submit-tds-calc-btn">
+        <Button
+          onClick={handleCalculateTDS}
+          disabled={calculating || !canManageTax}
+          data-testid="submit-tds-calc-btn"
+        >
           {calculating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
           Calculate TDS
         </Button>

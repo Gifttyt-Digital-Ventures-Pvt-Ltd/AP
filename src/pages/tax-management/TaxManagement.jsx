@@ -49,6 +49,7 @@ import {
 import GstCalculationDialog from './components/GstCalculationDialog';
 import TdsCalculationDialog from './components/TdsCalculationDialog';
 import Form16ADialog from './components/Form16ADialog';
+import { useActionGuard } from '../../hooks/useActionGuard';
 
 const formatCurrency = (amount) => {
   return new Intl.NumberFormat('en-IN', {
@@ -129,12 +130,14 @@ const TaxManagement = () => {
   const [calculateGst] = useCalculateGstMutation();
   const [calculateTds] = useCalculateTdsMutation();
   const [generateForm16a] = useGenerateForm16aMutation();
+  const { guardAction, canPerformAction } = useActionGuard();
   
   // Dialog States
   const [showGstCalcDialog, setShowGstCalcDialog] = useState(false);
   const [showTdsCalcDialog, setShowTdsCalcDialog] = useState(false);
   const [showForm16ADialog, setShowForm16ADialog] = useState(false);
   const [calculating, setCalculating] = useState(false);
+  const canManageTax = canPerformAction('tax.calculateGst');
   
   // Forms
   const [gstForm, setGstForm] = useState({
@@ -192,6 +195,7 @@ const TaxManagement = () => {
   };
 
   const handleCalculateGST = async () => {
+    if (!guardAction('tax.calculateGst')) return;
     if (!gstForm.invoice_id || !gstForm.place_of_supply || gstForm.taxable_amount <= 0) {
       toast.error('Please fill in all required fields');
       return;
@@ -219,6 +223,7 @@ const TaxManagement = () => {
   };
 
   const handleCalculateTDS = async () => {
+    if (!guardAction('tax.calculateTds')) return;
     if (!tdsForm.invoice_id || !tdsForm.section_code || tdsForm.base_amount <= 0) {
       toast.error('Please fill in all required fields');
       return;
@@ -244,6 +249,7 @@ const TaxManagement = () => {
   };
 
   const handleGenerateForm16A = async () => {
+    if (!guardAction('tax.generateForm16a')) return;
     if (!form16AForm.vendor_id) {
       toast.error('Please select a vendor');
       return;
@@ -353,7 +359,7 @@ const TaxManagement = () => {
 
           {/* GST Actions */}
           <div className="flex gap-2">
-            <Button onClick={() => setShowGstCalcDialog(true)} data-testid="calc-gst-btn">
+            <Button onClick={() => setShowGstCalcDialog(true)} data-testid="calc-gst-btn" disabled={!canManageTax}>
               <Calculator className="h-4 w-4 mr-2" />
               Calculate GST
             </Button>
@@ -482,11 +488,11 @@ const TaxManagement = () => {
 
           {/* TDS Actions */}
           <div className="flex gap-2">
-            <Button onClick={() => setShowTdsCalcDialog(true)} data-testid="calc-tds-btn">
+            <Button onClick={() => setShowTdsCalcDialog(true)} data-testid="calc-tds-btn" disabled={!canManageTax}>
               <Calculator className="h-4 w-4 mr-2" />
               Calculate TDS
             </Button>
-            <Button variant="outline" onClick={() => setShowForm16ADialog(true)} data-testid="generate-form16a-btn">
+            <Button variant="outline" onClick={() => setShowForm16ADialog(true)} data-testid="generate-form16a-btn" disabled={!canManageTax}>
               <FileText className="h-4 w-4 mr-2" />
               Generate Form 16A
             </Button>
@@ -645,6 +651,7 @@ const TaxManagement = () => {
         indianStates={INDIAN_STATES}
         calculating={calculating}
         handleCalculateGST={handleCalculateGST}
+        canManageTax={canManageTax}
       />
 
             <TdsCalculationDialog
@@ -657,6 +664,7 @@ const TaxManagement = () => {
         formatCurrency={formatCurrency}
         calculating={calculating}
         handleCalculateTDS={handleCalculateTDS}
+        canManageTax={canManageTax}
       />
 
             <Form16ADialog
@@ -667,10 +675,10 @@ const TaxManagement = () => {
         vendors={vendors}
         calculating={calculating}
         handleGenerateForm16A={handleGenerateForm16A}
+        canManageTax={canManageTax}
       />
     </div>
   );
 };
 
 export default TaxManagement;
-

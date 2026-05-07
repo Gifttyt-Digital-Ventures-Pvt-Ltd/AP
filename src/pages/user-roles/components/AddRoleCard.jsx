@@ -1,7 +1,7 @@
 import React from 'react';
 import { Plus } from 'lucide-react';
 
-// Dashed action card for creating a local draft role.
+// Dashed action card for creating a backend custom role.
 const AddRoleCard = ({ onClick }) => {
   return (
     <button
@@ -10,8 +10,8 @@ const AddRoleCard = ({ onClick }) => {
       data-testid="add-role-card"
     >
       <Plus className="w-6 h-6" />
-      <span className="font-medium">Add New Role</span>
-      <span className="text-xs">Local draft only</span>
+      <span className="font-medium">Create New Role</span>
+      {/* <span className="text-xs">Backend custom role</span> */}
     </button>
   );
 };

@@ -6,7 +6,15 @@ import { Label } from '../../../components/ui/label';
 import { Plus } from 'lucide-react';
 
 // Dialog for creating a connected bank account.
-const BankAccountDialog = ({ dialogOpen, setDialogOpen, resetForm, formData, setFormData, handleSubmit }) => (
+const BankAccountDialog = ({
+  dialogOpen,
+  setDialogOpen,
+  resetForm,
+  formData,
+  setFormData,
+  handleSubmit,
+  canCreateBankAccount,
+}) => (
   <Dialog
     open={dialogOpen}
     onOpenChange={(open) => {
@@ -15,7 +23,7 @@ const BankAccountDialog = ({ dialogOpen, setDialogOpen, resetForm, formData, set
     }}
   >
     <DialogTrigger asChild>
-      <Button data-testid="add-bank-account-button">
+      <Button data-testid="add-bank-account-button" disabled={!canCreateBankAccount}>
         <Plus className="h-4 w-4 mr-2" />
         Add Bank Account
       </Button>
@@ -85,7 +93,12 @@ const BankAccountDialog = ({ dialogOpen, setDialogOpen, resetForm, formData, set
             <option value="GBP">GBP</option>
           </select>
         </div>
-        <Button type="submit" className="w-full" data-testid="bank-account-submit-button">
+        <Button
+          type="submit"
+          className="w-full"
+          data-testid="bank-account-submit-button"
+          disabled={!canCreateBankAccount}
+        >
           Add Account
         </Button>
       </form>

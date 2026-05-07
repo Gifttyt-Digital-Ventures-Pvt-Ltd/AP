@@ -50,12 +50,12 @@ const InvoicesTable = ({
                 </span>
               ),
             },
-            { key: "branch_name", header: "Branch Name", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 text-sm", render: (invoice) => invoice.branch_name || "-" },
+            // { key: "branch_name", header: "Branch Name", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 text-sm", render: (invoice) => invoice.branch_name || "-" },
             { key: "invoice_number", header: "Invoice #", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 font-['JetBrains_Mono'] text-sm font-medium" },
             { key: "vendor_name", header: "Vendor", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 text-sm" },
-            { key: "current_file_name", header: "Current File Name", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 text-xs font-['JetBrains_Mono'] text-muted-foreground", render: (invoice) => invoice.current_file_name || "-" },
+            // { key: "current_file_name", header: "Current File Name", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 text-xs font-['JetBrains_Mono'] text-muted-foreground", render: (invoice) => invoice.current_file_name || "-" },
             { key: "original_file_name", header: "Original File Name", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 text-xs font-['JetBrains_Mono'] text-muted-foreground", render: (invoice) => invoice.original_file_name || "-" },
-            { key: "work_item_id", header: "Work Item ID", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 text-xs font-['JetBrains_Mono']", render: (invoice) => invoice.work_item_id || "-" },
+            // { key: "work_item_id", header: "Work Item ID", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 text-xs font-['JetBrains_Mono']", render: (invoice) => invoice.work_item_id || "-" },
             {
               key: "file_category",
               header: "File Category",

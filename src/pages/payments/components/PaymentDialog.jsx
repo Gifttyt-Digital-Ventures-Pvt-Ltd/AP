@@ -15,6 +15,7 @@ const PaymentDialog = ({
   invoices,
   bankAccounts,
   handleSubmit,
+  canCreatePayment,
 }) => (
   <Dialog
     open={dialogOpen}
@@ -24,7 +25,7 @@ const PaymentDialog = ({
     }}
   >
     <DialogTrigger asChild>
-      <Button variant="outline" data-testid="new-payment-button">
+      <Button variant="outline" data-testid="new-payment-button" disabled={!canCreatePayment}>
         <Plus className="h-4 w-4 mr-2" />
         Single Payment
       </Button>
@@ -120,7 +121,12 @@ const PaymentDialog = ({
           />
         </div>
 
-        <Button type="submit" className="w-full" data-testid="payment-submit-button">
+        <Button
+          type="submit"
+          className="w-full"
+          data-testid="payment-submit-button"
+          disabled={!canCreatePayment}
+        >
           Record Payment
         </Button>
       </form>

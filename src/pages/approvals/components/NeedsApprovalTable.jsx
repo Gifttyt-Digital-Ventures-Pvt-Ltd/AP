@@ -8,6 +8,7 @@ const NeedsApprovalTable = ({
   getApprovalProgress,
   safeFormatDate,
   handleApprovalAction,
+  canApproveInvoices,
 }) => (
   <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
     <table className="w-full" data-testid="needs-approval-table">
@@ -61,6 +62,7 @@ const NeedsApprovalTable = ({
                     size="sm"
                     onClick={() => handleApprovalAction(invoice, 'Approved')}
                     data-testid={`approve-button-${invoice.id}`}
+                    disabled={!canApproveInvoices}
                   >
                     <CheckCircle className="h-4 w-4 mr-2" />
                     Approve
@@ -70,6 +72,7 @@ const NeedsApprovalTable = ({
                     variant="destructive"
                     onClick={() => handleApprovalAction(invoice, 'Rejected')}
                     data-testid={`reject-button-${invoice.id}`}
+                    disabled={!canApproveInvoices}
                   >
                     <XCircle className="h-4 w-4 mr-2" />
                     Reject
