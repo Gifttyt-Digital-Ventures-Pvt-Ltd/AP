@@ -1,5 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Button } from '../../../components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../../components/ui/alert-dialog';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import { Badge } from '../../../components/ui/badge';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
@@ -290,6 +300,7 @@ const WorkflowRuleRow = ({
 };
 
 const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
+  const [deleteRuleTarget, setDeleteRuleTarget] = useState(null);
   const [showExplainer, setShowExplainer] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRuleId, setEditingRuleId] = useState('');
@@ -598,14 +609,20 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
       return;
     }
 
-    if (!window.confirm(`Delete workflow "${rule.name}"?`)) return;
+    setDeleteRuleTarget(rule);
+  };
 
+  const confirmDeleteRule = async () => {
+    const rule = deleteRuleTarget;
+    if (!rule) return;
     try {
       await deleteWorkflow({ workflowId: rule.workflowId }).unwrap();
       toast.success('Workflow deleted');
       refetchWorkflows();
     } catch (error) {
       toast.error(getErrorMessage(error, 'Failed to delete workflow'));
+    } finally {
+      setDeleteRuleTarget(null);
     }
   };
 
@@ -1265,6 +1282,21 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
           </form>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={Boolean(deleteRuleTarget)} onOpenChange={(open) => !open && setDeleteRuleTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Workflow?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Delete workflow "{deleteRuleTarget?.name}"?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteRule}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

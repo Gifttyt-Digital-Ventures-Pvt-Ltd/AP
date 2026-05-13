@@ -8,6 +8,16 @@ import {
 } from '../../Services/apis/approvalsPaymentsBankingApi';
 import { useCreatePaymentBatchMutation } from '../../Services/apis/paymentBatchesApi';
 import { Button } from '../../components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../components/ui/alert-dialog';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
@@ -66,6 +76,7 @@ const Payments = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [createBatchDialogOpen, setCreateBatchDialogOpen] = useState(false);
+  const [bulkReleaseConfirmOpen, setBulkReleaseConfirmOpen] = useState(false);
   const [creatingBatch, setCreatingBatch] = useState(false);
   const [formData, setFormData] = useState({
     invoice_id: '',
@@ -146,8 +157,11 @@ const Payments = () => {
       return;
     }
 
-    const confirmed = window.confirm(`Are you sure you want to release payments for ${invoices.length} invoices?`);
-    if (!confirmed) return;
+    setBulkReleaseConfirmOpen(true);
+  };
+
+  const confirmBulkRelease = async () => {
+    setBulkReleaseConfirmOpen(false);
 
     try {
       const response = await bulkReleasePayments().unwrap();
@@ -453,6 +467,21 @@ const Payments = () => {
           <ReleasedPaymentsTab filteredPayments={filteredPayments} safeFormatDate={safeFormatDate} />
         </TabsContent>
       </Tabs>
+
+      <AlertDialog open={bulkReleaseConfirmOpen} onOpenChange={setBulkReleaseConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Release All Pending Payments?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to release payments for {invoices.length} invoices?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmBulkRelease}>Release Payments</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

@@ -77,6 +77,31 @@ const ViewRoleDialog = ({
     });
   }, [availableUsers, userSearch]);
 
+  const displayedPermissions = useMemo(() => {
+    const backendEntries = Array.isArray(role?.permissionEntries) ? role.permissionEntries : [];
+    if (backendEntries.length > 0) {
+      return backendEntries.map((entry, index) => {
+        const screenLabel =
+          String(entry?.screenDisplayName || '').trim() ||
+          String(entry?.screen || '').trim();
+        const permissionTypeLabel =
+          String(entry?.permissionTypeDisplayName || '').trim() ||
+          String(entry?.permissionType || '').trim();
+        const fallbackLabel = entry?.canonicalId ? permissionLabels[entry.canonicalId] : '';
+        const label = screenLabel && permissionTypeLabel
+          ? `${screenLabel} - ${permissionTypeLabel}`
+          : fallbackLabel || screenLabel || permissionTypeLabel || 'Unknown Permission';
+        const key = entry?.id || `${entry?.screen || 'screen'}-${entry?.permissionType || 'type'}-${index}`;
+        return { key, label };
+      });
+    }
+    const canonicalPermissions = Array.isArray(role?.permissions) ? role.permissions : [];
+    return canonicalPermissions.map((permissionId) => ({
+      key: permissionId,
+      label: permissionLabels[permissionId] || permissionId,
+    }));
+  }, [permissionLabels, role?.permissionEntries, role?.permissions]);
+
   const handleSave = async () => {
     const didSave = await onSave({
       ...role,
@@ -164,11 +189,11 @@ const ViewRoleDialog = ({
                 </Accordion>
               ) : (
                 <div className="space-y-2">
-                  {role.permissions.length > 0 ? (
-                    role.permissions.map((permissionId) => (
-                      <div key={permissionId} className="flex items-center gap-2 p-3 bg-accent/50 rounded-lg">
+                  {displayedPermissions.length > 0 ? (
+                    displayedPermissions.map((permission) => (
+                      <div key={permission.key} className="flex items-center gap-2 p-3 bg-accent/50 rounded-lg">
                         <CheckCircle2 className="w-4 h-4 text-primary" />
-                        <span className="text-sm">{permissionLabels[permissionId] || permissionId}</span>
+                        <span className="text-sm">{permission.label}</span>
                       </div>
                     ))
                   ) : (

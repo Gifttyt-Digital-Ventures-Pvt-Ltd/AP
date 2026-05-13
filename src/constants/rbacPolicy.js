@@ -9,9 +9,10 @@ export const ROUTE_PERMISSION_RULES = {
     anyOf: ["invoice-view", "invoice-maker", "invoice-checker", "invoice-approver"],
   },
   "/invoice-matching": { anyOf: ["matching-view", "matching-manage"] },
-  "/transactions": { anyOf: ["banking-full"] },
+  "/transactions": { anyOf: ["banking-view", "banking-full"] },
   "/approvals": {
     anyOf: [
+      "approval-view",
       "approval-full",
       "invoice-checker",
       "invoice-approver",
@@ -23,8 +24,8 @@ export const ROUTE_PERMISSION_RULES = {
   "/payments": { anyOf: ["payments-view", "payments-manage"] },
   "/payment-batches": { anyOf: ["payments-view", "payments-manage"] },
   "/tax-management": { anyOf: ["tax-view", "tax-manage"] },
-  "/reports": { anyOf: ["reports-full"] },
-  "/banking": { anyOf: ["banking-full"] },
+  "/reports": { anyOf: ["reports-view", "reports-full"] },
+  "/banking": { anyOf: ["banking-view", "banking-full"] },
   "/notifications": { anyOf: ["settings-interaction"] },
   "/user-roles": {
     anyOf: [

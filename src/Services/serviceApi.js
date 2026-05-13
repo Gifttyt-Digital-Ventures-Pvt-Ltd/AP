@@ -83,6 +83,15 @@ export const serviceApi = createApi({
       }),
       invalidatesTags: ["Auth"],
     }),
+    exchangeHandoffToken: builder.query({
+      query: (token) => ({
+        url: "/session/getToken",
+        method: "GET",
+        params: { encryptedToken: token },
+        headers: { "x-skip-auth": "true" },
+      }),
+      providesTags: ["Auth"],
+    }),
     refreshSession: builder.query({
       query: (token) => ({
         url: "/session/ping",
@@ -105,6 +114,7 @@ export const {
   useCorporateLoginMutation,
   useGetCorporatesByEmailMutation,
   useSendCorporateLoginOtpMutation,
+  useLazyExchangeHandoffTokenQuery,
   useRefreshSessionQuery,
   useLazyRefreshSessionQuery,
 } = serviceApi;

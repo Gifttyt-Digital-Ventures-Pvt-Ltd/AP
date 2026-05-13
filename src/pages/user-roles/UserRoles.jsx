@@ -15,6 +15,16 @@ import {
   useUpdateCorporateEmployeeMutation,
 } from '../../Services/apis/corporateApi';
 import { Button } from '../../components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
@@ -44,6 +54,13 @@ const UserRoles = () => {
   const [selectedRole, setSelectedRole] = useState(null);
   const [inviteDialogMode, setInviteDialogMode] = useState('add');
   const [editingUser, setEditingUser] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    title: '',
+    description: '',
+    confirmLabel: 'Confirm',
+    onConfirm: null,
+  });
 
   const [inviteForm, setInviteForm] = useState({
     name: '',
@@ -257,16 +274,21 @@ const UserRoles = () => {
 
   const handleDeleteUser = async (userId, userName) => {
     if (!guardAction('roles.deleteUser')) return;
-    if (!window.confirm(`Are you sure you want to delete ${userName}? This action cannot be undone.`)) {
-      return;
-    }
-    try {
-      await deleteCorporateEmployee({ id: userId }).unwrap();
-      toast.success('User deleted successfully');
-      refetchUsers();
-    } catch (error) {
-      toast.error(error?.data?.detail || 'Failed to delete user');
-    }
+    setConfirmDialog({
+      open: true,
+      title: 'Delete User?',
+      description: `Are you sure you want to delete ${userName}? This action cannot be undone.`,
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        try {
+          await deleteCorporateEmployee({ id: userId }).unwrap();
+          toast.success('User deleted successfully');
+          refetchUsers();
+        } catch (error) {
+          toast.error(error?.data?.detail || 'Failed to delete user');
+        }
+      },
+    });
   };
 
   const handleCreateCustomRole = async ({ name, description, permissions }) => {
@@ -322,14 +344,21 @@ const UserRoles = () => {
   const handleDeleteRole = async (role) => {
     if (!role) return;
     if (!guardAction('roles.manageCustomRoles')) return;
-    if (!window.confirm(`Delete role "${role.name}"? This action cannot be undone.`)) return;
-    try {
-      await deleteCustomRole(role.id).unwrap();
-      toast.success('Role deleted successfully');
-      refetchRoles();
-    } catch (error) {
-      toast.error(error?.data?.detail || 'Failed to delete custom role');
-    }
+    setConfirmDialog({
+      open: true,
+      title: 'Delete Role?',
+      description: `Delete role "${role.name}"? This action cannot be undone.`,
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        try {
+          await deleteCustomRole(role.id).unwrap();
+          toast.success('Role deleted successfully');
+          refetchRoles();
+        } catch (error) {
+          toast.error(error?.data?.detail || 'Failed to delete custom role');
+        }
+      },
+    });
   };
 
   const handleSaveRoleChanges = async (roleDraft) => {
@@ -555,6 +584,29 @@ const UserRoles = () => {
         onSave={handleSaveRoleChanges}
         saving={updateCustomRoleLoading || deleteCustomRoleLoading}
       />
+
+      <AlertDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => setConfirmDialog((prev) => ({ ...prev, open }))}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmDialog.title}</AlertDialogTitle>
+            <AlertDialogDescription>{confirmDialog.description}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                await confirmDialog.onConfirm?.();
+                setConfirmDialog((prev) => ({ ...prev, open: false }));
+              }}
+            >
+              {confirmDialog.confirmLabel}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

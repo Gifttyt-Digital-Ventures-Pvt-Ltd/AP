@@ -11,6 +11,16 @@ import {
   useDeleteInvoiceMutation,
 } from '../../Services/apis/invoicesVendorsApi';
 import { Plus, Pencil, Clock, CheckCircle2, XCircle, CreditCard } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { useSidebar } from '../../components/Layout';
@@ -109,6 +119,7 @@ const InvoicesPage = () => {
   const [bulkEditPreviewError, setBulkEditPreviewError] = useState(false);
   const [bulkEditFileURL, setBulkEditFileURL] = useState(null);
   const [bulkAddingVendorItemId, setBulkAddingVendorItemId] = useState('');
+  const [invoiceDeleteTarget, setInvoiceDeleteTarget] = useState(null);
 
   const openSingleFilePicker = () => {
     if (fileInputRef.current) {
@@ -1061,15 +1072,18 @@ const InvoicesPage = () => {
 
   const handleDeleteInvoice = async (invoice) => {
     if (!guardAction('invoices.delete')) return;
-    if (!window.confirm(`Are you sure you want to delete invoice ${invoice.invoice_number}?`)) {
-      return;
-    }
+    setInvoiceDeleteTarget(invoice);
+  };
 
+  const confirmDeleteInvoice = async () => {
+    if (!invoiceDeleteTarget) return;
     try {
-      await deleteInvoice(invoice.id).unwrap();
+      await deleteInvoice(invoiceDeleteTarget.id).unwrap();
       toast.success('Invoice deleted successfully');
     } catch (error) {
       toast.error('Failed to delete invoice');
+    } finally {
+      setInvoiceDeleteTarget(null);
     }
   };
 
@@ -1319,13 +1333,26 @@ const InvoicesPage = () => {
         setViewPreviewError={setViewPreviewError}
         renderInvoiceForm={renderInvoiceForm}
       />
+
+      <AlertDialog open={Boolean(invoiceDeleteTarget)} onOpenChange={(open) => !open && setInvoiceDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Invoice?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete invoice {invoiceDeleteTarget?.invoice_number}?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteInvoice}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
 
 export default InvoicesPage;
-
-
 
 
 

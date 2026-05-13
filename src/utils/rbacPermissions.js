@@ -49,9 +49,8 @@ const mapInvoiceMatchingPermission = (permissionType) => {
 };
 
 const mapApprovalPermission = (permissionType) => {
-  if (["FULL", "APPROVER", "APPROVE", "MANAGE", "VIEW"].includes(permissionType)) {
-    return "approval-full";
-  }
+  if (permissionType === "VIEW") return "approval-view";
+  if (["FULL", "APPROVER", "APPROVE", "MANAGE"].includes(permissionType)) return "approval-full";
   return null;
 };
 
@@ -68,12 +67,14 @@ const mapTaxPermission = (permissionType) => {
 };
 
 const mapReportsPermission = (permissionType) => {
-  if (["FULL", "VIEW", "MANAGE"].includes(permissionType)) return "reports-full";
+  if (permissionType === "VIEW") return "reports-view";
+  if (["FULL", "MANAGE"].includes(permissionType)) return "reports-full";
   return null;
 };
 
 const mapBankingPermission = (permissionType) => {
-  if (["FULL", "VIEW", "MANAGE"].includes(permissionType)) return "banking-full";
+  if (permissionType === "VIEW") return "banking-view";
+  if (["FULL", "MANAGE"].includes(permissionType)) return "banking-full";
   return null;
 };
 

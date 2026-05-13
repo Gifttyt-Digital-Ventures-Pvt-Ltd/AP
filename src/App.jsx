@@ -7,6 +7,7 @@ import SessionTimeout from "./components/SessionTimeout";
 import { Toaster } from "./components/ui/sonner";
 import { Layout } from "./components/Layout";
 import AccessDeniedState from "./components/common/AccessDeniedState";
+import { redirectToOriginLogin } from "./utils/authRedirect";
 import Login from "./pages/login/Login";
 import Dashboard from "./pages/dashboard/Dashboard";
 import Vendors from "./pages/vendors/Vendors";
@@ -43,6 +44,12 @@ const ProtectedRoute = () => {
   const { isLoaded: rbacLoaded, canAccessRoute } = useRBAC();
   const location = useLocation();
 
+  useEffect(() => {
+    if (!loading && rbacLoaded && !user) {
+      redirectToOriginLogin();
+    }
+  }, [loading, rbacLoaded, user]);
+
   if (loading || !rbacLoaded) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -55,7 +62,7 @@ const ProtectedRoute = () => {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return null;
   }
 
   const canVisitPage = canAccessRoute(location.pathname);

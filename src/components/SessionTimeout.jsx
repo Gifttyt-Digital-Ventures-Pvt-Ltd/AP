@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useLazyRefreshSessionQuery } from "../Services/serviceApi";
 import { useAuth } from "../contexts/AuthContext";
+import { redirectToOriginLogin } from "../utils/authRedirect";
 
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
 const PING_INTERVAL_MS = 5 * 60 * 1000;
 
 const SessionTimeout = ({ children }) => {
-  const navigate = useNavigate();
   const { token, logout } = useAuth();
   const [isInitializing, setIsInitializing] = useState(true);
   const lastActivityRef = useRef(Date.now());
@@ -25,12 +24,12 @@ const SessionTimeout = ({ children }) => {
 
     logout();
 
-    navigate("/login", { replace: true });
     toast.error("Session Expired", {
       description: "You have been logged out due to inactivity.",
       duration: 5000,
     });
-  }, [logout, navigate]);
+    redirectToOriginLogin();
+  }, [logout]);
 
   useEffect(() => {
     handleLogoutRef.current = handleLogout;

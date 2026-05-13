@@ -9,11 +9,21 @@ import {
   useLazyGetVendorHistoryQuery,
 } from '../../Services/apis/invoicesVendorsApi';
 import { Button } from '../../components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../components/ui/alert-dialog';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { Search, Plus, Pencil, Trash2, Building2, User } from 'lucide-react';
+import { Search, Plus, Pencil, Trash2, Building2, User, Eye, X, Check } from 'lucide-react';
 import { toast } from 'sonner';
 import { useActionGuard } from '../../hooks/useActionGuard';
 
@@ -34,9 +44,9 @@ const Vendors = () => {
   const [triggerVendorHistory] = useLazyGetVendorHistoryQuery();
   const { guardAction, canPerformAction } = useActionGuard();
   const [searchTerm, setSearchTerm] = useState('');
-  const [listTab, setListTab] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState(null);
+  const [vendorDeleteTarget, setVendorDeleteTarget] = useState(null);
   const [formData, setFormData] = useState({
     // Basic Information
     name: '',
@@ -140,13 +150,18 @@ const Vendors = () => {
 
   const handleDelete = async (id) => {
     if (!guardAction('vendors.delete')) return;
-    if (!window.confirm('Are you sure you want to delete this vendor?')) return;
-    
+    setVendorDeleteTarget(id);
+  };
+
+  const confirmDeleteVendor = async () => {
+    if (!vendorDeleteTarget) return;
     try {
-      await deleteVendor(id).unwrap();
+      await deleteVendor(vendorDeleteTarget).unwrap();
       toast.success('Vendor deleted successfully');
     } catch (error) {
       toast.error('Failed to delete vendor');
+    } finally {
+      setVendorDeleteTarget(null);
     }
   };
 
@@ -169,15 +184,9 @@ const Vendors = () => {
 
   const handleViewVendorHistory = async (vendor) => {
     try {
-      const history = await triggerVendorHistory(vendor.id).unwrap();
-      const rows = Array.isArray(history) ? history : Array.isArray(history?.data) ? history.data : [];
-      if (rows.length === 0) {
-        toast.info('No approval history found for this vendor');
-        return;
-      }
-      toast.success(`History entries: ${rows.length}`);
-    } catch (error) {
-      toast.error(error?.data?.detail || 'Failed to fetch vendor history');
+      await triggerVendorHistory(vendor.id).unwrap();
+    } catch (_error) {
+      // History button is hidden for now; keep API helper for future enablement.
     }
   };
 
@@ -221,14 +230,25 @@ const Vendors = () => {
   const filteredVendors = vendors.filter(vendor =>
     vendor.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
-  const filteredPendingVendors = pendingApprovalVendors.filter(vendor =>
-    String(vendor?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredPendingVendorIds = new Set(
+    pendingApprovalVendors
+      .map((vendor) => (vendor?.id !== undefined && vendor?.id !== null ? String(vendor.id) : null))
+      .filter((id) => id !== undefined && id !== null),
   );
   const canCreateVendor = canPerformAction('vendors.create');
   const canEditVendor = canPerformAction('vendors.update');
   const canDeleteVendor = canPerformAction('vendors.delete');
   const canApproveVendor = canPerformAction('vendors.approve');
-  const visibleRows = listTab === 'pending' ? filteredPendingVendors : filteredVendors;
+
+  const isPendingApprovalVendor = (vendor) => {
+    const normalizedStatus = String(vendor?.status || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[_-]+/g, ' ');
+    if (normalizedStatus === 'pending approval') return true;
+    const vendorId = vendor?.id !== undefined && vendor?.id !== null ? String(vendor.id) : '';
+    return vendorId ? filteredPendingVendorIds.has(vendorId) : false;
+  };
 
   return (
     <div data-testid="vendors-page">
@@ -658,12 +678,6 @@ const Vendors = () => {
       </div>
 
       <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
-        <Tabs value={listTab} onValueChange={setListTab} className="px-4 pt-4">
-          <TabsList className="mb-4">
-            <TabsTrigger value="all">All Vendors ({filteredVendors.length})</TabsTrigger>
-            <TabsTrigger value="pending">Pending Approval ({filteredPendingVendors.length})</TabsTrigger>
-          </TabsList>
-        </Tabs>
         <table className="w-full" data-testid="vendors-table">
           <thead className="border-b border-border bg-muted/50">
             <tr>
@@ -677,7 +691,7 @@ const Vendors = () => {
             </tr>
           </thead>
           <tbody>
-            {visibleRows.map((vendor) => (
+            {filteredVendors.map((vendor) => (
               <tr
                 key={vendor.id}
                 className="border-b border-border hover:bg-muted/50 transition-colors"
@@ -716,62 +730,68 @@ const Vendors = () => {
                   {vendor.gstin ? `${vendor.gstin.substring(0, 4)}...${vendor.gstin.slice(-4)}` : '-'}
                 </td>
                 <td className="p-4 text-right">
-                  <div className="flex justify-end gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleViewVendorHistory(vendor)}
-                      data-testid={`vendor-history-${vendor.id}`}
-                    >
-                      History
-                    </Button>
-                    {listTab === 'pending' && canApproveVendor && (
+                  <div className="inline-flex justify-start items-center gap-1 pl-3">
+                    {isPendingApprovalVendor(vendor) ? (
                       <>
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleVendorApprovalAction(vendor, 'Approved')}
-                          data-testid={`approve-vendor-${vendor.id}`}
-                        >
-                          Approve
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleVendorApprovalAction(vendor, 'Rejected')}
-                          data-testid={`reject-vendor-${vendor.id}`}
-                        >
-                          Reject
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
+                          className="w-8 h-8 p-0 rounded-md"
                           onClick={() => handleVendorApprovalAction(vendor, 'Sent Back')}
+                          title="Send Back"
+                          disabled={!canApproveVendor}
                           data-testid={`sendback-vendor-${vendor.id}`}
                         >
-                          Send Back
+                          <Eye className="h-4 w-4 text-emerald-600" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-8 h-8 p-0 rounded-md"
+                          onClick={() => handleVendorApprovalAction(vendor, 'Rejected')}
+                          title="Reject"
+                          disabled={!canApproveVendor}
+                          data-testid={`reject-vendor-${vendor.id}`}
+                        >
+                          <X className="h-4 w-4 text-red-500" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-8 h-8 p-0 rounded-md"
+                          onClick={() => handleVendorApprovalAction(vendor, 'Approved')}
+                          title="Approve"
+                          disabled={!canApproveVendor}
+                          data-testid={`approve-vendor-${vendor.id}`}
+                        >
+                          <Check className="h-4 w-4 text-emerald-700" />
                         </Button>
                       </>
-                    )}
-                    {canEditVendor && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEdit(vendor)}
-                        data-testid={`edit-vendor-${vendor.id}`}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    )}
-                    {canDeleteVendor && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(vendor.id)}
-                        data-testid={`delete-vendor-${vendor.id}`}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                    ) : (
+                      <>
+                        {canEditVendor && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-8 h-8 p-0 rounded-md"
+                            onClick={() => handleEdit(vendor)}
+                            data-testid={`edit-vendor-${vendor.id}`}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {canDeleteVendor && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-8 h-8 p-0 rounded-md"
+                            onClick={() => handleDelete(vendor.id)}
+                            data-testid={`delete-vendor-${vendor.id}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
+                      </>
                     )}
                   </div>
                 </td>
@@ -779,14 +799,27 @@ const Vendors = () => {
             ))}
           </tbody>
         </table>
-        {visibleRows.length === 0 && (
+        {filteredVendors.length === 0 && (
           <div className="text-center py-8 text-muted-foreground" data-testid="no-vendors">
-            {listTab === 'pending'
-              ? 'No vendors pending approval.'
-              : 'No vendors found. Create your first vendor to get started!'}
+            No vendors found. Create your first vendor to get started!
           </div>
         )}
       </div>
+
+      <AlertDialog open={Boolean(vendorDeleteTarget)} onOpenChange={(open) => !open && setVendorDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Vendor?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this vendor? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteVendor}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
