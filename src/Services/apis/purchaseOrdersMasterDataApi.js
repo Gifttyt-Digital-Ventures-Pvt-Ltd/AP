@@ -21,6 +21,14 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
       query: (id) => ({ url: `/purchase-orders/${id}`, method: "GET" }),
       providesTags: ["PurchaseOrders"],
     }),
+    getPurchaseOrderDownloadUrl: builder.query({
+      query: (id) => ({ url: `/purchase-orders/${id}/download`, method: "GET" }),
+      providesTags: ["PurchaseOrders"],
+    }),
+    savePurchaseOrderDraft: builder.mutation({
+      query: (body) => ({ url: "/purchase-orders/draft", method: "POST", body }),
+      invalidatesTags: ["PurchaseOrders"],
+    }),
     createPurchaseOrder: builder.mutation({
       query: (body) => ({ url: "/purchase-orders", method: "POST", body }),
       invalidatesTags: ["PurchaseOrders"],
@@ -40,22 +48,6 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
       }),
       invalidatesTags: ["PurchaseOrders", "Approvals"],
     }),
-    getGlAccounts: builder.query({
-      query: () => ({ url: "/master/gl-accounts", method: "GET" }),
-      providesTags: ["MasterData"],
-    }),
-    getCostCenters: builder.query({
-      query: () => ({ url: "/master/cost-centers", method: "GET" }),
-      providesTags: ["MasterData"],
-    }),
-    getHsnSacCodes: builder.query({
-      query: () => ({ url: "/master/hsn-sac", method: "GET" }),
-      providesTags: ["MasterData"],
-    }),
-    seedMasterData: builder.mutation({
-      query: () => ({ url: "/master/seed", method: "POST" }),
-      invalidatesTags: ["MasterData"],
-    }),
   }),
 });
 
@@ -64,11 +56,9 @@ export const {
   useGetPendingPurchaseOrderApprovalsQuery,
   useGetPurchaseOrderByIdQuery,
   useLazyGetPurchaseOrderByIdQuery,
+  useLazyGetPurchaseOrderDownloadUrlQuery,
+  useSavePurchaseOrderDraftMutation,
   useCreatePurchaseOrderMutation,
   useSubmitPurchaseOrderMutation,
   useApprovePurchaseOrderMutation,
-  useGetGlAccountsQuery,
-  useGetCostCentersQuery,
-  useGetHsnSacCodesQuery,
-  useSeedMasterDataMutation,
 } = purchaseOrdersMasterDataApi;

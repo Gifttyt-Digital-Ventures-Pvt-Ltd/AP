@@ -7,9 +7,9 @@ export const PERMISSION_GROUPS = [
   {
     title: "Vendors",
     permissions: [
-      { id: "vendors-view", label: "View Only" },
       { id: "vendors-manage", label: "Manage (Add, Delete, Edit) Vendors" },
       { id: "vendors-approve", label: "Approve Vendors" },
+      { id: "vendors-view", label: "View Only" },
     ],
   },
   {
@@ -65,8 +65,8 @@ export const PERMISSION_GROUPS = [
   {
     title: "Tax Management",
     permissions: [
-      { id: "tax-view", label: "View Only" },
       { id: "tax-manage", label: "Manage" },
+      { id: "tax-view", label: "View Only" },
     ],
   },
   {
@@ -80,15 +80,15 @@ export const PERMISSION_GROUPS = [
   {
     title: "Manage Role",
     permissions: [
-      { id: "roles-view", label: "View Only" },
       { id: "roles-manage", label: "Manage" },
+      { id: "roles-view", label: "View Only" },
     ],
   },
   {
     title: "Vendor Approval Workflow",
     permissions: [
-      { id: "vendor-workflow-view", label: "View Only" },
       { id: "vendor-workflow-manage", label: "Manage (Add, Delete, Edit)" },
+      { id: "vendor-workflow-view", label: "View Only" },
     ],
   },
   {

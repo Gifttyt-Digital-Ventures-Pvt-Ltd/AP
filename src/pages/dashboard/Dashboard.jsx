@@ -546,9 +546,9 @@ const Dashboard = () => {
                   <span className="font-semibold">{paymentBatchStats.total_batches || 0}</span>
                 </div>
                 <div className="flex justify-between items-center p-2 bg-yellow-50 rounded">
-                  <span className="text-sm">Pending Approval</span>
+                  <span className="text-sm">Pending</span>
                   <Badge variant="outline" className="bg-yellow-100 text-yellow-700">
-                    {paymentBatchStats.pending_approval?.count || 0}
+                    {paymentBatchStats.pending?.count ?? paymentBatchStats.pending ?? 0}
                   </Badge>
                 </div>
                 <div className="flex justify-between items-center p-2 bg-green-50 rounded">

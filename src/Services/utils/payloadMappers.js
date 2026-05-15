@@ -127,6 +127,12 @@ export const toInvoiceApiPayload = (invoice = {}) => {
     created_at,
     matching_status,
     approval_records,
+    gross_amount,
+    gst_amount,
+    tds_amount,
+    net_amount,
+    approval_workflow_name,
+    approval_workflow_id,
     ...rest
   } = invoice;
 
@@ -156,6 +162,12 @@ export const toInvoiceApiPayload = (invoice = {}) => {
     createdAt: rest.createdAt ?? created_at,
     matchingStatus: rest.matchingStatus ?? matching_status,
     approvalRecords: rest.approvalRecords ?? approval_records,
+    grossAmount: rest.grossAmount ?? gross_amount,
+    gstAmount: rest.gstAmount ?? gst_amount,
+    tdsAmount: rest.tdsAmount ?? tds_amount,
+    netAmount: rest.netAmount ?? net_amount,
+    approvalWorkflowName: rest.approvalWorkflowName ?? approval_workflow_name,
+    approvalWorkflowId: rest.approvalWorkflowId ?? approval_workflow_id,
   };
 };
 
@@ -185,4 +197,10 @@ export const toInvoiceUiPayload = (invoice = {}) => ({
   created_at: invoice.created_at ?? invoice.createdAt,
   matching_status: invoice.matching_status ?? invoice.matchingStatus,
   approval_records: invoice.approval_records ?? invoice.approvalRecords,
+  gross_amount: invoice.gross_amount ?? invoice.grossAmount,
+  gst_amount: invoice.gst_amount ?? invoice.gstAmount,
+  tds_amount: invoice.tds_amount ?? invoice.tdsAmount,
+  net_amount: invoice.net_amount ?? invoice.netAmount,
+  approval_workflow_name: invoice.approval_workflow_name ?? invoice.approvalWorkflowName,
+  approval_workflow_id: invoice.approval_workflow_id ?? invoice.approvalWorkflowId,
 });

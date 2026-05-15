@@ -6,6 +6,31 @@ export const formatCurrency = (amount) => {
   }).format(amount || 0);
 };
 
+export const normalizePoStatus = (status = "") => {
+  const normalized = String(status || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+  const statusMap = {
+    DRAFT: "Draft",
+    PENDING_APPROVAL: "Pending Approval",
+    APPROVED: "Approved",
+    PARTIALLY_RECEIVED: "Partially Received",
+    CLOSED: "Closed",
+    CANCELLED: "Cancelled",
+    CANCELED: "Cancelled",
+    REJECTED: "Rejected",
+    SENT_BACK: "Sent Back",
+  };
+
+  return statusMap[normalized] || status || "-";
+};
+
+export const isPendingPoApproval = (status = "") =>
+  normalizePoStatus(status) === "Pending Approval";
+
 export const formatDate = (dateStr) => {
   if (!dateStr) return "-";
   const date = new Date(dateStr);
@@ -14,12 +39,6 @@ export const formatDate = (dateStr) => {
     month: "short",
     year: "numeric",
   });
-};
-
-export const truncateText = (value, max = 12) => {
-  const text = String(value ?? "");
-  if (!text) return "-";
-  return text.length > max ? `${text.substring(0, max)}...` : text;
 };
 
 export const normalizePoLineItem = (item = {}) => ({
@@ -31,8 +50,6 @@ export const normalizePoLineItem = (item = {}) => ({
   gst_rate: item.gst_rate ?? item.gstRate ?? 0,
   tax_amount: item.tax_amount ?? item.taxAmount ?? 0,
   total_amount: item.total_amount ?? item.totalAmount ?? item.amount ?? 0,
-  gl_account_id: item.gl_account_id ?? item.glAccountId ?? "",
-  cost_center_id: item.cost_center_id ?? item.costCenterId ?? "",
 });
 
 export const normalizePurchaseOrder = (po = {}) => ({
@@ -50,28 +67,11 @@ export const normalizePurchaseOrder = (po = {}) => ({
   subtotal: po.subtotal ?? 0,
   tax_amount: po.tax_amount ?? po.taxAmount ?? 0,
   total_amount: po.total_amount ?? po.totalAmount ?? 0,
+  status: normalizePoStatus(po.status),
   shipping_address: po.shipping_address ?? po.shippingAddress ?? "",
   billing_address: po.billing_address ?? po.billingAddress ?? "",
+  remarks: po.remarks ?? "",
   po_type: po.po_type ?? po.poType ?? "Standard",
   created_by_name: po.created_by_name ?? po.createdByName ?? "",
   approval_records: po.approval_records ?? po.approvalRecords ?? po.approvals ?? [],
-});
-
-export const normalizeGlAccount = (account = {}) => ({
-  ...account,
-  account_code: account.account_code ?? account.accountCode ?? "",
-  account_name: account.account_name ?? account.accountName ?? "",
-  account_type: account.account_type ?? account.accountType ?? "",
-  is_active: account.is_active ?? account.isActive ?? true,
-});
-
-export const normalizeCostCenter = (center = {}) => ({
-  ...center,
-  cost_center_code: center.cost_center_code ?? center.costCenterCode ?? "",
-  cost_center_name: center.cost_center_name ?? center.costCenterName ?? "",
-});
-
-export const normalizeHsnSacCode = (code = {}) => ({
-  ...code,
-  hsn_sac_code: code.hsn_sac_code ?? code.hsnSacCode ?? code.code ?? "",
 });

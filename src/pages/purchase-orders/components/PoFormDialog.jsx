@@ -5,8 +5,20 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/ui/table";
+import AppDataTable from "../../../components/common/AppDataTable";
+import { TableCell, TableRow } from "../../../components/ui/table";
 import { Textarea } from "../../../components/ui/textarea";
+
+const poFormLineItemTableHeader = [
+  { key: "item_description", title: "Description *", headerClassName: "w-[200px]" },
+  { key: "hsn_sac_code", title: "HSN/SAC" },
+  { key: "quantity", title: "Qty", headerClassName: "w-[80px]" },
+  { key: "unit_of_measure", title: "Unit", headerClassName: "w-[80px]" },
+  { key: "unit_price", title: "Unit Price", headerClassName: "w-[100px]" },
+  { key: "gst_rate", title: "GST %", headerClassName: "w-[80px]" },
+  { key: "total", title: "Total", headerClassName: "w-[100px]", cellClassName: "font-medium" },
+  { key: "actions", title: "", headerClassName: "w-[50px]" },
+];
 
 const PoFormDialog = ({
   showCreateDialog,
@@ -16,17 +28,120 @@ const PoFormDialog = ({
   vendors,
   addLineItem,
   updateLineItem,
-  hsnSacCodes,
-  truncateText,
-  glAccounts,
-  costCenters,
   removeLineItem,
   formatCurrency,
   calculateLineTotal,
   calculatePOTotal,
   handleCreatePO,
-  creating,
+  createAction,
 }) => {
+  const isSavingDraft = createAction === "draft";
+  const isSubmittingForApproval = createAction === "submit";
+  const isCreating = Boolean(createAction);
+
+  const renderLineItemRow = (item, idx, headers) => (
+    <TableRow key={idx}>
+      {headers.map((header) => {
+        let value;
+
+        switch (header.key) {
+          case "item_description":
+            value = (
+              <Input value={item.item_description} onChange={(e) => updateLineItem(idx, "item_description", e.target.value)} placeholder="Item description" data-testid={`line-item-desc-${idx}`} />
+            );
+            break;
+          case "hsn_sac_code":
+            value = (
+              <Input
+                value={item.hsn_sac_code}
+                onChange={(e) => updateLineItem(idx, "hsn_sac_code", e.target.value)}
+                placeholder="HSN/SAC"
+                className="min-w-[120px]"
+                data-testid={`line-item-hsn-sac-${idx}`}
+              />
+            );
+            break;
+          case "quantity":
+            value = (
+              <Input type="number" value={item.quantity} onChange={(e) => updateLineItem(idx, "quantity", parseFloat(e.target.value) || 0)} data-testid={`line-item-qty-${idx}`} />
+            );
+            break;
+          case "unit_of_measure":
+            value = (
+              <Select value={item.unit_of_measure} onValueChange={(v) => updateLineItem(idx, "unit_of_measure", v)}>
+                <SelectTrigger className="w-[80px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="NOS">NOS</SelectItem>
+                  <SelectItem value="KG">KG</SelectItem>
+                  <SelectItem value="MTR">MTR</SelectItem>
+                  <SelectItem value="PCS">PCS</SelectItem>
+                  <SelectItem value="HRS">HRS</SelectItem>
+                </SelectContent>
+              </Select>
+            );
+            break;
+          case "unit_price":
+            value = (
+              <Input
+                type="number"
+                value={item.unit_price ?? ""}
+                onChange={(e) => {
+                  const rawValue = e.target.value;
+                  if (rawValue === "") {
+                    updateLineItem(idx, "unit_price", "");
+                    return;
+                  }
+                  const parsedValue = Number(rawValue);
+                  if (Number.isNaN(parsedValue)) return;
+                  updateLineItem(idx, "unit_price", parsedValue);
+                }}
+                min="0"
+                className="min-w-[120px]"
+                data-testid={`line-item-price-${idx}`}
+              />
+            );
+            break;
+          case "gst_rate":
+            value = (
+              <Select value={String(item.gst_rate)} onValueChange={(v) => updateLineItem(idx, "gst_rate", parseFloat(v))}>
+                <SelectTrigger className="w-[80px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="0">0%</SelectItem>
+                  <SelectItem value="5">5%</SelectItem>
+                  <SelectItem value="12">12%</SelectItem>
+                  <SelectItem value="18">18%</SelectItem>
+                  <SelectItem value="28">28%</SelectItem>
+                </SelectContent>
+              </Select>
+            );
+            break;
+          case "total":
+            value = formatCurrency(calculateLineTotal(item));
+            break;
+          case "actions":
+            value = poForm.line_items.length > 1 && (
+              <Button variant="ghost" size="sm" onClick={() => removeLineItem(idx)} data-testid={`remove-line-item-${idx}`}>
+                <Trash2 className="h-4 w-4 text-destructive" />
+              </Button>
+            );
+            break;
+          default:
+            value = item?.[header.key] || "-";
+        }
+
+        return (
+          <TableCell key={header.key} className={header.cellClassName}>
+            {value}
+          </TableCell>
+        );
+      })}
+    </TableRow>
+  );
+
   return (
     <Dialog open={showCreateDialog} onOpenChange={setShowCreateDialog}>
       <DialogContent className="flex flex-col w-[95vw] max-w-4xl max-h-[90vh] overflow-hidden p-0">
@@ -98,131 +213,12 @@ const PoFormDialog = ({
             </div>
 
             <div className="border rounded-lg max-w-full overflow-x-auto">
-              <Table className="min-w-[1100px]">
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="w-[200px]">Description *</TableHead>
-                    <TableHead>HSN/SAC</TableHead>
-                    <TableHead className="w-[80px]">Qty</TableHead>
-                    <TableHead className="w-[80px]">Unit</TableHead>
-                    <TableHead className="w-[100px]">Unit Price</TableHead>
-                    <TableHead className="w-[80px]">GST %</TableHead>
-                    <TableHead>GL Account</TableHead>
-                    <TableHead>Cost Center</TableHead>
-                    <TableHead className="w-[100px]">Total</TableHead>
-                    <TableHead className="w-[50px]"></TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {poForm.line_items.map((item, idx) => (
-                    <TableRow key={idx}>
-                      <TableCell>
-                        <Input value={item.item_description} onChange={(e) => updateLineItem(idx, "item_description", e.target.value)} placeholder="Item description" data-testid={`line-item-desc-${idx}`} />
-                      </TableCell>
-                      <TableCell>
-                        <Select value={item.hsn_sac_code} onValueChange={(v) => updateLineItem(idx, "hsn_sac_code", v)}>
-                          <SelectTrigger className="w-[120px]">
-                            <SelectValue placeholder="Select" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {hsnSacCodes.map((h) => (
-                              <SelectItem key={h.id} value={String(h.hsn_sac_code || h.code || h.id)}>
-                                {(h.hsn_sac_code || h.code || "-") + " - " + truncateText(h.description ?? h.name ?? "", 15)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell>
-                        <Input type="number" value={item.quantity} onChange={(e) => updateLineItem(idx, "quantity", parseFloat(e.target.value) || 0)} data-testid={`line-item-qty-${idx}`} />
-                      </TableCell>
-                      <TableCell>
-                        <Select value={item.unit_of_measure} onValueChange={(v) => updateLineItem(idx, "unit_of_measure", v)}>
-                          <SelectTrigger className="w-[80px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="NOS">NOS</SelectItem>
-                            <SelectItem value="KG">KG</SelectItem>
-                            <SelectItem value="MTR">MTR</SelectItem>
-                            <SelectItem value="PCS">PCS</SelectItem>
-                            <SelectItem value="HRS">HRS</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          value={item.unit_price ?? ""}
-                          onChange={(e) => {
-                            const rawValue = e.target.value;
-                            if (rawValue === "") {
-                              updateLineItem(idx, "unit_price", "");
-                              return;
-                            }
-                            const parsedValue = Number(rawValue);
-                            if (Number.isNaN(parsedValue)) return;
-                            updateLineItem(idx, "unit_price", parsedValue);
-                          }}
-                          min="0"
-                          className="min-w-[120px]"
-                          data-testid={`line-item-price-${idx}`}
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <Select value={String(item.gst_rate)} onValueChange={(v) => updateLineItem(idx, "gst_rate", parseFloat(v))}>
-                          <SelectTrigger className="w-[80px]">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="0">0%</SelectItem>
-                            <SelectItem value="5">5%</SelectItem>
-                            <SelectItem value="12">12%</SelectItem>
-                            <SelectItem value="18">18%</SelectItem>
-                            <SelectItem value="28">28%</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell>
-                        <Select value={item.gl_account_id} onValueChange={(v) => updateLineItem(idx, "gl_account_id", v)}>
-                          <SelectTrigger className="w-[120px]">
-                            <SelectValue placeholder="Select" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {glAccounts.map((g) => (
-                              <SelectItem key={g.id} value={g.id}>
-                                {g.account_code} - {truncateText(g.account_name, 12)}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell>
-                        <Select value={item.cost_center_id} onValueChange={(v) => updateLineItem(idx, "cost_center_id", v)}>
-                          <SelectTrigger className="w-[120px]">
-                            <SelectValue placeholder="Select" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {costCenters.map((c) => (
-                              <SelectItem key={c.id} value={c.id}>
-                                {c.cost_center_code || "-"}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </TableCell>
-                      <TableCell className="font-medium">{formatCurrency(calculateLineTotal(item))}</TableCell>
-                      <TableCell>
-                        {poForm.line_items.length > 1 && (
-                          <Button variant="ghost" size="sm" onClick={() => removeLineItem(idx)} data-testid={`remove-line-item-${idx}`}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
+              <AppDataTable
+                tableHeader={poFormLineItemTableHeader}
+                tableData={poForm.line_items}
+                renderRow={renderLineItemRow}
+                tableClassName="min-w-[860px]"
+              />
             </div>
 
             <div className="flex justify-end">
@@ -251,9 +247,22 @@ const PoFormDialog = ({
           <Button variant="outline" onClick={() => setShowCreateDialog(false)}>
             Cancel
           </Button>
-          <Button onClick={handleCreatePO} disabled={creating} data-testid="submit-po-btn">
-            {creating && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-            Create Purchase Order
+          <Button
+            variant="outline"
+            onClick={() => handleCreatePO({ submitForApproval: false })}
+            disabled={isCreating}
+            data-testid="save-draft-po-btn"
+          >
+            {isSavingDraft && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            Save as Draft
+          </Button>
+          <Button
+            onClick={() => handleCreatePO({ submitForApproval: true })}
+            disabled={isCreating}
+            data-testid="submit-po-btn"
+          >
+            {isSubmittingForApproval && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            Submit for Approval
           </Button>
         </DialogFooter>
       </DialogContent>

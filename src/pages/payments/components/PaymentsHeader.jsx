@@ -17,13 +17,12 @@ const PaymentsHeader = ({
       <p className="text-muted-foreground">Track and release payments</p>
     </div>
     <div className="flex gap-2">
-      {invoicesCount > 0 && (
+      {invoicesCount > 0 && canBulkRelease && (
         <Button
           variant="default"
           onClick={handleBulkRelease}
           data-testid="bulk-release-button"
           className="bg-accent hover:bg-accent/90"
-          disabled={!canBulkRelease}
         >
           Release All Payments ({invoicesCount})
         </Button>

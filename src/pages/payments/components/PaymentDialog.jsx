@@ -16,7 +16,10 @@ const PaymentDialog = ({
   bankAccounts,
   handleSubmit,
   canCreatePayment,
-}) => (
+}) => {
+  if (!canCreatePayment) return null;
+
+  return (
   <Dialog
     open={dialogOpen}
     onOpenChange={(open) => {
@@ -25,7 +28,7 @@ const PaymentDialog = ({
     }}
   >
     <DialogTrigger asChild>
-      <Button variant="outline" data-testid="new-payment-button" disabled={!canCreatePayment}>
+      <Button variant="outline" data-testid="new-payment-button">
         <Plus className="h-4 w-4 mr-2" />
         Single Payment
       </Button>
@@ -128,10 +131,11 @@ const PaymentDialog = ({
           disabled={!canCreatePayment}
         >
           Record Payment
-        </Button>
-      </form>
-    </DialogContent>
-  </Dialog>
-);
+      </Button>
+    </form>
+  </DialogContent>
+</Dialog>
+  );
+};
 
 export default PaymentDialog;

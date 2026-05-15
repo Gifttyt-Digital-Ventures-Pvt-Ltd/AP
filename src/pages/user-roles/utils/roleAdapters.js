@@ -48,8 +48,8 @@ export const normalizePermissions = (permissions) => {
       return permissions.filter((item) => typeof item === "string");
     }
     const fromScreenPermissions = permissions
-      .map((item) =>
-        mapScreenPermissionToCanonical(item?.screen, item?.permissionType),
+      .flatMap((item) =>
+        toArray(mapScreenPermissionToCanonical(item?.screen, item?.permissionType)),
       )
       .filter(Boolean);
     return fromScreenPermissions;
@@ -98,7 +98,7 @@ export const toUiRole = (role = {}, users = []) => {
     seenPermissionKeys.add(dedupeKey);
     permissionEntries.push({
       id: `${dedupeKey || "permission"}-${index}`,
-      canonicalId: mapScreenPermissionToCanonical(screen, permissionType),
+      canonicalId: toArray(mapScreenPermissionToCanonical(screen, permissionType))[0],
       screen: screen || null,
       screenDisplayName: String(entry?.screenDisplayName || "").trim() || null,
       permissionType: permissionType || null,

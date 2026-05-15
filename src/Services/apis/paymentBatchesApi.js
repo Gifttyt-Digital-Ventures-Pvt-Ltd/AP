@@ -6,40 +6,30 @@ export const paymentBatchesApi = serviceApi.injectEndpoints({
       query: () => ({ url: "/payment-batches", method: "GET" }),
       providesTags: ["Batches"],
     }),
-    getPendingPaymentBatchApprovals: builder.query({
-      query: () => ({
-        url: "/payment-batches/pending-approval",
-        method: "GET",
-      }),
-      providesTags: ["Batches", "Approvals"],
-    }),
     getPaymentBatchStats: builder.query({
       query: () => ({ url: "/payment-batches/stats", method: "GET" }),
+      providesTags: ["Batches"],
+    }),
+    getPaymentBatch: builder.query({
+      query: (batchId) => ({ url: `/payment-batches/${batchId}`, method: "GET" }),
       providesTags: ["Batches"],
     }),
     createPaymentBatch: builder.mutation({
       query: (body) => ({ url: "/payment-batches", method: "POST", body }),
       invalidatesTags: ["Batches"],
     }),
-    submitPaymentBatch: builder.mutation({
-      query: (id) => ({
-        url: `/payment-batches/${id}/submit`,
-        method: "POST",
-      }),
-      invalidatesTags: ["Batches", "Approvals"],
-    }),
-    approvePaymentBatch: builder.mutation({
-      query: ({ id, body }) => ({
-        url: `/payment-batches/${id}/approve`,
-        method: "POST",
-        body,
-      }),
-      invalidatesTags: ["Batches", "Approvals"],
-    }),
     processPaymentBatch: builder.mutation({
       query: (id) => ({
         url: `/payment-batches/${id}/process`,
         method: "POST",
+      }),
+      invalidatesTags: ["Batches", "Payments", "Invoices", "Dashboard", "Reports"],
+    }),
+    markProcessedPaymentBatch: builder.mutation({
+      query: (body) => ({
+        url: "/payment-batches/mark-processed",
+        method: "POST",
+        body,
       }),
       invalidatesTags: ["Batches", "Payments", "Invoices", "Dashboard", "Reports"],
     }),
@@ -55,11 +45,11 @@ export const paymentBatchesApi = serviceApi.injectEndpoints({
 
 export const {
   useGetPaymentBatchesQuery,
-  useGetPendingPaymentBatchApprovalsQuery,
   useGetPaymentBatchStatsQuery,
+  useGetPaymentBatchQuery,
+  useLazyGetPaymentBatchQuery,
   useCreatePaymentBatchMutation,
-  useSubmitPaymentBatchMutation,
-  useApprovePaymentBatchMutation,
   useProcessPaymentBatchMutation,
+  useMarkProcessedPaymentBatchMutation,
   useGeneratePaymentBatchFileMutation,
 } = paymentBatchesApi;

@@ -3,10 +3,8 @@ import { useGetVendorsQuery } from '../../Services/apis/invoicesVendorsApi';
 import {
   useGetPurchaseOrdersQuery,
   useGetPendingPurchaseOrderApprovalsQuery,
-  useGetGlAccountsQuery,
-  useGetCostCentersQuery,
-  useGetHsnSacCodesQuery,
-  useSeedMasterDataMutation,
+  useLazyGetPurchaseOrderDownloadUrlQuery,
+  useSavePurchaseOrderDraftMutation,
   useCreatePurchaseOrderMutation,
   useSubmitPurchaseOrderMutation,
   useApprovePurchaseOrderMutation,
@@ -18,11 +16,7 @@ import { statusColors } from './constants';
 import {
   formatCurrency,
   formatDate,
-  normalizeCostCenter,
-  normalizeGlAccount,
-  normalizeHsnSacCode,
   normalizePurchaseOrder,
-  truncateText,
 } from './utils';
 import PurchaseOrdersToolbar from './components/PurchaseOrdersToolbar';
 import PoListTable from './components/PoListTable';
@@ -31,7 +25,20 @@ import PoDetailsDialog from './components/PoDetailsDialog';
 import PoApprovalDialog from './components/PoApprovalDialog';
 import { useActionGuard } from '../../hooks/useActionGuard';
 
+const getListData = (response) => {
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response?.content)) return response.content;
+  if (Array.isArray(response?.data)) return response.data;
+  if (Array.isArray(response?.items)) return response.items;
+  return [];
+};
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? '';
+
 const PurchaseOrdersPage = () => {
+  const { guardAction, canPerformAction } = useActionGuard();
+  const canManagePo = canPerformAction('po.create');
+  const canApprovePo = canPerformAction('po.approve');
   const {
     data: purchaseOrdersData = [],
     isLoading: purchaseOrdersLoading,
@@ -41,49 +48,24 @@ const PurchaseOrdersPage = () => {
     data: pendingApprovalsData = [],
     isLoading: pendingApprovalsLoading,
     refetch: refetchPendingApprovals,
-  } = useGetPendingPurchaseOrderApprovalsQuery();
+  } = useGetPendingPurchaseOrderApprovalsQuery(undefined, { skip: !canApprovePo });
   const {
     data: vendorsData = [],
     isLoading: vendorsLoading,
     refetch: refetchVendors,
   } = useGetVendorsQuery();
-  const {
-    data: glAccountsData = [],
-    isLoading: glAccountsLoading,
-    refetch: refetchGlAccounts,
-  } = useGetGlAccountsQuery();
-  const {
-    data: costCentersData = [],
-    isLoading: costCentersLoading,
-    refetch: refetchCostCenters,
-  } = useGetCostCentersQuery();
-  const {
-    data: hsnSacCodesData = [],
-    isLoading: hsnSacCodesLoading,
-    refetch: refetchHsnSacCodes,
-  } = useGetHsnSacCodesQuery();
-  const [seedMasterDataMutation] = useSeedMasterDataMutation();
+  const [getPurchaseOrderDownloadUrl] = useLazyGetPurchaseOrderDownloadUrlQuery();
+  const [savePurchaseOrderDraft] = useSavePurchaseOrderDraftMutation();
   const [createPurchaseOrder] = useCreatePurchaseOrderMutation();
   const [submitPurchaseOrder] = useSubmitPurchaseOrderMutation();
   const [approvePurchaseOrder] = useApprovePurchaseOrderMutation();
-  const { guardAction, canPerformAction } = useActionGuard();
-  const purchaseOrders = Array.isArray(purchaseOrdersData)
-    ? purchaseOrdersData.map(normalizePurchaseOrder)
-    : [];
-  const pendingApprovals = Array.isArray(pendingApprovalsData)
-    ? pendingApprovalsData.map(normalizePurchaseOrder)
-    : [];
+  const purchaseOrders = getListData(purchaseOrdersData).map(normalizePurchaseOrder);
+  const pendingApprovals = getListData(pendingApprovalsData).map(normalizePurchaseOrder);
   const vendors = Array.isArray(vendorsData) ? vendorsData : [];
-  const glAccounts = Array.isArray(glAccountsData) ? glAccountsData.map(normalizeGlAccount) : [];
-  const costCenters = Array.isArray(costCentersData) ? costCentersData.map(normalizeCostCenter) : [];
-  const hsnSacCodes = Array.isArray(hsnSacCodesData) ? hsnSacCodesData.map(normalizeHsnSacCode) : [];
   const loading =
     purchaseOrdersLoading ||
     pendingApprovalsLoading ||
-    vendorsLoading ||
-    glAccountsLoading ||
-    costCentersLoading ||
-    hsnSacCodesLoading;
+    vendorsLoading;
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [activeTab, setActiveTab] = useState('all');
@@ -93,7 +75,8 @@ const PurchaseOrdersPage = () => {
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showApprovalDialog, setShowApprovalDialog] = useState(false);
   const [selectedPO, setSelectedPO] = useState(null);
-  const [creating, setCreating] = useState(false);
+  const [createAction, setCreateAction] = useState(null);
+  const [downloadingPoId, setDownloadingPoId] = useState(null);
   const [submitting, setSubmitting] = useState(false);
 
   // Form state
@@ -114,8 +97,6 @@ const PurchaseOrdersPage = () => {
         unit_of_measure: 'NOS',
         unit_price: 0,
         gst_rate: 18,
-        gl_account_id: '',
-        cost_center_id: '',
         remarks: ''
       }
     ]
@@ -125,40 +106,45 @@ const PurchaseOrdersPage = () => {
     action: 'Approved',
     comments: ''
   });
-  const canManagePo = canPerformAction('po.create');
-  const canApprovePo = canPerformAction('po.approve');
-
   const fetchData = async () => {
     try {
-      await Promise.all([
+      const requests = [
         refetchPurchaseOrders(),
-        refetchPendingApprovals(),
         refetchVendors(),
-        refetchGlAccounts(),
-        refetchCostCenters(),
-        refetchHsnSacCodes(),
-      ]);
+      ];
+      if (canApprovePo) {
+        requests.push(refetchPendingApprovals());
+      }
+      await Promise.all(requests);
     } catch (error) {
       console.error('Error refreshing data:', error);
       toast.error('Failed to refresh purchase orders');
     }
   };
 
-  const seedMasterData = async () => {
-    if (!guardAction('po.seedMasterData')) return;
-    try {
-      const data = await seedMasterDataMutation().unwrap();
-      toast.success(
-        `Master data seeded: ${data?.gl_accounts_created || 0} GL accounts, ${data?.cost_centers_created || 0} cost centers, ${data?.hsn_sac_codes_created || 0} HSN/SAC codes`
-      );
-      fetchData();
-    } catch (error) {
-      toast.error(error?.data?.detail || 'Failed to seed master data');
-    }
+  const getCreatedPo = (response) => response?.po || response?.purchaseOrder || response;
+
+  const getPoId = (po) => po?.id || po?.po_id || po?.poId;
+
+  const getDownloadUrl = (response) =>
+    response?.url ||
+    response?.downloadUrl ||
+    response?.download_url ||
+    response?.documentUrl ||
+    response?.document_url ||
+    response?.fileUrl ||
+    response?.file_url;
+
+  const normalizeDownloadUrl = (url) => {
+    if (!url) return '';
+    if (/^https?:\/\//i.test(url)) return url;
+    const baseUrl = BACKEND_URL || window.location.origin;
+    return new URL(url, baseUrl).toString();
   };
 
-  const handleCreatePO = async () => {
+  const handleCreatePO = async ({ submitForApproval = false } = {}) => {
     if (!guardAction('po.create')) return;
+    if (submitForApproval && !guardAction('po.submit')) return;
     if (!poForm.vendor_id) {
       toast.error('Please select a vendor');
       return;
@@ -168,26 +154,71 @@ const PurchaseOrdersPage = () => {
       return;
     }
 
-    setCreating(true);
+    setCreateAction(submitForApproval ? 'submit' : 'draft');
     try {
       const payload = {
         ...poForm,
         line_items: poForm.line_items.map((item) => ({
-          ...item,
+          item_description: item.item_description,
+          hsn_sac_code: item.hsn_sac_code,
           quantity: Number(item.quantity) || 0,
+          unit_of_measure: item.unit_of_measure,
           unit_price: Number(item.unit_price) || 0,
           gst_rate: Number(item.gst_rate) || 0,
+          remarks: item.remarks || '',
         })),
       };
-      const data = await createPurchaseOrder(payload).unwrap();
-      toast.success(`Purchase Order ${data?.po?.po_number || ''} created successfully`);
+      const data = submitForApproval
+        ? await createPurchaseOrder(payload).unwrap()
+        : await savePurchaseOrderDraft(payload).unwrap();
+      const createdPo = getCreatedPo(data);
+      const createdPoId = getPoId(createdPo);
+
+      if (submitForApproval) {
+        if (!createdPoId) {
+          toast.error('Purchase order was created, but could not be submitted because the PO id was missing');
+          fetchData();
+          return;
+        }
+
+        await submitPurchaseOrder(createdPoId).unwrap();
+        toast.success(`Purchase Order ${createdPo?.po_number || createdPo?.poNumber || ''} submitted for approval`);
+      } else {
+        toast.success(`Purchase Order ${createdPo?.po_number || createdPo?.poNumber || ''} saved as draft`);
+      }
+
       setShowCreateDialog(false);
       resetForm();
       fetchData();
     } catch (error) {
-      toast.error(error?.data?.detail || 'Failed to create purchase order');
+      toast.error(error?.data?.detail || error?.data?.message || 'Failed to save purchase order');
     } finally {
-      setCreating(false);
+      setCreateAction(null);
+    }
+  };
+
+  const handleDownloadPO = async (po) => {
+    const poId = getPoId(po);
+    if (!poId) {
+      toast.error('Purchase order id is missing');
+      return;
+    }
+
+    setDownloadingPoId(poId);
+    try {
+      const data = await getPurchaseOrderDownloadUrl(poId).unwrap();
+      const downloadUrl = getDownloadUrl(data);
+
+      if (!downloadUrl) {
+        toast.error('Download URL was not returned for this purchase order');
+        return;
+      }
+
+      window.open(normalizeDownloadUrl(downloadUrl), '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      toast.error(error?.data?.detail || error?.data?.message || 'Failed to get purchase order download link');
+    } finally {
+      setDownloadingPoId(null);
     }
   };
 
@@ -200,7 +231,7 @@ const PurchaseOrdersPage = () => {
       setShowViewDialog(false);
       fetchData();
     } catch (error) {
-      toast.error(error?.data?.detail || 'Failed to submit for approval');
+      toast.error(error?.data?.detail || error?.data?.message || 'Failed to submit for approval');
     } finally {
       setSubmitting(false);
     }
@@ -218,10 +249,11 @@ const PurchaseOrdersPage = () => {
       }).unwrap();
       toast.success(data?.message || 'Approval processed');
       setShowApprovalDialog(false);
+      setSelectedPO(null);
       setApprovalForm({ action: 'Approved', comments: '' });
       fetchData();
     } catch (error) {
-      toast.error(error?.data?.detail || 'Failed to process approval');
+      toast.error(error?.data?.detail || error?.data?.message || 'Failed to process approval');
     } finally {
       setSubmitting(false);
     }
@@ -245,8 +277,6 @@ const PurchaseOrdersPage = () => {
           unit_of_measure: 'NOS',
           unit_price: 0,
           gst_rate: 18,
-          gl_account_id: '',
-          cost_center_id: '',
           remarks: ''
         }
       ]
@@ -265,8 +295,6 @@ const PurchaseOrdersPage = () => {
           unit_of_measure: 'NOS',
           unit_price: 0,
           gst_rate: 18,
-          gl_account_id: '',
-          cost_center_id: '',
           remarks: ''
         }
       ]
@@ -326,8 +354,6 @@ const PurchaseOrdersPage = () => {
   return (
     <div className="space-y-6" data-testid="purchase-orders-page">
       <PurchaseOrdersToolbar
-        glAccounts={glAccounts}
-        seedMasterData={seedMasterData}
         setShowCreateDialog={setShowCreateDialog}
         stats={stats}
         formatCurrency={formatCurrency}
@@ -337,12 +363,14 @@ const PurchaseOrdersPage = () => {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="all" data-testid="tab-all-pos">All POs</TabsTrigger>
-          <TabsTrigger value="pending" data-testid="tab-pending-approvals">
-            Pending Approvals
-            {pendingApprovals.length > 0 && (
-              <Badge variant="destructive" className="ml-2">{pendingApprovals.length}</Badge>
-            )}
-          </TabsTrigger>
+          {canApprovePo && (
+            <TabsTrigger value="pending" data-testid="tab-pending-approvals">
+              Pending Approvals
+              {pendingApprovals.length > 0 && (
+                <Badge variant="destructive" className="ml-2">{pendingApprovals.length}</Badge>
+              )}
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <PoListTable
@@ -356,10 +384,10 @@ const PurchaseOrdersPage = () => {
           statusColors={statusColors}
           setSelectedPO={setSelectedPO}
           setShowViewDialog={setShowViewDialog}
-        pendingApprovals={pendingApprovals}
-        setShowApprovalDialog={setShowApprovalDialog}
-        canApprovePo={canApprovePo}
-      />
+          pendingApprovals={pendingApprovals}
+          setShowApprovalDialog={setShowApprovalDialog}
+          canApprovePo={canApprovePo}
+        />
       </Tabs>
 
       <PoFormDialog
@@ -370,16 +398,12 @@ const PurchaseOrdersPage = () => {
         vendors={vendors}
         addLineItem={addLineItem}
         updateLineItem={updateLineItem}
-        hsnSacCodes={hsnSacCodes}
-        truncateText={truncateText}
-        glAccounts={glAccounts}
-        costCenters={costCenters}
         removeLineItem={removeLineItem}
         formatCurrency={formatCurrency}
         calculateLineTotal={calculateLineTotal}
         calculatePOTotal={calculatePOTotal}
         handleCreatePO={handleCreatePO}
-        creating={creating}
+        createAction={createAction}
       />
 
       <PoDetailsDialog
@@ -390,6 +414,8 @@ const PurchaseOrdersPage = () => {
         formatDate={formatDate}
         formatCurrency={formatCurrency}
         handleSubmitForApproval={handleSubmitForApproval}
+        handleDownloadPO={handleDownloadPO}
+        downloadingPoId={downloadingPoId}
         submitting={submitting}
         setShowApprovalDialog={setShowApprovalDialog}
         canManagePo={canManagePo}

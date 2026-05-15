@@ -8,6 +8,7 @@ import { Toaster } from "./components/ui/sonner";
 import { Layout } from "./components/Layout";
 import AccessDeniedState from "./components/common/AccessDeniedState";
 import { redirectToOriginLogin } from "./utils/authRedirect";
+import { resolveDefaultAccessibleRoute } from "./constants/rbacPolicy";
 import Login from "./pages/login/Login";
 import Dashboard from "./pages/dashboard/Dashboard";
 import Vendors from "./pages/vendors/Vendors";
@@ -78,6 +79,19 @@ const ProtectedRoute = () => {
   );
 };
 
+const DefaultProtectedRoute = () => {
+  const { canAccessRoute } = useRBAC();
+  const defaultRoute = resolveDefaultAccessibleRoute(canAccessRoute);
+
+  if (!defaultRoute) {
+    return (
+      <AccessDeniedState description="You do not have access to any AP Portal pages. Contact your administrator if this seems incorrect." />
+    );
+  }
+
+  return <Navigate to={defaultRoute} replace />;
+};
+
 function AppContent() {
   useEffect(() => {
     const preloadRoutes = () => {
@@ -141,7 +155,7 @@ function AppContent() {
               </Suspense>
             }
           />
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/" element={<DefaultProtectedRoute />} />
         </Route>
       </Routes>
       <Toaster position="top-right" />

@@ -43,7 +43,7 @@ import {
   useTestWorkflowMutation,
   useUpdateWorkflowMutation,
 } from '../../../Services/apis/workflowApi';
-import { useGetCostCentersQuery } from '../../../Services/apis/purchaseOrdersMasterDataApi';
+import { useGetCorporateDepartmentsQuery } from '../../../Services/apis/corporateApi';
 import {
   CONDITION_VISIBILITY,
   FALLBACK_USERS,
@@ -332,9 +332,9 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
     refetch: refetchWorkflows,
   } = useGetWorkflowsQuery();
   const {
-    data: costCentersData = [],
-    isError: costCentersError,
-  } = useGetCostCentersQuery();
+    data: departmentsData = [],
+    isError: departmentsError,
+  } = useGetCorporateDepartmentsQuery();
 
   const [createWorkflow, { isLoading: createWorkflowLoading }] = useCreateWorkflowMutation();
   const [updateWorkflow, { isLoading: updateWorkflowLoading }] = useUpdateWorkflowMutation();
@@ -360,10 +360,10 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
     }
   }, [workflowsError]);
   useEffect(() => {
-    if (costCentersError) {
+    if (departmentsError) {
       toast.error('Failed to load departments');
     }
-  }, [costCentersError]);
+  }, [departmentsError]);
 
   const rules = useMemo(() => {
     const grouped = workflowsResponse?.workflowTypeId;
@@ -443,19 +443,23 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
   const workflowDepartments = useMemo(() => {
     const departmentMap = new Map();
 
-    if (Array.isArray(costCentersData)) {
-      costCentersData.forEach((center) => {
+    if (Array.isArray(departmentsData)) {
+      departmentsData.forEach((department) => {
         const id = toStringId(
-          center?.id ??
-          center?.cost_center_id ??
-          center?.costCenterId,
+          department?.id ??
+          department?.departmentId ??
+          department?.department_id ??
+          department?.cost_center_id ??
+          department?.costCenterId,
         );
         const name = String(
-          center?.cost_center_name ??
-          center?.costCenterName ??
-          center?.name ??
-          center?.cost_center_code ??
-          center?.costCenterCode ??
+          department?.name ??
+          department?.departmentName ??
+          department?.department_name ??
+          department?.cost_center_name ??
+          department?.costCenterName ??
+          department?.cost_center_code ??
+          department?.costCenterCode ??
           '',
         ).trim();
         if (id && name) {
@@ -473,7 +477,7 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
     });
 
     return Array.from(departmentMap.entries()).map(([id, name]) => ({ id, name }));
-  }, [costCentersData, rules]);
+  }, [departmentsData, rules]);
 
   const workflowActionLoading =
     createWorkflowLoading ||

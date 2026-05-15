@@ -731,7 +731,7 @@ const Vendors = () => {
                 </td>
                 <td className="p-4 text-right">
                   <div className="inline-flex justify-start items-center gap-1 pl-3">
-                    {isPendingApprovalVendor(vendor) ? (
+                    {canApproveVendor && isPendingApprovalVendor(vendor) && (
                       <>
                         <Button
                           variant="ghost"
@@ -739,7 +739,6 @@ const Vendors = () => {
                           className="w-8 h-8 p-0 rounded-md"
                           onClick={() => handleVendorApprovalAction(vendor, 'Sent Back')}
                           title="Send Back"
-                          disabled={!canApproveVendor}
                           data-testid={`sendback-vendor-${vendor.id}`}
                         >
                           <Eye className="h-4 w-4 text-emerald-600" />
@@ -750,7 +749,6 @@ const Vendors = () => {
                           className="w-8 h-8 p-0 rounded-md"
                           onClick={() => handleVendorApprovalAction(vendor, 'Rejected')}
                           title="Reject"
-                          disabled={!canApproveVendor}
                           data-testid={`reject-vendor-${vendor.id}`}
                         >
                           <X className="h-4 w-4 text-red-500" />
@@ -761,13 +759,13 @@ const Vendors = () => {
                           className="w-8 h-8 p-0 rounded-md"
                           onClick={() => handleVendorApprovalAction(vendor, 'Approved')}
                           title="Approve"
-                          disabled={!canApproveVendor}
                           data-testid={`approve-vendor-${vendor.id}`}
                         >
                           <Check className="h-4 w-4 text-emerald-700" />
                         </Button>
                       </>
-                    ) : (
+                    )}
+                    {(canEditVendor || canDeleteVendor) && (
                       <>
                         {canEditVendor && (
                           <Button

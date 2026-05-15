@@ -1,11 +1,9 @@
 import React from "react";
-import { CheckCircle, Clock, DollarSign, FileText, Plus } from "lucide-react";
+import { CheckCircle, Clock, FileText, IndianRupee, Plus } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent } from "../../../components/ui/card";
 
 const PurchaseOrdersToolbar = ({
-  glAccounts,
-  seedMasterData,
   setShowCreateDialog,
   stats,
   formatCurrency,
@@ -19,12 +17,6 @@ const PurchaseOrdersToolbar = ({
           <p className="text-muted-foreground">Manage purchase orders with multi-level approvals</p>
         </div>
         <div className="flex gap-2">
-          {glAccounts.length === 0 && canManagePo && (
-            <Button variant="outline" onClick={seedMasterData} data-testid="seed-master-btn">
-              <Plus className="h-4 w-4 mr-2" />
-              Seed Master Data
-            </Button>
-          )}
           {canManagePo && (
             <Button onClick={() => setShowCreateDialog(true)} data-testid="create-po-btn">
               <Plus className="h-4 w-4 mr-2" />
@@ -86,7 +78,7 @@ const PurchaseOrdersToolbar = ({
                 <p className="text-sm text-muted-foreground">Total Value</p>
                 <p className="text-xl font-bold">{formatCurrency(stats.totalValue)}</p>
               </div>
-              <DollarSign className="h-8 w-8 text-primary" />
+              <IndianRupee className="h-8 w-8 text-primary" />
             </div>
           </CardContent>
         </Card>

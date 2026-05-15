@@ -1,10 +1,21 @@
 import React from "react";
-import { Building2, CheckCircle, FileText, Loader2, Package, Send, XCircle } from "lucide-react";
+import { Building2, CheckCircle, Download, FileText, Loader2, Package, Send, XCircle } from "lucide-react";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../../../components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/ui/table";
+import AppDataTable from "../../../components/common/AppDataTable";
+import { TableCell, TableRow } from "../../../components/ui/table";
+
+const poLineItemTableHeader = [
+  { key: "lineNumber", title: "#" },
+  { key: "description", title: "Description" },
+  { key: "hsnSacCode", title: "HSN/SAC" },
+  { key: "quantity", title: "Qty" },
+  { key: "unitPrice", title: "Unit Price" },
+  { key: "taxAmount", title: "Tax" },
+  { key: "totalAmount", title: "Amount", cellClassName: "font-medium" },
+];
 
 const PoDetailsDialog = ({
   showViewDialog,
@@ -14,11 +25,38 @@ const PoDetailsDialog = ({
   formatDate,
   formatCurrency,
   handleSubmitForApproval,
+  handleDownloadPO,
+  downloadingPoId,
   submitting,
   setShowApprovalDialog,
   canManagePo,
   canApprovePo,
 }) => {
+  const selectedPoId = selectedPO?.id || selectedPO?.po_id || selectedPO?.poId;
+  const isDownloading = Boolean(selectedPoId && downloadingPoId === selectedPoId);
+
+  const renderLineItemRow = (item, rowIndex, headers) => {
+    const lineItem = {
+      lineNumber: item.line_number ?? item.lineNumber ?? rowIndex + 1,
+      description: item.item_description ?? item.description ?? "-",
+      hsnSacCode: item.hsn_sac_code ?? item.hsnSac ?? "-",
+      quantity: `${Number(item.quantity ?? 0)} ${item.unit_of_measure ?? item.uom ?? ""}`.trim(),
+      unitPrice: formatCurrency(Number(item.unit_price ?? item.unitPrice ?? 0)),
+      taxAmount: formatCurrency(Number(item.tax_amount ?? item.taxAmount ?? item.igst_amount ?? item.igstAmount ?? 0)),
+      totalAmount: formatCurrency(Number(item.total_amount ?? item.totalAmount ?? item.line_amount ?? item.lineAmount ?? item.amount ?? 0)),
+    };
+
+    return (
+      <TableRow key={rowIndex}>
+        {headers.map((header) => (
+          <TableCell key={header.key} className={header.cellClassName}>
+            {lineItem[header.key] || "-"}
+          </TableCell>
+        ))}
+      </TableRow>
+    );
+  };
+
   return (
     <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -34,7 +72,7 @@ const PoDetailsDialog = ({
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div>
                 <p className="text-sm text-muted-foreground">Status</p>
-                <Badge className={`${statusColors[selectedPO.status]} text-white mt-1`}>{selectedPO.status}</Badge>
+                <Badge className={`${statusColors[selectedPO.status] || "bg-gray-500"} text-white mt-1`}>{selectedPO.status}</Badge>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">PO Type</p>
@@ -70,42 +108,12 @@ const PoDetailsDialog = ({
                 </CardTitle>
               </CardHeader>
               <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>#</TableHead>
-                      <TableHead>Description</TableHead>
-                      <TableHead>HSN/SAC</TableHead>
-                      <TableHead>Qty</TableHead>
-                      <TableHead>Unit Price</TableHead>
-                      <TableHead>Tax</TableHead>
-                      <TableHead>Amount</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {selectedPO.line_items?.map((item, idx) => {
-                      const lineNumber = item.line_number ?? item.lineNumber ?? idx + 1;
-                      const description = item.item_description ?? item.description ?? "-";
-                      const hsnSacCode = item.hsn_sac_code ?? item.hsnSac ?? "-";
-                      const quantity = Number(item.quantity ?? 0);
-                      const uom = item.unit_of_measure ?? item.uom ?? "";
-                      const unitPrice = Number(item.unit_price ?? item.unitPrice ?? 0);
-                      const taxAmount = Number(item.tax_amount ?? item.taxAmount ?? item.igst_amount ?? item.igstAmount ?? 0);
-                      const totalAmount = Number(item.total_amount ?? item.totalAmount ?? item.line_amount ?? item.lineAmount ?? item.amount ?? 0);
-                      return (
-                        <TableRow key={idx}>
-                          <TableCell>{lineNumber}</TableCell>
-                          <TableCell>{description}</TableCell>
-                          <TableCell>{hsnSacCode || "-"}</TableCell>
-                          <TableCell>{quantity} {uom}</TableCell>
-                          <TableCell>{formatCurrency(unitPrice)}</TableCell>
-                          <TableCell>{formatCurrency(taxAmount)}</TableCell>
-                          <TableCell className="font-medium">{formatCurrency(totalAmount)}</TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
+                <AppDataTable
+                  tableHeader={poLineItemTableHeader}
+                  tableData={selectedPO.line_items || []}
+                  renderRow={renderLineItemRow}
+                  emptyMessage="No line items found"
+                />
               </CardContent>
             </Card>
 
@@ -151,6 +159,21 @@ const PoDetailsDialog = ({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => setShowViewDialog(false)}>Close</Button>
+          {selectedPO && (
+            <Button
+              variant="outline"
+              onClick={() => handleDownloadPO(selectedPO)}
+              disabled={isDownloading}
+              data-testid="download-po-btn"
+            >
+              {isDownloading ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4 mr-2" />
+              )}
+              Download PO
+            </Button>
+          )}
           {selectedPO?.status === "Draft" && canManagePo && (
             <Button onClick={() => handleSubmitForApproval(selectedPO.id)} disabled={submitting} data-testid="submit-for-approval-btn">
               {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

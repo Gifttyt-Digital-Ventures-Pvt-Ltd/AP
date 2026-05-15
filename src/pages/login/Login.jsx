@@ -110,7 +110,7 @@ const Login = () => {
     try {
       await login(email, otp, selectedCorpId);
       toast.success("Login successful!");
-      navigate("/dashboard");
+      navigate("/");
     } catch (error) {
       toast.error(error?.data?.detail || error?.data?.message || "Authentication failed");
     } finally {

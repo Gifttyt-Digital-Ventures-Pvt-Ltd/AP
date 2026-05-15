@@ -64,6 +64,22 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
       query: (id) => ({ url: `/invoices/${id}/history`, method: "GET" }),
       providesTags: ["Invoices"],
     }),
+    getPendingCheckerInvoices: builder.query({
+      query: () => ({ url: "/checker/pending", method: "GET" }),
+      transformResponse: (response) =>
+        Array.isArray(response)
+          ? response.map(toInvoiceUiPayload)
+          : [],
+      providesTags: ["Invoices", "Approvals"],
+    }),
+    checkInvoice: builder.mutation({
+      query: ({ id, body }) => ({
+        url: `/invoices/${id}/check`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Invoices", "Approvals", "Dashboard", "Reports"],
+    }),
     getVendors: builder.query({
       query: () => ({ url: "/vendors", method: "GET" }),
       transformResponse: (response) =>
@@ -157,6 +173,8 @@ export const {
   useApproveInvoiceMutation,
   useGetInvoiceHistoryQuery,
   useLazyGetInvoiceHistoryQuery,
+  useGetPendingCheckerInvoicesQuery,
+  useCheckInvoiceMutation,
   useGetVendorsQuery,
   useCreateVendorMutation,
   useUpdateVendorMutation,
