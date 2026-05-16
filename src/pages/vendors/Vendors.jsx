@@ -21,11 +21,12 @@ import {
 } from '../../components/ui/alert-dialog';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { Search, Plus, Pencil, Trash2, Building2, User, Eye, X, Check } from 'lucide-react';
+import { Search, Plus, Pencil, Trash2, Building2, User, Eye, X, Check, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useActionGuard } from '../../hooks/useActionGuard';
+import { Textarea } from '../../components/ui/textarea';
 
 const Vendors = () => {
   const {
@@ -46,7 +47,10 @@ const Vendors = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState(null);
+  const [viewingVendor, setViewingVendor] = useState(null);
   const [vendorDeleteTarget, setVendorDeleteTarget] = useState(null);
+  const [approvalTarget, setApprovalTarget] = useState(null);
+  const [approvalComments, setApprovalComments] = useState('');
   const [formData, setFormData] = useState({
     // Basic Information
     name: '',
@@ -165,18 +169,26 @@ const Vendors = () => {
     }
   };
 
-  const handleVendorApprovalAction = async (vendor, action) => {
+  const openVendorApprovalDialog = (vendor, action) => {
     if (!guardAction('vendors.approve')) return;
-    const comments = window.prompt(`Optional comments for "${action}"`, '') || '';
+    setApprovalTarget({ vendor, action });
+    setApprovalComments('');
+  };
+
+  const confirmVendorApprovalAction = async () => {
+    if (!approvalTarget) return;
+
     try {
       await approveVendor({
-        id: vendor.id,
+        id: approvalTarget.vendor.id,
         body: {
-          action,
-          comments: comments.trim(),
+          action: approvalTarget.action,
+          comments: approvalComments.trim(),
         },
       }).unwrap();
-      toast.success(`Vendor ${action.toLowerCase()} successfully`);
+      toast.success(`Vendor ${approvalTarget.action.toLowerCase()} successfully`);
+      setApprovalTarget(null);
+      setApprovalComments('');
     } catch (error) {
       toast.error(error?.data?.detail || error?.data?.message || 'Failed to update vendor approval');
     }
@@ -731,23 +743,33 @@ const Vendors = () => {
                 </td>
                 <td className="p-4 text-right">
                   <div className="inline-flex justify-start items-center gap-1 pl-3">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-8 h-8 p-0 rounded-md"
+                      onClick={() => setViewingVendor(vendor)}
+                      title="View"
+                      data-testid={`view-vendor-${vendor.id}`}
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
                     {canApproveVendor && isPendingApprovalVendor(vendor) && (
                       <>
                         <Button
                           variant="ghost"
                           size="sm"
                           className="w-8 h-8 p-0 rounded-md"
-                          onClick={() => handleVendorApprovalAction(vendor, 'Sent Back')}
+                          onClick={() => openVendorApprovalDialog(vendor, 'Sent Back')}
                           title="Send Back"
                           data-testid={`sendback-vendor-${vendor.id}`}
                         >
-                          <Eye className="h-4 w-4 text-emerald-600" />
+                          <RotateCcw className="h-4 w-4 text-amber-600" />
                         </Button>
                         <Button
                           variant="ghost"
                           size="sm"
                           className="w-8 h-8 p-0 rounded-md"
-                          onClick={() => handleVendorApprovalAction(vendor, 'Rejected')}
+                          onClick={() => openVendorApprovalDialog(vendor, 'Rejected')}
                           title="Reject"
                           data-testid={`reject-vendor-${vendor.id}`}
                         >
@@ -757,7 +779,7 @@ const Vendors = () => {
                           variant="ghost"
                           size="sm"
                           className="w-8 h-8 p-0 rounded-md"
-                          onClick={() => handleVendorApprovalAction(vendor, 'Approved')}
+                          onClick={() => openVendorApprovalDialog(vendor, 'Approved')}
                           title="Approve"
                           data-testid={`approve-vendor-${vendor.id}`}
                         >
@@ -818,6 +840,192 @@ const Vendors = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <Dialog open={Boolean(viewingVendor)} onOpenChange={(open) => !open && setViewingVendor(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Vendor Details</DialogTitle>
+          </DialogHeader>
+          {viewingVendor && (
+            <div className="space-y-6 text-sm">
+              <div>
+                <h3 className="font-semibold mb-3">Basic Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-muted-foreground">Name</p>
+                    <p className="font-medium">{viewingVendor.name || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Type</p>
+                    <p className="font-medium">{viewingVendor.vendor_type || 'Company'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Status</p>
+                    <p className="font-medium">{viewingVendor.status || 'Pending Approval'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Category</p>
+                    <p className="font-medium">{viewingVendor.category || '-'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-3">Contact Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-muted-foreground">Email</p>
+                    <p className="font-medium">{viewingVendor.email || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Mobile</p>
+                    <p className="font-medium">{viewingVendor.mobile || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Phone</p>
+                    <p className="font-medium">{viewingVendor.phone || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Contact Person</p>
+                    <p className="font-medium">{viewingVendor.contact_person || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Website</p>
+                    <p className="font-medium">{viewingVendor.website || '-'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-3">Tax Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-muted-foreground">PAN</p>
+                    <p className="font-medium font-['JetBrains_Mono']">{viewingVendor.pan || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">GSTIN</p>
+                    <p className="font-medium font-['JetBrains_Mono']">{viewingVendor.gstin || '-'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-3">Address</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-muted-foreground">Address Line 1</p>
+                    <p className="font-medium">{viewingVendor.address_line1 || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Address Line 2</p>
+                    <p className="font-medium">{viewingVendor.address_line2 || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">City</p>
+                    <p className="font-medium">{viewingVendor.city || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">State</p>
+                    <p className="font-medium">{viewingVendor.state || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Pincode</p>
+                    <p className="font-medium">{viewingVendor.pincode || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Country</p>
+                    <p className="font-medium">{viewingVendor.country || '-'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-3">Bank Details</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-muted-foreground">Bank Name</p>
+                    <p className="font-medium">{viewingVendor.bank_name || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Account Holder Name</p>
+                    <p className="font-medium">{viewingVendor.account_holder_name || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Account Number</p>
+                    <p className="font-medium font-['JetBrains_Mono']">{viewingVendor.account_number || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">IFSC</p>
+                    <p className="font-medium font-['JetBrains_Mono']">{viewingVendor.ifsc_code || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Branch</p>
+                    <p className="font-medium">{viewingVendor.branch || '-'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-3">Additional Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-muted-foreground">Currency</p>
+                    <p className="font-medium">{viewingVendor.currency || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Payment Terms</p>
+                    <p className="font-medium">{viewingVendor.payment_terms || '-'}</p>
+                  </div>
+                  <div className="md:col-span-2">
+                    <p className="text-muted-foreground">Notes</p>
+                    <p className="font-medium whitespace-pre-wrap">{viewingVendor.notes || '-'}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewingVendor(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(approvalTarget)} onOpenChange={(open) => !open && setApprovalTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{approvalTarget?.action || 'Update'} Vendor</DialogTitle>
+          </DialogHeader>
+          {approvalTarget && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-muted p-4 text-sm">
+                <p><strong>Vendor:</strong> {approvalTarget.vendor.name || '-'}</p>
+                <p><strong>Action:</strong> {approvalTarget.action}</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Comments</Label>
+                <Textarea
+                  value={approvalComments}
+                  onChange={(event) => setApprovalComments(event.target.value)}
+                  placeholder="Optional comments"
+                  rows={3}
+                  data-testid="vendor-approval-comments"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApprovalTarget(null)}>Cancel</Button>
+            <Button
+              onClick={confirmVendorApprovalAction}
+              variant={approvalTarget?.action === 'Rejected' ? 'destructive' : 'default'}
+              data-testid="confirm-vendor-approval"
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
