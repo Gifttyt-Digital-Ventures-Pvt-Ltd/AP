@@ -20,8 +20,6 @@ const CUSTOM_ROLE_PERMISSION_MAP = {
   "invoice-approver": { screen: "INVOICE", permissionType: "APPROVER" },
   "matching-view": { screen: "INVOICE_MATCHING", permissionType: "VIEW" },
   "matching-manage": { screen: "INVOICE_MATCHING", permissionType: "MANAGE" },
-  "approval-view": { screen: "APPROVAL", permissionType: "VIEW" },
-  "approval-full": { screen: "APPROVAL", permissionType: "FULL" },
   "payments-view": { screen: "PAYMENTS", permissionType: "VIEW" },
   "payments-manage": { screen: "PAYMENTS", permissionType: "MANAGE" },
   "tax-view": { screen: "TAX_MANAGEMENT", permissionType: "VIEW" },
@@ -39,6 +37,9 @@ const CUSTOM_ROLE_PERMISSION_MAP = {
   "settings-interaction": { screen: "SETTINGS", permissionType: "INTERACTION" },
 };
 
+const HIDDEN_ROLE_ACCESS_PERMISSIONS = new Set(["approval-view", "approval-full"]);
+const HIDDEN_ROLE_ACCESS_SCREENS = new Set(["APPROVAL", "APPROVALS"]);
+
 const toArray = (value) => {
   if (!value) return [];
   if (Array.isArray(value)) return value;
@@ -49,19 +50,22 @@ export const normalizePermissions = (permissions) => {
   if (!permissions) return [];
   if (Array.isArray(permissions)) {
     if (permissions.every((item) => typeof item === "string")) {
-      return permissions.filter((item) => typeof item === "string");
+      return permissions.filter(
+        (item) => typeof item === "string" && !HIDDEN_ROLE_ACCESS_PERMISSIONS.has(item),
+      );
     }
     const fromScreenPermissions = permissions
       .flatMap((item) =>
         toArray(mapScreenPermissionToCanonical(item?.screen, item?.permissionType)),
       )
-      .filter(Boolean);
+      .filter((permission) => permission && !HIDDEN_ROLE_ACCESS_PERMISSIONS.has(permission));
     return fromScreenPermissions;
   }
   if (typeof permissions === "object") {
     return Object.entries(permissions)
       .filter(([, enabled]) => Boolean(enabled))
-      .map(([key]) => key);
+      .map(([key]) => key)
+      .filter((key) => !HIDDEN_ROLE_ACCESS_PERMISSIONS.has(key));
   }
   return [];
 };
@@ -96,6 +100,7 @@ export const toUiRole = (role = {}, users = []) => {
   const seenPermissionKeys = new Set();
   rawPermissionEntries.forEach((entry, index) => {
     const screen = String(entry?.screen || "").trim();
+    if (HIDDEN_ROLE_ACCESS_SCREENS.has(screen.toUpperCase())) return;
     const permissionType = String(entry?.permissionType || "").trim();
     const dedupeKey = `${screen.toUpperCase()}:${permissionType.toUpperCase()}`;
     if (seenPermissionKeys.has(dedupeKey)) return;

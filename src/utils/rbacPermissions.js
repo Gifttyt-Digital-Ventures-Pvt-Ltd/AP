@@ -57,12 +57,6 @@ const mapInvoiceMatchingPermission = (permissionType) => {
   return null;
 };
 
-const mapApprovalPermission = (permissionType) => {
-  if (permissionType === "VIEW") return "approval-view";
-  if (["FULL", "APPROVER", "APPROVE", "MANAGE"].includes(permissionType)) return "approval-full";
-  return null;
-};
-
 const mapPaymentsPermission = (permissionType) => {
   if (permissionType === "VIEW") return "payments-view";
   if (permissionType === "MANAGE") return "payments-manage";
@@ -142,10 +136,6 @@ export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput)
 
   if (screen === "INVOICE_MATCHING" || screen === "MATCHING") {
     return mapInvoiceMatchingPermission(permissionType);
-  }
-
-  if (screen === "APPROVAL" || screen === "APPROVALS") {
-    return mapApprovalPermission(permissionType);
   }
 
   if (

@@ -12,8 +12,6 @@ export const ROUTE_PERMISSION_RULES = {
   "/transactions": { anyOf: ["banking-view", "banking-full"] },
   "/approvals": {
     anyOf: [
-      "approval-view",
-      "approval-full",
       "invoice-checker",
       "invoice-approver",
       "po-approve",
@@ -66,7 +64,7 @@ export const ACTION_PERMISSION_RULES = {
   "vendors.create": { anyOf: ["vendors-manage"] },
   "vendors.update": { anyOf: ["vendors-manage"] },
   "vendors.delete": { anyOf: ["vendors-manage"] },
-  "vendors.approve": { anyOf: ["vendors-approve", "approval-full"] },
+  "vendors.approve": { anyOf: ["vendors-approve"] },
 
   "invoices.scan": { anyOf: ["invoice-maker", "pi-manage"] },
   "invoices.bulkUpload": { anyOf: ["invoice-maker", "pi-manage"] },
@@ -74,15 +72,15 @@ export const ACTION_PERMISSION_RULES = {
   "invoices.create": { anyOf: ["invoice-maker"] },
   "invoices.update": { anyOf: ["invoice-maker"] },
   "invoices.delete": { anyOf: ["invoice-maker"] },
-  "invoices.check": { anyOf: ["invoice-checker", "approval-full"] },
-  "invoices.approve": { anyOf: ["invoice-approver", "approval-full"] },
+  "invoices.check": { anyOf: ["invoice-checker"] },
+  "invoices.approve": { anyOf: ["invoice-approver"] },
 
   "po.create": { anyOf: ["po-manage"] },
   "po.submit": { anyOf: ["po-manage"] },
-  "po.approve": { anyOf: ["po-approve", "approval-full"] },
+  "po.approve": { anyOf: ["po-approve"] },
 
   "grn.create": { anyOf: ["grn-manage"] },
-  "grn.post": { anyOf: ["grn-approve", "approval-full"] },
+  "grn.post": { anyOf: ["grn-approve"] },
 
   "matching.perform": { anyOf: ["matching-manage"] },
   "matching.edit": { anyOf: ["matching-manage"] },

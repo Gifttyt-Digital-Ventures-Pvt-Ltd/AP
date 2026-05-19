@@ -57,7 +57,7 @@ const getAssignedRoles = (employeeDetails = null) => {
 
 const FALLBACK_DIRECT_ROLE_PERMISSIONS = {
   CHECKER: ["invoice-checker"],
-  APPROVER: ["invoice-approver", "approval-full"],
+  APPROVER: ["invoice-approver"],
   ACCOUNTANT: ["payments-manage", "payments-view", "tax-manage"],
 };
 

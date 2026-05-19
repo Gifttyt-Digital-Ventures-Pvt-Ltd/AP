@@ -52,10 +52,6 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
-    title: "Approval",
-    permissions: [{ id: "approval-full", label: "Full Access" }],
-  },
-  {
     title: "Payments / Payment Batches",
     permissions: [
       { id: "payments-manage", label: "Manage" },
@@ -122,8 +118,6 @@ export const PERMISSION_LABELS = {
   "invoice-approver": "Invoice - Approver",
   "matching-manage": "Invoice Matching - Manage",
   "matching-view": "Invoice Matching - View Only",
-  "approval-view": "Approvals - View Only",
-  "approval-full": "Approvals - Full Access",
   "payments-manage": "Payments - Manage",
   "payments-view": "Payments - View Only",
   "tax-view": "Tax Management - View Only",
