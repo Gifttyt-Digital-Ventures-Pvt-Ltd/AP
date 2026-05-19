@@ -6,6 +6,12 @@ const normalizeToken = (value = "") =>
     .replace(/^_+|_+$/g, "")
     .replace(/_+/g, "_");
 
+const toArray = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  return [value];
+};
+
 const mapVendorPermission = (permissionType) => {
   if (permissionType === "VIEW") return "vendors-view";
   if (permissionType === "MANAGE") return "vendors-manage";

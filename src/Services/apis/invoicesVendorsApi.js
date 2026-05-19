@@ -112,6 +112,14 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
       }),
       invalidatesTags: [{ type: "Vendors", id: "LIST" }, "Dashboard", "Reports"],
     }),
+    requestVendorAddition: builder.mutation({
+      query: (body) => ({
+        url: "/vendors/request",
+        method: "POST",
+        body: toVendorApiPayload(body),
+      }),
+      invalidatesTags: [{ type: "Vendors", id: "PENDING" }],
+    }),
     updateVendor: builder.mutation({
       query: ({ id, body }) => ({
         url: `/vendors/${id}`,
@@ -177,6 +185,7 @@ export const {
   useCheckInvoiceMutation,
   useGetVendorsQuery,
   useCreateVendorMutation,
+  useRequestVendorAdditionMutation,
   useUpdateVendorMutation,
   useDeleteVendorMutation,
   useGetPendingVendorApprovalsQuery,

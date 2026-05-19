@@ -39,7 +39,11 @@ const CUSTOM_ROLE_PERMISSION_MAP = {
   "settings-interaction": { screen: "SETTINGS", permissionType: "INTERACTION" },
 };
 
-const toArray = (value) => (Array.isArray(value) ? value : []);
+const toArray = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  return [value];
+};
 
 export const normalizePermissions = (permissions) => {
   if (!permissions) return [];

@@ -3,6 +3,23 @@ import { Building2, CheckCircle2, Plus, X } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
+import { TableCell, TableRow } from "../../../components/ui/table";
+import AppDataTable from "../../../components/common/AppDataTable";
+import AppSelect from "../../../components/common/AppSelect";
+
+const lineItemTableHeader = [
+  { key: "description", title: "Item Description", headerClassName: "min-w-[190px]", cellClassName: "min-w-[190px]" },
+  { key: "ledger", title: "*Ledger", headerClassName: "w-[160px] text-blue-500", cellClassName: "w-[200px]" },
+  { key: "tax", title: "*Tax", headerClassName: "w-[150px] text-blue-500", cellClassName: "w-[200px]" },
+  { key: "quantity", title: "Qty", headerClassName: "w-[60px] text-right", cellClassName: "w-[60px]" },
+  { key: "unit_rate", title: "Rate", headerClassName: "w-[80px] text-right", cellClassName: "w-[80px]" },
+  { key: "discount", title: "Discount", headerClassName: "w-[120px] text-left", cellClassName: "w-[120px]" },
+  { key: "subtotal", title: "Subtotal", headerClassName: "w-[100px] text-right", cellClassName: "w-[100px] text-right" },
+  { key: "actions", title: "", headerClassName: "w-[32px]", cellClassName: "w-[32px] text-center" },
+];
+
+const lineItemSelectClassName =
+  "h-7 w-full rounded border bg-white pl-2 pr-7 text-xs";
 
 export const InvoiceForm = ({
   formData,
@@ -24,6 +41,7 @@ export const InvoiceForm = ({
   handleAddInvoice,
   canAddVendor = true,
   canSubmit = true,
+  departments = [],
   GST_TREATMENTS,
   INDIAN_STATES,
   FILE_CATEGORIES,
@@ -36,6 +54,78 @@ export const InvoiceForm = ({
   const tdsRate = Number.parseFloat(String(formData.tds || "").replace("%", "")) || 0;
   const tdsAmount = Math.round(((totals.subTotal * tdsRate) / 100) * 100) / 100;
   const netPayable = Math.max(Math.round((totals.total - tdsAmount) * 100) / 100, 0);
+  const renderLineItemRow = (item, index, headers) => (
+    <TableRow key={index} className="border-b last:border-b-0">
+      {headers.map((header) => {
+        let value;
+
+        switch (header.key) {
+          case "description":
+            value = (
+              <div>
+                <Input value={item.description} onChange={(e) => updateLineItem(index, "description", e.target.value)} placeholder="Description" className="h-7 text-xs" />
+                <div className="flex items-center gap-1 mt-0.5">
+                  <span className="text-[10px] text-gray-400">HSN:</span>
+                  <Input value={item.hsn_sac} onChange={(e) => updateLineItem(index, "hsn_sac", e.target.value)} placeholder="Code" className="h-5 text-[10px] w-16 px-1" />
+                  <label className="flex items-center gap-0.5 text-[10px] text-gray-500 ml-1">
+                    <input type="checkbox" checked={item.eligible_for_itc} onChange={(e) => updateLineItem(index, "eligible_for_itc", e.target.checked)} className="h-2.5 w-2.5" />
+                    ITC
+                  </label>
+                </div>
+              </div>
+            );
+            break;
+          case "ledger":
+            value = (
+              <AppSelect value={item.ledger} onChange={(e) => updateLineItem(index, "ledger", e.target.value)} options={LEDGER_OPTIONS} className={lineItemSelectClassName} />
+            );
+            break;
+          case "tax":
+            value = (
+              <AppSelect value={item.tax} onChange={(e) => updateLineItem(index, "tax", e.target.value)} options={TAX_RATES} className={lineItemSelectClassName} />
+            );
+            break;
+          case "quantity":
+            value = <Input type="number" value={item.quantity} onChange={(e) => updateLineItem(index, "quantity", parseFloat(e.target.value) || 0)} className="h-7 text-xs text-right px-1" min="0" />;
+            break;
+          case "unit_rate":
+            value = <Input type="number" value={item.unit_rate} onChange={(e) => updateLineItem(index, "unit_rate", parseFloat(e.target.value) || 0)} className="h-7 text-xs text-right px-1" min="0" />;
+            break;
+          case "discount":
+            value = (
+              <div className="flex items-center gap-0.5">
+                <Input type="number" value={item.discount} onChange={(e) => updateLineItem(index, "discount", parseFloat(e.target.value) || 0)} className="h-7 text-xs text-right w-12 px-1" min="0" />
+                <AppSelect
+                  value={item.discount_type}
+                  onChange={(e) => updateLineItem(index, "discount_type", e.target.value)}
+                  options={["%", "₹"]}
+                  className="h-7 w-14 rounded border text-xs bg-white pl-2 pr-6"
+                />
+              </div>
+            );
+            break;
+          case "subtotal":
+            value = `\u20B9${calculateLineItemSubtotal(item).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+            break;
+          case "actions":
+            value = formData.line_items.length > 1 && (
+              <button type="button" onClick={() => removeLineItem(index)} className="text-red-500 hover:text-red-700 p-0.5">
+                <X className="h-3.5 w-3.5" />
+              </button>
+            );
+            break;
+          default:
+            value = item?.[header.key] || "-";
+        }
+
+        return (
+          <TableCell key={header.key} className={`px-2 py-1.5 align-middle text-xs ${header.cellClassName || ""}`}>
+            {value}
+          </TableCell>
+        );
+      })}
+    </TableRow>
+  );
 
   return (
     <div className="space-y-4">
@@ -56,11 +146,11 @@ export const InvoiceForm = ({
             }}
             className="bg-amber-600 hover:bg-amber-700 text-white h-7 text-xs"
             size="sm"
-            data-testid="add-vendor-from-invoice-btn"
+            data-testid="request-vendor-from-invoice-btn"
             disabled={!canAddVendor}
           >
             <Plus className="h-3 w-3 mr-1" />
-            Add Vendor
+            Request Vendor
           </Button>
         </div>
       )}
@@ -122,6 +212,36 @@ export const InvoiceForm = ({
         </div>
 
         <div>
+          <Label className="text-xs text-blue-400">* Department</Label>
+          <AppSelect
+            value={formData.department_id || ""}
+            onChange={(e) => {
+              const selectedDepartment = departments.find((department) => {
+                const departmentId = department?.id ?? department?.departmentId ?? department?.department_id;
+                return String(departmentId ?? "") === e.target.value;
+              });
+              setFormData({
+                ...formData,
+                department_id: e.target.value,
+                department_name:
+                  selectedDepartment?.name ||
+                  selectedDepartment?.departmentName ||
+                  selectedDepartment?.department_name ||
+                  "",
+              });
+            }}
+            className="h-8 text-sm"
+            data-testid="invoice-department-select"
+            required
+            placeholder="Select department"
+            options={departments.map((department) => ({
+              value: department?.id ?? department?.departmentId ?? department?.department_id,
+              label: department?.name ?? department?.departmentName ?? department?.department_name,
+            }))}
+          />
+        </div>
+
+        <div>
           <Label className="text-xs">Billing Address</Label>
           <textarea
             value={formData.billing_address}
@@ -134,13 +254,7 @@ export const InvoiceForm = ({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label className="text-xs text-blue-400">* GST Treatment</Label>
-            <select value={formData.gst_treatment} onChange={(e) => setFormData({ ...formData, gst_treatment: e.target.value })} className="w-full h-8 rounded-md border border-input bg-background px-2 text-sm">
-              {GST_TREATMENTS.map((gst) => (
-                <option key={gst.value} value={gst.value}>
-                  {gst.label}
-                </option>
-              ))}
-            </select>
+            <AppSelect value={formData.gst_treatment} onChange={(e) => setFormData({ ...formData, gst_treatment: e.target.value })} options={GST_TREATMENTS} className="h-8 text-sm" />
           </div>
           <div>
             <Label className="text-xs text-blue-400">* GSTIN</Label>
@@ -151,57 +265,37 @@ export const InvoiceForm = ({
         <div className="grid grid-cols-3 gap-2">
           <div>
             <Label className="text-xs text-blue-400">* Source of Supply</Label>
-            <select value={formData.source_of_supply} onChange={(e) => setFormData({ ...formData, source_of_supply: e.target.value })} className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs">
-              {INDIAN_STATES.map((state) => (
-                <option key={state} value={state}>
-                  {state}
-                </option>
-              ))}
-            </select>
+            <AppSelect value={formData.source_of_supply} onChange={(e) => setFormData({ ...formData, source_of_supply: e.target.value })} options={INDIAN_STATES} className="h-8 text-xs" />
           </div>
           <div>
             <Label className="text-xs text-blue-400">* Destination</Label>
-            <select value={formData.destination_of_supply} onChange={(e) => setFormData({ ...formData, destination_of_supply: e.target.value })} className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs">
-              {INDIAN_STATES.map((state) => (
-                <option key={state} value={state}>
-                  {state}
-                </option>
-              ))}
-            </select>
+            <AppSelect value={formData.destination_of_supply} onChange={(e) => setFormData({ ...formData, destination_of_supply: e.target.value })} options={INDIAN_STATES} className="h-8 text-xs" />
           </div>
           <div>
             <Label className="text-xs text-blue-400">* Location</Label>
-            <select value={formData.location} onChange={(e) => setFormData({ ...formData, location: e.target.value })} className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs">
-              <option value="Karnataka Registration">Karnataka</option>
-              <option value="Maharashtra Registration">Maharashtra</option>
-              <option value="Tamil Nadu Registration">Tamil Nadu</option>
-            </select>
+            <AppSelect
+              value={formData.location}
+              onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+              options={[
+                { value: "Karnataka Registration", label: "Karnataka" },
+                { value: "Maharashtra Registration", label: "Maharashtra" },
+                { value: "Tamil Nadu Registration", label: "Tamil Nadu" },
+              ]}
+              className="h-8 text-xs"
+            />
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label className="text-xs text-blue-400">* File Category</Label>
-            <select value={formData.file_category} onChange={(e) => setFormData({ ...formData, file_category: e.target.value })} className="w-full h-8 rounded-md border border-input bg-background px-2 text-sm" data-testid="file-category-select">
-              {FILE_CATEGORIES.map((cat) => (
-                <option key={cat.value} value={cat.value}>
-                  {cat.label}
-                </option>
-              ))}
-            </select>
+            <AppSelect value={formData.file_category} onChange={(e) => setFormData({ ...formData, file_category: e.target.value })} options={FILE_CATEGORIES} className="h-8 text-sm" data-testid="file-category-select" />
           </div>
           <div>
             <Label className="text-xs text-blue-400">* Source</Label>
-            <select value={formData.source} onChange={(e) => setFormData({ ...formData, source: e.target.value })} className="w-full h-8 rounded-md border border-input bg-background px-2 text-sm" data-testid="source-select">
-              {INVOICE_SOURCES.map((src) => (
-                <option key={src.value} value={src.value}>
-                  {src.label}
-                </option>
-              ))}
-            </select>
+            <AppSelect value={formData.source} onChange={(e) => setFormData({ ...formData, source: e.target.value })} options={INVOICE_SOURCES} className="h-8 text-sm" data-testid="source-select" />
           </div>
         </div>
-
         {formData.source === "Email" && (
           <div>
             <Label className="text-xs text-blue-400">Source Email</Label>
@@ -219,17 +313,21 @@ export const InvoiceForm = ({
         <div className="flex gap-6 text-xs">
           <div className="flex items-center gap-1.5">
             <span className="text-gray-600">Reverse Charges:</span>
-            <select value={formData.reverse_charges} onChange={(e) => setFormData({ ...formData, reverse_charges: e.target.value })} className="text-blue-600 bg-transparent border-none cursor-pointer text-xs">
-              <option value="Not Applicable">Not Applicable</option>
-              <option value="Applicable">Applicable</option>
-            </select>
+            <AppSelect
+              value={formData.reverse_charges}
+              onChange={(e) => setFormData({ ...formData, reverse_charges: e.target.value })}
+              options={["Not Applicable", "Applicable"]}
+              className="h-6 w-auto border-none bg-transparent pl-0 pr-6 text-xs text-blue-600 shadow-none"
+            />
           </div>
           <div className="flex items-center gap-1.5">
             <span className="text-gray-600">Discounts:</span>
-            <select value={formData.discounts_level} onChange={(e) => setFormData({ ...formData, discounts_level: e.target.value })} className="text-blue-600 bg-transparent border-none cursor-pointer text-xs">
-              <option value="At Line Item Level">At Line Item Level</option>
-              <option value="At Invoice Level">At Invoice Level</option>
-            </select>
+            <AppSelect
+              value={formData.discounts_level}
+              onChange={(e) => setFormData({ ...formData, discounts_level: e.target.value })}
+              options={["At Line Item Level", "At Invoice Level"]}
+              className="h-6 w-auto border-none bg-transparent pl-0 pr-6 text-xs text-blue-600 shadow-none"
+            />
           </div>
         </div>
       </div>
@@ -237,65 +335,17 @@ export const InvoiceForm = ({
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-gray-800">Line Items</h3>
         <div className="border rounded-lg overflow-hidden">
-          <div className="bg-gray-50 border-b">
-            <div className="grid grid-cols-[1fr_120px_100px_60px_80px_70px_90px_30px] gap-1 px-2 py-2 text-xs font-medium text-gray-600">
-              <span>Item Description</span>
-              <span className="text-blue-500">*Ledger</span>
-              <span className="text-blue-500">*Tax</span>
-              <span className="text-right">Qty</span>
-              <span className="text-right">Rate</span>
-              <span className="text-right">Disc</span>
-              <span className="text-right">Subtotal</span>
-              <span></span>
-            </div>
-          </div>
-          <div className="divide-y">
-            {formData.line_items.map((item, index) => (
-              <div key={index} className="grid grid-cols-[1fr_120px_100px_60px_80px_70px_90px_30px] gap-1 px-2 py-1.5 items-center text-xs">
-                <div>
-                  <Input value={item.description} onChange={(e) => updateLineItem(index, "description", e.target.value)} placeholder="Description" className="h-7 text-xs" />
-                  <div className="flex items-center gap-1 mt-0.5">
-                    <span className="text-[10px] text-gray-400">HSN:</span>
-                    <Input value={item.hsn_sac} onChange={(e) => updateLineItem(index, "hsn_sac", e.target.value)} placeholder="Code" className="h-5 text-[10px] w-16 px-1" />
-                    <label className="flex items-center gap-0.5 text-[10px] text-gray-500 ml-1">
-                      <input type="checkbox" checked={item.eligible_for_itc} onChange={(e) => updateLineItem(index, "eligible_for_itc", e.target.checked)} className="h-2.5 w-2.5" />
-                      ITC
-                    </label>
-                  </div>
-                </div>
-                <select value={item.ledger} onChange={(e) => updateLineItem(index, "ledger", e.target.value)} className="h-7 w-full rounded border px-1 text-xs bg-white">
-                  {LEDGER_OPTIONS.map((ledger) => (
-                    <option key={ledger} value={ledger}>
-                      {ledger}
-                    </option>
-                  ))}
-                </select>
-                <select value={item.tax} onChange={(e) => updateLineItem(index, "tax", e.target.value)} className="h-7 w-full rounded border px-1 text-xs bg-white">
-                  {TAX_RATES.map((tax) => (
-                    <option key={tax.value} value={tax.value}>
-                      {tax.label}
-                    </option>
-                  ))}
-                </select>
-                <Input type="number" value={item.quantity} onChange={(e) => updateLineItem(index, "quantity", parseFloat(e.target.value) || 0)} className="h-7 text-xs text-right px-1" min="0" />
-                <Input type="number" value={item.unit_rate} onChange={(e) => updateLineItem(index, "unit_rate", parseFloat(e.target.value) || 0)} className="h-7 text-xs text-right px-1" min="0" />
-                <div className="flex items-center gap-0.5">
-                  <Input type="number" value={item.discount} onChange={(e) => updateLineItem(index, "discount", parseFloat(e.target.value) || 0)} className="h-7 text-xs text-right w-10 px-1" min="0" />
-                  <select value={item.discount_type} onChange={(e) => updateLineItem(index, "discount_type", e.target.value)} className="h-7 w-8 rounded border text-xs bg-white px-0">
-                    <option value="%">%</option>
-                    <option value="\u20B9">\u20B9</option>
-                  </select>
-                </div>
-                <div className="text-right font-medium text-xs">{"\u20B9"}{calculateLineItemSubtotal(item).toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div>
-                <div className="text-center">
-                  {formData.line_items.length > 1 && (
-                    <button onClick={() => removeLineItem(index)} className="text-red-500 hover:text-red-700 p-0.5">
-                      <X className="h-3.5 w-3.5" />
-                    </button>
-                  )}
-                </div>
-              </div>
-            ))}
+          <div className="overflow-x-auto scrollbar-thin-muted">
+            <AppDataTable
+              tableHeader={lineItemTableHeader}
+              tableData={formData.line_items}
+              renderRow={renderLineItemRow}
+              tableClassName="min-w-[890px] border-separate border-spacing-0"
+              headClassName="bg-gray-50 border-b"
+              stickyHeader={false}
+              striped={false}
+              emptyMessage="No line items found"
+            />
           </div>
         </div>
         <div className="h-0.5 bg-gradient-to-r from-blue-500 via-blue-400 to-yellow-400 rounded" />
@@ -336,12 +386,13 @@ export const InvoiceForm = ({
         <div className="flex justify-between items-center pt-1.5 border-t text-xs">
           <div className="flex items-center gap-1.5">
             <span>TDS</span>
-            <select value={formData.tds} onChange={(e) => setFormData({ ...formData, tds: e.target.value })} className="h-6 rounded border px-1 text-xs">
-              <option value="">TDS</option>
-              <option value="1%">1%</option>
-              <option value="2%">2%</option>
-              <option value="10%">10%</option>
-            </select>
+            <AppSelect
+              value={formData.tds}
+              onChange={(e) => setFormData({ ...formData, tds: e.target.value })}
+              placeholder="TDS"
+              options={["1%", "2%", "10%"]}
+              className="h-6 w-20 rounded border pl-1 pr-6 text-xs"
+            />
           </div>
           <span>{"\u20B9"}{tdsAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
         </div>

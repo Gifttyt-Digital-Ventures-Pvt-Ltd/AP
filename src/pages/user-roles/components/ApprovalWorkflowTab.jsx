@@ -63,8 +63,8 @@ const emptyFormState = {
   id: '',
   name: '',
   type: '',
-  vendorId: '',
-  departmentId: '',
+  vendorIds: [],
+  departmentIds: [],
   minAmount: '',
   maxAmount: '',
   approvers: [{ userId: '', userName: '' }],
@@ -485,16 +485,12 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
     switchWorkflowLoading ||
     deleteWorkflowLoading;
 
-  const staticDepartment = workflowDepartments[0] || null;
-
   const openCreateModal = () => {
     setEditingRuleId('');
     const defaultType = editableWorkflowTypes[0] || '';
-    const defaultVisibility = CONDITION_VISIBILITY[defaultType];
     setFormState({
       ...emptyFormState,
       type: defaultType,
-      departmentId: defaultVisibility?.showDept ? (staticDepartment?.id || '') : '',
     });
     setModalOpen(true);
   };
@@ -505,8 +501,8 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
       id: rule.id,
       name: rule.name || '',
       type: rule.type || '',
-      vendorId: rule.vendorIds[0] || '',
-      departmentId: rule.departmentIds[0] || '',
+      vendorIds: Array.isArray(rule.vendorIds) ? rule.vendorIds : [],
+      departmentIds: Array.isArray(rule.departmentIds) ? rule.departmentIds : [],
       minAmount: rule.minAmount !== undefined && rule.minAmount !== null ? String(rule.minAmount) : '',
       maxAmount: rule.maxAmount !== undefined && rule.maxAmount !== null ? String(rule.maxAmount) : '',
       approvers: Array.isArray(rule.approvers) && rule.approvers.length > 0
@@ -516,19 +512,6 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
     });
     setModalOpen(true);
   };
-
-  useEffect(() => {
-    if (!modalOpen) return;
-    const currentVisibility = CONDITION_VISIBILITY[formState.type];
-    if (!currentVisibility?.showDept) return;
-    if (formState.departmentId) return;
-    if (!staticDepartment?.id) return;
-
-    setFormState((prev) => ({
-      ...prev,
-      departmentId: staticDepartment.id,
-    }));
-  }, [modalOpen, formState.type, formState.departmentId, staticDepartment]);
 
   const closeModal = () => {
     setModalOpen(false);
@@ -565,6 +548,18 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
       return {
         ...prev,
         approvers: nextApprovers,
+      };
+    });
+  };
+
+  const toggleFormSelection = (field, id, checked) => {
+    setFormState((prev) => {
+      const currentValues = Array.isArray(prev[field]) ? prev[field] : [];
+      return {
+        ...prev,
+        [field]: checked
+          ? Array.from(new Set([...currentValues, id]))
+          : currentValues.filter((value) => value !== id),
       };
     });
   };
@@ -688,18 +683,20 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
     }
 
     const visibility = CONDITION_VISIBILITY[formState.type];
+    const selectedVendorIds = Array.isArray(formState.vendorIds) ? formState.vendorIds : [];
+    const selectedDepartmentIds = Array.isArray(formState.departmentIds) ? formState.departmentIds : [];
 
-    if (visibility?.showVendor && !formState.vendorId) {
-      toast.error('Please select a vendor');
+    if (visibility?.showVendor && selectedVendorIds.length === 0) {
+      toast.error('Please select at least one vendor');
       return false;
     }
 
-    if (visibility?.showDept && !formState.departmentId) {
-      toast.error('Please select a department');
+    if (visibility?.showDept && selectedDepartmentIds.length === 0) {
+      toast.error('Please select at least one department');
       return false;
     }
 
-    if (visibility?.showDept && asNumberOrNull(formState.departmentId) === null) {
+    if (visibility?.showDept && selectedDepartmentIds.some((departmentId) => asNumberOrNull(departmentId) === null)) {
       toast.error('Department id must be numeric');
       return false;
     }
@@ -746,10 +743,10 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
     }));
 
     const config = {
-      vendorIds: visibility?.showVendor && formState.vendorId ? [formState.vendorId] : [],
+      vendorIds: visibility?.showVendor && Array.isArray(formState.vendorIds) ? formState.vendorIds : [],
       departmentIds:
-        visibility?.showDept && formState.departmentId
-          ? [asNumberOrNull(formState.departmentId)]
+        visibility?.showDept && Array.isArray(formState.departmentIds)
+          ? formState.departmentIds.map(asNumberOrNull).filter((departmentId) => departmentId !== null)
           : [],
     };
 
@@ -1148,34 +1145,55 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
 
                 {visibility.showVendor && (
                   <div className="space-y-2">
-                    <Label>Vendor</Label>
-                    <select
-                      value={formState.vendorId}
-                      onChange={(event) => setFormState((prev) => ({ ...prev, vendorId: event.target.value }))}
-                      className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      disabled={workflowActionLoading}
-                    >
-                      <option value="">Select vendor</option>
-                      {workflowVendors.map((vendor) => (
-                        <option key={vendor.id} value={vendor.id}>
-                          {vendor.name}
-                        </option>
-                      ))}
-                    </select>
+                    <Label>Vendors</Label>
+                    <div className="max-h-44 overflow-y-auto rounded-md border border-input bg-background p-2 space-y-1">
+                      {workflowVendors.length === 0 ? (
+                        <p className="px-2 py-1 text-sm text-muted-foreground">No vendors available</p>
+                      ) : (
+                        workflowVendors.map((vendor) => (
+                          <label
+                            key={vendor.id}
+                            className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/60"
+                          >
+                            <Checkbox
+                              checked={(formState.vendorIds || []).includes(vendor.id)}
+                              onCheckedChange={(checked) =>
+                                toggleFormSelection('vendorIds', vendor.id, Boolean(checked))
+                              }
+                              disabled={workflowActionLoading}
+                            />
+                            <span>{vendor.name}</span>
+                          </label>
+                        ))
+                      )}
+                    </div>
                   </div>
                 )}
 
                 {visibility.showDept && (
                   <div className="space-y-2">
-                    <Label>Department</Label>
-                    <Input
-                      value={staticDepartment?.name || 'No department available'}
-                      readOnly
-                      disabled
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      Department is fixed for this workflow setup.
-                    </p>
+                    <Label>Departments</Label>
+                    <div className="max-h-44 overflow-y-auto rounded-md border border-input bg-background p-2 space-y-1">
+                      {workflowDepartments.length === 0 ? (
+                        <p className="px-2 py-1 text-sm text-muted-foreground">No departments available</p>
+                      ) : (
+                        workflowDepartments.map((department) => (
+                          <label
+                            key={department.id}
+                            className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/60"
+                          >
+                            <Checkbox
+                              checked={(formState.departmentIds || []).includes(department.id)}
+                              onCheckedChange={(checked) =>
+                                toggleFormSelection('departmentIds', department.id, Boolean(checked))
+                              }
+                              disabled={workflowActionLoading}
+                            />
+                            <span>{department.name}</span>
+                          </label>
+                        ))
+                      )}
+                    </div>
                   </div>
                 )}
 
