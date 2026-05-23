@@ -38,6 +38,7 @@ export const serviceApi = createApi({
     "Users",
     "Transactions",
     "PurchaseOrders",
+    "PurchaseOrderFormatConfig",
     "GoodsReceipt",
     "Tax",
     "Matching",

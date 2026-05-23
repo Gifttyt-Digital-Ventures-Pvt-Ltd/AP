@@ -25,6 +25,10 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
       query: (id) => ({ url: `/purchase-orders/${id}/download`, method: "GET" }),
       providesTags: ["PurchaseOrders"],
     }),
+    getPurchaseOrderFormatConfig: builder.query({
+      query: () => ({ url: "/format-config", method: "GET" }),
+      providesTags: ["PurchaseOrderFormatConfig"],
+    }),
     savePurchaseOrderDraft: builder.mutation({
       query: (body) => ({ url: "/purchase-orders/draft", method: "POST", body }),
       invalidatesTags: ["PurchaseOrders"],
@@ -57,6 +61,7 @@ export const {
   useGetPurchaseOrderByIdQuery,
   useLazyGetPurchaseOrderByIdQuery,
   useLazyGetPurchaseOrderDownloadUrlQuery,
+  useGetPurchaseOrderFormatConfigQuery,
   useSavePurchaseOrderDraftMutation,
   useCreatePurchaseOrderMutation,
   useSubmitPurchaseOrderMutation,

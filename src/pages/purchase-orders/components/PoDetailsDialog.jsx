@@ -24,8 +24,8 @@ const PoDetailsDialog = ({
   statusColors,
   formatDate,
   formatCurrency,
-  handleSubmitForApproval,
   handleDownloadPO,
+  handleSubmitForApproval,
   downloadingPoId,
   submitting,
   setShowApprovalDialog,
@@ -34,6 +34,7 @@ const PoDetailsDialog = ({
 }) => {
   const selectedPoId = selectedPO?.id || selectedPO?.po_id || selectedPO?.poId;
   const isDownloading = Boolean(selectedPoId && downloadingPoId === selectedPoId);
+  const poCurrency = selectedPO?.currency || "INR";
 
   const renderLineItemRow = (item, rowIndex, headers) => {
     const lineItem = {
@@ -41,9 +42,9 @@ const PoDetailsDialog = ({
       description: item.item_description ?? item.description ?? "-",
       hsnSacCode: item.hsn_sac_code ?? item.hsnSac ?? "-",
       quantity: `${Number(item.quantity ?? 0)} ${item.unit_of_measure ?? item.uom ?? ""}`.trim(),
-      unitPrice: formatCurrency(Number(item.unit_price ?? item.unitPrice ?? 0)),
-      taxAmount: formatCurrency(Number(item.tax_amount ?? item.taxAmount ?? item.igst_amount ?? item.igstAmount ?? 0)),
-      totalAmount: formatCurrency(Number(item.total_amount ?? item.totalAmount ?? item.line_amount ?? item.lineAmount ?? item.amount ?? 0)),
+      unitPrice: formatCurrency(Number(item.unit_price ?? item.unitPrice ?? 0), poCurrency),
+      taxAmount: formatCurrency(Number(item.tax_amount ?? item.taxAmount ?? item.igst_amount ?? item.igstAmount ?? 0), poCurrency),
+      totalAmount: formatCurrency(Number(item.total_amount ?? item.totalAmount ?? item.line_amount ?? item.lineAmount ?? item.amount ?? 0), poCurrency),
     };
 
     return (
@@ -75,8 +76,20 @@ const PoDetailsDialog = ({
                 <Badge className={`${statusColors[selectedPO.status] || "bg-gray-500"} text-white mt-1`}>{selectedPO.status}</Badge>
               </div>
               <div>
-                <p className="text-sm text-muted-foreground">PO Type</p>
-                <p className="font-medium">{selectedPO.po_type}</p>
+                <p className="text-sm text-muted-foreground">Format</p>
+                <p className="font-medium">{selectedPO.po_format_name || "-"}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Template</p>
+                <p className="font-medium">{selectedPO.template_code || "-"}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Currency</p>
+                <p className="font-medium">{selectedPO.currency || "INR"}</p>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground">Tax Mode</p>
+                <p className="font-medium">{selectedPO.tax_mode || "-"}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">PO Date</p>
@@ -121,15 +134,15 @@ const PoDetailsDialog = ({
               <div className="w-72 space-y-2 border rounded-lg p-4">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Subtotal:</span>
-                  <span>{formatCurrency(selectedPO.subtotal)}</span>
+                  <span>{formatCurrency(selectedPO.subtotal, poCurrency)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Tax:</span>
-                  <span>{formatCurrency(selectedPO.tax_amount)}</span>
+                  <span>{formatCurrency(selectedPO.tax_amount, poCurrency)}</span>
                 </div>
                 <div className="flex justify-between font-semibold text-lg border-t pt-2">
                   <span>Total:</span>
-                  <span>{formatCurrency(selectedPO.total_amount)}</span>
+                  <span>{formatCurrency(selectedPO.total_amount, poCurrency)}</span>
                 </div>
               </div>
             </div>
@@ -175,7 +188,7 @@ const PoDetailsDialog = ({
             </Button>
           )}
           {selectedPO?.status === "Draft" && canManagePo && (
-            <Button onClick={() => handleSubmitForApproval(selectedPO.id)} disabled={submitting} data-testid="submit-for-approval-btn">
+            <Button onClick={() => handleSubmitForApproval(selectedPoId)} disabled={submitting} data-testid="submit-for-approval-btn">
               {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               <Send className="h-4 w-4 mr-2" />
               Submit for Approval

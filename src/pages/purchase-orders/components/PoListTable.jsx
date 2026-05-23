@@ -23,7 +23,7 @@ const poTableHeader = [
 const pendingPoTableHeader = [
   { key: "po_number", title: "PO Number", cellClassName: "font-medium" },
   { key: "vendor_name", title: "Vendor" },
-  { key: "requester_name", title: "Requester" },
+  { key: "po_format_name", title: "Format" },
   { key: "total_amount", title: "Amount" },
   { key: "current_approval_level", title: "Approval Level" },
   { key: "actions", title: "Actions" },
@@ -35,12 +35,13 @@ const PoListTable = ({
   statusFilter,
   setStatusFilter,
   filteredOrders,
+  pendingApprovals = [],
+  activeTab = "all",
   formatDate,
   formatCurrency,
   statusColors,
   setSelectedPO,
   setShowViewDialog,
-  pendingApprovals,
   setShowApprovalDialog,
   canApprovePo,
 }) => {
@@ -64,38 +65,24 @@ const PoListTable = ({
             value = formatDate(po.expected_delivery_date);
             break;
           case "total_amount":
-            value = formatCurrency(po.total_amount);
+            value = formatCurrency(po.total_amount, po.currency);
             break;
           case "status":
             value = <Badge className={`${statusColors[po.status] || "bg-gray-500"} text-white`}>{po.status}</Badge>;
             break;
           case "actions":
             value = (
-              <div className="flex gap-2">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setSelectedPO(po);
-                    setShowViewDialog(true);
-                  }}
-                  data-testid={`view-po-${po.id}`}
-                >
-                  <Eye className="h-4 w-4" />
-                </Button>
-                {canApprovePo && po.status === "Pending Approval" && (
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setSelectedPO(po);
-                      setShowApprovalDialog(true);
-                    }}
-                    data-testid={`review-po-${po.id}`}
-                  >
-                    Review
-                  </Button>
-                )}
-              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => {
+                  setSelectedPO(po);
+                  setShowViewDialog(true);
+                }}
+                data-testid={`view-po-${po.id}`}
+              >
+                <Eye className="h-4 w-4" />
+              </Button>
             );
             break;
           default:
@@ -125,10 +112,10 @@ const PoListTable = ({
             value = po.vendor_name || "-";
             break;
           case "total_amount":
-            value = formatCurrency(po.total_amount);
+            value = formatCurrency(po.total_amount, po.currency);
             break;
           case "current_approval_level":
-            value = <Badge>Level {po.current_approval_level}</Badge>;
+            value = <Badge>Level {po.current_approval_level || 1}</Badge>;
             break;
           case "actions":
             value = (
@@ -171,8 +158,8 @@ const PoListTable = ({
   );
 
   return (
-    <>
-      <TabsContent value="all" className="space-y-4">
+    <div className="space-y-4">
+      {activeTab === "all" && (
         <div className="flex gap-4 items-center">
           <div className="relative flex-1 max-w-sm">
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -192,14 +179,16 @@ const PoListTable = ({
               <SelectItem value="all">All Statuses</SelectItem>
               <SelectItem value="Draft">Draft</SelectItem>
               <SelectItem value="Pending Approval">Pending Approval</SelectItem>
-              <SelectItem value="Approved">Approved</SelectItem>
-              <SelectItem value="Partially Received">Partially Received</SelectItem>
-              <SelectItem value="Closed">Closed</SelectItem>
+              <SelectItem value="Issued">Issued</SelectItem>
+              <SelectItem value="Amended">Amended</SelectItem>
               <SelectItem value="Rejected">Rejected</SelectItem>
+              <SelectItem value="Cancelled">Cancelled</SelectItem>
             </SelectContent>
           </Select>
         </div>
+      )}
 
+      <TabsContent value="all" className="mt-0">
         <Card>
           <AppDataTable
             tableHeader={poTableHeader}
@@ -211,7 +200,7 @@ const PoListTable = ({
       </TabsContent>
 
       {canApprovePo && (
-        <TabsContent value="pending" className="space-y-4">
+        <TabsContent value="pending" className="mt-0">
           <Card>
             <CardHeader>
               <CardTitle>POs Pending Your Approval</CardTitle>
@@ -227,7 +216,7 @@ const PoListTable = ({
           </Card>
         </TabsContent>
       )}
-    </>
+    </div>
   );
 };
 
