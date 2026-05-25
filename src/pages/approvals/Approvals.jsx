@@ -3,6 +3,8 @@ import { useGetPendingApprovalsQuery } from '../../Services/apis/approvalsPaymen
 import {
   useGetInvoicesQuery,
   useApproveInvoiceMutation,
+  useGetPendingCheckerInvoicesQuery,
+  useCheckInvoiceMutation,
 } from '../../Services/apis/invoicesVendorsApi';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { toast } from 'sonner';
@@ -23,16 +25,22 @@ const safeFormatDate = (value, pattern = 'dd MMM yy') => {
 const Approvals = () => {
   const { data: pendingApprovalsData = [], refetch: refetchPendingApprovals } =
     useGetPendingApprovalsQuery();
+  const { data: pendingCheckerData = [], refetch: refetchPendingChecker } =
+    useGetPendingCheckerInvoicesQuery();
   const { data: allInvoicesData = [], refetch: refetchInvoices } = useGetInvoicesQuery();
   const [approveInvoice] = useApproveInvoiceMutation();
+  const [checkInvoice] = useCheckInvoiceMutation();
 
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [comments, setComments] = useState('');
   const [actionType, setActionType] = useState('');
   const { user } = useAuth();
-  const { guardAction, canPerformAction } = useActionGuard();
+  const { canPerformAction } = useActionGuard();
+  const canCheckInvoices = canPerformAction('invoices.check');
   const canApproveInvoices = canPerformAction('invoices.approve');
+  const canPerformApprovalActions = canApproveInvoices || canCheckInvoices;
+
 
   const normalizeInvoice = (invoice = {}) => ({
     ...invoice,
@@ -49,36 +57,62 @@ const Approvals = () => {
     approval_records: invoice.approval_records ?? invoice.approvalRecords,
   });
 
-  const pendingInvoices = Array.isArray(pendingApprovalsData)
-    ? pendingApprovalsData.map(normalizeInvoice)
-    : [];
+  const pendingInvoicesList = [
+    ...(Array.isArray(pendingApprovalsData) ? pendingApprovalsData : []),
+    ...(Array.isArray(pendingCheckerData) ? pendingCheckerData : [])
+  ];
+  
+  // Deduplicate in case an invoice appears in both (shouldn't happen, but safe)
+  const uniquePendingInvoices = Array.from(new Map(pendingInvoicesList.map(item => [item.id, item])).values());
+  const pendingInvoices = uniquePendingInvoices.map(normalizeInvoice);
   const allInvoices = Array.isArray(allInvoicesData) ? allInvoicesData.map(normalizeInvoice) : [];
 
   const handleApprovalAction = (invoice, action) => {
-    if (!guardAction('invoices.approve')) return;
+    // Determine if it's checker or approver based on status
+    const isChecker = invoice.status === 'Pending Checker' || invoice.status === 'PENDING_CHECKER';
+    if (isChecker && !canCheckInvoices) {
+      toast.error('You do not have permission to check invoices');
+      return;
+    }
+    if (!isChecker && !canApproveInvoices) {
+      toast.error('You do not have permission to approve invoices');
+      return;
+    }
+
     setSelectedInvoice(invoice);
     setActionType(action);
     setDialogOpen(true);
   };
 
   const submitApproval = async () => {
-    if (!guardAction('invoices.approve')) return;
     try {
-      await approveInvoice({
-        id: selectedInvoice.id,
-        body: {
-          action: actionType,
-          comments,
-        },
-      }).unwrap();
+      const isChecker = selectedInvoice.status === 'Pending Checker' || selectedInvoice.status === 'PENDING_CHECKER';
+      
+      if (isChecker) {
+        await checkInvoice({
+          id: selectedInvoice.id,
+          body: {
+            action: actionType,
+            comments,
+          },
+        }).unwrap();
+      } else {
+        await approveInvoice({
+          id: selectedInvoice.id,
+          body: {
+            action: actionType,
+            comments,
+          },
+        }).unwrap();
+      }
 
-      const approved = actionType === 'Approved';
-      const verb = approved ? 'approved' : 'rejected';
+      const isPositiveAction = actionType === 'Approved' || actionType === 'Checked';
+      const verb = actionType === 'Checked' ? 'verified' : (actionType === 'Approved' ? 'approved' : 'rejected');
       toast.success(`Invoice ${verb} successfully`, {
-        description: approved
-          ? 'Payment has been approved and moved to payments tab'
+        description: isPositiveAction
+          ? `Invoice has been ${verb} successfully`
           : 'Invoice has been rejected',
-        className: approved
+        className: isPositiveAction
           ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
           : 'bg-red-50 border-red-200 text-red-900',
       });
@@ -86,7 +120,7 @@ const Approvals = () => {
       setDialogOpen(false);
       setComments('');
       try {
-        await Promise.all([refetchPendingApprovals(), refetchInvoices()]);
+        await Promise.all([refetchPendingApprovals(), refetchPendingChecker(), refetchInvoices()]);
       } catch {
         // No-op: keep optimistic success toast even if background refetch fails.
       }
@@ -171,7 +205,7 @@ const Approvals = () => {
             getApprovalProgress={getApprovalProgress}
             safeFormatDate={safeFormatDate}
             handleApprovalAction={handleApprovalAction}
-            canApproveInvoices={canApproveInvoices}
+            canApproveInvoices={canPerformApprovalActions}
           />
         </TabsContent>
 

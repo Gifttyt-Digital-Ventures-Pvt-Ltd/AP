@@ -9,10 +9,9 @@ export const ROUTE_PERMISSION_RULES = {
     anyOf: ["invoice-view", "invoice-maker", "invoice-checker", "invoice-approver"],
   },
   "/invoice-matching": { anyOf: ["matching-view", "matching-manage"] },
-  "/transactions": { anyOf: ["banking-full"] },
+  "/transactions": { anyOf: ["banking-view", "banking-full"] },
   "/approvals": {
     anyOf: [
-      "approval-full",
       "invoice-checker",
       "invoice-approver",
       "po-approve",
@@ -23,8 +22,8 @@ export const ROUTE_PERMISSION_RULES = {
   "/payments": { anyOf: ["payments-view", "payments-manage"] },
   "/payment-batches": { anyOf: ["payments-view", "payments-manage"] },
   "/tax-management": { anyOf: ["tax-view", "tax-manage"] },
-  "/reports": { anyOf: ["reports-full"] },
-  "/banking": { anyOf: ["banking-full"] },
+  "/reports": { anyOf: ["reports-view", "reports-full"] },
+  "/banking": { anyOf: ["banking-view", "banking-full"] },
   "/notifications": { anyOf: ["settings-interaction"] },
   "/user-roles": {
     anyOf: [
@@ -37,11 +36,35 @@ export const ROUTE_PERMISSION_RULES = {
   "/settings": { anyOf: ["settings-org", "settings-banking", "settings-interaction"] },
 };
 
+export const DEFAULT_ROUTE_PRIORITY = [
+  "/dashboard",
+  "/vendors",
+  "/purchase-orders",
+  "/goods-receipt",
+  "/invoices",
+  "/invoice-matching",
+  "/transactions",
+  "/approvals",
+  "/payments",
+  "/payment-batches",
+  "/tax-management",
+  "/reports",
+  "/banking",
+  "/notifications",
+  "/user-roles",
+  "/settings",
+];
+
+export const resolveDefaultAccessibleRoute = (canAccessRoute) => {
+  if (typeof canAccessRoute !== "function") return null;
+  return DEFAULT_ROUTE_PRIORITY.find((path) => canAccessRoute(path)) || null;
+};
+
 export const ACTION_PERMISSION_RULES = {
   "vendors.create": { anyOf: ["vendors-manage"] },
   "vendors.update": { anyOf: ["vendors-manage"] },
   "vendors.delete": { anyOf: ["vendors-manage"] },
-  "vendors.approve": { anyOf: ["vendors-approve", "approval-full"] },
+  "vendors.approve": { anyOf: ["vendors-approve"] },
 
   "invoices.scan": { anyOf: ["invoice-maker", "pi-manage"] },
   "invoices.bulkUpload": { anyOf: ["invoice-maker", "pi-manage"] },
@@ -49,26 +72,26 @@ export const ACTION_PERMISSION_RULES = {
   "invoices.create": { anyOf: ["invoice-maker"] },
   "invoices.update": { anyOf: ["invoice-maker"] },
   "invoices.delete": { anyOf: ["invoice-maker"] },
-  "invoices.approve": { anyOf: ["invoice-approver", "approval-full"] },
+  "invoices.check": { anyOf: ["invoice-checker"] },
+  "invoices.approve": { anyOf: ["invoice-approver"] },
 
-  "po.seedMasterData": { anyOf: ["po-manage"] },
   "po.create": { anyOf: ["po-manage"] },
   "po.submit": { anyOf: ["po-manage"] },
-  "po.approve": { anyOf: ["po-approve", "approval-full"] },
+  "po.approve": { anyOf: ["po-approve"] },
 
   "grn.create": { anyOf: ["grn-manage"] },
-  "grn.post": { anyOf: ["grn-approve", "approval-full"] },
+  "grn.post": { anyOf: ["grn-approve"] },
 
-  "matching.match": { anyOf: ["matching-manage"] },
-  "matching.resolve": { anyOf: ["matching-manage"] },
+  "matching.perform": { anyOf: ["matching-manage"] },
+  "matching.edit": { anyOf: ["matching-manage"] },
+  "matching.exception": { anyOf: ["matching-manage"] },
 
   "payments.releaseBulk": { anyOf: ["payments-manage"] },
   "payments.create": { anyOf: ["payments-manage"] },
   "payments.createBatch": { anyOf: ["payments-manage"] },
 
-  "paymentBatches.submit": { anyOf: ["payments-manage"] },
-  "paymentBatches.approve": { anyOf: ["approval-full", "payments-manage"] },
   "paymentBatches.process": { anyOf: ["payments-manage"] },
+  "paymentBatches.markProcessed": { anyOf: ["payments-manage"] },
   "paymentBatches.generateFile": { anyOf: ["payments-manage"] },
 
   "settings.createBankAccount": { anyOf: ["settings-banking", "banking-full"] },
@@ -87,10 +110,10 @@ export const ACTION_PERMISSION_RULES = {
   "transactions.uploadVoucher": { anyOf: ["banking-full"] },
   "transactions.linkInvoice": { anyOf: ["banking-full"] },
 
-  "roles.invite": { anyOf: ["roles-manage"] },
-  "roles.updateUserRole": { anyOf: ["roles-manage"] },
-  "roles.updateUserStatus": { anyOf: ["roles-manage"] },
-  "roles.deleteUser": { anyOf: ["roles-manage"] },
+  "roles.invite": { anyOf: [FULL_ACCESS_PERMISSION] },
+  "roles.updateUserRole": { anyOf: [FULL_ACCESS_PERMISSION] },
+  "roles.updateUserStatus": { anyOf: [FULL_ACCESS_PERMISSION] },
+  "roles.deleteUser": { anyOf: [FULL_ACCESS_PERMISSION] },
   "roles.manageCustomRoles": { anyOf: ["roles-manage"] },
 
   "workflow.create": { anyOf: ["vendor-workflow-manage"] },

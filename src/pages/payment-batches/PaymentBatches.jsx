@@ -1,17 +1,15 @@
 import React, { useState } from 'react';
-import { useGetInvoicesQuery } from '../../Services/apis/invoicesVendorsApi';
-import { useGetBankAccountsQuery } from '../../Services/apis/approvalsPaymentsBankingApi';
 import {
   useGetPaymentBatchesQuery,
-  useGetPendingPaymentBatchApprovalsQuery,
   useGetPaymentBatchStatsQuery,
-  useSubmitPaymentBatchMutation,
-  useApprovePaymentBatchMutation,
+  useLazyGetPaymentBatchQuery,
   useProcessPaymentBatchMutation,
+  useMarkProcessedPaymentBatchMutation,
   useGeneratePaymentBatchFileMutation,
 } from '../../Services/apis/paymentBatchesApi';
 import { Button } from '../../components/ui/button';
 import { Label } from '../../components/ui/label';
+import { Input } from '../../components/ui/input';
 import {
   Dialog,
   DialogContent,
@@ -19,53 +17,30 @@ import {
   DialogTitle,
   DialogFooter,
 } from '../../components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../../components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '../../components/ui/table';
+import AppDataTable from '../../components/common/AppDataTable';
+import { TableCell, TableRow } from '../../components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
-import { Textarea } from '../../components/ui/textarea';
 import { toast } from 'sonner';
 import {
   Eye,
   CheckCircle,
-  XCircle,
   Clock,
   Loader2,
   RefreshCw,
-  FileText,
   Download,
-  Send,
   DollarSign,
   CreditCard,
-  Building2,
   Play,
   CheckCheck,
-  AlertTriangle
 } from 'lucide-react';
 import { useActionGuard } from '../../hooks/useActionGuard';
 
 const statusColors = {
-  'Draft': 'bg-gray-500',
-  'Pending Approval': 'bg-yellow-500',
-  'Approved': 'bg-blue-500',
-  'Processing': 'bg-purple-500',
+  'Pending': 'bg-yellow-500',
   'Completed': 'bg-green-500',
   'Failed': 'bg-red-500',
-  'Cancelled': 'bg-slate-600'
 };
 
 const formatCurrency = (amount) => {
@@ -86,6 +61,57 @@ const formatDate = (dateStr) => {
   });
 };
 
+const normalizeBatch = (batch = {}) => ({
+  ...batch,
+  batchNumber: batch.batchNumber ?? batch.batch_number ?? '',
+  bankAccountName: batch.bankAccountName ?? batch.bank_account_name ?? '',
+  paymentMethod: batch.paymentMethod ?? batch.payment_method ?? '',
+  status: batch.status ?? 'Pending',
+  totalItems: Number(batch.totalItems ?? batch.total_items ?? 0),
+  totalAmount: Number(batch.totalAmount ?? batch.total_amount ?? 0),
+  paymentItems: batch.paymentItems ?? batch.payment_items ?? batch.items ?? [],
+  notes: batch.notes ?? '',
+  createdAt: batch.createdAt ?? batch.created_at ?? batch.batch_date,
+  successfulCount: Number(batch.successfulCount ?? batch.successful_count ?? 0),
+  failedCount: Number(batch.failedCount ?? batch.failed_count ?? 0),
+});
+
+const normalizePaymentItem = (item = {}) => ({
+  ...item,
+  invoiceNumber: item.invoiceNumber ?? item.invoice_number ?? '',
+  vendorName: item.vendorName ?? item.vendor_name ?? '',
+  amount: Number(item.amount ?? 0),
+  currency: item.currency ?? 'INR',
+  vendorBankName: item.vendorBankName ?? item.vendor_bank_name ?? '',
+  vendorAccountNumber: item.vendorAccountNumber ?? item.vendor_account_number ?? '',
+  vendorIfscCode: item.vendorIfscCode ?? item.vendor_ifsc_code ?? item.vendor_ifsc ?? '',
+  status: item.status ?? item.payment_status ?? 'Pending',
+  utrNumber: item.utrNumber ?? item.utr_number ?? '',
+  errorMessage: item.errorMessage ?? item.failure_reason ?? '',
+});
+
+const getStatsCount = (stats, key) => Number(stats?.[key]?.count ?? stats?.[key] ?? 0);
+
+const batchTableHeader = [
+  { key: 'batchNumber', title: 'Batch Number', cellClassName: 'font-medium' },
+  { key: 'createdAt', title: 'Date' },
+  { key: 'paymentMethod', title: 'Method' },
+  { key: 'totalItems', title: 'Items' },
+  { key: 'totalAmount', title: 'Total Amount', cellClassName: 'font-medium' },
+  { key: 'successFailed', title: 'Success/Failed' },
+  { key: 'status', title: 'Status' },
+  { key: 'actions', title: 'Actions' },
+];
+
+const paymentItemTableHeader = [
+  { key: 'invoiceNumber', title: 'Invoice', cellClassName: 'font-medium' },
+  { key: 'vendorName', title: 'Vendor' },
+  { key: 'bankDetails', title: 'Bank Details', cellClassName: 'text-xs' },
+  { key: 'amount', title: 'Amount' },
+  { key: 'status', title: 'Status' },
+  { key: 'utrNumber', title: 'UTR', cellClassName: 'font-mono text-xs' },
+];
+
 const PaymentBatches = () => {
   const {
     data: batchesData = [],
@@ -93,81 +119,41 @@ const PaymentBatches = () => {
     refetch: refetchBatches,
   } = useGetPaymentBatchesQuery();
   const {
-    data: pendingBatchesData = [],
-    isLoading: pendingBatchesLoading,
-    refetch: refetchPendingBatches,
-  } = useGetPendingPaymentBatchApprovalsQuery();
-  const {
     data: stats = null,
     isLoading: statsLoading,
     refetch: refetchStats,
   } = useGetPaymentBatchStatsQuery();
-  const {
-    data: pendingPaymentInvoicesData = [],
-    isLoading: pendingPaymentInvoicesLoading,
-    refetch: refetchPendingPaymentInvoices,
-  } = useGetInvoicesQuery({ status: 'Pending Payment' });
-  const {
-    data: pendingApproverInvoicesData = [],
-    isLoading: pendingApproverInvoicesLoading,
-    refetch: refetchPendingApproverInvoices,
-  } = useGetInvoicesQuery({ status: 'Pending Approver' });
-  const {
-    data: bankAccountsData = [],
-    isLoading: bankAccountsLoading,
-    refetch: refetchBankAccounts,
-  } = useGetBankAccountsQuery();
-  const [submitPaymentBatch] = useSubmitPaymentBatchMutation();
-  const [approvePaymentBatch] = useApprovePaymentBatchMutation();
   const [processPaymentBatch] = useProcessPaymentBatchMutation();
+  const [markProcessedPaymentBatch] = useMarkProcessedPaymentBatchMutation();
   const [generatePaymentBatchFile] = useGeneratePaymentBatchFileMutation();
+  const [getPaymentBatch] = useLazyGetPaymentBatchQuery();
   const { guardAction, canPerformAction } = useActionGuard();
 
-  const batches = Array.isArray(batchesData) ? batchesData : [];
-  const pendingBatches = Array.isArray(pendingBatchesData) ? pendingBatchesData : [];
-  const pendingPaymentInvoices = Array.isArray(pendingPaymentInvoicesData)
-    ? pendingPaymentInvoicesData
-    : [];
-  const pendingApproverInvoices = Array.isArray(pendingApproverInvoicesData)
-    ? pendingApproverInvoicesData
-    : [];
+  const batches = Array.isArray(batchesData) ? batchesData.map(normalizeBatch) : [];
   const loading =
     batchesLoading ||
-    pendingBatchesLoading ||
-    statsLoading ||
-    pendingPaymentInvoicesLoading ||
-    pendingApproverInvoicesLoading ||
-    bankAccountsLoading;
+    statsLoading;
 
   const [activeTab, setActiveTab] = useState('all');
 
   // Dialog States
   const [showViewDialog, setShowViewDialog] = useState(false);
-  const [showApproveDialog, setShowApproveDialog] = useState(false);
+  const [showMarkProcessedDialog, setShowMarkProcessedDialog] = useState(false);
   const [showFileDialog, setShowFileDialog] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState(null);
   const [generatedFile, setGeneratedFile] = useState(null);
   const [processing, setProcessing] = useState(false);
+  const [utr, setUtr] = useState('');
   
-  // Approval Form
-  const [approvalForm, setApprovalForm] = useState({
-    action: 'Approved',
-    comments: ''
-  });
-  const canSubmitPaymentBatch = canPerformAction('paymentBatches.submit');
-  const canApprovePaymentBatch = canPerformAction('paymentBatches.approve');
   const canProcessPaymentBatch = canPerformAction('paymentBatches.process');
+  const canMarkProcessedPaymentBatch = canPerformAction('paymentBatches.markProcessed');
   const canGenerateBatchFile = canPerformAction('paymentBatches.generateFile');
 
   const fetchData = async () => {
     try {
       await Promise.all([
         refetchBatches(),
-        refetchPendingBatches(),
         refetchStats(),
-        refetchPendingPaymentInvoices(),
-        refetchPendingApproverInvoices(),
-        refetchBankAccounts(),
       ]);
     } catch (error) {
       console.error('Error refreshing payment batch data:', error);
@@ -175,34 +161,22 @@ const PaymentBatches = () => {
     }
   };
 
-  const handleSubmitBatch = async (batchId) => {
-    if (!guardAction('paymentBatches.submit')) return;
-    try {
-      await submitPaymentBatch(batchId).unwrap();
-      toast.success('Batch submitted for approval');
-      setShowViewDialog(false);
-      fetchData();
-    } catch (error) {
-      toast.error(error?.data?.detail || 'Failed to submit batch');
-    }
-  };
-
-  const handleApproveBatch = async () => {
-    if (!guardAction('paymentBatches.approve')) return;
+  const handleMarkProcessed = async () => {
+    if (!guardAction('paymentBatches.markProcessed')) return;
     if (!selectedBatch) return;
-    
     setProcessing(true);
     try {
-      const data = await approvePaymentBatch({
-        id: selectedBatch.id,
-        body: approvalForm,
+      const data = await markProcessedPaymentBatch({
+        batch_ids: [selectedBatch.id],
+        utr: utr || undefined,
       }).unwrap();
-      toast.success(data?.message || 'Batch approved');
-      setShowApproveDialog(false);
-      setApprovalForm({ action: 'Approved', comments: '' });
+      toast.success(data?.message || `${data?.processed_count || 1} batch marked as processed`);
+      setShowMarkProcessedDialog(false);
+      setShowViewDialog(false);
+      setUtr('');
       fetchData();
     } catch (error) {
-      toast.error(error?.data?.detail || 'Failed to approve batch');
+      toast.error(error?.data?.detail || 'Failed to mark batch processed');
     } finally {
       setProcessing(false);
     }
@@ -235,20 +209,148 @@ const PaymentBatches = () => {
     }
   };
 
+  const handleViewBatch = async (batch) => {
+    setSelectedBatch(batch);
+    setShowViewDialog(true);
+    try {
+      const data = await getPaymentBatch(batch.id).unwrap();
+      setSelectedBatch(normalizeBatch(data));
+    } catch (error) {
+      toast.error(error?.data?.detail || 'Failed to load payment batch details');
+    }
+  };
+
   const handleDownloadFile = () => {
     if (!generatedFile) return;
     
-    const blob = new Blob([generatedFile.file_content], { type: 'text/plain' });
+    const fileContent = generatedFile.content || generatedFile.file_content || '';
+    const blob = new Blob([fileContent], { type: 'text/plain' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = generatedFile.file_name;
+    a.download = generatedFile.file_name || generatedFile.fileName || 'payment_file.txt';
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     window.URL.revokeObjectURL(url);
     toast.success('File downloaded');
   };
+
+  const renderBatchRow = (batch, rowIndex, headers) => (
+    <TableRow key={batch.id ?? rowIndex} data-testid={`batch-row-${batch.id}`}>
+      {headers.map((header) => {
+        let value;
+
+        switch (header.key) {
+          case 'createdAt':
+            value = formatDate(batch.createdAt);
+            break;
+          case 'paymentMethod':
+            value = <Badge variant="outline">{batch.paymentMethod}</Badge>;
+            break;
+          case 'totalAmount':
+            value = formatCurrency(batch.totalAmount);
+            break;
+          case 'successFailed':
+            value = batch.status === 'Completed' ? (
+              <span className="text-sm">
+                <span className="text-green-600">{batch.successfulCount}</span>
+                {' / '}
+                <span className="text-red-600">{batch.failedCount}</span>
+              </span>
+            ) : '-';
+            break;
+          case 'status':
+            value = (
+              <Badge className={`${statusColors[batch.status]} text-white`}>
+                {batch.status}
+              </Badge>
+            );
+            break;
+          case 'actions':
+            value = (
+              <div className="flex gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleViewBatch(batch)}
+                  data-testid={`view-batch-${batch.id}`}
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+                {(batch.status === 'Pending' || batch.status === 'Completed') && canGenerateBatchFile && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleGenerateFile(batch.id)}
+                    data-testid={`download-batch-${batch.id}`}
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
+            );
+            break;
+          default:
+            value = batch?.[header.key] || '-';
+        }
+
+        return (
+          <TableCell key={header.key} className={header.cellClassName}>
+            {value}
+          </TableCell>
+        );
+      })}
+    </TableRow>
+  );
+
+  const renderPaymentItemRow = (item, rowIndex, headers) => (
+    <TableRow key={`${item.invoiceId || item.invoiceNumber || 'item'}-${rowIndex}`}>
+      {headers.map((header) => {
+        let value;
+
+        switch (header.key) {
+          case 'bankDetails':
+            value = item.vendorBankName ? (
+              <>
+                {item.vendorBankName}<br />
+                {item.vendorAccountNumber}<br />
+                IFSC: {item.vendorIfscCode}
+              </>
+            ) : (
+              <span className="text-red-500">Missing bank details</span>
+            );
+            break;
+          case 'amount':
+            value = formatCurrency(item.amount);
+            break;
+          case 'status':
+            value = (
+              <>
+                <Badge variant={item.status === 'Completed' ? 'default' : item.status === 'Failed' ? 'destructive' : 'secondary'}>
+                  {item.status}
+                </Badge>
+                {item.errorMessage && (
+                  <p className="text-xs text-red-500 mt-1">{item.errorMessage}</p>
+                )}
+              </>
+            );
+            break;
+          case 'utrNumber':
+            value = item.utrNumber || '-';
+            break;
+          default:
+            value = item?.[header.key] || '-';
+        }
+
+        return (
+          <TableCell key={header.key} className={header.cellClassName}>
+            {value}
+          </TableCell>
+        );
+      })}
+    </TableRow>
+  );
 
   if (loading) {
     return (
@@ -282,7 +384,7 @@ const PaymentBatches = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Total Batches</p>
-                  <p className="text-2xl font-bold">{stats.total_batches}</p>
+                  <p className="text-2xl font-bold">{Number(stats.total_batches ?? stats.totalBatches ?? 0)}</p>
                 </div>
                 <CreditCard className="h-8 w-8 text-muted-foreground" />
               </div>
@@ -292,8 +394,8 @@ const PaymentBatches = () => {
             <CardContent className="pt-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Draft</p>
-                  <p className="text-2xl font-bold">{stats.draft?.count || 0}</p>
+                  <p className="text-sm text-muted-foreground">Pending</p>
+                  <p className="text-2xl font-bold">{getStatsCount(stats, 'pending')}</p>
                 </div>
                 <Clock className="h-8 w-8 text-gray-500" />
               </div>
@@ -303,19 +405,8 @@ const PaymentBatches = () => {
             <CardContent className="pt-4">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm text-muted-foreground">Pending Approval</p>
-                  <p className="text-2xl font-bold">{stats.pending_approval?.count || 0}</p>
-                </div>
-                <Clock className="h-8 w-8 text-yellow-500" />
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Approved</p>
-                  <p className="text-2xl font-bold">{stats.approved?.count || 0}</p>
+                  <p className="text-sm text-muted-foreground">Failed</p>
+                  <p className="text-2xl font-bold">{getStatsCount(stats, 'failed')}</p>
                 </div>
                 <CheckCircle className="h-8 w-8 text-blue-500" />
               </div>
@@ -326,7 +417,7 @@ const PaymentBatches = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-muted-foreground">Completed</p>
-                  <p className="text-2xl font-bold">{stats.completed?.count || 0}</p>
+                  <p className="text-2xl font-bold">{getStatsCount(stats, 'completed')}</p>
                 </div>
                 <CheckCheck className="h-8 w-8 text-green-500" />
               </div>
@@ -350,148 +441,16 @@ const PaymentBatches = () => {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value="all" data-testid="tab-all">All Batches</TabsTrigger>
-          <TabsTrigger value="pending" data-testid="tab-pending">
-            Pending Approval
-            {pendingBatches.length > 0 && (
-              <Badge variant="destructive" className="ml-2">{pendingBatches.length}</Badge>
-            )}
-          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="all" className="space-y-4">
           <Card>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Batch Number</TableHead>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Method</TableHead>
-                  <TableHead>Items</TableHead>
-                  <TableHead>Total Amount</TableHead>
-                  <TableHead>Success/Failed</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {batches.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
-                      No payment batches found. Create a batch to process bulk payments.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  batches.map((batch) => (
-                    <TableRow key={batch.id} data-testid={`batch-row-${batch.id}`}>
-                      <TableCell className="font-medium">{batch.batch_number}</TableCell>
-                      <TableCell>{formatDate(batch.batch_date)}</TableCell>
-                      <TableCell>
-                        <Badge variant="outline">{batch.payment_method}</Badge>
-                      </TableCell>
-                      <TableCell>{batch.total_items}</TableCell>
-                      <TableCell className="font-medium">{formatCurrency(batch.total_amount)}</TableCell>
-                      <TableCell>
-                        {batch.status === 'Completed' ? (
-                          <span className="text-sm">
-                            <span className="text-green-600">{batch.successful_count}</span>
-                            {' / '}
-                            <span className="text-red-600">{batch.failed_count}</span>
-                          </span>
-                        ) : '-'}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={`${statusColors[batch.status]} text-white`}>
-                          {batch.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex gap-1">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setSelectedBatch(batch);
-                              setShowViewDialog(true);
-                            }}
-                            data-testid={`view-batch-${batch.id}`}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          {(batch.status === 'Approved' || batch.status === 'Completed') && canGenerateBatchFile && (
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => handleGenerateFile(batch.id)}
-                              data-testid={`download-batch-${batch.id}`}
-                            >
-                              <Download className="h-4 w-4" />
-                            </Button>
-                          )}
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="pending" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Batches Pending Approval</CardTitle>
-              <CardDescription>Review and approve payment batches</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Batch Number</TableHead>
-                    <TableHead>Created By</TableHead>
-                    <TableHead>Items</TableHead>
-                    <TableHead>Total Amount</TableHead>
-                    <TableHead>Method</TableHead>
-                    <TableHead>Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pendingBatches.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                        No batches pending approval
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    pendingBatches.map((batch) => (
-                      <TableRow key={batch.id}>
-                        <TableCell className="font-medium">{batch.batch_number}</TableCell>
-                        <TableCell>{batch.created_by_name}</TableCell>
-                        <TableCell>{batch.total_items}</TableCell>
-                        <TableCell className="font-medium">{formatCurrency(batch.total_amount)}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{batch.payment_method}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          {canApprovePaymentBatch && (
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                setSelectedBatch(batch);
-                                setShowApproveDialog(true);
-                              }}
-                              data-testid={`approve-batch-${batch.id}`}
-                            >
-                              Review
-                            </Button>
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </CardContent>
+            <AppDataTable
+              tableHeader={batchTableHeader}
+              tableData={batches}
+              renderRow={renderBatchRow}
+              emptyMessage="No payment batches found. Create a batch to process bulk payments."
+            />
           </Card>
         </TabsContent>
       </Tabs>
@@ -500,7 +459,7 @@ const PaymentBatches = () => {
       <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Payment Batch: {selectedBatch?.batch_number}</DialogTitle>
+            <DialogTitle>Payment Batch: {selectedBatch?.batchNumber}</DialogTitle>
           </DialogHeader>
 
           {selectedBatch && (
@@ -515,15 +474,15 @@ const PaymentBatches = () => {
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Payment Method</p>
-                  <p className="font-medium">{selectedBatch.payment_method}</p>
+                  <p className="font-medium">{selectedBatch.paymentMethod}</p>
                 </div>
                 <div>
                   <p className="text-sm text-muted-foreground">Bank Account</p>
-                  <p className="font-medium">{selectedBatch.bank_account_name || '-'}</p>
+                  <p className="font-medium">{selectedBatch.bankAccountName || '-'}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Batch Date</p>
-                  <p className="font-medium">{formatDate(selectedBatch.batch_date)}</p>
+                  <p className="text-sm text-muted-foreground">Created</p>
+                  <p className="font-medium">{formatDate(selectedBatch.createdAt)}</p>
                 </div>
               </div>
 
@@ -532,19 +491,19 @@ const PaymentBatches = () => {
                 <CardContent className="pt-4">
                   <div className="grid grid-cols-4 gap-4 text-center">
                     <div>
-                      <p className="text-2xl font-bold">{selectedBatch.total_items}</p>
+                      <p className="text-2xl font-bold">{selectedBatch.totalItems}</p>
                       <p className="text-sm text-muted-foreground">Total Items</p>
                     </div>
                     <div>
-                      <p className="text-2xl font-bold">{formatCurrency(selectedBatch.total_amount)}</p>
+                      <p className="text-2xl font-bold">{formatCurrency(selectedBatch.totalAmount)}</p>
                       <p className="text-sm text-muted-foreground">Total Amount</p>
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-green-600">{selectedBatch.successful_count}</p>
+                      <p className="text-2xl font-bold text-green-600">{selectedBatch.successfulCount}</p>
                       <p className="text-sm text-muted-foreground">Successful</p>
                     </div>
                     <div>
-                      <p className="text-2xl font-bold text-red-600">{selectedBatch.failed_count}</p>
+                      <p className="text-2xl font-bold text-red-600">{selectedBatch.failedCount}</p>
                       <p className="text-sm text-muted-foreground">Failed</p>
                     </div>
                   </div>
@@ -557,63 +516,22 @@ const PaymentBatches = () => {
                   <CardTitle className="text-sm">Payment Items</CardTitle>
                 </CardHeader>
                 <CardContent className="p-0">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Invoice</TableHead>
-                        <TableHead>Vendor</TableHead>
-                        <TableHead>Bank Details</TableHead>
-                        <TableHead>Amount</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>UTR</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {selectedBatch.items?.map((item, idx) => (
-                        <TableRow key={idx}>
-                          <TableCell className="font-medium">{item.invoice_number}</TableCell>
-                          <TableCell>{item.vendor_name}</TableCell>
-                          <TableCell className="text-xs">
-                            {item.vendor_bank_name ? (
-                              <>
-                                {item.vendor_bank_name}<br />
-                                {item.vendor_account_number}<br />
-                                IFSC: {item.vendor_ifsc}
-                              </>
-                            ) : (
-                              <span className="text-red-500">Missing bank details</span>
-                            )}
-                          </TableCell>
-                          <TableCell>{formatCurrency(item.amount)}</TableCell>
-                          <TableCell>
-                            <Badge variant={item.payment_status === 'Processed' ? 'default' : item.payment_status === 'Failed' ? 'destructive' : 'secondary'}>
-                              {item.payment_status}
-                            </Badge>
-                            {item.failure_reason && (
-                              <p className="text-xs text-red-500 mt-1">{item.failure_reason}</p>
-                            )}
-                          </TableCell>
-                          <TableCell className="font-mono text-xs">{item.utr_number || '-'}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
+                  <AppDataTable
+                    tableHeader={paymentItemTableHeader}
+                    tableData={(selectedBatch.paymentItems || []).map(normalizePaymentItem)}
+                    renderRow={renderPaymentItemRow}
+                    emptyMessage="No payment items found."
+                  />
                 </CardContent>
               </Card>
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowViewDialog(false)}>
               Close
             </Button>
-            {selectedBatch?.status === 'Draft' && canSubmitPaymentBatch && (
-              <Button onClick={() => handleSubmitBatch(selectedBatch.id)} data-testid="submit-for-approval-btn">
-                <Send className="h-4 w-4 mr-2" />
-                Submit for Approval
-              </Button>
-            )}
-            {selectedBatch?.status === 'Approved' && (
+            {selectedBatch?.status === 'Pending' && (
               <>
                 {canGenerateBatchFile && (
                   <Button variant="outline" onClick={() => handleGenerateFile(selectedBatch.id)}>
@@ -621,12 +539,22 @@ const PaymentBatches = () => {
                     Generate File
                   </Button>
                 )}
-                {canProcessPaymentBatch && (
-                  <Button onClick={() => handleProcessBatch(selectedBatch.id)} disabled={processing}>
-                    {processing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                    <Play className="h-4 w-4 mr-2" />
-                    Process Payments
-                  </Button>
+                {(canMarkProcessedPaymentBatch || canProcessPaymentBatch) && (
+                  <>
+                    {canMarkProcessedPaymentBatch && (
+                      <Button variant="secondary" onClick={() => setShowMarkProcessedDialog(true)} disabled={processing}>
+                        <CheckCheck className="h-4 w-4 mr-2" />
+                        Mark Processed (Manual)
+                      </Button>
+                    )}
+                    {canProcessPaymentBatch && (
+                      <Button onClick={() => handleProcessBatch(selectedBatch.id)} disabled={processing}>
+                        {processing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                        <Play className="h-4 w-4 mr-2" />
+                        Process Automatically
+                      </Button>
+                    )}
+                  </>
                 )}
               </>
             )}
@@ -634,66 +562,38 @@ const PaymentBatches = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Approve Dialog */}
-      <Dialog open={showApproveDialog} onOpenChange={setShowApproveDialog}>
+      {/* Mark Processed Dialog */}
+      <Dialog open={showMarkProcessedDialog} onOpenChange={setShowMarkProcessedDialog}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Review Payment Batch</DialogTitle>
+            <DialogTitle>Mark Batch as Processed</DialogTitle>
           </DialogHeader>
 
-          {selectedBatch && (
-            <div className="space-y-4">
-              <Card className="bg-muted">
-                <CardContent className="pt-4">
-                  <p><strong>Batch:</strong> {selectedBatch.batch_number}</p>
-                  <p><strong>Created By:</strong> {selectedBatch.created_by_name}</p>
-                  <p><strong>Items:</strong> {selectedBatch.total_items}</p>
-                  <p><strong>Total Amount:</strong> {formatCurrency(selectedBatch.total_amount)}</p>
-                  <p><strong>Payment Method:</strong> {selectedBatch.payment_method}</p>
-                </CardContent>
-              </Card>
-
-              <div className="space-y-2">
-                <Label>Decision</Label>
-                <Select 
-                  value={approvalForm.action} 
-                  onValueChange={(v) => setApprovalForm(prev => ({ ...prev, action: v }))}
-                >
-                  <SelectTrigger data-testid="approval-action-select">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Approved">Approve</SelectItem>
-                    <SelectItem value="Rejected">Reject</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Comments</Label>
-                <Textarea
-                  value={approvalForm.comments}
-                  onChange={(e) => setApprovalForm(prev => ({ ...prev, comments: e.target.value }))}
-                  placeholder="Add comments..."
-                  data-testid="approval-comments-input"
-                />
-              </div>
+          <div className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              Use this option if you have processed the payment file manually through your bank portal. 
+              This will mark all items as completed and update invoice statuses.
+            </p>
+            <div className="space-y-2">
+              <Label>Bank UTR / Reference Number (Optional)</Label>
+              <Input
+                value={utr}
+                onChange={(e) => setUtr(e.target.value)}
+                placeholder="Enter UTR..."
+              />
             </div>
-          )}
+          </div>
 
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowApproveDialog(false)}>
+            <Button variant="outline" onClick={() => setShowMarkProcessedDialog(false)}>
               Cancel
             </Button>
             <Button 
-              onClick={handleApproveBatch} 
-              disabled={processing || !canApprovePaymentBatch}
-              variant={approvalForm.action === 'Rejected' ? 'destructive' : 'default'}
-              data-testid="confirm-approval-btn"
+              onClick={handleMarkProcessed} 
+              disabled={processing}
             >
               {processing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              {approvalForm.action === 'Approved' ? <CheckCircle className="h-4 w-4 mr-2" /> : <XCircle className="h-4 w-4 mr-2" />}
-              {approvalForm.action}
+              Confirm Processed
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -711,22 +611,22 @@ const PaymentBatches = () => {
               <div className="grid grid-cols-3 gap-4 text-sm">
                 <div>
                   <p className="text-muted-foreground">File Name</p>
-                  <p className="font-medium">{generatedFile.file_name}</p>
+                  <p className="font-medium">{generatedFile.file_name || generatedFile.fileName}</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Format</p>
-                  <p className="font-medium">{generatedFile.format}</p>
+                  <p className="font-medium">NEFT</p>
                 </div>
                 <div>
                   <p className="text-muted-foreground">Records</p>
-                  <p className="font-medium">{generatedFile.record_count}</p>
+                  <p className="font-medium">{generatedFile.record_count || generatedFile.recordCount || '-'}</p>
                 </div>
               </div>
 
               <div className="space-y-2">
                 <Label>File Content Preview</Label>
                 <pre className="bg-muted p-4 rounded-lg text-xs overflow-x-auto max-h-[300px]">
-                  {generatedFile.file_content}
+                  {generatedFile.content || generatedFile.file_content}
                 </pre>
               </div>
             </div>

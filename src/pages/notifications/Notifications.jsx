@@ -4,14 +4,8 @@ import {
   useGetPendingNotificationsQuery,
 } from '../../Services/apis/notificationsApi';
 import { Button } from '../../components/ui/button';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '../../components/ui/table';
+import AppDataTable from '../../components/common/AppDataTable';
+import { TableCell, TableRow } from '../../components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
@@ -63,6 +57,22 @@ const notificationTypeColors = {
   'Payment Batch Approved': 'bg-green-500'
 };
 
+const notificationTableHeader = [
+  { key: 'notification_type', title: 'Type' },
+  { key: 'recipient', title: 'Recipient' },
+  { key: 'subject', title: 'Subject', cellClassName: 'max-w-[200px] truncate' },
+  { key: 'entity', title: 'Entity' },
+  { key: 'status', title: 'Status' },
+  { key: 'created_at', title: 'Created' },
+];
+
+const pendingNotificationTableHeader = [
+  { key: 'notification_type', title: 'Type' },
+  { key: 'recipient', title: 'Recipient' },
+  { key: 'subject', title: 'Subject' },
+  { key: 'created_at', title: 'Created' },
+];
+
 const Notifications = () => {
   const {
     data: notificationsData = [],
@@ -106,6 +116,108 @@ const Notifications = () => {
     sent: notifications.filter(n => n.sent).length,
     pending: notifications.filter(n => !n.sent).length,
     failed: notifications.filter(n => n.error_message).length
+  };
+
+  const renderNotificationRow = (notif, rowIndex, headers) => {
+    const Icon = notificationTypeIcons[notif.notification_type] || Bell;
+
+    return (
+      <TableRow key={notif.id ?? rowIndex} data-testid={`notification-row-${notif.id}`}>
+        {headers.map((header) => {
+          let value;
+
+          switch (header.key) {
+            case 'notification_type':
+              value = (
+                <div className="flex items-center gap-2">
+                  <div className={`p-1.5 rounded ${notificationTypeColors[notif.notification_type] || 'bg-gray-500'}`}>
+                    <Icon className="h-3 w-3 text-white" />
+                  </div>
+                  <span className="text-sm">{notif.notification_type}</span>
+                </div>
+              );
+              break;
+            case 'recipient':
+              value = (
+                <div>
+                  <p className="font-medium">{notif.recipient_name}</p>
+                  <p className="text-xs text-muted-foreground">{notif.recipient_email}</p>
+                </div>
+              );
+              break;
+            case 'entity':
+              value = (
+                <Badge variant="outline">
+                  {notif.entity_type}: {notif.entity_number || notif.entity_id?.slice(0, 8)}
+                </Badge>
+              );
+              break;
+            case 'status':
+              value = notif.sent ? (
+                <Badge className="bg-green-500 text-white">Sent</Badge>
+              ) : notif.error_message ? (
+                <Badge variant="destructive">Failed</Badge>
+              ) : (
+                <Badge variant="secondary">Pending</Badge>
+              );
+              break;
+            case 'created_at':
+              value = formatDate(notif.created_at);
+              break;
+            default:
+              value = notif?.[header.key] || '-';
+          }
+
+          return (
+            <TableCell key={header.key} className={header.cellClassName}>
+              {value}
+            </TableCell>
+          );
+        })}
+      </TableRow>
+    );
+  };
+
+  const renderPendingNotificationRow = (notif, rowIndex, headers) => {
+    const Icon = notificationTypeIcons[notif.notification_type] || Bell;
+
+    return (
+      <TableRow key={notif.id ?? rowIndex}>
+        {headers.map((header) => {
+          let value;
+
+          switch (header.key) {
+            case 'notification_type':
+              value = (
+                <div className="flex items-center gap-2">
+                  <Icon className="h-4 w-4" />
+                  <span className="text-sm">{notif.notification_type}</span>
+                </div>
+              );
+              break;
+            case 'recipient':
+              value = (
+                <div>
+                  <p className="font-medium">{notif.recipient_name}</p>
+                  <p className="text-xs text-muted-foreground">{notif.recipient_email}</p>
+                </div>
+              );
+              break;
+            case 'created_at':
+              value = formatDate(notif.created_at);
+              break;
+            default:
+              value = notif?.[header.key] || '-';
+          }
+
+          return (
+            <TableCell key={header.key} className={header.cellClassName}>
+              {value}
+            </TableCell>
+          );
+        })}
+      </TableRow>
+    );
   };
 
   if (loading) {
@@ -208,65 +320,12 @@ const Notifications = () => {
 
         <TabsContent value="all" className="space-y-4">
           <Card>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Recipient</TableHead>
-                  <TableHead>Subject</TableHead>
-                  <TableHead>Entity</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Created</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {notifications.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                      No notifications yet. Notifications are created when POs are submitted/approved or payments are processed.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  notifications.map((notif) => {
-                    const Icon = notificationTypeIcons[notif.notification_type] || Bell;
-                    return (
-                      <TableRow key={notif.id} data-testid={`notification-row-${notif.id}`}>
-                        <TableCell>
-                          <div className="flex items-center gap-2">
-                            <div className={`p-1.5 rounded ${notificationTypeColors[notif.notification_type] || 'bg-gray-500'}`}>
-                              <Icon className="h-3 w-3 text-white" />
-                            </div>
-                            <span className="text-sm">{notif.notification_type}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium">{notif.recipient_name}</p>
-                            <p className="text-xs text-muted-foreground">{notif.recipient_email}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell className="max-w-[200px] truncate">{notif.subject}</TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
-                            {notif.entity_type}: {notif.entity_number || notif.entity_id.slice(0, 8)}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          {notif.sent ? (
-                            <Badge className="bg-green-500 text-white">Sent</Badge>
-                          ) : notif.error_message ? (
-                            <Badge variant="destructive">Failed</Badge>
-                          ) : (
-                            <Badge variant="secondary">Pending</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-sm">{formatDate(notif.created_at)}</TableCell>
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
+            <AppDataTable
+              tableHeader={notificationTableHeader}
+              tableData={notifications}
+              renderRow={renderNotificationRow}
+              emptyMessage="No notifications yet. Notifications are created when POs are submitted/approved or payments are processed."
+            />
           </Card>
         </TabsContent>
 
@@ -277,47 +336,12 @@ const Notifications = () => {
               <CardDescription>Notifications waiting to be sent by the email service</CardDescription>
             </CardHeader>
             <CardContent>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Type</TableHead>
-                    <TableHead>Recipient</TableHead>
-                    <TableHead>Subject</TableHead>
-                    <TableHead>Created</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pendingNotifications.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
-                        No pending notifications
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    pendingNotifications.map((notif) => {
-                      const Icon = notificationTypeIcons[notif.notification_type] || Bell;
-                      return (
-                        <TableRow key={notif.id}>
-                          <TableCell>
-                            <div className="flex items-center gap-2">
-                              <Icon className="h-4 w-4" />
-                              <span className="text-sm">{notif.notification_type}</span>
-                            </div>
-                          </TableCell>
-                          <TableCell>
-                            <div>
-                              <p className="font-medium">{notif.recipient_name}</p>
-                              <p className="text-xs text-muted-foreground">{notif.recipient_email}</p>
-                            </div>
-                          </TableCell>
-                          <TableCell>{notif.subject}</TableCell>
-                          <TableCell className="text-sm">{formatDate(notif.created_at)}</TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
+              <AppDataTable
+                tableHeader={pendingNotificationTableHeader}
+                tableData={pendingNotifications}
+                renderRow={renderPendingNotificationRow}
+                emptyMessage="No pending notifications"
+              />
             </CardContent>
           </Card>
         </TabsContent>
@@ -327,4 +351,3 @@ const Notifications = () => {
 };
 
 export default Notifications;
-

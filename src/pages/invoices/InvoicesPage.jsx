@@ -4,13 +4,24 @@ import {
   useGetVendorsQuery,
   useScanInvoiceMutation,
   useBulkUploadInvoicesMutation,
-  useCreateVendorMutation,
+  useRequestVendorAdditionMutation,
   useCreateInvoiceMutation,
   useLazyGetInvoiceHistoryQuery,
   useUpdateInvoiceMutation,
   useDeleteInvoiceMutation,
 } from '../../Services/apis/invoicesVendorsApi';
+import { useGetCorporateDepartmentsQuery } from '../../Services/apis/corporateApi';
 import { Plus, Pencil, Clock, CheckCircle2, XCircle, CreditCard } from 'lucide-react';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { useSidebar } from '../../components/Layout';
@@ -31,9 +42,37 @@ import EditDialog from './components/EditDialog';
 import BulkExtractLoaderDialog from './components/BulkExtractLoaderDialog';
 import BulkPreviewDialog from './components/BulkPreviewDialog';
 import BulkEditDialog from './components/BulkEditDialog';
+import RequestVendorDialog from './components/RequestVendorDialog';
 import { useActionGuard } from '../../hooks/useActionGuard';
 
 const FILE_BASE_URL = import.meta.env.VITE_BACKEND_URL ?? '';
+
+const createEmptyVendorRequestForm = () => ({
+  name: '',
+  vendor_type: 'Company',
+  email: '',
+  phone: '',
+  mobile: '',
+  pan: '',
+  gstin: '',
+  address_line1: '',
+  address_line2: '',
+  city: '',
+  state: '',
+  pincode: '',
+  country: 'India',
+  bank_name: '',
+  account_number: '',
+  ifsc_code: '',
+  branch: '',
+  account_holder_name: '',
+  category: '',
+  currency: 'INR',
+  payment_terms: '30',
+  contact_person: '',
+  website: '',
+  notes: '',
+});
 
 const InvoicesPage = () => {
   const {
@@ -42,9 +81,12 @@ const InvoicesPage = () => {
   const {
     data: vendorsData = [],
   } = useGetVendorsQuery();
+  const {
+    data: departmentsData = [],
+  } = useGetCorporateDepartmentsQuery();
   const [scanInvoice] = useScanInvoiceMutation();
   const [bulkUploadInvoices] = useBulkUploadInvoicesMutation();
-  const [createVendor] = useCreateVendorMutation();
+  const [requestVendorAddition, { isLoading: requestVendorLoading }] = useRequestVendorAdditionMutation();
   const [createInvoice] = useCreateInvoiceMutation();
   const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
   const [updateInvoice] = useUpdateInvoiceMutation();
@@ -52,6 +94,7 @@ const InvoicesPage = () => {
   const { guardAction, canPerformAction } = useActionGuard();
   const invoices = Array.isArray(invoicesData) ? invoicesData : [];
   const vendors = Array.isArray(vendorsData) ? vendorsData : [];
+  const departments = Array.isArray(departmentsData) ? departmentsData : [];
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('list');
   const { setHideSidebar } = useSidebar();
@@ -109,6 +152,10 @@ const InvoicesPage = () => {
   const [bulkEditPreviewError, setBulkEditPreviewError] = useState(false);
   const [bulkEditFileURL, setBulkEditFileURL] = useState(null);
   const [bulkAddingVendorItemId, setBulkAddingVendorItemId] = useState('');
+  const [invoiceDeleteTarget, setInvoiceDeleteTarget] = useState(null);
+  const [requestVendorOpen, setRequestVendorOpen] = useState(false);
+  const [requestVendorContext, setRequestVendorContext] = useState(null);
+  const [requestVendorForm, setRequestVendorForm] = useState(createEmptyVendorRequestForm);
 
   const openSingleFilePicker = () => {
     if (fileInputRef.current) {
@@ -196,6 +243,42 @@ const InvoicesPage = () => {
     if (!vendorName) return null;
     return vendors.find(v => 
       v.name.toLowerCase().trim() === vendorName.toLowerCase().trim()
+    );
+  };
+
+  const buildVendorRequestForm = (source = {}) => ({
+    ...createEmptyVendorRequestForm(),
+    name: source.vendor_name || source.name || '',
+    gstin: source.gstin || source.vendor_gstin || '',
+    address_line1: source.billing_address || source.vendor_address || source.address_line1 || '',
+    notes: source.memo || source.description || '',
+  });
+
+  const openRequestVendorDialog = ({ source = {}, context }) => {
+    setRequestVendorContext(context);
+    setRequestVendorForm(buildVendorRequestForm(source));
+    setRequestVendorOpen(true);
+  };
+
+  const handleRequestVendorOpenChange = (open) => {
+    setRequestVendorOpen(open);
+    if (!open) {
+      setRequestVendorContext(null);
+      setRequestVendorForm(createEmptyVendorRequestForm());
+    }
+  };
+
+  const getDepartmentNameById = (departmentId) => {
+    const selectedDepartment = departments.find(
+      (department) =>
+        String(department?.id ?? department?.departmentId ?? department?.department_id ?? '') ===
+        String(departmentId ?? ''),
+    );
+    return (
+      selectedDepartment?.name ||
+      selectedDepartment?.departmentName ||
+      selectedDepartment?.department_name ||
+      ''
     );
   };
 
@@ -289,6 +372,11 @@ const InvoicesPage = () => {
     file_id: invoiceData.file_id || null,
     file_hash: invoiceData.file_hash || null,
     original_file_name: invoiceData.original_filename || null,
+    department_id: invoiceData.department_id || invoiceData.departmentId || '',
+    department_name:
+      invoiceData.department_name ||
+      invoiceData.departmentName ||
+      getDepartmentNameById(invoiceData.department_id || invoiceData.departmentId),
     source: 'Upload',
     source_email: null,
     file_category: 'Expense Invoice',
@@ -329,6 +417,8 @@ const InvoicesPage = () => {
             source: invoicePayload.source,
             sourceEmail: invoicePayload.source_email,
             fileCategory: invoicePayload.file_category,
+            departmentId: invoicePayload.department_id || null,
+            departmentName: invoicePayload.department_name || null,
           }),
         ],
         { type: 'application/json' }
@@ -394,7 +484,9 @@ const InvoicesPage = () => {
       currency: extractedData?.currency || 'INR',
       file_id: extractedData?.file_id || null,
       file_hash: extractedData?.file_hash || null,
-      original_file_name: extractedData?.original_filename || null
+      original_file_name: extractedData?.original_filename || null,
+      department_id: extractedData?.department_id || extractedData?.departmentId || '',
+      department_name: extractedData?.department_name || extractedData?.departmentName || ''
     };
   };
 
@@ -527,6 +619,11 @@ const InvoicesPage = () => {
       toast.error('No extracted invoices selected for creation');
       return;
     }
+    const missingDepartmentItem = selectedItems.find((item) => !item.invoicePayload?.department_id);
+    if (missingDepartmentItem) {
+      toast.error(`Please select department for ${missingDepartmentItem.filename}`);
+      return;
+    }
 
     setBulkCreating(true);
     setBulkProgress({
@@ -595,6 +692,8 @@ const InvoicesPage = () => {
       due_date: item.invoicePayload.due_date || format(new Date(), 'yyyy-MM-dd'),
       amount: Number(item.invoicePayload.amount || 0),
       currency: item.invoicePayload.currency || 'INR',
+      department_id: item.invoicePayload.department_id || '',
+      department_name: item.invoicePayload.department_name || '',
       billing_address: item.invoicePayload.billing_address || '',
       gstin: item.invoicePayload.gstin || '',
       source_of_supply: item.invoicePayload.source_of_supply || '',
@@ -693,48 +792,10 @@ const InvoicesPage = () => {
       return;
     }
 
-    setBulkAddingVendorItemId(itemId);
-    try {
-      const vendorData = {
-        name: vendorName,
-        vendor_type: 'Company',
-        gstin: payload.gstin || payload.vendor_gstin || '',
-        address_line1: payload.billing_address || '',
-        pan: '',
-        bank_name: '',
-        account_number: '',
-        ifsc_code: '',
-        category: 'Supplier',
-        email: null,
-        phone: '',
-      };
-
-      const createdVendor = await createVendor(vendorData).unwrap();
-      const newVendorId = createdVendor?.id;
-      if (!newVendorId) {
-        throw new Error('Vendor created but id missing');
-      }
-
-      setBulkPreviewItems((prev) =>
-        prev.map((item) =>
-          item.id === itemId
-            ? {
-                ...item,
-                invoicePayload: { ...item.invoicePayload, vendor_id: newVendorId },
-                selected: item.status !== 'uploaded',
-                error: '',
-                status: item.status === 'failed' ? 'success' : item.status,
-              }
-            : item
-        )
-      );
-      toast.success(`Vendor "${vendorName}" added`);
-    } catch (error) {
-      const errorMessage = error?.data?.detail || error?.message || 'Failed to add vendor';
-      toast.error(typeof errorMessage === 'string' ? errorMessage : 'Failed to add vendor');
-    } finally {
-      setBulkAddingVendorItemId('');
-    }
+    openRequestVendorDialog({
+      source: payload,
+      context: { type: 'bulk', itemId },
+    });
   };
 
   // Calculate line item subtotal
@@ -812,48 +873,86 @@ const InvoicesPage = () => {
       return;
     }
 
-    try {
-      const vendorData = {
-        name: formData.vendor_name,
-        vendor_type: 'Company',
-        gstin: formData.gstin || formData.vendor_gstin || '',
-        address_line1: formData.billing_address || formData.vendor_address || '',
-        pan: '',
-        bank_name: '',
-        account_number: '',
-        ifsc_code: '',
-        category: 'Supplier',
-        email: null,
-        phone: ''
-      };
+    openRequestVendorDialog({
+      source: formData,
+      context: { type: 'single' },
+    });
+  };
 
-      const response = await createVendor(vendorData).unwrap();
-      
-      // Update vendors list
-      
-      // Update form with new vendor ID
-      setFormData(prev => ({
-        ...prev,
-        vendor_id: response.id,
-        vendor_matched: true
-      }));
-      
-      toast.success(`Vendor "${formData.vendor_name}" added successfully!`);
+  const handleSubmitVendorRequest = async (event) => {
+    event.preventDefault();
+    if (!guardAction('invoices.addVendor')) return;
+
+    const vendorName = requestVendorForm.name.trim();
+    const vendorType = requestVendorForm.vendor_type || requestVendorForm.vendorType;
+    const gstin = requestVendorForm.gstin.trim();
+
+    if (!vendorName) {
+      toast.error('Vendor name is required');
+      return;
+    }
+    if (!vendorType) {
+      toast.error('Vendor type is required');
+      return;
+    }
+    if (!gstin) {
+      toast.error('GSTIN is required');
+      return;
+    }
+
+    if (requestVendorContext?.type === 'bulk') {
+      setBulkAddingVendorItemId(requestVendorContext.itemId);
+    }
+
+    try {
+      await requestVendorAddition({
+        ...requestVendorForm,
+        name: vendorName,
+        vendor_type: vendorType,
+        gstin,
+      }).unwrap();
+
+      if (requestVendorContext?.type === 'bulk') {
+        setBulkPreviewItems((prev) =>
+          prev.map((item) =>
+            item.id === requestVendorContext.itemId
+              ? {
+                  ...item,
+                  selected: false,
+                  error: `Vendor addition requested for "${vendorName}". Create the invoice after the vendor is approved.`,
+                  status: 'failed',
+                }
+              : item
+          )
+        );
+      } else {
+        setFormData((prev) => ({
+          ...prev,
+          vendor_id: '',
+          vendor_matched: false,
+        }));
+      }
+
+      toast.success(`Vendor addition requested for "${vendorName}"`);
+      handleRequestVendorOpenChange(false);
     } catch (error) {
-      console.error('Add vendor error:', error);
-      let errorMessage = 'Failed to add vendor';
+      console.error('Vendor request error:', error);
+      let errorMessage = 'Failed to request vendor addition';
       if (error?.data?.detail) {
         const detail = error.data.detail;
-        // Handle Pydantic validation errors (array of objects)
         if (Array.isArray(detail)) {
-          errorMessage = detail.map(d => d.msg || JSON.stringify(d)).join(', ');
+          errorMessage = detail.map((item) => item.msg || JSON.stringify(item)).join(', ');
         } else if (typeof detail === 'string') {
           errorMessage = detail;
         } else {
           errorMessage = JSON.stringify(detail);
         }
+      } else if (error?.data?.message) {
+        errorMessage = error.data.message;
       }
       toast.error(errorMessage);
+    } finally {
+      setBulkAddingVendorItemId('');
     }
   };
 
@@ -881,10 +980,16 @@ const InvoicesPage = () => {
       original_file_name: formData.original_file_name,
       source: formData.source || 'Upload',
       source_email: formData.source === 'Email' ? formData.source_email : null,
-      file_category: formData.file_category || 'Expense Invoice'
+      file_category: formData.file_category || 'Expense Invoice',
+      department_id: formData.department_id || '',
+      department_name: formData.department_name || getDepartmentNameById(formData.department_id),
     };
     if (!invoicePayload.vendor_id) {
       toast.error('Please select or add a vendor before creating invoice');
+      return;
+    }
+    if (!invoicePayload.department_id) {
+      toast.error('Please select a department before creating invoice');
       return;
     }
 
@@ -951,6 +1056,13 @@ const InvoicesPage = () => {
         timestamp: entry.timestamp || entry.createdAt || new Date().toISOString(),
         user_name: entry.user_name || entry.userName || 'Unknown',
         user_role: entry.user_role || entry.userRole || entry.level || '-',
+        comments:
+          entry.comments ||
+          entry.comment ||
+          entry.rejectionComment ||
+          entry.rejection_comment ||
+          entry.remarks ||
+          '',
         changes: Array.isArray(entry.changes) ? entry.changes : [],
       }));
       setInvoiceHistory(normalizedHistory);
@@ -1018,7 +1130,9 @@ const InvoicesPage = () => {
       description: invoice.memo || '',
       tds: '',
       amount: invoice.amount,
-      currency: invoice.currency || 'INR'
+      currency: invoice.currency || 'INR',
+      department_id: invoice.department_id || invoice.departmentId || '',
+      department_name: invoice.department_name || invoice.departmentName || ''
     });
     setEditDialogOpen(true);
   };
@@ -1046,7 +1160,9 @@ const InvoicesPage = () => {
           memo: formData.description,
           file_category: formData.file_category,
           source: formData.source,
-          source_email: formData.source === 'Email' ? formData.source_email : null
+          source_email: formData.source === 'Email' ? formData.source_email : null,
+          department_id: formData.department_id || '',
+          department_name: formData.department_name || getDepartmentNameById(formData.department_id),
         },
       }).unwrap();
 
@@ -1061,20 +1177,23 @@ const InvoicesPage = () => {
 
   const handleDeleteInvoice = async (invoice) => {
     if (!guardAction('invoices.delete')) return;
-    if (!window.confirm(`Are you sure you want to delete invoice ${invoice.invoice_number}?`)) {
-      return;
-    }
+    setInvoiceDeleteTarget(invoice);
+  };
 
+  const confirmDeleteInvoice = async () => {
+    if (!invoiceDeleteTarget) return;
     try {
-      await deleteInvoice(invoice.id).unwrap();
+      await deleteInvoice(invoiceDeleteTarget.id).unwrap();
       toast.success('Invoice deleted successfully');
     } catch (error) {
       toast.error('Failed to delete invoice');
+    } finally {
+      setInvoiceDeleteTarget(null);
     }
   };
 
   const canEdit = (status) =>
-    canUpdateInvoices && ['Pending Checker', 'Pending Approver', 'Pending Approval'].includes(status);
+    canUpdateInvoices && status === 'Rejected';
   const canDelete = (status) =>
     canDeleteInvoices && ['Pending Checker', 'Pending Approver', 'Pending Approval'].includes(status);
 
@@ -1191,6 +1310,7 @@ const InvoicesPage = () => {
       handleAddInvoice={handleAddInvoice}
       canAddVendor={canAddVendors}
       canSubmit={isEdit ? canUpdateInvoices : canManageInvoices}
+      departments={departments}
       GST_TREATMENTS={GST_TREATMENTS}
       INDIAN_STATES={INDIAN_STATES}
       FILE_CATEGORIES={FILE_CATEGORIES}
@@ -1266,6 +1386,8 @@ const InvoicesPage = () => {
         handleAddVendorForBulkItem={handleAddVendorForBulkItem}
         openBulkEditDialog={openBulkEditDialog}
         handleCreateBulkInvoices={handleCreateBulkInvoices}
+        departments={departments}
+        getDepartmentNameById={getDepartmentNameById}
       />
 
       {/* Dedicated editor dialog for per-item corrections before creation. */}
@@ -1282,6 +1404,8 @@ const InvoicesPage = () => {
         bulkEditPreviewError={bulkEditPreviewError}
         setBulkEditPreviewError={setBulkEditPreviewError}
         vendors={vendors}
+        departments={departments}
+        getDepartmentNameById={getDepartmentNameById}
         taxRates={TAX_RATES}
         updateBulkEditLineItem={updateBulkEditLineItem}
         saveBulkEditChanges={saveBulkEditChanges}
@@ -1319,15 +1443,32 @@ const InvoicesPage = () => {
         setViewPreviewError={setViewPreviewError}
         renderInvoiceForm={renderInvoiceForm}
       />
+
+      <RequestVendorDialog
+        open={requestVendorOpen}
+        onOpenChange={handleRequestVendorOpenChange}
+        formData={requestVendorForm}
+        setFormData={setRequestVendorForm}
+        onSubmit={handleSubmitVendorRequest}
+        submitting={requestVendorLoading}
+      />
+
+      <AlertDialog open={Boolean(invoiceDeleteTarget)} onOpenChange={(open) => !open && setInvoiceDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Invoice?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete invoice {invoiceDeleteTarget?.invoice_number}?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteInvoice}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
 
 export default InvoicesPage;
-
-
-
-
-
-
-

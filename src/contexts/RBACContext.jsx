@@ -57,7 +57,7 @@ const getAssignedRoles = (employeeDetails = null) => {
 
 const FALLBACK_DIRECT_ROLE_PERMISSIONS = {
   CHECKER: ["invoice-checker"],
-  APPROVER: ["invoice-approver", "approval-full"],
+  APPROVER: ["invoice-approver"],
   ACCOUNTANT: ["payments-manage", "payments-view", "tax-manage"],
 };
 
@@ -122,9 +122,15 @@ export const RBACProvider = ({ children }) => {
   const authRole = user?.role || null;
   const effectiveRole = corporateUserContext?.effectiveRole || null;
 
+  const normalizedCorporateUserRole = normalizeRoleToken(corporateUserContext?.corporateUser?.role);
+  const normalizedAuthRole = normalizeRoleToken(authRole);
   const isCorporateAdmin =
-    corporateUserContext?.corporateUser?.role === "CORP_ADMIN" ||
-    normalizeRoleToken(authRole) === "ADMIN";
+    normalizedCorporateUserRole === "CORP_ADMIN" ||
+    normalizedCorporateUserRole === "CORPADMIN" ||
+    normalizedCorporateUserRole === "ADMIN" ||
+    normalizedAuthRole === "CORP_ADMIN" ||
+    normalizedAuthRole === "CORPADMIN" ||
+    normalizedAuthRole === "ADMIN";
 
   const computedPermissions = useMemo(() => {
     if (!user) {

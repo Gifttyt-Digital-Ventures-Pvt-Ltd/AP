@@ -11,6 +11,11 @@ import {
 } from '../../../components/ui/dialog';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
+import {
+  isPermissionChecked,
+  isViewOnlyImplied,
+  togglePermissionSelection,
+} from '../utils/permissionSelection';
 
 // Dialog for backend custom role creation.
 const AddRoleDialog = ({ open, onOpenChange, permissionGroups, onSave, saving = false }) => {
@@ -20,12 +25,8 @@ const AddRoleDialog = ({ open, onOpenChange, permissionGroups, onSave, saving = 
 
   const canSave = useMemo(() => roleName.trim().length > 0, [roleName]);
 
-  const handlePermissionToggle = (permissionId) => {
-    setSelectedPermissions((prev) =>
-      prev.includes(permissionId)
-        ? prev.filter((id) => id !== permissionId)
-        : [...prev, permissionId]
-    );
+  const handlePermissionToggle = (group, permissionId) => {
+    setSelectedPermissions((prev) => togglePermissionSelection(group, permissionId, prev));
   };
 
   const reset = () => {
@@ -101,21 +102,43 @@ const AddRoleDialog = ({ open, onOpenChange, permissionGroups, onSave, saving = 
                     </AccordionTrigger>
                     <AccordionContent className="pb-4">
                       <div className="space-y-3 pt-2">
-                        {group.permissions.map((permission) => (
-                          <div key={permission.id} className="flex items-center space-x-3">
+                        {group.permissions.map((permission) => {
+                          const impliedViewOnly = isViewOnlyImplied(
+                            group,
+                            permission.id,
+                            selectedPermissions,
+                          );
+                          return (
+                          <div
+                            key={permission.id}
+                            className={`flex items-center space-x-3 ${
+                              impliedViewOnly ? 'opacity-50' : ''
+                            }`}
+                          >
                             <Checkbox
                               id={`create-${permission.id}`}
-                              checked={selectedPermissions.includes(permission.id)}
-                              onCheckedChange={() => handlePermissionToggle(permission.id)}
+                              checked={isPermissionChecked(group, permission.id, selectedPermissions)}
+                              disabled={impliedViewOnly}
+                              onCheckedChange={() => handlePermissionToggle(group, permission.id)}
                             />
                             <label
                               htmlFor={`create-${permission.id}`}
-                              className="text-sm text-foreground cursor-pointer"
+                              className={`text-sm ${
+                                impliedViewOnly
+                                  ? 'text-muted-foreground cursor-not-allowed'
+                                  : 'text-foreground cursor-pointer'
+                              }`}
                             >
                               {permission.label}
+                              {impliedViewOnly && (
+                                <span className="ml-2 text-xs text-muted-foreground">
+                                  Included with higher access
+                                </span>
+                              )}
                             </label>
                           </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     </AccordionContent>
                   </AccordionItem>

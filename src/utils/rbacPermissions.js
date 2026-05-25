@@ -6,6 +6,12 @@ const normalizeToken = (value = "") =>
     .replace(/^_+|_+$/g, "")
     .replace(/_+/g, "_");
 
+const toArray = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  return [value];
+};
+
 const mapVendorPermission = (permissionType) => {
   if (permissionType === "VIEW") return "vendors-view";
   if (permissionType === "MANAGE") return "vendors-manage";
@@ -17,6 +23,7 @@ const mapPurchaseOrderPermission = (permissionType) => {
   if (permissionType === "VIEW") return "po-view";
   if (permissionType === "MANAGE") return "po-manage";
   if (permissionType === "APPROVER" || permissionType === "APPROVE") return "po-approve";
+  if (permissionType === "FULL") return ["po-view", "po-manage", "po-approve"];
   return null;
 };
 
@@ -24,6 +31,7 @@ const mapGrnPermission = (permissionType) => {
   if (permissionType === "VIEW") return "grn-view";
   if (permissionType === "MANAGE") return "grn-manage";
   if (permissionType === "APPROVER" || permissionType === "APPROVE") return "grn-approve";
+  if (permissionType === "FULL") return ["grn-view", "grn-manage", "grn-approve"];
   return null;
 };
 
@@ -39,19 +47,13 @@ const mapInvoicePermission = (permissionType) => {
   if (permissionType === "MAKER" || permissionType === "MANAGE") return "invoice-maker";
   if (permissionType === "CHECKER") return "invoice-checker";
   if (permissionType === "APPROVER" || permissionType === "APPROVE") return "invoice-approver";
+  if (permissionType === "FULL") return ["invoice-view", "invoice-maker", "invoice-checker", "invoice-approver"];
   return null;
 };
 
 const mapInvoiceMatchingPermission = (permissionType) => {
   if (permissionType === "VIEW") return "matching-view";
   if (permissionType === "MANAGE") return "matching-manage";
-  return null;
-};
-
-const mapApprovalPermission = (permissionType) => {
-  if (["FULL", "APPROVER", "APPROVE", "MANAGE", "VIEW"].includes(permissionType)) {
-    return "approval-full";
-  }
   return null;
 };
 
@@ -68,12 +70,14 @@ const mapTaxPermission = (permissionType) => {
 };
 
 const mapReportsPermission = (permissionType) => {
-  if (["FULL", "VIEW", "MANAGE"].includes(permissionType)) return "reports-full";
+  if (permissionType === "VIEW") return "reports-view";
+  if (["FULL", "MANAGE"].includes(permissionType)) return "reports-full";
   return null;
 };
 
 const mapBankingPermission = (permissionType) => {
-  if (["FULL", "VIEW", "MANAGE"].includes(permissionType)) return "banking-full";
+  if (permissionType === "VIEW") return "banking-view";
+  if (["FULL", "MANAGE"].includes(permissionType)) return "banking-full";
   return null;
 };
 
@@ -134,10 +138,6 @@ export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput)
     return mapInvoiceMatchingPermission(permissionType);
   }
 
-  if (screen === "APPROVAL" || screen === "APPROVALS") {
-    return mapApprovalPermission(permissionType);
-  }
-
   if (
     screen === "PAYMENTS" ||
     screen === "PAYMENT" ||
@@ -180,8 +180,26 @@ export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput)
 };
 
 const getPermissionsArrayFromResponse = (response) => {
+  if (Array.isArray(response)) {
+    return response.flatMap((role) =>
+      Array.isArray(role?.permissions) ? role.permissions : [],
+    );
+  }
+
   const directPermissions = response?.permissions;
   if (Array.isArray(directPermissions)) return directPermissions;
+
+  if (Array.isArray(response?.roles)) {
+    return response.roles.flatMap((role) =>
+      Array.isArray(role?.permissions) ? role.permissions : [],
+    );
+  }
+
+  if (Array.isArray(response?.data)) {
+    return response.data.flatMap((role) =>
+      Array.isArray(role?.permissions) ? role.permissions : [],
+    );
+  }
 
   const nestedPermissions = response?.data?.permissions;
   if (Array.isArray(nestedPermissions)) return nestedPermissions;
@@ -201,7 +219,7 @@ export const normalizeCustomRolePermissionsResponse = (response) => {
     );
 
     if (canonicalPermission) {
-      canonicalSet.add(canonicalPermission);
+      toArray(canonicalPermission).forEach((permission) => canonicalSet.add(permission));
       return;
     }
 

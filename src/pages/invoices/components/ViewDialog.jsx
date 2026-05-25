@@ -140,6 +140,12 @@ const ViewDialog = ({
                                   </div>
                                 </div>
                                 <p className="text-sm mb-3">{entry.action_description}</p>
+                                {entry.action_type === "Rejected" && entry.comments && (
+                                  <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2">
+                                    <p className="text-xs font-medium text-red-700">Rejection comments</p>
+                                    <p className="mt-1 text-sm text-red-900 whitespace-pre-line">{entry.comments}</p>
+                                  </div>
+                                )}
                                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                                   <User className="h-3 w-3" />
                                   <span className="font-medium">{entry.user_name}</span>

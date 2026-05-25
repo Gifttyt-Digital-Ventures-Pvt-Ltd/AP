@@ -17,7 +17,10 @@ const ApprovalDialog = ({
   <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
     <DialogContent data-testid="approval-dialog">
       <DialogHeader>
-        <DialogTitle>{actionType === 'Approved' ? 'Approve Invoice' : 'Reject Invoice'}</DialogTitle>
+        <DialogTitle>
+          {actionType === 'Approved' ? 'Approve Invoice' : 
+           actionType === 'Checked' ? 'Verify Invoice' : 'Reject Invoice'}
+        </DialogTitle>
       </DialogHeader>
       <div className="space-y-4">
         {selectedInvoice && (
@@ -61,10 +64,10 @@ const ApprovalDialog = ({
             Cancel
           </Button>
           <Button className="flex-1" onClick={submitApproval} data-testid="approval-confirm">
-            {actionType === 'Approved' ? (
+            {actionType === 'Approved' || actionType === 'Checked' ? (
               <>
                 <CheckCircle className="h-4 w-4 mr-2" />
-                Approve
+                {actionType === 'Checked' ? 'Verify' : 'Approve'}
               </>
             ) : (
               <>

@@ -29,8 +29,8 @@ const PoApprovalDialog = ({
             <div className="p-4 bg-muted rounded-lg">
               <p><strong>PO Number:</strong> {selectedPO.po_number}</p>
               <p><strong>Vendor:</strong> {selectedPO.vendor_name}</p>
-              <p><strong>Amount:</strong> {formatCurrency(selectedPO.total_amount)}</p>
-              <p><strong>Current Level:</strong> {selectedPO.current_approval_level}</p>
+              <p><strong>Amount:</strong> {formatCurrency(selectedPO.total_amount, selectedPO.currency)}</p>
+              <p><strong>Current Level:</strong> {selectedPO.current_approval_level || 1}</p>
             </div>
 
             <div className="space-y-2">

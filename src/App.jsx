@@ -1,12 +1,24 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { RBACProvider, useRBAC } from "./contexts/RBACContext";
 import SessionTimeout from "./components/SessionTimeout";
 import { Toaster } from "./components/ui/sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "./components/ui/alert-dialog";
 import { Layout } from "./components/Layout";
 import AccessDeniedState from "./components/common/AccessDeniedState";
+import { redirectToOriginLogin } from "./utils/authRedirect";
+import { resolveDefaultAccessibleRoute } from "./constants/rbacPolicy";
 import Login from "./pages/login/Login";
 import Dashboard from "./pages/dashboard/Dashboard";
 import Vendors from "./pages/vendors/Vendors";
@@ -43,6 +55,12 @@ const ProtectedRoute = () => {
   const { isLoaded: rbacLoaded, canAccessRoute } = useRBAC();
   const location = useLocation();
 
+  useEffect(() => {
+    if (!loading && rbacLoaded && !user) {
+      redirectToOriginLogin();
+    }
+  }, [loading, rbacLoaded, user]);
+
   if (loading || !rbacLoaded) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -55,7 +73,7 @@ const ProtectedRoute = () => {
   }
 
   if (!user) {
-    return <Navigate to="/login" replace />;
+    return null;
   }
 
   const canVisitPage = canAccessRoute(location.pathname);
@@ -68,6 +86,103 @@ const ProtectedRoute = () => {
         <AccessDeniedState description="You do not have the required permissions to access this page. Contact your administrator if this seems incorrect." />
       )}
     </Layout>
+  );
+};
+
+const DefaultProtectedRoute = () => {
+  const { canAccessRoute } = useRBAC();
+  const defaultRoute = resolveDefaultAccessibleRoute(canAccessRoute);
+
+  if (!defaultRoute) {
+    return (
+      <AccessDeniedState description="You do not have access to any AP Portal pages. Contact your administrator if this seems incorrect." />
+    );
+  }
+
+  return <Navigate to={defaultRoute} replace />;
+};
+
+const getCurrentHistoryPath = () =>
+  `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
+const BrowserBackLogoutGuard = () => {
+  const { user, logout, loading } = useAuth();
+  const location = useLocation();
+  const [showLogoutPrompt, setShowLogoutPrompt] = useState(false);
+  const previousPathRef = useRef("");
+  const allowingLogoutRef = useRef(false);
+  const guardArmedRef = useRef(false);
+
+  useEffect(() => {
+    previousPathRef.current = getCurrentHistoryPath();
+  }, [location.pathname, location.search, location.hash]);
+
+  useEffect(() => {
+    if (loading || !user || typeof window === "undefined") return undefined;
+
+    if (!guardArmedRef.current) {
+      window.history.pushState(
+        { ...(window.history.state || {}), apBackLogoutGuard: true },
+        "",
+        window.location.href,
+      );
+      previousPathRef.current = getCurrentHistoryPath();
+      guardArmedRef.current = true;
+    }
+
+    const handlePopState = () => {
+      if (allowingLogoutRef.current) return;
+
+      const nextPath = getCurrentHistoryPath();
+      const previousPath = previousPathRef.current;
+
+      if (nextPath !== previousPath) {
+        previousPathRef.current = nextPath;
+        return;
+      }
+
+      setShowLogoutPrompt(true);
+      window.history.pushState(
+        { ...(window.history.state || {}), apBackLogoutGuard: true },
+        "",
+        window.location.href,
+      );
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [loading, user]);
+
+  if (!user) return null;
+
+  const stayLoggedIn = () => {
+    setShowLogoutPrompt(false);
+    previousPathRef.current = getCurrentHistoryPath();
+  };
+
+  const confirmLogout = () => {
+    allowingLogoutRef.current = true;
+    logout();
+    redirectToOriginLogin();
+  };
+
+  return (
+    <AlertDialog open={showLogoutPrompt} onOpenChange={setShowLogoutPrompt}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Log out?</AlertDialogTitle>
+          <AlertDialogDescription>
+            Going back will take you to the login page and log you out of the AP Portal.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel onClick={stayLoggedIn}>Stay logged in</AlertDialogCancel>
+          <AlertDialogAction onClick={confirmLogout}>Log out</AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   );
 };
 
@@ -94,6 +209,7 @@ function AppContent() {
 
   return (
     <>
+      <BrowserBackLogoutGuard />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route element={<ProtectedRoute />}>
@@ -134,7 +250,7 @@ function AppContent() {
               </Suspense>
             }
           />
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/" element={<DefaultProtectedRoute />} />
         </Route>
       </Routes>
       <Toaster position="top-right" />

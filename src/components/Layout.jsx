@@ -6,6 +6,7 @@ import {
   useGetCorporateDetailsQuery,
   useGetCorporateUserDetailsQuery,
 } from '../Services/apis/corporateApi';
+import { redirectToOriginLogin } from '../utils/authRedirect';
 import { Button } from './ui/button';
 import {
   LayoutDashboard,
@@ -75,7 +76,7 @@ export const Layout = ({ children }) => {
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    redirectToOriginLogin();
   };
 
   const isActive = (path) => location.pathname === path;

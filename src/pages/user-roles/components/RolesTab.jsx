@@ -3,7 +3,14 @@ import AddRoleCard from './AddRoleCard';
 import RoleCard from './RoleCard';
 
 // Card grid from source UI adapted for backend roles.
-const RolesTab = ({ roles, onRoleClick, onEditRole, onDeleteRole, onOpenCreateDialog }) => {
+const RolesTab = ({
+  roles,
+  onRoleClick,
+  onEditRole,
+  onDeleteRole,
+  onOpenCreateDialog,
+  canManageRoles = false,
+}) => {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {roles.map((role) => (
@@ -14,11 +21,11 @@ const RolesTab = ({ roles, onRoleClick, onEditRole, onDeleteRole, onOpenCreateDi
           permissionsCount={role.permissionsCount}
           usersCount={Array.isArray(role.users) ? role.users.length : 0}
           onClick={() => onRoleClick(role)}
-          onEdit={() => onEditRole(role)}
-          onDelete={() => onDeleteRole(role)}
+          onEdit={canManageRoles ? () => onEditRole(role) : null}
+          onDelete={canManageRoles ? () => onDeleteRole(role) : null}
         />
       ))}
-      <AddRoleCard onClick={onOpenCreateDialog} />
+      {canManageRoles && <AddRoleCard onClick={onOpenCreateDialog} />}
     </div>
   );
 };

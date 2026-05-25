@@ -4,7 +4,12 @@ import { normalizeCustomRolePermissionsResponse } from "../../utils/rbacPermissi
 const toBoolean = (value) => value === true;
 
 const resolveCorporatePayload = (response) => {
-  return response?.corporateUserDetails?.corporate || response?.corporate || response || null;
+  return (
+    response?.corporateUserDetails?.corporate ||
+    response?.corporate ||
+    response ||
+    null
+  );
 };
 
 const normalizeCorporateSubscription = (corporate) => {
@@ -30,7 +35,9 @@ const normalizeCorporateSubscription = (corporate) => {
     expense: toBoolean(corporate.expense),
     advanceExpense: toBoolean(corporate.advanceExpense),
     combined: toBoolean(
-      corporate.combined ?? corporate.combinedExpense ?? corporate.expenseCombined
+      corporate.combined ??
+        corporate.combinedExpense ??
+        corporate.expenseCombined,
     ),
     liveTracking: toBoolean(corporate.liveTracking),
     voucherEnabled: toBoolean(corporate.voucherEnabled),
@@ -42,7 +49,9 @@ const extractFirstEmployeeRole = (employeeDetails = null) => {
   const assignedRoles = employeeDetails.assignedRoles;
 
   if (Array.isArray(assignedRoles)) {
-    const firstRole = assignedRoles.find((role) => typeof role === "string" && role.trim());
+    const firstRole = assignedRoles.find(
+      (role) => typeof role === "string" && role.trim(),
+    );
     return firstRole ? firstRole.trim() : null;
   }
 
@@ -74,9 +83,11 @@ export const corporateApi = serviceApi.injectEndpoints({
       query: () => ({ url: "/corporate/user/details", method: "GET" }),
       transformResponse: (response) => {
         const corporate = response?.corporateUserDetails?.corporate || null;
-        const corporateUser = response?.corporateUserDetails?.corporateUser || null;
+        const corporateUser =
+          response?.corporateUserDetails?.corporateUser || null;
         const employeeDetails = response?.employeeDetails || null;
-        const effectiveRole = corporateUser?.role || extractFirstEmployeeRole(employeeDetails);
+        const effectiveRole =
+          corporateUser?.role || extractFirstEmployeeRole(employeeDetails);
 
         return {
           raw: response ?? null,
@@ -93,14 +104,16 @@ export const corporateApi = serviceApi.injectEndpoints({
         url: `/corporate/custom-roles/employee/${employeeId}`,
         method: "GET",
       }),
-      transformResponse: (response) => normalizeCustomRolePermissionsResponse(response),
+      transformResponse: (response) =>
+        normalizeCustomRolePermissionsResponse(response),
     }),
     getCustomRoleScreens: builder.query({
       query: () => ({
         url: "/corporate/custom-roles/screens",
         method: "GET",
       }),
-      transformResponse: (response) => (Array.isArray(response) ? response : []),
+      transformResponse: (response) =>
+        Array.isArray(response) ? response : [],
       providesTags: ["Users"],
     }),
     getCustomRoles: builder.query({
@@ -121,7 +134,9 @@ export const corporateApi = serviceApi.injectEndpoints({
         url: `/corporate/custom-roles/${roleId}`,
         method: "GET",
       }),
-      providesTags: (_result, _error, roleId) => [{ type: "Users", id: roleId }],
+      providesTags: (_result, _error, roleId) => [
+        { type: "Users", id: roleId },
+      ],
     }),
     createCustomRole: builder.mutation({
       query: (body) => ({
@@ -228,6 +243,20 @@ export const corporateApi = serviceApi.injectEndpoints({
       },
       providesTags: ["Users"],
     }),
+    getCorporateDepartments: builder.query({
+      query: () => ({
+        url: "/corporate/departments",
+        method: "GET",
+        params: { programType: "VENDOR_PAYMENTS" },
+      }),
+      transformResponse: (response) => {
+        if (Array.isArray(response)) return response;
+        if (Array.isArray(response?.data)) return response.data;
+        if (Array.isArray(response?.departments)) return response.departments;
+        return [];
+      },
+      providesTags: ["Users"],
+    }),
     addCorporateUsers: builder.mutation({
       query: (body) => ({
         url: "/corporate/user/add",
@@ -247,8 +276,9 @@ export const corporateApi = serviceApi.injectEndpoints({
     deleteCorporateEmployee: builder.mutation({
       query: ({ id }) => ({
         url: "/corporate/employee/delete",
-        method: "DELETE",
-        body: { id },
+        method: "POST",
+        params: { employeeId: id },
+        body: {},
       }),
       invalidatesTags: ["Users"],
     }),
@@ -270,6 +300,7 @@ export const {
   useAssignCustomRoleToEmployeesMutation,
   useRemoveCustomRoleFromEmployeesMutation,
   useGetCorporateEmployeesQuery,
+  useGetCorporateDepartmentsQuery,
   useAddCorporateUsersMutation,
   useUpdateCorporateEmployeeMutation,
   useDeleteCorporateEmployeeMutation,

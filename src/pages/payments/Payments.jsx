@@ -8,6 +8,16 @@ import {
 } from '../../Services/apis/approvalsPaymentsBankingApi';
 import { useCreatePaymentBatchMutation } from '../../Services/apis/paymentBatchesApi';
 import { Button } from '../../components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../components/ui/alert-dialog';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
@@ -20,7 +30,8 @@ import {
 } from '../../components/ui/dialog';
 import { Textarea } from '../../components/ui/textarea';
 import { Checkbox } from '../../components/ui/checkbox';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../../components/ui/table';
+import AppDataTable from '../../components/common/AppDataTable';
+import { TableCell, TableRow } from '../../components/ui/table';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Search, Plus, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -38,6 +49,14 @@ const safeFormatDate = (value, pattern = 'dd MMM yy') => {
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? '-' : format(date, pattern);
 };
+
+const batchInvoiceTableHeader = [
+  { key: 'select', title: '', headerClassName: 'w-[48px]' },
+  { key: 'invoice_number', title: 'Invoice', cellClassName: 'font-medium' },
+  { key: 'vendor_name', title: 'Vendor' },
+  { key: 'amount', title: 'Amount' },
+  { key: 'status', title: 'Status' },
+];
 
 const Payments = () => {
   const {
@@ -66,6 +85,7 @@ const Payments = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [createBatchDialogOpen, setCreateBatchDialogOpen] = useState(false);
+  const [bulkReleaseConfirmOpen, setBulkReleaseConfirmOpen] = useState(false);
   const [creatingBatch, setCreatingBatch] = useState(false);
   const [formData, setFormData] = useState({
     invoice_id: '',
@@ -76,11 +96,10 @@ const Payments = () => {
     notes: '',
   });
   const [createBatchForm, setCreateBatchForm] = useState({
-    batch_date: new Date().toISOString().split('T')[0],
     payment_method: 'NEFT',
     bank_account_id: '',
     invoice_ids: [],
-    remarks: '',
+    notes: '',
   });
 
   const normalizePayment = (payment = {}) => ({
@@ -146,8 +165,11 @@ const Payments = () => {
       return;
     }
 
-    const confirmed = window.confirm(`Are you sure you want to release payments for ${invoices.length} invoices?`);
-    if (!confirmed) return;
+    setBulkReleaseConfirmOpen(true);
+  };
+
+  const confirmBulkRelease = async () => {
+    setBulkReleaseConfirmOpen(false);
 
     try {
       const response = await bulkReleasePayments().unwrap();
@@ -175,11 +197,10 @@ const Payments = () => {
 
   const resetCreateBatchForm = () => {
     setCreateBatchForm({
-      batch_date: new Date().toISOString().split('T')[0],
       payment_method: 'NEFT',
       bank_account_id: '',
       invoice_ids: [],
-      remarks: '',
+      notes: '',
     });
   };
 
@@ -244,23 +265,59 @@ const Payments = () => {
 
   const totalPendingAmount = invoices.reduce((sum, inv) => sum + inv.amount, 0);
 
+  const renderBatchInvoiceRow = (invoice, rowIndex, headers) => (
+    <TableRow
+      key={invoice.id ?? rowIndex}
+      className={createBatchForm.invoice_ids.includes(invoice.id) ? 'bg-primary/10' : ''}
+      onClick={() => toggleInvoiceSelection(invoice.id)}
+    >
+      {headers.map((header) => {
+        let value;
+
+        switch (header.key) {
+          case 'select':
+            value = (
+              <div onClick={(e) => e.stopPropagation()}>
+                <Checkbox
+                  checked={createBatchForm.invoice_ids.includes(invoice.id)}
+                  onCheckedChange={() => toggleInvoiceSelection(invoice.id)}
+                  disabled={!canCreateBatch}
+                />
+              </div>
+            );
+            break;
+          case 'amount':
+            value = `₹${Number(invoice.amount || 0).toLocaleString('en-IN')}`;
+            break;
+          default:
+            value = invoice?.[header.key] || '-';
+        }
+
+        return (
+          <TableCell key={header.key} className={header.cellClassName}>
+            {value}
+          </TableCell>
+        );
+      })}
+    </TableRow>
+  );
+
   return (
     <div data-testid="payments-page">
       <PaymentsHeader
         invoicesCount={invoices.length}
         handleBulkRelease={handleBulkRelease}
         canBulkRelease={canBulkRelease}
-        batchDialogTrigger={(
+        batchDialogTrigger={canCreateBatch ? (
           <Button
             variant="default"
             onClick={() => setCreateBatchDialogOpen(true)}
             data-testid="open-create-batch-dialog"
-            disabled={!canCreateBatch}
           >
             <Plus className="h-4 w-4 mr-2" />
             Create Batch
           </Button>
-        )}
+        ) : null}
         paymentDialog={(
           <PaymentDialog
             dialogOpen={dialogOpen}
@@ -289,15 +346,7 @@ const Payments = () => {
           </DialogHeader>
 
           <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>Batch Date *</Label>
-                <Input
-                  type="date"
-                  value={createBatchForm.batch_date}
-                  onChange={(e) => setCreateBatchForm((prev) => ({ ...prev, batch_date: e.target.value }))}
-                />
-              </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Payment Method *</Label>
                 <Select
@@ -350,55 +399,21 @@ const Payments = () => {
               </div>
 
               <div className="border rounded-lg max-h-80 overflow-y-auto">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[48px]" />
-                      <TableHead>Invoice</TableHead>
-                      <TableHead>Vendor</TableHead>
-                      <TableHead>Amount</TableHead>
-                      <TableHead>Status</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {batchEligibleInvoices.length === 0 ? (
-                      <TableRow>
-                        <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                          No invoices available for batch creation
-                        </TableCell>
-                      </TableRow>
-                    ) : (
-                      batchEligibleInvoices.map((invoice) => (
-                        <TableRow
-                          key={invoice.id}
-                          className={createBatchForm.invoice_ids.includes(invoice.id) ? 'bg-primary/10' : ''}
-                          onClick={() => toggleInvoiceSelection(invoice.id)}
-                        >
-                          <TableCell onClick={(e) => e.stopPropagation()}>
-                            <Checkbox
-                              checked={createBatchForm.invoice_ids.includes(invoice.id)}
-                        onCheckedChange={() => toggleInvoiceSelection(invoice.id)}
-                        disabled={!canCreateBatch}
-                            />
-                          </TableCell>
-                          <TableCell className="font-medium">{invoice.invoice_number}</TableCell>
-                          <TableCell>{invoice.vendor_name}</TableCell>
-                          <TableCell>{'\u20B9'}{Number(invoice.amount || 0).toLocaleString('en-IN')}</TableCell>
-                          <TableCell>{invoice.status}</TableCell>
-                        </TableRow>
-                      ))
-                    )}
-                  </TableBody>
-                </Table>
+                <AppDataTable
+                  tableHeader={batchInvoiceTableHeader}
+                  tableData={batchEligibleInvoices}
+                  renderRow={renderBatchInvoiceRow}
+                  emptyMessage="No invoices available for batch creation"
+                />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label>Remarks</Label>
+              <Label>Notes</Label>
               <Textarea
-                value={createBatchForm.remarks}
+                value={createBatchForm.notes}
                 placeholder="Additional notes..."
-                onChange={(e) => setCreateBatchForm((prev) => ({ ...prev, remarks: e.target.value }))}
+                onChange={(e) => setCreateBatchForm((prev) => ({ ...prev, notes: e.target.value }))}
               />
             </div>
           </div>
@@ -453,6 +468,21 @@ const Payments = () => {
           <ReleasedPaymentsTab filteredPayments={filteredPayments} safeFormatDate={safeFormatDate} />
         </TabsContent>
       </Tabs>
+
+      <AlertDialog open={bulkReleaseConfirmOpen} onOpenChange={setBulkReleaseConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Release All Pending Payments?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to release payments for {invoices.length} invoices?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmBulkRelease}>Release Payments</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

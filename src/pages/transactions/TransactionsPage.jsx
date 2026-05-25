@@ -15,6 +15,16 @@ import {
 } from '../../Services/apis/transactionsApi';
 import { format } from 'date-fns';
 import { Button } from '../../components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../components/ui/alert-dialog';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
@@ -104,6 +114,7 @@ const TransactionsPage = () => {
   const [amountMin, setAmountMin] = useState('');
   const [amountMax, setAmountMax] = useState('');
   const [dateFilterOpen, setDateFilterOpen] = useState(false);
+  const [statementDeleteTarget, setStatementDeleteTarget] = useState(null);
 
   // Invoice side panel state
   const [invoicePanelOpen, setInvoicePanelOpen] = useState(false);
@@ -202,14 +213,19 @@ const TransactionsPage = () => {
 
   const handleDeleteStatement = async (statementId) => {
     if (!guardAction('transactions.deleteStatement')) return;
-    if (!window.confirm('Are you sure? This will delete all associated transactions.')) return;
-    
+    setStatementDeleteTarget(statementId);
+  };
+
+  const confirmDeleteStatement = async () => {
+    if (!statementDeleteTarget) return;
     try {
-      await deleteStatement(statementId).unwrap();
+      await deleteStatement(statementDeleteTarget).unwrap();
       toast.success('Statement deleted');
       await Promise.all([refetchStatements(), refetchTransactions()]);
     } catch (error) {
       toast.error('Failed to delete statement');
+    } finally {
+      setStatementDeleteTarget(null);
     }
   };
 
@@ -1150,11 +1166,24 @@ const TransactionsPage = () => {
         handleLinkInvoice={handleLinkInvoice}
         canLinkInvoices={canLinkInvoices}
       />
+
+      <AlertDialog open={Boolean(statementDeleteTarget)} onOpenChange={(open) => !open && setStatementDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Statement?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure? This will delete all associated transactions.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteStatement}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
 
 export default TransactionsPage;
-
-
 

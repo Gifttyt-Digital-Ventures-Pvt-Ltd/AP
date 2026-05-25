@@ -9,13 +9,24 @@ import {
   useLazyGetVendorHistoryQuery,
 } from '../../Services/apis/invoicesVendorsApi';
 import { Button } from '../../components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../components/ui/alert-dialog';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { Search, Plus, Pencil, Trash2, Building2, User } from 'lucide-react';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../../components/ui/dialog';
+import { Search, Plus, Pencil, Trash2, Eye, X, Check, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useActionGuard } from '../../hooks/useActionGuard';
+import { Textarea } from '../../components/ui/textarea';
+import VendorDetailsDialog from '../../components/vendors/VendorDetailsDialog';
 
 const Vendors = () => {
   const {
@@ -34,9 +45,12 @@ const Vendors = () => {
   const [triggerVendorHistory] = useLazyGetVendorHistoryQuery();
   const { guardAction, canPerformAction } = useActionGuard();
   const [searchTerm, setSearchTerm] = useState('');
-  const [listTab, setListTab] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState(null);
+  const [viewingVendor, setViewingVendor] = useState(null);
+  const [vendorDeleteTarget, setVendorDeleteTarget] = useState(null);
+  const [approvalTarget, setApprovalTarget] = useState(null);
+  const [approvalComments, setApprovalComments] = useState('');
   const [formData, setFormData] = useState({
     // Basic Information
     name: '',
@@ -140,28 +154,41 @@ const Vendors = () => {
 
   const handleDelete = async (id) => {
     if (!guardAction('vendors.delete')) return;
-    if (!window.confirm('Are you sure you want to delete this vendor?')) return;
-    
+    setVendorDeleteTarget(id);
+  };
+
+  const confirmDeleteVendor = async () => {
+    if (!vendorDeleteTarget) return;
     try {
-      await deleteVendor(id).unwrap();
+      await deleteVendor(vendorDeleteTarget).unwrap();
       toast.success('Vendor deleted successfully');
     } catch (error) {
       toast.error('Failed to delete vendor');
+    } finally {
+      setVendorDeleteTarget(null);
     }
   };
 
-  const handleVendorApprovalAction = async (vendor, action) => {
+  const openVendorApprovalDialog = (vendor, action) => {
     if (!guardAction('vendors.approve')) return;
-    const comments = window.prompt(`Optional comments for "${action}"`, '') || '';
+    setApprovalTarget({ vendor, action });
+    setApprovalComments('');
+  };
+
+  const confirmVendorApprovalAction = async () => {
+    if (!approvalTarget) return;
+
     try {
       await approveVendor({
-        id: vendor.id,
+        id: approvalTarget.vendor.id,
         body: {
-          action,
-          comments: comments.trim(),
+          action: approvalTarget.action,
+          comments: approvalComments.trim(),
         },
       }).unwrap();
-      toast.success(`Vendor ${action.toLowerCase()} successfully`);
+      toast.success(`Vendor ${approvalTarget.action.toLowerCase()} successfully`);
+      setApprovalTarget(null);
+      setApprovalComments('');
     } catch (error) {
       toast.error(error?.data?.detail || error?.data?.message || 'Failed to update vendor approval');
     }
@@ -169,15 +196,9 @@ const Vendors = () => {
 
   const handleViewVendorHistory = async (vendor) => {
     try {
-      const history = await triggerVendorHistory(vendor.id).unwrap();
-      const rows = Array.isArray(history) ? history : Array.isArray(history?.data) ? history.data : [];
-      if (rows.length === 0) {
-        toast.info('No approval history found for this vendor');
-        return;
-      }
-      toast.success(`History entries: ${rows.length}`);
-    } catch (error) {
-      toast.error(error?.data?.detail || 'Failed to fetch vendor history');
+      await triggerVendorHistory(vendor.id).unwrap();
+    } catch (_error) {
+      // History button is hidden for now; keep API helper for future enablement.
     }
   };
 
@@ -221,14 +242,25 @@ const Vendors = () => {
   const filteredVendors = vendors.filter(vendor =>
     vendor.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
-  const filteredPendingVendors = pendingApprovalVendors.filter(vendor =>
-    String(vendor?.name || '').toLowerCase().includes(searchTerm.toLowerCase())
+  const filteredPendingVendorIds = new Set(
+    pendingApprovalVendors
+      .map((vendor) => (vendor?.id !== undefined && vendor?.id !== null ? String(vendor.id) : null))
+      .filter((id) => id !== undefined && id !== null),
   );
   const canCreateVendor = canPerformAction('vendors.create');
   const canEditVendor = canPerformAction('vendors.update');
   const canDeleteVendor = canPerformAction('vendors.delete');
   const canApproveVendor = canPerformAction('vendors.approve');
-  const visibleRows = listTab === 'pending' ? filteredPendingVendors : filteredVendors;
+
+  const isPendingApprovalVendor = (vendor) => {
+    const normalizedStatus = String(vendor?.status || '')
+      .trim()
+      .toLowerCase()
+      .replace(/[_-]+/g, ' ');
+    if (normalizedStatus === 'pending approval') return true;
+    const vendorId = vendor?.id !== undefined && vendor?.id !== null ? String(vendor.id) : '';
+    return vendorId ? filteredPendingVendorIds.has(vendorId) : false;
+  };
 
   return (
     <div data-testid="vendors-page">
@@ -239,410 +271,29 @@ const Vendors = () => {
           </h1>
           <p className="text-muted-foreground">Manage your vendor relationships</p>
         </div>
-        <Dialog open={dialogOpen} onOpenChange={(open) => {
+        {canCreateVendor && (
+          <Button data-testid="new-vendor-button" onClick={() => setDialogOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            New Vendor
+          </Button>
+        )}
+      </div>
+
+      <VendorDetailsDialog
+        open={dialogOpen}
+        onOpenChange={(open) => {
           setDialogOpen(open);
           if (!open) resetForm();
-        }}>
-          {canCreateVendor && (
-            <DialogTrigger asChild>
-              <Button data-testid="new-vendor-button">
-                <Plus className="h-4 w-4 mr-2" />
-                New Vendor
-              </Button>
-            </DialogTrigger>
-          )}
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid="vendor-dialog">
-            <DialogHeader>
-              <DialogTitle className="text-2xl font-bold">
-                {editingVendor ? 'Edit Vendor' : 'Create Vendor'}
-              </DialogTitle>
-              <p className="text-sm text-muted-foreground">
-                Add contact details and payment info of your vendor in OptiFii
-              </p>
-            </DialogHeader>
-            
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <Tabs defaultValue="basic" className="w-full">
-                <TabsList className="grid w-full grid-cols-4">
-                  <TabsTrigger value="basic">Basic Info</TabsTrigger>
-                  <TabsTrigger value="tax">Tax Info</TabsTrigger>
-                  <TabsTrigger value="bank">Bank Details</TabsTrigger>
-                  <TabsTrigger value="additional">Additional</TabsTrigger>
-                </TabsList>
-
-                {/* Basic Information Tab */}
-                <TabsContent value="basic" className="space-y-4 mt-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="col-span-2">
-                      <Label htmlFor="vendor_type">Vendor Type *</Label>
-                      <div className="flex gap-4 mt-2">
-                        <button
-                          type="button"
-                          onClick={() => setFormData({ ...formData, vendor_type: 'Company' })}
-                          className={`flex-1 p-4 border-2 rounded-lg flex items-center justify-center gap-2 transition-all ${
-                            formData.vendor_type === 'Company'
-                              ? 'border-accent bg-accent/10'
-                              : 'border-border hover:border-accent/50'
-                          }`}
-                        >
-                          <Building2 className="h-5 w-5" />
-                          <span className="font-medium">Company</span>
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setFormData({ ...formData, vendor_type: 'Individual' })}
-                          className={`flex-1 p-4 border-2 rounded-lg flex items-center justify-center gap-2 transition-all ${
-                            formData.vendor_type === 'Individual'
-                              ? 'border-accent bg-accent/10'
-                              : 'border-border hover:border-accent/50'
-                          }`}
-                        >
-                          <User className="h-5 w-5" />
-                          <span className="font-medium">Individual</span>
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="col-span-2">
-                      <Label htmlFor="name">
-                        {formData.vendor_type === 'Company' ? 'Company Name' : 'Full Name'} *
-                      </Label>
-                      <Input
-                        id="name"
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        required
-                        placeholder={formData.vendor_type === 'Company' ? 'e.g., Acme Corporation' : 'e.g., John Doe'}
-                        data-testid="vendor-name-input"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="email">Email *</Label>
-                      <Input
-                        id="email"
-                        type="email"
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        required
-                        placeholder="vendor@example.com"
-                        data-testid="vendor-email-input"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="mobile">Mobile Number *</Label>
-                      <Input
-                        id="mobile"
-                        value={formData.mobile}
-                        onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
-                        placeholder="+91 98765 43210"
-                        data-testid="vendor-mobile-input"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="phone">Phone Number</Label>
-                      <Input
-                        id="phone"
-                        value={formData.phone}
-                        onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                        placeholder="+91 22 1234 5678"
-                        data-testid="vendor-phone-input"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="contact_person">Contact Person</Label>
-                      <Input
-                        id="contact_person"
-                        value={formData.contact_person}
-                        onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
-                        placeholder="e.g., Rahul Sharma"
-                      />
-                    </div>
-
-                    <div className="col-span-2">
-                      <Label htmlFor="category">Category</Label>
-                      <select
-                        id="category"
-                        value={formData.category}
-                        onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                        className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      >
-                        <option value="">Select Category</option>
-                        <option value="IT Services">IT Services</option>
-                        <option value="Office Supplies">Office Supplies</option>
-                        <option value="Consulting">Consulting</option>
-                        <option value="Marketing">Marketing</option>
-                        <option value="Legal">Legal</option>
-                        <option value="Maintenance">Maintenance</option>
-                        <option value="Utilities">Utilities</option>
-                        <option value="Others">Others</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <Label htmlFor="website">Website</Label>
-                      <Input
-                        id="website"
-                        value={formData.website}
-                        onChange={(e) => setFormData({ ...formData, website: e.target.value })}
-                        placeholder="https://example.com"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="currency">Currency</Label>
-                      <select
-                        id="currency"
-                        value={formData.currency}
-                        onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
-                        className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      >
-                        <option value="INR">INR - Indian Rupee</option>
-                        <option value="USD">USD - US Dollar</option>
-                        <option value="EUR">EUR - Euro</option>
-                        <option value="GBP">GBP - British Pound</option>
-                      </select>
-                    </div>
-
-                    <div className="col-span-2">
-                      <Label htmlFor="address_line1">Address Line 1</Label>
-                      <Input
-                        id="address_line1"
-                        value={formData.address_line1}
-                        onChange={(e) => setFormData({ ...formData, address_line1: e.target.value })}
-                        placeholder="Building/Street address"
-                      />
-                    </div>
-
-                    <div className="col-span-2">
-                      <Label htmlFor="address_line2">Address Line 2</Label>
-                      <Input
-                        id="address_line2"
-                        value={formData.address_line2}
-                        onChange={(e) => setFormData({ ...formData, address_line2: e.target.value })}
-                        placeholder="Apartment, suite, etc."
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="city">City</Label>
-                      <Input
-                        id="city"
-                        value={formData.city}
-                        onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                        placeholder="e.g., Mumbai"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="state">State</Label>
-                      <Input
-                        id="state"
-                        value={formData.state}
-                        onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                        placeholder="e.g., Maharashtra"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="pincode">Pincode</Label>
-                      <Input
-                        id="pincode"
-                        value={formData.pincode}
-                        onChange={(e) => setFormData({ ...formData, pincode: e.target.value })}
-                        placeholder="e.g., 400001"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="country">Country</Label>
-                      <Input
-                        id="country"
-                        value={formData.country}
-                        onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                        placeholder="India"
-                      />
-                    </div>
-                  </div>
-                </TabsContent>
-
-                {/* Tax Information Tab */}
-                <TabsContent value="tax" className="space-y-4 mt-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor="pan">PAN Number</Label>
-                      <Input
-                        id="pan"
-                        value={formData.pan}
-                        onChange={(e) => setFormData({ ...formData, pan: e.target.value.toUpperCase() })}
-                        placeholder="ABCDE1234F"
-                        maxLength={10}
-                        className="uppercase"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        10-digit alphanumeric PAN number
-                      </p>
-                    </div>
-
-                    <div>
-                      <Label htmlFor="gstin">GSTIN</Label>
-                      <Input
-                        id="gstin"
-                        value={formData.gstin}
-                        onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })}
-                        placeholder="29ABCDE1314R9Z6"
-                        maxLength={15}
-                        className="uppercase"
-                      />
-                      <p className="text-xs text-muted-foreground mt-1">
-                        15-digit GST Identification Number
-                      </p>
-                    </div>
-
-                    <div>
-                      <Label htmlFor="payment_terms">Payment Terms (Days)</Label>
-                      <select
-                        id="payment_terms"
-                        value={formData.payment_terms}
-                        onChange={(e) => setFormData({ ...formData, payment_terms: e.target.value })}
-                        className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      >
-                        <option value="0">Immediate</option>
-                        <option value="7">Net 7</option>
-                        <option value="15">Net 15</option>
-                        <option value="30">Net 30</option>
-                        <option value="45">Net 45</option>
-                        <option value="60">Net 60</option>
-                        <option value="90">Net 90</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="bg-muted/50 rounded-lg p-4 border border-border mt-4">
-                    <h4 className="font-semibold mb-2 flex items-center gap-2">
-                      <span className="text-accent">i</span>
-                      Tax Information Note
-                    </h4>
-                    <ul className="text-sm text-muted-foreground space-y-1 list-disc list-inside">
-                      <li>PAN is mandatory for vendors with transactions above ₹2 lakhs</li>
-                      <li>GSTIN is required for claiming input tax credit</li>
-                      <li>Ensure tax details are verified before processing payments</li>
-                    </ul>
-                  </div>
-                </TabsContent>
-
-                {/* Bank Details Tab */}
-                <TabsContent value="bank" className="space-y-4 mt-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="col-span-2">
-                      <Label htmlFor="account_holder_name">Account Holder Name</Label>
-                      <Input
-                        id="account_holder_name"
-                        value={formData.account_holder_name}
-                        onChange={(e) => setFormData({ ...formData, account_holder_name: e.target.value })}
-                        placeholder="As per bank records"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="account_number">Account Number</Label>
-                      <Input
-                        id="account_number"
-                        value={formData.account_number}
-                        onChange={(e) => setFormData({ ...formData, account_number: e.target.value })}
-                        placeholder="1234567890"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="ifsc_code">IFSC Code</Label>
-                      <Input
-                        id="ifsc_code"
-                        value={formData.ifsc_code}
-                        onChange={(e) => setFormData({ ...formData, ifsc_code: e.target.value.toUpperCase() })}
-                        placeholder="ICIC0001234"
-                        className="uppercase"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="bank_name">Bank Name</Label>
-                      <Input
-                        id="bank_name"
-                        value={formData.bank_name}
-                        onChange={(e) => setFormData({ ...formData, bank_name: e.target.value })}
-                        placeholder="e.g., ICICI Bank"
-                      />
-                    </div>
-
-                    <div>
-                      <Label htmlFor="branch">Branch</Label>
-                      <Input
-                        id="branch"
-                        value={formData.branch}
-                        onChange={(e) => setFormData({ ...formData, branch: e.target.value })}
-                        placeholder="e.g., Andheri West"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="bg-amber-50 dark:bg-amber-950/20 rounded-lg p-4 border border-amber-200 dark:border-amber-900 mt-4">
-                    <h4 className="font-semibold mb-2 text-amber-900 dark:text-amber-100">
-                      Warning: Bank Details Security
-                    </h4>
-                    <p className="text-sm text-amber-800 dark:text-amber-200">
-                      To modify vendor's bank details, you need to delete and re-enter the information. This ensures payment security and prevents unauthorized changes.
-                    </p>
-                  </div>
-                </TabsContent>
-
-                {/* Additional Information Tab */}
-                <TabsContent value="additional" className="space-y-4 mt-4">
-                  <div>
-                    <Label htmlFor="notes">Notes</Label>
-                    <textarea
-                      id="notes"
-                      value={formData.notes}
-                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                      className="w-full min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      placeholder="Add any additional notes or special instructions..."
-                    />
-                  </div>
-
-                  <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-4 border border-blue-200 dark:border-blue-900">
-                    <h4 className="font-semibold mb-2 text-blue-900 dark:text-blue-100">
-                      Vendor Management Tips
-                    </h4>
-                    <ul className="text-sm text-blue-800 dark:text-blue-200 space-y-1 list-disc list-inside">
-                      <li>Keep vendor information up-to-date for smooth payment processing</li>
-                      <li>Verify bank details before making first payment</li>
-                      <li>Use categories to organize and filter vendors efficiently</li>
-                      <li>Regular audits of vendor data ensure compliance</li>
-                    </ul>
-                  </div>
-                </TabsContent>
-              </Tabs>
-
-              <div className="flex gap-3 pt-4 border-t">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setDialogOpen(false)}
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-                <Button type="submit" className="flex-1" data-testid="vendor-submit-button">
-                  {editingVendor ? 'Update Vendor' : 'Create Vendor'}
-                </Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
-      </div>
+        }}
+        formData={formData}
+        setFormData={setFormData}
+        onSubmit={handleSubmit}
+        title={editingVendor ? 'Edit Vendor' : 'Create Vendor'}
+        description="Add contact details and payment info of your vendor in OptiFii"
+        submitLabel={editingVendor ? 'Update Vendor' : 'Create Vendor'}
+        requireEmail
+        testId="vendor-dialog"
+      />
 
       <div className="mb-6">
         <div className="relative">
@@ -658,12 +309,6 @@ const Vendors = () => {
       </div>
 
       <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
-        <Tabs value={listTab} onValueChange={setListTab} className="px-4 pt-4">
-          <TabsList className="mb-4">
-            <TabsTrigger value="all">All Vendors ({filteredVendors.length})</TabsTrigger>
-            <TabsTrigger value="pending">Pending Approval ({filteredPendingVendors.length})</TabsTrigger>
-          </TabsList>
-        </Tabs>
         <table className="w-full" data-testid="vendors-table">
           <thead className="border-b border-border bg-muted/50">
             <tr>
@@ -677,7 +322,7 @@ const Vendors = () => {
             </tr>
           </thead>
           <tbody>
-            {visibleRows.map((vendor) => (
+            {filteredVendors.map((vendor) => (
               <tr
                 key={vendor.id}
                 className="border-b border-border hover:bg-muted/50 transition-colors"
@@ -716,62 +361,76 @@ const Vendors = () => {
                   {vendor.gstin ? `${vendor.gstin.substring(0, 4)}...${vendor.gstin.slice(-4)}` : '-'}
                 </td>
                 <td className="p-4 text-right">
-                  <div className="flex justify-end gap-2">
+                  <div className="inline-flex justify-start items-center gap-1 pl-3">
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => handleViewVendorHistory(vendor)}
-                      data-testid={`vendor-history-${vendor.id}`}
+                      className="w-8 h-8 p-0 rounded-md"
+                      onClick={() => setViewingVendor(vendor)}
+                      title="View"
+                      data-testid={`view-vendor-${vendor.id}`}
                     >
-                      History
+                      <Eye className="h-4 w-4" />
                     </Button>
-                    {listTab === 'pending' && canApproveVendor && (
+                    {canApproveVendor && isPendingApprovalVendor(vendor) && (
                       <>
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleVendorApprovalAction(vendor, 'Approved')}
-                          data-testid={`approve-vendor-${vendor.id}`}
-                        >
-                          Approve
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleVendorApprovalAction(vendor, 'Rejected')}
-                          data-testid={`reject-vendor-${vendor.id}`}
-                        >
-                          Reject
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleVendorApprovalAction(vendor, 'Sent Back')}
+                          className="w-8 h-8 p-0 rounded-md"
+                          onClick={() => openVendorApprovalDialog(vendor, 'Sent Back')}
+                          title="Send Back"
                           data-testid={`sendback-vendor-${vendor.id}`}
                         >
-                          Send Back
+                          <RotateCcw className="h-4 w-4 text-amber-600" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-8 h-8 p-0 rounded-md"
+                          onClick={() => openVendorApprovalDialog(vendor, 'Rejected')}
+                          title="Reject"
+                          data-testid={`reject-vendor-${vendor.id}`}
+                        >
+                          <X className="h-4 w-4 text-red-500" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-8 h-8 p-0 rounded-md"
+                          onClick={() => openVendorApprovalDialog(vendor, 'Approved')}
+                          title="Approve"
+                          data-testid={`approve-vendor-${vendor.id}`}
+                        >
+                          <Check className="h-4 w-4 text-emerald-700" />
                         </Button>
                       </>
                     )}
-                    {canEditVendor && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleEdit(vendor)}
-                        data-testid={`edit-vendor-${vendor.id}`}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                    )}
-                    {canDeleteVendor && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(vendor.id)}
-                        data-testid={`delete-vendor-${vendor.id}`}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
+                    {(canEditVendor || canDeleteVendor) && (
+                      <>
+                        {canEditVendor && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-8 h-8 p-0 rounded-md"
+                            onClick={() => handleEdit(vendor)}
+                            data-testid={`edit-vendor-${vendor.id}`}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {canDeleteVendor && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="w-8 h-8 p-0 rounded-md"
+                            onClick={() => handleDelete(vendor.id)}
+                            data-testid={`delete-vendor-${vendor.id}`}
+                          >
+                            <Trash2 className="h-4 w-4 text-destructive" />
+                          </Button>
+                        )}
+                      </>
                     )}
                   </div>
                 </td>
@@ -779,14 +438,213 @@ const Vendors = () => {
             ))}
           </tbody>
         </table>
-        {visibleRows.length === 0 && (
+        {filteredVendors.length === 0 && (
           <div className="text-center py-8 text-muted-foreground" data-testid="no-vendors">
-            {listTab === 'pending'
-              ? 'No vendors pending approval.'
-              : 'No vendors found. Create your first vendor to get started!'}
+            No vendors found. Create your first vendor to get started!
           </div>
         )}
       </div>
+
+      <AlertDialog open={Boolean(vendorDeleteTarget)} onOpenChange={(open) => !open && setVendorDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Vendor?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this vendor? This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteVendor}>Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <Dialog open={Boolean(viewingVendor)} onOpenChange={(open) => !open && setViewingVendor(null)}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Vendor Details</DialogTitle>
+          </DialogHeader>
+          {viewingVendor && (
+            <div className="space-y-6 text-sm">
+              <div>
+                <h3 className="font-semibold mb-3">Basic Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-muted-foreground">Name</p>
+                    <p className="font-medium">{viewingVendor.name || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Type</p>
+                    <p className="font-medium">{viewingVendor.vendor_type || 'Company'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Status</p>
+                    <p className="font-medium">{viewingVendor.status || 'Pending Approval'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Category</p>
+                    <p className="font-medium">{viewingVendor.category || '-'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-3">Contact Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-muted-foreground">Email</p>
+                    <p className="font-medium">{viewingVendor.email || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Mobile</p>
+                    <p className="font-medium">{viewingVendor.mobile || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Phone</p>
+                    <p className="font-medium">{viewingVendor.phone || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Contact Person</p>
+                    <p className="font-medium">{viewingVendor.contact_person || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Website</p>
+                    <p className="font-medium">{viewingVendor.website || '-'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-3">Tax Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-muted-foreground">PAN</p>
+                    <p className="font-medium font-['JetBrains_Mono']">{viewingVendor.pan || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">GSTIN</p>
+                    <p className="font-medium font-['JetBrains_Mono']">{viewingVendor.gstin || '-'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-3">Address</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-muted-foreground">Address Line 1</p>
+                    <p className="font-medium">{viewingVendor.address_line1 || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Address Line 2</p>
+                    <p className="font-medium">{viewingVendor.address_line2 || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">City</p>
+                    <p className="font-medium">{viewingVendor.city || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">State</p>
+                    <p className="font-medium">{viewingVendor.state || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Pincode</p>
+                    <p className="font-medium">{viewingVendor.pincode || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Country</p>
+                    <p className="font-medium">{viewingVendor.country || '-'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-3">Bank Details</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-muted-foreground">Bank Name</p>
+                    <p className="font-medium">{viewingVendor.bank_name || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Account Holder Name</p>
+                    <p className="font-medium">{viewingVendor.account_holder_name || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Account Number</p>
+                    <p className="font-medium font-['JetBrains_Mono']">{viewingVendor.account_number || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">IFSC</p>
+                    <p className="font-medium font-['JetBrains_Mono']">{viewingVendor.ifsc_code || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Branch</p>
+                    <p className="font-medium">{viewingVendor.branch || '-'}</p>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <h3 className="font-semibold mb-3">Additional Information</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-muted-foreground">Currency</p>
+                    <p className="font-medium">{viewingVendor.currency || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Payment Terms</p>
+                    <p className="font-medium">{viewingVendor.payment_terms || '-'}</p>
+                  </div>
+                  <div className="md:col-span-2">
+                    <p className="text-muted-foreground">Notes</p>
+                    <p className="font-medium whitespace-pre-wrap">{viewingVendor.notes || '-'}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setViewingVendor(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(approvalTarget)} onOpenChange={(open) => !open && setApprovalTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{approvalTarget?.action || 'Update'} Vendor</DialogTitle>
+          </DialogHeader>
+          {approvalTarget && (
+            <div className="space-y-4">
+              <div className="rounded-lg bg-muted p-4 text-sm">
+                <p><strong>Vendor:</strong> {approvalTarget.vendor.name || '-'}</p>
+                <p><strong>Action:</strong> {approvalTarget.action}</p>
+              </div>
+              <div className="space-y-2">
+                <Label>Comments</Label>
+                <Textarea
+                  value={approvalComments}
+                  onChange={(event) => setApprovalComments(event.target.value)}
+                  placeholder="Optional comments"
+                  rows={3}
+                  data-testid="vendor-approval-comments"
+                />
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setApprovalTarget(null)}>Cancel</Button>
+            <Button
+              onClick={confirmVendorApprovalAction}
+              variant={approvalTarget?.action === 'Rejected' ? 'destructive' : 'default'}
+              data-testid="confirm-vendor-approval"
+            >
+              Confirm
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

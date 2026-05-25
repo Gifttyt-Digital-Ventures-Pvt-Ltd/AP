@@ -1,35 +1,46 @@
 import React from "react";
-import { CheckCircle, Clock, DollarSign, FileText, Plus } from "lucide-react";
+import { CheckCircle, Clock, FileText, IndianRupee, Plus, Settings2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent } from "../../../components/ui/card";
 
 const PurchaseOrdersToolbar = ({
-  glAccounts,
-  seedMasterData,
   setShowCreateDialog,
+  setShowBuilderDialog,
   stats,
   formatCurrency,
   canManagePo,
+  isDemoFlow = false,
+  activeFormat,
 }) => {
   return (
     <>
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold">Purchase Orders</h1>
-          <p className="text-muted-foreground">Manage purchase orders with multi-level approvals</p>
+          <p className="text-muted-foreground">Create and track purchase orders</p>
+          {isDemoFlow && (
+            <p className="mt-1 text-xs text-amber-700">
+              Demo flow is active: created POs are stored locally for this session.
+            </p>
+          )}
+          {activeFormat && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Active format: {activeFormat.name} ({activeFormat.templateCode}, {activeFormat.defaultCurrency})
+            </p>
+          )}
         </div>
         <div className="flex gap-2">
-          {glAccounts.length === 0 && canManagePo && (
-            <Button variant="outline" onClick={seedMasterData} data-testid="seed-master-btn">
-              <Plus className="h-4 w-4 mr-2" />
-              Seed Master Data
-            </Button>
-          )}
           {canManagePo && (
-            <Button onClick={() => setShowCreateDialog(true)} data-testid="create-po-btn">
-              <Plus className="h-4 w-4 mr-2" />
-              Create PO
-            </Button>
+            <>
+              <Button variant="outline" onClick={() => setShowBuilderDialog(true)} data-testid="open-po-builder-btn">
+                <Settings2 className="h-4 w-4 mr-2" />
+                Format Builder
+              </Button>
+              <Button onClick={() => setShowCreateDialog(true)} data-testid="create-po-btn">
+                <Plus className="h-4 w-4 mr-2" />
+                Create PO
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -72,8 +83,8 @@ const PurchaseOrdersToolbar = ({
           <CardContent className="pt-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-muted-foreground">Approved</p>
-                <p className="text-2xl font-bold">{stats.approved}</p>
+                <p className="text-sm text-muted-foreground">Issued</p>
+                <p className="text-2xl font-bold">{stats.issued}</p>
               </div>
               <CheckCircle className="h-8 w-8 text-green-500" />
             </div>
@@ -86,7 +97,7 @@ const PurchaseOrdersToolbar = ({
                 <p className="text-sm text-muted-foreground">Total Value</p>
                 <p className="text-xl font-bold">{formatCurrency(stats.totalValue)}</p>
               </div>
-              <DollarSign className="h-8 w-8 text-primary" />
+              <IndianRupee className="h-8 w-8 text-primary" />
             </div>
           </CardContent>
         </Card>

@@ -19,6 +19,8 @@ const BulkEditDialog = ({
   bulkEditPreviewError,
   setBulkEditPreviewError,
   vendors,
+  departments = [],
+  getDepartmentNameById = () => '',
   taxRates,
   updateBulkEditLineItem,
   saveBulkEditChanges,
@@ -97,6 +99,32 @@ const BulkEditDialog = ({
                     value={bulkEditForm.currency}
                     onChange={(e) => setBulkEditForm((prev) => ({ ...prev, currency: e.target.value }))}
                   />
+                </div>
+                <div className="col-span-2">
+                  <Label className="text-xs">Department</Label>
+                  <select
+                    value={bulkEditForm.department_id || ''}
+                    onChange={(e) =>
+                      setBulkEditForm((prev) => ({
+                        ...prev,
+                        department_id: e.target.value,
+                        department_name: getDepartmentNameById(e.target.value),
+                      }))
+                    }
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    required
+                  >
+                    <option value="">Select department</option>
+                    {departments.map((department) => {
+                      const id = department?.id ?? department?.departmentId ?? department?.department_id;
+                      const name = department?.name ?? department?.departmentName ?? department?.department_name;
+                      return (
+                        <option key={id} value={id}>
+                          {name}
+                        </option>
+                      );
+                    })}
+                  </select>
                 </div>
               </div>
 

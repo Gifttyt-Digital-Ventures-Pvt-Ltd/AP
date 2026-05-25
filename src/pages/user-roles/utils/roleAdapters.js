@@ -20,12 +20,13 @@ const CUSTOM_ROLE_PERMISSION_MAP = {
   "invoice-approver": { screen: "INVOICE", permissionType: "APPROVER" },
   "matching-view": { screen: "INVOICE_MATCHING", permissionType: "VIEW" },
   "matching-manage": { screen: "INVOICE_MATCHING", permissionType: "MANAGE" },
-  "approval-full": { screen: "APPROVAL", permissionType: "FULL" },
   "payments-view": { screen: "PAYMENTS", permissionType: "VIEW" },
   "payments-manage": { screen: "PAYMENTS", permissionType: "MANAGE" },
   "tax-view": { screen: "TAX_MANAGEMENT", permissionType: "VIEW" },
   "tax-manage": { screen: "TAX_MANAGEMENT", permissionType: "MANAGE" },
+  "reports-view": { screen: "REPORTS", permissionType: "VIEW" },
   "reports-full": { screen: "REPORTS", permissionType: "FULL" },
+  "banking-view": { screen: "BANKING", permissionType: "VIEW" },
   "banking-full": { screen: "BANKING", permissionType: "FULL" },
   "roles-view": { screen: "MANAGE_ROLE", permissionType: "VIEW" },
   "roles-manage": { screen: "MANAGE_ROLE", permissionType: "MANAGE" },
@@ -36,25 +37,35 @@ const CUSTOM_ROLE_PERMISSION_MAP = {
   "settings-interaction": { screen: "SETTINGS", permissionType: "INTERACTION" },
 };
 
-const toArray = (value) => (Array.isArray(value) ? value : []);
+const HIDDEN_ROLE_ACCESS_PERMISSIONS = new Set(["approval-view", "approval-full"]);
+const HIDDEN_ROLE_ACCESS_SCREENS = new Set(["APPROVAL", "APPROVALS"]);
+
+const toArray = (value) => {
+  if (!value) return [];
+  if (Array.isArray(value)) return value;
+  return [value];
+};
 
 export const normalizePermissions = (permissions) => {
   if (!permissions) return [];
   if (Array.isArray(permissions)) {
     if (permissions.every((item) => typeof item === "string")) {
-      return permissions.filter((item) => typeof item === "string");
+      return permissions.filter(
+        (item) => typeof item === "string" && !HIDDEN_ROLE_ACCESS_PERMISSIONS.has(item),
+      );
     }
     const fromScreenPermissions = permissions
-      .map((item) =>
-        mapScreenPermissionToCanonical(item?.screen, item?.permissionType),
+      .flatMap((item) =>
+        toArray(mapScreenPermissionToCanonical(item?.screen, item?.permissionType)),
       )
-      .filter(Boolean);
+      .filter((permission) => permission && !HIDDEN_ROLE_ACCESS_PERMISSIONS.has(permission));
     return fromScreenPermissions;
   }
   if (typeof permissions === "object") {
     return Object.entries(permissions)
       .filter(([, enabled]) => Boolean(enabled))
-      .map(([key]) => key);
+      .map(([key]) => key)
+      .filter((key) => !HIDDEN_ROLE_ACCESS_PERMISSIONS.has(key));
   }
   return [];
 };
@@ -81,7 +92,28 @@ export const toUiRole = (role = {}, users = []) => {
   const roleName = normalizeRoleName(
     role.roleName || role.name || role.role_name || role.title || role.roleCode || role.role_code || role.id,
   );
-  const backendPermissions = normalizePermissions(role.permissions);
+  const canonicalPermissions = normalizePermissions(role.permissions);
+  const rawPermissionEntries = toArray(role.permissions).filter(
+    (entry) => entry && typeof entry === "object" && !Array.isArray(entry),
+  );
+  const permissionEntries = [];
+  const seenPermissionKeys = new Set();
+  rawPermissionEntries.forEach((entry, index) => {
+    const screen = String(entry?.screen || "").trim();
+    if (HIDDEN_ROLE_ACCESS_SCREENS.has(screen.toUpperCase())) return;
+    const permissionType = String(entry?.permissionType || "").trim();
+    const dedupeKey = `${screen.toUpperCase()}:${permissionType.toUpperCase()}`;
+    if (seenPermissionKeys.has(dedupeKey)) return;
+    seenPermissionKeys.add(dedupeKey);
+    permissionEntries.push({
+      id: `${dedupeKey || "permission"}-${index}`,
+      canonicalId: toArray(mapScreenPermissionToCanonical(screen, permissionType))[0],
+      screen: screen || null,
+      screenDisplayName: String(entry?.screenDisplayName || "").trim() || null,
+      permissionType: permissionType || null,
+      permissionTypeDisplayName: String(entry?.permissionTypeDisplayName || "").trim() || null,
+    });
+  });
   const matchedUsers = toArray(users).filter((user) => matchesRole(user, roleName));
   const assignedUsersFromRole = toArray(role?.employees || role?.assignedEmployees || role?.users).map((employee) => ({
     id: toUserId(employee),
@@ -108,8 +140,9 @@ export const toUiRole = (role = {}, users = []) => {
     sourceRoleName: roleName,
     name: roleName,
     description: role.description || role.summary || "",
-    permissions: backendPermissions,
-    permissionsCount: backendPermissions.length,
+    permissions: canonicalPermissions,
+    permissionEntries,
+    permissionsCount: canonicalPermissions.length,
     users: uniqueAssignedUsers.map((user) => user.name),
     assignedUsers: uniqueAssignedUsers,
     assignedEmployeeIds: uniqueAssignedUsers.map((user) => user.id).filter(Boolean),

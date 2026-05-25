@@ -19,6 +19,8 @@ const BulkPreviewDialog = ({
   handleAddVendorForBulkItem,
   openBulkEditDialog,
   handleCreateBulkInvoices,
+  departments = [],
+  getDepartmentNameById = () => '',
 }) => {
   const extractedCount = bulkPreviewItems.filter((item) => item.invoicePayload).length;
   const selectableItems = bulkPreviewItems.filter(
@@ -82,13 +84,14 @@ const BulkPreviewDialog = ({
           )}
 
           <div className="border rounded-lg min-h-0 max-w-full overflow-auto max-h-[52vh]">
-            <table className="w-full min-w-[900px] text-sm">
+            <table className="w-full min-w-[1040px] text-sm">
               <thead className="bg-muted/50 border-b sticky top-0 z-10">
                 <tr>
                   <th className="p-3 text-left w-12">Pick</th>
                   <th className="p-3 text-left">File</th>
                   <th className="p-3 text-left">Vendor</th>
                   <th className="p-3 text-left">Invoice #</th>
+                  <th className="p-3 text-left">Department</th>
                   <th className="p-3 text-right">Amount</th>
                   <th className="p-3 text-left">Status</th>
                   <th className="p-3 text-right">Actions</th>
@@ -114,6 +117,43 @@ const BulkPreviewDialog = ({
                     <td className="p-3">{item.filename}</td>
                     <td className="p-3">{item.invoicePayload?.vendor_name || '-'}</td>
                     <td className="p-3 font-['JetBrains_Mono']">{item.invoicePayload?.invoice_number || '-'}</td>
+                    <td className="p-3 min-w-44">
+                      {item.invoicePayload ? (
+                        <select
+                          value={item.invoicePayload.department_id || ''}
+                          onChange={(e) =>
+                            setBulkPreviewItems((prev) =>
+                              prev.map((row) =>
+                                row.id === item.id
+                                  ? {
+                                      ...row,
+                                      invoicePayload: {
+                                        ...row.invoicePayload,
+                                        department_id: e.target.value,
+                                        department_name: getDepartmentNameById(e.target.value),
+                                      },
+                                    }
+                                  : row
+                              )
+                            )
+                          }
+                          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                          <option value="">Select department</option>
+                          {departments.map((department) => {
+                            const id = department?.id ?? department?.departmentId ?? department?.department_id;
+                            const name = department?.name ?? department?.departmentName ?? department?.department_name;
+                            return (
+                              <option key={id} value={id}>
+                                {name}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      ) : (
+                        '-'
+                      )}
+                    </td>
                     <td className="p-3 text-right font-['JetBrains_Mono']">
                       {item.invoicePayload ? `\u20B9${Number(item.invoicePayload.amount || 0).toLocaleString('en-IN')}` : '-'}
                     </td>
@@ -136,7 +176,7 @@ const BulkPreviewDialog = ({
                             onClick={() => handleAddVendorForBulkItem(item.id)}
                             disabled={bulkCreating || bulkExtracting || bulkAddingVendorItemId === item.id}
                           >
-                            {bulkAddingVendorItemId === item.id ? 'Adding...' : 'Add Vendor'}
+                            {bulkAddingVendorItemId === item.id ? 'Requesting...' : 'Request Vendor'}
                           </Button>
                         )}
                         <Button

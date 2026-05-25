@@ -13,6 +13,11 @@ import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import { Separator } from '../../../components/ui/separator';
 import { CheckCircle2, Edit2, Shield, Users } from 'lucide-react';
+import {
+  isPermissionChecked,
+  isViewOnlyImplied,
+  togglePermissionSelection,
+} from '../utils/permissionSelection';
 
 // Role detail dialog for backend roles.
 const ViewRoleDialog = ({
@@ -25,6 +30,7 @@ const ViewRoleDialog = ({
   onSave,
   saving = false,
   availableUsers = [],
+  canManageRoles = false,
 }) => {
   const [editSection, setEditSection] = useState(null);
   const [selectedPermissions, setSelectedPermissions] = useState([]);
@@ -36,18 +42,14 @@ const ViewRoleDialog = ({
     setSelectedPermissions(Array.isArray(role.permissions) ? role.permissions : []);
     setSelectedEmployeeIds(Array.isArray(role.assignedEmployeeIds) ? role.assignedEmployeeIds : []);
     setUserSearch('');
-    setEditSection(startInEditMode ? 'permissions' : null);
-  }, [role, open, startInEditMode]);
+    setEditSection(startInEditMode && canManageRoles ? 'permissions' : null);
+  }, [role, open, startInEditMode, canManageRoles]);
 
   const isPermissionEditMode = editSection === 'permissions';
   const isUserEditMode = editSection === 'users';
 
-  const handlePermissionToggle = (permissionId) => {
-    setSelectedPermissions((prev) =>
-      prev.includes(permissionId)
-        ? prev.filter((id) => id !== permissionId)
-        : [...prev, permissionId]
-    );
+  const handlePermissionToggle = (group, permissionId) => {
+    setSelectedPermissions((prev) => togglePermissionSelection(group, permissionId, prev));
   };
 
   const handleCancel = () => {
@@ -76,6 +78,31 @@ const ViewRoleDialog = ({
       return name.includes(query) || email.includes(query) || empId.includes(query);
     });
   }, [availableUsers, userSearch]);
+
+  const displayedPermissions = useMemo(() => {
+    const backendEntries = Array.isArray(role?.permissionEntries) ? role.permissionEntries : [];
+    if (backendEntries.length > 0) {
+      return backendEntries.map((entry, index) => {
+        const screenLabel =
+          String(entry?.screenDisplayName || '').trim() ||
+          String(entry?.screen || '').trim();
+        const permissionTypeLabel =
+          String(entry?.permissionTypeDisplayName || '').trim() ||
+          String(entry?.permissionType || '').trim();
+        const fallbackLabel = entry?.canonicalId ? permissionLabels[entry.canonicalId] : '';
+        const label = screenLabel && permissionTypeLabel
+          ? `${screenLabel} - ${permissionTypeLabel}`
+          : fallbackLabel || screenLabel || permissionTypeLabel || 'Unknown Permission';
+        const key = entry?.id || `${entry?.screen || 'screen'}-${entry?.permissionType || 'type'}-${index}`;
+        return { key, label };
+      });
+    }
+    const canonicalPermissions = Array.isArray(role?.permissions) ? role.permissions : [];
+    return canonicalPermissions.map((permissionId) => ({
+      key: permissionId,
+      label: permissionLabels[permissionId] || permissionId,
+    }));
+  }, [permissionLabels, role?.permissionEntries, role?.permissions]);
 
   const handleSave = async () => {
     const didSave = await onSave({
@@ -119,7 +146,7 @@ const ViewRoleDialog = ({
                     Permissions ({isPermissionEditMode ? selectedPermissions.length : role.permissionsCount})
                   </h3>
                 </div>
-                {!isPermissionEditMode && (
+                {canManageRoles && !isPermissionEditMode && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -145,18 +172,43 @@ const ViewRoleDialog = ({
                       </AccordionTrigger>
                       <AccordionContent className="pb-4">
                         <div className="space-y-3 pt-2">
-                          {group.permissions.map((permission) => (
-                            <div key={permission.id} className="flex items-center space-x-3">
+                          {group.permissions.map((permission) => {
+                            const impliedViewOnly = isViewOnlyImplied(
+                              group,
+                              permission.id,
+                              selectedPermissions,
+                            );
+                            return (
+                            <div
+                              key={permission.id}
+                              className={`flex items-center space-x-3 ${
+                                impliedViewOnly ? 'opacity-50' : ''
+                              }`}
+                            >
                               <Checkbox
                                 id={`edit-${permission.id}`}
-                                checked={selectedPermissions.includes(permission.id)}
-                                onCheckedChange={() => handlePermissionToggle(permission.id)}
+                                checked={isPermissionChecked(group, permission.id, selectedPermissions)}
+                                disabled={impliedViewOnly}
+                                onCheckedChange={() => handlePermissionToggle(group, permission.id)}
                               />
-                              <label htmlFor={`edit-${permission.id}`} className="text-sm text-foreground cursor-pointer">
+                              <label
+                                htmlFor={`edit-${permission.id}`}
+                                className={`text-sm ${
+                                  impliedViewOnly
+                                    ? 'text-muted-foreground cursor-not-allowed'
+                                    : 'text-foreground cursor-pointer'
+                                }`}
+                              >
                                 {permission.label}
+                                {impliedViewOnly && (
+                                  <span className="ml-2 text-xs text-muted-foreground">
+                                    Included with higher access
+                                  </span>
+                                )}
                               </label>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </AccordionContent>
                     </AccordionItem>
@@ -164,11 +216,11 @@ const ViewRoleDialog = ({
                 </Accordion>
               ) : (
                 <div className="space-y-2">
-                  {role.permissions.length > 0 ? (
-                    role.permissions.map((permissionId) => (
-                      <div key={permissionId} className="flex items-center gap-2 p-3 bg-accent/50 rounded-lg">
+                  {displayedPermissions.length > 0 ? (
+                    displayedPermissions.map((permission) => (
+                      <div key={permission.key} className="flex items-center gap-2 p-3 bg-accent/50 rounded-lg">
                         <CheckCircle2 className="w-4 h-4 text-primary" />
-                        <span className="text-sm">{permissionLabels[permissionId] || permissionId}</span>
+                        <span className="text-sm">{permission.label}</span>
                       </div>
                     ))
                   ) : (
@@ -187,7 +239,7 @@ const ViewRoleDialog = ({
                     Assigned Users ({isUserEditMode ? selectedEmployeeIds.length : role.users.length})
                   </h3>
                 </div>
-                {!isUserEditMode && (
+                {canManageRoles && !isUserEditMode && (
                   <Button
                     variant="outline"
                     size="sm"

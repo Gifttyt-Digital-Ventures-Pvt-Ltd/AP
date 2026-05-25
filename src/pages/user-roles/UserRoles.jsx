@@ -15,6 +15,16 @@ import {
   useUpdateCorporateEmployeeMutation,
 } from '../../Services/apis/corporateApi';
 import { Button } from '../../components/ui/button';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '../../components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { toast } from 'sonner';
 import { useAuth } from '../../contexts/AuthContext';
@@ -28,11 +38,13 @@ import {
 } from './utils/roleAdapters';
 import InviteUserDialog from './components/InviteUserDialog';
 import AddRoleDialog from './components/AddRoleDialog';
+import AssignRoleSetsDialog from './components/AssignRoleSetsDialog';
 import ViewRoleDialog from './components/ViewRoleDialog';
 import RolesTab from './components/RolesTab';
 import UsersTable from './components/UsersTable';
 import ApprovalWorkflowTab from './components/ApprovalWorkflowTab';
 import { useActionGuard } from '../../hooks/useActionGuard';
+import { FULL_ACCESS_PERMISSION } from '../../constants/rbacPolicy';
 
 const UserRoles = () => {
   const [activeTab, setActiveTab] = useState('users');
@@ -41,9 +53,19 @@ const UserRoles = () => {
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
   const [addRoleDialogOpen, setAddRoleDialogOpen] = useState(false);
   const [viewRoleDialogOpen, setViewRoleDialogOpen] = useState(false);
+  const [assignRoleSetsDialogOpen, setAssignRoleSetsDialogOpen] = useState(false);
   const [selectedRole, setSelectedRole] = useState(null);
+  const [selectedUserForRoleSets, setSelectedUserForRoleSets] = useState(null);
+  const [selectedUserInitialRoleIds, setSelectedUserInitialRoleIds] = useState([]);
   const [inviteDialogMode, setInviteDialogMode] = useState('add');
   const [editingUser, setEditingUser] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState({
+    open: false,
+    title: '',
+    description: '',
+    confirmLabel: 'Confirm',
+    onConfirm: null,
+  });
 
   const [inviteForm, setInviteForm] = useState({
     name: '',
@@ -60,13 +82,13 @@ const UserRoles = () => {
   const navigate = useNavigate();
   const canViewRoles = hasPermission('roles-view') || hasPermission('roles-manage');
   const canManageRoles = hasPermission('roles-manage');
+  const canManageUserRecords = hasPermission(FULL_ACCESS_PERMISSION);
+  const canAssignRoleSets = canManageRoles || canManageUserRecords;
   const canViewWorkflow =
     hasPermission('vendor-workflow-view') ||
-    hasPermission('vendor-workflow-manage') ||
-    canManageRoles;
+    hasPermission('vendor-workflow-manage');
   const canManageWorkflow =
-    hasPermission('vendor-workflow-manage') ||
-    canManageRoles;
+    hasPermission('vendor-workflow-manage');
   const canViewUserRolesModule = canViewRoles || canViewWorkflow;
   const shouldSkipUsersAndRoles = !currentUser || !canViewRoles;
   const shouldSkipVendors = !currentUser || !canViewWorkflow;
@@ -77,7 +99,7 @@ const UserRoles = () => {
     isError: usersError,
     refetch: refetchUsers,
   } = useGetCorporateEmployeesQuery(
-    { type: 'EMPLOYEES', limit: 200, offset: 0, programType: 'VENDORS_PAYMENTS' },
+    { type: 'EMPLOYEES', limit: 200, offset: 0, programType: 'VENDOR_PAYMENTS' },
     { skip: shouldSkipUsersAndRoles },
   );
 
@@ -101,6 +123,7 @@ const UserRoles = () => {
   const [createCustomRole, { isLoading: createCustomRoleLoading }] = useCreateCustomRoleMutation();
   const [updateCustomRole, { isLoading: updateCustomRoleLoading }] = useUpdateCustomRoleMutation();
   const [deleteCustomRole, { isLoading: deleteCustomRoleLoading }] = useDeleteCustomRoleMutation();
+  const [assigningRoleSets, setAssigningRoleSets] = useState(false);
   const {
     data: availableCustomRoleScreens = [],
     isError: customRoleScreensError,
@@ -163,6 +186,17 @@ const UserRoles = () => {
 
   const allRoles = useMemo(() => backendRoles, [backendRoles]);
 
+  const getAssignedRoleIdsForUser = (user) => {
+    if (!user?.id) return [];
+    const userId = String(user.id);
+    return allRoles
+      .filter((role) =>
+        Array.isArray(role.assignedEmployeeIds) &&
+        role.assignedEmployeeIds.some((employeeId) => String(employeeId) === userId),
+      )
+      .map((role) => String(role.id));
+  };
+
   const loading = !currentUser || (!accessDenied && (usersLoading || rolesLoading || vendorsLoading));
 
   const resetInviteForm = () => {
@@ -203,6 +237,12 @@ const UserRoles = () => {
     setInviteDialogOpen(true);
   };
 
+  const openAssignRoleSetsDialog = (user) => {
+    setSelectedUserForRoleSets(user || null);
+    setSelectedUserInitialRoleIds(getAssignedRoleIdsForUser(user));
+    setAssignRoleSetsDialogOpen(true);
+  };
+
   const handleInviteUser = async (e) => {
     e.preventDefault();
     if (!guardAction(inviteDialogMode === 'edit' ? 'roles.updateUserRole' : 'roles.invite')) return;
@@ -233,7 +273,7 @@ const UserRoles = () => {
             grade: String(inviteForm.grade || '').trim() || '',
             department: String(inviteForm.department || '').trim() || '',
             role: '',
-            programType: 'VENDORS_PAYMENTS',
+            programType: 'VENDOR_PAYMENTS',
           },
         ],
       };
@@ -257,16 +297,21 @@ const UserRoles = () => {
 
   const handleDeleteUser = async (userId, userName) => {
     if (!guardAction('roles.deleteUser')) return;
-    if (!window.confirm(`Are you sure you want to delete ${userName}? This action cannot be undone.`)) {
-      return;
-    }
-    try {
-      await deleteCorporateEmployee({ id: userId }).unwrap();
-      toast.success('User deleted successfully');
-      refetchUsers();
-    } catch (error) {
-      toast.error(error?.data?.detail || 'Failed to delete user');
-    }
+    setConfirmDialog({
+      open: true,
+      title: 'Delete User?',
+      description: `Are you sure you want to delete ${userName}? This action cannot be undone.`,
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        try {
+          await deleteCorporateEmployee({ id: userId }).unwrap();
+          toast.success('User deleted successfully');
+          refetchUsers();
+        } catch (error) {
+          toast.error(error?.data?.detail || 'Failed to delete user');
+        }
+      },
+    });
   };
 
   const handleCreateCustomRole = async ({ name, description, permissions }) => {
@@ -322,14 +367,21 @@ const UserRoles = () => {
   const handleDeleteRole = async (role) => {
     if (!role) return;
     if (!guardAction('roles.manageCustomRoles')) return;
-    if (!window.confirm(`Delete role "${role.name}"? This action cannot be undone.`)) return;
-    try {
-      await deleteCustomRole(role.id).unwrap();
-      toast.success('Role deleted successfully');
-      refetchRoles();
-    } catch (error) {
-      toast.error(error?.data?.detail || 'Failed to delete custom role');
-    }
+    setConfirmDialog({
+      open: true,
+      title: 'Delete Role?',
+      description: `Delete role "${role.name}"? This action cannot be undone.`,
+      confirmLabel: 'Delete',
+      onConfirm: async () => {
+        try {
+          await deleteCustomRole(role.id).unwrap();
+          toast.success('Role deleted successfully');
+          refetchRoles();
+        } catch (error) {
+          toast.error(error?.data?.detail || 'Failed to delete custom role');
+        }
+      },
+    });
   };
 
   const handleSaveRoleChanges = async (roleDraft) => {
@@ -414,6 +466,48 @@ const UserRoles = () => {
     }
   };
 
+  const handleAssignRoleSets = async ({ user, previousRoleIds, selectedRoleIds }) => {
+    if (!guardAction('roles.manageCustomRoles')) return false;
+    if (!user?.id) {
+      toast.error('Invalid user selected');
+      return false;
+    }
+
+    const previousSet = new Set((previousRoleIds || []).map((id) => String(id)));
+    const selectedSet = new Set((selectedRoleIds || []).map((id) => String(id)));
+    const roleIdsToAssign = (selectedRoleIds || []).filter((id) => !previousSet.has(String(id)));
+    const roleIdsToRemove = (previousRoleIds || []).filter((id) => !selectedSet.has(String(id)));
+
+    setAssigningRoleSets(true);
+    try {
+      await Promise.all([
+        ...roleIdsToAssign.map((roleId) =>
+          assignCustomRoleToEmployees({
+            roleId,
+            employeeIds: [user.id],
+          }).unwrap(),
+        ),
+        ...roleIdsToRemove.map((roleId) =>
+          removeCustomRoleFromEmployees({
+            roleId,
+            employeeIds: [user.id],
+          }).unwrap(),
+        ),
+      ]);
+
+      toast.success('Role sets assigned successfully. Final access has been updated for this user.');
+      setAssignRoleSetsDialogOpen(false);
+      setSelectedUserForRoleSets(null);
+      await Promise.all([refetchRoles(), refetchUsers()]);
+      return true;
+    } catch (error) {
+      toast.error(error?.data?.detail || 'Failed to assign role sets');
+      return false;
+    } finally {
+      setAssigningRoleSets(false);
+    }
+  };
+
   const handleRoleCardClick = (role) => {
     setSelectedRole(role);
     setRoleDialogMode('view');
@@ -443,8 +537,8 @@ const UserRoles = () => {
           <p className="text-red-600 mb-6">
             You do not have permission to access User Management.
           </p>
-          <Button onClick={() => navigate('/dashboard')} variant="outline">
-            Return to Dashboard
+          <Button onClick={() => navigate('/')} variant="outline">
+            Return to Home
           </Button>
         </div>
       </div>
@@ -460,7 +554,7 @@ const UserRoles = () => {
           </h1>
           <p className="text-muted-foreground">Manage user permissions and access rights</p>
         </div>
-        {canManageRoles && (
+        {canManageUserRecords && (
           <Button onClick={openAddUserDialog} data-testid="invite-user-btn">
             <UserPlus className="h-4 w-4 mr-2" />
             Add User
@@ -497,7 +591,9 @@ const UserRoles = () => {
               currentUserId={currentUser?.id}
               handleDeleteUser={handleDeleteUser}
               handleEditUser={openEditUserDialog}
-              canManageRoles={canManageRoles}
+              handleAssignRoles={openAssignRoleSetsDialog}
+              canManageUserRecords={canManageUserRecords}
+              canAssignRoles={canAssignRoleSets}
             />
           </TabsContent>
         )}
@@ -510,6 +606,7 @@ const UserRoles = () => {
               onEditRole={handleRoleCardEdit}
               onDeleteRole={handleDeleteRole}
               onOpenCreateDialog={() => setAddRoleDialogOpen(true)}
+              canManageRoles={canManageRoles}
             />
           </TabsContent>
         )}
@@ -541,6 +638,22 @@ const UserRoles = () => {
         saving={createCustomRoleLoading}
       />
 
+      <AssignRoleSetsDialog
+        open={assignRoleSetsDialogOpen}
+        onOpenChange={(open) => {
+          setAssignRoleSetsDialogOpen(open);
+          if (!open) {
+            setSelectedUserForRoleSets(null);
+            setSelectedUserInitialRoleIds([]);
+          }
+        }}
+        user={selectedUserForRoleSets}
+        roles={allRoles}
+        initialRoleIds={selectedUserInitialRoleIds}
+        onSave={handleAssignRoleSets}
+        saving={assigningRoleSets}
+      />
+
       <ViewRoleDialog
         open={viewRoleDialogOpen}
         onOpenChange={(open) => {
@@ -554,7 +667,31 @@ const UserRoles = () => {
         availableUsers={users.filter((user) => user?.id)}
         onSave={handleSaveRoleChanges}
         saving={updateCustomRoleLoading || deleteCustomRoleLoading}
+        canManageRoles={canManageRoles}
       />
+
+      <AlertDialog
+        open={confirmDialog.open}
+        onOpenChange={(open) => setConfirmDialog((prev) => ({ ...prev, open }))}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{confirmDialog.title}</AlertDialogTitle>
+            <AlertDialogDescription>{confirmDialog.description}</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                await confirmDialog.onConfirm?.();
+                setConfirmDialog((prev) => ({ ...prev, open: false }));
+              }}
+            >
+              {confirmDialog.confirmLabel}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

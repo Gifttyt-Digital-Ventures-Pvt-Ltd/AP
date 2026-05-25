@@ -64,6 +64,22 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
       query: (id) => ({ url: `/invoices/${id}/history`, method: "GET" }),
       providesTags: ["Invoices"],
     }),
+    getPendingCheckerInvoices: builder.query({
+      query: () => ({ url: "/checker/pending", method: "GET" }),
+      transformResponse: (response) =>
+        Array.isArray(response)
+          ? response.map(toInvoiceUiPayload)
+          : [],
+      providesTags: ["Invoices", "Approvals"],
+    }),
+    checkInvoice: builder.mutation({
+      query: ({ id, body }) => ({
+        url: `/invoices/${id}/check`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Invoices", "Approvals", "Dashboard", "Reports"],
+    }),
     getVendors: builder.query({
       query: () => ({ url: "/vendors", method: "GET" }),
       transformResponse: (response) =>
@@ -95,6 +111,14 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
         body: toVendorApiPayload(body),
       }),
       invalidatesTags: [{ type: "Vendors", id: "LIST" }, "Dashboard", "Reports"],
+    }),
+    requestVendorAddition: builder.mutation({
+      query: (body) => ({
+        url: "/vendors/request",
+        method: "POST",
+        body: toVendorApiPayload(body),
+      }),
+      invalidatesTags: [{ type: "Vendors", id: "PENDING" }],
     }),
     updateVendor: builder.mutation({
       query: ({ id, body }) => ({
@@ -157,8 +181,11 @@ export const {
   useApproveInvoiceMutation,
   useGetInvoiceHistoryQuery,
   useLazyGetInvoiceHistoryQuery,
+  useGetPendingCheckerInvoicesQuery,
+  useCheckInvoiceMutation,
   useGetVendorsQuery,
   useCreateVendorMutation,
+  useRequestVendorAdditionMutation,
   useUpdateVendorMutation,
   useDeleteVendorMutation,
   useGetPendingVendorApprovalsQuery,
