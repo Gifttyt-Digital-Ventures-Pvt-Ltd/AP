@@ -9,7 +9,6 @@ const PurchaseOrdersToolbar = ({
   stats,
   formatCurrency,
   canManagePo,
-  isDemoFlow = false,
   activeFormat,
 }) => {
   return (
@@ -18,11 +17,6 @@ const PurchaseOrdersToolbar = ({
         <div>
           <h1 className="text-2xl font-bold">Purchase Orders</h1>
           <p className="text-muted-foreground">Create and track purchase orders</p>
-          {isDemoFlow && (
-            <p className="mt-1 text-xs text-amber-700">
-              Demo flow is active: created POs are stored locally for this session.
-            </p>
-          )}
           {activeFormat && (
             <p className="mt-1 text-xs text-muted-foreground">
               Active format: {activeFormat.name} ({activeFormat.templateCode}, {activeFormat.defaultCurrency})
