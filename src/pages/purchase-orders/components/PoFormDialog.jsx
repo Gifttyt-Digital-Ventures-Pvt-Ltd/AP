@@ -48,7 +48,6 @@ const PoFormDialog = ({
   calculateLineTotal,
   calculatePOTotal,
   handleCreatePO,
-  loadDemoPoSample,
   taxMode,
   createAction,
 }) => {
@@ -228,19 +227,6 @@ const PoFormDialog = ({
                 {isPreviewing ? "Preview before saving in" : "Editing in selected format:"} {selectedFormat.name || "PO Format"} ({templateCode})
               </p>
             </div>
-            {!isPreviewing && (
-              <div className="flex gap-2">
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={loadDemoPoSample}
-                  data-testid="load-demo-po-sample-btn"
-                >
-                  Load sample
-                </Button>
-              </div>
-            )}
           </div>
         </DialogHeader>
 
