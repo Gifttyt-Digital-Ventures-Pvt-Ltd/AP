@@ -83,15 +83,25 @@ const GoodsReceipt = () => {
     refetch: refetchGrns,
   } = useGetGrnsQuery();
   const {
-    data: approvedPOsData = [],
-    isLoading: approvedPOsLoading,
-    refetch: refetchApprovedPOs,
+    data: approvedPOsLegacyData = [],
+    isLoading: approvedPOsLegacyLoading,
+    refetch: refetchApprovedPOsLegacy,
   } = useGetPurchaseOrdersQuery({ status: 'Approved' });
   const {
-    data: partialPOsData = [],
-    isLoading: partialPOsLoading,
-    refetch: refetchPartialPOs,
+    data: approvedPOsCanonicalData = [],
+    isLoading: approvedPOsCanonicalLoading,
+    refetch: refetchApprovedPOsCanonical,
+  } = useGetPurchaseOrdersQuery({ status: 'ISSUED' });
+  const {
+    data: partialPOsLegacyData = [],
+    isLoading: partialPOsLegacyLoading,
+    refetch: refetchPartialPOsLegacy,
   } = useGetPurchaseOrdersQuery({ status: 'Partially Received' });
+  const {
+    data: partialPOsCanonicalData = [],
+    isLoading: partialPOsCanonicalLoading,
+    refetch: refetchPartialPOsCanonical,
+  } = useGetPurchaseOrdersQuery({ status: 'PARTIALLY_RECEIVED' });
   const [getPurchaseOrderById] = useLazyGetPurchaseOrderByIdQuery();
   const [createGrn] = useCreateGrnMutation();
   const [postGrn] = usePostGrnMutation();
@@ -160,9 +170,16 @@ const GoodsReceipt = () => {
 
   const grns = Array.isArray(grnsData) ? grnsData.map(normalizeGrn) : [];
   const purchaseOrders = [
-    ...(Array.isArray(approvedPOsData) ? approvedPOsData : []),
-    ...(Array.isArray(partialPOsData) ? partialPOsData : []),
-  ].map(normalizePurchaseOrder);
+    ...(Array.isArray(approvedPOsLegacyData) ? approvedPOsLegacyData : []),
+    ...(Array.isArray(approvedPOsCanonicalData) ? approvedPOsCanonicalData : []),
+    ...(Array.isArray(partialPOsLegacyData) ? partialPOsLegacyData : []),
+    ...(Array.isArray(partialPOsCanonicalData) ? partialPOsCanonicalData : []),
+  ]
+    .map(normalizePurchaseOrder)
+    .filter(
+      (po, index, list) =>
+        list.findIndex((candidate) => (candidate.id ?? candidate.po_id ?? candidate.poId) === (po.id ?? po.po_id ?? po.poId)) === index,
+    );
   const [selectedPO, setSelectedPO] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -179,7 +196,11 @@ const GoodsReceipt = () => {
   const canPostGrn = canPerformAction('grn.post');
 
   const loading =
-    grnsLoading || approvedPOsLoading || partialPOsLoading;
+    grnsLoading ||
+    approvedPOsLegacyLoading ||
+    approvedPOsCanonicalLoading ||
+    partialPOsLegacyLoading ||
+    partialPOsCanonicalLoading;
   // Form state
   const [grnForm, setGrnForm] = useState({
     po_id: '',
@@ -195,8 +216,10 @@ const GoodsReceipt = () => {
     try {
       await Promise.all([
         refetchGrns(),
-        refetchApprovedPOs(),
-        refetchPartialPOs(),
+        refetchApprovedPOsLegacy(),
+        refetchApprovedPOsCanonical(),
+        refetchPartialPOsLegacy(),
+        refetchPartialPOsCanonical(),
       ]);
     } catch (error) {
       console.error('Error refreshing data:', error);

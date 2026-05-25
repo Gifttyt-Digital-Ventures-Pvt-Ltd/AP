@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import AppDataTable from "../../../components/common/AppDataTable";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import { Textarea } from "../../../components/ui/textarea";
-import { isFormatFieldEnabled, isFormatSectionEnabled } from "../utils";
+import { isFormatFieldEnabled, isFormatSectionEnabled, normalizePoTemplateCode } from "../utils";
 
 const getPoFormLineItemTableHeader = ({ isInr, fieldOn }) => [
   ...(fieldOn("LINE_ITEM", "item_name") ? [{ key: "item_description", title: "Description *", headerClassName: "w-[220px]" }] : []),
@@ -64,7 +64,7 @@ const PoFormDialog = ({
   const isCreating = Boolean(createAction);
   const isPreviewing = Boolean(previewAction);
   const previewSubmitForApproval = previewAction === "submit";
-  const templateCode = selectedFormat.templateCode || "T1";
+  const templateCode = normalizePoTemplateCode(selectedFormat.templateCode || "T1");
   const documentBorderClass = templateCode === "T3" ? "border-2 border-slate-900" : "border";
   const headerBorderClass = templateCode === "T4" ? "border-b-4 border-emerald-600" : "border-b";
   const showTdsControls = isInr && fieldOn("TAX_TOTALS", "is_tds_applicable");
@@ -246,7 +246,7 @@ const PoFormDialog = ({
                   <SelectContent>
                     {formatConfigs.map((format) => (
                       <SelectItem key={format.id} value={format.id}>
-                        {format.name} ({format.templateCode}, {format.defaultCurrency})
+                        {format.name} ({normalizePoTemplateCode(format.templateCode)}, {format.defaultCurrency})
                       </SelectItem>
                     ))}
                   </SelectContent>
