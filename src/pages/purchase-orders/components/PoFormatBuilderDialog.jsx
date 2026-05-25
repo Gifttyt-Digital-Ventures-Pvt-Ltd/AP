@@ -6,7 +6,7 @@ import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
 import { Switch } from "../../../components/ui/switch";
-import { getTaxMode, isInrCurrency, formatCurrency } from "../utils";
+import { getTaxMode, isInrCurrency, formatCurrency, normalizePoTemplateCode } from "../utils";
 
 const SAMPLE_ITEMS = [
   { description: "Industrial switch 48-port", hsn: "851762", uom: "NOS", quantity: 10, unitRate: 4200, gstRate: 18 },
@@ -55,8 +55,9 @@ const PoFormatBuilderDialog = ({
   const sampleSubtotal = SAMPLE_ITEMS.reduce((sum, item) => sum + item.quantity * item.unitRate, 0);
   const sampleTax = showGstSummary ? SAMPLE_ITEMS.reduce((sum, item) => sum + (item.quantity * item.unitRate * item.gstRate) / 100, 0) : 0;
   const sampleTotal = sampleSubtotal + sampleTax;
-  const documentBorderClass = draftConfig.templateCode === "T3" ? "border-2 border-slate-900" : "border";
-  const headerBorderClass = draftConfig.templateCode === "T4" ? "border-b-4 border-emerald-600" : "border-b";
+  const normalizedTemplateCode = normalizePoTemplateCode(draftConfig.templateCode);
+  const documentBorderClass = normalizedTemplateCode === "T3" ? "border-2 border-slate-900" : "border";
+  const headerBorderClass = normalizedTemplateCode === "T4" ? "border-b-4 border-emerald-600" : "border-b";
 
   const updateConfig = (patch) => setDraftConfig((prev) => ({ ...prev, ...patch }));
 
@@ -139,7 +140,7 @@ const PoFormatBuilderDialog = ({
                   <SelectContent>
                     {formatOptions.map((format) => (
                       <SelectItem key={format.id} value={format.id}>
-                        {format.name} ({format.templateCode}, {format.defaultCurrency})
+                        {format.name} ({normalizePoTemplateCode(format.templateCode)}, {format.defaultCurrency})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -176,7 +177,10 @@ const PoFormatBuilderDialog = ({
                 </div>
                 <div className="space-y-2">
                   <Label>Template</Label>
-                  <Select value={draftConfig.templateCode} onValueChange={(templateCode) => updateConfig({ templateCode })}>
+                  <Select
+                    value={normalizePoTemplateCode(draftConfig.templateCode)}
+                    onValueChange={(templateCode) => updateConfig({ templateCode })}
+                  >
                     <SelectTrigger data-testid="po-builder-template">
                       <SelectValue />
                     </SelectTrigger>

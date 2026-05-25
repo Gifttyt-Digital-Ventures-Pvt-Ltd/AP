@@ -1,4 +1,5 @@
 export const SUPPORTED_PO_CURRENCIES = ["INR", "USD", "EUR", "GBP"];
+export const SUPPORTED_PO_TEMPLATES = ["T1", "T2", "T3", "T4", "T5"];
 
 export const DEFAULT_PO_FORMAT_CONFIG = {
   id: "default-format",
@@ -81,6 +82,12 @@ export const getTaxMode = (currency = "INR") => (currency === "INR" ? "GST" : "E
 
 export const isInrCurrency = (currency = "INR") => getTaxMode(currency) === "GST";
 
+export const normalizePoTemplateCode = (templateCode = "T1") => {
+  const raw = String(templateCode || "").trim().toUpperCase();
+  if (!raw || raw === "DEFAULT") return "T1";
+  return SUPPORTED_PO_TEMPLATES.includes(raw) ? raw : "T1";
+};
+
 export const formatCurrency = (amount, currency = "INR") => {
   const safeCurrency = SUPPORTED_PO_CURRENCIES.includes(currency) ? currency : "INR";
   return new Intl.NumberFormat(safeCurrency === "INR" ? "en-IN" : "en-US", {
@@ -156,7 +163,7 @@ export const normalizePurchaseOrder = (po = {}) => ({
   tds_amount: po.tds_amount ?? po.tdsAmount ?? 0,
   po_format_id: po.po_format_id ?? po.poFormatId ?? po.formatConfigId ?? "",
   po_format_name: po.po_format_name ?? po.poFormatName ?? po.formatName ?? "",
-  template_code: po.template_code ?? po.templateCode ?? "",
+  template_code: normalizePoTemplateCode(po.template_code ?? po.templateCode ?? "T1"),
   place_of_supply: po.place_of_supply ?? po.placeOfSupply ?? "",
   line_items: Array.isArray(po.line_items)
     ? po.line_items.map(normalizePoLineItem)

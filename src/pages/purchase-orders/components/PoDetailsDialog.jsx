@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../../../components/ui/dialog";
 import AppDataTable from "../../../components/common/AppDataTable";
 import { TableCell, TableRow } from "../../../components/ui/table";
+import { isFormatFieldEnabled, isFormatSectionEnabled, normalizePoTemplateCode } from "../utils";
 
 const poLineItemTableHeader = [
   { key: "lineNumber", title: "#" },
@@ -35,6 +36,22 @@ const PoDetailsDialog = ({
   const selectedPoId = selectedPO?.id || selectedPO?.po_id || selectedPO?.poId;
   const isDownloading = Boolean(selectedPoId && downloadingPoId === selectedPoId);
   const poCurrency = selectedPO?.currency || "INR";
+  const isInr = poCurrency === "INR";
+  const templateCode = normalizePoTemplateCode(selectedPO?.template_code || selectedPO?.templateCode || "T1");
+  const documentBorderClass = templateCode === "T3" ? "border-2 border-slate-900" : "border";
+  const headerBorderClass = templateCode === "T4" ? "border-b-4 border-emerald-600" : "border-b";
+
+  const selectedFormat =
+    selectedPO?.formatConfigSnapshot ||
+    selectedPO?.format_snapshot ||
+    selectedPO?.formatSnapshot ||
+    selectedPO?.po_format_config ||
+    selectedPO?.poFormatConfig ||
+    selectedPO?.formatConfig ||
+    null;
+
+  const sectionOn = (sectionKey) => (selectedFormat ? isFormatSectionEnabled(selectedFormat, sectionKey) : true);
+  const fieldOn = (sectionKey, fieldKey) => (selectedFormat ? isFormatFieldEnabled(selectedFormat, sectionKey, fieldKey) : true);
 
   const renderLineItemRow = (item, rowIndex, headers) => {
     const lineItem = {
@@ -60,101 +77,165 @@ const PoDetailsDialog = ({
 
   return (
     <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto p-0">
         <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
+          <DialogTitle className="flex items-center gap-2 px-6 pt-6 pb-3 border-b">
             <FileText className="h-5 w-5" />
             Purchase Order: {selectedPO?.po_number}
           </DialogTitle>
         </DialogHeader>
 
         {selectedPO && (
-          <div className="space-y-6">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div>
-                <p className="text-sm text-muted-foreground">Status</p>
-                <Badge className={`${statusColors[selectedPO.status] || "bg-gray-500"} text-white mt-1`}>{selectedPO.status}</Badge>
+          <div className="bg-slate-100 px-6 py-5 space-y-6">
+            <div className={`bg-white shadow-sm ${documentBorderClass} p-6 md:p-8`}>
+              {sectionOn("HEADER") && (
+                <header className={`mb-5 pb-5 ${headerBorderClass}`}>
+                  <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_360px]">
+                    <div className="flex items-start gap-3">
+                      {fieldOn("HEADER", "h_logo") && (
+                        <div className="grid h-12 w-12 shrink-0 place-items-center rounded bg-emerald-700 text-lg font-semibold text-white">
+                          {(selectedPO?.company_name || "O").charAt(0)}
+                        </div>
+                      )}
+                      <div>
+                        <h2 className="text-xl font-bold">{selectedPO?.company_name || "Company Name"}</h2>
+                        <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Purchase Order</p>
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          {selectedPO.po_format_name || "PO Format"} - {templateCode}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1 text-right text-sm">
+                      <p>
+                        <span className="text-muted-foreground">Status:</span>{" "}
+                        <Badge className={`${statusColors[selectedPO.status] || "bg-gray-500"} text-white`}>
+                          {selectedPO.status}
+                        </Badge>
+                      </p>
+                      {fieldOn("HEADER", "po_number") && (
+                        <p><span className="text-muted-foreground">PO No:</span> {selectedPO.po_number || "-"}</p>
+                      )}
+                      {fieldOn("HEADER", "po_date") && (
+                        <p><span className="text-muted-foreground">Date:</span> {formatDate(selectedPO.po_date)}</p>
+                      )}
+                      {fieldOn("HEADER", "valid_till") && (
+                        <p><span className="text-muted-foreground">Valid Till:</span> {formatDate(selectedPO.valid_till)}</p>
+                      )}
+                      <p><span className="text-muted-foreground">Currency:</span> {selectedPO.currency || "INR"}</p>
+                      <p><span className="text-muted-foreground">Tax Mode:</span> {selectedPO.tax_mode || "-"}</p>
+                    </div>
+                  </div>
+                </header>
+              )}
+
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                {sectionOn("VENDOR") && (
+                  <section className="rounded border p-4">
+                    <h3 className="mb-2 text-sm font-semibold flex items-center gap-2">
+                      <Building2 className="h-4 w-4" />
+                      Vendor
+                    </h3>
+                    {fieldOn("VENDOR", "vendor_name") && <p className="font-medium">{selectedPO.vendor_name || "-"}</p>}
+                    {isInr && fieldOn("VENDOR", "vendor_gstin") && selectedPO.vendor_gstin && (
+                      <p className="text-sm text-muted-foreground">GSTIN: {selectedPO.vendor_gstin}</p>
+                    )}
+                    {isInr && fieldOn("VENDOR", "vendor_pan") && selectedPO.vendor_pan && (
+                      <p className="text-sm text-muted-foreground">PAN: {selectedPO.vendor_pan}</p>
+                    )}
+                  </section>
+                )}
+
+                {sectionOn("SHIP_BILL") && (
+                  <section className="rounded border p-4">
+                    <h3 className="mb-2 text-sm font-semibold">Ship & Bill</h3>
+                    {fieldOn("SHIP_BILL", "ship_to_address") && (
+                      <p className="text-sm">Ship To: {selectedPO.shipping_address || "-"}</p>
+                    )}
+                    {fieldOn("SHIP_BILL", "billing_address") && (
+                      <p className="text-sm">Bill To: {selectedPO.billing_address || "-"}</p>
+                    )}
+                    {isInr && fieldOn("SHIP_BILL", "place_of_supply") && (
+                      <p className="text-sm text-muted-foreground">Place of Supply: {selectedPO.place_of_supply || "-"}</p>
+                    )}
+                    <p className="text-sm text-muted-foreground mt-1">Delivery Date: {formatDate(selectedPO.expected_delivery_date)}</p>
+                  </section>
+                )}
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Format</p>
-                <p className="font-medium">{selectedPO.po_format_name || "-"}</p>
+
+              {sectionOn("LINE_ITEM") && (
+                <section className="mt-6">
+                  <h3 className="mb-3 text-sm font-semibold flex items-center gap-2">
+                    <Package className="h-4 w-4" />
+                    Line Items
+                  </h3>
+                  <div className="overflow-x-auto rounded border">
+                    <AppDataTable
+                      tableHeader={poLineItemTableHeader}
+                      tableData={selectedPO.line_items || []}
+                      renderRow={renderLineItemRow}
+                      emptyMessage="No line items found"
+                    />
+                  </div>
+                </section>
+              )}
+
+              <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-[1fr_320px]">
+                {sectionOn("PAYMENT") && (
+                  <section className="rounded border bg-slate-50/60 p-4">
+                    <h3 className="mb-3 text-sm font-semibold">Terms</h3>
+                    <div className="space-y-2 text-sm">
+                      {fieldOn("PAYMENT", "delivery_terms") && <p>Delivery Terms: {selectedPO.delivery_terms || "-"}</p>}
+                      {fieldOn("PAYMENT", "freight_terms") && <p>Freight Terms: {selectedPO.freight_terms || "-"}</p>}
+                      {fieldOn("PAYMENT", "payment_terms") && <p>Payment Terms: {selectedPO.payment_terms || "-"}</p>}
+                    </div>
+                  </section>
+                )}
+
+                <section className="rounded border bg-white p-4 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Subtotal</span>
+                    <span>{formatCurrency(selectedPO.subtotal, poCurrency)}</span>
+                  </div>
+                  <div className="flex justify-between mt-1">
+                    <span className="text-muted-foreground">Tax</span>
+                    <span>{formatCurrency(selectedPO.tax_amount, poCurrency)}</span>
+                  </div>
+                  <div className="mt-3 flex justify-between border-t pt-3 text-base font-semibold">
+                    <span>Total</span>
+                    <span>{formatCurrency(selectedPO.total_amount, poCurrency)}</span>
+                  </div>
+                  {selectedPO.tds_amount > 0 && (
+                    <>
+                      <div className="mt-2 flex justify-between text-muted-foreground">
+                        <span>Less: TDS</span>
+                        <span>- {formatCurrency(selectedPO.tds_amount, poCurrency)}</span>
+                      </div>
+                      <div className="mt-1 flex justify-between font-semibold">
+                        <span>Net Payable</span>
+                        <span>{formatCurrency(selectedPO.net_payable, poCurrency)}</span>
+                      </div>
+                    </>
+                  )}
+                </section>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Template</p>
-                <p className="font-medium">{selectedPO.template_code || "-"}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Currency</p>
-                <p className="font-medium">{selectedPO.currency || "INR"}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Tax Mode</p>
-                <p className="font-medium">{selectedPO.tax_mode || "-"}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">PO Date</p>
-                <p className="font-medium">{formatDate(selectedPO.po_date)}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground">Delivery Date</p>
-                <p className="font-medium">{formatDate(selectedPO.expected_delivery_date)}</p>
-              </div>
+
+              {selectedPO.remarks && (
+                <section className="mt-6 rounded border bg-slate-50/60 p-4 text-sm">
+                  <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground mb-1">Remarks</p>
+                  <p>{selectedPO.remarks}</p>
+                </section>
+              )}
             </div>
 
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Building2 className="h-4 w-4" />
-                  Vendor Information
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="py-3">
-                <p className="font-medium">{selectedPO.vendor_name}</p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm flex items-center gap-2">
-                  <Package className="h-4 w-4" />
-                  Line Items
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="p-0">
-                <AppDataTable
-                  tableHeader={poLineItemTableHeader}
-                  tableData={selectedPO.line_items || []}
-                  renderRow={renderLineItemRow}
-                  emptyMessage="No line items found"
-                />
-              </CardContent>
-            </Card>
-
-            <div className="flex justify-end">
-              <div className="w-72 space-y-2 border rounded-lg p-4">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Subtotal:</span>
-                  <span>{formatCurrency(selectedPO.subtotal, poCurrency)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Tax:</span>
-                  <span>{formatCurrency(selectedPO.tax_amount, poCurrency)}</span>
-                </div>
-                <div className="flex justify-between font-semibold text-lg border-t pt-2">
-                  <span>Total:</span>
-                  <span>{formatCurrency(selectedPO.total_amount, poCurrency)}</span>
-                </div>
-              </div>
-            </div>
-
-            {selectedPO.approvals?.length > 0 && (
+            {(selectedPO.approvals?.length > 0 || selectedPO.approval_records?.length > 0 || selectedPO.approvalRecords?.length > 0) && (
               <Card>
                 <CardHeader className="py-3">
                   <CardTitle className="text-sm">Approval History</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-2">
-                    {selectedPO.approvals.map((approval, idx) => (
+                    {(selectedPO.approvals || selectedPO.approval_records || selectedPO.approvalRecords || []).map((approval, idx) => (
                       <div key={idx} className="flex items-center gap-4 text-sm">
                         {approval.action === "Approved" ? <CheckCircle className="h-4 w-4 text-green-500" /> : <XCircle className="h-4 w-4 text-red-500" />}
                         <span className="font-medium">Level {approval.approval_level}</span>
@@ -170,7 +251,7 @@ const PoDetailsDialog = ({
           </div>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="px-6 py-4 border-t">
           <Button variant="outline" onClick={() => setShowViewDialog(false)}>Close</Button>
           {selectedPO && (
             <Button

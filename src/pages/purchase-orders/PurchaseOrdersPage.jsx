@@ -26,6 +26,7 @@ import {
   getTaxMode,
   isInrCurrency,
   isFormatFieldEnabled,
+  normalizePoTemplateCode,
   normalizePurchaseOrder,
   sanitizeLineItemForCurrency,
 } from './utils';
@@ -95,6 +96,7 @@ const cloneFormatConfig = (config) => ({
 
 const makeFormatConfig = (config, fallbackId = 'default-format', fallbackName = 'Standard GST Format') => ({
   ...cloneFormatConfig(config),
+  templateCode: normalizePoTemplateCode(config.templateCode),
   id: config.id || fallbackId,
   name: config.name || fallbackName,
 });
