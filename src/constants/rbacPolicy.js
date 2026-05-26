@@ -33,7 +33,16 @@ export const ROUTE_PERMISSION_RULES = {
       "vendor-workflow-manage",
     ],
   },
-  "/settings": { anyOf: ["settings-org", "settings-banking", "settings-interaction"] },
+  "/settings": {
+    anyOf: [
+      "settings-org",
+      "settings-banking",
+      "settings-interaction",
+      "category-view",
+      "category-manage",
+      "invoice-approver",
+    ],
+  },
 };
 
 export const DEFAULT_ROUTE_PRIORITY = [
@@ -97,6 +106,9 @@ export const ACTION_PERMISSION_RULES = {
   "settings.createBankAccount": { anyOf: ["settings-banking", "banking-full"] },
   "settings.createOrganisation": { anyOf: ["settings-org"] },
   "settings.updateOrganisation": { anyOf: ["settings-org"] },
+  "categories.create": { anyOf: ["category-manage"] },
+  "categories.update": { anyOf: ["category-manage"] },
+  "categories.delete": { anyOf: ["category-manage"] },
 
   "tax.calculateGst": { anyOf: ["tax-manage"] },
   "tax.calculateTds": { anyOf: ["tax-manage"] },
