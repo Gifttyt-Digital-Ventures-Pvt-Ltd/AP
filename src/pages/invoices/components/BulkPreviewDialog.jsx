@@ -33,12 +33,12 @@ const BulkPreviewDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !bulkCreating && setBulkPreviewOpen(nextOpen)}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto" data-testid="bulk-preview-dialog">
+      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto overflow-x-hidden" data-testid="bulk-preview-dialog">
         <DialogHeader>
           <DialogTitle>Review Bulk Invoices</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-3 min-w-0">
+        <div className="space-y-3">
           <div className="flex items-center justify-between text-sm">
             <div className="text-muted-foreground">
               {extractedCount} extracted successfully out of {bulkPreviewItems.length}
@@ -85,8 +85,8 @@ const BulkPreviewDialog = ({
             </div>
           )}
 
-          <div className="border rounded-lg w-full overflow-auto max-h-[52vh]">
-            <table className="w-max min-w-[1220px] text-sm">
+          <div className="border rounded-lg min-h-0 max-w-full overflow-auto max-h-[52vh]">
+            <table className="w-full min-w-[1180px] text-sm">
               <thead className="bg-muted/50 border-b sticky top-0 z-10">
                 <tr>
                   <th className="p-3 text-left w-12">Pick</th>
@@ -117,9 +117,9 @@ const BulkPreviewDialog = ({
                         }
                       />
                     </td>
-                    <td className="p-3 whitespace-nowrap">{item.filename}</td>
-                    <td className="p-3 whitespace-nowrap">{item.invoicePayload?.vendor_name || '-'}</td>
-                    <td className="p-3 whitespace-nowrap font-['JetBrains_Mono']">{item.invoicePayload?.invoice_number || '-'}</td>
+                    <td className="p-3">{item.filename}</td>
+                    <td className="p-3">{item.invoicePayload?.vendor_name || '-'}</td>
+                    <td className="p-3 font-['JetBrains_Mono']">{item.invoicePayload?.invoice_number || '-'}</td>
                     <td className="p-3 min-w-44">
                       {item.invoicePayload ? (
                         <select
@@ -196,10 +196,10 @@ const BulkPreviewDialog = ({
                         '-'
                       )}
                     </td>
-                    <td className="p-3 text-right whitespace-nowrap font-['JetBrains_Mono']">
+                    <td className="p-3 text-right font-['JetBrains_Mono']">
                       {item.invoicePayload ? `\u20B9${Number(item.invoicePayload.amount || 0).toLocaleString('en-IN')}` : '-'}
                     </td>
-                    <td className="p-3 whitespace-nowrap">
+                    <td className="p-3">
                       <span
                         className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium border ${getBulkStatusBadgeClass(item.status)}`}
                       >
@@ -209,7 +209,7 @@ const BulkPreviewDialog = ({
                         <p className="text-[11px] text-red-600 mt-1">{item.error}</p>
                       )}
                     </td>
-                    <td className="p-3 text-right whitespace-nowrap">
+                    <td className="p-3 text-right">
                       <div className="flex justify-end gap-2">
                         {item.invoicePayload && !item.invoicePayload.vendor_id && (
                           <Button

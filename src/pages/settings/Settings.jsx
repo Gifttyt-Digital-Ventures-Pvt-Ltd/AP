@@ -17,7 +17,6 @@ import { toast } from 'sonner';
 import BankAccountDialog from './components/BankAccountDialog';
 import ZohoConfigDialog from './components/ZohoConfigDialog';
 import TallyConfigDialog from './components/TallyConfigDialog';
-import CategoriesTab from './components/CategoriesTab';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useRBAC } from '../../contexts/RBACContext';
 
@@ -62,7 +61,7 @@ const Settings = () => {
     ? 'banking'
     : canViewOrganisationSettings
       ? 'organisation'
-      : 'categories';
+      : 'banking';
   const {
     data: bankAccountsData = [],
     isError: bankAccountsError,
@@ -365,7 +364,6 @@ const Settings = () => {
           <TabsTrigger value="organisation" data-testid="tab-organisation">Organisation Details</TabsTrigger>
           <TabsTrigger value="banking" data-testid="tab-banking">Connected Banking</TabsTrigger>
           <TabsTrigger value="integrations" data-testid="tab-integrations">Integrations</TabsTrigger>
-          <TabsTrigger value="categories" data-testid="tab-categories">Categories</TabsTrigger>
         </TabsList>
 
         <TabsContent value="organisation">
@@ -940,9 +938,6 @@ const Settings = () => {
           </div>
         </TabsContent>
 
-        <TabsContent value="categories">
-          <CategoriesTab />
-        </TabsContent>
       </Tabs>
 
             <ZohoConfigDialog

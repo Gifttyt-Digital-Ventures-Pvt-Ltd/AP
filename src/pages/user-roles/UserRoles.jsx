@@ -43,6 +43,7 @@ import ViewRoleDialog from './components/ViewRoleDialog';
 import RolesTab from './components/RolesTab';
 import UsersTable from './components/UsersTable';
 import ApprovalWorkflowTab from './components/ApprovalWorkflowTab';
+import CategoriesTab from './components/CategoriesTab';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { FULL_ACCESS_PERMISSION } from '../../constants/rbacPolicy';
 
@@ -89,7 +90,10 @@ const UserRoles = () => {
     hasPermission('vendor-workflow-manage');
   const canManageWorkflow =
     hasPermission('vendor-workflow-manage');
-  const canViewUserRolesModule = canViewRoles || canViewWorkflow;
+  const canViewCategories =
+    hasPermission('category-view') ||
+    hasPermission('category-manage');
+  const canViewUserRolesModule = canViewRoles || canViewWorkflow || canViewCategories;
   const shouldSkipUsersAndRoles = !currentUser || !canViewRoles;
   const shouldSkipVendors = !currentUser || !canViewWorkflow;
 
@@ -139,11 +143,12 @@ const UserRoles = () => {
     const availableTabs = [];
     if (canViewRoles) availableTabs.push('users', 'roles');
     if (canViewWorkflow) availableTabs.push('workflow');
+    if (canViewCategories) availableTabs.push('categories');
     if (availableTabs.length === 0) return;
     if (!availableTabs.includes(activeTab)) {
       setActiveTab(availableTabs[0]);
     }
-  }, [activeTab, canViewRoles, canViewWorkflow]);
+  }, [activeTab, canViewRoles, canViewWorkflow, canViewCategories]);
 
   useEffect(() => {
     if (usersError) toast.error('Failed to load users');
@@ -582,6 +587,11 @@ const UserRoles = () => {
               Approval Workflow
             </TabsTrigger>
           )}
+          {canViewCategories && (
+            <TabsTrigger value="categories" data-testid="tab-categories">
+              Categories
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {canViewRoles && (
@@ -617,6 +627,12 @@ const UserRoles = () => {
               vendors={vendors}
               canManageWorkflow={canManageWorkflow}
             />
+          </TabsContent>
+        )}
+
+        {canViewCategories && (
+          <TabsContent value="categories">
+            <CategoriesTab />
           </TabsContent>
         )}
       </Tabs>
