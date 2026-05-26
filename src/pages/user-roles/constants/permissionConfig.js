@@ -70,6 +70,10 @@ export const PERMISSION_GROUPS = [
     permissions: [{ id: "reports-full", label: "Full Access" }],
   },
   {
+    title: "Audit Trail",
+    permissions: [{ id: "audit-trail-view", label: "View Only" }],
+  },
+  {
     title: "Banking",
     permissions: [{ id: "banking-full", label: "Full Access" }],
   },
@@ -131,6 +135,7 @@ export const PERMISSION_LABELS = {
   "tax-manage": "Tax Management - Manage",
   "reports-view": "Reports - View Only",
   "reports-full": "Reports - Full Access",
+  "audit-trail-view": "Audit Trail - View Only",
   "banking-view": "Banking - View Only",
   "banking-full": "Banking - Full Access",
   "roles-view": "Manage Roles - View Only",

@@ -172,6 +172,9 @@ export const toInvoiceApiPayload = (invoice = {}) => {
     approval_workflow_id,
     department_id,
     department_name,
+    category,
+    category_id,
+    category_name,
     ...rest
   } = invoice;
 
@@ -209,6 +212,14 @@ export const toInvoiceApiPayload = (invoice = {}) => {
     approvalWorkflowId: rest.approvalWorkflowId ?? approval_workflow_id,
     departmentId: rest.departmentId ?? department_id,
     departmentName: rest.departmentName ?? department_name,
+    category: rest.category ?? category ?? (
+      (rest.categoryId ?? category_id)
+        ? {
+            id: rest.categoryId ?? category_id,
+            name: rest.categoryName ?? category_name ?? "",
+          }
+        : undefined
+    ),
   };
 };
 
@@ -246,4 +257,7 @@ export const toInvoiceUiPayload = (invoice = {}) => ({
   approval_workflow_id: invoice.approval_workflow_id ?? invoice.approvalWorkflowId,
   department_id: invoice.department_id ?? invoice.departmentId,
   department_name: invoice.department_name ?? invoice.departmentName,
+  category: invoice.category,
+  category_id: invoice.category_id ?? invoice.categoryId ?? invoice.category?.id,
+  category_name: invoice.category_name ?? invoice.categoryName ?? invoice.category?.name,
 });

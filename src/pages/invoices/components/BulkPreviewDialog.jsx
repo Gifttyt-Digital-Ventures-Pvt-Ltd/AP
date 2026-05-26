@@ -21,6 +21,8 @@ const BulkPreviewDialog = ({
   handleCreateBulkInvoices,
   departments = [],
   getDepartmentNameById = () => '',
+  invoiceCategories = [],
+  getCategoryNameById = () => '',
 }) => {
   const extractedCount = bulkPreviewItems.filter((item) => item.invoicePayload).length;
   const selectableItems = bulkPreviewItems.filter(
@@ -84,7 +86,7 @@ const BulkPreviewDialog = ({
           )}
 
           <div className="border rounded-lg min-h-0 max-w-full overflow-auto max-h-[52vh]">
-            <table className="w-full min-w-[1040px] text-sm">
+            <table className="w-full min-w-[1180px] text-sm">
               <thead className="bg-muted/50 border-b sticky top-0 z-10">
                 <tr>
                   <th className="p-3 text-left w-12">Pick</th>
@@ -92,6 +94,7 @@ const BulkPreviewDialog = ({
                   <th className="p-3 text-left">Vendor</th>
                   <th className="p-3 text-left">Invoice #</th>
                   <th className="p-3 text-left">Department</th>
+                  <th className="p-3 text-left">Category</th>
                   <th className="p-3 text-right">Amount</th>
                   <th className="p-3 text-left">Status</th>
                   <th className="p-3 text-right">Actions</th>
@@ -149,6 +152,45 @@ const BulkPreviewDialog = ({
                               </option>
                             );
                           })}
+                        </select>
+                      ) : (
+                        '-'
+                      )}
+                    </td>
+                    <td className="p-3 min-w-44">
+                      {item.invoicePayload ? (
+                        <select
+                          value={item.invoicePayload.category_id || item.invoicePayload.category?.id || ''}
+                          onChange={(e) =>
+                            setBulkPreviewItems((prev) =>
+                              prev.map((row) =>
+                                row.id === item.id
+                                  ? {
+                                      ...row,
+                                      invoicePayload: {
+                                        ...row.invoicePayload,
+                                        category_id: e.target.value,
+                                        category_name: getCategoryNameById(e.target.value),
+                                        category: e.target.value
+                                          ? {
+                                              id: e.target.value,
+                                              name: getCategoryNameById(e.target.value),
+                                            }
+                                          : null,
+                                      },
+                                    }
+                                  : row
+                              )
+                            )
+                          }
+                          className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                        >
+                          <option value="">Select category</option>
+                          {invoiceCategories.map((category) => (
+                            <option key={category.id} value={category.id}>
+                              {category.name}
+                            </option>
+                          ))}
                         </select>
                       ) : (
                         '-'

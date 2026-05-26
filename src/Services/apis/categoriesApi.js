@@ -75,6 +75,15 @@ export const categoriesApi = serviceApi.injectEndpoints({
       transformResponse: (response) => toArray(response).map(normalizeApprover),
       providesTags: ["Categories"],
     }),
+    getCategoriesForInvoice: builder.query({
+      query: (userEmail) => ({
+        url: "/api/categories/for-invoice",
+        method: "GET",
+        params: { userEmail },
+      }),
+      transformResponse: (response) => toArray(response).map(normalizeCategory),
+      providesTags: ["Categories"],
+    }),
     createCategory: builder.mutation({
       query: ({ category, approvers }) => ({
         url: "/api/categories",
@@ -109,6 +118,7 @@ export const categoriesApi = serviceApi.injectEndpoints({
 export const {
   useGetCategoriesQuery,
   useGetCategoryInvoiceApproversQuery,
+  useGetCategoriesForInvoiceQuery,
   useCreateCategoryMutation,
   useUpdateCategoryMutation,
   useDeleteCategoryMutation,

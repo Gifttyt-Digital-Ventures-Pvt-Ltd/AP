@@ -21,6 +21,8 @@ const BulkEditDialog = ({
   vendors,
   departments = [],
   getDepartmentNameById = () => '',
+  invoiceCategories = [],
+  getCategoryNameById = () => '',
   taxRates,
   updateBulkEditLineItem,
   saveBulkEditChanges,
@@ -100,7 +102,7 @@ const BulkEditDialog = ({
                     onChange={(e) => setBulkEditForm((prev) => ({ ...prev, currency: e.target.value }))}
                   />
                 </div>
-                <div className="col-span-2">
+                <div>
                   <Label className="text-xs">Department</Label>
                   <select
                     value={bulkEditForm.department_id || ''}
@@ -124,6 +126,33 @@ const BulkEditDialog = ({
                         </option>
                       );
                     })}
+                  </select>
+                </div>
+                <div>
+                  <Label className="text-xs">Category</Label>
+                  <select
+                    value={bulkEditForm.category_id || bulkEditForm.category?.id || ''}
+                    onChange={(e) =>
+                      setBulkEditForm((prev) => ({
+                        ...prev,
+                        category_id: e.target.value,
+                        category_name: getCategoryNameById(e.target.value),
+                        category: e.target.value
+                          ? {
+                              id: e.target.value,
+                              name: getCategoryNameById(e.target.value),
+                            }
+                          : null,
+                      }))
+                    }
+                    className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  >
+                    <option value="">Select category</option>
+                    {invoiceCategories.map((category) => (
+                      <option key={category.id} value={category.id}>
+                        {category.name}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>

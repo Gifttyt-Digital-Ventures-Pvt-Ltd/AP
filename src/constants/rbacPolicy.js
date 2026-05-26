@@ -23,6 +23,7 @@ export const ROUTE_PERMISSION_RULES = {
   "/payment-batches": { anyOf: ["payments-view", "payments-manage"] },
   "/tax-management": { anyOf: ["tax-view", "tax-manage"] },
   "/reports": { anyOf: ["reports-view", "reports-full"] },
+  "/audit-trail": { anyOf: ["audit-trail-view"] },
   "/banking": { anyOf: ["banking-view", "banking-full"] },
   "/notifications": { anyOf: ["settings-interaction"] },
   "/user-roles": {
@@ -58,6 +59,7 @@ export const DEFAULT_ROUTE_PRIORITY = [
   "/payment-batches",
   "/tax-management",
   "/reports",
+  "/audit-trail",
   "/banking",
   "/notifications",
   "/user-roles",
