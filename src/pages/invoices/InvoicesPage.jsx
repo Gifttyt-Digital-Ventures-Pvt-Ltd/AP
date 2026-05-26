@@ -338,6 +338,7 @@ const InvoicesPage = () => {
       const d = new Date(value);
       return Number.isNaN(d.getTime()) ? '' : format(d, 'yyyy-MM-dd');
     };
+    const roundCurrency = (value) => Math.round((Number(value) || 0) * 100) / 100;
 
     const lineItemsRaw = Array.isArray(scanResponse?.line_items)
       ? scanResponse.line_items
@@ -346,28 +347,56 @@ const InvoicesPage = () => {
         : [];
     const taxesRaw = Array.isArray(scanResponse?.taxes) ? scanResponse.taxes : [];
 
+    const taxRows = taxesRaw.map((tax) => ({
+      name: String(tax?.name || '').toUpperCase(),
+      amount: Number(tax?.amount ?? 0) || 0,
+      rate: Number(tax?.taxRate ?? tax?.tax_rate ?? 0) || 0,
+    }));
+
+    const aggregateTaxRate = (label) =>
+      taxRows
+        .filter((tax) => tax.name.includes(label) && tax.rate > 0)
+        .reduce((sum, tax) => sum + tax.rate, 0);
+
+    const normalizeTaxRate = (rate) => {
+      const supportedRates = [5, 12, 18, 28];
+      const nearest = supportedRates.reduce((best, candidate) =>
+        Math.abs(candidate - rate) < Math.abs(best - rate) ? candidate : best
+      );
+      return Math.abs(nearest - rate) <= 0.25 ? nearest : rate;
+    };
+
     const resolveTaxLabel = (item) => {
       if (item?.tax) return item.tax;
-      const rate = Number(item?.taxRate ?? item?.tax_rate ?? 0);
-      const hasAnyTaxData =
-        rate > 0 ||
-        taxesRaw.some((t) => Number(t?.amount ?? 0) > 0 || Number(t?.taxRate ?? t?.tax_rate ?? 0) > 0);
-      if (!hasAnyTaxData) return 'Exempt';
-      if (!rate) return 'CGST + SGST 18%';
-      const hasIgst = taxesRaw.some((t) => String(t?.name || '').toUpperCase().includes('IGST'));
-      if (hasIgst) return `IGST ${rate}%`;
-      return `CGST + SGST ${rate}%`;
+      const itemRate = Number(item?.taxRate ?? item?.tax_rate ?? 0) || 0;
+      const igstRate = aggregateTaxRate('IGST');
+      const cgstSgstRate = aggregateTaxRate('CGST') + aggregateTaxRate('SGST');
+
+      if (igstRate > 0) return `IGST ${normalizeTaxRate(igstRate)}%`;
+      if (cgstSgstRate > 0) return `CGST + SGST ${normalizeTaxRate(cgstSgstRate)}%`;
+      if (itemRate > 0) return `CGST + SGST ${normalizeTaxRate(itemRate)}%`;
+      return 'Exempt';
     };
 
     const lineItems = lineItemsRaw.map((item) => {
       const quantity = Number(item?.quantity ?? item?.qty ?? 1) || 1;
       const unitPrice = Number(item?.unit_price ?? item?.unitPrice ?? item?.price ?? 0) || 0;
-      const amount = Number(item?.amount ?? item?.lineTotal ?? quantity * unitPrice) || 0;
+      const discountAmount = Number(item?.discountAmount ?? item?.discount_amount ?? 0) || 0;
+      const discountPercent = Number(item?.discountPercent ?? item?.discount_percent ?? 0) || 0;
+      const computedBase = quantity * unitPrice;
+      const computedAmount = discountPercent > 0
+        ? computedBase - ((computedBase * discountPercent) / 100)
+        : computedBase - discountAmount;
+      const amount = roundCurrency(Math.max(computedAmount, 0));
       return {
         description: item?.description ?? item?.name ?? '',
         quantity,
         unit_price: unitPrice,
         amount,
+        discount_amount: discountAmount,
+        discount_percent: discountPercent,
+        discount: discountPercent > 0 ? discountPercent : discountAmount,
+        discount_type: discountPercent > 0 ? '%' : '₹',
         hsn_sac: item?.hsn_sac ?? item?.hsnSac ?? '',
         tax: resolveTaxLabel(item),
       };
@@ -390,12 +419,16 @@ const InvoicesPage = () => {
       due_date:
         toDateOnly(scanResponse?.due_date ?? scanResponse?.dueDate ?? scanResponse?.datetime) ||
         format(new Date(), 'yyyy-MM-dd'),
+      place_of_supply: scanResponse?.place_of_supply ?? scanResponse?.placeOfSupply ?? '',
       line_items: lineItems,
-      amount: Number(scanResponse?.amount ?? scanResponse?.total ?? scanResponse?.subtotal ?? computedAmount) || 0,
+      amount: roundCurrency(scanResponse?.amount ?? scanResponse?.total ?? scanResponse?.subtotal ?? computedAmount),
       currency: scanResponse?.currency ?? 'INR',
       file_id: scanResponse?.file_id ?? scanResponse?.fileId ?? null,
       file_hash: scanResponse?.file_hash ?? scanResponse?.fileHash ?? null,
       original_filename: scanResponse?.original_filename ?? scanResponse?.originalFileName ?? null,
+      api_subtotal: roundCurrency(scanResponse?.subtotal),
+      api_total_tax_amount: roundCurrency(scanResponse?.totalTaxAmount ?? scanResponse?.total_tax_amount),
+      api_total: roundCurrency(scanResponse?.total ?? scanResponse?.amount),
     };
   };
 
@@ -490,6 +523,12 @@ const InvoicesPage = () => {
     const matchedVendor = extractedData?.vendor_name ? findVendorByName(extractedData.vendor_name) : null;
     const notesText = Array.isArray(extractedData?.notes) ? extractedData.notes.join('\n') : '';
     const extractedGstin = extractedData?.billing_gstin || extractedData?.vendor_gstin || '';
+    const defaultSupply =
+      extractedData?.source_of_supply ||
+      extractedData?.destination_of_supply ||
+      extractedData?.place_of_supply ||
+      extractedData?.location ||
+      '';
     const extractedAddress =
       extractedData?.address ||
       extractedData?.vendor_address ||
@@ -507,9 +546,9 @@ const InvoicesPage = () => {
       billing_address: extractedAddress,
       gst_treatment: extractedData?.gst_treatment || 'Regular',
       gstin: extractedGstin,
-      source_of_supply: extractedData?.source_of_supply || extractedData?.place_of_supply || '',
-      destination_of_supply: extractedData?.destination_of_supply || extractedData?.place_of_supply || '',
-      location: extractedData?.location || extractedData?.place_of_supply || '',
+      source_of_supply: extractedData?.source_of_supply || defaultSupply,
+      destination_of_supply: extractedData?.destination_of_supply || defaultSupply,
+      location: extractedData?.location || defaultSupply,
       reverse_charges: extractedData?.reverse_charges || 'Not Applicable',
       discounts_level: extractedData?.discounts_level || 'At Line Item Level',
       file_category: extractedData?.file_category || 'Expense Invoice',
@@ -518,11 +557,11 @@ const InvoicesPage = () => {
       line_items: extractedData?.line_items?.length > 0 ? extractedData.line_items.map(item => ({
         description: item.description || '',
         ledger: item.ledger || 'Cloud Services',
-        tax: item.tax || 'CGST + SGST 18%',
+        tax: item.tax || 'Exempt',
         quantity: item.quantity || 1,
-        unit_rate: item.unit_price || item.amount || 0,
-        discount: item.discount || 0,
-        discount_type: item.discount_type || '%',
+        unit_rate: item.unit_price ?? item.amount ?? 0,
+        discount: item.discount ?? item.discount_percent ?? item.discount_amount ?? 0,
+        discount_type: item.discount_type || (Number(item.discount_percent || 0) > 0 ? '%' : '₹'),
         hsn_sac: item.hsn_sac || '',
         eligible_for_itc: item.eligible_for_itc ?? true
       })) : [{
@@ -543,6 +582,9 @@ const InvoicesPage = () => {
       file_id: extractedData?.file_id || null,
       file_hash: extractedData?.file_hash || null,
       original_file_name: extractedData?.original_filename || null,
+      api_subtotal: extractedData?.api_subtotal ?? null,
+      api_total_tax_amount: extractedData?.api_total_tax_amount ?? null,
+      api_total: extractedData?.api_total ?? null,
       department_id: extractedData?.department_id || extractedData?.departmentId || '',
       department_name: extractedData?.department_name || extractedData?.departmentName || '',
       category: extractedData?.category || null,
@@ -864,11 +906,12 @@ const InvoicesPage = () => {
 
   // Calculate line item subtotal
   const calculateLineItemSubtotal = (item) => {
-    const subtotal = item.quantity * item.unit_rate;
+    const subtotal = Number(item.quantity || 0) * Number(item.unit_rate || 0);
+    const discount = Number(item.discount || 0);
     if (item.discount_type === '%') {
-      return subtotal - (subtotal * item.discount / 100);
+      return Math.round(Math.max(subtotal - (subtotal * discount / 100), 0) * 100) / 100;
     }
-    return subtotal - item.discount;
+    return Math.round(Math.max(subtotal - discount, 0) * 100) / 100;
   };
 
   // Calculate totals
@@ -890,7 +933,13 @@ const InvoicesPage = () => {
       }
     });
 
-    return { subTotal, cgst, sgst, igst, total: subTotal + cgst + sgst + igst };
+    return {
+      subTotal: Math.round(subTotal * 100) / 100,
+      cgst: Math.round(cgst * 100) / 100,
+      sgst: Math.round(sgst * 100) / 100,
+      igst: Math.round(igst * 100) / 100,
+      total: Math.round((subTotal + cgst + sgst + igst) * 100) / 100,
+    };
   };
 
   // Add line item
@@ -1178,9 +1227,9 @@ const InvoicesPage = () => {
         ledger: item.ledger || 'Cloud Services',
         tax: item.tax || 'CGST + SGST 18%',
         quantity: item.quantity || 1,
-        unit_rate: item.unit_price || item.amount || 0,
-        discount: item.discount || 0,
-        discount_type: item.discount_type || '%',
+        unit_rate: item.unit_price ?? item.amount ?? 0,
+        discount: item.discount ?? item.discount_percent ?? item.discount_amount ?? 0,
+        discount_type: item.discount_type || (Number(item.discount_percent || 0) > 0 ? '%' : '₹'),
         hsn_sac: item.hsn_sac || '',
         eligible_for_itc: item.eligible_for_itc ?? true
       })) : [{

@@ -6,16 +6,57 @@ import { Label } from "../../../components/ui/label";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import AppDataTable from "../../../components/common/AppDataTable";
 import AppSelect from "../../../components/common/AppSelect";
+import InvoiceChecklist from "./InvoiceFormChecklist";
 
 const lineItemTableHeader = [
-  { key: "description", title: "Item Description", headerClassName: "min-w-[190px]", cellClassName: "min-w-[190px]" },
-  { key: "ledger", title: "*Ledger", headerClassName: "w-[160px] text-blue-500", cellClassName: "w-[200px]" },
-  { key: "tax", title: "*Tax", headerClassName: "w-[150px] text-blue-500", cellClassName: "w-[200px]" },
-  { key: "quantity", title: "Qty", headerClassName: "w-[60px] text-right", cellClassName: "w-[60px]" },
-  { key: "unit_rate", title: "Rate", headerClassName: "w-[80px] text-right", cellClassName: "w-[80px]" },
-  { key: "discount", title: "Discount", headerClassName: "w-[120px] text-left", cellClassName: "w-[120px]" },
-  { key: "subtotal", title: "Subtotal", headerClassName: "w-[100px] text-right", cellClassName: "w-[100px] text-right" },
-  { key: "actions", title: "", headerClassName: "w-[32px]", cellClassName: "w-[32px] text-center" },
+  {
+    key: "description",
+    title: "Item Description",
+    headerClassName: "min-w-[190px]",
+    cellClassName: "min-w-[190px]",
+  },
+  {
+    key: "ledger",
+    title: "*Ledger",
+    headerClassName: "w-[160px] text-blue-500",
+    cellClassName: "w-[200px]",
+  },
+  {
+    key: "tax",
+    title: "*Tax",
+    headerClassName: "w-[150px] text-blue-500",
+    cellClassName: "w-[200px]",
+  },
+  {
+    key: "quantity",
+    title: "Qty",
+    headerClassName: "w-[60px] text-right",
+    cellClassName: "w-[60px]",
+  },
+  {
+    key: "unit_rate",
+    title: "Rate",
+    headerClassName: "w-[80px] text-right",
+    cellClassName: "w-[80px]",
+  },
+  {
+    key: "discount",
+    title: "Discount",
+    headerClassName: "w-[120px] text-left",
+    cellClassName: "w-[120px]",
+  },
+  {
+    key: "subtotal",
+    title: "Subtotal",
+    headerClassName: "w-[100px] text-right",
+    cellClassName: "w-[100px] text-right",
+  },
+  {
+    key: "actions",
+    title: "",
+    headerClassName: "w-[32px]",
+    cellClassName: "w-[32px] text-center",
+  },
 ];
 
 const lineItemSelectClassName =
@@ -53,9 +94,28 @@ export const InvoiceForm = ({
 }) => {
   if (!formData) return null;
   const totals = calculateTotals(formData.line_items);
-  const tdsRate = Number.parseFloat(String(formData.tds || "").replace("%", "")) || 0;
+  const tdsRate =
+    Number.parseFloat(String(formData.tds || "").replace("%", "")) || 0;
   const tdsAmount = Math.round(((totals.subTotal * tdsRate) / 100) * 100) / 100;
-  const netPayable = Math.max(Math.round((totals.total - tdsAmount) * 100) / 100, 0);
+  const netPayable = Math.max(
+    Math.round((totals.total - tdsAmount) * 100) / 100,
+    0,
+  );
+  const apiTotal = Number(formData.api_total);
+  const hasApiTotal = Number.isFinite(apiTotal) && apiTotal > 0;
+  const totalDelta = hasApiTotal ? Math.abs(apiTotal - totals.total) : 0;
+  const showApiMismatch = hasApiTotal && totalDelta > 0.01;
+  const parseNumericInput = (rawValue, maxDecimals = null) => {
+    const value = String(rawValue ?? "").trim();
+    const regex =
+      maxDecimals === null
+        ? /^\d*\.?\d*$/
+        : new RegExp(`^\\d*\\.?\\d{0,${maxDecimals}}$`);
+
+    if (!regex.test(value)) return null;
+    if (value === "" || value === ".") return 0;
+    return Number.parseFloat(value);
+  };
   const renderLineItemRow = (item, index, headers) => (
     <TableRow key={index} className="border-b last:border-b-0">
       {headers.map((header) => {
@@ -65,12 +125,37 @@ export const InvoiceForm = ({
           case "description":
             value = (
               <div>
-                <Input value={item.description} onChange={(e) => updateLineItem(index, "description", e.target.value)} placeholder="Description" className="h-7 text-xs" />
+                <Input
+                  value={item.description}
+                  onChange={(e) =>
+                    updateLineItem(index, "description", e.target.value)
+                  }
+                  placeholder="Description"
+                  className="h-7 text-xs"
+                />
                 <div className="flex items-center gap-1 mt-0.5">
                   <span className="text-[10px] text-gray-400">HSN:</span>
-                  <Input value={item.hsn_sac} onChange={(e) => updateLineItem(index, "hsn_sac", e.target.value)} placeholder="Code" className="h-5 text-[10px] w-16 px-1" />
+                  <Input
+                    value={item.hsn_sac}
+                    onChange={(e) =>
+                      updateLineItem(index, "hsn_sac", e.target.value)
+                    }
+                    placeholder="Code"
+                    className="h-5 text-[10px] w-16 px-1"
+                  />
                   <label className="flex items-center gap-0.5 text-[10px] text-gray-500 ml-1">
-                    <input type="checkbox" checked={item.eligible_for_itc} onChange={(e) => updateLineItem(index, "eligible_for_itc", e.target.checked)} className="h-2.5 w-2.5" />
+                    <input
+                      type="checkbox"
+                      checked={item.eligible_for_itc}
+                      onChange={(e) =>
+                        updateLineItem(
+                          index,
+                          "eligible_for_itc",
+                          e.target.checked,
+                        )
+                      }
+                      className="h-2.5 w-2.5"
+                    />
                     ITC
                   </label>
                 </div>
@@ -79,27 +164,72 @@ export const InvoiceForm = ({
             break;
           case "ledger":
             value = (
-              <AppSelect value={item.ledger} onChange={(e) => updateLineItem(index, "ledger", e.target.value)} options={LEDGER_OPTIONS} className={lineItemSelectClassName} />
+              <AppSelect
+                value={item.ledger}
+                onChange={(e) =>
+                  updateLineItem(index, "ledger", e.target.value)
+                }
+                options={LEDGER_OPTIONS}
+                className={lineItemSelectClassName}
+              />
             );
             break;
           case "tax":
             value = (
-              <AppSelect value={item.tax} onChange={(e) => updateLineItem(index, "tax", e.target.value)} options={TAX_RATES} className={lineItemSelectClassName} />
+              <AppSelect
+                value={item.tax}
+                onChange={(e) => updateLineItem(index, "tax", e.target.value)}
+                options={TAX_RATES}
+                className={lineItemSelectClassName}
+              />
             );
             break;
           case "quantity":
-            value = <Input type="number" value={item.quantity} onChange={(e) => updateLineItem(index, "quantity", parseFloat(e.target.value) || 0)} className="h-7 text-xs text-right px-1" min="0" />;
+            value = (
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={item.quantity}
+                onChange={(e) => {
+                  const parsed = parseNumericInput(e.target.value);
+                  if (parsed !== null) updateLineItem(index, "quantity", parsed);
+                }}
+                className="h-7 text-xs text-right px-1"
+              />
+            );
             break;
           case "unit_rate":
-            value = <Input type="number" value={item.unit_rate} onChange={(e) => updateLineItem(index, "unit_rate", parseFloat(e.target.value) || 0)} className="h-7 text-xs text-right px-1" min="0" />;
+            value = (
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={item.unit_rate}
+                onChange={(e) => {
+                  const parsed = parseNumericInput(e.target.value, 2);
+                  if (parsed !== null) updateLineItem(index, "unit_rate", parsed);
+                }}
+                className="h-7 text-xs text-right px-1"
+              />
+            );
             break;
           case "discount":
             value = (
               <div className="flex items-center gap-0.5">
-                <Input type="number" value={item.discount} onChange={(e) => updateLineItem(index, "discount", parseFloat(e.target.value) || 0)} className="h-7 text-xs text-right w-12 px-1" min="0" />
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  value={item.discount}
+                  onChange={(e) => {
+                    const parsed = parseNumericInput(e.target.value, 2);
+                    if (parsed !== null) updateLineItem(index, "discount", parsed);
+                  }}
+                  className="h-7 text-xs text-right w-12 px-1"
+                />
                 <AppSelect
                   value={item.discount_type}
-                  onChange={(e) => updateLineItem(index, "discount_type", e.target.value)}
+                  onChange={(e) =>
+                    updateLineItem(index, "discount_type", e.target.value)
+                  }
                   options={["%", "₹"]}
                   className="h-7 w-14 rounded border text-xs bg-white pl-2 pr-6"
                 />
@@ -111,7 +241,11 @@ export const InvoiceForm = ({
             break;
           case "actions":
             value = formData.line_items.length > 1 && (
-              <button type="button" onClick={() => removeLineItem(index)} className="text-red-500 hover:text-red-700 p-0.5">
+              <button
+                type="button"
+                onClick={() => removeLineItem(index)}
+                className="text-red-500 hover:text-red-700 p-0.5"
+              >
                 <X className="h-3.5 w-3.5" />
               </button>
             );
@@ -121,7 +255,10 @@ export const InvoiceForm = ({
         }
 
         return (
-          <TableCell key={header.key} className={`px-2 py-1.5 align-middle text-xs ${header.cellClassName || ""}`}>
+          <TableCell
+            key={header.key}
+            className={`px-2 py-1.5 align-middle text-xs ${header.cellClassName || ""}`}
+          >
             {value}
           </TableCell>
         );
@@ -136,8 +273,12 @@ export const InvoiceForm = ({
           <div className="flex items-center gap-2">
             <Building2 className="h-4 w-4 text-amber-600" />
             <div>
-              <p className="font-medium text-amber-800 text-xs">Vendor not registered</p>
-              <p className="text-[11px] text-amber-600">"{formData.vendor_name}" is not in the system</p>
+              <p className="font-medium text-amber-800 text-xs">
+                Vendor not registered
+              </p>
+              <p className="text-[11px] text-amber-600">
+                "{formData.vendor_name}" is not in the system
+              </p>
             </div>
           </div>
           <Button
@@ -161,7 +302,8 @@ export const InvoiceForm = ({
         <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2 flex items-center gap-2">
           <CheckCircle2 className="h-4 w-4 text-emerald-600" />
           <p className="text-xs text-emerald-700">
-            <span className="font-medium">Vendor matched:</span> "{formData.vendor_name}"
+            <span className="font-medium">Vendor matched:</span> "
+            {formData.vendor_name}"
           </p>
         </div>
       )}
@@ -189,7 +331,17 @@ export const InvoiceForm = ({
               />
               <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
                 {formData.vendor_name && (
-                  <button onClick={() => setFormData({ ...formData, vendor_name: "", vendor_id: "", vendor_matched: false })} className="text-gray-400 hover:text-gray-600">
+                  <button
+                    onClick={() =>
+                      setFormData({
+                        ...formData,
+                        vendor_name: "",
+                        vendor_id: "",
+                        vendor_matched: false,
+                      })
+                    }
+                    className="text-gray-400 hover:text-gray-600"
+                  >
                     <X className="h-3 w-3" />
                   </button>
                 )}
@@ -198,18 +350,39 @@ export const InvoiceForm = ({
           </div>
           <div>
             <Label className="text-xs text-blue-400">* Bill Number</Label>
-            <Input value={formData.invoice_number} onChange={(e) => setFormData({ ...formData, invoice_number: e.target.value })} placeholder="Invoice number" className="h-8 text-sm" />
+            <Input
+              value={formData.invoice_number}
+              onChange={(e) =>
+                setFormData({ ...formData, invoice_number: e.target.value })
+              }
+              placeholder="Invoice number"
+              className="h-8 text-sm"
+            />
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label className="text-xs text-blue-400">* Billing Date</Label>
-            <Input type="date" value={formData.invoice_date} onChange={(e) => setFormData({ ...formData, invoice_date: e.target.value })} className="h-8 text-sm" />
+            <Input
+              type="date"
+              value={formData.invoice_date}
+              onChange={(e) =>
+                setFormData({ ...formData, invoice_date: e.target.value })
+              }
+              className="h-8 text-sm"
+            />
           </div>
           <div>
             <Label className="text-xs text-blue-400">* Due Date</Label>
-            <Input type="date" value={formData.due_date} onChange={(e) => setFormData({ ...formData, due_date: e.target.value })} className="h-8 text-sm" />
+            <Input
+              type="date"
+              value={formData.due_date}
+              onChange={(e) =>
+                setFormData({ ...formData, due_date: e.target.value })
+              }
+              className="h-8 text-sm"
+            />
           </div>
         </div>
 
@@ -219,7 +392,10 @@ export const InvoiceForm = ({
             value={formData.department_id || ""}
             onChange={(e) => {
               const selectedDepartment = departments.find((department) => {
-                const departmentId = department?.id ?? department?.departmentId ?? department?.department_id;
+                const departmentId =
+                  department?.id ??
+                  department?.departmentId ??
+                  department?.department_id;
                 return String(departmentId ?? "") === e.target.value;
               });
               setFormData({
@@ -237,8 +413,14 @@ export const InvoiceForm = ({
             required
             placeholder="Select department"
             options={departments.map((department) => ({
-              value: department?.id ?? department?.departmentId ?? department?.department_id,
-              label: department?.name ?? department?.departmentName ?? department?.department_name,
+              value:
+                department?.id ??
+                department?.departmentId ??
+                department?.department_id,
+              label:
+                department?.name ??
+                department?.departmentName ??
+                department?.department_name,
             }))}
           />
         </div>
@@ -275,7 +457,9 @@ export const InvoiceForm = ({
           <Label className="text-xs">Billing Address</Label>
           <textarea
             value={formData.billing_address}
-            onChange={(e) => setFormData({ ...formData, billing_address: e.target.value })}
+            onChange={(e) =>
+              setFormData({ ...formData, billing_address: e.target.value })
+            }
             placeholder="Enter billing address"
             className="w-full min-h-[50px] rounded-md border border-input bg-background px-2 py-1.5 text-xs resize-none"
           />
@@ -284,34 +468,73 @@ export const InvoiceForm = ({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label className="text-xs text-blue-400">* GST Treatment</Label>
-            <AppSelect value={formData.gst_treatment} onChange={(e) => setFormData({ ...formData, gst_treatment: e.target.value })} options={GST_TREATMENTS} className="h-8 text-sm" />
+            <AppSelect
+              value={formData.gst_treatment}
+              onChange={(e) =>
+                setFormData({ ...formData, gst_treatment: e.target.value })
+              }
+              options={GST_TREATMENTS}
+              className="h-8 text-sm"
+            />
           </div>
           <div>
             <Label className="text-xs text-blue-400">* GSTIN</Label>
-            <Input value={formData.gstin} onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })} placeholder="Enter GSTIN" className="h-8 text-sm" />
+            <Input
+              value={formData.gstin}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  gstin: e.target.value.toUpperCase(),
+                })
+              }
+              placeholder="Enter GSTIN"
+              className="h-8 text-sm"
+            />
           </div>
         </div>
 
         <div className="grid grid-cols-3 gap-2">
           <div>
             <Label className="text-xs text-blue-400">* Source of Supply</Label>
-            <AppSelect value={formData.source_of_supply} onChange={(e) => setFormData({ ...formData, source_of_supply: e.target.value })} options={INDIAN_STATES} className="h-8 text-xs" />
+            <AppSelect
+              value={formData.source_of_supply}
+              onChange={(e) =>
+                setFormData({ ...formData, source_of_supply: e.target.value })
+              }
+              options={INDIAN_STATES}
+              className="h-8 text-xs"
+            />
           </div>
           <div>
             <Label className="text-xs text-blue-400">* Destination</Label>
-            <AppSelect value={formData.destination_of_supply} onChange={(e) => setFormData({ ...formData, destination_of_supply: e.target.value })} options={INDIAN_STATES} className="h-8 text-xs" />
+            <AppSelect
+              value={formData.destination_of_supply}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  destination_of_supply: e.target.value,
+                })
+              }
+              options={INDIAN_STATES}
+              className="h-8 text-xs"
+            />
           </div>
           <div>
             <Label className="text-xs text-blue-400">* Location</Label>
-            <AppSelect
+            <Input
               value={formData.location}
-              onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-              options={[
-                { value: "Karnataka Registration", label: "Karnataka" },
-                { value: "Maharashtra Registration", label: "Maharashtra" },
-                { value: "Tamil Nadu Registration", label: "Tamil Nadu" },
-              ]}
-              className="h-8 text-xs"
+              onChange={(e) => {
+                const location = e.target.value;
+                setFormData({
+                  ...formData,
+                  location,
+                  source_of_supply: formData.source_of_supply || location,
+                  destination_of_supply:
+                    formData.destination_of_supply || location,
+                });
+              }}
+              placeholder="Enter location"
+              className="h-8 text-sm"
             />
           </div>
         </div>
@@ -319,11 +542,27 @@ export const InvoiceForm = ({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label className="text-xs text-blue-400">* File Category</Label>
-            <AppSelect value={formData.file_category} onChange={(e) => setFormData({ ...formData, file_category: e.target.value })} options={FILE_CATEGORIES} className="h-8 text-sm" data-testid="file-category-select" />
+            <AppSelect
+              value={formData.file_category}
+              onChange={(e) =>
+                setFormData({ ...formData, file_category: e.target.value })
+              }
+              options={FILE_CATEGORIES}
+              className="h-8 text-sm"
+              data-testid="file-category-select"
+            />
           </div>
           <div>
             <Label className="text-xs text-blue-400">* Source</Label>
-            <AppSelect value={formData.source} onChange={(e) => setFormData({ ...formData, source: e.target.value })} options={INVOICE_SOURCES} className="h-8 text-sm" data-testid="source-select" />
+            <AppSelect
+              value={formData.source}
+              onChange={(e) =>
+                setFormData({ ...formData, source: e.target.value })
+              }
+              options={INVOICE_SOURCES}
+              className="h-8 text-sm"
+              data-testid="source-select"
+            />
           </div>
         </div>
         {formData.source === "Email" && (
@@ -332,7 +571,9 @@ export const InvoiceForm = ({
             <Input
               type="email"
               value={formData.source_email}
-              onChange={(e) => setFormData({ ...formData, source_email: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, source_email: e.target.value })
+              }
               placeholder="vendor@example.com"
               className="w-full h-8 text-sm"
               data-testid="source-email-input"
@@ -345,7 +586,9 @@ export const InvoiceForm = ({
             <span className="text-gray-600">Reverse Charges:</span>
             <AppSelect
               value={formData.reverse_charges}
-              onChange={(e) => setFormData({ ...formData, reverse_charges: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, reverse_charges: e.target.value })
+              }
               options={["Not Applicable", "Applicable"]}
               className="h-6 w-auto border-none bg-transparent pl-0 pr-6 text-xs text-blue-600 shadow-none"
             />
@@ -354,7 +597,9 @@ export const InvoiceForm = ({
             <span className="text-gray-600">Discounts:</span>
             <AppSelect
               value={formData.discounts_level}
-              onChange={(e) => setFormData({ ...formData, discounts_level: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, discounts_level: e.target.value })
+              }
               options={["At Line Item Level", "At Invoice Level"]}
               className="h-6 w-auto border-none bg-transparent pl-0 pr-6 text-xs text-blue-600 shadow-none"
             />
@@ -379,7 +624,12 @@ export const InvoiceForm = ({
           </div>
         </div>
         <div className="h-0.5 bg-gradient-to-r from-blue-500 via-blue-400 to-yellow-400 rounded" />
-        <Button variant="outline" onClick={addLineItem} className="text-blue-600 h-7 text-xs" size="sm">
+        <Button
+          variant="outline"
+          onClick={addLineItem}
+          className="text-blue-600 h-7 text-xs"
+          size="sm"
+        >
           <Plus className="h-3 w-3 mr-1" />
           Add Line Item
         </Button>
@@ -387,30 +637,57 @@ export const InvoiceForm = ({
 
       <div>
         <Label className="text-xs">Description</Label>
-        <textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="Enter Description (Optional)" className="w-full min-h-[50px] rounded-md border border-input bg-background px-2 py-1.5 text-xs resize-none" />
+        <textarea
+          value={formData.description}
+          onChange={(e) =>
+            setFormData({ ...formData, description: e.target.value })
+          }
+          placeholder="Enter Description (Optional)"
+          className="w-full min-h-[50px] rounded-md border border-input bg-background px-2 py-1.5 text-xs resize-none"
+        />
       </div>
 
       <div className="bg-gray-50 rounded-lg p-3 space-y-1.5">
         <div className="flex justify-between text-xs">
           <span>Sub Total</span>
-          <span className="font-medium">{"\u20B9"}{totals.subTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+          <span className="font-medium">
+            {"\u20B9"}
+            {totals.subTotal.toLocaleString("en-IN", {
+              minimumFractionDigits: 2,
+            })}
+          </span>
         </div>
         {totals.cgst > 0 && (
           <div className="flex justify-between text-xs">
-            <span>CGST 9%</span>
-            <span>{"\u20B9"}{totals.cgst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+            <span>CGST</span>
+            <span>
+              {"\u20B9"}
+              {totals.cgst.toLocaleString("en-IN", {
+                minimumFractionDigits: 2,
+              })}
+            </span>
           </div>
         )}
         {totals.sgst > 0 && (
           <div className="flex justify-between text-xs">
-            <span>SGST 9%</span>
-            <span>{"\u20B9"}{totals.sgst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+            <span>SGST</span>
+            <span>
+              {"\u20B9"}
+              {totals.sgst.toLocaleString("en-IN", {
+                minimumFractionDigits: 2,
+              })}
+            </span>
           </div>
         )}
         {totals.igst > 0 && (
           <div className="flex justify-between text-xs">
             <span>IGST</span>
-            <span>{"\u20B9"}{totals.igst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+            <span>
+              {"\u20B9"}
+              {totals.igst.toLocaleString("en-IN", {
+                minimumFractionDigits: 2,
+              })}
+            </span>
           </div>
         )}
         <div className="flex justify-between items-center pt-1.5 border-t text-xs">
@@ -418,22 +695,42 @@ export const InvoiceForm = ({
             <span>TDS</span>
             <AppSelect
               value={formData.tds}
-              onChange={(e) => setFormData({ ...formData, tds: e.target.value })}
+              onChange={(e) =>
+                setFormData({ ...formData, tds: e.target.value })
+              }
               placeholder="TDS"
               options={["1%", "2%", "10%"]}
               className="h-6 w-20 rounded border pl-1 pr-6 text-xs"
             />
           </div>
-          <span>{"\u20B9"}{tdsAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+          <span>
+            {"\u20B9"}
+            {tdsAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+          </span>
         </div>
         <div className="flex justify-between text-sm pt-1.5 border-t">
           <span>Total</span>
-          <span>{"\u20B9"}{totals.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+          <span>
+            {"\u20B9"}
+            {totals.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+          </span>
         </div>
         <div className="flex justify-between text-sm font-bold pt-1.5 border-t">
           <span>Net Payable</span>
-          <span>{"\u20B9"}{netPayable.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+          <span>
+            {"\u20B9"}
+            {netPayable.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+          </span>
         </div>
+        {showApiMismatch && (
+          <div className="text-[11px] text-amber-700 pt-1.5 border-t">
+            API total is {"\u20B9"}
+            {apiTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })};
+            this draft is currently {"\u20B9"}
+            {totals.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}
+            .
+          </div>
+        )}
       </div>
 
       {!hideActions && (
@@ -463,6 +760,7 @@ export const InvoiceForm = ({
           </Button>
         </div>
       )}
+      <InvoiceChecklist formData={formData} />
     </div>
   );
 };
