@@ -4,10 +4,14 @@ const normalizeWorkflowTypeMap = (value) => {
   if (!value || typeof value !== "object") {
     return {
       VENDOR_DEPARTMENT_AMOUNT: [],
+      VENDOR_DEPARTMENT_AMOUNT_CATEGORY: [],
       VENDOR_DEPARTMENT: [],
+      VENDOR_CATEGORY: [],
       DEPARTMENT_AMOUNT: [],
+      DEPARTMENT_CATEGORY: [],
       VENDOR_AMOUNT: [],
       DEPARTMENT: [],
+      CATEGORY: [],
       VENDOR: [],
       AMOUNT: [],
       GENERIC: [],
@@ -18,10 +22,16 @@ const normalizeWorkflowTypeMap = (value) => {
     VENDOR_DEPARTMENT_AMOUNT: Array.isArray(value.VENDOR_DEPARTMENT_AMOUNT)
       ? value.VENDOR_DEPARTMENT_AMOUNT
       : [],
+    VENDOR_DEPARTMENT_AMOUNT_CATEGORY: Array.isArray(value.VENDOR_DEPARTMENT_AMOUNT_CATEGORY)
+      ? value.VENDOR_DEPARTMENT_AMOUNT_CATEGORY
+      : [],
     VENDOR_DEPARTMENT: Array.isArray(value.VENDOR_DEPARTMENT) ? value.VENDOR_DEPARTMENT : [],
+    VENDOR_CATEGORY: Array.isArray(value.VENDOR_CATEGORY) ? value.VENDOR_CATEGORY : [],
     DEPARTMENT_AMOUNT: Array.isArray(value.DEPARTMENT_AMOUNT) ? value.DEPARTMENT_AMOUNT : [],
+    DEPARTMENT_CATEGORY: Array.isArray(value.DEPARTMENT_CATEGORY) ? value.DEPARTMENT_CATEGORY : [],
     VENDOR_AMOUNT: Array.isArray(value.VENDOR_AMOUNT) ? value.VENDOR_AMOUNT : [],
     DEPARTMENT: Array.isArray(value.DEPARTMENT) ? value.DEPARTMENT : [],
+    CATEGORY: Array.isArray(value.CATEGORY) ? value.CATEGORY : [],
     VENDOR: Array.isArray(value.VENDOR) ? value.VENDOR : [],
     AMOUNT: Array.isArray(value.AMOUNT) ? value.AMOUNT : [],
     GENERIC: Array.isArray(value.GENERIC) ? value.GENERIC : [],
@@ -31,6 +41,11 @@ const normalizeWorkflowTypeMap = (value) => {
 const normalizeWorkflowResponse = (workflow = {}) => {
   const vendors = Array.isArray(workflow.vendor) ? workflow.vendor : [];
   const departments = Array.isArray(workflow.department) ? workflow.department : [];
+  const categories = Array.isArray(workflow.category)
+    ? workflow.category
+    : Array.isArray(workflow.categories)
+      ? workflow.categories
+      : [];
   const approvers = Array.isArray(workflow.approvers) ? workflow.approvers : [];
 
   return {
@@ -38,6 +53,7 @@ const normalizeWorkflowResponse = (workflow = {}) => {
     name: workflow.name ?? "",
     vendor: vendors,
     department: departments,
+    category: categories,
     minAmount: workflow.minAmount ?? null,
     maxAmount: workflow.maxAmount ?? null,
     isSequential: workflow.isSequential === true,

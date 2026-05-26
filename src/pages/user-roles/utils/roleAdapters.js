@@ -26,6 +26,7 @@ const CUSTOM_ROLE_PERMISSION_MAP = {
   "tax-manage": { screen: "TAX_MANAGEMENT", permissionType: "MANAGE" },
   "reports-view": { screen: "REPORTS", permissionType: "VIEW" },
   "reports-full": { screen: "REPORTS", permissionType: "FULL" },
+  "audit-trail-view": { screen: "AUDIT_TRAIL", permissionType: "VIEW" },
   "banking-view": { screen: "BANKING", permissionType: "VIEW" },
   "banking-full": { screen: "BANKING", permissionType: "FULL" },
   "roles-view": { screen: "MANAGE_ROLE", permissionType: "VIEW" },

@@ -44,12 +44,14 @@ import {
   useUpdateWorkflowMutation,
 } from '../../../Services/apis/workflowApi';
 import { useGetCorporateDepartmentsQuery } from '../../../Services/apis/corporateApi';
+import { useGetCategoriesQuery } from '../../../Services/apis/categoriesApi';
 import {
-  CONDITION_VISIBILITY,
   FALLBACK_USERS,
   WORKFLOW_SECTIONS,
   WORKFLOW_TYPE_BADGE_CLASSES,
   WORKFLOW_TYPE_LABELS,
+  getConditionVisibility,
+  getWorkflowTypeLabel,
 } from '../constants/approvalWorkflowConfig';
 import {
   getConditionSummary,
@@ -65,6 +67,7 @@ const emptyFormState = {
   type: '',
   vendorIds: [],
   departmentIds: [],
+  categoryIds: [],
   minAmount: '',
   maxAmount: '',
   approvers: [{ userId: '', userName: '' }],
@@ -130,11 +133,15 @@ const normalizeEntityList = (items = [], type = 'entity') => {
       const idKeys =
         type === 'vendor'
           ? ['id', 'vendorId', 'vendor_id', 'vendorUUID']
-          : ['id', 'departmentId', 'department_id'];
+          : type === 'category'
+            ? ['id', 'categoryId', 'category_id']
+            : ['id', 'departmentId', 'department_id'];
       const nameKeys =
         type === 'vendor'
           ? ['name', 'vendorName', 'vendor_name', 'legalName']
-          : ['name', 'departmentName', 'department_name'];
+          : type === 'category'
+            ? ['name', 'categoryName', 'category_name']
+            : ['name', 'departmentName', 'department_name'];
 
       const id = resolveEntityId(item, idKeys);
       const name = resolveEntityName(item, nameKeys);
@@ -181,6 +188,7 @@ const getErrorMessage = (error, fallbackMessage) => {
 const mapWorkflowToUiRule = (workflow = {}) => {
   const vendorEntries = normalizeEntityList(workflow.vendor, 'vendor');
   const departmentEntries = normalizeEntityList(workflow.department, 'department');
+  const categoryEntries = normalizeEntityList(workflow.category, 'category');
   const approvers = normalizeApprovers(workflow.approvers);
   const workflowId = workflow.workflowId;
 
@@ -193,6 +201,8 @@ const mapWorkflowToUiRule = (workflow = {}) => {
     vendorNames: vendorEntries.map((item) => item.name),
     departmentIds: departmentEntries.map((item) => item.id),
     departmentNames: departmentEntries.map((item) => item.name),
+    categoryIds: categoryEntries.map((item) => item.id),
+    categoryNames: categoryEntries.map((item) => item.name),
     minAmount: asNumberOrNull(workflow.minAmount),
     maxAmount: asNumberOrNull(workflow.maxAmount),
     approvalMode: workflow.isSequential ? 'sequential' : 'parallel',
@@ -246,7 +256,7 @@ const WorkflowRuleRow = ({
             variant="outline"
             className={`border ${WORKFLOW_TYPE_BADGE_CLASSES[rule.type] || 'bg-gray-100 text-gray-800 border-gray-200'}`}
           >
-            {WORKFLOW_TYPE_LABELS[rule.type] || rule.type}
+            {getWorkflowTypeLabel(rule.type)}
           </Badge>
           <div className="min-w-0">
             <p className="font-medium">{rule.name}</p>
@@ -309,6 +319,7 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
   const [tester, setTester] = useState({
     vendorId: '',
     departmentId: '',
+    categoryId: '',
     amount: '',
     tested: false,
     result: null,
@@ -335,6 +346,10 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
     data: departmentsData = [],
     isError: departmentsError,
   } = useGetCorporateDepartmentsQuery();
+  const {
+    data: categoriesData = [],
+    isError: categoriesError,
+  } = useGetCategoriesQuery();
 
   const [createWorkflow, { isLoading: createWorkflowLoading }] = useCreateWorkflowMutation();
   const [updateWorkflow, { isLoading: updateWorkflowLoading }] = useUpdateWorkflowMutation();
@@ -364,6 +379,11 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
       toast.error('Failed to load departments');
     }
   }, [departmentsError]);
+  useEffect(() => {
+    if (categoriesError) {
+      toast.error('Failed to load categories');
+    }
+  }, [categoriesError]);
 
   const rules = useMemo(() => {
     const grouped = workflowsResponse?.workflowTypeId;
@@ -479,6 +499,30 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
     return Array.from(departmentMap.entries()).map(([id, name]) => ({ id, name }));
   }, [departmentsData, rules]);
 
+  const workflowCategories = useMemo(() => {
+    const categoryMap = new Map();
+
+    if (Array.isArray(categoriesData)) {
+      categoriesData.forEach((category) => {
+        const id = toStringId(category?.id ?? category?.categoryId ?? category?.category_id);
+        const name = String(category?.name ?? category?.categoryName ?? category?.category_name ?? '').trim();
+        if (id && name) {
+          categoryMap.set(id, name);
+        }
+      });
+    }
+
+    rules.forEach((rule) => {
+      (rule.categoryIds || []).forEach((categoryId, index) => {
+        if (!categoryMap.has(categoryId)) {
+          categoryMap.set(categoryId, rule.categoryNames?.[index] || `Category ${categoryId}`);
+        }
+      });
+    });
+
+    return Array.from(categoryMap.entries()).map(([id, name]) => ({ id, name }));
+  }, [categoriesData, rules]);
+
   const workflowActionLoading =
     createWorkflowLoading ||
     updateWorkflowLoading ||
@@ -503,6 +547,7 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
       type: rule.type || '',
       vendorIds: Array.isArray(rule.vendorIds) ? rule.vendorIds : [],
       departmentIds: Array.isArray(rule.departmentIds) ? rule.departmentIds : [],
+      categoryIds: Array.isArray(rule.categoryIds) ? rule.categoryIds : [],
       minAmount: rule.minAmount !== undefined && rule.minAmount !== null ? String(rule.minAmount) : '',
       maxAmount: rule.maxAmount !== undefined && rule.maxAmount !== null ? String(rule.maxAmount) : '',
       approvers: Array.isArray(rule.approvers) && rule.approvers.length > 0
@@ -633,6 +678,7 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
         vendorId: tester.vendorId,
         departmentId: asNumberOrNull(tester.departmentId),
         amount: Number(tester.amount || 0),
+        categoryId: asNumberOrNull(tester.categoryId),
       }).unwrap();
 
       const matchedRule = {
@@ -682,9 +728,10 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
       return false;
     }
 
-    const visibility = CONDITION_VISIBILITY[formState.type];
+    const visibility = getConditionVisibility(formState.type);
     const selectedVendorIds = Array.isArray(formState.vendorIds) ? formState.vendorIds : [];
     const selectedDepartmentIds = Array.isArray(formState.departmentIds) ? formState.departmentIds : [];
+    const selectedCategoryIds = Array.isArray(formState.categoryIds) ? formState.categoryIds : [];
 
     if (visibility?.showVendor && selectedVendorIds.length === 0) {
       toast.error('Please select at least one vendor');
@@ -698,6 +745,16 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
 
     if (visibility?.showDept && selectedDepartmentIds.some((departmentId) => asNumberOrNull(departmentId) === null)) {
       toast.error('Department id must be numeric');
+      return false;
+    }
+
+    if (visibility?.showCategory && selectedCategoryIds.length === 0) {
+      toast.error('Please select at least one category');
+      return false;
+    }
+
+    if (visibility?.showCategory && selectedCategoryIds.some((categoryId) => asNumberOrNull(categoryId) === null)) {
+      toast.error('Category id must be numeric');
       return false;
     }
 
@@ -736,7 +793,7 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
   };
 
   const buildWorkflowPayload = () => {
-    const visibility = CONDITION_VISIBILITY[formState.type];
+    const visibility = getConditionVisibility(formState.type);
     const approvers = formState.approvers.map((approver, index) => ({
       approverId: asNumberOrNull(approver.userId),
       level: index + 1,
@@ -747,6 +804,10 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
       departmentIds:
         visibility?.showDept && Array.isArray(formState.departmentIds)
           ? formState.departmentIds.map(asNumberOrNull).filter((departmentId) => departmentId !== null)
+          : [],
+      categoryIds:
+        visibility?.showCategory && Array.isArray(formState.categoryIds)
+          ? formState.categoryIds.map(asNumberOrNull).filter((categoryId) => categoryId !== null)
           : [],
     };
 
@@ -812,7 +873,7 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
   };
 
   const isEditingGeneric = editingRuleId && formState.type === 'GENERIC';
-  const visibility = formState.type ? CONDITION_VISIBILITY[formState.type] : null;
+  const visibility = formState.type ? getConditionVisibility(formState.type) : null;
 
   const loading = workflowTypesLoading || workflowApproversLoading || (workflowsLoading && !workflowsResponse);
 
@@ -831,7 +892,7 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
           <CardTitle className="text-lg">Approval Workflow Tester</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <div>
               <Label>Vendor</Label>
               <select
@@ -871,6 +932,28 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
                 {workflowDepartments.map((department) => (
                   <option key={department.id} value={department.id}>
                     {department.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <Label>Category</Label>
+              <select
+                value={tester.categoryId}
+                onChange={(event) =>
+                  setTester((prev) => ({
+                    ...prev,
+                    categoryId: event.target.value,
+                    tested: false,
+                  }))
+                }
+                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              >
+                <option value="">Select category</option>
+                {workflowCategories.map((category) => (
+                  <option key={category.id} value={category.id}>
+                    {category.name}
                   </option>
                 ))}
               </select>
@@ -932,7 +1015,7 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
                       <p>
                         Type:{' '}
                         <span className="font-medium text-foreground">
-                          {WORKFLOW_TYPE_LABELS[tester.result.rule.type] || tester.result.rule.type}
+                          {getWorkflowTypeLabel(tester.result.rule.type)}
                         </span>
                       </p>
                     </div>
@@ -1070,7 +1153,7 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
                   <span className="w-6 h-6 rounded-full bg-muted text-muted-foreground text-xs font-semibold flex items-center justify-center">
                     {priority}
                   </span>
-                  <h4 className="font-semibold">{WORKFLOW_TYPE_LABELS[type] || type}</h4>
+                  <h4 className="font-semibold">{getWorkflowTypeLabel(type)}</h4>
                   <div className="h-px bg-border flex-1" />
                   <span className="text-xs text-muted-foreground">{sectionRules.length} rule(s)</span>
                 </div>
@@ -1128,7 +1211,7 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
                         : 'bg-background hover:bg-accent border-input'
                     } ${isEditingGeneric ? 'opacity-60 cursor-not-allowed' : ''}`}
                   >
-                    {WORKFLOW_TYPE_LABELS[value] || value}
+                    {getWorkflowTypeLabel(value)}
                   </button>
                 ))}
               </div>
@@ -1190,6 +1273,33 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
                               disabled={workflowActionLoading}
                             />
                             <span>{department.name}</span>
+                          </label>
+                        ))
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {visibility.showCategory && (
+                  <div className="space-y-2">
+                    <Label>Categories</Label>
+                    <div className="max-h-44 overflow-y-auto rounded-md border border-input bg-background p-2 space-y-1">
+                      {workflowCategories.length === 0 ? (
+                        <p className="px-2 py-1 text-sm text-muted-foreground">No categories available</p>
+                      ) : (
+                        workflowCategories.map((category) => (
+                          <label
+                            key={category.id}
+                            className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/60"
+                          >
+                            <Checkbox
+                              checked={(formState.categoryIds || []).includes(category.id)}
+                              onCheckedChange={(checked) =>
+                                toggleFormSelection('categoryIds', category.id, Boolean(checked))
+                              }
+                              disabled={workflowActionLoading}
+                            />
+                            <span>{category.name}</span>
                           </label>
                         ))
                       )}

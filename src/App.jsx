@@ -36,10 +36,12 @@ import Notifications from "./pages/notifications/Notifications";
 const loadSettingsPage = () => import("./pages/settings/Settings");
 const loadTaxManagementPage = () => import("./pages/tax-management/TaxManagement");
 const loadReportsPage = () => import("./pages/reports/Reports");
+const loadAuditTrailPage = () => import("./pages/audit-trail/AuditTrail");
 
 const Settings = lazy(loadSettingsPage);
 const TaxManagement = lazy(loadTaxManagementPage);
 const Reports = lazy(loadReportsPage);
+const AuditTrail = lazy(loadAuditTrailPage);
 
 const PageFallback = () => (
   <div className="min-h-[60vh] rounded-xl border border-border bg-card/50 flex items-center justify-center">
@@ -192,6 +194,7 @@ function AppContent() {
       loadSettingsPage();
       loadTaxManagementPage();
       loadReportsPage();
+      loadAuditTrailPage();
     };
 
     if (typeof window !== "undefined" && "requestIdleCallback" in window) {
@@ -247,6 +250,14 @@ function AppContent() {
             element={
               <Suspense fallback={<PageFallback />}>
                 <Reports />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/audit-trail"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <AuditTrail />
               </Suspense>
             }
           />
