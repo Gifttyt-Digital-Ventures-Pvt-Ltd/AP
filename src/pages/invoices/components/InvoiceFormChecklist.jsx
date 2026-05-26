@@ -86,7 +86,7 @@ const buildChecklist = (formData) => {
 };
 
 export const InvoiceChecklist = ({ formData }) => {
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(true);
 
   const groups = useMemo(() => buildChecklist(formData), [formData]);
 
