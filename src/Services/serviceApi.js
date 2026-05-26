@@ -47,6 +47,7 @@ export const serviceApi = createApi({
     "Reports",
     "MasterData",
     "Workflow",
+    "Categories",
   ],
   endpoints: (builder) => ({
     login: builder.mutation({

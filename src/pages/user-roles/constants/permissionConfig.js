@@ -95,6 +95,13 @@ export const PERMISSION_GROUPS = [
       { id: "settings-interaction", label: "Interaction Rules" },
     ],
   },
+  {
+    title: "Category",
+    permissions: [
+      { id: "category-view", label: "View Only" },
+      { id: "category-manage", label: "Manage (Add, Delete, Edit)" },
+    ],
+  },
 ];
 
 // Human-readable permission labels ported from AP_User Roles ViewRoleDialog.
@@ -133,4 +140,6 @@ export const PERMISSION_LABELS = {
   "settings-org": "Settings - Manage Organisation",
   "settings-banking": "Settings - Manage Banking",
   "settings-interaction": "Settings - Interaction Rules",
+  "category-view": "Category - View Only",
+  "category-manage": "Category - Manage (Add, Delete, Edit)",
 };

@@ -35,6 +35,8 @@ const CUSTOM_ROLE_PERMISSION_MAP = {
   "settings-org": { screen: "SETTINGS", permissionType: "ORG" },
   "settings-banking": { screen: "SETTINGS", permissionType: "BANKING" },
   "settings-interaction": { screen: "SETTINGS", permissionType: "INTERACTION" },
+  "category-view": { screen: "CATEGORY", permissionType: "VIEW" },
+  "category-manage": { screen: "CATEGORY", permissionType: "MANAGE" },
 };
 
 const HIDDEN_ROLE_ACCESS_PERMISSIONS = new Set(["approval-view", "approval-full"]);

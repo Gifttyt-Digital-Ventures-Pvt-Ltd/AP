@@ -96,6 +96,12 @@ const mapSettingsPermission = (permissionType) => {
   return null;
 };
 
+const mapCategoryPermission = (permissionType) => {
+  if (permissionType === "VIEW") return "category-view";
+  if (permissionType === "MANAGE") return "category-manage";
+  return null;
+};
+
 const mapVendorWorkflowPermission = (permissionType) => {
   if (permissionType === "VIEW") return "vendor-workflow-view";
   if (permissionType === "MANAGE") return "vendor-workflow-manage";
@@ -165,6 +171,10 @@ export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput)
 
   if (screen === "SETTINGS") {
     return mapSettingsPermission(permissionType);
+  }
+
+  if (screen === "CATEGORY" || screen === "CATEGORIES") {
+    return mapCategoryPermission(permissionType);
   }
 
   if (

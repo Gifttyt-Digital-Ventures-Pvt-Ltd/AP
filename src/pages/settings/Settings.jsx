@@ -17,7 +17,9 @@ import { toast } from 'sonner';
 import BankAccountDialog from './components/BankAccountDialog';
 import ZohoConfigDialog from './components/ZohoConfigDialog';
 import TallyConfigDialog from './components/TallyConfigDialog';
+import CategoriesTab from './components/CategoriesTab';
 import { useActionGuard } from '../../hooks/useActionGuard';
+import { useRBAC } from '../../contexts/RBACContext';
 
 // Zoho Logo Component - Four interlocking rounded squares
 const ZohoLogo = () => (
@@ -53,18 +55,26 @@ const SYNC_DATA_ITEMS = [
 ];
 
 const Settings = () => {
+  const { hasAnyPermission } = useRBAC();
+  const canViewBankingSettings = hasAnyPermission(['settings-banking', 'banking-full']);
+  const canViewOrganisationSettings = hasAnyPermission(['settings-org']);
+  const defaultSettingsTab = canViewBankingSettings
+    ? 'banking'
+    : canViewOrganisationSettings
+      ? 'organisation'
+      : 'categories';
   const {
     data: bankAccountsData = [],
     isError: bankAccountsError,
     refetch: refetchBankAccounts,
-  } = useGetBankAccountsQuery();
+  } = useGetBankAccountsQuery(undefined, { skip: !canViewBankingSettings });
   const {
     data: organisationData,
     isLoading: organisationLoading,
     isFetching: organisationFetching,
     error: organisationError,
     refetch: refetchOrganisation,
-  } = useGetOrganisationQuery();
+  } = useGetOrganisationQuery(undefined, { skip: !canViewOrganisationSettings });
   const [createBankAccount] = useCreateBankAccountMutation();
   const [createOrganisation] = useCreateOrganisationMutation();
   const [updateOrganisation] = useUpdateOrganisationMutation();
@@ -350,11 +360,12 @@ const Settings = () => {
         <p className="text-muted-foreground">Manage your account settings and integrations</p>
       </div>
 
-      <Tabs defaultValue="banking" className="space-y-6" data-testid="settings-tabs">
+      <Tabs defaultValue={defaultSettingsTab} className="space-y-6" data-testid="settings-tabs">
         <TabsList>
           <TabsTrigger value="organisation" data-testid="tab-organisation">Organisation Details</TabsTrigger>
           <TabsTrigger value="banking" data-testid="tab-banking">Connected Banking</TabsTrigger>
           <TabsTrigger value="integrations" data-testid="tab-integrations">Integrations</TabsTrigger>
+          <TabsTrigger value="categories" data-testid="tab-categories">Categories</TabsTrigger>
         </TabsList>
 
         <TabsContent value="organisation">
@@ -927,6 +938,10 @@ const Settings = () => {
               </p>
             </div>
           </div>
+        </TabsContent>
+
+        <TabsContent value="categories">
+          <CategoriesTab />
         </TabsContent>
       </Tabs>
 
