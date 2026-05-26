@@ -32,6 +32,8 @@ export const ROUTE_PERMISSION_RULES = {
       "roles-manage",
       "vendor-workflow-view",
       "vendor-workflow-manage",
+      "category-view",
+      "category-manage",
     ],
   },
   "/settings": {
@@ -39,9 +41,6 @@ export const ROUTE_PERMISSION_RULES = {
       "settings-org",
       "settings-banking",
       "settings-interaction",
-      "category-view",
-      "category-manage",
-      "invoice-approver",
     ],
   },
 };
