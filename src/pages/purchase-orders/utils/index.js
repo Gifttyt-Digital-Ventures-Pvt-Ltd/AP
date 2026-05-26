@@ -1,4 +1,5 @@
 export const SUPPORTED_PO_CURRENCIES = ["INR", "USD", "EUR", "GBP"];
+export const SUPPORTED_PO_TEMPLATES = ["T1", "T2", "T3", "T4", "T5"];
 
 export const DEFAULT_PO_FORMAT_CONFIG = {
   id: "default-format",
@@ -81,6 +82,12 @@ export const getTaxMode = (currency = "INR") => (currency === "INR" ? "GST" : "E
 
 export const isInrCurrency = (currency = "INR") => getTaxMode(currency) === "GST";
 
+export const normalizePoTemplateCode = (templateCode = "T1") => {
+  const raw = String(templateCode || "").trim().toUpperCase();
+  if (!raw || raw === "DEFAULT") return "T1";
+  return SUPPORTED_PO_TEMPLATES.includes(raw) ? raw : "T1";
+};
+
 export const formatCurrency = (amount, currency = "INR") => {
   const safeCurrency = SUPPORTED_PO_CURRENCIES.includes(currency) ? currency : "INR";
   return new Intl.NumberFormat(safeCurrency === "INR" ? "en-IN" : "en-US", {
@@ -156,7 +163,7 @@ export const normalizePurchaseOrder = (po = {}) => ({
   tds_amount: po.tds_amount ?? po.tdsAmount ?? 0,
   po_format_id: po.po_format_id ?? po.poFormatId ?? po.formatConfigId ?? "",
   po_format_name: po.po_format_name ?? po.poFormatName ?? po.formatName ?? "",
-  template_code: po.template_code ?? po.templateCode ?? "",
+  template_code: normalizePoTemplateCode(po.template_code ?? po.templateCode ?? "T1"),
   place_of_supply: po.place_of_supply ?? po.placeOfSupply ?? "",
   line_items: Array.isArray(po.line_items)
     ? po.line_items.map(normalizePoLineItem)
@@ -263,97 +270,4 @@ export const buildCreatePurchaseOrderPayload = (form = {}, formatConfig = null) 
       };
     }),
   };
-};
-
-export const calculatePurchaseOrderPreview = (form = {}) => {
-  const currency = form.currency || "INR";
-  const isInr = isInrCurrency(currency);
-  let subtotal = 0;
-  let taxAmount = 0;
-  const tdsApplicable = isInr && Boolean(form.tds_applicable);
-  const tdsPercent = tdsApplicable ? Number(form.tds_percent) || 0 : 0;
-
-  const lineItems = (form.line_items || []).map((item, index) => {
-    const quantity = Number(item.quantity) || 0;
-    const unitPrice = Number(item.unit_price) || 0;
-    const discountPercent = Number(item.discount_percent) || 0;
-    const gross = quantity * unitPrice;
-    const discountAmount = gross * discountPercent / 100;
-    const taxableValue = Math.max(gross - discountAmount, 0);
-    const lineTax = isInr ? taxableValue * (Number(item.gst_rate) || 0) / 100 : 0;
-    const totalAmount = taxableValue + lineTax;
-
-    subtotal += taxableValue;
-    taxAmount += lineTax;
-
-    return {
-      line_number: index + 1,
-      item_description: item.item_description || "",
-      hsn_sac_code: isInr ? item.hsn_sac_code || "" : "",
-      quantity,
-      unit_of_measure: item.unit_of_measure || "NOS",
-      unit_price: unitPrice,
-      discount_percent: discountPercent,
-      gst_rate: isInr ? Number(item.gst_rate) || 0 : 0,
-      tax_amount: lineTax,
-      total_amount: totalAmount,
-      remarks: item.remarks || "",
-    };
-  });
-
-  const totalAmount = subtotal + taxAmount;
-  const tdsAmount = subtotal * tdsPercent / 100;
-
-  return {
-    lineItems,
-    subtotal,
-    taxAmount,
-    totalAmount,
-    tdsAmount,
-    netPayable: totalAmount - tdsAmount,
-  };
-};
-
-export const buildDemoPurchaseOrder = ({ form = {}, vendor = {}, formatConfig = {}, sequence = 1, status = "DRAFT" }) => {
-  const preview = calculatePurchaseOrderPreview(form);
-  const currency = form.currency || "INR";
-  const isInr = isInrCurrency(currency);
-  const id = `demo-po-${Date.now()}`;
-
-  return normalizePurchaseOrder({
-    id,
-    po_number: `PO-DEMO-${String(sequence).padStart(4, "0")}`,
-    vendor_id: form.vendor_id,
-    vendor_name: vendor?.name || "Demo Vendor",
-    po_format_id: form.po_format_id || formatConfig.id || "",
-    po_format_name: formatConfig.name || "Demo Format",
-    template_code: formatConfig.templateCode || "T1",
-    po_date: form.po_date,
-    valid_till: form.valid_till,
-    expected_delivery_date: form.expected_delivery_date,
-    currency,
-    exchange_rate: form.exchange_rate,
-    tax_mode: getTaxMode(currency),
-    tds_applicable: isInr && Boolean(form.tds_applicable),
-    tds_section: isInr && form.tds_applicable ? form.tds_section : "",
-    tds_percent: isInr && form.tds_applicable ? Number(form.tds_percent) || 0 : 0,
-    tds_amount: preview.tdsAmount,
-    place_of_supply: isInr ? form.place_of_supply : "",
-    line_items: preview.lineItems,
-    subtotal: preview.subtotal,
-    tax_amount: preview.taxAmount,
-    total_amount: preview.totalAmount,
-    grand_total: preview.totalAmount,
-    net_payable: preview.netPayable,
-    status,
-    current_approval_level: status === "PENDING_APPROVAL" ? 1 : null,
-    approvals: [],
-    shipping_address: form.shipping_address,
-    billing_address: form.billing_address,
-    delivery_terms: form.delivery_terms,
-    freight_terms: form.freight_terms,
-    payment_terms: form.payment_terms,
-    remarks: form.remarks || "Demo PO generated locally until backend creation is ready.",
-    created_by_name: "Demo User",
-  });
 };

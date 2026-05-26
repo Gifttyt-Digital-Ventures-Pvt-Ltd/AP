@@ -83,6 +83,8 @@ export const InvoiceForm = ({
   canAddVendor = true,
   canSubmit = true,
   departments = [],
+  invoiceCategories = [],
+  invoiceCategoriesLoading = false,
   GST_TREATMENTS,
   INDIAN_STATES,
   FILE_CATEGORIES,
@@ -419,6 +421,34 @@ export const InvoiceForm = ({
                 department?.name ??
                 department?.departmentName ??
                 department?.department_name,
+            }))}
+          />
+        </div>
+
+        <div>
+          <Label className="text-xs text-blue-400">Category</Label>
+          <AppSelect
+            value={formData.category_id || ""}
+            onChange={(e) => {
+              const selectedCategory = invoiceCategories.find(
+                (category) => String(category.id ?? "") === e.target.value,
+              );
+              setFormData({
+                ...formData,
+                category_id: e.target.value,
+                category_name: selectedCategory?.name || "",
+                category: selectedCategory
+                  ? { id: selectedCategory.id, name: selectedCategory.name }
+                  : null,
+              });
+            }}
+            className="h-8 text-sm"
+            data-testid="invoice-category-select"
+            placeholder={invoiceCategoriesLoading ? "Loading categories..." : "Select category"}
+            disabled={invoiceCategoriesLoading}
+            options={invoiceCategories.map((category) => ({
+              value: category.id,
+              label: category.name,
             }))}
           />
         </div>

@@ -75,6 +75,11 @@ const mapReportsPermission = (permissionType) => {
   return null;
 };
 
+const mapAuditTrailPermission = (permissionType) => {
+  if (permissionType === "VIEW") return "audit-trail-view";
+  return null;
+};
+
 const mapBankingPermission = (permissionType) => {
   if (permissionType === "VIEW") return "banking-view";
   if (["FULL", "MANAGE"].includes(permissionType)) return "banking-full";
@@ -93,6 +98,12 @@ const mapSettingsPermission = (permissionType) => {
   }
   if (permissionType === "BANKING") return "settings-banking";
   if (permissionType === "INTERACTION") return "settings-interaction";
+  return null;
+};
+
+const mapCategoryPermission = (permissionType) => {
+  if (permissionType === "VIEW") return "category-view";
+  if (permissionType === "MANAGE") return "category-manage";
   return null;
 };
 
@@ -155,6 +166,10 @@ export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput)
     return mapReportsPermission(permissionType);
   }
 
+  if (screen === "AUDIT_TRAIL" || screen === "AUDIT") {
+    return mapAuditTrailPermission(permissionType);
+  }
+
   if (screen === "BANKING" || screen === "BANK") {
     return mapBankingPermission(permissionType);
   }
@@ -165,6 +180,10 @@ export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput)
 
   if (screen === "SETTINGS") {
     return mapSettingsPermission(permissionType);
+  }
+
+  if (screen === "CATEGORY" || screen === "CATEGORIES") {
+    return mapCategoryPermission(permissionType);
   }
 
   if (

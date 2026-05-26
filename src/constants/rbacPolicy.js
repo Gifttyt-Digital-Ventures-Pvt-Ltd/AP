@@ -23,6 +23,7 @@ export const ROUTE_PERMISSION_RULES = {
   "/payment-batches": { anyOf: ["payments-view", "payments-manage"] },
   "/tax-management": { anyOf: ["tax-view", "tax-manage"] },
   "/reports": { anyOf: ["reports-view", "reports-full"] },
+  "/audit-trail": { anyOf: ["audit-trail-view"] },
   "/banking": { anyOf: ["banking-view", "banking-full"] },
   "/notifications": { anyOf: ["settings-interaction"] },
   "/user-roles": {
@@ -33,7 +34,16 @@ export const ROUTE_PERMISSION_RULES = {
       "vendor-workflow-manage",
     ],
   },
-  "/settings": { anyOf: ["settings-org", "settings-banking", "settings-interaction"] },
+  "/settings": {
+    anyOf: [
+      "settings-org",
+      "settings-banking",
+      "settings-interaction",
+      "category-view",
+      "category-manage",
+      "invoice-approver",
+    ],
+  },
 };
 
 export const DEFAULT_ROUTE_PRIORITY = [
@@ -49,6 +59,7 @@ export const DEFAULT_ROUTE_PRIORITY = [
   "/payment-batches",
   "/tax-management",
   "/reports",
+  "/audit-trail",
   "/banking",
   "/notifications",
   "/user-roles",
@@ -97,6 +108,9 @@ export const ACTION_PERMISSION_RULES = {
   "settings.createBankAccount": { anyOf: ["settings-banking", "banking-full"] },
   "settings.createOrganisation": { anyOf: ["settings-org"] },
   "settings.updateOrganisation": { anyOf: ["settings-org"] },
+  "categories.create": { anyOf: ["category-manage"] },
+  "categories.update": { anyOf: ["category-manage"] },
+  "categories.delete": { anyOf: ["category-manage"] },
 
   "tax.calculateGst": { anyOf: ["tax-manage"] },
   "tax.calculateTds": { anyOf: ["tax-manage"] },

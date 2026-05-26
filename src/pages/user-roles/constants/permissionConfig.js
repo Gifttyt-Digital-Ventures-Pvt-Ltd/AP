@@ -70,6 +70,10 @@ export const PERMISSION_GROUPS = [
     permissions: [{ id: "reports-full", label: "Full Access" }],
   },
   {
+    title: "Audit Trail",
+    permissions: [{ id: "audit-trail-view", label: "View Only" }],
+  },
+  {
     title: "Banking",
     permissions: [{ id: "banking-full", label: "Full Access" }],
   },
@@ -93,6 +97,13 @@ export const PERMISSION_GROUPS = [
       { id: "settings-org", label: "Manage Organisation Details" },
       { id: "settings-banking", label: "Manage Connected Banking" },
       { id: "settings-interaction", label: "Interaction Rules" },
+    ],
+  },
+  {
+    title: "Category",
+    permissions: [
+      { id: "category-view", label: "View Only" },
+      { id: "category-manage", label: "Manage (Add, Delete, Edit)" },
     ],
   },
 ];
@@ -124,6 +135,7 @@ export const PERMISSION_LABELS = {
   "tax-manage": "Tax Management - Manage",
   "reports-view": "Reports - View Only",
   "reports-full": "Reports - Full Access",
+  "audit-trail-view": "Audit Trail - View Only",
   "banking-view": "Banking - View Only",
   "banking-full": "Banking - Full Access",
   "roles-view": "Manage Roles - View Only",
@@ -133,4 +145,6 @@ export const PERMISSION_LABELS = {
   "settings-org": "Settings - Manage Organisation",
   "settings-banking": "Settings - Manage Banking",
   "settings-interaction": "Settings - Interaction Rules",
+  "category-view": "Category - View Only",
+  "category-manage": "Category - Manage (Add, Delete, Edit)",
 };

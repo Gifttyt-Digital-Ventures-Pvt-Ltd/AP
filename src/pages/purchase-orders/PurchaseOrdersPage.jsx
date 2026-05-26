@@ -4,7 +4,11 @@ import {
   useGetPurchaseOrdersQuery,
   useGetPendingPurchaseOrderApprovalsQuery,
   useGetPurchaseOrderFormatConfigQuery,
+  useGetPurchaseOrderFormatConfigsQuery,
   useLazyGetPurchaseOrderDownloadUrlQuery,
+  useCreatePurchaseOrderFormatConfigMutation,
+  useUpdatePurchaseOrderFormatConfigMutation,
+  useDeletePurchaseOrderFormatConfigMutation,
   useSavePurchaseOrderDraftMutation,
   useCreatePurchaseOrderMutation,
   useSubmitPurchaseOrderMutation,
@@ -16,13 +20,13 @@ import { toast } from 'sonner';
 import { statusColors } from './constants';
 import {
   DEFAULT_PO_FORMAT_CONFIG,
-  buildDemoPurchaseOrder,
   buildCreatePurchaseOrderPayload,
   formatCurrency,
   formatDate,
   getTaxMode,
   isInrCurrency,
   isFormatFieldEnabled,
+  normalizePoTemplateCode,
   normalizePurchaseOrder,
   sanitizeLineItemForCurrency,
 } from './utils';
@@ -43,13 +47,6 @@ const getListData = (response) => {
 };
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? '';
-const USE_FAKE_PO_FLOW = true;
-
-const DEMO_VENDORS = [
-  { id: "demo-vendor-1", name: "Aarav Industrial Supplies" },
-  { id: "demo-vendor-2", name: "BluePeak Technologies" },
-  { id: "demo-vendor-3", name: "Nexa Global Exports" },
-];
 
 const createEmptyLineItem = (currency = 'INR') =>
   sanitizeLineItemForCurrency(
@@ -99,9 +96,41 @@ const cloneFormatConfig = (config) => ({
 
 const makeFormatConfig = (config, fallbackId = 'default-format', fallbackName = 'Standard GST Format') => ({
   ...cloneFormatConfig(config),
+  templateCode: normalizePoTemplateCode(config.templateCode),
   id: config.id || fallbackId,
   name: config.name || fallbackName,
 });
+
+const buildFormatConfigPayload = (config) => ({
+  name: config.name,
+  defaultCurrency: config.defaultCurrency,
+  companyName: config.companyName,
+  logoUrl: config.logoUrl || null,
+  logoS3Key: config.logoS3Key || null,
+  poNumberPrefix: config.poNumberPrefix,
+  dateFormat: config.dateFormat,
+  templateCode: config.templateCode,
+  isDefault: Boolean(config.isDefault),
+  configVersion: config.configVersion || 0,
+  sections: (config.sections || []).map((section, sectionIndex) => ({
+    section: section.section,
+    label: section.label,
+    isEnabled: Boolean(section.isEnabled),
+    displayOrder: section.displayOrder ?? sectionIndex + 1,
+    fields: (section.fields || []).map((field, fieldIndex) => ({
+      fieldKey: field.fieldKey,
+      label: field.label,
+      isEnabled: Boolean(field.isEnabled),
+      isMandatory: Boolean(field.isMandatory),
+      labelOverride: field.labelOverride || null,
+      displayOrder: field.displayOrder ?? fieldIndex + 1,
+      isSystemField: Boolean(field.isSystemField),
+      isCurrencyDependent: Boolean(field.isCurrencyDependent),
+    })),
+  })),
+});
+
+const isUnsavedFormat = (formatId = '') => String(formatId).startsWith('new-format-');
 
 const PurchaseOrdersPage = () => {
   const { guardAction, canPerformAction } = useActionGuard();
@@ -118,7 +147,16 @@ const PurchaseOrdersPage = () => {
     isLoading: pendingApprovalsLoading,
     refetch: refetchPendingApprovals,
   } = useGetPendingPurchaseOrderApprovalsQuery(undefined, { skip: !canApprovePo });
-  const { data: formatConfigData } = useGetPurchaseOrderFormatConfigQuery();
+  const {
+    data: formatConfigData,
+    isLoading: formatConfigLoading,
+    refetch: refetchFormatConfig,
+  } = useGetPurchaseOrderFormatConfigQuery();
+  const {
+    data: formatConfigsData = [],
+    isLoading: formatConfigsLoading,
+    refetch: refetchFormatConfigs,
+  } = useGetPurchaseOrderFormatConfigsQuery();
   const {
     data: vendorsData = [],
     isLoading: vendorsLoading,
@@ -126,6 +164,9 @@ const PurchaseOrdersPage = () => {
   } = useGetVendorsQuery();
 
   const [getPurchaseOrderDownloadUrl] = useLazyGetPurchaseOrderDownloadUrlQuery();
+  const [createPurchaseOrderFormatConfig] = useCreatePurchaseOrderFormatConfigMutation();
+  const [updatePurchaseOrderFormatConfig] = useUpdatePurchaseOrderFormatConfigMutation();
+  const [deletePurchaseOrderFormatConfig] = useDeletePurchaseOrderFormatConfigMutation();
   const [savePurchaseOrderDraft] = useSavePurchaseOrderDraftMutation();
   const [createPurchaseOrder] = useCreatePurchaseOrderMutation();
   const [submitPurchaseOrder] = useSubmitPurchaseOrderMutation();
@@ -134,9 +175,8 @@ const PurchaseOrdersPage = () => {
   const formatConfig = formatConfigData || DEFAULT_PO_FORMAT_CONFIG;
   const apiPurchaseOrders = getListData(purchaseOrdersData).map(normalizePurchaseOrder);
   const apiPendingApprovals = getListData(pendingApprovalsData).map(normalizePurchaseOrder);
-  const vendorsFromApi = Array.isArray(vendorsData) ? vendorsData : [];
-  const vendors = vendorsFromApi.length > 0 ? vendorsFromApi : DEMO_VENDORS;
-  const loading = purchaseOrdersLoading || pendingApprovalsLoading || vendorsLoading;
+  const vendors = Array.isArray(vendorsData) ? vendorsData : getListData(vendorsData);
+  const loading = purchaseOrdersLoading || pendingApprovalsLoading || vendorsLoading || formatConfigLoading || formatConfigsLoading;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -149,16 +189,13 @@ const PurchaseOrdersPage = () => {
   const [createAction, setCreateAction] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [downloadingPoId, setDownloadingPoId] = useState(null);
-  const [demoPurchaseOrders, setDemoPurchaseOrders] = useState([]);
   const [approvalForm, setApprovalForm] = useState({ action: 'Approved', comments: '' });
   const [savedFormatConfigs, setSavedFormatConfigs] = useState(() => [makeFormatConfig(formatConfig)]);
   const [activeFormatId, setActiveFormatId] = useState('default-format');
   const [builderDraftConfig, setBuilderDraftConfig] = useState(() => makeFormatConfig(formatConfig));
 
-  const purchaseOrders = [...demoPurchaseOrders, ...apiPurchaseOrders];
-  const pendingApprovals = USE_FAKE_PO_FLOW
-    ? purchaseOrders.filter((po) => po.status === 'Pending Approval')
-    : apiPendingApprovals;
+  const purchaseOrders = apiPurchaseOrders;
+  const pendingApprovals = apiPendingApprovals;
   const activeFormatConfig =
     savedFormatConfigs.find((config) => config.id === activeFormatId) ||
     savedFormatConfigs[0] ||
@@ -169,11 +206,25 @@ const PurchaseOrdersPage = () => {
   );
 
   useEffect(() => {
-    if (!formatConfigData?.defaultCurrency) return;
-    const nextConfig = makeFormatConfig(formatConfigData);
-    setSavedFormatConfigs([nextConfig]);
-    setActiveFormatId(nextConfig.id);
-    setBuilderDraftConfig(makeFormatConfig(nextConfig));
+    const formatsFromApi = getListData(formatConfigsData).map((config, index) =>
+      makeFormatConfig(config, index === 0 ? 'default-format' : `format-${index + 1}`),
+    );
+    const nextFormats = formatsFromApi.length
+      ? formatsFromApi
+      : formatConfigData?.defaultCurrency
+        ? [makeFormatConfig(formatConfigData)]
+        : [];
+
+    if (!nextFormats.length) return;
+
+    const nextActiveFormat =
+      nextFormats.find((config) => config.id === activeFormatId) ||
+      nextFormats.find((config) => config.isDefault) ||
+      nextFormats[0];
+
+    setSavedFormatConfigs(nextFormats);
+    setActiveFormatId(nextActiveFormat.id);
+    setBuilderDraftConfig(makeFormatConfig(nextActiveFormat));
     setPoForm((prev) => {
       const untouched =
         !prev.vendor_id &&
@@ -181,13 +232,20 @@ const PurchaseOrdersPage = () => {
         prev.line_items.length === 1 &&
         !prev.line_items[0]?.item_description;
 
-      return untouched ? createDefaultPoForm(nextConfig.defaultCurrency, nextConfig.id) : prev;
+      if (untouched) return createDefaultPoForm(nextActiveFormat.defaultCurrency, nextActiveFormat.id);
+      if (nextFormats.some((config) => config.id === prev.po_format_id)) return prev;
+      return {
+        ...prev,
+        po_format_id: nextActiveFormat.id,
+        currency: nextActiveFormat.defaultCurrency,
+        line_items: prev.line_items.map((item) => sanitizeLineItemForCurrency(item, nextActiveFormat.defaultCurrency)),
+      };
     });
-  }, [formatConfigData]);
+  }, [formatConfigData, formatConfigsData, activeFormatId]);
 
   const fetchData = async () => {
     try {
-      const requests = [refetchPurchaseOrders(), refetchVendors()];
+      const requests = [refetchPurchaseOrders(), refetchVendors(), refetchFormatConfig(), refetchFormatConfigs()];
       if (canApprovePo) requests.push(refetchPendingApprovals());
       await Promise.all(requests);
     } catch (error) {
@@ -196,7 +254,8 @@ const PurchaseOrdersPage = () => {
     }
   };
 
-  const getCreatedPo = (response) => response?.po || response?.purchaseOrder || response;
+  const getCreatedPo = (response) =>
+    response?.po || response?.purchaseOrder || response?.formatConfig || response?.data || response?.item || response;
   const getPoId = (po) => po?.id || po?.po_id || po?.poId;
 
   const getDownloadUrl = (response) =>
@@ -249,29 +308,17 @@ const PurchaseOrdersPage = () => {
 
     setCreateAction(submitForApproval ? 'submit' : 'draft');
     try {
-      const selectedVendor = vendors.find((vendor) => vendor.id === poForm.vendor_id);
       const selectedFormat = savedFormatConfigs.find((config) => config.id === poForm.po_format_id) || activeFormatConfig;
       const payload = buildCreatePurchaseOrderPayload(poForm, selectedFormat);
-      let createdPo;
+      const data = submitForApproval
+        ? await createPurchaseOrder(payload).unwrap()
+        : await savePurchaseOrderDraft(payload).unwrap();
+      const createdPo = getCreatedPo(data);
+      const normalizedCreatedPo = normalizePurchaseOrder(createdPo || {});
+      const createdPoId = getPoId(createdPo);
 
-      if (USE_FAKE_PO_FLOW) {
-        createdPo = buildDemoPurchaseOrder({
-          form: poForm,
-          vendor: selectedVendor,
-          formatConfig: selectedFormat,
-          sequence: demoPurchaseOrders.length + apiPurchaseOrders.length + 1,
-          status: submitForApproval ? 'PENDING_APPROVAL' : 'DRAFT',
-        });
-        setDemoPurchaseOrders((prev) => [createdPo, ...prev]);
-      } else {
-        const data = submitForApproval
-          ? await createPurchaseOrder(payload).unwrap()
-          : await savePurchaseOrderDraft(payload).unwrap();
-        createdPo = getCreatedPo(data);
-        const createdPoId = getPoId(createdPo);
-        if (submitForApproval && createdPoId) {
-          await submitPurchaseOrder(createdPoId).unwrap();
-        }
+      if (submitForApproval && createdPoId && normalizedCreatedPo.status === 'Draft') {
+        await submitPurchaseOrder(createdPoId).unwrap();
       }
 
       toast.success(
@@ -281,7 +328,7 @@ const PurchaseOrdersPage = () => {
       );
       setShowCreateDialog(false);
       resetForm();
-      if (!USE_FAKE_PO_FLOW) fetchData();
+      fetchData();
     } catch (error) {
       toast.error(error?.data?.detail || error?.data?.message || 'Failed to save purchase order');
     } finally {
@@ -293,15 +340,7 @@ const PurchaseOrdersPage = () => {
     if (!guardAction('po.submit')) return;
     setSubmitting(true);
     try {
-      if (USE_FAKE_PO_FLOW) {
-        setDemoPurchaseOrders((prev) =>
-          prev.map((po) =>
-            getPoId(po) === poId ? { ...po, status: 'Pending Approval', current_approval_level: 1 } : po,
-          ),
-        );
-      } else {
-        await submitPurchaseOrder(poId).unwrap();
-      }
+      await submitPurchaseOrder(poId).unwrap();
       toast.success('Purchase Order submitted for approval');
       setShowViewDialog(false);
       fetchData();
@@ -318,29 +357,7 @@ const PurchaseOrdersPage = () => {
 
     setSubmitting(true);
     try {
-      if (USE_FAKE_PO_FLOW) {
-        const nextStatus = approvalForm.action === 'Approved' ? 'Issued' : approvalForm.action;
-        const approvalRecord = {
-          action: approvalForm.action,
-          comments: approvalForm.comments,
-          approval_level: selectedPO.current_approval_level || 1,
-          approver_name: 'Demo Approver',
-        };
-        setDemoPurchaseOrders((prev) =>
-          prev.map((po) =>
-            getPoId(po) === getPoId(selectedPO)
-              ? {
-                  ...po,
-                  status: nextStatus,
-                  current_approval_level: null,
-                  approvals: [...(po.approvals || []), approvalRecord],
-                }
-              : po,
-          ),
-        );
-      } else {
-        await approvePurchaseOrder({ id: getPoId(selectedPO), body: approvalForm }).unwrap();
-      }
+      await approvePurchaseOrder({ id: getPoId(selectedPO), body: approvalForm }).unwrap();
       toast.success(approvalForm.action === 'Approved' ? 'Purchase Order issued' : `Purchase Order ${approvalForm.action.toLowerCase()}`);
       setShowApprovalDialog(false);
       setSelectedPO(null);
@@ -357,10 +374,6 @@ const PurchaseOrdersPage = () => {
     const poId = getPoId(po);
     if (!poId) {
       toast.error('Purchase order id is missing');
-      return;
-    }
-    if (String(poId).startsWith('demo-po-')) {
-      toast.info('Demo POs can be viewed here; PDF download will use the backend generator later.');
       return;
     }
 
@@ -389,33 +402,51 @@ const PurchaseOrdersPage = () => {
     setShowBuilderDialog(open);
   };
 
-  const saveBuilderConfig = () => {
+  const saveBuilderConfig = async () => {
     if (!String(builderDraftConfig.name || '').trim()) {
       toast.error('Please name this PO format');
       return;
     }
+
     const nextConfig = {
       ...makeFormatConfig(builderDraftConfig),
       name: String(builderDraftConfig.name || '').trim(),
       configVersion: (builderDraftConfig.configVersion || 0) + 1,
     };
-    setSavedFormatConfigs((prev) => {
-      const exists = prev.some((config) => config.id === nextConfig.id);
-      return exists
-        ? prev.map((config) => (config.id === nextConfig.id ? nextConfig : config))
-        : [...prev, nextConfig];
-    });
-    setActiveFormatId(nextConfig.id);
-    setShowBuilderDialog(false);
-    setPoForm((prev) => {
-      const untouched = !prev.vendor_id && prev.line_items.length === 1 && !prev.line_items[0]?.item_description;
-      return untouched ? createDefaultPoForm(nextConfig.defaultCurrency, nextConfig.id) : prev;
-    });
-    toast.success(`PO format "${nextConfig.name}" saved for this demo session`);
+    const payload = buildFormatConfigPayload(nextConfig);
+
+    setSubmitting(true);
+    try {
+      const data = isUnsavedFormat(nextConfig.id)
+        ? await createPurchaseOrderFormatConfig(payload).unwrap()
+        : await updatePurchaseOrderFormatConfig({ id: nextConfig.id, body: payload }).unwrap();
+      const savedConfig = makeFormatConfig(getCreatedPo(data) || nextConfig, nextConfig.id, nextConfig.name);
+
+      setSavedFormatConfigs((prev) => {
+        const existingId = isUnsavedFormat(nextConfig.id) ? savedConfig.id : nextConfig.id;
+        const exists = prev.some((config) => config.id === existingId || config.id === nextConfig.id);
+        return exists
+          ? prev.map((config) => (config.id === existingId || config.id === nextConfig.id ? savedConfig : config))
+          : [...prev, savedConfig];
+      });
+      setActiveFormatId(savedConfig.id);
+      setBuilderDraftConfig(savedConfig);
+      setShowBuilderDialog(false);
+      setPoForm((prev) => {
+        const untouched = !prev.vendor_id && prev.line_items.length === 1 && !prev.line_items[0]?.item_description;
+        return untouched ? createDefaultPoForm(savedConfig.defaultCurrency, savedConfig.id) : { ...prev, po_format_id: savedConfig.id };
+      });
+      await Promise.all([refetchFormatConfigs(), refetchFormatConfig()]);
+      toast.success(`PO format "${savedConfig.name}" saved`);
+    } catch (error) {
+      toast.error(error?.data?.detail || error?.data?.message || 'Failed to save PO format');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const createNewBuilderFormat = () => {
-    const id = `demo-format-${Date.now()}`;
+    const id = `new-format-${Date.now()}`;
     setBuilderDraftConfig({
       ...makeFormatConfig(activeFormatConfig, id, `Format ${savedFormatConfigs.length + 1}`),
       id,
@@ -431,7 +462,7 @@ const PurchaseOrdersPage = () => {
     setActiveFormatId(selectedFormat.id);
   };
 
-  const deleteBuilderFormat = () => {
+  const deleteBuilderFormat = async () => {
     if (savedFormatConfigs.length <= 1) {
       toast.error('At least one PO format is required');
       return;
@@ -443,24 +474,36 @@ const PurchaseOrdersPage = () => {
       remainingFormats.find((config) => config.id === activeFormatId) ||
       remainingFormats[0];
 
-    setSavedFormatConfigs(remainingFormats);
-    setActiveFormatId(nextActiveFormat.id);
-    setBuilderDraftConfig(makeFormatConfig(nextActiveFormat));
-    setPoForm((prev) => {
-      if (prev.po_format_id !== deletingFormatId) return prev;
-      return {
-        ...prev,
-        po_format_id: nextActiveFormat.id,
-        currency: nextActiveFormat.defaultCurrency,
-      exchange_rate: isInrCurrency(nextActiveFormat.defaultCurrency) ? '' : prev.exchange_rate,
-      place_of_supply: isInrCurrency(nextActiveFormat.defaultCurrency) ? prev.place_of_supply : '',
-      tds_applicable: isInrCurrency(nextActiveFormat.defaultCurrency) ? prev.tds_applicable : false,
-      tds_section: isInrCurrency(nextActiveFormat.defaultCurrency) ? prev.tds_section : '',
-      tds_percent: isInrCurrency(nextActiveFormat.defaultCurrency) ? prev.tds_percent : '',
-      line_items: prev.line_items.map((item) => sanitizeLineItemForCurrency(item, nextActiveFormat.defaultCurrency)),
-    };
-  });
-    toast.success('PO format deleted for this demo session');
+    setSubmitting(true);
+    try {
+      if (!isUnsavedFormat(deletingFormatId)) {
+        await deletePurchaseOrderFormatConfig(deletingFormatId).unwrap();
+      }
+
+      setSavedFormatConfigs(remainingFormats);
+      setActiveFormatId(nextActiveFormat.id);
+      setBuilderDraftConfig(makeFormatConfig(nextActiveFormat));
+      setPoForm((prev) => {
+        if (prev.po_format_id !== deletingFormatId) return prev;
+        return {
+          ...prev,
+          po_format_id: nextActiveFormat.id,
+          currency: nextActiveFormat.defaultCurrency,
+          exchange_rate: isInrCurrency(nextActiveFormat.defaultCurrency) ? '' : prev.exchange_rate,
+          place_of_supply: isInrCurrency(nextActiveFormat.defaultCurrency) ? prev.place_of_supply : '',
+          tds_applicable: isInrCurrency(nextActiveFormat.defaultCurrency) ? prev.tds_applicable : false,
+          tds_section: isInrCurrency(nextActiveFormat.defaultCurrency) ? prev.tds_section : '',
+          tds_percent: isInrCurrency(nextActiveFormat.defaultCurrency) ? prev.tds_percent : '',
+          line_items: prev.line_items.map((item) => sanitizeLineItemForCurrency(item, nextActiveFormat.defaultCurrency)),
+        };
+      });
+      await Promise.all([refetchFormatConfigs(), refetchFormatConfig()]);
+      toast.success('PO format deleted');
+    } catch (error) {
+      toast.error(error?.data?.detail || error?.data?.message || 'Failed to delete PO format');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const applyPoFormat = (formatId) => {
@@ -515,58 +558,6 @@ const PurchaseOrdersPage = () => {
     }));
   };
 
-  const loadDemoPoSample = () => {
-    const currency = poForm.currency || "INR";
-    const isInr = isInrCurrency(currency);
-    const demoVendor = currency === "INR" ? vendors[0] : vendors[2] || vendors[0];
-
-    setPoForm((prev) => ({
-      ...prev,
-      vendor_id: demoVendor?.id || "",
-      valid_till: "",
-      expected_delivery_date: "2026-06-15",
-      exchange_rate: isInr ? "" : prev.exchange_rate || "83.2500",
-      place_of_supply: isInr ? "MH" : "",
-      shipping_address: "Optifii AP Office, Mumbai, Maharashtra",
-      billing_address: "Optifii Finance Team, Mumbai, Maharashtra",
-      delivery_terms: "Door delivery",
-      freight_terms: isInr ? "Included" : "FOB",
-      payment_terms: isInr ? "Net 30 days" : "50% advance, 50% on dispatch",
-      tds_applicable: false,
-      tds_section: "",
-      tds_percent: "",
-      remarks: isInr ? "Demo INR purchase order with GST preview." : "Demo export-mode purchase order without GST.",
-      line_items: [
-        sanitizeLineItemForCurrency(
-          {
-            item_description: "Industrial switch 48-port",
-            hsn_sac_code: "851762",
-            quantity: 10,
-            unit_of_measure: "NOS",
-            unit_price: isInr ? 4200 : 125,
-            discount_percent: 5,
-            gst_rate: 18,
-            remarks: "",
-          },
-          currency,
-        ),
-        sanitizeLineItemForCurrency(
-          {
-            item_description: "Installation and commissioning",
-            hsn_sac_code: "998739",
-            quantity: 1,
-            unit_of_measure: "HRS",
-            unit_price: isInr ? 12000 : 450,
-            discount_percent: 0,
-            gst_rate: 18,
-            remarks: "",
-          },
-          currency,
-        ),
-      ],
-    }));
-  };
-
   const calculateLineSubtotal = (item) => {
     const amount = (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
     const discount = amount * (Number(item.discount_percent) || 0) / 100;
@@ -615,7 +606,6 @@ const PurchaseOrdersPage = () => {
         stats={stats}
         formatCurrency={formatCurrency}
         canManagePo={canManagePo}
-        isDemoFlow={USE_FAKE_PO_FLOW}
         activeFormat={activeFormatConfig}
       />
 
@@ -668,7 +658,6 @@ const PurchaseOrdersPage = () => {
         calculatePOTotal={calculatePOTotal}
         taxMode={getTaxMode(poForm.currency)}
         handleCreatePO={handleCreatePO}
-        loadDemoPoSample={loadDemoPoSample}
         createAction={createAction}
       />
 

@@ -2,6 +2,7 @@ import React from "react";
 import { CheckCircle, Clock, FileText, IndianRupee, Plus, Settings2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent } from "../../../components/ui/card";
+import { normalizePoTemplateCode } from "../utils";
 
 const PurchaseOrdersToolbar = ({
   setShowCreateDialog,
@@ -9,7 +10,6 @@ const PurchaseOrdersToolbar = ({
   stats,
   formatCurrency,
   canManagePo,
-  isDemoFlow = false,
   activeFormat,
 }) => {
   return (
@@ -18,14 +18,9 @@ const PurchaseOrdersToolbar = ({
         <div>
           <h1 className="text-2xl font-bold">Purchase Orders</h1>
           <p className="text-muted-foreground">Create and track purchase orders</p>
-          {isDemoFlow && (
-            <p className="mt-1 text-xs text-amber-700">
-              Demo flow is active: created POs are stored locally for this session.
-            </p>
-          )}
           {activeFormat && (
             <p className="mt-1 text-xs text-muted-foreground">
-              Active format: {activeFormat.name} ({activeFormat.templateCode}, {activeFormat.defaultCurrency})
+              Active format: {activeFormat.name} ({normalizePoTemplateCode(activeFormat.templateCode)}, {activeFormat.defaultCurrency})
             </p>
           )}
         </div>

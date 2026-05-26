@@ -26,6 +26,7 @@ const CUSTOM_ROLE_PERMISSION_MAP = {
   "tax-manage": { screen: "TAX_MANAGEMENT", permissionType: "MANAGE" },
   "reports-view": { screen: "REPORTS", permissionType: "VIEW" },
   "reports-full": { screen: "REPORTS", permissionType: "FULL" },
+  "audit-trail-view": { screen: "AUDIT_TRAIL", permissionType: "VIEW" },
   "banking-view": { screen: "BANKING", permissionType: "VIEW" },
   "banking-full": { screen: "BANKING", permissionType: "FULL" },
   "roles-view": { screen: "MANAGE_ROLE", permissionType: "VIEW" },
@@ -35,6 +36,8 @@ const CUSTOM_ROLE_PERMISSION_MAP = {
   "settings-org": { screen: "SETTINGS", permissionType: "ORG" },
   "settings-banking": { screen: "SETTINGS", permissionType: "BANKING" },
   "settings-interaction": { screen: "SETTINGS", permissionType: "INTERACTION" },
+  "category-view": { screen: "CATEGORY", permissionType: "VIEW" },
+  "category-manage": { screen: "CATEGORY", permissionType: "MANAGE" },
 };
 
 const HIDDEN_ROLE_ACCESS_PERMISSIONS = new Set(["approval-view", "approval-full"]);

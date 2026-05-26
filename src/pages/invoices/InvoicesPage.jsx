@@ -10,7 +10,12 @@ import {
   useUpdateInvoiceMutation,
   useDeleteInvoiceMutation,
 } from '../../Services/apis/invoicesVendorsApi';
-import { useGetCorporateDepartmentsQuery } from '../../Services/apis/corporateApi';
+import {
+  useGetCorporateDepartmentsQuery,
+  useGetCorporateUserDetailsQuery,
+} from '../../Services/apis/corporateApi';
+import { useGetCategoriesForInvoiceQuery } from '../../Services/apis/categoriesApi';
+import { useAuth } from '../../contexts/AuthContext';
 import { Plus, Pencil, Clock, CheckCircle2, XCircle, CreditCard } from 'lucide-react';
 import {
   AlertDialog,
@@ -75,6 +80,16 @@ const createEmptyVendorRequestForm = () => ({
 });
 
 const InvoicesPage = () => {
+  const { user } = useAuth();
+  const {
+    data: corporateUserContext = null,
+  } = useGetCorporateUserDetailsQuery();
+  const invoiceCategoryEmail =
+    corporateUserContext?.corporateUser?.email ||
+    corporateUserContext?.employeeDetails?.email ||
+    user?.email ||
+    user?.identifier ||
+    '';
   const {
     data: invoicesData = [],
   } = useGetInvoicesQuery();
@@ -84,6 +99,13 @@ const InvoicesPage = () => {
   const {
     data: departmentsData = [],
   } = useGetCorporateDepartmentsQuery();
+  const {
+    data: invoiceCategoriesData = [],
+    isLoading: invoiceCategoriesLoading,
+    isFetching: invoiceCategoriesFetching,
+  } = useGetCategoriesForInvoiceQuery(invoiceCategoryEmail, {
+    skip: !invoiceCategoryEmail,
+  });
   const [scanInvoice] = useScanInvoiceMutation();
   const [bulkUploadInvoices] = useBulkUploadInvoicesMutation();
   const [requestVendorAddition, { isLoading: requestVendorLoading }] = useRequestVendorAdditionMutation();
@@ -95,6 +117,7 @@ const InvoicesPage = () => {
   const invoices = Array.isArray(invoicesData) ? invoicesData : [];
   const vendors = Array.isArray(vendorsData) ? vendorsData : [];
   const departments = Array.isArray(departmentsData) ? departmentsData : [];
+  const invoiceCategories = Array.isArray(invoiceCategoriesData) ? invoiceCategoriesData : [];
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('list');
   const { setHideSidebar } = useSidebar();
@@ -282,6 +305,33 @@ const InvoicesPage = () => {
     );
   };
 
+  const getCategoryNameById = (categoryId) => {
+    const selectedCategory = invoiceCategories.find(
+      (category) => String(category?.id ?? '') === String(categoryId ?? ''),
+    );
+    return selectedCategory?.name || '';
+  };
+
+  const normalizeInvoiceCategoryId = (categoryId) => {
+    if (categoryId === null || categoryId === undefined || categoryId === '') return '';
+    const numericCategoryId = Number(categoryId);
+    return Number.isNaN(numericCategoryId) ? categoryId : numericCategoryId;
+  };
+
+  const buildInvoiceCategoryPayload = (source = {}) => {
+    const rawCategoryId = source.category?.id ?? source.category_id ?? source.categoryId;
+    const categoryId = normalizeInvoiceCategoryId(rawCategoryId);
+    if (!categoryId) return null;
+    return {
+      id: categoryId,
+      name:
+        source.category?.name ||
+        source.category_name ||
+        source.categoryName ||
+        getCategoryNameById(categoryId),
+    };
+  };
+
   const normalizeScannedInvoice = (scanResponse = {}) => {
     const toDateOnly = (value) => {
       if (!value) return '';
@@ -410,6 +460,13 @@ const InvoicesPage = () => {
       invoiceData.department_name ||
       invoiceData.departmentName ||
       getDepartmentNameById(invoiceData.department_id || invoiceData.departmentId),
+    category: buildInvoiceCategoryPayload(invoiceData),
+    category_id: invoiceData.category_id || invoiceData.categoryId || invoiceData.category?.id || '',
+    category_name:
+      invoiceData.category_name ||
+      invoiceData.categoryName ||
+      invoiceData.category?.name ||
+      getCategoryNameById(invoiceData.category_id || invoiceData.categoryId || invoiceData.category?.id),
     source: 'Upload',
     source_email: null,
     file_category: 'Expense Invoice',
@@ -452,6 +509,7 @@ const InvoicesPage = () => {
             fileCategory: invoicePayload.file_category,
             departmentId: invoicePayload.department_id || null,
             departmentName: invoicePayload.department_name || null,
+            category: buildInvoiceCategoryPayload(invoicePayload),
           }),
         ],
         { type: 'application/json' }
@@ -528,7 +586,10 @@ const InvoicesPage = () => {
       api_total_tax_amount: extractedData?.api_total_tax_amount ?? null,
       api_total: extractedData?.api_total ?? null,
       department_id: extractedData?.department_id || extractedData?.departmentId || '',
-      department_name: extractedData?.department_name || extractedData?.departmentName || ''
+      department_name: extractedData?.department_name || extractedData?.departmentName || '',
+      category: extractedData?.category || null,
+      category_id: extractedData?.category_id || extractedData?.categoryId || extractedData?.category?.id || '',
+      category_name: extractedData?.category_name || extractedData?.categoryName || extractedData?.category?.name || ''
     };
   };
 
@@ -736,6 +797,9 @@ const InvoicesPage = () => {
       currency: item.invoicePayload.currency || 'INR',
       department_id: item.invoicePayload.department_id || '',
       department_name: item.invoicePayload.department_name || '',
+      category: item.invoicePayload.category || null,
+      category_id: item.invoicePayload.category_id || item.invoicePayload.category?.id || '',
+      category_name: item.invoicePayload.category_name || item.invoicePayload.category?.name || '',
       billing_address: item.invoicePayload.billing_address || '',
       gstin: item.invoicePayload.gstin || '',
       source_of_supply: item.invoicePayload.source_of_supply || '',
@@ -1032,6 +1096,9 @@ const InvoicesPage = () => {
       file_category: formData.file_category || 'Expense Invoice',
       department_id: formData.department_id || '',
       department_name: formData.department_name || getDepartmentNameById(formData.department_id),
+      category: buildInvoiceCategoryPayload(formData),
+      category_id: formData.category_id || '',
+      category_name: formData.category_name || '',
     };
     if (!invoicePayload.vendor_id) {
       toast.error('Please select or add a vendor before creating invoice');
@@ -1181,7 +1248,10 @@ const InvoicesPage = () => {
       amount: invoice.amount,
       currency: invoice.currency || 'INR',
       department_id: invoice.department_id || invoice.departmentId || '',
-      department_name: invoice.department_name || invoice.departmentName || ''
+      department_name: invoice.department_name || invoice.departmentName || '',
+      category: invoice.category || null,
+      category_id: invoice.category_id || invoice.categoryId || invoice.category?.id || '',
+      category_name: invoice.category_name || invoice.categoryName || invoice.category?.name || ''
     });
     setEditDialogOpen(true);
   };
@@ -1212,6 +1282,9 @@ const InvoicesPage = () => {
           source_email: formData.source === 'Email' ? formData.source_email : null,
           department_id: formData.department_id || '',
           department_name: formData.department_name || getDepartmentNameById(formData.department_id),
+          category: buildInvoiceCategoryPayload(formData),
+          category_id: formData.category_id || '',
+          category_name: formData.category_name || '',
         },
       }).unwrap();
 
@@ -1360,6 +1433,8 @@ const InvoicesPage = () => {
       canAddVendor={canAddVendors}
       canSubmit={isEdit ? canUpdateInvoices : canManageInvoices}
       departments={departments}
+      invoiceCategories={invoiceCategories}
+      invoiceCategoriesLoading={invoiceCategoriesLoading || invoiceCategoriesFetching}
       GST_TREATMENTS={GST_TREATMENTS}
       INDIAN_STATES={INDIAN_STATES}
       FILE_CATEGORIES={FILE_CATEGORIES}
@@ -1437,6 +1512,8 @@ const InvoicesPage = () => {
         handleCreateBulkInvoices={handleCreateBulkInvoices}
         departments={departments}
         getDepartmentNameById={getDepartmentNameById}
+        invoiceCategories={invoiceCategories}
+        getCategoryNameById={getCategoryNameById}
       />
 
       {/* Dedicated editor dialog for per-item corrections before creation. */}
@@ -1455,6 +1532,8 @@ const InvoicesPage = () => {
         vendors={vendors}
         departments={departments}
         getDepartmentNameById={getDepartmentNameById}
+        invoiceCategories={invoiceCategories}
+        getCategoryNameById={getCategoryNameById}
         taxRates={TAX_RATES}
         updateBulkEditLineItem={updateBulkEditLineItem}
         saveBulkEditChanges={saveBulkEditChanges}
