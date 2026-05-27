@@ -9,24 +9,131 @@ import {
   useLazyGetVendorHistoryQuery,
 } from '../../Services/apis/invoicesVendorsApi';
 import { Button } from '../../components/ui/button';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '../../components/ui/alert-dialog';
 import { Input } from '../../components/ui/input';
-import { Label } from '../../components/ui/label';
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '../../components/ui/dialog';
 import { Search, Plus, Pencil, Trash2, Eye, X, Check, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useActionGuard } from '../../hooks/useActionGuard';
-import { Textarea } from '../../components/ui/textarea';
 import VendorDetailsDialog from '../../components/vendors/VendorDetailsDialog';
+import * as XLSX from '@e965/xlsx';
+import AppDataTable from '../../components/common/AppDataTable';
+import { TableCell, TableRow } from '../../components/ui/table';
+import MultipleVendorUploadDialog from './components/MultipleVendorUploadDialog';
+import BulkUploadReviewDialog from './components/BulkUploadReviewDialog';
+import DeleteVendorDialog from './components/DeleteVendorDialog';
+import ViewVendorDialog from './components/ViewVendorDialog';
+import VendorApprovalDialog from './components/VendorApprovalDialog';
+
+const VENDOR_UPLOAD_FIELDS = [
+  'name',
+  'vendor_type',
+  'email',
+  'mobile',
+  'phone',
+  'contact_person',
+  'pan',
+  'gstin',
+  'category',
+  'website',
+  'currency',
+  'address_line1',
+  'address_line2',
+  'city',
+  'state',
+  'pincode',
+  'country',
+  'account_holder_name',
+  'account_number',
+  'ifsc_code',
+  'bank_name',
+  'branch',
+  'notes',
+];
+
+const VENDOR_UPLOAD_MANDATORY_FIELDS = [
+  'name',
+  'vendor_type',
+  'email',
+  'mobile',
+  'phone',
+  'contact_person',
+  'address_line1',
+  'address_line2',
+  'city',
+  'state',
+  'pincode',
+  'country',
+  'pan',
+  'gstin',
+];
+
+const VENDOR_UPLOAD_HEADER_MAP = {
+  name: 'Company Name',
+  vendor_type: 'Vendor Type',
+  email: 'Email ID',
+  mobile: 'Mobile No',
+  phone: 'Phone No',
+  contact_person: 'Contact person',
+  category: 'Category',
+  website: 'Website',
+  currency: 'Currency',
+  address_line1: 'Address Line 1',
+  address_line2: 'Address Line 2',
+  city: 'City',
+  state: 'State',
+  pincode: 'Pincode',
+  country: 'Country',
+  pan: 'PAN No',
+  gstin: 'GST no',
+  account_holder_name: 'Account Name',
+  account_number: 'Account Number',
+  ifsc_code: 'IFSC Code',
+  bank_name: 'Bank Name',
+  branch: 'Branch',
+  notes: 'Remarks',
+};
+
+const VENDOR_UPLOAD_OPTIONAL_FIELDS = VENDOR_UPLOAD_FIELDS.filter(
+  (field) => !VENDOR_UPLOAD_MANDATORY_FIELDS.includes(field),
+);
+
+const toBulkVendorPayload = (row) => {
+  const name = String(row.name || '').trim();
+  const vendorTypeRaw = String(row.vendor_type || '').trim().toLowerCase();
+  const vendorType = vendorTypeRaw === 'individual' ? 'Individual' : 'Company';
+  return {
+    name,
+    vendor_type: vendorType,
+    email: String(row.email || '').trim(),
+    phone: String(row.phone || '').trim(),
+    mobile: String(row.mobile || '').trim(),
+    pan: String(row.pan || '').trim().toUpperCase(),
+    gstin: String(row.gstin || '').trim().toUpperCase(),
+    address_line1: String(row.address_line1 || '').trim(),
+    address_line2: String(row.address_line2 || '').trim(),
+    city: String(row.city || '').trim(),
+    state: String(row.state || '').trim(),
+    pincode: String(row.pincode || '').trim(),
+    country: String(row.country || '').trim() || 'India',
+    bank_name: String(row.bank_name || '').trim(),
+    account_number: String(row.account_number || '').trim(),
+    ifsc_code: String(row.ifsc_code || '').trim().toUpperCase(),
+    branch: String(row.branch || '').trim(),
+    account_holder_name: String(row.account_holder_name || '').trim(),
+    category: String(row.category || '').trim(),
+    currency: String(row.currency || '').trim() || 'INR',
+    payment_terms: String(row.payment_terms || '').trim() || '30',
+    contact_person: String(row.contact_person || '').trim(),
+    website: String(row.website || '').trim(),
+    notes: String(row.notes || '').trim(),
+  };
+};
+
+const getVendorApiErrorMessages = (response) => {
+  if (!response || !Array.isArray(response.failed)) return [];
+  return response.failed.flatMap((item) =>
+    Array.isArray(item?.errors) ? item.errors.filter(Boolean) : [],
+  );
+};
 
 const Vendors = () => {
   const {
@@ -38,7 +145,7 @@ const Vendors = () => {
     isError: pendingApprovalsError,
   } = useGetPendingVendorApprovalsQuery();
 
-  const [createVendor] = useCreateVendorMutation();
+  const [createVendor, { isLoading: createVendorLoading }] = useCreateVendorMutation();
   const [updateVendor] = useUpdateVendorMutation();
   const [deleteVendor] = useDeleteVendorMutation();
   const [approveVendor] = useApproveVendorMutation();
@@ -46,11 +153,15 @@ const Vendors = () => {
   const { guardAction, canPerformAction } = useActionGuard();
   const [searchTerm, setSearchTerm] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [vendorUploadOptionOpen, setVendorUploadOptionOpen] = useState(false);
+  const [multipleVendorUploadOpen, setMultipleVendorUploadOpen] = useState(false);
   const [editingVendor, setEditingVendor] = useState(null);
   const [viewingVendor, setViewingVendor] = useState(null);
   const [vendorDeleteTarget, setVendorDeleteTarget] = useState(null);
   const [approvalTarget, setApprovalTarget] = useState(null);
   const [approvalComments, setApprovalComments] = useState('');
+  const [bulkReviewOpen, setBulkReviewOpen] = useState(false);
+  const [bulkReviewData, setBulkReviewData] = useState(null);
   const [formData, setFormData] = useState({
     // Basic Information
     name: '',
@@ -81,7 +192,6 @@ const Vendors = () => {
     // Additional Information
     category: '',
     currency: 'INR',
-    payment_terms: '30',
     contact_person: '',
     website: '',
     notes: ''
@@ -111,14 +221,167 @@ const Vendors = () => {
         await updateVendor({ id: editingVendor.id, body: formData }).unwrap();
         toast.success('Vendor updated successfully');
       } else {
-        await createVendor(formData).unwrap();
-        toast.success('Vendor created successfully');
+        const response = await createVendor(formData).unwrap();
+        const successCount = Number(response?.successCount ?? 0);
+        const failedCount = Number(response?.failedCount ?? 0);
+        const errorMessages = getVendorApiErrorMessages(response);
+
+        if (failedCount > 0 && successCount === 0) {
+          toast.error(errorMessages[0] || 'Vendor creation failed');
+          return;
+        }
+
+        if (failedCount > 0) {
+          toast.warning(`Vendor created with ${failedCount} issue(s)`);
+        } else {
+          toast.success('Vendor created successfully');
+        }
       }
       setDialogOpen(false);
       resetForm();
     } catch (error) {
       toast.error('Failed to save vendor');
     }
+  };
+
+  const openSingleVendorDialog = () => {
+    setVendorUploadOptionOpen(false);
+    setEditingVendor(null);
+    setDialogOpen(true);
+  };
+
+  const openMultipleVendorDialog = () => {
+    setVendorUploadOptionOpen(false);
+    setMultipleVendorUploadOpen(true);
+  };
+
+  const handleBulkVendorUpload = async (rows) => {
+    if (!guardAction('vendors.create')) return;
+
+    try {
+      const vendorsPayload = rows
+        .map((row) => toBulkVendorPayload(row))
+        .filter((vendor) => vendor.name);
+
+      if (!vendorsPayload.length) {
+        toast.error('No valid vendor records found. Please include at least a vendor name column');
+        return;
+      }
+
+      const response = await createVendor(vendorsPayload).unwrap();
+      const successCount = Number(response?.successCount ?? 0);
+      const failedCount = Number(response?.failedCount ?? 0);
+      const errorMessages = getVendorApiErrorMessages(response);
+      setBulkReviewData(response);
+      setBulkReviewOpen(true);
+
+      if (failedCount > 0 && successCount === 0) {
+        toast.error(errorMessages[0] || 'Vendor upload failed');
+        return;
+      }
+
+      if (failedCount > 0) {
+        toast.warning(`${successCount} uploaded, ${failedCount} failed`);
+      } else {
+        toast.success(`${successCount || vendorsPayload.length} vendors uploaded successfully`);
+      }
+      setMultipleVendorUploadOpen(false);
+    } catch (_error) {
+      toast.error('Failed to parse or upload vendor file');
+    }
+  };
+
+  const validateVendorUploadRow = (row, rowIndex) => {
+    const errors = [];
+    const email = String(row.email || '').trim();
+    const gstin = String(row.gstin || '').trim();
+    const pan = String(row.pan || '').trim();
+    const vendorType = String(row.vendor_type || '').trim();
+
+    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      errors.push(`Row ${rowIndex + 2}: Email is invalid`);
+    }
+    if (gstin && gstin.length !== 15) {
+      errors.push(`Row ${rowIndex + 2}: GSTIN must be 15 characters`);
+    }
+    if (pan && pan.length !== 10) {
+      errors.push(`Row ${rowIndex + 2}: PAN must be 10 characters`);
+    }
+    if (!vendorType) {
+      errors.push(`Row ${rowIndex + 2}: Vendor Type is required`);
+    } else if (!['company', 'individual'].includes(vendorType.toLowerCase())) {
+      errors.push(`Row ${rowIndex + 2}: Vendor Type must be Company or Individual`);
+    }
+    return errors;
+  };
+
+  const downloadVendorTemplate = () => {
+    const headerRow = [
+      'Company Name',
+      'Vendor Type',
+      'Email ID',
+      'Mobile No',
+      'Phone No',
+      'Contact person',
+      'Category',
+      'Website',
+      'Currency',
+      'Address Line 1',
+      'Address Line 2',
+      'City',
+      'State',
+      'Pincode',
+      'Country',
+      'PAN No',
+      'GST no',
+      'Account Name',
+      'Account Number',
+      'IFSC Code',
+      'Bank Name',
+      'Branch',
+      'Remarks',
+    ];
+
+    const guideRows = [
+      ['Parameter', 'Type'],
+      ['Company Name', 'Mandatory'],
+      ['Vendor Type', 'Mandatory (Company/Individual)'],
+      ['Email ID', 'Mandatory'],
+      ['Mobile No', 'Mandatory'],
+      ['Phone No', 'Mandatory'],
+      ['Contact person', 'Mandatory'],
+      ['Category', 'Optional'],
+      ['Website', 'Optional'],
+      ['Currency', 'Optional'],
+      ['Address Line 1', 'Mandatory'],
+      ['Address Line 2', 'Mandatory'],
+      ['City', 'Mandatory'],
+      ['State', 'Mandatory'],
+      ['Pincode', 'Mandatory'],
+      ['Country', 'Mandatory'],
+      ['PAN No', 'Mandatory'],
+      ['GST no', 'Mandatory'],
+      ['Account Name', 'Optional'],
+      ['Account Number', 'Optional'],
+      ['IFSC Code', 'Optional'],
+      ['Bank Name', 'Optional'],
+      ['Branch', 'Optional'],
+      ['Remarks', 'Optional'],
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet([headerRow]), 'Sheet1');
+    XLSX.utils.book_append_sheet(workbook, XLSX.utils.aoa_to_sheet(guideRows), 'Guide');
+    const bytes = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'Vendor_Upload_Format.xlsx';
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   };
 
   const handleEdit = (vendor) => {
@@ -144,7 +407,6 @@ const Vendors = () => {
       account_holder_name: vendor.account_holder_name || '',
       category: vendor.category || '',
       currency: vendor.currency || 'INR',
-      payment_terms: vendor.payment_terms || '30',
       contact_person: vendor.contact_person || '',
       website: vendor.website || '',
       notes: vendor.notes || ''
@@ -232,7 +494,6 @@ const Vendors = () => {
       account_holder_name: '',
       category: '',
       currency: 'INR',
-      payment_terms: '30',
       contact_person: '',
       website: '',
       notes: ''
@@ -262,6 +523,163 @@ const Vendors = () => {
     return vendorId ? filteredPendingVendorIds.has(vendorId) : false;
   };
 
+  const vendorsTableHeader = [
+    { key: 'vendor', title: 'Vendor' },
+    { key: 'type', title: 'Type' },
+    { key: 'status', title: 'Status' },
+    { key: 'contact', title: 'Contact' },
+    { key: 'pan', title: 'PAN' },
+    { key: 'gstin', title: 'GSTIN' },
+    { key: 'actions', title: 'Actions', headerClassName: 'text-right' },
+  ];
+
+  const renderVendorRow = (vendor, rowIndex, headers) => (
+    <TableRow
+      key={vendor.id ?? rowIndex}
+      className="border-b border-border hover:bg-muted/50 transition-colors"
+      data-testid={`vendor-row-${vendor.id}`}
+    >
+      {headers.map((header) => {
+        let value;
+
+        switch (header.key) {
+          case 'vendor':
+            value = (
+              <div>
+                <div className="font-medium">{vendor.name}</div>
+                <div className="text-sm text-muted-foreground">{vendor.category || 'Uncategorized'}</div>
+              </div>
+            );
+            break;
+          case 'type':
+            value = (
+              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
+                vendor.vendor_type === 'Company'
+                  ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                  : 'bg-purple-100 text-purple-800 border border-purple-200'
+              }`}>
+                {vendor.vendor_type || 'Company'}
+              </span>
+            );
+            break;
+          case 'status':
+            value = (
+              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStatusBadgeClass(vendor.status)}`}>
+                {vendor.status || 'Pending Approval'}
+              </span>
+            );
+            break;
+          case 'contact':
+            value = (
+              <div className="text-sm">
+                <div>{vendor.email || '-'}</div>
+                <div className="text-muted-foreground">{vendor.mobile || vendor.phone || '-'}</div>
+              </div>
+            );
+            break;
+          case 'pan':
+            value = vendor.pan || '-';
+            break;
+          case 'gstin':
+            value = vendor.gstin ? `${vendor.gstin.substring(0, 4)}...${vendor.gstin.slice(-4)}` : '-';
+            break;
+          case 'actions':
+            value = (
+              <div className="inline-flex justify-start items-center gap-1 pl-3">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="w-8 h-8 p-0 rounded-md"
+                  onClick={() => setViewingVendor(vendor)}
+                  title="View"
+                  data-testid={`view-vendor-${vendor.id}`}
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+                {canApproveVendor && isPendingApprovalVendor(vendor) && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-8 h-8 p-0 rounded-md"
+                      onClick={() => openVendorApprovalDialog(vendor, 'Sent Back')}
+                      title="Send Back"
+                      data-testid={`sendback-vendor-${vendor.id}`}
+                    >
+                      <RotateCcw className="h-4 w-4 text-amber-600" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-8 h-8 p-0 rounded-md"
+                      onClick={() => openVendorApprovalDialog(vendor, 'Rejected')}
+                      title="Reject"
+                      data-testid={`reject-vendor-${vendor.id}`}
+                    >
+                      <X className="h-4 w-4 text-red-500" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-8 h-8 p-0 rounded-md"
+                      onClick={() => openVendorApprovalDialog(vendor, 'Approved')}
+                      title="Approve"
+                      data-testid={`approve-vendor-${vendor.id}`}
+                    >
+                      <Check className="h-4 w-4 text-emerald-700" />
+                    </Button>
+                  </>
+                )}
+                {(canEditVendor || canDeleteVendor) && (
+                  <>
+                    {canEditVendor && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-8 h-8 p-0 rounded-md"
+                        onClick={() => handleEdit(vendor)}
+                        data-testid={`edit-vendor-${vendor.id}`}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {canDeleteVendor && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="w-8 h-8 p-0 rounded-md"
+                        onClick={() => handleDelete(vendor.id)}
+                        data-testid={`delete-vendor-${vendor.id}`}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+            break;
+          default:
+            value = '-';
+        }
+
+        const className = [
+          header.cellClassName,
+          header.key === 'pan' || header.key === 'gstin' ? "font-['JetBrains_Mono'] text-sm" : '',
+          header.key === 'actions' ? 'text-right' : '',
+        ]
+          .filter(Boolean)
+          .join(' ');
+
+        return (
+          <TableCell key={header.key} className={className}>
+            {value}
+          </TableCell>
+        );
+      })}
+    </TableRow>
+  );
+
   return (
     <div data-testid="vendors-page">
       <div className="flex justify-between items-center mb-8">
@@ -272,12 +690,57 @@ const Vendors = () => {
           <p className="text-muted-foreground">Manage your vendor relationships</p>
         </div>
         {canCreateVendor && (
-          <Button data-testid="new-vendor-button" onClick={() => setDialogOpen(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            New Vendor
-          </Button>
+          <div className="relative">
+            <Button data-testid="new-vendor-button" onClick={() => setVendorUploadOptionOpen((prev) => !prev)}>
+              <Plus className="h-4 w-4 mr-2" />
+              New Vendor
+            </Button>
+            {vendorUploadOptionOpen && (
+              <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-md border border-border bg-background p-2 shadow-md">
+                <button
+                  type="button"
+                  className="w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-muted"
+                  onClick={openSingleVendorDialog}
+                >
+                  Single Vendor
+                </button>
+                <button
+                  type="button"
+                  className="w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-muted"
+                  onClick={openMultipleVendorDialog}
+                >
+                  Multiple Vendors
+                </button>
+              </div>
+            )}
+          </div>
         )}
       </div>
+
+      <MultipleVendorUploadDialog
+        open={multipleVendorUploadOpen}
+        onOpenChange={setMultipleVendorUploadOpen}
+        onDownloadTemplate={downloadVendorTemplate}
+        onDataParsed={handleBulkVendorUpload}
+        onUploadErrors={(errors) => {
+          if (errors.length > 1) {
+            toast.error(`${errors[0]} (+${errors.length - 1} more issues)`);
+            return;
+          }
+          if (errors[0]) toast.error(errors[0]);
+        }}
+        disabled={createVendorLoading}
+        expectedHeaders={VENDOR_UPLOAD_FIELDS}
+        uploadHeaderMap={VENDOR_UPLOAD_HEADER_MAP}
+        nonMandatoryFields={VENDOR_UPLOAD_OPTIONAL_FIELDS}
+        customValidation={validateVendorUploadRow}
+      />
+
+      <BulkUploadReviewDialog
+        open={bulkReviewOpen}
+        onOpenChange={setBulkReviewOpen}
+        data={bulkReviewData}
+      />
 
       <VendorDetailsDialog
         open={dialogOpen}
@@ -292,6 +755,7 @@ const Vendors = () => {
         description="Add contact details and payment info of your vendor in OptiFii"
         submitLabel={editingVendor ? 'Update Vendor' : 'Create Vendor'}
         requireEmail
+        requireFullMandatory
         testId="vendor-dialog"
       />
 
@@ -309,342 +773,37 @@ const Vendors = () => {
       </div>
 
       <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
-        <table className="w-full" data-testid="vendors-table">
-          <thead className="border-b border-border bg-muted/50">
-            <tr>
-              <th className="p-4 text-left text-sm font-medium">Vendor</th>
-              <th className="p-4 text-left text-sm font-medium">Type</th>
-              <th className="p-4 text-left text-sm font-medium">Status</th>
-              <th className="p-4 text-left text-sm font-medium">Contact</th>
-              <th className="p-4 text-left text-sm font-medium">PAN</th>
-              <th className="p-4 text-left text-sm font-medium">GSTIN</th>
-              <th className="p-4 text-right text-sm font-medium">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredVendors.map((vendor) => (
-              <tr
-                key={vendor.id}
-                className="border-b border-border hover:bg-muted/50 transition-colors"
-                data-testid={`vendor-row-${vendor.id}`}
-              >
-                <td className="p-4">
-                  <div>
-                    <div className="font-medium">{vendor.name}</div>
-                    <div className="text-sm text-muted-foreground">{vendor.category || 'Uncategorized'}</div>
-                  </div>
-                </td>
-                <td className="p-4">
-                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                    vendor.vendor_type === 'Company'
-                      ? 'bg-blue-100 text-blue-800 border border-blue-200'
-                      : 'bg-purple-100 text-purple-800 border border-purple-200'
-                  }`}>
-                    {vendor.vendor_type || 'Company'}
-                  </span>
-                </td>
-                <td className="p-4">
-                  <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStatusBadgeClass(vendor.status)}`}>
-                    {vendor.status || 'Pending Approval'}
-                  </span>
-                </td>
-                <td className="p-4">
-                  <div className="text-sm">
-                    <div>{vendor.email || '-'}</div>
-                    <div className="text-muted-foreground">{vendor.mobile || vendor.phone || '-'}</div>
-                  </div>
-                </td>
-                <td className="p-4 font-['JetBrains_Mono'] text-sm">
-                  {vendor.pan || '-'}
-                </td>
-                <td className="p-4 font-['JetBrains_Mono'] text-sm">
-                  {vendor.gstin ? `${vendor.gstin.substring(0, 4)}...${vendor.gstin.slice(-4)}` : '-'}
-                </td>
-                <td className="p-4 text-right">
-                  <div className="inline-flex justify-start items-center gap-1 pl-3">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="w-8 h-8 p-0 rounded-md"
-                      onClick={() => setViewingVendor(vendor)}
-                      title="View"
-                      data-testid={`view-vendor-${vendor.id}`}
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                    {canApproveVendor && isPendingApprovalVendor(vendor) && (
-                      <>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="w-8 h-8 p-0 rounded-md"
-                          onClick={() => openVendorApprovalDialog(vendor, 'Sent Back')}
-                          title="Send Back"
-                          data-testid={`sendback-vendor-${vendor.id}`}
-                        >
-                          <RotateCcw className="h-4 w-4 text-amber-600" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="w-8 h-8 p-0 rounded-md"
-                          onClick={() => openVendorApprovalDialog(vendor, 'Rejected')}
-                          title="Reject"
-                          data-testid={`reject-vendor-${vendor.id}`}
-                        >
-                          <X className="h-4 w-4 text-red-500" />
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="w-8 h-8 p-0 rounded-md"
-                          onClick={() => openVendorApprovalDialog(vendor, 'Approved')}
-                          title="Approve"
-                          data-testid={`approve-vendor-${vendor.id}`}
-                        >
-                          <Check className="h-4 w-4 text-emerald-700" />
-                        </Button>
-                      </>
-                    )}
-                    {(canEditVendor || canDeleteVendor) && (
-                      <>
-                        {canEditVendor && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="w-8 h-8 p-0 rounded-md"
-                            onClick={() => handleEdit(vendor)}
-                            data-testid={`edit-vendor-${vendor.id}`}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                        )}
-                        {canDeleteVendor && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="w-8 h-8 p-0 rounded-md"
-                            onClick={() => handleDelete(vendor.id)}
-                            data-testid={`delete-vendor-${vendor.id}`}
-                          >
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        {filteredVendors.length === 0 && (
-          <div className="text-center py-8 text-muted-foreground" data-testid="no-vendors">
-            No vendors found. Create your first vendor to get started!
-          </div>
-        )}
+        <AppDataTable
+          tableHeader={vendorsTableHeader}
+          tableData={filteredVendors}
+          renderRow={renderVendorRow}
+          emptyMessage="No vendors found. Create your first vendor to get started!"
+          emptyTestId="no-vendors"
+          tableClassName="w-full"
+          striped={false}
+        />
       </div>
 
-      <AlertDialog open={Boolean(vendorDeleteTarget)} onOpenChange={(open) => !open && setVendorDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Vendor?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete this vendor? This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeleteVendor}>Delete</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+      <DeleteVendorDialog
+        open={Boolean(vendorDeleteTarget)}
+        onOpenChange={(open) => !open && setVendorDeleteTarget(null)}
+        onConfirm={confirmDeleteVendor}
+      />
 
-      <Dialog open={Boolean(viewingVendor)} onOpenChange={(open) => !open && setViewingVendor(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Vendor Details</DialogTitle>
-          </DialogHeader>
-          {viewingVendor && (
-            <div className="space-y-6 text-sm">
-              <div>
-                <h3 className="font-semibold mb-3">Basic Information</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-muted-foreground">Name</p>
-                    <p className="font-medium">{viewingVendor.name || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Type</p>
-                    <p className="font-medium">{viewingVendor.vendor_type || 'Company'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Status</p>
-                    <p className="font-medium">{viewingVendor.status || 'Pending Approval'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Category</p>
-                    <p className="font-medium">{viewingVendor.category || '-'}</p>
-                  </div>
-                </div>
-              </div>
+      <ViewVendorDialog
+        open={Boolean(viewingVendor)}
+        onOpenChange={(open) => !open && setViewingVendor(null)}
+        vendor={viewingVendor}
+      />
 
-              <div>
-                <h3 className="font-semibold mb-3">Contact Information</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-muted-foreground">Email</p>
-                    <p className="font-medium">{viewingVendor.email || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Mobile</p>
-                    <p className="font-medium">{viewingVendor.mobile || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Phone</p>
-                    <p className="font-medium">{viewingVendor.phone || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Contact Person</p>
-                    <p className="font-medium">{viewingVendor.contact_person || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Website</p>
-                    <p className="font-medium">{viewingVendor.website || '-'}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="font-semibold mb-3">Tax Information</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-muted-foreground">PAN</p>
-                    <p className="font-medium font-['JetBrains_Mono']">{viewingVendor.pan || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">GSTIN</p>
-                    <p className="font-medium font-['JetBrains_Mono']">{viewingVendor.gstin || '-'}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="font-semibold mb-3">Address</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-muted-foreground">Address Line 1</p>
-                    <p className="font-medium">{viewingVendor.address_line1 || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Address Line 2</p>
-                    <p className="font-medium">{viewingVendor.address_line2 || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">City</p>
-                    <p className="font-medium">{viewingVendor.city || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">State</p>
-                    <p className="font-medium">{viewingVendor.state || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Pincode</p>
-                    <p className="font-medium">{viewingVendor.pincode || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Country</p>
-                    <p className="font-medium">{viewingVendor.country || '-'}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="font-semibold mb-3">Bank Details</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-muted-foreground">Bank Name</p>
-                    <p className="font-medium">{viewingVendor.bank_name || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Account Holder Name</p>
-                    <p className="font-medium">{viewingVendor.account_holder_name || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Account Number</p>
-                    <p className="font-medium font-['JetBrains_Mono']">{viewingVendor.account_number || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">IFSC</p>
-                    <p className="font-medium font-['JetBrains_Mono']">{viewingVendor.ifsc_code || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Branch</p>
-                    <p className="font-medium">{viewingVendor.branch || '-'}</p>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <h3 className="font-semibold mb-3">Additional Information</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-muted-foreground">Currency</p>
-                    <p className="font-medium">{viewingVendor.currency || '-'}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Payment Terms</p>
-                    <p className="font-medium">{viewingVendor.payment_terms || '-'}</p>
-                  </div>
-                  <div className="md:col-span-2">
-                    <p className="text-muted-foreground">Notes</p>
-                    <p className="font-medium whitespace-pre-wrap">{viewingVendor.notes || '-'}</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setViewingVendor(null)}>Close</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(approvalTarget)} onOpenChange={(open) => !open && setApprovalTarget(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{approvalTarget?.action || 'Update'} Vendor</DialogTitle>
-          </DialogHeader>
-          {approvalTarget && (
-            <div className="space-y-4">
-              <div className="rounded-lg bg-muted p-4 text-sm">
-                <p><strong>Vendor:</strong> {approvalTarget.vendor.name || '-'}</p>
-                <p><strong>Action:</strong> {approvalTarget.action}</p>
-              </div>
-              <div className="space-y-2">
-                <Label>Comments</Label>
-                <Textarea
-                  value={approvalComments}
-                  onChange={(event) => setApprovalComments(event.target.value)}
-                  placeholder="Optional comments"
-                  rows={3}
-                  data-testid="vendor-approval-comments"
-                />
-              </div>
-            </div>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setApprovalTarget(null)}>Cancel</Button>
-            <Button
-              onClick={confirmVendorApprovalAction}
-              variant={approvalTarget?.action === 'Rejected' ? 'destructive' : 'default'}
-              data-testid="confirm-vendor-approval"
-            >
-              Confirm
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <VendorApprovalDialog
+        open={Boolean(approvalTarget)}
+        onOpenChange={(open) => !open && setApprovalTarget(null)}
+        approvalTarget={approvalTarget}
+        approvalComments={approvalComments}
+        onCommentsChange={setApprovalComments}
+        onConfirm={confirmVendorApprovalAction}
+      />
     </div>
   );
 };

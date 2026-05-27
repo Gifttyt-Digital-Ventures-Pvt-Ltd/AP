@@ -106,9 +106,11 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
     }),
     createVendor: builder.mutation({
       query: (body) => ({
-        url: "/vendors",
+        url: "/api/vendors",
         method: "POST",
-        body: toVendorApiPayload(body),
+        body: Array.isArray(body)
+          ? body.map(toVendorApiPayload)
+          : [toVendorApiPayload(body)],
       }),
       invalidatesTags: [{ type: "Vendors", id: "LIST" }, "Dashboard", "Reports"],
     }),

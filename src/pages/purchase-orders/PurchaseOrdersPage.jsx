@@ -2,7 +2,6 @@ import React, { useEffect, useState } from 'react';
 import { useGetVendorsQuery } from '../../Services/apis/invoicesVendorsApi';
 import {
   useGetPurchaseOrdersQuery,
-  useGetPendingPurchaseOrderApprovalsQuery,
   useGetPurchaseOrderFormatConfigQuery,
   useGetPurchaseOrderFormatConfigsQuery,
   useLazyGetPurchaseOrderDownloadUrlQuery,
@@ -14,8 +13,6 @@ import {
   useSubmitPurchaseOrderMutation,
   useApprovePurchaseOrderMutation,
 } from '../../Services/apis/purchaseOrdersMasterDataApi';
-import { Tabs, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { Badge } from '../../components/ui/badge';
 import { toast } from 'sonner';
 import { statusColors } from './constants';
 import {
@@ -131,6 +128,19 @@ const buildFormatConfigPayload = (config) => ({
 });
 
 const isUnsavedFormat = (formatId = '') => String(formatId).startsWith('new-format-');
+const areFormatListsEquivalent = (left = [], right = []) => {
+  if (left.length !== right.length) return false;
+  for (let index = 0; index < left.length; index += 1) {
+    const leftItem = left[index];
+    const rightItem = right[index];
+    if (!leftItem || !rightItem) return false;
+    if (leftItem.id !== rightItem.id) return false;
+    if (leftItem.name !== rightItem.name) return false;
+    if (leftItem.defaultCurrency !== rightItem.defaultCurrency) return false;
+    if (leftItem.templateCode !== rightItem.templateCode) return false;
+  }
+  return true;
+};
 
 const PurchaseOrdersPage = () => {
   const { guardAction, canPerformAction } = useActionGuard();
@@ -142,11 +152,6 @@ const PurchaseOrdersPage = () => {
     isLoading: purchaseOrdersLoading,
     refetch: refetchPurchaseOrders,
   } = useGetPurchaseOrdersQuery();
-  const {
-    data: pendingApprovalsData = [],
-    isLoading: pendingApprovalsLoading,
-    refetch: refetchPendingApprovals,
-  } = useGetPendingPurchaseOrderApprovalsQuery(undefined, { skip: !canApprovePo });
   const {
     data: formatConfigData,
     isLoading: formatConfigLoading,
@@ -174,13 +179,11 @@ const PurchaseOrdersPage = () => {
 
   const formatConfig = formatConfigData || DEFAULT_PO_FORMAT_CONFIG;
   const apiPurchaseOrders = getListData(purchaseOrdersData).map(normalizePurchaseOrder);
-  const apiPendingApprovals = getListData(pendingApprovalsData).map(normalizePurchaseOrder);
   const vendors = Array.isArray(vendorsData) ? vendorsData : getListData(vendorsData);
-  const loading = purchaseOrdersLoading || pendingApprovalsLoading || vendorsLoading || formatConfigLoading || formatConfigsLoading;
+  const loading = purchaseOrdersLoading || vendorsLoading || formatConfigLoading || formatConfigsLoading;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [activeTab, setActiveTab] = useState('all');
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [showBuilderDialog, setShowBuilderDialog] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
@@ -195,7 +198,6 @@ const PurchaseOrdersPage = () => {
   const [builderDraftConfig, setBuilderDraftConfig] = useState(() => makeFormatConfig(formatConfig));
 
   const purchaseOrders = apiPurchaseOrders;
-  const pendingApprovals = apiPendingApprovals;
   const activeFormatConfig =
     savedFormatConfigs.find((config) => config.id === activeFormatId) ||
     savedFormatConfigs[0] ||
@@ -217,14 +219,29 @@ const PurchaseOrdersPage = () => {
 
     if (!nextFormats.length) return;
 
-    const nextActiveFormat =
+    const resolvedActiveFormat =
       nextFormats.find((config) => config.id === activeFormatId) ||
       nextFormats.find((config) => config.isDefault) ||
       nextFormats[0];
 
-    setSavedFormatConfigs(nextFormats);
-    setActiveFormatId(nextActiveFormat.id);
-    setBuilderDraftConfig(makeFormatConfig(nextActiveFormat));
+    setSavedFormatConfigs((prev) => (
+      areFormatListsEquivalent(prev, nextFormats) ? prev : nextFormats
+    ));
+    setActiveFormatId((prev) => (
+      prev === resolvedActiveFormat.id ? prev : resolvedActiveFormat.id
+    ));
+    setBuilderDraftConfig((prev) => {
+      const nextDraft = makeFormatConfig(resolvedActiveFormat);
+      if (
+        prev?.id === nextDraft.id &&
+        prev?.name === nextDraft.name &&
+        prev?.defaultCurrency === nextDraft.defaultCurrency &&
+        prev?.templateCode === nextDraft.templateCode
+      ) {
+        return prev;
+      }
+      return nextDraft;
+    });
     setPoForm((prev) => {
       const untouched =
         !prev.vendor_id &&
@@ -232,13 +249,13 @@ const PurchaseOrdersPage = () => {
         prev.line_items.length === 1 &&
         !prev.line_items[0]?.item_description;
 
-      if (untouched) return createDefaultPoForm(nextActiveFormat.defaultCurrency, nextActiveFormat.id);
+      if (untouched) return createDefaultPoForm(resolvedActiveFormat.defaultCurrency, resolvedActiveFormat.id);
       if (nextFormats.some((config) => config.id === prev.po_format_id)) return prev;
       return {
         ...prev,
-        po_format_id: nextActiveFormat.id,
-        currency: nextActiveFormat.defaultCurrency,
-        line_items: prev.line_items.map((item) => sanitizeLineItemForCurrency(item, nextActiveFormat.defaultCurrency)),
+        po_format_id: resolvedActiveFormat.id,
+        currency: resolvedActiveFormat.defaultCurrency,
+        line_items: prev.line_items.map((item) => sanitizeLineItemForCurrency(item, resolvedActiveFormat.defaultCurrency)),
       };
     });
   }, [formatConfigData, formatConfigsData, activeFormatId]);
@@ -246,7 +263,6 @@ const PurchaseOrdersPage = () => {
   const fetchData = async () => {
     try {
       const requests = [refetchPurchaseOrders(), refetchVendors(), refetchFormatConfig(), refetchFormatConfigs()];
-      if (canApprovePo) requests.push(refetchPendingApprovals());
       await Promise.all(requests);
     } catch (error) {
       console.error('Error refreshing data:', error);
@@ -609,36 +625,18 @@ const PurchaseOrdersPage = () => {
         activeFormat={activeFormatConfig}
       />
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="all" data-testid="tab-all-pos">All POs</TabsTrigger>
-          {canApprovePo && (
-            <TabsTrigger value="pending" data-testid="tab-pending-approvals">
-              Pending Approvals
-              {pendingApprovals.length > 0 && (
-                <Badge variant="destructive" className="ml-2">{pendingApprovals.length}</Badge>
-              )}
-            </TabsTrigger>
-          )}
-        </TabsList>
-
-        <PoListTable
-          searchQuery={searchQuery}
-          setSearchQuery={setSearchQuery}
-          statusFilter={statusFilter}
-          setStatusFilter={setStatusFilter}
-          filteredOrders={filteredOrders}
-          pendingApprovals={pendingApprovals}
-          activeTab={activeTab}
-          formatDate={formatDate}
-          formatCurrency={formatCurrency}
-          statusColors={statusColors}
-          setSelectedPO={setSelectedPO}
-          setShowViewDialog={setShowViewDialog}
-          setShowApprovalDialog={setShowApprovalDialog}
-          canApprovePo={canApprovePo}
-        />
-      </Tabs>
+      <PoListTable
+        searchQuery={searchQuery}
+        setSearchQuery={setSearchQuery}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        filteredOrders={filteredOrders}
+        formatDate={formatDate}
+        formatCurrency={formatCurrency}
+        statusColors={statusColors}
+        setSelectedPO={setSelectedPO}
+        setShowViewDialog={setShowViewDialog}
+      />
 
       <PoFormDialog
         showCreateDialog={showCreateDialog}

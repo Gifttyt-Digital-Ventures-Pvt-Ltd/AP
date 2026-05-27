@@ -6,6 +6,24 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 
+const CATEGORY_OPTIONS = [
+  'IT Services',
+  'Office Supplies',
+  'Consulting',
+  'Marketing',
+  'Legal',
+  'Maintenance',
+  'Utilities',
+  'Others',
+];
+
+const CURRENCY_OPTIONS = [
+  { value: 'INR', label: 'INR - Indian Rupee' },
+  { value: 'USD', label: 'USD - US Dollar' },
+  { value: 'EUR', label: 'EUR - Euro' },
+  { value: 'GBP', label: 'GBP - British Pound' },
+];
+
 const VendorDetailsDialog = ({
   open,
   onOpenChange,
@@ -18,9 +36,65 @@ const VendorDetailsDialog = ({
   submitting = false,
   requireEmail = true,
   requireGstin = false,
+  requireFullMandatory = false,
   testId = 'vendor-dialog',
 }) => {
   if (!formData) return null;
+  const isEmailRequired = requireEmail || requireFullMandatory;
+  const isGstinRequired = requireGstin || requireFullMandatory;
+  const updateField = (field, value) => setFormData((prev) => ({ ...prev, [field]: value }));
+
+  const basicInfoFields = [
+    { key: 'email', label: 'Email', type: 'email', placeholder: 'vendor@example.com', required: isEmailRequired, testId: 'vendor-email-input' },
+    { key: 'mobile', label: 'Mobile Number', placeholder: '+91 98765 43210', required: requireFullMandatory, testId: 'vendor-mobile-input' },
+    { key: 'phone', label: 'Phone Number', placeholder: '+91 22 1234 5678', required: requireFullMandatory, testId: 'vendor-phone-input' },
+    { key: 'contact_person', label: 'Contact Person', placeholder: 'e.g., Rahul Sharma', required: requireFullMandatory },
+    { key: 'website', label: 'Website', placeholder: 'https://example.com' },
+  ];
+
+  const addressFields = [
+    { key: 'address_line1', label: 'Address Line 1', placeholder: 'Building/Street address', required: requireFullMandatory, colSpan: 'col-span-2' },
+    { key: 'address_line2', label: 'Address Line 2', placeholder: 'Apartment, suite, etc.', required: requireFullMandatory, colSpan: 'col-span-2' },
+    { key: 'city', label: 'City', placeholder: 'e.g., Mumbai', required: requireFullMandatory },
+    { key: 'state', label: 'State', placeholder: 'e.g., Maharashtra', required: requireFullMandatory },
+    { key: 'pincode', label: 'Pincode', placeholder: 'e.g., 400001', required: requireFullMandatory },
+    { key: 'country', label: 'Country', placeholder: 'India', required: requireFullMandatory },
+  ];
+
+  const bankFields = [
+    { key: 'account_holder_name', label: 'Account Holder Name', placeholder: 'As per bank records', colSpan: 'col-span-2' },
+    { key: 'account_number', label: 'Account Number', placeholder: '1234567890' },
+    { key: 'ifsc_code', label: 'IFSC Code', placeholder: 'ICIC0001234', transform: (value) => value.toUpperCase(), className: 'uppercase' },
+    { key: 'bank_name', label: 'Bank Name', placeholder: 'e.g., ICICI Bank' },
+    { key: 'branch', label: 'Branch', placeholder: 'e.g., Andheri West' },
+  ];
+
+  const renderInputField = ({
+    key,
+    label,
+    placeholder,
+    required = false,
+    type = 'text',
+    transform,
+    className = '',
+    colSpan = '',
+    maxLength,
+    testId,
+  }) => (
+    <div key={key} className={colSpan}>
+      <Label>{label}{required ? ' *' : ''}</Label>
+      <Input
+        type={type}
+        value={formData[key] || ''}
+        onChange={(event) => updateField(key, transform ? transform(event.target.value) : event.target.value)}
+        placeholder={placeholder}
+        required={required}
+        className={className}
+        maxLength={maxLength}
+        data-testid={testId}
+      />
+    </div>
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -66,162 +140,57 @@ const VendorDetailsDialog = ({
                   <Label>{formData.vendor_type === 'Company' ? 'Company Name' : 'Full Name'} *</Label>
                   <Input
                     value={formData.name}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, name: event.target.value }))}
+                    onChange={(event) => updateField('name', event.target.value)}
                     placeholder={formData.vendor_type === 'Company' ? 'e.g., Acme Corporation' : 'e.g., John Doe'}
                     data-testid="vendor-name-input"
                     required
                   />
                 </div>
 
-                <div>
-                  <Label>Email{requireEmail ? ' *' : ''}</Label>
-                  <Input
-                    type="email"
-                    value={formData.email}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, email: event.target.value }))}
-                    placeholder="vendor@example.com"
-                    data-testid="vendor-email-input"
-                    required={requireEmail}
-                  />
-                </div>
-
-                <div>
-                  <Label>Mobile Number</Label>
-                  <Input
-                    value={formData.mobile}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, mobile: event.target.value }))}
-                    placeholder="+91 98765 43210"
-                    data-testid="vendor-mobile-input"
-                  />
-                </div>
-
-                <div>
-                  <Label>Phone Number</Label>
-                  <Input
-                    value={formData.phone}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, phone: event.target.value }))}
-                    placeholder="+91 22 1234 5678"
-                    data-testid="vendor-phone-input"
-                  />
-                </div>
-
-                <div>
-                  <Label>Contact Person</Label>
-                  <Input
-                    value={formData.contact_person}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, contact_person: event.target.value }))}
-                    placeholder="e.g., Rahul Sharma"
-                  />
-                </div>
+                {basicInfoFields.map(renderInputField)}
 
                 <div>
                   <Label>Category</Label>
                   <select
                     value={formData.category}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, category: event.target.value }))}
+                    onChange={(event) => updateField('category', event.target.value)}
                     className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
                     <option value="">Select Category</option>
-                    <option value="IT Services">IT Services</option>
-                    <option value="Office Supplies">Office Supplies</option>
-                    <option value="Consulting">Consulting</option>
-                    <option value="Marketing">Marketing</option>
-                    <option value="Legal">Legal</option>
-                    <option value="Maintenance">Maintenance</option>
-                    <option value="Utilities">Utilities</option>
-                    <option value="Others">Others</option>
+                    {CATEGORY_OPTIONS.map((option) => (
+                      <option key={option} value={option}>{option}</option>
+                    ))}
                   </select>
-                </div>
-
-                <div>
-                  <Label>Website</Label>
-                  <Input
-                    value={formData.website}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, website: event.target.value }))}
-                    placeholder="https://example.com"
-                  />
                 </div>
 
                 <div>
                   <Label>Currency</Label>
                   <select
                     value={formData.currency}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, currency: event.target.value }))}
+                    onChange={(event) => updateField('currency', event.target.value)}
                     className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
-                    <option value="INR">INR - Indian Rupee</option>
-                    <option value="USD">USD - US Dollar</option>
-                    <option value="EUR">EUR - Euro</option>
-                    <option value="GBP">GBP - British Pound</option>
+                    {CURRENCY_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
                   </select>
                 </div>
 
-                <div className="col-span-2">
-                  <Label>Address Line 1</Label>
-                  <Input
-                    value={formData.address_line1}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, address_line1: event.target.value }))}
-                    placeholder="Building/Street address"
-                  />
-                </div>
-
-                <div className="col-span-2">
-                  <Label>Address Line 2</Label>
-                  <Input
-                    value={formData.address_line2}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, address_line2: event.target.value }))}
-                    placeholder="Apartment, suite, etc."
-                  />
-                </div>
-
-                <div>
-                  <Label>City</Label>
-                  <Input
-                    value={formData.city}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, city: event.target.value }))}
-                    placeholder="e.g., Mumbai"
-                  />
-                </div>
-
-                <div>
-                  <Label>State</Label>
-                  <Input
-                    value={formData.state}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, state: event.target.value }))}
-                    placeholder="e.g., Maharashtra"
-                  />
-                </div>
-
-                <div>
-                  <Label>Pincode</Label>
-                  <Input
-                    value={formData.pincode}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, pincode: event.target.value }))}
-                    placeholder="e.g., 400001"
-                  />
-                </div>
-
-                <div>
-                  <Label>Country</Label>
-                  <Input
-                    value={formData.country}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, country: event.target.value }))}
-                    placeholder="India"
-                  />
-                </div>
+                {addressFields.map(renderInputField)}
               </div>
             </TabsContent>
 
             <TabsContent value="tax" className="space-y-4 mt-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>PAN Number</Label>
+                <div key="pan">
+                  <Label>PAN Number{requireFullMandatory ? ' *' : ''}</Label>
                   <Input
                     value={formData.pan}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, pan: event.target.value.toUpperCase() }))}
+                    onChange={(event) => updateField('pan', event.target.value.toUpperCase())}
                     placeholder="ABCDE1234F"
                     maxLength={10}
                     className="uppercase"
+                    required={requireFullMandatory}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     10-digit alphanumeric PAN number
@@ -229,86 +198,26 @@ const VendorDetailsDialog = ({
                 </div>
 
                 <div>
-                  <Label>GSTIN{requireGstin ? ' *' : ''}</Label>
+                  <Label>GSTIN{isGstinRequired ? ' *' : ''}</Label>
                   <Input
                     value={formData.gstin}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, gstin: event.target.value.toUpperCase() }))}
+                    onChange={(event) => updateField('gstin', event.target.value.toUpperCase())}
                     placeholder="29ABCDE1234F1Z5"
                     maxLength={15}
                     className="uppercase"
-                    required={requireGstin}
+                    required={isGstinRequired}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     15-digit GST Identification Number
                   </p>
                 </div>
 
-                <div>
-                  <Label>Payment Terms (Days)</Label>
-                  <select
-                    value={formData.payment_terms}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, payment_terms: event.target.value }))}
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="0">Immediate</option>
-                    <option value="7">Net 7</option>
-                    <option value="15">Net 15</option>
-                    <option value="30">Net 30</option>
-                    <option value="45">Net 45</option>
-                    <option value="60">Net 60</option>
-                    <option value="90">Net 90</option>
-                  </select>
-                </div>
               </div>
             </TabsContent>
 
             <TabsContent value="bank" className="space-y-4 mt-4">
               <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <Label>Account Holder Name</Label>
-                  <Input
-                    value={formData.account_holder_name}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, account_holder_name: event.target.value }))}
-                    placeholder="As per bank records"
-                  />
-                </div>
-
-                <div>
-                  <Label>Account Number</Label>
-                  <Input
-                    value={formData.account_number}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, account_number: event.target.value }))}
-                    placeholder="1234567890"
-                  />
-                </div>
-
-                <div>
-                  <Label>IFSC Code</Label>
-                  <Input
-                    value={formData.ifsc_code}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, ifsc_code: event.target.value.toUpperCase() }))}
-                    placeholder="ICIC0001234"
-                    className="uppercase"
-                  />
-                </div>
-
-                <div>
-                  <Label>Bank Name</Label>
-                  <Input
-                    value={formData.bank_name}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, bank_name: event.target.value }))}
-                    placeholder="e.g., ICICI Bank"
-                  />
-                </div>
-
-                <div>
-                  <Label>Branch</Label>
-                  <Input
-                    value={formData.branch}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, branch: event.target.value }))}
-                    placeholder="e.g., Andheri West"
-                  />
-                </div>
+                {bankFields.map(renderInputField)}
               </div>
 
               <div className="bg-amber-50 dark:bg-amber-950/20 rounded-lg p-4 border border-amber-200 dark:border-amber-900 mt-4">
@@ -326,7 +235,7 @@ const VendorDetailsDialog = ({
                 <Label>Notes</Label>
                 <textarea
                   value={formData.notes}
-                  onChange={(event) => setFormData((prev) => ({ ...prev, notes: event.target.value }))}
+                  onChange={(event) => updateField('notes', event.target.value)}
                   className="w-full min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm"
                   placeholder="Add any additional notes or special instructions..."
                 />
