@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   useGetExecutiveDashboardQuery,
   useGetApReportsQuery,
@@ -45,6 +45,7 @@ import {
 import ReportsHeader from './components/ReportsHeader';
 import MetricCard from './components/MetricCard';
 import ReportsTooltip from './components/ReportsTooltip';
+import { useRBAC } from '../../contexts/RBACContext';
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6'];
 const STATUS_COLORS = {
@@ -73,9 +74,31 @@ const formatFullCurrency = (amount) => {
 };
 
 const Reports = () => {
+  const { isCorporateSectionEnabled } = useRBAC();
   const [activeTab, setActiveTab] = useState('executive');
   const [dateRange, setDateRange] = useState('30');
   const [customDays, setCustomDays] = useState('');
+  const canViewExecutiveReports = isCorporateSectionEnabled('REPORTS_EXECUTIVE');
+  const canViewApReports = isCorporateSectionEnabled('REPORTS_AP');
+  const canViewVendorReports = isCorporateSectionEnabled('REPORTS_VENDOR');
+  const canViewTaxReports = isCorporateSectionEnabled('REPORTS_TAX');
+  const canViewPaymentReports = isCorporateSectionEnabled('REPORTS_PAYMENT');
+  const availableReportTabs = useMemo(() => {
+    const tabs = [];
+    if (canViewExecutiveReports) tabs.push('executive');
+    if (canViewApReports) tabs.push('ap');
+    if (canViewVendorReports) tabs.push('vendor');
+    if (canViewTaxReports) tabs.push('tax');
+    if (canViewPaymentReports) tabs.push('payment');
+    return tabs;
+  }, [canViewApReports, canViewExecutiveReports, canViewPaymentReports, canViewTaxReports, canViewVendorReports]);
+
+  useEffect(() => {
+    if (availableReportTabs.length === 0) return;
+    if (!availableReportTabs.includes(activeTab)) {
+      setActiveTab(availableReportTabs[0]);
+    }
+  }, [activeTab, availableReportTabs]);
 
   const getDays = () => {
     if (dateRange === 'custom' && customDays) {
@@ -92,54 +115,49 @@ const Reports = () => {
     isLoading: executiveLoading,
     isFetching: executiveFetching,
     refetch: refetchExecutiveDashboard,
-  } = useGetExecutiveDashboardQuery({ days }, { skip: shouldSkip });
+  } = useGetExecutiveDashboardQuery({ days }, { skip: shouldSkip || !canViewExecutiveReports });
   const {
     data: apData = null,
     isLoading: apLoading,
     isFetching: apFetching,
     refetch: refetchApReports,
-  } = useGetApReportsQuery({ days }, { skip: shouldSkip });
+  } = useGetApReportsQuery({ days }, { skip: shouldSkip || !canViewApReports });
   const {
     data: vendorData = null,
     isLoading: vendorLoading,
     isFetching: vendorFetching,
     refetch: refetchVendorAnalytics,
-  } = useGetVendorAnalyticsQuery({ days }, { skip: shouldSkip });
+  } = useGetVendorAnalyticsQuery({ days }, { skip: shouldSkip || !canViewVendorReports });
   const {
     data: taxData = null,
     isLoading: taxLoading,
     isFetching: taxFetching,
     refetch: refetchTaxReports,
-  } = useGetTaxReportsQuery({ days }, { skip: shouldSkip });
+  } = useGetTaxReportsQuery({ days }, { skip: shouldSkip || !canViewTaxReports });
   const {
     data: paymentData = null,
     isLoading: paymentLoading,
     isFetching: paymentFetching,
     refetch: refetchPaymentAnalytics,
-  } = useGetPaymentAnalyticsQuery({ days }, { skip: shouldSkip });
+  } = useGetPaymentAnalyticsQuery({ days }, { skip: shouldSkip || !canViewPaymentReports });
 
   const loading =
-    executiveLoading ||
-    apLoading ||
-    vendorLoading ||
-    taxLoading ||
-    paymentLoading ||
-    executiveFetching ||
-    apFetching ||
-    vendorFetching ||
-    taxFetching ||
-    paymentFetching;
+    (canViewExecutiveReports && (executiveLoading || executiveFetching)) ||
+    (canViewApReports && (apLoading || apFetching)) ||
+    (canViewVendorReports && (vendorLoading || vendorFetching)) ||
+    (canViewTaxReports && (taxLoading || taxFetching)) ||
+    (canViewPaymentReports && (paymentLoading || paymentFetching));
 
   const fetchAllData = async () => {
     if (shouldSkip) return;
 
     try {
       await Promise.all([
-        refetchExecutiveDashboard(),
-        refetchApReports(),
-        refetchVendorAnalytics(),
-        refetchTaxReports(),
-        refetchPaymentAnalytics(),
+        canViewExecutiveReports ? refetchExecutiveDashboard() : Promise.resolve(),
+        canViewApReports ? refetchApReports() : Promise.resolve(),
+        canViewVendorReports ? refetchVendorAnalytics() : Promise.resolve(),
+        canViewTaxReports ? refetchTaxReports() : Promise.resolve(),
+        canViewPaymentReports ? refetchPaymentAnalytics() : Promise.resolve(),
       ]);
     } catch (error) {
       console.error('Error refreshing analytics:', error);
@@ -171,31 +189,31 @@ const Reports = () => {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid grid-cols-5 w-full max-w-3xl">
-          <TabsTrigger value="executive" data-testid="tab-executive">
+        <TabsList className="flex w-full max-w-3xl flex-wrap">
+          {canViewExecutiveReports && <TabsTrigger value="executive" data-testid="tab-executive">
             <BarChart3 className="h-4 w-4 mr-2" />
             Executive
-          </TabsTrigger>
-          <TabsTrigger value="ap" data-testid="tab-ap">
+          </TabsTrigger>}
+          {canViewApReports && <TabsTrigger value="ap" data-testid="tab-ap">
             <FileText className="h-4 w-4 mr-2" />
             AP Reports
-          </TabsTrigger>
-          <TabsTrigger value="vendor" data-testid="tab-vendor">
+          </TabsTrigger>}
+          {canViewVendorReports && <TabsTrigger value="vendor" data-testid="tab-vendor">
             <Building2 className="h-4 w-4 mr-2" />
             Vendors
-          </TabsTrigger>
-          <TabsTrigger value="tax" data-testid="tab-tax">
+          </TabsTrigger>}
+          {canViewTaxReports && <TabsTrigger value="tax" data-testid="tab-tax">
             <Calculator className="h-4 w-4 mr-2" />
             Tax
-          </TabsTrigger>
-          <TabsTrigger value="payment" data-testid="tab-payment">
+          </TabsTrigger>}
+          {canViewPaymentReports && <TabsTrigger value="payment" data-testid="tab-payment">
             <CreditCard className="h-4 w-4 mr-2" />
             Payments
-          </TabsTrigger>
+          </TabsTrigger>}
         </TabsList>
 
         {/* Executive Dashboard */}
-        <TabsContent value="executive" className="space-y-6">
+        {canViewExecutiveReports && <TabsContent value="executive" className="space-y-6">
           {executiveData && (
             <>
               {/* Key Metrics */}
@@ -319,10 +337,10 @@ const Reports = () => {
               </Card>
             </>
           )}
-        </TabsContent>
+        </TabsContent>}
 
         {/* AP Reports */}
-        <TabsContent value="ap" className="space-y-6">
+        {canViewApReports && <TabsContent value="ap" className="space-y-6">
           {apData && (
             <>
               {/* Processing Metrics */}
@@ -414,10 +432,10 @@ const Reports = () => {
               </Card>
             </>
           )}
-        </TabsContent>
+        </TabsContent>}
 
         {/* Vendor Analytics */}
-        <TabsContent value="vendor" className="space-y-6">
+        {canViewVendorReports && <TabsContent value="vendor" className="space-y-6">
           {vendorData && (
             <>
               {/* Summary */}
@@ -531,10 +549,10 @@ const Reports = () => {
               </Card>
             </>
           )}
-        </TabsContent>
+        </TabsContent>}
 
         {/* Tax Reports */}
-        <TabsContent value="tax" className="space-y-6">
+        {canViewTaxReports && <TabsContent value="tax" className="space-y-6">
           {taxData && (
             <>
               {/* GST Section */}
@@ -661,10 +679,10 @@ const Reports = () => {
               </Card>
             </>
           )}
-        </TabsContent>
+        </TabsContent>}
 
         {/* Payment Analytics */}
-        <TabsContent value="payment" className="space-y-6">
+        {canViewPaymentReports && <TabsContent value="payment" className="space-y-6">
           {paymentData && (
             <>
               {/* Summary */}
@@ -784,11 +802,10 @@ const Reports = () => {
               </Card>
             </>
           )}
-        </TabsContent>
+        </TabsContent>}
       </Tabs>
     </div>
   );
 };
 
 export default Reports;
-

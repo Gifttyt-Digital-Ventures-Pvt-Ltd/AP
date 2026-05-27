@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../../../components/ui/accordion';
 import { Button } from '../../../components/ui/button';
 import { Checkbox } from '../../../components/ui/checkbox';
@@ -31,19 +31,28 @@ const ViewRoleDialog = ({
   saving = false,
   availableUsers = [],
   canManageRoles = false,
+  hiddenPermissionIds = [],
 }) => {
   const [editSection, setEditSection] = useState(null);
   const [selectedPermissions, setSelectedPermissions] = useState([]);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([]);
   const [userSearch, setUserSearch] = useState('');
+  const hiddenPermissionSet = useMemo(
+    () => new Set(hiddenPermissionIds.map((permissionId) => String(permissionId || '').trim()).filter(Boolean)),
+    [hiddenPermissionIds],
+  );
+  const filterHiddenPermissions = useCallback(
+    (permissions = []) => permissions.filter((permissionId) => !hiddenPermissionSet.has(permissionId)),
+    [hiddenPermissionSet],
+  );
 
   useEffect(() => {
     if (!role) return;
-    setSelectedPermissions(Array.isArray(role.permissions) ? role.permissions : []);
+    setSelectedPermissions(filterHiddenPermissions(Array.isArray(role.permissions) ? role.permissions : []));
     setSelectedEmployeeIds(Array.isArray(role.assignedEmployeeIds) ? role.assignedEmployeeIds : []);
     setUserSearch('');
     setEditSection(startInEditMode && canManageRoles ? 'permissions' : null);
-  }, [role, open, startInEditMode, canManageRoles]);
+  }, [role, open, startInEditMode, canManageRoles, filterHiddenPermissions]);
 
   const isPermissionEditMode = editSection === 'permissions';
   const isUserEditMode = editSection === 'users';
@@ -53,7 +62,7 @@ const ViewRoleDialog = ({
   };
 
   const handleCancel = () => {
-    setSelectedPermissions(Array.isArray(role.permissions) ? role.permissions : []);
+    setSelectedPermissions(filterHiddenPermissions(Array.isArray(role.permissions) ? role.permissions : []));
     setSelectedEmployeeIds(Array.isArray(role.assignedEmployeeIds) ? role.assignedEmployeeIds : []);
     setUserSearch('');
     setEditSection(null);
@@ -82,27 +91,31 @@ const ViewRoleDialog = ({
   const displayedPermissions = useMemo(() => {
     const backendEntries = Array.isArray(role?.permissionEntries) ? role.permissionEntries : [];
     if (backendEntries.length > 0) {
-      return backendEntries.map((entry, index) => {
-        const screenLabel =
-          String(entry?.screenDisplayName || '').trim() ||
-          String(entry?.screen || '').trim();
-        const permissionTypeLabel =
-          String(entry?.permissionTypeDisplayName || '').trim() ||
-          String(entry?.permissionType || '').trim();
-        const fallbackLabel = entry?.canonicalId ? permissionLabels[entry.canonicalId] : '';
-        const label = screenLabel && permissionTypeLabel
-          ? `${screenLabel} - ${permissionTypeLabel}`
-          : fallbackLabel || screenLabel || permissionTypeLabel || 'Unknown Permission';
-        const key = entry?.id || `${entry?.screen || 'screen'}-${entry?.permissionType || 'type'}-${index}`;
-        return { key, label };
-      });
+      return backendEntries
+        .filter((entry) => !entry?.canonicalId || !hiddenPermissionSet.has(entry.canonicalId))
+        .map((entry, index) => {
+          const screenLabel =
+            String(entry?.screenDisplayName || '').trim() ||
+            String(entry?.screen || '').trim();
+          const permissionTypeLabel =
+            String(entry?.permissionTypeDisplayName || '').trim() ||
+            String(entry?.permissionType || '').trim();
+          const fallbackLabel = entry?.canonicalId ? permissionLabels[entry.canonicalId] : '';
+          const label = screenLabel && permissionTypeLabel
+            ? `${screenLabel} - ${permissionTypeLabel}`
+            : fallbackLabel || screenLabel || permissionTypeLabel || 'Unknown Permission';
+          const key = entry?.id || `${entry?.screen || 'screen'}-${entry?.permissionType || 'type'}-${index}`;
+          return { key, label };
+        });
     }
     const canonicalPermissions = Array.isArray(role?.permissions) ? role.permissions : [];
-    return canonicalPermissions.map((permissionId) => ({
-      key: permissionId,
-      label: permissionLabels[permissionId] || permissionId,
-    }));
-  }, [permissionLabels, role?.permissionEntries, role?.permissions]);
+    return canonicalPermissions
+      .filter((permissionId) => !hiddenPermissionSet.has(permissionId))
+      .map((permissionId) => ({
+        key: permissionId,
+        label: permissionLabels[permissionId] || permissionId,
+      }));
+  }, [hiddenPermissionSet, permissionLabels, role?.permissionEntries, role?.permissions]);
 
   const handleSave = async () => {
     const didSave = await onSave({

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useGetInvoicesQuery, useGetVendorsQuery } from '../../Services/apis/invoicesVendorsApi';
 import {
   useGetGstEntriesQuery,
@@ -50,6 +50,7 @@ import GstCalculationDialog from './components/GstCalculationDialog';
 import TdsCalculationDialog from './components/TdsCalculationDialog';
 import Form16ADialog from './components/Form16ADialog';
 import { useActionGuard } from '../../hooks/useActionGuard';
+import { useRBAC } from '../../contexts/RBACContext';
 
 const formatCurrency = (amount) => {
   return new Intl.NumberFormat('en-IN', {
@@ -79,7 +80,23 @@ const INDIAN_STATES = [
 ];
 
 const TaxManagement = () => {
+  const { isCorporateSectionEnabled } = useRBAC();
   const [activeTab, setActiveTab] = useState('gst');
+  const canViewGst = isCorporateSectionEnabled('TAX_GST');
+  const canViewTds = isCorporateSectionEnabled('TAX_TDS_COMPLIANCE');
+  const taxTabs = useMemo(() => {
+    const tabs = [];
+    if (canViewGst) tabs.push('gst');
+    if (canViewTds) tabs.push('tds', 'certificates');
+    return tabs;
+  }, [canViewGst, canViewTds]);
+
+  useEffect(() => {
+    if (taxTabs.length === 0) return;
+    if (!taxTabs.includes(activeTab)) {
+      setActiveTab(taxTabs[0]);
+    }
+  }, [activeTab, taxTabs]);
   
   // GST State
   const {
@@ -87,25 +104,25 @@ const TaxManagement = () => {
     isLoading: gstEntriesLoading,
     isFetching: gstEntriesFetching,
     refetch: refetchGstEntries,
-  } = useGetGstEntriesQuery();
+  } = useGetGstEntriesQuery(undefined, { skip: !canViewGst });
   const {
     data: gstSummary = null,
     isLoading: gstSummaryLoading,
     isFetching: gstSummaryFetching,
     refetch: refetchGstSummary,
-  } = useGetGstSummaryQuery();
+  } = useGetGstSummaryQuery(undefined, { skip: !canViewGst });
   const {
     data: invoicesData = [],
     isLoading: invoicesLoading,
     isFetching: invoicesFetching,
     refetch: refetchInvoices,
-  } = useGetInvoicesQuery();
+  } = useGetInvoicesQuery(undefined, { skip: taxTabs.length === 0 });
   const {
     data: vendorsData = [],
     isLoading: vendorsLoading,
     isFetching: vendorsFetching,
     refetch: refetchVendors,
-  } = useGetVendorsQuery();
+  } = useGetVendorsQuery(undefined, { skip: taxTabs.length === 0 });
   
   // TDS State
   const {
@@ -113,19 +130,19 @@ const TaxManagement = () => {
     isLoading: tdsEntriesLoading,
     isFetching: tdsEntriesFetching,
     refetch: refetchTdsEntries,
-  } = useGetTdsEntriesQuery();
+  } = useGetTdsEntriesQuery(undefined, { skip: !canViewTds });
   const {
     data: tdsSummary = null,
     isLoading: tdsSummaryLoading,
     isFetching: tdsSummaryFetching,
     refetch: refetchTdsSummary,
-  } = useGetTdsSummaryQuery();
+  } = useGetTdsSummaryQuery(undefined, { skip: !canViewTds });
   const {
     data: tdsSectionsData = [],
     isLoading: tdsSectionsLoading,
     isFetching: tdsSectionsFetching,
     refetch: refetchTdsSections,
-  } = useGetTdsSectionsQuery();
+  } = useGetTdsSectionsQuery(undefined, { skip: !canViewTds });
   const [tdsCertificates, setTdsCertificates] = useState([]);
   const [calculateGst] = useCalculateGstMutation();
   const [calculateTds] = useCalculateTdsMutation();
@@ -137,7 +154,9 @@ const TaxManagement = () => {
   const [showTdsCalcDialog, setShowTdsCalcDialog] = useState(false);
   const [showForm16ADialog, setShowForm16ADialog] = useState(false);
   const [calculating, setCalculating] = useState(false);
-  const canManageTax = canPerformAction('tax.calculateGst');
+  const canManageGst = canPerformAction('tax.calculateGst') && canViewGst;
+  const canManageTds = canPerformAction('tax.calculateTds') && canViewTds;
+  const canGenerateForm16A = canPerformAction('tax.generateForm16a') && canViewTds;
   
   // Forms
   const [gstForm, setGstForm] = useState({
@@ -169,24 +188,20 @@ const TaxManagement = () => {
   const tdsSections = Array.isArray(tdsSectionsData) ? tdsSectionsData : [];
 
   const loading =
-    gstEntriesLoading ||
-    gstSummaryLoading ||
-    tdsEntriesLoading ||
-    tdsSummaryLoading ||
-    tdsSectionsLoading ||
-    invoicesLoading ||
-    vendorsLoading;
+    (canViewGst && (gstEntriesLoading || gstSummaryLoading)) ||
+    (canViewTds && (tdsEntriesLoading || tdsSummaryLoading || tdsSectionsLoading)) ||
+    (taxTabs.length > 0 && (invoicesLoading || vendorsLoading));
 
   const fetchData = async () => {
     try {
       await Promise.all([
-        refetchGstEntries(),
-        refetchGstSummary(),
-        refetchTdsEntries(),
-        refetchTdsSummary(),
-        refetchTdsSections(),
-        refetchInvoices(),
-        refetchVendors(),
+        canViewGst ? refetchGstEntries() : Promise.resolve(),
+        canViewGst ? refetchGstSummary() : Promise.resolve(),
+        canViewTds ? refetchTdsEntries() : Promise.resolve(),
+        canViewTds ? refetchTdsSummary() : Promise.resolve(),
+        canViewTds ? refetchTdsSections() : Promise.resolve(),
+        taxTabs.length > 0 ? refetchInvoices() : Promise.resolve(),
+        taxTabs.length > 0 ? refetchVendors() : Promise.resolve(),
       ]);
     } catch (error) {
       console.error('Error refreshing tax data:', error);
@@ -300,13 +315,13 @@ const TaxManagement = () => {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-3 max-w-md">
-          <TabsTrigger value="gst" data-testid="tab-gst">GST</TabsTrigger>
-          <TabsTrigger value="tds" data-testid="tab-tds">TDS</TabsTrigger>
-          <TabsTrigger value="certificates" data-testid="tab-certificates">Certificates</TabsTrigger>
+          {canViewGst && <TabsTrigger value="gst" data-testid="tab-gst">GST</TabsTrigger>}
+          {canViewTds && <TabsTrigger value="tds" data-testid="tab-tds">TDS</TabsTrigger>}
+          {canViewTds && <TabsTrigger value="certificates" data-testid="tab-certificates">Certificates</TabsTrigger>}
         </TabsList>
 
         {/* GST Tab */}
-        <TabsContent value="gst" className="space-y-6">
+        {canViewGst && <TabsContent value="gst" className="space-y-6">
           {/* GST Summary Cards */}
           {gstSummary && (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -359,7 +374,7 @@ const TaxManagement = () => {
 
           {/* GST Actions */}
           <div className="flex gap-2">
-            <Button onClick={() => setShowGstCalcDialog(true)} data-testid="calc-gst-btn" disabled={!canManageTax}>
+            <Button onClick={() => setShowGstCalcDialog(true)} data-testid="calc-gst-btn" disabled={!canManageGst}>
               <Calculator className="h-4 w-4 mr-2" />
               Calculate GST
             </Button>
@@ -432,10 +447,10 @@ const TaxManagement = () => {
               </Table>
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent>}
 
         {/* TDS Tab */}
-        <TabsContent value="tds" className="space-y-6">
+        {canViewTds && <TabsContent value="tds" className="space-y-6">
           {/* TDS Summary Cards */}
           {tdsSummary && (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -488,11 +503,11 @@ const TaxManagement = () => {
 
           {/* TDS Actions */}
           <div className="flex gap-2">
-            <Button onClick={() => setShowTdsCalcDialog(true)} data-testid="calc-tds-btn" disabled={!canManageTax}>
+            <Button onClick={() => setShowTdsCalcDialog(true)} data-testid="calc-tds-btn" disabled={!canManageTds}>
               <Calculator className="h-4 w-4 mr-2" />
               Calculate TDS
             </Button>
-            <Button variant="outline" onClick={() => setShowForm16ADialog(true)} data-testid="generate-form16a-btn" disabled={!canManageTax}>
+            <Button variant="outline" onClick={() => setShowForm16ADialog(true)} data-testid="generate-form16a-btn" disabled={!canGenerateForm16A}>
               <FileText className="h-4 w-4 mr-2" />
               Generate Form 16A
             </Button>
@@ -586,10 +601,10 @@ const TaxManagement = () => {
               </Table>
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent>}
 
         {/* Certificates Tab */}
-        <TabsContent value="certificates" className="space-y-6">
+        {canViewTds && <TabsContent value="certificates" className="space-y-6">
           <Card>
             <CardHeader>
               <CardTitle>TDS Certificates (Form 16A)</CardTitle>
@@ -638,7 +653,7 @@ const TaxManagement = () => {
               </Table>
             </CardContent>
           </Card>
-        </TabsContent>
+        </TabsContent>}
       </Tabs>
 
             <GstCalculationDialog
@@ -651,7 +666,7 @@ const TaxManagement = () => {
         indianStates={INDIAN_STATES}
         calculating={calculating}
         handleCalculateGST={handleCalculateGST}
-        canManageTax={canManageTax}
+        canManageTax={canManageGst}
       />
 
             <TdsCalculationDialog
@@ -664,7 +679,7 @@ const TaxManagement = () => {
         formatCurrency={formatCurrency}
         calculating={calculating}
         handleCalculateTDS={handleCalculateTDS}
-        canManageTax={canManageTax}
+        canManageTax={canManageTds}
       />
 
             <Form16ADialog
@@ -675,7 +690,7 @@ const TaxManagement = () => {
         vendors={vendors}
         calculating={calculating}
         handleGenerateForm16A={handleGenerateForm16A}
-        canManageTax={canManageTax}
+        canManageTax={canGenerateForm16A}
       />
     </div>
   );

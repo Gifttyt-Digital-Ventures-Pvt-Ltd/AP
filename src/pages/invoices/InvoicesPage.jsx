@@ -49,6 +49,7 @@ import BulkPreviewDialog from './components/BulkPreviewDialog';
 import BulkEditDialog from './components/BulkEditDialog';
 import RequestVendorDialog from './components/RequestVendorDialog';
 import { useActionGuard } from '../../hooks/useActionGuard';
+import { useRBAC } from '../../contexts/RBACContext';
 
 const FILE_BASE_URL = import.meta.env.VITE_BACKEND_URL ?? '';
 
@@ -81,6 +82,7 @@ const createEmptyVendorRequestForm = () => ({
 
 const InvoicesPage = () => {
   const { user } = useAuth();
+  const { isCategoryFeatureEnabled } = useRBAC();
   const {
     data: corporateUserContext = null,
   } = useGetCorporateUserDetailsQuery();
@@ -104,7 +106,7 @@ const InvoicesPage = () => {
     isLoading: invoiceCategoriesLoading,
     isFetching: invoiceCategoriesFetching,
   } = useGetCategoriesForInvoiceQuery(invoiceCategoryEmail, {
-    skip: !invoiceCategoryEmail,
+    skip: !invoiceCategoryEmail || !isCategoryFeatureEnabled,
   });
   const [scanInvoice] = useScanInvoiceMutation();
   const [bulkUploadInvoices] = useBulkUploadInvoicesMutation();
@@ -117,7 +119,8 @@ const InvoicesPage = () => {
   const invoices = Array.isArray(invoicesData) ? invoicesData : [];
   const vendors = Array.isArray(vendorsData) ? vendorsData : [];
   const departments = Array.isArray(departmentsData) ? departmentsData : [];
-  const invoiceCategories = Array.isArray(invoiceCategoriesData) ? invoiceCategoriesData : [];
+  const invoiceCategories =
+    isCategoryFeatureEnabled && Array.isArray(invoiceCategoriesData) ? invoiceCategoriesData : [];
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState('list');
   const { setHideSidebar } = useSidebar();
@@ -306,6 +309,7 @@ const InvoicesPage = () => {
   };
 
   const getCategoryNameById = (categoryId) => {
+    if (!isCategoryFeatureEnabled) return '';
     const selectedCategory = invoiceCategories.find(
       (category) => String(category?.id ?? '') === String(categoryId ?? ''),
     );
@@ -319,6 +323,7 @@ const InvoicesPage = () => {
   };
 
   const buildInvoiceCategoryPayload = (source = {}) => {
+    if (!isCategoryFeatureEnabled) return null;
     const rawCategoryId = source.category?.id ?? source.category_id ?? source.categoryId;
     const categoryId = normalizeInvoiceCategoryId(rawCategoryId);
     if (!categoryId) return null;
@@ -399,45 +404,52 @@ const InvoicesPage = () => {
     };
   };
 
-  const toCreateInvoicePayload = (invoiceData = {}) => ({
-    vendor_name: invoiceData.vendor_name || '',
-    invoice_number: invoiceData.invoice_number || '',
-    vendor_id: invoiceData.vendor_id || findVendorByName(invoiceData.vendor_name)?.id || '',
-    invoice_date: invoiceData.invoice_date || format(new Date(), 'yyyy-MM-dd'),
-    due_date: invoiceData.due_date || format(new Date(), 'yyyy-MM-dd'),
-    amount: Number(invoiceData.amount || 0),
-    currency: invoiceData.currency || 'INR',
-    billing_address: invoiceData.billing_address || invoiceData.vendor_address || '',
-    gstin: invoiceData.gstin || invoiceData.vendor_gstin || '',
-    source_of_supply: invoiceData.source_of_supply || invoiceData.place_of_supply || '',
-    destination_of_supply: invoiceData.destination_of_supply || invoiceData.place_of_supply || '',
-    location: invoiceData.location || invoiceData.place_of_supply || '',
-    line_items: (invoiceData.line_items || []).map((item) => ({
-      description: item.description || '',
-      quantity: Number(item.quantity || 1),
-      unit_price: Number(item.unit_price ?? item.amount ?? 0),
-      amount: Number(item.amount ?? (Number(item.quantity || 1) * Number(item.unit_price ?? 0))),
-    })),
-    memo: invoiceData.notes?.join?.('\n') || '',
-    file_id: invoiceData.file_id || null,
-    file_hash: invoiceData.file_hash || null,
-    original_file_name: invoiceData.original_filename || null,
-    department_id: invoiceData.department_id || invoiceData.departmentId || '',
-    department_name:
-      invoiceData.department_name ||
-      invoiceData.departmentName ||
-      getDepartmentNameById(invoiceData.department_id || invoiceData.departmentId),
-    category: buildInvoiceCategoryPayload(invoiceData),
-    category_id: invoiceData.category_id || invoiceData.categoryId || invoiceData.category?.id || '',
-    category_name:
-      invoiceData.category_name ||
-      invoiceData.categoryName ||
-      invoiceData.category?.name ||
-      getCategoryNameById(invoiceData.category_id || invoiceData.categoryId || invoiceData.category?.id),
-    source: 'Upload',
-    source_email: null,
-    file_category: 'Expense Invoice',
-  });
+  const toCreateInvoicePayload = (invoiceData = {}) => {
+    const categoryPayload = buildInvoiceCategoryPayload(invoiceData);
+    return {
+      vendor_name: invoiceData.vendor_name || '',
+      invoice_number: invoiceData.invoice_number || '',
+      vendor_id: invoiceData.vendor_id || findVendorByName(invoiceData.vendor_name)?.id || '',
+      invoice_date: invoiceData.invoice_date || format(new Date(), 'yyyy-MM-dd'),
+      due_date: invoiceData.due_date || format(new Date(), 'yyyy-MM-dd'),
+      amount: Number(invoiceData.amount || 0),
+      currency: invoiceData.currency || 'INR',
+      billing_address: invoiceData.billing_address || invoiceData.vendor_address || '',
+      gstin: invoiceData.gstin || invoiceData.vendor_gstin || '',
+      source_of_supply: invoiceData.source_of_supply || invoiceData.place_of_supply || '',
+      destination_of_supply: invoiceData.destination_of_supply || invoiceData.place_of_supply || '',
+      location: invoiceData.location || invoiceData.place_of_supply || '',
+      line_items: (invoiceData.line_items || []).map((item) => ({
+        description: item.description || '',
+        quantity: Number(item.quantity || 1),
+        unit_price: Number(item.unit_price ?? item.amount ?? 0),
+        amount: Number(item.amount ?? (Number(item.quantity || 1) * Number(item.unit_price ?? 0))),
+      })),
+      memo: invoiceData.notes?.join?.('\n') || '',
+      file_id: invoiceData.file_id || null,
+      file_hash: invoiceData.file_hash || null,
+      original_file_name: invoiceData.original_filename || null,
+      department_id: invoiceData.department_id || invoiceData.departmentId || '',
+      department_name:
+        invoiceData.department_name ||
+        invoiceData.departmentName ||
+        getDepartmentNameById(invoiceData.department_id || invoiceData.departmentId),
+      ...(isCategoryFeatureEnabled
+        ? {
+            category: categoryPayload,
+            category_id: invoiceData.category_id || invoiceData.categoryId || invoiceData.category?.id || '',
+            category_name:
+              invoiceData.category_name ||
+              invoiceData.categoryName ||
+              invoiceData.category?.name ||
+              getCategoryNameById(invoiceData.category_id || invoiceData.categoryId || invoiceData.category?.id),
+          }
+        : {}),
+      source: 'Upload',
+      source_email: null,
+      file_category: 'Expense Invoice',
+    };
+  };
 
   const toLocalDateTimeString = (value) => {
     if (!value) return value;
@@ -476,7 +488,9 @@ const InvoicesPage = () => {
             fileCategory: invoicePayload.file_category,
             departmentId: invoicePayload.department_id || null,
             departmentName: invoicePayload.department_name || null,
-            category: buildInvoiceCategoryPayload(invoicePayload),
+            ...(isCategoryFeatureEnabled
+              ? { category: buildInvoiceCategoryPayload(invoicePayload) }
+              : {}),
           }),
         ],
         { type: 'application/json' }
@@ -545,9 +559,13 @@ const InvoicesPage = () => {
       original_file_name: extractedData?.original_filename || null,
       department_id: extractedData?.department_id || extractedData?.departmentId || '',
       department_name: extractedData?.department_name || extractedData?.departmentName || '',
-      category: extractedData?.category || null,
-      category_id: extractedData?.category_id || extractedData?.categoryId || extractedData?.category?.id || '',
-      category_name: extractedData?.category_name || extractedData?.categoryName || extractedData?.category?.name || ''
+      ...(isCategoryFeatureEnabled
+        ? {
+            category: extractedData?.category || null,
+            category_id: extractedData?.category_id || extractedData?.categoryId || extractedData?.category?.id || '',
+            category_name: extractedData?.category_name || extractedData?.categoryName || extractedData?.category?.name || '',
+          }
+        : {})
     };
   };
 
@@ -755,9 +773,13 @@ const InvoicesPage = () => {
       currency: item.invoicePayload.currency || 'INR',
       department_id: item.invoicePayload.department_id || '',
       department_name: item.invoicePayload.department_name || '',
-      category: item.invoicePayload.category || null,
-      category_id: item.invoicePayload.category_id || item.invoicePayload.category?.id || '',
-      category_name: item.invoicePayload.category_name || item.invoicePayload.category?.name || '',
+      ...(isCategoryFeatureEnabled
+        ? {
+            category: item.invoicePayload.category || null,
+            category_id: item.invoicePayload.category_id || item.invoicePayload.category?.id || '',
+            category_name: item.invoicePayload.category_name || item.invoicePayload.category?.name || '',
+          }
+        : {}),
       billing_address: item.invoicePayload.billing_address || '',
       gstin: item.invoicePayload.gstin || '',
       source_of_supply: item.invoicePayload.source_of_supply || '',
@@ -810,6 +832,11 @@ const InvoicesPage = () => {
             tax: line.tax || 'CGST + SGST 18%',
           })),
         };
+        if (!isCategoryFeatureEnabled) {
+          delete updatedPayload.category;
+          delete updatedPayload.category_id;
+          delete updatedPayload.category_name;
+        }
         const vendorMissing = !matchedVendorId;
         return {
           ...item,
@@ -1047,9 +1074,13 @@ const InvoicesPage = () => {
       file_category: formData.file_category || 'Expense Invoice',
       department_id: formData.department_id || '',
       department_name: formData.department_name || getDepartmentNameById(formData.department_id),
-      category: buildInvoiceCategoryPayload(formData),
-      category_id: formData.category_id || '',
-      category_name: formData.category_name || '',
+      ...(isCategoryFeatureEnabled
+        ? {
+            category: buildInvoiceCategoryPayload(formData),
+            category_id: formData.category_id || '',
+            category_name: formData.category_name || '',
+          }
+        : {}),
     };
     if (!invoicePayload.vendor_id) {
       toast.error('Please select or add a vendor before creating invoice');
@@ -1200,9 +1231,13 @@ const InvoicesPage = () => {
       currency: invoice.currency || 'INR',
       department_id: invoice.department_id || invoice.departmentId || '',
       department_name: invoice.department_name || invoice.departmentName || '',
-      category: invoice.category || null,
-      category_id: invoice.category_id || invoice.categoryId || invoice.category?.id || '',
-      category_name: invoice.category_name || invoice.categoryName || invoice.category?.name || ''
+      ...(isCategoryFeatureEnabled
+        ? {
+            category: invoice.category || null,
+            category_id: invoice.category_id || invoice.categoryId || invoice.category?.id || '',
+            category_name: invoice.category_name || invoice.categoryName || invoice.category?.name || '',
+          }
+        : {})
     });
     setEditDialogOpen(true);
   };
@@ -1233,9 +1268,13 @@ const InvoicesPage = () => {
           source_email: formData.source === 'Email' ? formData.source_email : null,
           department_id: formData.department_id || '',
           department_name: formData.department_name || getDepartmentNameById(formData.department_id),
-          category: buildInvoiceCategoryPayload(formData),
-          category_id: formData.category_id || '',
-          category_name: formData.category_name || '',
+          ...(isCategoryFeatureEnabled
+            ? {
+                category: buildInvoiceCategoryPayload(formData),
+                category_id: formData.category_id || '',
+                category_name: formData.category_name || '',
+              }
+            : {}),
         },
       }).unwrap();
 
@@ -1386,6 +1425,7 @@ const InvoicesPage = () => {
       departments={departments}
       invoiceCategories={invoiceCategories}
       invoiceCategoriesLoading={invoiceCategoriesLoading || invoiceCategoriesFetching}
+      showCategoryField={isCategoryFeatureEnabled}
       GST_TREATMENTS={GST_TREATMENTS}
       INDIAN_STATES={INDIAN_STATES}
       FILE_CATEGORIES={FILE_CATEGORIES}
@@ -1465,6 +1505,7 @@ const InvoicesPage = () => {
         getDepartmentNameById={getDepartmentNameById}
         invoiceCategories={invoiceCategories}
         getCategoryNameById={getCategoryNameById}
+        showCategoryField={isCategoryFeatureEnabled}
       />
 
       {/* Dedicated editor dialog for per-item corrections before creation. */}
@@ -1485,6 +1526,7 @@ const InvoicesPage = () => {
         getDepartmentNameById={getDepartmentNameById}
         invoiceCategories={invoiceCategories}
         getCategoryNameById={getCategoryNameById}
+        showCategoryField={isCategoryFeatureEnabled}
         taxRates={TAX_RATES}
         updateBulkEditLineItem={updateBulkEditLineItem}
         saveBulkEditChanges={saveBulkEditChanges}

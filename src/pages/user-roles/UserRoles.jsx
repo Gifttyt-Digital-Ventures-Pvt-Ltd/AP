@@ -33,9 +33,11 @@ import { GitBranch, Shield, ShieldAlert, UserPlus, Users } from 'lucide-react';
 import { PERMISSION_GROUPS, PERMISSION_LABELS } from './constants/permissionConfig';
 import {
   buildCustomRoleCode,
+  CUSTOM_ROLE_PERMISSION_MAP,
   mapUiPermissionsToCustomRolePayload,
   toUiRole,
 } from './utils/roleAdapters';
+import { mapScreenPermissionToCanonical } from '../../utils/rbacPermissions';
 import InviteUserDialog from './components/InviteUserDialog';
 import AddRoleDialog from './components/AddRoleDialog';
 import AssignRoleSetsDialog from './components/AssignRoleSetsDialog';
@@ -78,7 +80,12 @@ const UserRoles = () => {
   });
 
   const { user: currentUser } = useAuth();
-  const { hasPermission } = useRBAC();
+  const {
+    hasPermission,
+    isCorporateScreenAllowed,
+    isCorporateSectionEnabled,
+    isCategoryFeatureEnabled,
+  } = useRBAC();
   const { guardAction } = useActionGuard();
   const navigate = useNavigate();
   const canViewRoles = hasPermission('roles-view') || hasPermission('roles-manage');
@@ -93,9 +100,17 @@ const UserRoles = () => {
   const canViewCategories =
     hasPermission('category-view') ||
     hasPermission('category-manage');
-  const canViewUserRolesModule = canViewRoles || canViewWorkflow || canViewCategories;
-  const shouldSkipUsersAndRoles = !currentUser || !canViewRoles;
-  const shouldSkipVendors = !currentUser || !canViewWorkflow;
+  const canViewUsersTab = canViewRoles && isCorporateSectionEnabled('MANAGE_ROLE_USERS');
+  const canViewRolesTab = canViewRoles && isCorporateSectionEnabled('MANAGE_ROLE_ROLES_PERMISSIONS');
+  const canViewWorkflowTab = canViewWorkflow && isCorporateSectionEnabled('MANAGE_ROLE_APPROVAL_WORKFLOW');
+  const canViewCategoriesTab = canViewCategories && isCategoryFeatureEnabled;
+  const canViewUserRolesModule =
+    canViewUsersTab ||
+    canViewRolesTab ||
+    canViewWorkflowTab ||
+    canViewCategoriesTab;
+  const shouldSkipUsersAndRoles = !currentUser || !(canViewUsersTab || canViewRolesTab);
+  const shouldSkipVendors = !currentUser || !canViewWorkflowTab;
 
   const {
     data: employeesResponse = null,
@@ -131,7 +146,7 @@ const UserRoles = () => {
   const {
     data: availableCustomRoleScreens = [],
     isError: customRoleScreensError,
-  } = useGetCustomRoleScreensQuery(undefined, { skip: !currentUser || !canManageRoles });
+  } = useGetCustomRoleScreensQuery(undefined, { skip: !currentUser || !canManageRoles || !canViewRolesTab });
 
   useEffect(() => {
     if (currentUser) {
@@ -141,14 +156,15 @@ const UserRoles = () => {
 
   useEffect(() => {
     const availableTabs = [];
-    if (canViewRoles) availableTabs.push('users', 'roles');
-    if (canViewWorkflow) availableTabs.push('workflow');
-    if (canViewCategories) availableTabs.push('categories');
+    if (canViewUsersTab) availableTabs.push('users');
+    if (canViewRolesTab) availableTabs.push('roles');
+    if (canViewWorkflowTab) availableTabs.push('workflow');
+    if (canViewCategoriesTab) availableTabs.push('categories');
     if (availableTabs.length === 0) return;
     if (!availableTabs.includes(activeTab)) {
       setActiveTab(availableTabs[0]);
     }
-  }, [activeTab, canViewRoles, canViewWorkflow, canViewCategories]);
+  }, [activeTab, canViewUsersTab, canViewRolesTab, canViewWorkflowTab, canViewCategoriesTab]);
 
   useEffect(() => {
     if (usersError) toast.error('Failed to load users');
@@ -190,6 +206,90 @@ const UserRoles = () => {
   }, [rolesData, users]);
 
   const allRoles = useMemo(() => backendRoles, [backendRoles]);
+
+  const availablePermissionKeys = useMemo(() => {
+    if (!Array.isArray(availableCustomRoleScreens) || availableCustomRoleScreens.length === 0) {
+      return null;
+    }
+
+    const keys = new Set();
+    availableCustomRoleScreens.forEach((screen) => {
+      const screenName = screen?.screen;
+      const permissionTypes = Array.isArray(screen?.permissionTypes) ? screen.permissionTypes : [];
+      permissionTypes.forEach((permissionTypeEntry) => {
+        const permissionType = permissionTypeEntry?.permissionType ?? permissionTypeEntry?.type;
+        const canonicalPermissions = mapScreenPermissionToCanonical(screenName, permissionType);
+        (Array.isArray(canonicalPermissions) ? canonicalPermissions : [canonicalPermissions])
+          .filter(Boolean)
+          .forEach((permissionId) => keys.add(permissionId));
+      });
+    });
+    return keys;
+  }, [availableCustomRoleScreens]);
+
+  const filteredPermissionGroups = useMemo(() => {
+    const isPermissionScreenEntitled = (backendEntry) => {
+      if (!backendEntry?.screen) return false;
+      if (backendEntry.screen === 'CATEGORY') return isCategoryFeatureEnabled;
+      if (backendEntry.screen === 'VENDOR_APPROVAL_WORKFLOW') {
+        return (
+          isCorporateSectionEnabled('MANAGE_ROLE_APPROVAL_WORKFLOW') ||
+          isCorporateSectionEnabled('VENDOR_APPROVAL_WORKFLOW_ALL')
+        );
+      }
+      if (backendEntry.screen === 'SETTINGS') {
+        if (backendEntry.permissionType === 'ORG') return isCorporateSectionEnabled('SETTINGS_ORG_DETAILS');
+        if (backendEntry.permissionType === 'BANKING') return isCorporateSectionEnabled('SETTINGS_CONNECTED_BANKING');
+        if (backendEntry.permissionType === 'INTERACTION') return isCorporateSectionEnabled('SETTINGS_INTEGRATIONS');
+      }
+      return isCorporateScreenAllowed(backendEntry.screen);
+    };
+
+    const groups = PERMISSION_GROUPS.map((group) => ({
+      ...group,
+      permissions: group.permissions.filter((permission) => {
+        const backendEntry = CUSTOM_ROLE_PERMISSION_MAP[permission.id];
+        if (!backendEntry) return false;
+        if (!isPermissionScreenEntitled(backendEntry)) return false;
+        if (availablePermissionKeys && !availablePermissionKeys.has(permission.id)) return false;
+        return true;
+      }),
+    })).filter((group) => group.permissions.length > 0);
+
+    return groups;
+  }, [availablePermissionKeys, isCategoryFeatureEnabled, isCorporateScreenAllowed, isCorporateSectionEnabled]);
+
+  const validateMappedPermissions = (mappedPermissions = []) => {
+    if (!isCategoryFeatureEnabled) {
+      const categoryPermission = mappedPermissions.find((permission) => permission.screen === 'CATEGORY');
+      if (categoryPermission) {
+        toast.error('Category permissions are not enabled for your corporate setup');
+        return false;
+      }
+    }
+
+    if (Array.isArray(availableCustomRoleScreens) && availableCustomRoleScreens.length > 0) {
+      const supportedPermissionKeys = new Set();
+      availableCustomRoleScreens.forEach((screen) => {
+        const permissionTypes = Array.isArray(screen?.permissionTypes) ? screen.permissionTypes : [];
+        permissionTypes.forEach((permissionTypeEntry) => {
+          const permissionType = String(permissionTypeEntry?.permissionType ?? permissionTypeEntry?.type ?? '').trim().toUpperCase();
+          if (screen?.screen && permissionType) {
+            supportedPermissionKeys.add(`${String(screen.screen).trim().toUpperCase()}:${permissionType}`);
+          }
+        });
+      });
+      const unsupportedEntry = mappedPermissions.find(
+        (permission) => !supportedPermissionKeys.has(`${permission.screen}:${permission.permissionType}`),
+      );
+      if (unsupportedEntry) {
+        toast.error(`Permission "${unsupportedEntry.screen} - ${unsupportedEntry.permissionType}" is not enabled for your corporate setup`);
+        return false;
+      }
+    }
+
+    return true;
+  };
 
   const getAssignedRoleIdsForUser = (user) => {
     if (!user?.id) return [];
@@ -335,16 +435,7 @@ const UserRoles = () => {
       return false;
     }
 
-    if (availableCustomRoleScreens.length > 0) {
-      const supportedScreens = new Set(availableCustomRoleScreens.map((screen) => String(screen || '').trim()));
-      const unsupportedScreenEntry = mappedPermissions.find(
-        (permission) => !supportedScreens.has(permission.screen),
-      );
-      if (unsupportedScreenEntry) {
-        toast.error(`Screen "${unsupportedScreenEntry.screen}" is not enabled for your corporate setup`);
-        return false;
-      }
-    }
+    if (!validateMappedPermissions(mappedPermissions)) return false;
 
     try {
       const body = {
@@ -411,16 +502,7 @@ const UserRoles = () => {
           return false;
         }
 
-        if (availableCustomRoleScreens.length > 0) {
-          const supportedScreens = new Set(availableCustomRoleScreens.map((screen) => String(screen || '').trim()));
-          const unsupportedScreenEntry = mappedPermissions.find(
-            (permission) => !supportedScreens.has(permission.screen),
-          );
-          if (unsupportedScreenEntry) {
-            toast.error(`Screen "${unsupportedScreenEntry.screen}" is not enabled for your corporate setup`);
-            return false;
-          }
-        }
+        if (!validateMappedPermissions(mappedPermissions)) return false;
 
         await updateCustomRole({
           roleId: roleDraft.id,
@@ -559,7 +641,7 @@ const UserRoles = () => {
           </h1>
           <p className="text-muted-foreground">Manage user permissions and access rights</p>
         </div>
-        {canManageUserRecords && (
+        {canManageUserRecords && canViewUsersTab && (
           <Button onClick={openAddUserDialog} data-testid="invite-user-btn">
             <UserPlus className="h-4 w-4 mr-2" />
             Add User
@@ -569,32 +651,32 @@ const UserRoles = () => {
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
         <TabsList className="mb-6">
-          {canViewRoles && (
+          {canViewUsersTab && (
             <TabsTrigger value="users" data-testid="tab-users">
               <Users className="h-4 w-4 mr-2" />
               Users ({users.length})
             </TabsTrigger>
           )}
-          {canViewRoles && (
+          {canViewRolesTab && (
             <TabsTrigger value="roles" data-testid="tab-roles">
               <Shield className="h-4 w-4 mr-2" />
               Roles & Permissions ({allRoles.length})
             </TabsTrigger>
           )}
-          {canViewWorkflow && (
+          {canViewWorkflowTab && (
             <TabsTrigger value="workflow" data-testid="tab-approval-workflow">
               <GitBranch className="h-4 w-4 mr-2" />
               Approval Workflow
             </TabsTrigger>
           )}
-          {canViewCategories && (
+          {canViewCategoriesTab && (
             <TabsTrigger value="categories" data-testid="tab-categories">
               Categories
             </TabsTrigger>
           )}
         </TabsList>
 
-        {canViewRoles && (
+        {canViewUsersTab && (
           <TabsContent value="users">
             <UsersTable
               users={users}
@@ -608,7 +690,7 @@ const UserRoles = () => {
           </TabsContent>
         )}
 
-        {canViewRoles && (
+        {canViewRolesTab && (
           <TabsContent value="roles">
             <RolesTab
               roles={allRoles}
@@ -621,16 +703,17 @@ const UserRoles = () => {
           </TabsContent>
         )}
 
-        {canViewWorkflow && (
+        {canViewWorkflowTab && (
           <TabsContent value="workflow">
             <ApprovalWorkflowTab
               vendors={vendors}
               canManageWorkflow={canManageWorkflow}
+              categoryEnabled={isCategoryFeatureEnabled}
             />
           </TabsContent>
         )}
 
-        {canViewCategories && (
+        {canViewCategoriesTab && (
           <TabsContent value="categories">
             <CategoriesTab />
           </TabsContent>
@@ -649,7 +732,7 @@ const UserRoles = () => {
       <AddRoleDialog
         open={addRoleDialogOpen}
         onOpenChange={setAddRoleDialogOpen}
-        permissionGroups={PERMISSION_GROUPS}
+        permissionGroups={filteredPermissionGroups}
         onSave={handleCreateCustomRole}
         saving={createCustomRoleLoading}
       />
@@ -678,8 +761,9 @@ const UserRoles = () => {
         }}
         role={selectedRole}
         startInEditMode={roleDialogMode === 'edit'}
-        permissionGroups={PERMISSION_GROUPS}
+        permissionGroups={filteredPermissionGroups}
         permissionLabels={PERMISSION_LABELS}
+        hiddenPermissionIds={isCategoryFeatureEnabled ? [] : ['category-view', 'category-manage']}
         availableUsers={users.filter((user) => user?.id)}
         onSave={handleSaveRoleChanges}
         saving={updateCustomRoleLoading || deleteCustomRoleLoading}

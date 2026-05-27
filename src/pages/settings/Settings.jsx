@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   useGetBankAccountsQuery,
   useCreateBankAccountMutation,
@@ -54,14 +54,24 @@ const SYNC_DATA_ITEMS = [
 ];
 
 const Settings = () => {
-  const { hasAnyPermission } = useRBAC();
-  const canViewBankingSettings = hasAnyPermission(['settings-banking', 'banking-full']);
-  const canViewOrganisationSettings = hasAnyPermission(['settings-org']);
-  const defaultSettingsTab = canViewBankingSettings
-    ? 'banking'
-    : canViewOrganisationSettings
-      ? 'organisation'
-      : 'banking';
+  const { hasAnyPermission, isCorporateSectionEnabled } = useRBAC();
+  const canViewBankingSettings =
+    hasAnyPermission(['settings-banking', 'banking-full']) &&
+    isCorporateSectionEnabled('SETTINGS_CONNECTED_BANKING');
+  const canViewOrganisationSettings =
+    hasAnyPermission(['settings-org']) &&
+    isCorporateSectionEnabled('SETTINGS_ORG_DETAILS');
+  const canViewIntegrationsSettings =
+    hasAnyPermission(['settings-interaction']) &&
+    isCorporateSectionEnabled('SETTINGS_INTEGRATIONS');
+  const availableSettingsTabs = useMemo(() => {
+    const tabs = [];
+    if (canViewOrganisationSettings) tabs.push('organisation');
+    if (canViewBankingSettings) tabs.push('banking');
+    if (canViewIntegrationsSettings) tabs.push('integrations');
+    return tabs;
+  }, [canViewBankingSettings, canViewIntegrationsSettings, canViewOrganisationSettings]);
+  const [activeSettingsTab, setActiveSettingsTab] = useState('');
   const {
     data: bankAccountsData = [],
     isError: bankAccountsError,
@@ -128,6 +138,13 @@ const Settings = () => {
   const canCreateOrganisationDetails = canPerformAction('settings.createOrganisation');
   const canUpdateOrganisationDetails = canPerformAction('settings.updateOrganisation');
   const canSaveOrganisation = orgDetails ? canUpdateOrganisationDetails : canCreateOrganisationDetails;
+
+  useEffect(() => {
+    if (availableSettingsTabs.length === 0) return;
+    if (!availableSettingsTabs.includes(activeSettingsTab)) {
+      setActiveSettingsTab(availableSettingsTabs[0]);
+    }
+  }, [activeSettingsTab, availableSettingsTabs]);
 
   useEffect(() => {
     if (organisationData) {
@@ -359,14 +376,20 @@ const Settings = () => {
         <p className="text-muted-foreground">Manage your account settings and integrations</p>
       </div>
 
-      <Tabs defaultValue={defaultSettingsTab} className="space-y-6" data-testid="settings-tabs">
+      <Tabs value={activeSettingsTab} onValueChange={setActiveSettingsTab} className="space-y-6" data-testid="settings-tabs">
         <TabsList>
-          <TabsTrigger value="organisation" data-testid="tab-organisation">Organisation Details</TabsTrigger>
-          <TabsTrigger value="banking" data-testid="tab-banking">Connected Banking</TabsTrigger>
-          <TabsTrigger value="integrations" data-testid="tab-integrations">Integrations</TabsTrigger>
+          {canViewOrganisationSettings && (
+            <TabsTrigger value="organisation" data-testid="tab-organisation">Organisation Details</TabsTrigger>
+          )}
+          {canViewBankingSettings && (
+            <TabsTrigger value="banking" data-testid="tab-banking">Connected Banking</TabsTrigger>
+          )}
+          {canViewIntegrationsSettings && (
+            <TabsTrigger value="integrations" data-testid="tab-integrations">Integrations</TabsTrigger>
+          )}
         </TabsList>
 
-        <TabsContent value="organisation">
+        {canViewOrganisationSettings && <TabsContent value="organisation">
           <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
             <div className="mb-6">
               <h3 className="text-xl font-semibold font-['Manrope'] mb-1 flex items-center gap-2">
@@ -666,9 +689,9 @@ const Settings = () => {
               </form>
             )}
           </div>
-        </TabsContent>
+        </TabsContent>}
 
-        <TabsContent value="banking">
+        {canViewBankingSettings && <TabsContent value="banking">
           <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
             <div className="flex justify-between items-center mb-6">
               <div>
@@ -719,9 +742,9 @@ const Settings = () => {
               )}
             </div>
           </div>
-        </TabsContent>
+        </TabsContent>}
 
-        <TabsContent value="integrations">
+        {canViewIntegrationsSettings && <TabsContent value="integrations">
           <div className="space-y-6">
             {/* Header */}
             <p className="text-muted-foreground">
@@ -936,7 +959,7 @@ const Settings = () => {
               </p>
             </div>
           </div>
-        </TabsContent>
+        </TabsContent>}
 
       </Tabs>
 
