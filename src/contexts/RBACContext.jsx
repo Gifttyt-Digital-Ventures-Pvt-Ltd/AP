@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useMemo } from "react";
 import { useAuth } from "./AuthContext";
 import {
+  useGetCorporateScreensQuery,
   useGetCorporateUserDetailsQuery,
   useGetEmployeeCustomRolesQuery,
 } from "../Services/apis/corporateApi";
@@ -8,6 +9,7 @@ import { PERMISSION_LABELS } from "../pages/user-roles/constants/permissionConfi
 import {
   ACTION_PERMISSION_RULES,
   FULL_ACCESS_PERMISSION,
+  resolveRouteCorporateEntitlementRule,
   resolveRoutePermissionRule,
 } from "../constants/rbacPolicy";
 
@@ -21,6 +23,9 @@ const RBACContext = createContext({
   hasAllPermissions: () => false,
   canAccessRoute: () => false,
   canPerformAction: () => false,
+  isCorporateScreenAllowed: () => false,
+  isCorporateSectionEnabled: () => false,
+  isCategoryFeatureEnabled: false,
 });
 
 const normalizeRoleToken = (value = "") =>
@@ -34,6 +39,19 @@ const toArray = (value) => {
   if (!value) return [];
   if (Array.isArray(value)) return value;
   return [value];
+};
+
+const normalizeEntitlementToken = (value = "") =>
+  String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+const normalizeRoutePath = (path = "") => {
+  const raw = String(path || "").trim();
+  if (!raw) return "/";
+  return raw !== "/" && raw.endsWith("/") ? raw.slice(0, -1).toLowerCase() : raw.toLowerCase();
 };
 
 const getAssignedRoles = (employeeDetails = null) => {
@@ -97,6 +115,13 @@ export const RBACProvider = ({ children }) => {
     isLoading: corporateUserLoading,
     isFetching: corporateUserFetching,
   } = useGetCorporateUserDetailsQuery(undefined, {
+    skip: authLoading || !user,
+  });
+  const {
+    data: corporateScreens = null,
+    isLoading: corporateScreensLoading,
+    isFetching: corporateScreensFetching,
+  } = useGetCorporateScreensQuery(undefined, {
     skip: authLoading || !user,
   });
 
@@ -213,6 +238,7 @@ export const RBACProvider = ({ children }) => {
     if (authLoading) return false;
     if (!user) return true;
     if (corporateUserLoading || corporateUserFetching) return false;
+    if (corporateScreensLoading || corporateScreensFetching) return false;
     if (shouldFetchCustomRoles && (customRolesLoading || customRolesFetching)) return false;
     return true;
   }, [
@@ -220,6 +246,8 @@ export const RBACProvider = ({ children }) => {
     user,
     corporateUserLoading,
     corporateUserFetching,
+    corporateScreensLoading,
+    corporateScreensFetching,
     shouldFetchCustomRoles,
     customRolesLoading,
     customRolesFetching,
@@ -228,6 +256,34 @@ export const RBACProvider = ({ children }) => {
   const permissions = computedPermissions.permissions;
   const permissionsSet = useMemo(() => new Set(permissions), [permissions]);
   const hasPermission = useMemo(() => makeHasPermissionChecker(permissionsSet), [permissionsSet]);
+  const allowedScreensSet = useMemo(
+    () => new Set(toArray(corporateScreens?.allowedScreens).map(normalizeEntitlementToken)),
+    [corporateScreens?.allowedScreens],
+  );
+  const enabledSectionsSet = useMemo(
+    () => new Set(toArray(corporateScreens?.enabledSections).map(normalizeEntitlementToken)),
+    [corporateScreens?.enabledSections],
+  );
+
+  const isCorporateScreenAllowed = (screen = "") => {
+    const normalizedScreen = normalizeEntitlementToken(screen);
+    if (!normalizedScreen) return false;
+    return allowedScreensSet.has(normalizedScreen);
+  };
+
+  const isCorporateSectionEnabled = (section = "") => {
+    const normalizedSection = normalizeEntitlementToken(section);
+    if (!normalizedSection) return false;
+    return enabledSectionsSet.has(normalizedSection);
+  };
+
+  const isCorporateScreenSectionEnabled = (screen = "", section = "") => {
+    const normalizedSection = normalizeEntitlementToken(section);
+    if (!normalizedSection || !isCorporateSectionEnabled(normalizedSection)) return false;
+    return isCorporateScreenAllowed(screen);
+  };
+
+  const isCategoryFeatureEnabled = Boolean(corporateScreens?.isCategoryFeatureEnabled);
 
   const hasAnyPermission = (permissionIds = []) => {
     if (!permissionIds || permissionIds.length === 0) return true;
@@ -248,6 +304,38 @@ export const RBACProvider = ({ children }) => {
     if (rule.anyOf && !hasAnyPermission(rule.anyOf)) return false;
     if (rule.allOf && !hasAllPermissions(rule.allOf)) return false;
 
+    const normalizedPath = normalizeRoutePath(path);
+    if (normalizedPath === "/user-roles" || normalizedPath.startsWith("/user-roles/")) {
+      const canViewRoles = hasAnyPermission(["roles-view", "roles-manage"]);
+      const canViewWorkflow = hasAnyPermission(["vendor-workflow-view", "vendor-workflow-manage"]);
+      const canViewCategories = hasAnyPermission(["category-view", "category-manage"]);
+      return (
+        (canViewRoles && isCorporateSectionEnabled("MANAGE_ROLE_USERS")) ||
+        (canViewRoles && isCorporateSectionEnabled("MANAGE_ROLE_ROLES_PERMISSIONS")) ||
+        (canViewWorkflow && isCorporateSectionEnabled("MANAGE_ROLE_APPROVAL_WORKFLOW")) ||
+        (canViewCategories && isCategoryFeatureEnabled)
+      );
+    }
+
+    if (normalizedPath === "/settings" || normalizedPath.startsWith("/settings/")) {
+      return (
+        (hasPermission("settings-org") && isCorporateSectionEnabled("SETTINGS_ORG_DETAILS")) ||
+        (hasAnyPermission(["settings-banking", "banking-full"]) && isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING")) ||
+        (hasPermission("settings-interaction") && isCorporateSectionEnabled("SETTINGS_INTEGRATIONS"))
+      );
+    }
+
+    const entitlementRule = resolveRouteCorporateEntitlementRule(path);
+    if (entitlementRule) {
+      if (entitlementRule.screen && !isCorporateScreenAllowed(entitlementRule.screen)) return false;
+      if (
+        entitlementRule.anySections &&
+        !entitlementRule.anySections.some((section) => isCorporateSectionEnabled(section))
+      ) {
+        return false;
+      }
+    }
+
     return true;
   };
 
@@ -263,6 +351,22 @@ export const RBACProvider = ({ children }) => {
     if (actionRule.anyOf && !hasAnyPermission(actionRule.anyOf)) return false;
     if (actionRule.allOf && !hasAllPermissions(actionRule.allOf)) return false;
 
+    if (actionKey.startsWith("categories.")) {
+      return isCategoryFeatureEnabled;
+    }
+    if (actionKey === "settings.createBankAccount") {
+      return isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING");
+    }
+    if (actionKey === "settings.createOrganisation" || actionKey === "settings.updateOrganisation") {
+      return isCorporateSectionEnabled("SETTINGS_ORG_DETAILS");
+    }
+    if (actionKey === "tax.calculateGst") {
+      return isCorporateSectionEnabled("TAX_GST");
+    }
+    if (actionKey === "tax.calculateTds" || actionKey === "tax.generateForm16a") {
+      return isCorporateSectionEnabled("TAX_TDS_COMPLIANCE");
+    }
+
     return true;
   };
 
@@ -276,6 +380,11 @@ export const RBACProvider = ({ children }) => {
     hasAllPermissions,
     canAccessRoute,
     canPerformAction,
+    corporateScreens,
+    isCorporateScreenAllowed,
+    isCorporateSectionEnabled,
+    isCorporateScreenSectionEnabled,
+    isCategoryFeatureEnabled,
     permissionLabels: PERMISSION_LABELS,
   };
 

@@ -66,6 +66,95 @@ const extractFirstEmployeeRole = (employeeDetails = null) => {
   return null;
 };
 
+const normalizeToken = (value = "") =>
+  String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+const toArray = (value) => {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+};
+
+const normalizeCorporateScreensResponse = (response = {}) => {
+  const rawScreenSections =
+    response?.screenSections && typeof response.screenSections === "object"
+      ? response.screenSections
+      : {};
+  const explicitSectionEnabled = new Map();
+  const sectionScreens = new Map();
+  const screenSectionsByScreen = {};
+
+  Object.entries(rawScreenSections).forEach(([screenName, sections]) => {
+    const screen = normalizeToken(screenName);
+    if (!screen) return;
+    const normalizedSections = toArray(sections)
+      .map((section) => {
+        const sectionId = normalizeToken(section?.section);
+        if (!sectionId) return null;
+        explicitSectionEnabled.set(sectionId, section?.isEnabled === true);
+        sectionScreens.set(sectionId, screen);
+        return {
+          section: sectionId,
+          displayName: String(section?.displayName || sectionId).trim(),
+          screen,
+          isBasic: section?.isBasic === true,
+          isEnabled: section?.isEnabled === true,
+        };
+      })
+      .filter(Boolean);
+    screenSectionsByScreen[screen] = normalizedSections;
+  });
+
+  const enabledSections = new Set();
+  const addEnabledSection = (sectionEntry = {}) => {
+    const section = normalizeToken(sectionEntry?.section);
+    if (!section) return;
+    const explicitEnabled = explicitSectionEnabled.get(section);
+    if (explicitEnabled === false) return;
+    enabledSections.add(section);
+    const screen = normalizeToken(sectionEntry?.screen);
+    if (screen) sectionScreens.set(section, screen);
+  };
+
+  toArray(response?.basicSections).forEach(addEnabledSection);
+  toArray(response?.additionalSections).forEach(addEnabledSection);
+  explicitSectionEnabled.forEach((isEnabled, section) => {
+    if (isEnabled) enabledSections.add(section);
+    if (!isEnabled) enabledSections.delete(section);
+  });
+
+  const allowedScreens = new Set(toArray(response?.allowedScreens).map(normalizeToken).filter(Boolean));
+  enabledSections.forEach((section) => {
+    const screen = sectionScreens.get(section);
+    if (screen) allowedScreens.add(screen);
+  });
+
+  const enabledSectionList = Array.from(enabledSections);
+  return {
+    raw: response ?? null,
+    allowedScreens: Array.from(allowedScreens),
+    enabledSections: enabledSectionList,
+    screenSectionsByScreen,
+    sectionScreens: Object.fromEntries(sectionScreens),
+    isCategoryFeatureEnabled: enabledSections.has("MANAGE_ROLE_CATEGORIES"),
+  };
+};
+
+const normalizeCustomRoleScreen = (screen = {}) => ({
+  ...screen,
+  screen: normalizeToken(screen?.screen),
+  displayName: String(screen?.displayName || screen?.screen || "").trim(),
+  permissionTypes: toArray(screen?.permissionTypes).map((permission) => ({
+    ...permission,
+    permissionType: normalizeToken(permission?.permissionType ?? permission?.type),
+    type: normalizeToken(permission?.type ?? permission?.permissionType),
+    displayName: String(permission?.displayName || permission?.permissionType || permission?.type || "").trim(),
+  })).filter((permission) => permission.permissionType),
+});
+
 export const corporateApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getCorporateDetails: builder.query({
@@ -112,8 +201,30 @@ export const corporateApi = serviceApi.injectEndpoints({
         url: "/corporate/custom-roles/screens",
         method: "GET",
       }),
-      transformResponse: (response) =>
-        Array.isArray(response) ? response : [],
+      transformResponse: (response) => {
+        const screens = Array.isArray(response)
+          ? response
+          : Array.isArray(response?.screens)
+            ? response.screens
+            : [];
+        return screens.map(normalizeCustomRoleScreen).filter((screen) => screen.screen);
+      },
+      providesTags: ["Users"],
+    }),
+    getCorporateScreens: builder.query({
+      query: () => ({
+        url: "/corporate/custom-roles/corporate-screens",
+        method: "GET",
+      }),
+      transformResponse: normalizeCorporateScreensResponse,
+      providesTags: ["Users"],
+    }),
+    getSubscriptionModules: builder.query({
+      query: () => ({
+        url: "/corporate/custom-roles/subscription-modules",
+        method: "GET",
+      }),
+      transformResponse: (response) => (Array.isArray(response) ? response : []),
       providesTags: ["Users"],
     }),
     getCustomRoles: builder.query({
@@ -290,6 +401,8 @@ export const {
   useGetCorporateUserDetailsQuery,
   useGetEmployeeCustomRolesQuery,
   useGetCustomRoleScreensQuery,
+  useGetCorporateScreensQuery,
+  useGetSubscriptionModulesQuery,
   useGetCustomRolesQuery,
   useGetCustomRoleByIdQuery,
   useCreateCustomRoleMutation,

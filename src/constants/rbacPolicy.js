@@ -45,6 +45,43 @@ export const ROUTE_PERMISSION_RULES = {
   },
 };
 
+export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
+  "/dashboard": { screen: "DASHBOARD", anySections: ["DASHBOARD_ALL"] },
+  "/vendors": { screen: "VENDORS", anySections: ["VENDORS_ALL"] },
+  "/purchase-orders": {
+    screen: "PURCHASE_ORDER",
+    anySections: ["PURCHASE_ORDER_CREATE", "PURCHASE_ORDER_UPLOAD", "PURCHASE_ORDER_ALL"],
+  },
+  "/goods-receipt": { screen: "GRN", anySections: ["GRN_ALL"] },
+  "/invoices": { screen: "INVOICE", anySections: ["INVOICES_ALL"] },
+  "/invoice-matching": { screen: "INVOICE_MATCHING", anySections: ["INVOICE_MATCHING_ALL"] },
+  "/transactions": { screen: "BANKING", anySections: ["BANKING_ALL"] },
+  "/approvals": { screen: "APPROVAL", anySections: ["APPROVAL_ALL"] },
+  "/payments": { screen: "PAYMENTS", anySections: ["PAYMENTS_ALL"] },
+  "/payment-batches": { screen: "PAYMENTS", anySections: ["PAYMENTS_ALL"] },
+  "/tax-management": { screen: "TAX_MANAGEMENT", anySections: ["TAX_GST", "TAX_TDS_COMPLIANCE"] },
+  "/reports": {
+    screen: "REPORTS",
+    anySections: ["REPORTS_EXECUTIVE", "REPORTS_AP", "REPORTS_VENDOR", "REPORTS_TAX", "REPORTS_PAYMENT"],
+  },
+  "/audit-trail": { screen: "AUDIT_TRAIL", anySections: ["AUDIT_TRAIL_ALL"] },
+  "/banking": { screen: "BANKING", anySections: ["BANKING_ALL"] },
+  "/notifications": { screen: "SETTINGS", anySections: ["SETTINGS_INTEGRATIONS", "SETTINGS_ORG_DETAILS"] },
+  "/user-roles": {
+    screen: "MANAGE_ROLE",
+    anySections: [
+      "MANAGE_ROLE_USERS",
+      "MANAGE_ROLE_ROLES_PERMISSIONS",
+      "MANAGE_ROLE_APPROVAL_WORKFLOW",
+      "MANAGE_ROLE_CATEGORIES",
+    ],
+  },
+  "/settings": {
+    screen: "SETTINGS",
+    anySections: ["SETTINGS_ORG_DETAILS", "SETTINGS_CONNECTED_BANKING", "SETTINGS_INTEGRATIONS"],
+  },
+};
+
 export const DEFAULT_ROUTE_PRIORITY = [
   "/dashboard",
   "/vendors",
@@ -152,4 +189,15 @@ export const resolveRoutePermissionRule = (path = "") => {
   );
 
   return matchedRoute ? ROUTE_PERMISSION_RULES[matchedRoute] : null;
+};
+
+export const resolveRouteCorporateEntitlementRule = (path = "") => {
+  const normalizedPath = normalizePath(path);
+  const routes = Object.keys(ROUTE_CORPORATE_ENTITLEMENT_RULES).sort((a, b) => b.length - a.length);
+  const matchedRoute = routes.find(
+    (route) =>
+      normalizedPath === route || normalizedPath.startsWith(`${route}/`),
+  );
+
+  return matchedRoute ? ROUTE_CORPORATE_ENTITLEMENT_RULES[matchedRoute] : null;
 };

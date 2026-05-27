@@ -61,6 +61,9 @@ import {
 
 const DEFAULT_WORKFLOW_TYPES = Object.keys(WORKFLOW_TYPE_LABELS);
 
+const workflowTypeIncludesCategory = (type = '') =>
+  String(type || '').split('_').includes('CATEGORY');
+
 const emptyFormState = {
   id: '',
   name: '',
@@ -309,7 +312,7 @@ const WorkflowRuleRow = ({
   );
 };
 
-const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
+const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true, categoryEnabled = true }) => {
   const [deleteRuleTarget, setDeleteRuleTarget] = useState(null);
   const [showExplainer, setShowExplainer] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -349,7 +352,7 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
   const {
     data: categoriesData = [],
     isError: categoriesError,
-  } = useGetCategoriesQuery();
+  } = useGetCategoriesQuery(undefined, { skip: !categoryEnabled });
 
   const [createWorkflow, { isLoading: createWorkflowLoading }] = useCreateWorkflowMutation();
   const [updateWorkflow, { isLoading: updateWorkflowLoading }] = useUpdateWorkflowMutation();
@@ -380,25 +383,26 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
     }
   }, [departmentsError]);
   useEffect(() => {
-    if (categoriesError) {
+    if (categoryEnabled && categoriesError) {
       toast.error('Failed to load categories');
     }
-  }, [categoriesError]);
+  }, [categoriesError, categoryEnabled]);
 
   const rules = useMemo(() => {
     const grouped = workflowsResponse?.workflowTypeId;
     if (!grouped || typeof grouped !== 'object') return [];
 
     return Object.entries(grouped).flatMap(([workflowType, items]) => {
+      if (!categoryEnabled && workflowTypeIncludesCategory(workflowType)) return [];
       if (!Array.isArray(items)) return [];
       return items.map((workflow) =>
         mapWorkflowToUiRule({
           ...workflow,
           workflowType: workflow.workflowType || workflowType,
         }),
-      );
+      ).filter((rule) => categoryEnabled || !workflowTypeIncludesCategory(rule.type));
     });
-  }, [workflowsResponse]);
+  }, [workflowsResponse, categoryEnabled]);
 
   const groupedRules = useMemo(() => groupRulesByType(rules), [rules]);
   const noCatchAllRule = !hasCatchAllRule(rules);
@@ -410,8 +414,9 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
 
     return types
       .map((type) => String(type || '').trim())
-      .filter(Boolean);
-  }, [workflowTypesData]);
+      .filter(Boolean)
+      .filter((type) => categoryEnabled || !workflowTypeIncludesCategory(type));
+  }, [workflowTypesData, categoryEnabled]);
 
   const editableWorkflowTypes = useMemo(() => {
     return workflowTypes.filter((type) => type !== 'GENERIC');
@@ -500,6 +505,7 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
   }, [departmentsData, rules]);
 
   const workflowCategories = useMemo(() => {
+    if (!categoryEnabled) return [];
     const categoryMap = new Map();
 
     if (Array.isArray(categoriesData)) {
@@ -521,7 +527,7 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
     });
 
     return Array.from(categoryMap.entries()).map(([id, name]) => ({ id, name }));
-  }, [categoriesData, rules]);
+  }, [categoriesData, rules, categoryEnabled]);
 
   const workflowActionLoading =
     createWorkflowLoading ||
@@ -678,7 +684,7 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
         vendorId: tester.vendorId,
         departmentId: asNumberOrNull(tester.departmentId),
         amount: Number(tester.amount || 0),
-        categoryId: asNumberOrNull(tester.categoryId),
+        ...(categoryEnabled ? { categoryId: asNumberOrNull(tester.categoryId) } : {}),
       }).unwrap();
 
       const matchedRule = {
@@ -723,6 +729,11 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
       return false;
     }
 
+    if (!categoryEnabled && workflowTypeIncludesCategory(formState.type)) {
+      toast.error('Category workflows are not enabled for this corporate');
+      return false;
+    }
+
     if (!editingRuleId && formState.type === 'GENERIC') {
       toast.error('GENERIC workflow is created automatically and cannot be submitted');
       return false;
@@ -748,12 +759,12 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
       return false;
     }
 
-    if (visibility?.showCategory && selectedCategoryIds.length === 0) {
+    if (categoryEnabled && visibility?.showCategory && selectedCategoryIds.length === 0) {
       toast.error('Please select at least one category');
       return false;
     }
 
-    if (visibility?.showCategory && selectedCategoryIds.some((categoryId) => asNumberOrNull(categoryId) === null)) {
+    if (categoryEnabled && visibility?.showCategory && selectedCategoryIds.some((categoryId) => asNumberOrNull(categoryId) === null)) {
       toast.error('Category id must be numeric');
       return false;
     }
@@ -805,10 +816,14 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
         visibility?.showDept && Array.isArray(formState.departmentIds)
           ? formState.departmentIds.map(asNumberOrNull).filter((departmentId) => departmentId !== null)
           : [],
-      categoryIds:
-        visibility?.showCategory && Array.isArray(formState.categoryIds)
-          ? formState.categoryIds.map(asNumberOrNull).filter((categoryId) => categoryId !== null)
-          : [],
+      ...(categoryEnabled
+        ? {
+            categoryIds:
+              visibility?.showCategory && Array.isArray(formState.categoryIds)
+                ? formState.categoryIds.map(asNumberOrNull).filter((categoryId) => categoryId !== null)
+                : [],
+          }
+        : {}),
     };
 
     if (visibility?.showAmount) {
@@ -892,7 +907,7 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
           <CardTitle className="text-lg">Approval Workflow Tester</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div className={`grid grid-cols-1 ${categoryEnabled ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-4`}>
             <div>
               <Label>Vendor</Label>
               <select
@@ -937,27 +952,29 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
               </select>
             </div>
 
-            <div>
-              <Label>Category</Label>
-              <select
-                value={tester.categoryId}
-                onChange={(event) =>
-                  setTester((prev) => ({
-                    ...prev,
-                    categoryId: event.target.value,
-                    tested: false,
-                  }))
-                }
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              >
-                <option value="">Select category</option>
-                {workflowCategories.map((category) => (
-                  <option key={category.id} value={category.id}>
-                    {category.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {categoryEnabled && (
+              <div>
+                <Label>Category</Label>
+                <select
+                  value={tester.categoryId}
+                  onChange={(event) =>
+                    setTester((prev) => ({
+                      ...prev,
+                      categoryId: event.target.value,
+                      tested: false,
+                    }))
+                  }
+                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="">Select category</option>
+                  {workflowCategories.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div>
               <Label>Amount (₹)</Label>
@@ -1143,7 +1160,7 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
             </div>
           )}
 
-          {WORKFLOW_SECTIONS.map(({ type, priority }) => {
+          {WORKFLOW_SECTIONS.filter(({ type }) => categoryEnabled || !workflowTypeIncludesCategory(type)).map(({ type, priority }) => {
             const sectionRules = groupedRules[type] || [];
             if (sectionRules.length === 0) return null;
 
@@ -1280,7 +1297,7 @@ const ApprovalWorkflowTab = ({ vendors = [], canManageWorkflow = true }) => {
                   </div>
                 )}
 
-                {visibility.showCategory && (
+                {categoryEnabled && visibility.showCategory && (
                   <div className="space-y-2">
                     <Label>Categories</Label>
                     <div className="max-h-44 overflow-y-auto rounded-md border border-input bg-background p-2 space-y-1">

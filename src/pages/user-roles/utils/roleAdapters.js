@@ -1,6 +1,6 @@
 import { mapScreenPermissionToCanonical } from "../../../utils/rbacPermissions";
 
-const CUSTOM_ROLE_PERMISSION_MAP = {
+export const CUSTOM_ROLE_PERMISSION_MAP = {
   "dashboard-view": { screen: "DASHBOARD", permissionType: "VIEW" },
   "vendors-view": { screen: "VENDORS", permissionType: "VIEW" },
   "vendors-manage": { screen: "VENDORS", permissionType: "MANAGE" },
