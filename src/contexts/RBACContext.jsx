@@ -114,6 +114,8 @@ export const RBACProvider = ({ children }) => {
     data: corporateUserContext = null,
     isLoading: corporateUserLoading,
     isFetching: corporateUserFetching,
+    isError: corporateUserError,
+    error: corporateUserErrorPayload,
   } = useGetCorporateUserDetailsQuery(undefined, {
     skip: authLoading || !user,
   });
@@ -121,6 +123,8 @@ export const RBACProvider = ({ children }) => {
     data: corporateScreens = null,
     isLoading: corporateScreensLoading,
     isFetching: corporateScreensFetching,
+    isError: corporateScreensError,
+    error: corporateScreensErrorPayload,
   } = useGetCorporateScreensQuery(undefined, {
     skip: authLoading || !user,
   });
@@ -234,20 +238,34 @@ export const RBACProvider = ({ children }) => {
     }
   }, [computedPermissions.unmappedPermissions]);
 
+  const isForbiddenError = (error) => {
+    const status = error?.status ?? error?.originalStatus;
+    return status === 403;
+  };
+
+  const hasCorporateContextForbidden =
+    isForbiddenError(corporateUserErrorPayload) ||
+    isForbiddenError(corporateScreensErrorPayload);
+
   const isLoaded = useMemo(() => {
     if (authLoading) return false;
     if (!user) return true;
-    if (corporateUserLoading || corporateUserFetching) return false;
-    if (corporateScreensLoading || corporateScreensFetching) return false;
+    if (hasCorporateContextForbidden) return true;
+    // Gate only on initial loads. Background fetches should not block the app shell.
+    if (corporateUserLoading) return false;
+    if (corporateScreensLoading) return false;
+    // Any resolved error means the request completed and RBAC can fallback safely.
+    if (corporateUserError || corporateScreensError) return true;
     if (shouldFetchCustomRoles && (customRolesLoading || customRolesFetching)) return false;
     return true;
   }, [
     authLoading,
     user,
     corporateUserLoading,
-    corporateUserFetching,
+    corporateUserError,
     corporateScreensLoading,
-    corporateScreensFetching,
+    corporateScreensError,
+    hasCorporateContextForbidden,
     shouldFetchCustomRoles,
     customRolesLoading,
     customRolesFetching,
