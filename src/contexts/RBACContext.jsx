@@ -25,7 +25,10 @@ const RBACContext = createContext({
   canPerformAction: () => false,
   isCorporateScreenAllowed: () => false,
   isCorporateSectionEnabled: () => false,
+  isCorporateScreenSectionEnabled: () => false,
   isCategoryFeatureEnabled: false,
+  isPaymentBatchesFeatureEnabled: false,
+  isConnectedBankingEnabled: false,
 });
 
 const normalizeRoleToken = (value = "") =>
@@ -76,7 +79,13 @@ const getAssignedRoles = (employeeDetails = null) => {
 const FALLBACK_DIRECT_ROLE_PERMISSIONS = {
   CHECKER: ["invoice-checker"],
   APPROVER: ["invoice-approver"],
-  ACCOUNTANT: ["payments-manage", "payments-view", "tax-manage"],
+  ACCOUNTANT: [
+    "payments-manage",
+    "payments-view",
+    "payment-batches-manage",
+    "payment-batches-view",
+    "tax-manage",
+  ],
 };
 
 const resolvePermissionsFromRole = (roleName = "") => {
@@ -303,6 +312,17 @@ export const RBACProvider = ({ children }) => {
 
   const isCategoryFeatureEnabled = Boolean(corporateScreens?.isCategoryFeatureEnabled);
 
+  const isPaymentBatchesFeatureEnabled = useMemo(() => {
+    const screen = normalizeEntitlementToken("PAYMENT_BATCHES");
+    const section = normalizeEntitlementToken("PAYMENT_BATCHES_ALL");
+    return allowedScreensSet.has(screen) && enabledSectionsSet.has(section);
+  }, [allowedScreensSet, enabledSectionsSet]);
+
+  const isConnectedBankingEnabled = useMemo(
+    () => isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING"),
+    [enabledSectionsSet],
+  );
+
   const hasAnyPermission = (permissionIds = []) => {
     if (!permissionIds || permissionIds.length === 0) return true;
     return permissionIds.some((permissionId) => hasPermission(permissionId));
@@ -373,7 +393,7 @@ export const RBACProvider = ({ children }) => {
       return isCategoryFeatureEnabled;
     }
     if (actionKey === "settings.createBankAccount") {
-      return isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING");
+      return isConnectedBankingEnabled;
     }
     if (actionKey === "settings.createOrganisation" || actionKey === "settings.updateOrganisation") {
       return isCorporateSectionEnabled("SETTINGS_ORG_DETAILS");
@@ -383,6 +403,13 @@ export const RBACProvider = ({ children }) => {
     }
     if (actionKey === "tax.calculateTds" || actionKey === "tax.generateForm16a") {
       return isCorporateSectionEnabled("TAX_TDS_COMPLIANCE");
+    }
+
+    if (
+      actionKey === "payments.createBatch" ||
+      actionKey.startsWith("paymentBatches.")
+    ) {
+      return isPaymentBatchesFeatureEnabled;
     }
 
     return true;
@@ -403,6 +430,8 @@ export const RBACProvider = ({ children }) => {
     isCorporateSectionEnabled,
     isCorporateScreenSectionEnabled,
     isCategoryFeatureEnabled,
+    isPaymentBatchesFeatureEnabled,
+    isConnectedBankingEnabled,
     permissionLabels: PERMISSION_LABELS,
   };
 

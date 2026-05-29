@@ -52,10 +52,17 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
-    title: "Payments / Payment Batches",
+    title: "Payments",
     permissions: [
       { id: "payments-manage", label: "Manage" },
       { id: "payments-view", label: "View Only" },
+    ],
+  },
+  {
+    title: "Payment Batches",
+    permissions: [
+      { id: "payment-batches-manage", label: "Manage" },
+      { id: "payment-batches-view", label: "View Only" },
     ],
   },
   {
@@ -131,6 +138,8 @@ export const PERMISSION_LABELS = {
   "matching-view": "Invoice Matching - View Only",
   "payments-manage": "Payments - Manage",
   "payments-view": "Payments - View Only",
+  "payment-batches-manage": "Payment Batches - Manage",
+  "payment-batches-view": "Payment Batches - View Only",
   "tax-view": "Tax Management - View Only",
   "tax-manage": "Tax Management - Manage",
   "reports-view": "Reports - View Only",

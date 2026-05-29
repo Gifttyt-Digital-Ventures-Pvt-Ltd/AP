@@ -28,6 +28,8 @@ const BulkEditDialog = ({
   saveBulkEditChanges,
   renderPdfPreview,
   showCategoryField = true,
+  departmentMandatory = false,
+  categoryMandatory = false,
 }) => {
   const selectedFile = bulkPreviewItems.find((item) => item.id === bulkEditItemId)?.file || null;
 
@@ -104,7 +106,9 @@ const BulkEditDialog = ({
                   />
                 </div>
                 <div className={showCategoryField ? '' : 'col-span-2'}>
-                  <Label className="text-xs">Department</Label>
+                  <Label className={`text-xs ${departmentMandatory ? 'text-blue-500' : ''}`}>
+                    {departmentMandatory ? '* ' : ''}Department
+                  </Label>
                   <select
                     value={bulkEditForm.department_id || ''}
                     onChange={(e) =>
@@ -115,7 +119,7 @@ const BulkEditDialog = ({
                       }))
                     }
                     className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    required
+                    required={departmentMandatory}
                   >
                     <option value="">Select department</option>
                     {departments.map((department) => {
@@ -131,7 +135,9 @@ const BulkEditDialog = ({
                 </div>
                 {showCategoryField && (
                   <div>
-                    <Label className="text-xs">Category</Label>
+                    <Label className={`text-xs ${categoryMandatory ? 'text-blue-500' : ''}`}>
+                      {categoryMandatory ? '* ' : ''}Category
+                    </Label>
                     <select
                       value={bulkEditForm.category_id || bulkEditForm.category?.id || ''}
                       onChange={(e) =>
@@ -148,6 +154,7 @@ const BulkEditDialog = ({
                         }))
                       }
                       className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      required={categoryMandatory}
                     >
                       <option value="">Select category</option>
                       {invoiceCategories.map((category) => (

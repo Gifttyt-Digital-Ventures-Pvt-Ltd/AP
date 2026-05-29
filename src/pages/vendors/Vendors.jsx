@@ -18,6 +18,7 @@ import * as XLSX from '@e965/xlsx';
 import AppDataTable from '../../components/common/AppDataTable';
 import { TableCell, TableRow } from '../../components/ui/table';
 import MultipleVendorUploadDialog from './components/MultipleVendorUploadDialog';
+import { getVendorValidationErrors } from '../../utils/vendorValidation';
 import BulkUploadReviewDialog from './components/BulkUploadReviewDialog';
 import DeleteVendorDialog from './components/DeleteVendorDialog';
 import ViewVendorDialog from './components/ViewVendorDialog';
@@ -54,7 +55,6 @@ const VENDOR_UPLOAD_MANDATORY_FIELDS = [
   'vendor_type',
   'email',
   'mobile',
-  'phone',
   'contact_person',
   'address_line1',
   'address_line2',
@@ -62,8 +62,6 @@ const VENDOR_UPLOAD_MANDATORY_FIELDS = [
   'state',
   'pincode',
   'country',
-  'pan',
-  'gstin',
 ];
 
 const VENDOR_UPLOAD_HEADER_MAP = {
@@ -216,6 +214,12 @@ const Vendors = () => {
     const actionKey = editingVendor ? 'vendors.update' : 'vendors.create';
     if (!guardAction(actionKey)) return;
 
+    const validationErrors = getVendorValidationErrors(formData, { requireEmail: true });
+    if (validationErrors.length > 0) {
+      toast.error(validationErrors[0]);
+      return;
+    }
+
     try {
       if (editingVendor) {
         await updateVendor({ id: editingVendor.id, body: formData }).unwrap();
@@ -256,7 +260,9 @@ const Vendors = () => {
   };
 
   const handleBulkVendorUpload = async (rows) => {
-    if (!guardAction('vendors.create')) return;
+    if (!guardAction('vendors.create')) {
+      return { errors: [] };
+    }
 
     try {
       const vendorsPayload = rows
@@ -264,8 +270,9 @@ const Vendors = () => {
         .filter((vendor) => vendor.name);
 
       if (!vendorsPayload.length) {
-        toast.error('No valid vendor records found. Please include at least a vendor name column');
-        return;
+        return {
+          errors: ['No valid vendor records found. Please include at least a vendor name column'],
+        };
       }
 
       const response = await createVendor(vendorsPayload).unwrap();
@@ -276,8 +283,9 @@ const Vendors = () => {
       setBulkReviewOpen(true);
 
       if (failedCount > 0 && successCount === 0) {
-        toast.error(errorMessages[0] || 'Vendor upload failed');
-        return;
+        return {
+          errors: errorMessages.length > 0 ? errorMessages : ['Vendor upload failed'],
+        };
       }
 
       if (failedCount > 0) {
@@ -286,34 +294,18 @@ const Vendors = () => {
         toast.success(`${successCount || vendorsPayload.length} vendors uploaded successfully`);
       }
       setMultipleVendorUploadOpen(false);
+      return { errors: [] };
     } catch (_error) {
-      toast.error('Failed to parse or upload vendor file');
+      return { errors: ['Failed to parse or upload vendor file'] };
     }
   };
 
-  const validateVendorUploadRow = (row, rowIndex) => {
-    const errors = [];
-    const email = String(row.email || '').trim();
-    const gstin = String(row.gstin || '').trim();
-    const pan = String(row.pan || '').trim();
-    const vendorType = String(row.vendor_type || '').trim();
-
-    if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      errors.push(`Row ${rowIndex + 2}: Email is invalid`);
-    }
-    if (gstin && gstin.length !== 15) {
-      errors.push(`Row ${rowIndex + 2}: GSTIN must be 15 characters`);
-    }
-    if (pan && pan.length !== 10) {
-      errors.push(`Row ${rowIndex + 2}: PAN must be 10 characters`);
-    }
-    if (!vendorType) {
-      errors.push(`Row ${rowIndex + 2}: Vendor Type is required`);
-    } else if (!['company', 'individual'].includes(vendorType.toLowerCase())) {
-      errors.push(`Row ${rowIndex + 2}: Vendor Type must be Company or Individual`);
-    }
-    return errors;
-  };
+  const validateVendorUploadRow = (row, rowIndex) =>
+    getVendorValidationErrors(row, {
+      rowIndex,
+      requireEmail: true,
+      requireVendorType: true,
+    });
 
   const downloadVendorTemplate = () => {
     const headerRow = [
@@ -348,7 +340,7 @@ const Vendors = () => {
       ['Vendor Type', 'Mandatory (Company/Individual)'],
       ['Email ID', 'Mandatory'],
       ['Mobile No', 'Mandatory'],
-      ['Phone No', 'Mandatory'],
+      ['Phone No', 'Optional'],
       ['Contact person', 'Mandatory'],
       ['Category', 'Optional'],
       ['Website', 'Optional'],
@@ -359,8 +351,8 @@ const Vendors = () => {
       ['State', 'Mandatory'],
       ['Pincode', 'Mandatory'],
       ['Country', 'Mandatory'],
-      ['PAN No', 'Mandatory'],
-      ['GST no', 'Mandatory'],
+      ['PAN No', 'Mandatory when Country is India, otherwise Optional'],
+      ['GST no', 'Mandatory when Country is India, otherwise Optional'],
       ['Account Name', 'Optional'],
       ['Account Number', 'Optional'],
       ['IFSC Code', 'Optional'],
@@ -722,13 +714,6 @@ const Vendors = () => {
         onOpenChange={setMultipleVendorUploadOpen}
         onDownloadTemplate={downloadVendorTemplate}
         onDataParsed={handleBulkVendorUpload}
-        onUploadErrors={(errors) => {
-          if (errors.length > 1) {
-            toast.error(`${errors[0]} (+${errors.length - 1} more issues)`);
-            return;
-          }
-          if (errors[0]) toast.error(errors[0]);
-        }}
         disabled={createVendorLoading}
         expectedHeaders={VENDOR_UPLOAD_FIELDS}
         uploadHeaderMap={VENDOR_UPLOAD_HEADER_MAP}

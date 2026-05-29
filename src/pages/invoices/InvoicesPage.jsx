@@ -1,7 +1,9 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
 import {
   useGetInvoicesQuery,
+  useGetInvoiceMandatoryFieldsQuery,
   useGetVendorsQuery,
+  useGetPendingVendorApprovalsQuery,
   useScanInvoiceMutation,
   useBulkUploadInvoicesMutation,
   useRequestVendorAdditionMutation,
@@ -10,6 +12,15 @@ import {
   useUpdateInvoiceMutation,
   useDeleteInvoiceMutation,
 } from '../../Services/apis/invoicesVendorsApi';
+import {
+  getInvoiceMandatoryFieldValidationMessage,
+  isInvoiceMandatoryFieldsSatisfied,
+  normalizeInvoiceMandatoryFields,
+} from './utils/mandatoryFields';
+import {
+  extractVendorIdFromResponse,
+  mergeInvoiceVendorOptions,
+} from '../../Services/utils/payloadMappers';
 import {
   useGetCorporateDepartmentsQuery,
   useGetCorporateUserDetailsQuery,
@@ -48,6 +59,7 @@ import BulkExtractLoaderDialog from './components/BulkExtractLoaderDialog';
 import BulkPreviewDialog from './components/BulkPreviewDialog';
 import BulkEditDialog from './components/BulkEditDialog';
 import RequestVendorDialog from './components/RequestVendorDialog';
+import { getVendorValidationErrors } from '../../utils/vendorValidation';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useRBAC } from '../../contexts/RBACContext';
 
@@ -97,10 +109,27 @@ const InvoicesPage = () => {
   } = useGetInvoicesQuery();
   const {
     data: vendorsData = [],
+    refetch: refetchVendors,
   } = useGetVendorsQuery();
+  const {
+    data: pendingVendorsData = [],
+    refetch: refetchPendingVendors,
+  } = useGetPendingVendorApprovalsQuery();
   const {
     data: departmentsData = [],
   } = useGetCorporateDepartmentsQuery();
+  const {
+    data: invoiceMandatoryFieldsData,
+    isLoading: invoiceMandatoryFieldsLoading,
+  } = useGetInvoiceMandatoryFieldsQuery();
+  const invoiceMandatoryFields = useMemo(
+    () => normalizeInvoiceMandatoryFields(invoiceMandatoryFieldsData),
+    [invoiceMandatoryFieldsData],
+  );
+  const mandatoryFieldOptions = useMemo(
+    () => ({ showCategoryField: isCategoryFeatureEnabled }),
+    [isCategoryFeatureEnabled],
+  );
   const {
     data: invoiceCategoriesData = [],
     isLoading: invoiceCategoriesLoading,
@@ -117,7 +146,12 @@ const InvoicesPage = () => {
   const [deleteInvoice] = useDeleteInvoiceMutation();
   const { guardAction, canPerformAction } = useActionGuard();
   const invoices = Array.isArray(invoicesData) ? invoicesData : [];
-  const vendors = Array.isArray(vendorsData) ? vendorsData : [];
+  const approvedVendors = Array.isArray(vendorsData) ? vendorsData : [];
+  const pendingVendors = Array.isArray(pendingVendorsData) ? pendingVendorsData : [];
+  const invoiceVendorOptions = useMemo(
+    () => mergeInvoiceVendorOptions(approvedVendors, pendingVendors),
+    [approvedVendors, pendingVendors],
+  );
   const departments = Array.isArray(departmentsData) ? departmentsData : [];
   const invoiceCategories =
     isCategoryFeatureEnabled && Array.isArray(invoiceCategoriesData) ? invoiceCategoriesData : [];
@@ -264,13 +298,15 @@ const InvoicesPage = () => {
   }, [bulkExtracting, bulkExtractStartedAt]);
 
 
-  // Check if vendor exists in system
-  const findVendorByName = (vendorName) => {
+  const findVendorByName = useCallback((vendorName) => {
     if (!vendorName) return null;
-    return vendors.find(v => 
-      v.name.toLowerCase().trim() === vendorName.toLowerCase().trim()
+    const normalizedName = vendorName.toLowerCase().trim();
+    return (
+      invoiceVendorOptions.find(
+        (vendor) => String(vendor?.name || '').toLowerCase().trim() === normalizedName,
+      ) || null
     );
-  };
+  }, [invoiceVendorOptions]);
 
   const buildVendorRequestForm = (source = {}) => ({
     ...createEmptyVendorRequestForm(),
@@ -469,6 +505,7 @@ const InvoicesPage = () => {
           JSON.stringify({
             invoiceNumber: invoicePayload.invoice_number,
             vendorId: invoicePayload.vendor_id || null,
+            vendorName: invoicePayload.vendor_name || null,
             invoiceDate: toLocalDateTimeString(invoicePayload.invoice_date),
             dueDate: toLocalDateTimeString(invoicePayload.due_date),
             amount: invoicePayload.amount,
@@ -513,6 +550,8 @@ const InvoicesPage = () => {
       vendor_name: extractedData?.vendor_name || '',
       vendor_id: matchedVendor?.id || '',
       vendor_matched: !!matchedVendor,
+      vendor_request_submitted: false,
+      vendor_request_pending: Boolean(matchedVendor?.is_pending_approval),
       vendor_gstin: extractedData?.vendor_gstin || extractedData?.billing_gstin || '',
       vendor_address: extractedAddress,
       invoice_number: extractedData?.invoice_number || '',
@@ -661,7 +700,10 @@ const InvoicesPage = () => {
         const normalizedInvoice = isExtracted ? normalizeScannedInvoice(result.extracted) : null;
         const invoicePayload = normalizedInvoice ? toCreateInvoicePayload(normalizedInvoice) : null;
         const matchingFile = fileMap.get(String(result?.filename || '').toLowerCase()) || null;
-        const vendorMissing = Boolean(invoicePayload) && !invoicePayload.vendor_id;
+        const vendorMissing =
+          Boolean(invoicePayload) &&
+          !invoicePayload.vendor_id &&
+          !invoicePayload.vendor_request_submitted;
         return {
           id: `${result?.filename || 'file'}-${index}`,
           filename: result?.filename || 'Unknown file',
@@ -698,9 +740,20 @@ const InvoicesPage = () => {
       toast.error('No extracted invoices selected for creation');
       return;
     }
-    const missingDepartmentItem = selectedItems.find((item) => !item.invoicePayload?.department_id);
-    if (missingDepartmentItem) {
-      toast.error(`Please select department for ${missingDepartmentItem.filename}`);
+    const missingMandatoryItem = selectedItems.find((item) =>
+      getInvoiceMandatoryFieldValidationMessage(
+        item.invoicePayload,
+        invoiceMandatoryFields,
+        mandatoryFieldOptions,
+      ),
+    );
+    if (missingMandatoryItem) {
+      const validationMessage = getInvoiceMandatoryFieldValidationMessage(
+        missingMandatoryItem.invoicePayload,
+        invoiceMandatoryFields,
+        mandatoryFieldOptions,
+      );
+      toast.error(`${validationMessage} (${missingMandatoryItem.filename})`);
       return;
     }
 
@@ -815,6 +868,17 @@ const InvoicesPage = () => {
 
   const saveBulkEditChanges = () => {
     if (!bulkEditForm || !bulkEditItemId) return;
+
+    const mandatoryValidationMessage = getInvoiceMandatoryFieldValidationMessage(
+      bulkEditForm,
+      invoiceMandatoryFields,
+      mandatoryFieldOptions,
+    );
+    if (mandatoryValidationMessage) {
+      toast.error(mandatoryValidationMessage);
+      return;
+    }
+
     const matchedVendorId = findVendorByName(bulkEditForm.vendor_name)?.id || '';
     setBulkPreviewItems((prev) =>
       prev.map((item) => {
@@ -978,16 +1042,12 @@ const InvoicesPage = () => {
     const vendorType = requestVendorForm.vendor_type || requestVendorForm.vendorType;
     const gstin = requestVendorForm.gstin.trim();
 
-    if (!vendorName) {
-      toast.error('Vendor name is required');
-      return;
-    }
-    if (!vendorType) {
-      toast.error('Vendor type is required');
-      return;
-    }
-    if (!gstin) {
-      toast.error('GSTIN is required');
+    const validationErrors = getVendorValidationErrors(requestVendorForm, {
+      requireName: true,
+      requireVendorType: true,
+    });
+    if (validationErrors.length > 0) {
+      toast.error(validationErrors[0]);
       return;
     }
 
@@ -996,12 +1056,33 @@ const InvoicesPage = () => {
     }
 
     try {
-      await requestVendorAddition({
+      const response = await requestVendorAddition({
         ...requestVendorForm,
         name: vendorName,
         vendor_type: vendorType,
         gstin,
       }).unwrap();
+
+      const requestedVendorId = extractVendorIdFromResponse(response);
+
+      const [vendorsResult, pendingResult] = await Promise.all([
+        refetchVendors(),
+        refetchPendingVendors(),
+      ]);
+      const freshVendorOptions = mergeInvoiceVendorOptions(
+        vendorsResult?.data || [],
+        pendingResult?.data || [],
+      );
+      const normalizedVendorName = vendorName.toLowerCase().trim();
+      const matchedVendor =
+        (requestedVendorId
+          ? freshVendorOptions.find((vendor) => String(vendor.id) === String(requestedVendorId))
+          : null) ||
+        freshVendorOptions.find(
+          (vendor) => String(vendor?.name || '').toLowerCase().trim() === normalizedVendorName,
+        ) ||
+        null;
+      const resolvedVendorId = matchedVendor?.id || requestedVendorId || '';
 
       if (requestVendorContext?.type === 'bulk') {
         setBulkPreviewItems((prev) =>
@@ -1009,9 +1090,19 @@ const InvoicesPage = () => {
             item.id === requestVendorContext.itemId
               ? {
                   ...item,
-                  selected: false,
-                  error: `Vendor addition requested for "${vendorName}". Create the invoice after the vendor is approved.`,
-                  status: 'failed',
+                  selected: Boolean(resolvedVendorId),
+                  error: resolvedVendorId
+                    ? ''
+                    : `Vendor "${vendorName}" requested. You can still create the invoice once the vendor is linked.`,
+                  status: resolvedVendorId ? 'success' : item.status,
+                  invoicePayload: item.invoicePayload
+                    ? {
+                        ...item.invoicePayload,
+                        vendor_id: resolvedVendorId,
+                        vendor_name: vendorName,
+                        vendor_request_submitted: true,
+                      }
+                    : item.invoicePayload,
                 }
               : item
           )
@@ -1019,12 +1110,19 @@ const InvoicesPage = () => {
       } else {
         setFormData((prev) => ({
           ...prev,
-          vendor_id: '',
-          vendor_matched: false,
+          vendor_name: vendorName,
+          vendor_id: resolvedVendorId,
+          vendor_matched: Boolean(resolvedVendorId),
+          vendor_request_submitted: true,
+          vendor_request_pending: Boolean(matchedVendor?.is_pending_approval),
         }));
       }
 
-      toast.success(`Vendor addition requested for "${vendorName}"`);
+      toast.success(
+        resolvedVendorId
+          ? `Vendor "${vendorName}" requested. You can add the invoice now.`
+          : `Vendor addition requested for "${vendorName}". You can add the invoice while approval is pending.`,
+      );
       handleRequestVendorOpenChange(false);
     } catch (error) {
       console.error('Vendor request error:', error);
@@ -1055,6 +1153,7 @@ const InvoicesPage = () => {
     const invoicePayload = {
       invoice_number: formData.invoice_number,
       vendor_id: formData.vendor_id || '',
+      vendor_name: formData.vendor_name?.trim() || '',
       invoice_date: formData.invoice_date,
       due_date: formData.due_date,
       amount: totals.total,
@@ -1082,12 +1181,21 @@ const InvoicesPage = () => {
           }
         : {}),
     };
-    if (!invoicePayload.vendor_id) {
-      toast.error('Please select or add a vendor before creating invoice');
+    if (!invoicePayload.vendor_id && !formData.vendor_request_submitted) {
+      toast.error('Please select or request a vendor before creating invoice');
       return;
     }
-    if (!invoicePayload.department_id) {
-      toast.error('Please select a department before creating invoice');
+    if (!invoicePayload.vendor_name) {
+      toast.error('Vendor name is required');
+      return;
+    }
+    const mandatoryValidationMessage = getInvoiceMandatoryFieldValidationMessage(
+      invoicePayload,
+      invoiceMandatoryFields,
+      mandatoryFieldOptions,
+    );
+    if (mandatoryValidationMessage) {
+      toast.error(mandatoryValidationMessage);
       return;
     }
 
@@ -1245,6 +1353,16 @@ const InvoicesPage = () => {
   const handleUpdateInvoice = async () => {
     if (!guardAction('invoices.update')) return;
     if (!selectedInvoice || !formData) return;
+
+    const mandatoryValidationMessage = getInvoiceMandatoryFieldValidationMessage(
+      formData,
+      invoiceMandatoryFields,
+      mandatoryFieldOptions,
+    );
+    if (mandatoryValidationMessage) {
+      toast.error(mandatoryValidationMessage);
+      return;
+    }
 
     const totals = calculateTotals(formData.line_items);
 
@@ -1421,7 +1539,19 @@ const InvoicesPage = () => {
       handleUpdateInvoice={handleUpdateInvoice}
       handleAddInvoice={handleAddInvoice}
       canAddVendor={canAddVendors}
-      canSubmit={isEdit ? canUpdateInvoices : canManageInvoices}
+      canSubmit={
+        isEdit
+          ? canUpdateInvoices &&
+            !invoiceMandatoryFieldsLoading &&
+            isInvoiceMandatoryFieldsSatisfied(formData, invoiceMandatoryFields, mandatoryFieldOptions)
+          : canManageInvoices &&
+            !invoiceMandatoryFieldsLoading &&
+            isInvoiceMandatoryFieldsSatisfied(formData, invoiceMandatoryFields, mandatoryFieldOptions) &&
+            (Boolean(formData?.vendor_id) || Boolean(formData?.vendor_request_submitted))
+      }
+      departmentMandatory={invoiceMandatoryFields.department}
+      categoryMandatory={invoiceMandatoryFields.category}
+      vendorOptions={invoiceVendorOptions}
       departments={departments}
       invoiceCategories={invoiceCategories}
       invoiceCategoriesLoading={invoiceCategoriesLoading || invoiceCategoriesFetching}
@@ -1506,6 +1636,8 @@ const InvoicesPage = () => {
         invoiceCategories={invoiceCategories}
         getCategoryNameById={getCategoryNameById}
         showCategoryField={isCategoryFeatureEnabled}
+        departmentMandatory={invoiceMandatoryFields.department}
+        categoryMandatory={invoiceMandatoryFields.category}
       />
 
       {/* Dedicated editor dialog for per-item corrections before creation. */}
@@ -1521,12 +1653,14 @@ const InvoicesPage = () => {
         pdfZoom={pdfZoom}
         bulkEditPreviewError={bulkEditPreviewError}
         setBulkEditPreviewError={setBulkEditPreviewError}
-        vendors={vendors}
+        vendors={invoiceVendorOptions}
         departments={departments}
         getDepartmentNameById={getDepartmentNameById}
         invoiceCategories={invoiceCategories}
         getCategoryNameById={getCategoryNameById}
         showCategoryField={isCategoryFeatureEnabled}
+        departmentMandatory={invoiceMandatoryFields.department}
+        categoryMandatory={invoiceMandatoryFields.category}
         taxRates={TAX_RATES}
         updateBulkEditLineItem={updateBulkEditLineItem}
         saveBulkEditChanges={saveBulkEditChanges}

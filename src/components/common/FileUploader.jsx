@@ -23,10 +23,21 @@ const FileUploader = ({
   const fileInputRef = useRef(null);
   const [isParsing, setIsParsing] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [selectedFileName, setSelectedFileName] = useState('');
 
   const openFilePicker = () => {
     if (disabled || isParsing) return;
     fileInputRef.current?.click();
+  };
+
+  const clearSelectedFile = () => {
+    setSelectedFileName('');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+    if (typeof onErrors === 'function') {
+      onErrors([]);
+    }
   };
 
   const reportErrors = (errors) => {
@@ -37,6 +48,12 @@ const FileUploader = ({
 
   const processFile = async (file) => {
     if (!file) return;
+
+    setSelectedFileName(file.name);
+
+    if (typeof onErrors === 'function') {
+      onErrors([]);
+    }
 
     const extension = normalizeExtension(file.name);
     const allowed = acceptedExtensions.map((item) => String(item).toLowerCase());
@@ -153,6 +170,10 @@ const FileUploader = ({
         return;
       }
 
+      if (typeof onErrors === 'function') {
+        onErrors([]);
+      }
+
       if (typeof onDataParsed === 'function') {
         await onDataParsed(parsedRows, file);
       }
@@ -167,6 +188,17 @@ const FileUploader = ({
     const file = event.target.files?.[0];
     event.target.value = '';
     await processFile(file);
+  };
+
+  const handleDropZoneClick = () => {
+    openFilePicker();
+  };
+
+  const handleDropZoneKeyDown = (event) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      openFilePicker();
+    }
   };
 
   const handleDragOver = (event) => {
@@ -200,9 +232,15 @@ const FileUploader = ({
       {typeof children === 'function'
         ? children({
             openFilePicker,
+            clearSelectedFile,
+            fileName: selectedFileName,
             isParsing,
             isDragging,
             getDropZoneProps: () => ({
+              role: 'button',
+              tabIndex: disabled || isParsing ? -1 : 0,
+              onClick: handleDropZoneClick,
+              onKeyDown: handleDropZoneKeyDown,
               onDragOver: handleDragOver,
               onDragLeave: handleDragLeave,
               onDrop: handleDrop,

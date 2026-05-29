@@ -63,6 +63,12 @@ const mapPaymentsPermission = (permissionType) => {
   return null;
 };
 
+const mapPaymentBatchesPermission = (permissionType) => {
+  if (permissionType === "VIEW") return "payment-batches-view";
+  if (permissionType === "MANAGE") return "payment-batches-manage";
+  return null;
+};
+
 const mapTaxPermission = (permissionType) => {
   if (permissionType === "VIEW") return "tax-view";
   if (permissionType === "MANAGE") return "tax-manage";
@@ -149,13 +155,12 @@ export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput)
     return mapInvoiceMatchingPermission(permissionType);
   }
 
-  if (
-    screen === "PAYMENTS" ||
-    screen === "PAYMENT" ||
-    screen === "PAYMENT_BATCHES" ||
-    screen === "PAYMENT_BATCH"
-  ) {
+  if (screen === "PAYMENTS" || screen === "PAYMENT") {
     return mapPaymentsPermission(permissionType);
+  }
+
+  if (screen === "PAYMENT_BATCHES" || screen === "PAYMENT_BATCH") {
+    return mapPaymentBatchesPermission(permissionType);
   }
 
   if (screen === "TAX" || screen === "TAX_MANAGEMENT") {
