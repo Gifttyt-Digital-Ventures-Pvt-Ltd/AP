@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatWorkflowStatus } from '../../../utils/approvalWorkflow';
 import { Button } from '../../../components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
 
@@ -18,7 +19,7 @@ const ViewVendorDialog = ({ open, onOpenChange, vendor }) => (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div><p className="text-muted-foreground">Name</p><p className="font-medium">{vendor.name || '-'}</p></div>
               <div><p className="text-muted-foreground">Type</p><p className="font-medium">{vendor.vendor_type || 'Company'}</p></div>
-              <div><p className="text-muted-foreground">Status</p><p className="font-medium">{vendor.status || 'Pending Approval'}</p></div>
+              <div><p className="text-muted-foreground">Status</p><p className="font-medium">{formatWorkflowStatus(vendor.status) || 'Pending Approval'}</p></div>
               <div><p className="text-muted-foreground">Category</p><p className="font-medium">{vendor.category || '-'}</p></div>
             </div>
           </div>

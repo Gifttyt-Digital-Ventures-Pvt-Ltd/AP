@@ -15,6 +15,14 @@ import NeedsApprovalTable from './components/NeedsApprovalTable';
 import PendingInvoicesTable from './components/PendingInvoicesTable';
 import AllInvoicesTable from './components/AllInvoicesTable';
 import ApprovalDialog from './components/ApprovalDialog';
+import {
+  getInvoiceStatusBadgeClass,
+  isInvoiceAwaitingApproval,
+  isInvoicePaid,
+  NEEDS_CORRECTION_ACTION,
+  normalizeApprovalAction,
+  normalizeWorkflowStatus,
+} from '../../utils/approvalWorkflow';
 
 const safeFormatDate = (value, pattern = 'dd MMM yy') => {
   if (!value) return '-';
@@ -68,8 +76,13 @@ const Approvals = () => {
   const allInvoices = Array.isArray(allInvoicesData) ? allInvoicesData.map(normalizeInvoice) : [];
 
   const handleApprovalAction = (invoice, action) => {
+    if (!isInvoiceAwaitingApproval(invoice.status)) {
+      toast.error('Approval actions are not available for this invoice status');
+      return;
+    }
     // Determine if it's checker or approver based on status
-    const isChecker = invoice.status === 'Pending Checker' || invoice.status === 'PENDING_CHECKER';
+    const isChecker =
+      normalizeWorkflowStatus(invoice.status) === 'Pending Checker';
     if (isChecker && !canCheckInvoices) {
       toast.error('You do not have permission to check invoices');
       return;
@@ -86,13 +99,14 @@ const Approvals = () => {
 
   const submitApproval = async () => {
     try {
-      const isChecker = selectedInvoice.status === 'Pending Checker' || selectedInvoice.status === 'PENDING_CHECKER';
+      const isChecker =
+        normalizeWorkflowStatus(selectedInvoice.status) === 'Pending Checker';
       
       if (isChecker) {
         await checkInvoice({
           id: selectedInvoice.id,
           body: {
-            action: actionType,
+            action: normalizeApprovalAction(actionType),
             comments,
           },
         }).unwrap();
@@ -100,21 +114,35 @@ const Approvals = () => {
         await approveInvoice({
           id: selectedInvoice.id,
           body: {
-            action: actionType,
+            action: normalizeApprovalAction(actionType),
             comments,
           },
         }).unwrap();
       }
 
-      const isPositiveAction = actionType === 'Approved' || actionType === 'Checked';
-      const verb = actionType === 'Checked' ? 'verified' : (actionType === 'Approved' ? 'approved' : 'rejected');
+      const normalizedAction = normalizeApprovalAction(actionType);
+      const isPositiveAction =
+        normalizedAction === 'Approved' || normalizedAction === 'Checked';
+      const isNeedsCorrection = normalizedAction === NEEDS_CORRECTION_ACTION;
+      const verb =
+        normalizedAction === 'Checked'
+          ? 'verified'
+          : normalizedAction === 'Approved'
+            ? 'approved'
+            : isNeedsCorrection
+              ? 'sent for correction'
+              : 'rejected';
       toast.success(`Invoice ${verb} successfully`, {
         description: isPositiveAction
           ? `Invoice has been ${verb} successfully`
-          : 'Invoice has been rejected',
+          : isNeedsCorrection
+            ? 'Invoice has been marked as Needs Correction'
+            : 'Invoice has been rejected',
         className: isPositiveAction
           ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
-          : 'bg-red-50 border-red-200 text-red-900',
+          : isNeedsCorrection
+            ? 'bg-amber-50 border-amber-200 text-amber-900'
+            : 'bg-red-50 border-red-200 text-red-900',
       });
 
       setDialogOpen(false);
@@ -136,42 +164,30 @@ const Approvals = () => {
     return { approved, total, percentage: (approved / total) * 100 };
   };
 
-  const getStatusBadgeClass = (status) => {
-    const normalizedStatus = status?.toUpperCase()?.replace(/ /g, '_');
-    const statusMap = {
-      PENDING_CHECKER: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      PENDING_APPROVER: 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      PENDING_PAYMENT: 'bg-blue-100 text-blue-800 border-blue-200',
-      AMOUNT_RELEASED: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-      REJECTED: 'bg-red-100 text-red-800 border-red-200',
-      APPROVED: 'bg-emerald-100 text-emerald-800 border-emerald-200',
-    };
-    return statusMap[normalizedStatus] || 'bg-gray-100 text-gray-800';
-  };
+  const getStatusBadgeClass = (status) => getInvoiceStatusBadgeClass(status);
 
-  const formatStatus = (status) => {
-    if (!status) return '';
-    return status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
-  };
+  const formatStatus = (status) => normalizeWorkflowStatus(status);
 
-  const myPendingInvoices = pendingInvoices.filter((invoice) => {
-    const userRole = user?.role?.toUpperCase();
-    if (userRole === 'CHECKER') {
-      return invoice.status === 'Pending Checker' || invoice.status === 'PENDING_CHECKER';
-    }
-    if (userRole === 'APPROVER') {
-      return invoice.status === 'Pending Approver' || invoice.status === 'PENDING_APPROVER';
-    }
-    return true; // Admin sees all
-  });
+  const myPendingInvoices = pendingInvoices
+    .filter((invoice) => isInvoiceAwaitingApproval(invoice.status))
+    .filter((invoice) => {
+      const status = normalizeWorkflowStatus(invoice.status);
+      const userRole = user?.role?.toUpperCase();
+      if (userRole === 'CHECKER') return status === 'Pending Checker';
+      if (userRole === 'APPROVER') {
+        return status === 'Pending Approver' || status === 'Pending Approval';
+      }
+      return true;
+    });
 
   const otherPendingInvoices = pendingInvoices.filter((invoice) => {
+    const status = normalizeWorkflowStatus(invoice.status);
+    if (isInvoicePaid(status) || status === 'Rejected') return false;
+
     const userRole = user?.role?.toUpperCase();
-    if (userRole === 'CHECKER') {
-      return invoice.status !== 'Pending Checker' && invoice.status !== 'PENDING_CHECKER';
-    }
+    if (userRole === 'CHECKER') return status !== 'Pending Checker';
     if (userRole === 'APPROVER') {
-      return invoice.status !== 'Pending Approver' && invoice.status !== 'PENDING_APPROVER';
+      return status !== 'Pending Approver' && status !== 'Pending Approval';
     }
     return false;
   });

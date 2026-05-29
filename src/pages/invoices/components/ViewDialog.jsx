@@ -5,6 +5,11 @@ import { Button } from "../../../components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../../components/ui/dialog";
 import { Label } from "../../../components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
+import {
+  formatWorkflowStatus,
+  normalizeHistoryActionType,
+  PAID_STATUS,
+} from "../../../utils/approvalWorkflow";
 
 const ViewDialog = ({
   viewDialogOpen,
@@ -48,7 +53,7 @@ const ViewDialog = ({
                   <DialogTitle className="text-2xl font-bold flex items-center justify-between">
                     <span>Invoice {selectedInvoice.invoice_number}</span>
                     <span className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border ${getStatusBadgeClass(selectedInvoice.status)}`}>
-                      {selectedInvoice.status}
+                      {formatWorkflowStatus(selectedInvoice.status)}
                     </span>
                   </DialogTitle>
                 </DialogHeader>
@@ -127,13 +132,13 @@ const ViewDialog = ({
                       <div className="space-y-4">
                         {invoiceHistory.map((entry) => (
                           <div key={entry.id} className="relative flex gap-4">
-                            <div className={`relative z-10 w-10 h-10 rounded-full flex items-center justify-center border-2 border-background shadow-sm ${entry.action_type === "Created" || entry.action_type === "Approved" || entry.action_type === "Payment Released" ? "bg-emerald-100" : entry.action_type === "Rejected" ? "bg-red-100" : entry.action_type === "Edited" ? "bg-blue-100" : "bg-gray-100"}`}>
+                            <div className={`relative z-10 w-10 h-10 rounded-full flex items-center justify-center border-2 border-background shadow-sm ${["Created", "Approved", "Payment Released", PAID_STATUS].includes(normalizeHistoryActionType(entry.action_type)) ? "bg-emerald-100" : entry.action_type === "Rejected" ? "bg-red-100" : entry.action_type === "Edited" || entry.action_type === "Edited & Resubmitted" ? "bg-blue-100" : "bg-gray-100"}`}>
                               {getHistoryIcon(entry.action_type)}
                             </div>
                             <div className="flex-1 pb-4">
                               <div className="bg-card border rounded-lg p-4 shadow-sm">
                                 <div className="flex items-start justify-between mb-2">
-                                  <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium border ${getHistoryBadgeClass(entry.action_type)}`}>{entry.action_type}</span>
+                                  <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium border ${getHistoryBadgeClass(entry.action_type)}`}>{normalizeHistoryActionType(entry.action_type)}</span>
                                   <div className="text-right text-xs text-muted-foreground">
                                     <p>{format(new Date(entry.timestamp), "dd MMM yyyy")}</p>
                                     <p>{format(new Date(entry.timestamp), "hh:mm a")}</p>
@@ -180,7 +185,7 @@ const ViewDialog = ({
                 <Button variant="outline" onClick={() => setViewDialogOpen(false)} className="flex-1">
                   Close
                 </Button>
-                {canEdit(selectedInvoice.status) && (
+                {canEdit(selectedInvoice) && (
                   <Button
                     onClick={() => {
                       setViewDialogOpen(false);

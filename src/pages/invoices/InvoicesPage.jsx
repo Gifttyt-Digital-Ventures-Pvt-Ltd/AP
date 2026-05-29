@@ -18,8 +18,10 @@ import {
   normalizeInvoiceMandatoryFields,
 } from './utils/mandatoryFields';
 import {
+  buildCreateInvoiceRequestBody,
   extractVendorIdFromResponse,
   mergeInvoiceVendorOptions,
+  toInvoiceApiPayload,
 } from '../../Services/utils/payloadMappers';
 import {
   useGetCorporateDepartmentsQuery,
@@ -59,9 +61,19 @@ import BulkExtractLoaderDialog from './components/BulkExtractLoaderDialog';
 import BulkPreviewDialog from './components/BulkPreviewDialog';
 import BulkEditDialog from './components/BulkEditDialog';
 import RequestVendorDialog from './components/RequestVendorDialog';
-import { getVendorValidationErrors } from '../../utils/vendorValidation';
+import { getInvoiceVendorRequestValidationErrors } from '../../utils/vendorValidation';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useRBAC } from '../../contexts/RBACContext';
+import {
+  canDeleteInvoice,
+  canEditInvoice,
+  extractApiErrorDetail,
+  formatWorkflowStatus,
+  getInvoiceStatusBadgeClass,
+  normalizeHistoryActionType,
+  NEEDS_CORRECTION_STATUS,
+  PAID_STATUS,
+} from '../../utils/approvalWorkflow';
 
 const FILE_BASE_URL = import.meta.env.VITE_BACKEND_URL ?? '';
 
@@ -172,6 +184,19 @@ const InvoicesPage = () => {
   const canUpdateInvoices = canPerformAction('invoices.update');
   const canDeleteInvoices = canPerformAction('invoices.delete');
   const canAddVendors = canPerformAction('invoices.addVendor');
+  const currentUserEmail =
+    corporateUserContext?.corporateUser?.email ||
+    corporateUserContext?.employeeDetails?.email ||
+    user?.email ||
+    user?.identifier ||
+    '';
+  const invoiceEditContext = useMemo(
+    () => ({
+      userEmail: currentUserEmail,
+      canUpdateInvoices,
+    }),
+    [currentUserEmail, canUpdateInvoices],
+  );
   
   // PDF Zoom
   const [pdfZoom, setPdfZoom] = useState(100);
@@ -312,6 +337,13 @@ const InvoicesPage = () => {
     ...createEmptyVendorRequestForm(),
     name: source.vendor_name || source.name || '',
     gstin: source.gstin || source.vendor_gstin || '',
+    mobile:
+      source.mobile ||
+      source.vendor_mobile ||
+      source.vendorMobile ||
+      '',
+    phone: source.phone || source.vendor_phone || source.vendorPhone || '',
+    pan: source.pan || source.vendor_pan || source.vendorPan || '',
     address_line1: source.billing_address || source.vendor_address || source.address_line1 || '',
     notes: source.memo || source.description || '',
   });
@@ -440,98 +472,73 @@ const InvoicesPage = () => {
     };
   };
 
-  const toCreateInvoicePayload = (invoiceData = {}) => {
-    const categoryPayload = buildInvoiceCategoryPayload(invoiceData);
-    return {
-      vendor_name: invoiceData.vendor_name || '',
-      invoice_number: invoiceData.invoice_number || '',
-      vendor_id: invoiceData.vendor_id || findVendorByName(invoiceData.vendor_name)?.id || '',
-      invoice_date: invoiceData.invoice_date || format(new Date(), 'yyyy-MM-dd'),
-      due_date: invoiceData.due_date || format(new Date(), 'yyyy-MM-dd'),
-      amount: Number(invoiceData.amount || 0),
-      currency: invoiceData.currency || 'INR',
-      billing_address: invoiceData.billing_address || invoiceData.vendor_address || '',
-      gstin: invoiceData.gstin || invoiceData.vendor_gstin || '',
-      source_of_supply: invoiceData.source_of_supply || invoiceData.place_of_supply || '',
-      destination_of_supply: invoiceData.destination_of_supply || invoiceData.place_of_supply || '',
-      location: invoiceData.location || invoiceData.place_of_supply || '',
-      line_items: (invoiceData.line_items || []).map((item) => ({
-        description: item.description || '',
-        quantity: Number(item.quantity || 1),
-        unit_price: Number(item.unit_price ?? item.amount ?? 0),
-        amount: Number(item.amount ?? (Number(item.quantity || 1) * Number(item.unit_price ?? 0))),
-      })),
-      memo: invoiceData.notes?.join?.('\n') || '',
-      file_id: invoiceData.file_id || null,
-      file_hash: invoiceData.file_hash || null,
-      original_file_name: invoiceData.original_filename || null,
-      department_id: invoiceData.department_id || invoiceData.departmentId || '',
-      department_name:
-        invoiceData.department_name ||
-        invoiceData.departmentName ||
-        getDepartmentNameById(invoiceData.department_id || invoiceData.departmentId),
-      ...(isCategoryFeatureEnabled
-        ? {
-            category: categoryPayload,
-            category_id: invoiceData.category_id || invoiceData.categoryId || invoiceData.category?.id || '',
-            category_name:
-              invoiceData.category_name ||
-              invoiceData.categoryName ||
-              invoiceData.category?.name ||
-              getCategoryNameById(invoiceData.category_id || invoiceData.categoryId || invoiceData.category?.id),
-          }
-        : {}),
-      source: 'Upload',
-      source_email: null,
-      file_category: 'Expense Invoice',
-    };
+  const computeTdsAmount = (lineItems = [], tdsValue = '') => {
+    const tdsRate = Number.parseFloat(String(tdsValue || '').replace('%', '')) || 0;
+    if (!tdsRate) return 0;
+    const subTotal = (lineItems || []).reduce(
+      (sum, item) => sum + calculateLineItemSubtotal(item),
+      0,
+    );
+    return Math.round(((subTotal * tdsRate) / 100) * 100) / 100;
   };
 
-  const toLocalDateTimeString = (value) => {
-    if (!value) return value;
-    if (typeof value !== 'string') return value;
-    return /^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00` : value;
+  const toCreateInvoicePayload = (invoiceData = {}, options = {}) => {
+    const lineItems = invoiceData.line_items || [];
+    const totals =
+      options.totals ??
+      (lineItems.length > 0 ? calculateTotals(lineItems) : null);
+
+    return buildCreateInvoiceRequestBody(
+      {
+        ...invoiceData,
+        vendor_id: invoiceData.vendor_id || findVendorByName(invoiceData.vendor_name)?.id || '',
+        department_name:
+          invoiceData.department_name ||
+          invoiceData.departmentName ||
+          getDepartmentNameById(invoiceData.department_id || invoiceData.departmentId),
+        category: buildInvoiceCategoryPayload(invoiceData),
+        category_id: invoiceData.category_id || invoiceData.categoryId || invoiceData.category?.id || '',
+        category_name:
+          invoiceData.category_name ||
+          invoiceData.categoryName ||
+          invoiceData.category?.name ||
+          getCategoryNameById(invoiceData.category_id || invoiceData.categoryId || invoiceData.category?.id),
+        memo:
+          invoiceData.memo ||
+          invoiceData.description ||
+          (Array.isArray(invoiceData.notes) ? invoiceData.notes.join('\n') : ''),
+        original_file_name:
+          invoiceData.original_file_name ||
+          invoiceData.original_filename ||
+          null,
+        source: invoiceData.source || 'Upload',
+        source_email: invoiceData.source === 'Email' ? invoiceData.source_email : null,
+        file_category: invoiceData.file_category || 'Expense Invoice',
+      },
+      {
+        ...options,
+        totals,
+        tdsAmount: options.tdsAmount ?? computeTdsAmount(lineItems, invoiceData.tds),
+        categoryEnabled: isCategoryFeatureEnabled,
+      },
+    );
   };
 
-  const buildInvoiceMultipartPayload = (invoicePayload, file = null) => {
+  const buildInvoiceMultipartPayload = (invoicePayload, file = null, options = {}) => {
     const multipartPayload = new FormData();
     if (file) {
       multipartPayload.append('file', file);
     }
+    const requestBody = toInvoiceApiPayload(
+      buildCreateInvoiceRequestBody(invoicePayload, {
+        ...options,
+        uploadedFileName: file?.name,
+        categoryEnabled: isCategoryFeatureEnabled,
+      }),
+    );
     multipartPayload.append(
       'invoice',
-      new Blob(
-        [
-          JSON.stringify({
-            invoiceNumber: invoicePayload.invoice_number,
-            vendorId: invoicePayload.vendor_id || null,
-            vendorName: invoicePayload.vendor_name || null,
-            invoiceDate: toLocalDateTimeString(invoicePayload.invoice_date),
-            dueDate: toLocalDateTimeString(invoicePayload.due_date),
-            amount: invoicePayload.amount,
-            currency: invoicePayload.currency,
-            lineItems: (invoicePayload.line_items || []).map((item) => ({
-              description: item.description,
-              quantity: item.quantity,
-              unitPrice: item.unit_price,
-              amount: item.amount,
-            })),
-            memo: invoicePayload.memo || '',
-            fileId: invoicePayload.file_id || null,
-            fileHash: invoicePayload.file_hash || null,
-            originalFileName: invoicePayload.original_file_name || file?.name || null,
-            source: invoicePayload.source,
-            sourceEmail: invoicePayload.source_email,
-            fileCategory: invoicePayload.file_category,
-            departmentId: invoicePayload.department_id || null,
-            departmentName: invoicePayload.department_name || null,
-            ...(isCategoryFeatureEnabled
-              ? { category: buildInvoiceCategoryPayload(invoicePayload) }
-              : {}),
-          }),
-        ],
-        { type: 'application/json' }
-      )
+      new Blob([JSON.stringify(requestBody)], { type: 'application/json' }),
     );
     return multipartPayload;
   };
@@ -771,7 +778,11 @@ const InvoicesPage = () => {
 
       for (const [index, item] of selectedItems.entries()) {
         try {
-          await createInvoice(buildInvoiceMultipartPayload(item.invoicePayload, item.file)).unwrap();
+          await createInvoice(
+            buildInvoiceMultipartPayload(item.invoicePayload, item.file, {
+              uploadedFileName: item.file?.name,
+            }),
+          ).unwrap();
           createdCount += 1;
           setBulkPreviewItems((prev) =>
             prev.map((row) =>
@@ -1042,10 +1053,7 @@ const InvoicesPage = () => {
     const vendorType = requestVendorForm.vendor_type || requestVendorForm.vendorType;
     const gstin = requestVendorForm.gstin.trim();
 
-    const validationErrors = getVendorValidationErrors(requestVendorForm, {
-      requireName: true,
-      requireVendorType: true,
-    });
+    const validationErrors = getInvoiceVendorRequestValidationErrors(requestVendorForm);
     if (validationErrors.length > 0) {
       toast.error(validationErrors[0]);
       return;
@@ -1150,37 +1158,25 @@ const InvoicesPage = () => {
     if (!formData) return;
 
     const totals = calculateTotals(formData.line_items);
-    const invoicePayload = {
-      invoice_number: formData.invoice_number,
-      vendor_id: formData.vendor_id || '',
-      vendor_name: formData.vendor_name?.trim() || '',
-      invoice_date: formData.invoice_date,
-      due_date: formData.due_date,
-      amount: totals.total,
-      currency: formData.currency || 'INR',
-      line_items: formData.line_items.map(item => ({
-        description: item.description,
-        quantity: item.quantity,
-        unit_price: item.unit_rate,
-        amount: calculateLineItemSubtotal(item)
-      })),
-      memo: formData.description,
-      file_id: formData.file_id,
-      file_hash: formData.file_hash,
-      original_file_name: formData.original_file_name,
-      source: formData.source || 'Upload',
-      source_email: formData.source === 'Email' ? formData.source_email : null,
-      file_category: formData.file_category || 'Expense Invoice',
-      department_id: formData.department_id || '',
-      department_name: formData.department_name || getDepartmentNameById(formData.department_id),
-      ...(isCategoryFeatureEnabled
-        ? {
-            category: buildInvoiceCategoryPayload(formData),
-            category_id: formData.category_id || '',
-            category_name: formData.category_name || '',
-          }
-        : {}),
-    };
+    const invoicePayload = toCreateInvoicePayload(
+      {
+        ...formData,
+        vendor_name: formData.vendor_name?.trim() || '',
+        line_items: formData.line_items.map((item) => ({
+          ...item,
+          unit_price: item.unit_rate,
+          amount: calculateLineItemSubtotal(item),
+        })),
+        memo: formData.description,
+        original_file_name: formData.original_file_name || uploadedFile?.name || null,
+        current_file_name: uploadedFile?.name || formData.original_file_name || null,
+      },
+      {
+        totals,
+        tdsAmount: computeTdsAmount(formData.line_items, formData.tds),
+        uploadedFileName: uploadedFile?.name,
+      },
+    );
     if (!invoicePayload.vendor_id && !formData.vendor_request_submitted) {
       toast.error('Please select or request a vendor before creating invoice');
       return;
@@ -1201,7 +1197,10 @@ const InvoicesPage = () => {
 
     try {
       if (uploadedFile) {
-        const multipartPayload = buildInvoiceMultipartPayload(invoicePayload, uploadedFile);
+        const multipartPayload = buildInvoiceMultipartPayload(invoicePayload, uploadedFile, {
+          totals,
+          tdsAmount: computeTdsAmount(formData.line_items, formData.tds),
+        });
         await createInvoice(multipartPayload).unwrap();
       } else {
         await createInvoice(invoicePayload).unwrap();
@@ -1281,6 +1280,17 @@ const InvoicesPage = () => {
   };
 
   const handleEditInvoice = (invoice) => {
+    if (!canEditInvoice(invoice, invoiceEditContext)) {
+      const status = formatWorkflowStatus(invoice?.status);
+      if (!canUpdateInvoices) {
+        toast.error('Only invoice makers can edit invoices in Needs Correction status');
+      } else if (status !== NEEDS_CORRECTION_STATUS) {
+        toast.error('Invoices can only be edited when status is Needs Correction');
+      } else {
+        toast.error('Only the creator can edit an invoice in Needs Correction status');
+      }
+      return;
+    }
     const sourceOfSupply =
       invoice.source_of_supply ||
       invoice.place_of_supply ||
@@ -1401,7 +1411,7 @@ const InvoicesPage = () => {
       setSelectedInvoice(null);
       setFormData(null);
     } catch (error) {
-      toast.error('Failed to update invoice');
+      toast.error(extractApiErrorDetail(error) || 'Failed to update invoice');
     }
   };
 
@@ -1422,23 +1432,10 @@ const InvoicesPage = () => {
     }
   };
 
-  const canEdit = (status) =>
-    canUpdateInvoices && status === 'Rejected';
-  const canDelete = (status) =>
-    canDeleteInvoices && ['Pending Checker', 'Pending Approver', 'Pending Approval'].includes(status);
+  const canEdit = (invoice) => canEditInvoice(invoice, invoiceEditContext);
+  const canDelete = (status) => canDeleteInvoice(status, canDeleteInvoices);
 
-  const getStatusBadgeClass = (status) => {
-    const statusMap = {
-      'Draft': 'bg-gray-100 text-gray-800 border-gray-200',
-      'Pending Checker': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      'Pending Approver': 'bg-yellow-100 text-yellow-800 border-yellow-200',
-      'Pending Approval': 'bg-[#FFF7CC] text-[#7A4A00] border-[#F2D675] rounded-full',
-      'Pending Payment': 'bg-blue-100 text-blue-800 border-blue-200',
-      'Amount Released': 'bg-emerald-100 text-emerald-800 border-emerald-200',
-      'Rejected': 'bg-red-100 text-red-800 border-red-200'
-    };
-    return statusMap[status] || 'bg-gray-100 text-gray-800';
-  };
+  const getStatusBadgeClass = (status) => getInvoiceStatusBadgeClass(status);
 
   const formatDuration = (totalSeconds) => {
     const mins = Math.floor(totalSeconds / 60);
@@ -1464,23 +1461,31 @@ const InvoicesPage = () => {
   };
 
   const getHistoryIcon = (actionType) => {
-    switch (actionType) {
+    const normalizedAction = normalizeHistoryActionType(actionType);
+    switch (normalizedAction) {
       case 'Created': return <Plus className="h-4 w-4 text-emerald-500" />;
       case 'Edited': return <Pencil className="h-4 w-4 text-blue-500" />;
       case 'Approved': return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
       case 'Rejected': return <XCircle className="h-4 w-4 text-red-500" />;
-      case 'Payment Released': return <CreditCard className="h-4 w-4 text-emerald-500" />;
+      case 'Edited & Resubmitted': return <Pencil className="h-4 w-4 text-amber-600" />;
+      case PAID_STATUS:
+      case 'Payment Released':
+        return <CreditCard className="h-4 w-4 text-emerald-500" />;
       default: return <Clock className="h-4 w-4 text-muted-foreground" />;
     }
   };
 
   const getHistoryBadgeClass = (actionType) => {
-    switch (actionType) {
+    const normalizedAction = normalizeHistoryActionType(actionType);
+    switch (normalizedAction) {
       case 'Created': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
       case 'Edited': return 'bg-blue-100 text-blue-700 border-blue-200';
       case 'Approved': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
       case 'Rejected': return 'bg-red-100 text-red-700 border-red-200';
-      case 'Payment Released': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
+      case 'Edited & Resubmitted': return 'bg-amber-100 text-amber-800 border-amber-200';
+      case PAID_STATUS:
+      case 'Payment Released':
+        return 'bg-emerald-100 text-emerald-700 border-emerald-200';
       default: return 'bg-gray-100 text-gray-700 border-gray-200';
     }
   };
@@ -1541,7 +1546,8 @@ const InvoicesPage = () => {
       canAddVendor={canAddVendors}
       canSubmit={
         isEdit
-          ? canUpdateInvoices &&
+          ? selectedInvoice &&
+            canEditInvoice(selectedInvoice, invoiceEditContext) &&
             !invoiceMandatoryFieldsLoading &&
             isInvoiceMandatoryFieldsSatisfied(formData, invoiceMandatoryFields, mandatoryFieldOptions)
           : canManageInvoices &&

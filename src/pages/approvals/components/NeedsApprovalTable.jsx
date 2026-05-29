@@ -1,6 +1,11 @@
 import React from 'react';
 import { Button } from '../../../components/ui/button';
-import { CheckCircle, XCircle } from 'lucide-react';
+import { CheckCircle, RotateCcw, XCircle } from 'lucide-react';
+import {
+  isInvoiceAwaitingApproval,
+  NEEDS_CORRECTION_ACTION,
+  normalizeWorkflowStatus,
+} from '../../../utils/approvalWorkflow';
 import AppDataTable from '../../../components/common/AppDataTable';
 import { TableCell, TableRow } from '../../../components/ui/table';
 
@@ -24,6 +29,9 @@ const NeedsApprovalTable = ({
 }) => {
   const renderNeedsApprovalRow = (invoice, rowIndex, headers) => {
     const progress = getApprovalProgress(invoice);
+    const status = normalizeWorkflowStatus(invoice.status);
+    const isChecker = status === 'Pending Checker';
+    const canAct = canApproveInvoices && isInvoiceAwaitingApproval(invoice.status);
 
     return (
       <TableRow key={invoice.id ?? rowIndex} data-testid={`approval-row-${invoice.id}`}>
@@ -65,19 +73,29 @@ const NeedsApprovalTable = ({
                 <div className="flex justify-end gap-2">
                   <Button
                     size="sm"
-                    onClick={() => handleApprovalAction(invoice, (invoice.status === 'Pending Checker' || invoice.status === 'PENDING_CHECKER') ? 'Checked' : 'Approved')}
+                    onClick={() => handleApprovalAction(invoice, isChecker ? 'Checked' : 'Approved')}
                     data-testid={`approve-button-${invoice.id}`}
-                    disabled={!canApproveInvoices}
+                    disabled={!canAct}
                   >
                     <CheckCircle className="h-4 w-4 mr-2" />
-                    {(invoice.status === 'Pending Checker' || invoice.status === 'PENDING_CHECKER') ? 'Verify' : 'Approve'}
+                    {isChecker ? 'Verify' : 'Approve'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleApprovalAction(invoice, NEEDS_CORRECTION_ACTION)}
+                    data-testid={`needs-correction-button-${invoice.id}`}
+                    disabled={!canAct}
+                  >
+                    <RotateCcw className="h-4 w-4 mr-2" />
+                    Needs Correction
                   </Button>
                   <Button
                     size="sm"
                     variant="destructive"
                     onClick={() => handleApprovalAction(invoice, 'Rejected')}
                     data-testid={`reject-button-${invoice.id}`}
-                    disabled={!canApproveInvoices}
+                    disabled={!canAct}
                   >
                     <XCircle className="h-4 w-4 mr-2" />
                     Reject

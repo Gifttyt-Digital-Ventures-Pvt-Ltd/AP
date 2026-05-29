@@ -7,6 +7,7 @@ import { TableCell, TableRow } from "../../../components/ui/table";
 import { cn } from "../../../lib/utils";
 import { Search } from "lucide-react";
 import AppDataTable from "../../../components/common/AppDataTable";
+import { formatWorkflowStatus } from "../../../utils/approvalWorkflow";
 
 const toNumber = (value) => {
   const numberValue = Number(value);
@@ -148,7 +149,7 @@ const InvoicesTable = ({
           case "status":
             value = (
               <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border whitespace-nowrap ${getStatusBadgeClass(invoice.status)}`}>
-                {invoice.status}
+                {formatWorkflowStatus(invoice.status)}
               </span>
             );
             break;
@@ -161,7 +162,7 @@ const InvoicesTable = ({
                 <Button variant="ghost" size="sm" onClick={() => handleViewInvoice(invoice)} data-testid={`view-invoice-${invoice.id}`} title="View Invoice" className="h-8 w-8 p-0">
                   <Eye className="h-4 w-4" />
                 </Button>
-                {canEdit(invoice.status) && (
+                {canEdit(invoice) && (
                   <Button variant="ghost" size="sm" onClick={() => handleEditInvoice(invoice)} data-testid={`edit-invoice-${invoice.id}`} title="Edit Invoice" className="h-8 w-8 p-0">
                     <Pencil className="h-4 w-4" />
                   </Button>
