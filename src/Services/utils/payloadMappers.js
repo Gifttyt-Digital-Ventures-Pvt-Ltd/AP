@@ -83,6 +83,35 @@ export const toVendorUiPayload = (vendor = {}) => ({
   contact_person: vendor.contact_person ?? vendor.contactPerson,
 });
 
+export const extractVendorIdFromResponse = (response) => {
+  if (!response) return "";
+  const candidate = response?.vendor ?? response?.data ?? response;
+  const id =
+    candidate?.id ??
+    candidate?.vendorId ??
+    candidate?.vendor_id ??
+    response?.id ??
+    response?.vendorId ??
+    response?.vendor_id;
+  return id !== undefined && id !== null ? String(id) : "";
+};
+
+export const mergeInvoiceVendorOptions = (approvedVendors = [], pendingVendors = []) => {
+  const merged = new Map();
+
+  approvedVendors.forEach((vendor) => {
+    if (vendor?.id === undefined || vendor?.id === null) return;
+    merged.set(String(vendor.id), { ...vendor, is_pending_approval: false });
+  });
+
+  pendingVendors.forEach((vendor) => {
+    if (vendor?.id === undefined || vendor?.id === null) return;
+    merged.set(String(vendor.id), { ...vendor, is_pending_approval: true });
+  });
+
+  return Array.from(merged.values());
+};
+
 export const toBankAccountApiPayload = (account = {}) => {
   const {
     account_name,

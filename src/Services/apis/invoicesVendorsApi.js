@@ -8,6 +8,9 @@ import {
 
 export const invoicesVendorsApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
+    getInvoiceMandatoryFields: builder.query({
+      query: () => ({ url: "/invoice/mandatory-fields", method: "GET" }),
+    }),
     getInvoices: builder.query({
       query: (params) => ({ url: "/invoices", method: "GET", params }),
       transformResponse: (response) =>
@@ -67,9 +70,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
     getPendingCheckerInvoices: builder.query({
       query: () => ({ url: "/checker/pending", method: "GET" }),
       transformResponse: (response) =>
-        Array.isArray(response)
-          ? response.map(toInvoiceUiPayload)
-          : [],
+        Array.isArray(response) ? response.map(toInvoiceUiPayload) : [],
       providesTags: ["Invoices", "Approvals"],
     }),
     checkInvoice: builder.mutation({
@@ -91,7 +92,9 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
           return [
             { type: "Vendors", id: "LIST" },
             ...result
-              .filter((vendor) => vendor?.id !== undefined && vendor?.id !== null)
+              .filter(
+                (vendor) => vendor?.id !== undefined && vendor?.id !== null,
+              )
               .map((vendor) => ({ type: "Vendors", id: vendor.id })),
           ];
         }
@@ -106,13 +109,17 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
     }),
     createVendor: builder.mutation({
       query: (body) => ({
-        url: "/api/vendors",
+        url: "/vendors",
         method: "POST",
         body: Array.isArray(body)
           ? body.map(toVendorApiPayload)
           : [toVendorApiPayload(body)],
       }),
-      invalidatesTags: [{ type: "Vendors", id: "LIST" }, "Dashboard", "Reports"],
+      invalidatesTags: [
+        { type: "Vendors", id: "LIST" },
+        "Dashboard",
+        "Reports",
+      ],
     }),
     requestVendorAddition: builder.mutation({
       query: (body) => ({
@@ -120,7 +127,11 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
         method: "POST",
         body: toVendorApiPayload(body),
       }),
-      invalidatesTags: [{ type: "Vendors", id: "PENDING" }],
+      transformResponse: (response) => {
+        const payload = response?.vendor ?? response?.data ?? response;
+        return toVendorUiPayload(payload);
+      },
+      invalidatesTags: ["Vendors"],
     }),
     updateVendor: builder.mutation({
       query: ({ id, body }) => ({
@@ -147,9 +158,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
     getPendingVendorApprovals: builder.query({
       query: () => ({ url: "/vendors/approvals/pending", method: "GET" }),
       transformResponse: (response) =>
-        Array.isArray(response)
-          ? response.map(toVendorUiPayload)
-          : [],
+        Array.isArray(response) ? response.map(toVendorUiPayload) : [],
       providesTags: [{ type: "Vendors", id: "PENDING" }],
     }),
     approveVendor: builder.mutation({
@@ -174,6 +183,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
 });
 
 export const {
+  useGetInvoiceMandatoryFieldsQuery,
   useGetInvoicesQuery,
   useCreateInvoiceMutation,
   useUpdateInvoiceMutation,

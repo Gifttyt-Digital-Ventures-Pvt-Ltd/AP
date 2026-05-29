@@ -41,10 +41,13 @@ export const InvoiceForm = ({
   handleAddInvoice,
   canAddVendor = true,
   canSubmit = true,
+  vendorOptions = [],
   departments = [],
   invoiceCategories = [],
   invoiceCategoriesLoading = false,
   showCategoryField = true,
+  departmentMandatory = false,
+  categoryMandatory = false,
   GST_TREATMENTS,
   INDIAN_STATES,
   FILE_CATEGORIES,
@@ -132,7 +135,20 @@ export const InvoiceForm = ({
 
   return (
     <div className="space-y-4">
-      {!isEdit && formData.vendor_name && !formData.vendor_matched && (
+      {!isEdit &&
+        formData.vendor_name &&
+        formData.vendor_request_submitted &&
+        !formData.vendor_matched && (
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 flex items-center gap-2">
+          <CheckCircle2 className="h-4 w-4 text-blue-600" />
+          <p className="text-xs text-blue-700">
+            <span className="font-medium">Vendor request submitted:</span> "{formData.vendor_name}"
+            {' '}(you can add this invoice while approval is pending)
+          </p>
+        </div>
+      )}
+
+      {!isEdit && formData.vendor_name && !formData.vendor_matched && !formData.vendor_request_submitted && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Building2 className="h-4 w-4 text-amber-600" />
@@ -162,7 +178,10 @@ export const InvoiceForm = ({
         <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2 flex items-center gap-2">
           <CheckCircle2 className="h-4 w-4 text-emerald-600" />
           <p className="text-xs text-emerald-700">
-            <span className="font-medium">Vendor matched:</span> "{formData.vendor_name}"
+            <span className="font-medium">
+              {formData.vendor_request_pending ? 'Vendor linked (pending approval):' : 'Vendor matched:'}
+            </span>{' '}
+            "{formData.vendor_name}"
           </p>
         </div>
       )}
@@ -173,7 +192,13 @@ export const InvoiceForm = ({
           <div>
             <Label className="text-xs text-blue-400">* Vendor Name</Label>
             <div className="relative">
+              <datalist id="invoice-vendor-options">
+                {vendorOptions.map((vendor) => (
+                  <option key={vendor.id} value={vendor.name} />
+                ))}
+              </datalist>
               <Input
+                list="invoice-vendor-options"
                 value={formData.vendor_name}
                 onChange={(e) => {
                   const newName = e.target.value;
@@ -183,6 +208,10 @@ export const InvoiceForm = ({
                     vendor_name: newName,
                     vendor_id: matched?.id || "",
                     vendor_matched: !!matched,
+                    vendor_request_pending: Boolean(matched?.is_pending_approval),
+                    vendor_request_submitted: matched
+                      ? formData.vendor_request_submitted
+                      : false,
                   });
                 }}
                 placeholder="Select or enter vendor"
@@ -215,7 +244,9 @@ export const InvoiceForm = ({
         </div>
 
         <div>
-          <Label className="text-xs text-blue-400">* Department</Label>
+          <Label className={`text-xs ${departmentMandatory ? "text-blue-400" : ""}`}>
+            {departmentMandatory ? "* " : ""}Department
+          </Label>
           <AppSelect
             value={formData.department_id || ""}
             onChange={(e) => {
@@ -235,7 +266,7 @@ export const InvoiceForm = ({
             }}
             className="h-8 text-sm"
             data-testid="invoice-department-select"
-            required
+            required={departmentMandatory}
             placeholder="Select department"
             options={departments.map((department) => ({
               value: department?.id ?? department?.departmentId ?? department?.department_id,
@@ -246,7 +277,9 @@ export const InvoiceForm = ({
 
         {showCategoryField && (
           <div>
-            <Label className="text-xs text-blue-400">Category</Label>
+            <Label className={`text-xs ${categoryMandatory ? "text-blue-400" : ""}`}>
+              {categoryMandatory ? "* " : ""}Category
+            </Label>
             <AppSelect
               value={formData.category_id || ""}
               onChange={(e) => {
@@ -264,6 +297,7 @@ export const InvoiceForm = ({
               }}
               className="h-8 text-sm"
               data-testid="invoice-category-select"
+              required={categoryMandatory}
               placeholder={invoiceCategoriesLoading ? "Loading categories..." : "Select category"}
               disabled={invoiceCategoriesLoading}
               options={invoiceCategories.map((category) => ({

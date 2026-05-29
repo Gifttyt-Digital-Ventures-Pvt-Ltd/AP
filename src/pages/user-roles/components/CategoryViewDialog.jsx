@@ -71,7 +71,7 @@ const CategoryViewDialog = ({ open, onOpenChange, category, employees = [] }) =>
 
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <Label>Assigned Invoice Approvers</Label>
+              <Label>Assigned Invoice Makers</Label>
               <Badge variant="outline">
                 {assignedUsers.length} user{assignedUsers.length === 1 ? "" : "s"}
               </Badge>
@@ -93,7 +93,7 @@ const CategoryViewDialog = ({ open, onOpenChange, category, employees = [] }) =>
                           {user.name || "Unnamed Approver"}
                         </p>
                         <p className="truncate text-xs text-muted-foreground">
-                          {user.role || "Invoice Approver"}
+                          {user.role || "Invoice Maker"}
                         </p>
                         <p className="truncate text-xs text-muted-foreground">
                           {user.email || "No email available"}
@@ -105,7 +105,7 @@ const CategoryViewDialog = ({ open, onOpenChange, category, employees = [] }) =>
               </ScrollArea>
             ) : (
               <div className="rounded-md border border-border p-8 text-center text-sm text-muted-foreground">
-                No invoice approvers assigned to this category.
+                No invoice makers assigned to this category.
               </div>
             )}
           </div>

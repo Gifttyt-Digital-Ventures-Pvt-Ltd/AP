@@ -20,7 +20,7 @@ const RoleCard = ({
       <div className="flex items-start justify-between mb-3">
         <h3 className="font-medium text-foreground">{name}</h3>
         <div className="flex items-center gap-1">
-          {onEdit && (
+          {/* {onEdit && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -32,7 +32,7 @@ const RoleCard = ({
             >
               <Pencil className="w-4 h-4" />
             </button>
-          )}
+          )} */}
           {onDelete && (
             <button
               onClick={(e) => {

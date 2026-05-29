@@ -22,6 +22,8 @@ export const CUSTOM_ROLE_PERMISSION_MAP = {
   "matching-manage": { screen: "INVOICE_MATCHING", permissionType: "MANAGE" },
   "payments-view": { screen: "PAYMENTS", permissionType: "VIEW" },
   "payments-manage": { screen: "PAYMENTS", permissionType: "MANAGE" },
+  "payment-batches-view": { screen: "PAYMENT_BATCHES", permissionType: "VIEW" },
+  "payment-batches-manage": { screen: "PAYMENT_BATCHES", permissionType: "MANAGE" },
   "tax-view": { screen: "TAX_MANAGEMENT", permissionType: "VIEW" },
   "tax-manage": { screen: "TAX_MANAGEMENT", permissionType: "MANAGE" },
   "reports-view": { screen: "REPORTS", permissionType: "VIEW" },

@@ -41,6 +41,7 @@ import PaymentDialog from './components/PaymentDialog';
 import PendingPaymentsTab from './components/PendingPaymentsTab';
 import ReleasedPaymentsTab from './components/ReleasedPaymentsTab';
 import { useActionGuard } from '../../hooks/useActionGuard';
+import { useRBAC } from '../../contexts/RBACContext';
 
 const safeLower = (value) => String(value ?? '').toLowerCase();
 
@@ -59,6 +60,7 @@ const batchInvoiceTableHeader = [
 ];
 
 const Payments = () => {
+  const { isPaymentBatchesFeatureEnabled, isConnectedBankingEnabled } = useRBAC();
   const {
     data: paymentsData = [],
     isError: paymentsError,
@@ -72,11 +74,14 @@ const Payments = () => {
     data: pendingApproverInvoicesData = [],
     isError: pendingApproverInvoicesError,
     refetch: refetchPendingApproverInvoices,
-  } = useGetInvoicesQuery({ status: 'Pending Approver' });
+  } = useGetInvoicesQuery(
+    { status: 'Pending Approver' },
+    { skip: !isPaymentBatchesFeatureEnabled },
+  );
   const {
     data: bankAccountsData = [],
     isError: bankAccountsError,
-  } = useGetBankAccountsQuery();
+  } = useGetBankAccountsQuery(undefined, { skip: !isConnectedBankingEnabled });
 
   const [bulkReleasePayments] = useBulkReleasePaymentsMutation();
   const [createPayment] = useCreatePaymentMutation();
@@ -129,7 +134,8 @@ const Payments = () => {
   const bankAccounts = Array.isArray(bankAccountsData) ? bankAccountsData : [];
   const canManagePayments = canPerformAction('payments.create');
   const canBulkRelease = canPerformAction('payments.releaseBulk');
-  const canCreateBatch = canPerformAction('payments.createBatch');
+  const canCreateBatch =
+    isPaymentBatchesFeatureEnabled && canPerformAction('payments.createBatch');
 
   useEffect(() => {
     if (paymentsError) toast.error('Failed to load payments');
@@ -144,8 +150,10 @@ const Payments = () => {
   }, [pendingApproverInvoicesError]);
 
   useEffect(() => {
-    if (bankAccountsError) toast.error('Failed to load bank accounts');
-  }, [bankAccountsError]);
+    if (isConnectedBankingEnabled && bankAccountsError) {
+      toast.error('Failed to load bank accounts');
+    }
+  }, [bankAccountsError, isConnectedBankingEnabled]);
 
   const resetForm = () => {
     setFormData({
@@ -182,11 +190,19 @@ const Payments = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!guardAction('payments.create')) return;
+    if (isConnectedBankingEnabled && !formData.bank_account_id) {
+      toast.error('Please select a bank account');
+      return;
+    }
     try {
-      await createPayment({
+      const paymentPayload = {
         ...formData,
         payment_date: new Date(formData.payment_date).toISOString(),
-      }).unwrap();
+      };
+      if (!isConnectedBankingEnabled) {
+        delete paymentPayload.bank_account_id;
+      }
+      await createPayment(paymentPayload).unwrap();
       toast.success('Payment recorded successfully');
       setDialogOpen(false);
       resetForm();
@@ -228,7 +244,7 @@ const Payments = () => {
 
   const handleCreateBatch = async () => {
     if (!guardAction('payments.createBatch')) return;
-    if (!createBatchForm.bank_account_id) {
+    if (isConnectedBankingEnabled && !createBatchForm.bank_account_id) {
       toast.error('Please select a bank account');
       return;
     }
@@ -239,7 +255,11 @@ const Payments = () => {
 
     setCreatingBatch(true);
     try {
-      const response = await createPaymentBatch(createBatchForm).unwrap();
+      const batchPayload = { ...createBatchForm };
+      if (!isConnectedBankingEnabled) {
+        delete batchPayload.bank_account_id;
+      }
+      const response = await createPaymentBatch(batchPayload).unwrap();
       toast.success(response?.message || 'Batch created');
       await Promise.all([refetchPendingPaymentInvoices(), refetchPendingApproverInvoices()]);
       setCreateBatchDialogOpen(false);
@@ -327,108 +347,119 @@ const Payments = () => {
             setFormData={setFormData}
             invoices={invoices}
             bankAccounts={bankAccounts}
+            showBankAccountField={isConnectedBankingEnabled}
             handleSubmit={handleSubmit}
             canCreatePayment={canManagePayments}
           />
         )}
       />
 
-      <Dialog
-        open={createBatchDialogOpen}
-        onOpenChange={(open) => {
-          if (!open) resetCreateBatchForm();
-          setCreateBatchDialogOpen(open);
-        }}
-      >
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Create Payment Batch</DialogTitle>
-          </DialogHeader>
+      {isPaymentBatchesFeatureEnabled && (
+        <Dialog
+          open={createBatchDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) resetCreateBatchForm();
+            setCreateBatchDialogOpen(open);
+          }}
+        >
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Create Payment Batch</DialogTitle>
+            </DialogHeader>
 
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Payment Method *</Label>
-                <Select
-                  value={createBatchForm.payment_method}
-                  onValueChange={(value) => setCreateBatchForm((prev) => ({ ...prev, payment_method: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="NEFT">NEFT</SelectItem>
-                    <SelectItem value="RTGS">RTGS</SelectItem>
-                    <SelectItem value="IMPS">IMPS</SelectItem>
-                    <SelectItem value="UPI">UPI</SelectItem>
-                    <SelectItem value="Cheque">Cheque</SelectItem>
-                  </SelectContent>
-                </Select>
+            <div className="space-y-6">
+              <div
+                className={`grid grid-cols-1 gap-4 ${
+                  isConnectedBankingEnabled ? 'md:grid-cols-2' : ''
+                }`}
+              >
+                <div className="space-y-2">
+                  <Label>Payment Method *</Label>
+                  <Select
+                    value={createBatchForm.payment_method}
+                    onValueChange={(value) => setCreateBatchForm((prev) => ({ ...prev, payment_method: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NEFT">NEFT</SelectItem>
+                      <SelectItem value="RTGS">RTGS</SelectItem>
+                      <SelectItem value="IMPS">IMPS</SelectItem>
+                      <SelectItem value="UPI">UPI</SelectItem>
+                      <SelectItem value="Cheque">Cheque</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {isConnectedBankingEnabled && (
+                  <div className="space-y-2">
+                    <Label>Bank Account *</Label>
+                    <Select
+                      value={createBatchForm.bank_account_id}
+                      onValueChange={(value) =>
+                        setCreateBatchForm((prev) => ({ ...prev, bank_account_id: value }))
+                      }
+                    >
+                      <SelectTrigger data-testid="create-batch-bank-select">
+                        <SelectValue placeholder="Select bank account" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {bankAccounts.map((bank) => (
+                          <SelectItem key={bank.id} value={String(bank.id)}>
+                            {bank.bank_name} - {bank.account_number}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
-              <div className="space-y-2">
-                <Label>Bank Account *</Label>
-                <Select
-                  value={createBatchForm.bank_account_id}
-                  onValueChange={(value) => setCreateBatchForm((prev) => ({ ...prev, bank_account_id: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select bank account" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {bankAccounts.map((bank) => (
-                      <SelectItem key={bank.id} value={bank.id}>
-                        {bank.bank_name} - {bank.account_number}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-base">Select Invoices</Label>
-                <div className="flex items-center gap-4 text-sm">
-                  <Button variant="outline" size="sm" onClick={selectAllInvoices} disabled={!canCreateBatch}>
-                    {createBatchForm.invoice_ids.length === batchEligibleInvoices.length ? 'Deselect All' : 'Select All'}
-                  </Button>
-                  <span>
-                    Selected: <strong>{createBatchForm.invoice_ids.length}</strong> | Total: <strong>{'\u20B9'}{selectedBatchTotal.toLocaleString('en-IN')}</strong>
-                  </span>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-base">Select Invoices</Label>
+                  <div className="flex items-center gap-4 text-sm">
+                    <Button variant="outline" size="sm" onClick={selectAllInvoices} disabled={!canCreateBatch}>
+                      {createBatchForm.invoice_ids.length === batchEligibleInvoices.length ? 'Deselect All' : 'Select All'}
+                    </Button>
+                    <span>
+                      Selected: <strong>{createBatchForm.invoice_ids.length}</strong> | Total: <strong>{'\u20B9'}{selectedBatchTotal.toLocaleString('en-IN')}</strong>
+                    </span>
+                  </div>
+                </div>
+
+                <div className="border rounded-lg max-h-80 overflow-y-auto">
+                  <AppDataTable
+                    tableHeader={batchInvoiceTableHeader}
+                    tableData={batchEligibleInvoices}
+                    renderRow={renderBatchInvoiceRow}
+                    emptyMessage="No invoices available for batch creation"
+                  />
                 </div>
               </div>
 
-              <div className="border rounded-lg max-h-80 overflow-y-auto">
-                <AppDataTable
-                  tableHeader={batchInvoiceTableHeader}
-                  tableData={batchEligibleInvoices}
-                  renderRow={renderBatchInvoiceRow}
-                  emptyMessage="No invoices available for batch creation"
+              <div className="space-y-2">
+                <Label>Notes</Label>
+                <Textarea
+                  value={createBatchForm.notes}
+                  placeholder="Additional notes..."
+                  onChange={(e) => setCreateBatchForm((prev) => ({ ...prev, notes: e.target.value }))}
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Notes</Label>
-              <Textarea
-                value={createBatchForm.notes}
-                placeholder="Additional notes..."
-                onChange={(e) => setCreateBatchForm((prev) => ({ ...prev, notes: e.target.value }))}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateBatchDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreateBatch} disabled={creatingBatch || !canCreateBatch}>
-              {creatingBatch && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Create Batch
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCreateBatchDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreateBatch} disabled={creatingBatch || !canCreateBatch}>
+                {creatingBatch && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Create Batch
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       <div className="mb-6">
         <div className="relative">

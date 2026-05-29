@@ -239,7 +239,7 @@ const CategoriesTab = () => {
           <div className="mb-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
             {categoriesError
               ? "Failed to load categories."
-              : "Failed to load invoice approvers. You can still view categories."}
+              : "Failed to load invoice makers. You can still view categories."}
           </div>
         )}
 

@@ -98,7 +98,7 @@ const CategoryDialog = ({
             </div>
 
             <div className="space-y-2">
-              <Label>Assigned Invoice Approvers</Label>
+              <Label>Assigned Invoice Makers</Label>
               <p className="text-xs text-muted-foreground">
                 Select users who can approve invoices in this category.
               </p>
@@ -107,7 +107,7 @@ const CategoryDialog = ({
                   {employeesLoading ? (
                     <div className="flex items-center justify-center py-10 text-sm text-muted-foreground">
                       <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Loading invoice approvers...
+                      Loading invoice makers...
                     </div>
                   ) : employees.length > 0 ? (
                     employees.map((employee) => (
@@ -134,8 +134,8 @@ const CategoryDialog = ({
                   ) : (
                     <div className="py-10 text-center text-sm text-muted-foreground">
                       {employeesError
-                        ? "Unable to load invoice approvers. You can still save this category."
-                        : "No invoice approvers available. You can still save this category."}
+                        ? "Unable to load invoice makers. You can still save this category."
+                        : "No invoice makers available. You can still save this category."}
                     </div>
                   )}
                 </div>

@@ -14,6 +14,7 @@ const PaymentDialog = ({
   setFormData,
   invoices,
   bankAccounts,
+  showBankAccountField = false,
   handleSubmit,
   canCreatePayment,
 }) => {
@@ -85,23 +86,26 @@ const PaymentDialog = ({
           </select>
         </div>
 
-        <div>
-          <Label htmlFor="bank_account_id">Bank Account</Label>
-          <select
-            id="bank_account_id"
-            value={formData.bank_account_id}
-            onChange={(e) => setFormData({ ...formData, bank_account_id: e.target.value })}
-            className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            data-testid="payment-bank-select"
-          >
-            <option value="">Select bank account</option>
-            {bankAccounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.account_name} - {account.bank_name}
-              </option>
-            ))}
-          </select>
-        </div>
+        {showBankAccountField && (
+          <div>
+            <Label htmlFor="bank_account_id">Bank Account *</Label>
+            <select
+              id="bank_account_id"
+              value={formData.bank_account_id}
+              onChange={(e) => setFormData({ ...formData, bank_account_id: e.target.value })}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              required
+              data-testid="payment-bank-select"
+            >
+              <option value="">Select bank account</option>
+              {bankAccounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.account_name || account.bank_name} - {account.account_number || account.bank_name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
 
         <div>
           <Label htmlFor="reference_number">Reference Number</Label>

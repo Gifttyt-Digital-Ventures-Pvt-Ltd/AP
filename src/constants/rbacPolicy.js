@@ -20,7 +20,7 @@ export const ROUTE_PERMISSION_RULES = {
     ],
   },
   "/payments": { anyOf: ["payments-view", "payments-manage"] },
-  "/payment-batches": { anyOf: ["payments-view", "payments-manage"] },
+  "/payment-batches": { anyOf: ["payment-batches-view", "payment-batches-manage"] },
   "/tax-management": { anyOf: ["tax-view", "tax-manage"] },
   "/reports": { anyOf: ["reports-view", "reports-full"] },
   "/audit-trail": { anyOf: ["audit-trail-view"] },
@@ -58,14 +58,14 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
   "/transactions": { screen: "BANKING", anySections: ["BANKING_ALL"] },
   "/approvals": { screen: "APPROVAL", anySections: ["APPROVAL_ALL"] },
   "/payments": { screen: "PAYMENTS", anySections: ["PAYMENTS_ALL"] },
-  "/payment-batches": { screen: "PAYMENTS", anySections: ["PAYMENTS_ALL"] },
+  "/payment-batches": { screen: "PAYMENT_BATCHES", anySections: ["PAYMENT_BATCHES_ALL"] },
   "/tax-management": { screen: "TAX_MANAGEMENT", anySections: ["TAX_GST", "TAX_TDS_COMPLIANCE"] },
   "/reports": {
     screen: "REPORTS",
     anySections: ["REPORTS_EXECUTIVE", "REPORTS_AP", "REPORTS_VENDOR", "REPORTS_TAX", "REPORTS_PAYMENT"],
   },
   "/audit-trail": { screen: "AUDIT_TRAIL", anySections: ["AUDIT_TRAIL_ALL"] },
-  "/banking": { screen: "BANKING", anySections: ["BANKING_ALL"] },
+  "/banking": { anySections: ["SETTINGS_CONNECTED_BANKING"] },
   "/notifications": { screen: "SETTINGS", anySections: ["SETTINGS_INTEGRATIONS", "SETTINGS_ORG_DETAILS"] },
   "/user-roles": {
     screen: "MANAGE_ROLE",
@@ -135,11 +135,11 @@ export const ACTION_PERMISSION_RULES = {
 
   "payments.releaseBulk": { anyOf: ["payments-manage"] },
   "payments.create": { anyOf: ["payments-manage"] },
-  "payments.createBatch": { anyOf: ["payments-manage"] },
+  "payments.createBatch": { anyOf: ["payment-batches-manage"] },
 
-  "paymentBatches.process": { anyOf: ["payments-manage"] },
-  "paymentBatches.markProcessed": { anyOf: ["payments-manage"] },
-  "paymentBatches.generateFile": { anyOf: ["payments-manage"] },
+  "paymentBatches.process": { anyOf: ["payment-batches-manage"] },
+  "paymentBatches.markProcessed": { anyOf: ["payment-batches-manage"] },
+  "paymentBatches.generateFile": { anyOf: ["payment-batches-manage"] },
 
   "settings.createBankAccount": { anyOf: ["settings-banking", "banking-full"] },
   "settings.createOrganisation": { anyOf: ["settings-org"] },

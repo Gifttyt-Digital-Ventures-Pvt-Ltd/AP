@@ -1,5 +1,6 @@
 import React from 'react';
 import { Building2, User } from 'lucide-react';
+import { isIndiaCountry } from '../../utils/vendorValidation';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Input } from '../ui/input';
@@ -35,19 +36,18 @@ const VendorDetailsDialog = ({
   submitLabel = 'Save Vendor',
   submitting = false,
   requireEmail = true,
-  requireGstin = false,
   requireFullMandatory = false,
   testId = 'vendor-dialog',
 }) => {
   if (!formData) return null;
   const isEmailRequired = requireEmail || requireFullMandatory;
-  const isGstinRequired = requireGstin || requireFullMandatory;
+  const isIndia = isIndiaCountry(formData.country);
   const updateField = (field, value) => setFormData((prev) => ({ ...prev, [field]: value }));
 
   const basicInfoFields = [
     { key: 'email', label: 'Email', type: 'email', placeholder: 'vendor@example.com', required: isEmailRequired, testId: 'vendor-email-input' },
-    { key: 'mobile', label: 'Mobile Number', placeholder: '+91 98765 43210', required: requireFullMandatory, testId: 'vendor-mobile-input' },
-    { key: 'phone', label: 'Phone Number', placeholder: '+91 22 1234 5678', required: requireFullMandatory, testId: 'vendor-phone-input' },
+    { key: 'mobile', label: 'Mobile Number', placeholder: '+91 98765 43210', required: true, testId: 'vendor-mobile-input' },
+    { key: 'phone', label: 'Phone Number', placeholder: '+91 22 1234 5678', required: false, testId: 'vendor-phone-input' },
     { key: 'contact_person', label: 'Contact Person', placeholder: 'e.g., Rahul Sharma', required: requireFullMandatory },
     { key: 'website', label: 'Website', placeholder: 'https://example.com' },
   ];
@@ -183,14 +183,14 @@ const VendorDetailsDialog = ({
             <TabsContent value="tax" className="space-y-4 mt-4">
               <div className="grid grid-cols-2 gap-4">
                 <div key="pan">
-                  <Label>PAN Number{requireFullMandatory ? ' *' : ''}</Label>
+                  <Label>PAN Number{isIndia ? ' *' : ''}</Label>
                   <Input
                     value={formData.pan}
                     onChange={(event) => updateField('pan', event.target.value.toUpperCase())}
                     placeholder="ABCDE1234F"
                     maxLength={10}
                     className="uppercase"
-                    required={requireFullMandatory}
+                    required={isIndia}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     10-digit alphanumeric PAN number
@@ -198,14 +198,14 @@ const VendorDetailsDialog = ({
                 </div>
 
                 <div>
-                  <Label>GSTIN{isGstinRequired ? ' *' : ''}</Label>
+                  <Label>GSTIN{isIndia ? ' *' : ''}</Label>
                   <Input
                     value={formData.gstin}
                     onChange={(event) => updateField('gstin', event.target.value.toUpperCase())}
                     placeholder="29ABCDE1234F1Z5"
                     maxLength={15}
                     className="uppercase"
-                    required={isGstinRequired}
+                    required={isIndia}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     15-digit GST Identification Number

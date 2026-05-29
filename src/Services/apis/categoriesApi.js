@@ -39,7 +39,7 @@ const normalizeApprover = (approver = {}) => ({
   userId: approver.userId ?? approver.id ?? null,
   name: approver.userName ?? approver.name ?? "",
   email: approver.email ?? "",
-  role: "Invoice Approver",
+  role: "Invoice Maker",
 });
 
 const toCategoryBody = (category = {}, approvers = []) => {

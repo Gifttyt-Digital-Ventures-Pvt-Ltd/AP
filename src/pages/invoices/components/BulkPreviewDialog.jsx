@@ -24,6 +24,8 @@ const BulkPreviewDialog = ({
   invoiceCategories = [],
   getCategoryNameById = () => '',
   showCategoryField = true,
+  departmentMandatory = false,
+  categoryMandatory = false,
 }) => {
   const extractedCount = bulkPreviewItems.filter((item) => item.invoicePayload).length;
   const selectableItems = bulkPreviewItems.filter(
@@ -94,8 +96,14 @@ const BulkPreviewDialog = ({
                   <th className="p-3 text-left">File</th>
                   <th className="p-3 text-left">Vendor</th>
                   <th className="p-3 text-left">Invoice #</th>
-                  <th className="p-3 text-left">Department</th>
-                  {showCategoryField && <th className="p-3 text-left">Category</th>}
+                  <th className="p-3 text-left">
+                    {departmentMandatory ? '* ' : ''}Department
+                  </th>
+                  {showCategoryField && (
+                    <th className="p-3 text-left">
+                      {categoryMandatory ? '* ' : ''}Category
+                    </th>
+                  )}
                   <th className="p-3 text-right">Amount</th>
                   <th className="p-3 text-left">Status</th>
                   <th className="p-3 text-right">Actions</th>
@@ -142,6 +150,7 @@ const BulkPreviewDialog = ({
                             )
                           }
                           className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                          required={departmentMandatory}
                         >
                           <option value="">Select department</option>
                           {departments.map((department) => {
@@ -186,6 +195,7 @@ const BulkPreviewDialog = ({
                               )
                             }
                             className="h-9 w-full rounded-md border border-input bg-background px-2 text-sm"
+                            required={categoryMandatory}
                           >
                             <option value="">Select category</option>
                             {invoiceCategories.map((category) => (
