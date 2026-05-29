@@ -2,7 +2,8 @@ import React from 'react';
 import { Button } from '../../../components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
 import { Label } from '../../../components/ui/label';
-import { CheckCircle, XCircle } from 'lucide-react';
+import { CheckCircle, RotateCcw, XCircle } from 'lucide-react';
+import { NEEDS_CORRECTION_ACTION } from '../../../utils/approvalWorkflow';
 
 // Confirmation dialog used for both approve and reject workflows.
 const ApprovalDialog = ({
@@ -18,8 +19,13 @@ const ApprovalDialog = ({
     <DialogContent data-testid="approval-dialog">
       <DialogHeader>
         <DialogTitle>
-          {actionType === 'Approved' ? 'Approve Invoice' : 
-           actionType === 'Checked' ? 'Verify Invoice' : 'Reject Invoice'}
+          {actionType === 'Approved'
+            ? 'Approve Invoice'
+            : actionType === 'Checked'
+              ? 'Verify Invoice'
+              : actionType === NEEDS_CORRECTION_ACTION
+                ? 'Send for Correction'
+                : 'Reject Invoice'}
         </DialogTitle>
       </DialogHeader>
       <div className="space-y-4">
@@ -68,6 +74,11 @@ const ApprovalDialog = ({
               <>
                 <CheckCircle className="h-4 w-4 mr-2" />
                 {actionType === 'Checked' ? 'Verify' : 'Approve'}
+              </>
+            ) : actionType === NEEDS_CORRECTION_ACTION ? (
+              <>
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Needs Correction
               </>
             ) : (
               <>

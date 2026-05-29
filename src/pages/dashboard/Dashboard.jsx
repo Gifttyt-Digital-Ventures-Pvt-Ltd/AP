@@ -62,7 +62,9 @@ const STATUS_COLORS = {
   'Pending Approver': '#f97316',
   'Pending Payment': '#3b82f6',
   'Amount Released': '#22c55e',
+  Paid: '#22c55e',
   'Rejected': '#ef4444',
+  'Needs Correction': '#d97706',
   'Draft': '#6b7280'
 };
 
@@ -193,10 +195,12 @@ const Dashboard = () => {
 
   const getStatusBadgeVariant = (status) => {
     switch (status) {
-      case 'Amount Released': return 'default';
+      case 'Amount Released':
+      case 'Paid': return 'default';
       case 'Pending Payment': return 'secondary';
       case 'Pending Approver': case 'Pending Checker': return 'outline';
       case 'Rejected': return 'destructive';
+      case 'Needs Correction': return 'outline';
       default: return 'outline';
     }
   };

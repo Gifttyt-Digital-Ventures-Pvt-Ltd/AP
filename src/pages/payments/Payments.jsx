@@ -5,6 +5,7 @@ import {
   useGetBankAccountsQuery,
   useBulkReleasePaymentsMutation,
   useCreatePaymentMutation,
+  useRecordPaymentsMutation,
 } from '../../Services/apis/approvalsPaymentsBankingApi';
 import { useCreatePaymentBatchMutation } from '../../Services/apis/paymentBatchesApi';
 import { Button } from '../../components/ui/button';
@@ -38,6 +39,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import PaymentsHeader from './components/PaymentsHeader';
 import PaymentDialog from './components/PaymentDialog';
+import RecordPaymentDialog from './components/RecordPaymentDialog';
 import PendingPaymentsTab from './components/PendingPaymentsTab';
 import ReleasedPaymentsTab from './components/ReleasedPaymentsTab';
 import { useActionGuard } from '../../hooks/useActionGuard';
@@ -85,13 +87,21 @@ const Payments = () => {
 
   const [bulkReleasePayments] = useBulkReleasePaymentsMutation();
   const [createPayment] = useCreatePaymentMutation();
+  const [recordPayments] = useRecordPaymentsMutation();
   const [createPaymentBatch] = useCreatePaymentBatchMutation();
   const { guardAction, canPerformAction } = useActionGuard();
   const [searchTerm, setSearchTerm] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [createBatchDialogOpen, setCreateBatchDialogOpen] = useState(false);
+  const [recordPaymentDialogOpen, setRecordPaymentDialogOpen] = useState(false);
   const [bulkReleaseConfirmOpen, setBulkReleaseConfirmOpen] = useState(false);
   const [creatingBatch, setCreatingBatch] = useState(false);
+  const [recordingPayments, setRecordingPayments] = useState(false);
+  const [recordPaymentInvoiceIds, setRecordPaymentInvoiceIds] = useState([]);
+  const [recordPaymentForm, setRecordPaymentForm] = useState({
+    payment_date: '',
+    payment_method: 'Bank Transfer',
+  });
   const [formData, setFormData] = useState({
     invoice_id: '',
     payment_date: '',
@@ -136,6 +146,12 @@ const Payments = () => {
   const canBulkRelease = canPerformAction('payments.releaseBulk');
   const canCreateBatch =
     isPaymentBatchesFeatureEnabled && canPerformAction('payments.createBatch');
+  const showBankingBatchPaymentActions =
+    isConnectedBankingEnabled || isPaymentBatchesFeatureEnabled;
+  const showRecordPaymentFlow = !showBankingBatchPaymentActions;
+  const canShowSinglePayment = showBankingBatchPaymentActions && canManagePayments;
+  const canShowBulkRelease = showBankingBatchPaymentActions && canBulkRelease;
+  const canShowRecordPayment = showRecordPaymentFlow && canManagePayments;
 
   useEffect(() => {
     if (paymentsError) toast.error('Failed to load payments');
@@ -242,6 +258,77 @@ const Payments = () => {
     .filter((invoice) => createBatchForm.invoice_ids.includes(invoice.id))
     .reduce((sum, invoice) => sum + (invoice.amount || 0), 0);
 
+  const resetRecordPaymentForm = () => {
+    setRecordPaymentInvoiceIds([]);
+    setRecordPaymentForm({
+      payment_date: '',
+      payment_method: 'Bank Transfer',
+    });
+  };
+
+  const selectedRecordPaymentInvoices = invoices.filter((invoice) =>
+    recordPaymentInvoiceIds.includes(invoice.id),
+  );
+
+  const openRecordPaymentDialog = () => {
+    if (recordPaymentInvoiceIds.length === 0) {
+      toast.error('Please select at least one invoice from the list');
+      return;
+    }
+    setRecordPaymentForm((prev) => ({
+      ...prev,
+      payment_method: prev.payment_method || 'Bank Transfer',
+      payment_date: prev.payment_date || new Date().toISOString().slice(0, 10),
+    }));
+    setRecordPaymentDialogOpen(true);
+  };
+
+  const toggleRecordPaymentInvoice = (invoiceId) => {
+    setRecordPaymentInvoiceIds((prev) =>
+      prev.includes(invoiceId)
+        ? prev.filter((id) => id !== invoiceId)
+        : [...prev, invoiceId],
+    );
+  };
+
+  const selectAllRecordPaymentInvoices = () => {
+    setRecordPaymentInvoiceIds((prev) =>
+      prev.length === invoices.length ? [] : invoices.map((invoice) => invoice.id),
+    );
+  };
+
+  const handleRecordPayments = async (event) => {
+    event.preventDefault();
+    if (!guardAction('payments.create')) return;
+
+    const invoiceNumbers = selectedRecordPaymentInvoices
+      .map((invoice) => String(invoice.invoice_number || '').trim())
+      .filter(Boolean);
+
+    if (invoiceNumbers.length === 0) {
+      toast.error('Please select at least one invoice');
+      return;
+    }
+
+    if (!recordPaymentForm.payment_date) {
+      toast.error('Payment date is required');
+      return;
+    }
+
+    setRecordingPayments(true);
+    try {
+      const response = await recordPayments({ invoiceNumbers }).unwrap();
+      toast.success(response?.message || 'Payments recorded successfully (PAID)');
+      await refetchPendingPaymentInvoices();
+      setRecordPaymentDialogOpen(false);
+      resetRecordPaymentForm();
+    } catch (error) {
+      toast.error(error?.data?.detail || error?.data?.message || 'Failed to record payments');
+    } finally {
+      setRecordingPayments(false);
+    }
+  };
+
   const handleCreateBatch = async () => {
     if (!guardAction('payments.createBatch')) return;
     if (isConnectedBankingEnabled && !createBatchForm.bank_account_id) {
@@ -327,7 +414,7 @@ const Payments = () => {
       <PaymentsHeader
         invoicesCount={invoices.length}
         handleBulkRelease={handleBulkRelease}
-        canBulkRelease={canBulkRelease}
+        canBulkRelease={canShowBulkRelease}
         batchDialogTrigger={canCreateBatch ? (
           <Button
             variant="default"
@@ -338,20 +425,22 @@ const Payments = () => {
             Create Batch
           </Button>
         ) : null}
-        paymentDialog={(
-          <PaymentDialog
-            dialogOpen={dialogOpen}
-            setDialogOpen={setDialogOpen}
-            resetForm={resetForm}
-            formData={formData}
-            setFormData={setFormData}
-            invoices={invoices}
-            bankAccounts={bankAccounts}
-            showBankAccountField={isConnectedBankingEnabled}
-            handleSubmit={handleSubmit}
-            canCreatePayment={canManagePayments}
-          />
-        )}
+        paymentDialog={
+          canShowSinglePayment ? (
+            <PaymentDialog
+              dialogOpen={dialogOpen}
+              setDialogOpen={setDialogOpen}
+              resetForm={resetForm}
+              formData={formData}
+              setFormData={setFormData}
+              invoices={invoices}
+              bankAccounts={bankAccounts}
+              showBankAccountField={isConnectedBankingEnabled}
+              handleSubmit={handleSubmit}
+              canCreatePayment={canManagePayments}
+            />
+          ) : null
+        }
       />
 
       {isPaymentBatchesFeatureEnabled && (
@@ -491,6 +580,13 @@ const Payments = () => {
             filteredPendingInvoices={filteredPendingInvoices}
             totalPendingAmount={totalPendingAmount}
             handleBulkRelease={handleBulkRelease}
+            canBulkRelease={canShowBulkRelease}
+            showRecordPaymentSelection={canShowRecordPayment}
+            selectedInvoiceIds={recordPaymentInvoiceIds}
+            onToggleInvoice={toggleRecordPaymentInvoice}
+            onSelectAllInvoices={selectAllRecordPaymentInvoices}
+            onOpenRecordPayment={openRecordPaymentDialog}
+            canRecordPayment={canShowRecordPayment}
             safeFormatDate={safeFormatDate}
           />
         </TabsContent>
@@ -499,6 +595,22 @@ const Payments = () => {
           <ReleasedPaymentsTab filteredPayments={filteredPayments} safeFormatDate={safeFormatDate} />
         </TabsContent>
       </Tabs>
+
+      {canShowRecordPayment && (
+        <RecordPaymentDialog
+          open={recordPaymentDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setRecordPaymentDialogOpen(false);
+            }
+          }}
+          formData={recordPaymentForm}
+          setFormData={setRecordPaymentForm}
+          selectedInvoices={selectedRecordPaymentInvoices}
+          handleSubmit={handleRecordPayments}
+          submitting={recordingPayments}
+        />
+      )}
 
       <AlertDialog open={bulkReleaseConfirmOpen} onOpenChange={setBulkReleaseConfirmOpen}>
         <AlertDialogContent>

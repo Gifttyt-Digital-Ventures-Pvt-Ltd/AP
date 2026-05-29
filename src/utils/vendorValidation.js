@@ -66,3 +66,39 @@ export const getVendorValidationErrors = (
 
   return errors;
 };
+
+/**
+ * Lighter validation for Request Vendor from invoice upload (single + bulk).
+ * Keeps the original invoice-flow rules (name, type, GSTIN) plus mandatory mobile.
+ * Full PAN / India rules apply on the Vendors screen and bulk vendor upload only.
+ */
+export const getInvoiceVendorRequestValidationErrors = (vendor = {}) => {
+  const errors = [];
+
+  const name = String(vendor.name || "").trim();
+  const vendorType = String(vendor.vendor_type || vendor.vendorType || "").trim();
+  const mobile = String(vendor.mobile || "").trim();
+  const gstin = String(vendor.gstin || "").trim().toUpperCase();
+
+  if (!name) {
+    errors.push("Vendor name is required");
+  }
+
+  if (!vendorType) {
+    errors.push("Vendor type is required");
+  } else if (!["company", "individual"].includes(vendorType.toLowerCase())) {
+    errors.push("Vendor type must be Company or Individual");
+  }
+
+  if (!mobile) {
+    errors.push("Mobile number is required");
+  }
+
+  if (!gstin) {
+    errors.push("GSTIN is required");
+  } else if (gstin.length !== 15) {
+    errors.push("GSTIN must be 15 characters");
+  }
+
+  return errors;
+};

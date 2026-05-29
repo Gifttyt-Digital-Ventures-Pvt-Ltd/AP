@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   useGetVendorsQuery,
   useCreateVendorMutation,
@@ -13,6 +13,15 @@ import { Input } from '../../components/ui/input';
 import { Search, Plus, Pencil, Trash2, Eye, X, Check, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useActionGuard } from '../../hooks/useActionGuard';
+import { useAuth } from '../../contexts/AuthContext';
+import { useGetCorporateUserDetailsQuery } from '../../Services/apis/corporateApi';
+import {
+  canEditVendor,
+  extractApiErrorDetail,
+  formatWorkflowStatus,
+  NEEDS_CORRECTION_ACTION,
+  NEEDS_CORRECTION_STATUS,
+} from '../../utils/approvalWorkflow';
 import VendorDetailsDialog from '../../components/vendors/VendorDetailsDialog';
 import * as XLSX from '@e965/xlsx';
 import AppDataTable from '../../components/common/AppDataTable';
@@ -148,7 +157,23 @@ const Vendors = () => {
   const [deleteVendor] = useDeleteVendorMutation();
   const [approveVendor] = useApproveVendorMutation();
   const [triggerVendorHistory] = useLazyGetVendorHistoryQuery();
+  const { user } = useAuth();
+  const { data: corporateUserContext = null } = useGetCorporateUserDetailsQuery();
   const { guardAction, canPerformAction } = useActionGuard();
+  const currentUserEmail =
+    corporateUserContext?.corporateUser?.email ||
+    corporateUserContext?.employeeDetails?.email ||
+    user?.email ||
+    user?.identifier ||
+    '';
+  const canUpdateVendorPermission = canPerformAction('vendors.update');
+  const vendorEditContext = useMemo(
+    () => ({
+      userEmail: currentUserEmail,
+      canUpdateVendor: canUpdateVendorPermission,
+    }),
+    [currentUserEmail, canUpdateVendorPermission],
+  );
   const [searchTerm, setSearchTerm] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [vendorUploadOptionOpen, setVendorUploadOptionOpen] = useState(false);
@@ -244,7 +269,7 @@ const Vendors = () => {
       setDialogOpen(false);
       resetForm();
     } catch (error) {
-      toast.error('Failed to save vendor');
+      toast.error(extractApiErrorDetail(error) || 'Failed to save vendor');
     }
   };
 
@@ -377,6 +402,17 @@ const Vendors = () => {
   };
 
   const handleEdit = (vendor) => {
+    if (!canEditVendor(vendor, vendorEditContext)) {
+      const status = formatWorkflowStatus(vendor?.status);
+      if (status === 'Rejected') {
+        toast.error('Rejected vendors cannot be edited');
+      } else if (status === NEEDS_CORRECTION_STATUS) {
+        toast.error('Only the creator can edit a vendor in Needs Correction status');
+      } else {
+        toast.error('This vendor cannot be edited in its current status');
+      }
+      return;
+    }
     setEditingVendor(vendor);
     setFormData({
       name: vendor.name || '',
@@ -457,9 +493,12 @@ const Vendors = () => {
   };
 
   const getStatusBadgeClass = (status) => {
-    if (status === 'Approved') return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-    if (status === 'Rejected') return 'bg-red-100 text-red-800 border-red-200';
-    if (status === 'Draft' || status === 'Sent Back') return 'bg-slate-100 text-slate-800 border-slate-200';
+    const normalizedStatus = formatWorkflowStatus(status);
+    if (normalizedStatus === 'Approved') return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+    if (normalizedStatus === 'Rejected') return 'bg-red-100 text-red-800 border-red-200';
+    if (normalizedStatus === 'Draft' || normalizedStatus === NEEDS_CORRECTION_STATUS) {
+      return 'bg-amber-100 text-amber-900 border-amber-200';
+    }
     return 'bg-amber-100 text-amber-800 border-amber-200';
   };
 
@@ -501,7 +540,7 @@ const Vendors = () => {
       .filter((id) => id !== undefined && id !== null),
   );
   const canCreateVendor = canPerformAction('vendors.create');
-  const canEditVendor = canPerformAction('vendors.update');
+  const canEditVendorPermission = canUpdateVendorPermission;
   const canDeleteVendor = canPerformAction('vendors.delete');
   const canApproveVendor = canPerformAction('vendors.approve');
 
@@ -557,7 +596,7 @@ const Vendors = () => {
           case 'status':
             value = (
               <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStatusBadgeClass(vendor.status)}`}>
-                {vendor.status || 'Pending Approval'}
+                {formatWorkflowStatus(vendor.status) || 'Pending Approval'}
               </span>
             );
             break;
@@ -594,9 +633,9 @@ const Vendors = () => {
                       variant="ghost"
                       size="sm"
                       className="w-8 h-8 p-0 rounded-md"
-                      onClick={() => openVendorApprovalDialog(vendor, 'Sent Back')}
-                      title="Send Back"
-                      data-testid={`sendback-vendor-${vendor.id}`}
+                      onClick={() => openVendorApprovalDialog(vendor, NEEDS_CORRECTION_ACTION)}
+                      title="Needs Correction"
+                      data-testid={`needs-correction-vendor-${vendor.id}`}
                     >
                       <RotateCcw className="h-4 w-4 text-amber-600" />
                     </Button>
@@ -622,9 +661,9 @@ const Vendors = () => {
                     </Button>
                   </>
                 )}
-                {(canEditVendor || canDeleteVendor) && (
+                {(canEditVendorPermission || canDeleteVendor) && (
                   <>
-                    {canEditVendor && (
+                    {canEditVendorPermission && canEditVendor(vendor, vendorEditContext) && (
                       <Button
                         variant="ghost"
                         size="sm"

@@ -61,11 +61,13 @@ const CategoryDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-h-[92vh] overflow-hidden sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>{category ? "Edit Category" : "Create Category"}</DialogTitle>
+          <DialogTitle>
+            {category ? "Edit Category" : "Create Category"}
+          </DialogTitle>
           <DialogDescription>
             {category
-              ? "Update category details and assigned approval users."
-              : "Add a category for approval routing and assign eligible users."}
+              ? "Update category details and assigned invoice makers."
+              : "Create a category and assign invoice makers who can submit invoices under it."}
           </DialogDescription>
         </DialogHeader>
 
@@ -100,7 +102,7 @@ const CategoryDialog = ({
             <div className="space-y-2">
               <Label>Assigned Invoice Makers</Label>
               <p className="text-xs text-muted-foreground">
-                Select users who can approve invoices in this category.
+              Select users who can create invoices in this category
               </p>
               <ScrollArea className="h-56 rounded-md border border-border">
                 <div className="space-y-3 p-4">
@@ -122,11 +124,14 @@ const CategoryDialog = ({
                             htmlFor={`category-user-${employee.id}`}
                             className="cursor-pointer font-normal"
                           >
-                            {employee.name || employee.email || "Unnamed Employee"}
+                            {employee.name ||
+                              employee.email ||
+                              "Unnamed Employee"}
                           </Label>
                           <p className="truncate text-xs text-muted-foreground">
-                            {[employee.role, employee.email].filter(Boolean).join(" • ") ||
-                              "No role or email available"}
+                            {[employee.role, employee.email]
+                              .filter(Boolean)
+                              .join(" • ") || "No role or email available"}
                           </p>
                         </div>
                       </div>
@@ -141,16 +146,25 @@ const CategoryDialog = ({
                 </div>
               </ScrollArea>
               <p className="text-xs text-muted-foreground">
-                {assignedUserIds.length} user{assignedUserIds.length === 1 ? "" : "s"} selected
+                {assignedUserIds.length} user
+                {assignedUserIds.length === 1 ? "" : "s"} selected
               </p>
             </div>
           </div>
 
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+            >
               Cancel
             </Button>
-            <Button type="submit" disabled={saving} data-testid="save-category-btn">
+            <Button
+              type="submit"
+              disabled={saving}
+              data-testid="save-category-btn"
+            >
               {saving ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

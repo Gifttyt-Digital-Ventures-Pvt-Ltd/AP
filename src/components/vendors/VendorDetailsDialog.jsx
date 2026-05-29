@@ -37,11 +37,15 @@ const VendorDetailsDialog = ({
   submitting = false,
   requireEmail = true,
   requireFullMandatory = false,
+  /** Invoice upload vendor request: GSTIN + mobile only; PAN optional */
+  invoiceVendorRequest = false,
   testId = 'vendor-dialog',
 }) => {
   if (!formData) return null;
   const isEmailRequired = requireEmail || requireFullMandatory;
   const isIndia = isIndiaCountry(formData.country);
+  const isGstinRequired = invoiceVendorRequest || isIndia;
+  const isPanRequired = isIndia && !invoiceVendorRequest;
   const updateField = (field, value) => setFormData((prev) => ({ ...prev, [field]: value }));
 
   const basicInfoFields = [
@@ -183,14 +187,14 @@ const VendorDetailsDialog = ({
             <TabsContent value="tax" className="space-y-4 mt-4">
               <div className="grid grid-cols-2 gap-4">
                 <div key="pan">
-                  <Label>PAN Number{isIndia ? ' *' : ''}</Label>
+                  <Label>PAN Number{isPanRequired ? ' *' : ''}</Label>
                   <Input
                     value={formData.pan}
                     onChange={(event) => updateField('pan', event.target.value.toUpperCase())}
                     placeholder="ABCDE1234F"
                     maxLength={10}
                     className="uppercase"
-                    required={isIndia}
+                    required={isPanRequired}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     10-digit alphanumeric PAN number
@@ -198,14 +202,14 @@ const VendorDetailsDialog = ({
                 </div>
 
                 <div>
-                  <Label>GSTIN{isIndia ? ' *' : ''}</Label>
+                  <Label>GSTIN{isGstinRequired ? ' *' : ''}</Label>
                   <Input
                     value={formData.gstin}
                     onChange={(event) => updateField('gstin', event.target.value.toUpperCase())}
                     placeholder="29ABCDE1234F1Z5"
                     maxLength={15}
                     className="uppercase"
-                    required={isIndia}
+                    required={isGstinRequired}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     15-digit GST Identification Number

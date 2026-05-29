@@ -3,6 +3,7 @@ import { Button } from '../../../components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
 import { Label } from '../../../components/ui/label';
 import { Textarea } from '../../../components/ui/textarea';
+import { NEEDS_CORRECTION_ACTION } from '../../../utils/approvalWorkflow';
 
 const VendorApprovalDialog = ({
   open,
@@ -42,7 +43,13 @@ const VendorApprovalDialog = ({
         <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
         <Button
           onClick={onConfirm}
-          variant={approvalTarget?.action === 'Rejected' ? 'destructive' : 'default'}
+          variant={
+            approvalTarget?.action === 'Rejected'
+              ? 'destructive'
+              : approvalTarget?.action === NEEDS_CORRECTION_ACTION
+                ? 'outline'
+                : 'default'
+          }
           data-testid="confirm-vendor-approval"
         >
           Confirm
