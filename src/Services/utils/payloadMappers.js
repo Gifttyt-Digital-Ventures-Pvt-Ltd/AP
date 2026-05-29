@@ -81,6 +81,12 @@ export const toVendorUiPayload = (vendor = {}) => ({
   account_holder_name: vendor.account_holder_name ?? vendor.accountHolderName,
   payment_terms: vendor.payment_terms ?? vendor.paymentTerms,
   contact_person: vendor.contact_person ?? vendor.contactPerson,
+  created_by_email: vendor.created_by_email ?? vendor.createdByEmail,
+  created_by_name: vendor.created_by_name ?? vendor.createdByName,
+  created_by_id: vendor.created_by_id ?? vendor.createdById,
+  created_by: vendor.created_by ?? vendor.createdBy,
+  requested_by_email: vendor.requested_by_email ?? vendor.requestedByEmail,
+  requested_by: vendor.requested_by ?? vendor.requestedBy,
 });
 
 export const extractVendorIdFromResponse = (response) => {
@@ -150,12 +156,68 @@ const normalizeDepartmentId = (value) => {
   return Number.isNaN(numeric) ? value : numeric;
 };
 
+/** Mirrors invoice form TAX_RATES — used to map UI tax labels to API gstRate */
+const INVOICE_TAX_RATE_OPTIONS = [
+  { value: "CGST + SGST 5%", cgst: 2.5, sgst: 2.5 },
+  { value: "CGST + SGST 12%", cgst: 6, sgst: 6 },
+  { value: "CGST + SGST 18%", cgst: 9, sgst: 9 },
+  { value: "CGST + SGST 28%", cgst: 14, sgst: 14 },
+  { value: "IGST 5%", igst: 5 },
+  { value: "IGST 12%", igst: 12 },
+  { value: "IGST 18%", igst: 18 },
+  { value: "IGST 28%", igst: 28 },
+  { value: "Exempt", cgst: 0, sgst: 0 },
+];
+
+export const resolveGstRateFromLineItem = (item = {}) => {
+  const direct = item.gstRate ?? item.gst_rate;
+  if (direct !== null && direct !== undefined && direct !== "") {
+    const numeric = Number(direct);
+    return Number.isFinite(numeric) ? numeric : undefined;
+  }
+
+  const taxLabel = String(item.tax ?? "").trim();
+  if (!taxLabel) return undefined;
+
+  const match = INVOICE_TAX_RATE_OPTIONS.find((option) => option.value === taxLabel);
+  if (match) {
+    if (match.igst != null) return match.igst;
+    if (match.cgst != null && match.sgst != null) return match.cgst + match.sgst;
+    return 0;
+  }
+
+  if (/exempt/i.test(taxLabel)) return 0;
+
+  const percentMatch = taxLabel.match(/(\d+(?:\.\d+)?)\s*%/);
+  if (percentMatch) {
+    const numeric = Number(percentMatch[1]);
+    return Number.isFinite(numeric) ? numeric : undefined;
+  }
+
+  return undefined;
+};
+
+const inferTaxLabelFromGstRate = (gstRate) => {
+  const rate = Number(gstRate);
+  if (!Number.isFinite(rate)) return "";
+  if (rate === 0) return "Exempt";
+
+  const match = INVOICE_TAX_RATE_OPTIONS.find((option) => {
+    if (option.igst != null) return option.igst === rate;
+    if (option.cgst != null && option.sgst != null) return option.cgst + option.sgst === rate;
+    return false;
+  });
+
+  return match?.value ?? "";
+};
+
 const mapInvoiceLineItemForCreate = (item = {}) => {
   const quantity = Number(item.quantity ?? item.qty ?? 1) || 1;
   const unitPrice =
     Number(item.unit_price ?? item.unit_rate ?? item.unitPrice ?? item.price ?? 0) || 0;
   const amount =
     Number(item.amount ?? item.lineTotal ?? quantity * unitPrice) || quantity * unitPrice;
+  const gstRate = resolveGstRateFromLineItem(item);
 
   return {
     description: item.description ?? item.name ?? "",
@@ -163,6 +225,8 @@ const mapInvoiceLineItemForCreate = (item = {}) => {
     unit_price: unitPrice,
     amount,
     hsn_sac: item.hsn_sac ?? item.hsnSac ?? "",
+    ...(gstRate !== undefined ? { gst_rate: gstRate } : {}),
+    // UI-only fields kept for form state / totals (stripped in toInvoiceLineItemApiPayload)
     tax: item.tax ?? "",
     ledger: item.ledger ?? "",
     discount: Number(item.discount ?? 0) || 0,
@@ -171,36 +235,41 @@ const mapInvoiceLineItemForCreate = (item = {}) => {
   };
 };
 
+/** Backend LineItem: description, quantity, unitPrice, amount, hsnSac, gstRate, itemCode, uom */
 const toInvoiceLineItemApiPayload = (item = {}) => {
-  const mapped = mapInvoiceLineItemForCreate(item);
-  const {
-    unit_price,
-    unit_rate,
-    eligible_for_itc,
-    hsn_sac,
-    discount_type,
-    ...rest
-  } = { ...item, ...mapped };
+  const quantity = Number(item.quantity ?? item.qty ?? 1) || 1;
+  const unitPrice =
+    Number(item.unit_price ?? item.unit_rate ?? item.unitPrice ?? item.price ?? 0) || 0;
+  const amount =
+    Number(item.amount ?? item.lineTotal ?? quantity * unitPrice) || quantity * unitPrice;
+  const gstRate = resolveGstRateFromLineItem(item);
+  const hsnSac = String(item.hsn_sac ?? item.hsnSac ?? "").trim();
+  const itemCode = String(item.item_code ?? item.itemCode ?? "").trim();
+  const uom = String(item.uom ?? item.unit_of_measure ?? item.unitOfMeasure ?? "").trim();
 
-  return {
-    description: rest.description ?? mapped.description,
-    quantity: rest.quantity ?? mapped.quantity,
-    amount: rest.amount ?? mapped.amount,
-    tax: rest.tax ?? mapped.tax,
-    ledger: rest.ledger ?? mapped.ledger,
-    discount: rest.discount ?? mapped.discount,
-    discountType: rest.discountType ?? discount_type ?? mapped.discount_type,
-    unitPrice: rest.unitPrice ?? unit_price ?? unit_rate ?? mapped.unit_price,
-    eligibleForItc: rest.eligibleForItc ?? eligible_for_itc ?? mapped.eligible_for_itc,
-    hsnSac: rest.hsnSac ?? hsn_sac ?? mapped.hsn_sac,
+  const payload = {
+    description: item.description ?? item.name ?? "",
+    quantity,
+    unitPrice,
+    amount,
   };
+
+  if (hsnSac) payload.hsnSac = hsnSac;
+  if (gstRate !== undefined) payload.gstRate = gstRate;
+  if (itemCode) payload.itemCode = itemCode;
+  if (uom) payload.uom = uom;
+
+  return payload;
 };
 
 const toInvoiceLineItemUiPayload = (item = {}) => ({
   ...item,
   unit_price: item.unit_price ?? item.unitPrice,
-  eligible_for_itc: item.eligible_for_itc ?? item.eligibleForItc,
+  unit_rate: item.unit_rate ?? item.unitPrice ?? item.unit_price,
   hsn_sac: item.hsn_sac ?? item.hsnSac,
+  gst_rate: item.gst_rate ?? item.gstRate,
+  tax: item.tax ?? inferTaxLabelFromGstRate(item.gst_rate ?? item.gstRate),
+  eligible_for_itc: item.eligible_for_itc ?? item.eligibleForItc,
 });
 
 const resolveInvoiceCategoryPayload = (invoice = {}) => {

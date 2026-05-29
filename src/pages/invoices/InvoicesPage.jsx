@@ -65,6 +65,7 @@ import { getInvoiceVendorRequestValidationErrors } from '../../utils/vendorValid
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useRBAC } from '../../contexts/RBACContext';
 import {
+  buildCurrentUserIdentity,
   canDeleteInvoice,
   canEditInvoice,
   extractApiErrorDetail,
@@ -106,7 +107,7 @@ const createEmptyVendorRequestForm = () => ({
 
 const InvoicesPage = () => {
   const { user } = useAuth();
-  const { isCategoryFeatureEnabled } = useRBAC();
+  const { isCategoryFeatureEnabled, isCorporateAdmin } = useRBAC();
   const {
     data: corporateUserContext = null,
   } = useGetCorporateUserDetailsQuery();
@@ -184,18 +185,13 @@ const InvoicesPage = () => {
   const canUpdateInvoices = canPerformAction('invoices.update');
   const canDeleteInvoices = canPerformAction('invoices.delete');
   const canAddVendors = canPerformAction('invoices.addVendor');
-  const currentUserEmail =
-    corporateUserContext?.corporateUser?.email ||
-    corporateUserContext?.employeeDetails?.email ||
-    user?.email ||
-    user?.identifier ||
-    '';
   const invoiceEditContext = useMemo(
     () => ({
-      userEmail: currentUserEmail,
+      ...buildCurrentUserIdentity({ user, corporateUserContext }),
       canUpdateInvoices,
+      isCorporateAdmin,
     }),
-    [currentUserEmail, canUpdateInvoices],
+    [user, corporateUserContext, canUpdateInvoices, isCorporateAdmin],
   );
   
   // PDF Zoom
@@ -1389,6 +1385,8 @@ const InvoicesPage = () => {
             quantity: item.quantity,
             unit_price: item.unit_rate,
             amount: calculateLineItemSubtotal(item),
+            tax: item.tax,
+            hsn_sac: item.hsn_sac,
           })),
           memo: formData.description,
           file_category: formData.file_category,
