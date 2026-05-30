@@ -34,13 +34,20 @@ export const normalizeCategory = (category = {}) => {
   };
 };
 
-const normalizeApprover = (approver = {}) => ({
-  id: normalizeUserId(approver.userId ?? approver.id),
-  userId: approver.userId ?? approver.id ?? null,
-  name: approver.userName ?? approver.name ?? "",
-  email: approver.email ?? "",
-  role: "Invoice Maker",
-});
+const normalizeApprover = (approver = {}) => {
+  const roles = toArray(approver.roles);
+  const roleLabel =
+    roles.length > 0 ? roles.join(", ") : approver.role ?? "Invoice Maker";
+
+  return {
+    id: normalizeUserId(approver.userId ?? approver.id),
+    userId: approver.userId ?? approver.id ?? null,
+    name: approver.userName ?? approver.name ?? "",
+    email: approver.email ?? "",
+    role: roleLabel,
+    roles,
+  };
+};
 
 const toCategoryBody = (category = {}, approvers = []) => {
   const approverById = new Map(
@@ -72,7 +79,10 @@ export const categoriesApi = serviceApi.injectEndpoints({
     }),
     getCategoryInvoiceApprovers: builder.query({
       query: () => ({ url: "/api/categories/invoice-approvers", method: "GET" }),
-      transformResponse: (response) => toArray(response).map(normalizeApprover),
+      transformResponse: (response) => {
+        const rows = Array.isArray(response) ? response : toArray(response?.data);
+        return rows.map(normalizeApprover);
+      },
       providesTags: ["Categories"],
     }),
     getCategoriesForInvoice: builder.query({
