@@ -5,9 +5,41 @@ export const isIndiaCountry = (country) => {
   return normalized === 'india' || normalized === 'in';
 };
 
+export const normalizePincodeInput = (value, country) => {
+  const raw = String(value ?? '');
+  if (isIndiaCountry(country)) {
+    return raw.replace(/\D/g, '').slice(0, 6);
+  }
+  return raw;
+};
+
+export const getPincodeValidationError = (
+  pincode,
+  country,
+  { required = false, prefix = '' } = {},
+) => {
+  const value = String(pincode || '').trim();
+
+  if (!value) {
+    return required ? `${prefix}Pincode is required` : null;
+  }
+
+  if (isIndiaCountry(country) && !/^\d{6}$/.test(value)) {
+    return `${prefix}Pincode must be a 6-digit number for vendors in India`;
+  }
+
+  return null;
+};
+
 export const getVendorValidationErrors = (
   vendor = {},
-  { rowIndex = null, requireEmail = false, requireName = true, requireVendorType = false } = {},
+  {
+    rowIndex = null,
+    requireEmail = false,
+    requireName = true,
+    requireVendorType = false,
+    requirePincode = false,
+  } = {},
 ) => {
   const prefix = rowIndex !== null && rowIndex !== undefined ? `Row ${rowIndex + 2}: ` : '';
   const errors = [];
@@ -17,6 +49,7 @@ export const getVendorValidationErrors = (
   const email = String(vendor.email || '').trim();
   const mobile = String(vendor.mobile || '').trim();
   const country = String(vendor.country || '').trim();
+  const pincode = String(vendor.pincode || '').trim();
   const pan = String(vendor.pan || '').trim().toUpperCase();
   const gstin = String(vendor.gstin || '').trim().toUpperCase();
 
@@ -41,6 +74,14 @@ export const getVendorValidationErrors = (
 
   if (!mobile) {
     errors.push(`${prefix}Mobile number is required`);
+  }
+
+  const pincodeError = getPincodeValidationError(pincode, country, {
+    required: requirePincode,
+    prefix,
+  });
+  if (pincodeError) {
+    errors.push(pincodeError);
   }
 
   if (isIndiaCountry(country)) {

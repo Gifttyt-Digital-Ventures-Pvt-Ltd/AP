@@ -253,7 +253,10 @@ const Vendors = () => {
       return;
     }
 
-    const validationErrors = getVendorValidationErrors(formData, { requireEmail: true });
+    const validationErrors = getVendorValidationErrors(formData, {
+      requireEmail: true,
+      requirePincode: true,
+    });
     if (validationErrors.length > 0) {
       toast.error(validationErrors[0]);
       return;
@@ -344,6 +347,7 @@ const Vendors = () => {
       rowIndex,
       requireEmail: true,
       requireVendorType: true,
+      requirePincode: true,
     });
 
   const downloadVendorTemplate = () => {
@@ -388,7 +392,7 @@ const Vendors = () => {
       ['Address Line 2', 'Mandatory'],
       ['City', 'Mandatory'],
       ['State', 'Mandatory'],
-      ['Pincode', 'Mandatory'],
+      ['Pincode', 'Mandatory. Must be 6 digits when Country is India, otherwise any postal code text'],
       ['Country', 'Mandatory'],
       ['PAN No', 'Mandatory when Country is India, otherwise Optional'],
       ['GST no', 'Mandatory when Country is India, otherwise Optional'],

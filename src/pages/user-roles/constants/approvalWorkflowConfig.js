@@ -49,6 +49,49 @@ export const WORKFLOW_SECTIONS = [
 
 const WORKFLOW_TYPE_TOKENS = ['VENDOR', 'DEPARTMENT', 'AMOUNT', 'CATEGORY'];
 
+const WORKFLOW_TYPE_SHORT_LABELS = {
+  VENDOR_DEPARTMENT_AMOUNT_CATEGORY: 'Vendor+Dept+Amt+Category',
+  VENDOR_DEPARTMENT_CATEGORY: 'Vendor+Dept+Category',
+  VENDOR_DEPARTMENT_AMOUNT: 'Vendor+Dept+Amt',
+  DEPARTMENT_AMOUNT_CATEGORY: 'Dept+Amt+Category',
+  VENDOR_AMOUNT_CATEGORY: 'Vendor+Amt+Category',
+  VENDOR_CATEGORY: 'Vendor+Category',
+  VENDOR_DEPARTMENT: 'Vendor+Dept',
+  DEPARTMENT_CATEGORY: 'Dept+Category',
+  AMOUNT_CATEGORY: 'Amt+Category',
+  DEPARTMENT_AMOUNT: 'Dept+Amt',
+  VENDOR_AMOUNT: 'Vendor+Amt',
+  CATEGORY: 'Category',
+  DEPARTMENT: 'Dept',
+  VENDOR: 'Vendor',
+  AMOUNT: 'Amount',
+  GENERIC: 'Generic',
+};
+
+export const getWorkflowTypeShortLabel = (type) => {
+  const upperType = String(type || '').trim().toUpperCase();
+  if (!upperType) return '';
+  if (WORKFLOW_TYPE_SHORT_LABELS[upperType]) return WORKFLOW_TYPE_SHORT_LABELS[upperType];
+  return getWorkflowTypeLabel(type);
+};
+
+const workflowTypeIncludesCategory = (type = '') =>
+  String(type || '')
+    .split('_')
+    .includes('CATEGORY');
+
+export const getMatchingPriorityOrder = (categoryEnabled = true) =>
+  WORKFLOW_SECTIONS.filter(
+    ({ type }) => categoryEnabled || !workflowTypeIncludesCategory(type),
+  )
+    .map(({ type }) => getWorkflowTypeShortLabel(type))
+    .join(' → ');
+
+export const getMatchingExplainerStepOne = (categoryEnabled = true) =>
+  categoryEnabled
+    ? 'Invoice arrives — vendor, department, category & amount are extracted'
+    : 'Invoice arrives — vendor, department & amount are extracted';
+
 const hasTypeToken = (type, token) => {
   const upperType = String(type || '').toUpperCase();
   return upperType.split('_').includes(token);

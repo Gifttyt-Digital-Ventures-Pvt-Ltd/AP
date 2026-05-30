@@ -27,6 +27,7 @@ import {
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { Checkbox } from "../../../components/ui/checkbox";
+import { Switch } from "../../../components/ui/switch";
 import { toast } from "sonner";
 import {
   AlertCircle,
@@ -40,7 +41,6 @@ import {
   Loader2,
   Minus,
   Plus,
-  Power,
   Search,
   Trash2,
 } from "lucide-react";
@@ -61,6 +61,8 @@ import {
   WORKFLOW_SECTIONS,
   WORKFLOW_TYPE_BADGE_CLASSES,
   WORKFLOW_TYPE_LABELS,
+  getMatchingExplainerStepOne,
+  getMatchingPriorityOrder,
   getConditionVisibility,
   getWorkflowTypeLabel,
 } from "../constants/approvalWorkflowConfig";
@@ -69,6 +71,7 @@ import {
   groupRulesByType,
   hasCatchAllRule,
 } from "../utils/approvalWorkflowUtils";
+import WorkflowViewDialog from "./WorkflowViewDialog";
 
 const DEFAULT_WORKFLOW_TYPES = Object.keys(WORKFLOW_TYPE_LABELS);
 
@@ -268,6 +271,7 @@ const WorkflowRuleRow = ({
   rule,
   canManageWorkflow,
   workflowActionLoading,
+  onViewRule,
   onToggleRule,
   onEditRule,
   onDeleteRule,
@@ -282,13 +286,26 @@ const WorkflowRuleRow = ({
 
   return (
     <div
-      className={`rounded-lg border p-4 transition-colors ${rule.isActive ? "bg-card hover:bg-muted/30" : "bg-muted/20 opacity-70"}`}
+      role="button"
+      tabIndex={0}
+      onClick={() => {
+        if (!workflowActionLoading) onViewRule(rule);
+      }}
+      onKeyDown={(event) => {
+        if (workflowActionLoading) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onViewRule(rule);
+        }
+      }}
+      aria-label={`View workflow ${rule.name}`}
+      className={`rounded-lg border p-4 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${rule.isActive ? "bg-card hover:bg-muted/30" : "bg-muted/20 opacity-70 hover:opacity-100"}`}
     >
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div className="flex items-start gap-3 flex-1">
+        <div className="flex items-start gap-3 flex-1 min-w-0">
           <Badge
             variant="outline"
-            className={`border ${WORKFLOW_TYPE_BADGE_CLASSES[rule.type] || "bg-gray-100 text-gray-800 border-gray-200"}`}
+            className={`shrink-0 border ${WORKFLOW_TYPE_BADGE_CLASSES[rule.type] || "bg-gray-100 text-gray-800 border-gray-200"}`}
           >
             {getWorkflowTypeLabel(rule.type)}
           </Badge>
@@ -317,39 +334,39 @@ const WorkflowRuleRow = ({
             {rule.approvalMode === "sequential" ? "Sequential" : "Parallel"}
           </Badge>
 
-          <div className="flex items-center gap-1">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onToggleRule(rule)}
-              title={rule.isActive ? "Disable Rule" : "Enable Rule"}
-              className="h-8 w-8 p-0"
+          <div
+            className="flex items-center gap-3"
+            onClick={(event) => event.stopPropagation()}
+            onKeyDown={(event) => event.stopPropagation()}
+          >
+            <Switch
+              checked={rule.isActive}
+              onCheckedChange={() => onToggleRule(rule)}
               disabled={toggleDisabled}
-            >
-              <Power
-                className={`h-4 w-4 ${rule.isActive ? "text-emerald-600" : "text-muted-foreground"}`}
-              />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onEditRule(rule)}
-              title="Edit Rule"
-              className="h-8 w-8 p-0"
-              disabled={workflowActionLoading || !canManageWorkflow}
-            >
-              <Edit className="h-4 w-4 text-blue-600" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => onDeleteRule(rule)}
-              title="Delete Rule"
-              className="h-8 w-8 p-0"
-              disabled={deleteDisabled}
-            >
-              <Trash2 className="h-4 w-4 text-red-600" />
-            </Button>
+              aria-label={rule.isActive ? "Disable rule" : "Enable rule"}
+            />
+            <div className="flex items-center gap-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onEditRule(rule)}
+                title="Edit Rule"
+                className="h-8 w-8 p-0"
+                disabled={workflowActionLoading || !canManageWorkflow}
+              >
+                <Edit className="h-4 w-4 text-blue-600" />
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => onDeleteRule(rule)}
+                title="Delete Rule"
+                className="h-8 w-8 p-0"
+                disabled={deleteDisabled}
+              >
+                <Trash2 className="h-4 w-4 text-red-600" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>
@@ -363,6 +380,8 @@ const ApprovalWorkflowTab = ({
   categoryEnabled = true,
 }) => {
   const [deleteRuleTarget, setDeleteRuleTarget] = useState(null);
+  const [viewRule, setViewRule] = useState(null);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [showExplainer, setShowExplainer] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingRuleId, setEditingRuleId] = useState("");
@@ -624,6 +643,11 @@ const ApprovalWorkflowTab = ({
       type: defaultType,
     });
     setModalOpen(true);
+  };
+
+  const openViewModal = (rule) => {
+    setViewRule(rule);
+    setViewDialogOpen(true);
   };
 
   const openEditModal = (rule) => {
@@ -1030,6 +1054,14 @@ const ApprovalWorkflowTab = ({
   const visibility = formState.type
     ? getConditionVisibility(formState.type)
     : null;
+  const matchingPriorityOrder = useMemo(
+    () => getMatchingPriorityOrder(categoryEnabled),
+    [categoryEnabled],
+  );
+  const matchingExplainerStepOne = useMemo(
+    () => getMatchingExplainerStepOne(categoryEnabled),
+    [categoryEnabled],
+  );
 
   const loading =
     workflowTypesLoading ||
@@ -1215,7 +1247,7 @@ const ApprovalWorkflowTab = ({
                 </div>
                 <p className="text-base leading-7 text-foreground">
                   <span className="bg-background/80 px-1.5 py-0.5 rounded-sm">
-                    Invoice arrives — vendor, department & amount are extracted
+                    {matchingExplainerStepOne}
                   </span>
                 </p>
               </div>
@@ -1227,10 +1259,7 @@ const ApprovalWorkflowTab = ({
                 <p className="text-base leading-7 text-foreground">
                   <span className="bg-background/80 px-1.5 py-0.5 rounded-sm">
                     Rules checked in priority order:{" "}
-                    <span className="font-semibold">
-                      Vendor+Dept+Amt → Vendor+Dept → Dept+Amt → Vendor+Amt →
-                      Dept → Vendor → Amount → Generic
-                    </span>
+                    <span className="font-semibold">{matchingPriorityOrder}</span>
                   </span>
                 </p>
               </div>
@@ -1346,6 +1375,7 @@ const ApprovalWorkflowTab = ({
                       rule={rule}
                       canManageWorkflow={canManageWorkflow}
                       workflowActionLoading={workflowActionLoading}
+                      onViewRule={openViewModal}
                       onToggleRule={handleToggleRule}
                       onEditRule={openEditModal}
                       onDeleteRule={handleDeleteRule}
@@ -1357,6 +1387,18 @@ const ApprovalWorkflowTab = ({
           })}
         </CardContent>
       </Card>
+
+      <WorkflowViewDialog
+        open={viewDialogOpen}
+        onOpenChange={(open) => {
+          setViewDialogOpen(open);
+          if (!open) setViewRule(null);
+        }}
+        rule={viewRule}
+        categoryEnabled={categoryEnabled}
+        canManageWorkflow={canManageWorkflow}
+        onEdit={openEditModal}
+      />
 
       <Dialog
         open={modalOpen}

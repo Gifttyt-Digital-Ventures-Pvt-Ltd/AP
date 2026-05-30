@@ -203,13 +203,7 @@ export const extractApiErrorDetail = (error) => {
   return "";
 };
 
-const INVOICE_DELETABLE_STATUSES = new Set([
-  "Draft",
-  "Pending Checker",
-  "Pending Approver",
-  "Pending Approval",
-  "Rejected",
-]);
+const INVOICE_DELETABLE_STATUSES = new Set([NEEDS_CORRECTION_STATUS, "Rejected"]);
 
 export const canEditInvoice = (invoice, identity = {}) => {
   const { canUpdateInvoices, isCorporateAdmin } = identity;
