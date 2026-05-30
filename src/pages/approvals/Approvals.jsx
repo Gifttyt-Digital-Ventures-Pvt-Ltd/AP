@@ -5,7 +5,9 @@ import {
   useApproveInvoiceMutation,
   useGetPendingCheckerInvoicesQuery,
   useCheckInvoiceMutation,
+  useLazyGetInvoiceHistoryQuery,
 } from '../../Services/apis/invoicesVendorsApi';
+import { toInvoiceUiPayload } from '../../Services/utils/payloadMappers';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -18,6 +20,10 @@ import NeedsApprovalTable from './components/NeedsApprovalTable';
 import PendingInvoicesTable from './components/PendingInvoicesTable';
 import AllInvoicesTable from './components/AllInvoicesTable';
 import ApprovalDialog from './components/ApprovalDialog';
+import ViewDialog from '../invoices/components/ViewDialog';
+import { InvoicePdfPreview } from '../invoices/components/InvoicePdfPreview';
+import { getInvoiceFileUrl } from '../invoices/utils/invoicePreview';
+import { normalizeInvoiceHistoryEntries } from '../invoices/utils/invoiceHistory';
 import {
   getInvoiceStatusBadgeClass,
   isInvoiceAwaitingApproval,
@@ -26,6 +32,7 @@ import {
   normalizeApprovalAction,
   normalizeWorkflowStatus,
 } from '../../utils/approvalWorkflow';
+import { getApprovalProgress } from './utils/approvalProgress';
 
 const safeFormatDate = (value, pattern = 'dd MMM yy') => {
   if (!value) return '-';
@@ -57,28 +64,23 @@ const Approvals = () => {
   const { data: allInvoicesData = [], refetch: refetchInvoices } = useGetInvoicesQuery(approvalQueryArgs);
   const [approveInvoice] = useApproveInvoiceMutation();
   const [checkInvoice] = useCheckInvoiceMutation();
+  const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
 
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [viewInvoice, setViewInvoice] = useState(null);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [viewTab, setViewTab] = useState('details');
+  const [invoiceHistory, setInvoiceHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [viewPreviewError, setViewPreviewError] = useState(false);
+  const [pdfZoom, setPdfZoom] = useState(100);
   const [comments, setComments] = useState('');
   const [actionType, setActionType] = useState('');
   const canPerformApprovalActions = canApproveInvoices || canCheckInvoices;
 
 
-  const normalizeInvoice = (invoice = {}) => ({
-    ...invoice,
-    invoice_number: invoice.invoice_number ?? invoice.invoiceNumber,
-    vendor_name: invoice.vendor_name ?? invoice.vendorName,
-    vendor_id: invoice.vendor_id ?? invoice.vendorId,
-    invoice_date: invoice.invoice_date ?? invoice.invoiceDate,
-    due_date: invoice.due_date ?? invoice.dueDate,
-    payment_date: invoice.payment_date ?? invoice.paymentDate,
-    source_email: invoice.source_email ?? invoice.sourceEmail,
-    file_category: invoice.file_category ?? invoice.fileCategory,
-    original_file_name: invoice.original_file_name ?? invoice.originalFileName,
-    created_by_name: invoice.created_by_name ?? invoice.createdByName,
-    approval_records: invoice.approval_records ?? invoice.approvalRecords,
-  });
+  const normalizeInvoice = (invoice = {}) => toInvoiceUiPayload(invoice);
 
   const pendingInvoicesList = [
     ...(Array.isArray(pendingApprovalsData) ? pendingApprovalsData : []),
@@ -111,6 +113,49 @@ const Approvals = () => {
     setActionType(action);
     setDialogOpen(true);
   };
+
+  const handleViewInvoice = async (invoice) => {
+    setViewInvoice(normalizeInvoice(invoice));
+    setViewDialogOpen(true);
+    setViewTab('details');
+    setViewPreviewError(false);
+    setInvoiceHistory([]);
+    setLoadingHistory(true);
+
+    try {
+      const response = await getInvoiceHistory(invoice.id).unwrap();
+      const normalized = normalizeInvoice(invoice);
+      let historyEntries = Array.isArray(response)
+        ? response
+        : normalizeInvoiceHistoryEntries(response);
+
+      if (historyEntries.length === 0) {
+        const approvalRecords =
+          normalized.approval_records ||
+          normalized.approvalRecords ||
+          invoice.approval_records ||
+          invoice.approvalRecords;
+        if (Array.isArray(approvalRecords) && approvalRecords.length > 0) {
+          historyEntries = normalizeInvoiceHistoryEntries(approvalRecords);
+        }
+      }
+
+      setInvoiceHistory(historyEntries);
+    } catch (error) {
+      console.error('Failed to fetch invoice history:', error);
+      toast.error('Failed to load invoice history');
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const renderPdfPreview = (props = {}) => (
+    <InvoicePdfPreview
+      {...props}
+      setPdfZoom={setPdfZoom}
+      getInvoiceFileUrl={getInvoiceFileUrl}
+    />
+  );
 
   const submitApproval = async () => {
     try {
@@ -170,13 +215,6 @@ const Approvals = () => {
     } catch {
       toast.error(`Failed to ${actionType} invoice`);
     }
-  };
-
-  const getApprovalProgress = (invoice) => {
-    const records = invoice.approval_records || [];
-    const total = 3; // Maker, Checker, Approver
-    const approved = records.filter((r) => r.action === 'Approved').length;
-    return { approved, total, percentage: (approved / total) * 100 };
   };
 
   const getStatusBadgeClass = (status) => getInvoiceStatusBadgeClass(status);
@@ -245,6 +283,7 @@ const Approvals = () => {
             getApprovalProgress={getApprovalProgress}
             safeFormatDate={safeFormatDate}
             handleApprovalAction={handleApprovalAction}
+            handleViewInvoice={handleViewInvoice}
             canApproveInvoices={canPerformApprovalActions}
           />
         </TabsContent>
@@ -275,6 +314,23 @@ const Approvals = () => {
         comments={comments}
         setComments={setComments}
         submitApproval={submitApproval}
+      />
+
+      <ViewDialog
+        viewDialogOpen={viewDialogOpen}
+        setViewDialogOpen={setViewDialogOpen}
+        selectedInvoice={viewInvoice}
+        renderPdfPreview={renderPdfPreview}
+        pdfZoom={pdfZoom}
+        viewPreviewError={viewPreviewError}
+        setViewPreviewError={setViewPreviewError}
+        getStatusBadgeClass={getStatusBadgeClass}
+        viewTab={viewTab}
+        setViewTab={setViewTab}
+        invoiceHistory={invoiceHistory}
+        loadingHistory={loadingHistory}
+        canEdit={() => false}
+        handleEditInvoice={() => {}}
       />
     </div>
   );

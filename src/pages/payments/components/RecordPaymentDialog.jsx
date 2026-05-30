@@ -9,7 +9,7 @@ import {
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 
-// Confirm record-payment for invoices selected on the pending list (API: invoiceNumbers only).
+// Confirm record-payment for invoices selected on the pending list.
 const RecordPaymentDialog = ({
   open,
   onOpenChange,

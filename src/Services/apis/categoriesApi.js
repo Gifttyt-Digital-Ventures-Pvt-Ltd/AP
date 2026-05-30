@@ -2,6 +2,16 @@ import { serviceApi } from "../serviceApi";
 
 const toArray = (value) => (Array.isArray(value) ? value : []);
 
+const normalizeCategoriesList = (response) => {
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response?.data)) return response.data;
+  if (Array.isArray(response?.categories)) return response.categories;
+  if (Array.isArray(response?.items)) return response.items;
+  if (Array.isArray(response?.content)) return response.content;
+  if (Array.isArray(response?.results)) return response.results;
+  return [];
+};
+
 const normalizeUserId = (value) => {
   if (value === undefined || value === null) return "";
   return String(value);
@@ -70,15 +80,15 @@ const toCategoryBody = (category = {}, approvers = []) => {
 export const categoriesApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getCategories: builder.query({
-      query: () => ({ url: "/api/categories", method: "GET" }),
-      transformResponse: (response) => toArray(response).map(normalizeCategory),
+      query: () => ({ url: "/categories", method: "GET" }),
+      transformResponse: (response) => normalizeCategoriesList(response).map(normalizeCategory),
       providesTags: (result) => [
         "Categories",
         ...(result || []).map((category) => ({ type: "Categories", id: category.id })),
       ],
     }),
     getCategoryInvoiceApprovers: builder.query({
-      query: () => ({ url: "/api/categories/invoice-approvers", method: "GET" }),
+      query: () => ({ url: "/categories/invoice-approvers", method: "GET" }),
       transformResponse: (response) => {
         const rows = Array.isArray(response) ? response : toArray(response?.data);
         return rows.map(normalizeApprover);
@@ -87,19 +97,19 @@ export const categoriesApi = serviceApi.injectEndpoints({
     }),
     getCategoriesForInvoice: builder.query({
       query: ({ userEmail, currency } = {}) => ({
-        url: "/api/categories/for-invoice",
+        url: "/categories/for-invoice",
         method: "GET",
         params: {
           ...(userEmail ? { userEmail } : {}),
           ...(currency ? { currency } : {}),
         },
       }),
-      transformResponse: (response) => toArray(response).map(normalizeCategory),
+      transformResponse: (response) => normalizeCategoriesList(response).map(normalizeCategory),
       providesTags: ["Categories"],
     }),
     createCategory: builder.mutation({
       query: ({ category, approvers }) => ({
-        url: "/api/categories",
+        url: "/categories",
         method: "POST",
         body: toCategoryBody(category, approvers),
       }),
@@ -108,7 +118,7 @@ export const categoriesApi = serviceApi.injectEndpoints({
     }),
     updateCategory: builder.mutation({
       query: ({ categoryId, category, approvers }) => ({
-        url: `/api/categories/${categoryId}`,
+        url: `/categories/${categoryId}`,
         method: "PUT",
         body: toCategoryBody(category, approvers),
       }),
@@ -120,7 +130,7 @@ export const categoriesApi = serviceApi.injectEndpoints({
     }),
     deleteCategory: builder.mutation({
       query: (categoryId) => ({
-        url: `/api/categories/${categoryId}`,
+        url: `/categories/${categoryId}`,
         method: "DELETE",
       }),
       invalidatesTags: ["Categories"],

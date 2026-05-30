@@ -2,6 +2,7 @@ import React from 'react';
 import { Button } from '../../../components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
 import { isDuplicateBulkPreviewItem } from '../utils/duplicateInvoice';
+import { formatInvoiceAmount } from '../utils/invoiceAmounts';
 
 // Review and selection surface for extracted invoices before final creation.
 const BulkPreviewDialog = ({
@@ -215,7 +216,9 @@ const BulkPreviewDialog = ({
                       </td>
                     )}
                     <td className="p-3 text-right whitespace-nowrap font-['JetBrains_Mono']">
-                      {item.invoicePayload ? `\u20B9${Number(item.invoicePayload.amount || 0).toLocaleString('en-IN')}` : '-'}
+                      {item.invoicePayload
+                        ? formatInvoiceAmount(item.invoicePayload, item.invoicePayload.amount)
+                        : '-'}
                     </td>
                     <td className="p-3 whitespace-nowrap">
                       <span

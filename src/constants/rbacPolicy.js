@@ -14,9 +14,9 @@ export const ROUTE_PERMISSION_RULES = {
     anyOf: [
       "invoice-checker",
       "invoice-approver",
-      "po-approve",
-      "grn-approve",
-      "payments-manage",
+      // "po-approve",
+      // "grn-approve",
+      // "payments-manage",
     ],
   },
   "/payments": { anyOf: ["payments-view", "payments-manage"] },

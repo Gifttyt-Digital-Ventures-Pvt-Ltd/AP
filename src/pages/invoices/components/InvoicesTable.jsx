@@ -8,54 +8,13 @@ import { cn } from "../../../lib/utils";
 import { Search } from "lucide-react";
 import AppDataTable from "../../../components/common/AppDataTable";
 import { formatWorkflowStatus } from "../../../utils/approvalWorkflow";
-
-const toNumber = (value) => {
-  const numberValue = Number(value);
-  return Number.isFinite(numberValue) ? numberValue : 0;
-};
-
-const formatCurrency = (amount) =>
-  `₹${toNumber(amount).toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-
-const getInvoiceGrossAmount = (invoice) =>
-  toNumber(
-    invoice.gross_amount ??
-      invoice.grossAmount ??
-      invoice.subtotal ??
-      invoice.subTotal ??
-      invoice.taxable_amount ??
-      invoice.taxableAmount ??
-      invoice.amount,
-  );
-
-const getInvoiceGstAmount = (invoice) =>
-  toNumber(
-    invoice.gst_amount ??
-      invoice.gstAmount ??
-      invoice.tax_amount ??
-      invoice.taxAmount ??
-      toNumber(invoice.cgst_amount ?? invoice.cgstAmount) +
-        toNumber(invoice.sgst_amount ?? invoice.sgstAmount) +
-        toNumber(invoice.igst_amount ?? invoice.igstAmount),
-  );
-
-const getInvoiceTdsAmount = (invoice) =>
-  toNumber(invoice.tds_amount ?? invoice.tdsAmount ?? invoice.tds);
-
-const getInvoiceNetAmount = (invoice) => {
-  const explicitNetAmount = invoice.net_amount ?? invoice.netAmount ?? invoice.net_payable ?? invoice.netPayable;
-  if (explicitNetAmount !== undefined && explicitNetAmount !== null && explicitNetAmount !== "") {
-    return toNumber(explicitNetAmount);
-  }
-
-  const grossAmount = getInvoiceGrossAmount(invoice);
-  const gstAmount = getInvoiceGstAmount(invoice);
-  const tdsAmount = getInvoiceTdsAmount(invoice);
-  return Math.max(grossAmount + gstAmount - tdsAmount, 0);
-};
+import {
+  formatInvoiceAmount,
+  getInvoiceGrossAmount,
+  getInvoiceNetAmount,
+  getInvoiceTaxAmount,
+  getInvoiceTdsAmount,
+} from "../utils/invoiceAmounts";
 
 const getApprovalWorkflowName = (invoice) =>
   invoice.approval_workflow_name ??
@@ -71,9 +30,8 @@ const invoiceTableHeader = [
   { key: "invoice_number", title: "Invoice #", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 font-['JetBrains_Mono'] text-sm font-medium" },
   { key: "vendor_name", title: "Vendor", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 text-sm" },
   { key: "original_file_name", title: "Original File Name", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 text-xs font-['JetBrains_Mono'] text-muted-foreground" },
-  { key: "file_category", title: "File Category", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3" },
   { key: "gross_amount", title: "Gross Amount", headerClassName: "p-3 text-right text-xs font-medium", cellClassName: "p-3 font-['JetBrains_Mono'] text-sm font-semibold text-right" },
-  { key: "gst_amount", title: "GST", headerClassName: "p-3 text-right text-xs font-medium", cellClassName: "p-3 font-['JetBrains_Mono'] text-sm text-right" },
+  { key: "tax_amount", title: "GST / Tax", headerClassName: "p-3 text-right text-xs font-medium", cellClassName: "p-3 font-['JetBrains_Mono'] text-sm text-right" },
   { key: "tds_amount", title: "TDS", headerClassName: "p-3 text-right text-xs font-medium", cellClassName: "p-3 font-['JetBrains_Mono'] text-sm text-right" },
   { key: "net_amount", title: "Net Amount", headerClassName: "p-3 text-right text-xs font-medium", cellClassName: "p-3 font-['JetBrains_Mono'] text-sm font-semibold text-right" },
   { key: "approval_workflow_name", title: "Approval Workflow", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 text-sm whitespace-nowrap" },
@@ -121,24 +79,17 @@ const InvoicesTable = ({
           case "original_file_name":
             value = invoice.original_file_name || "-";
             break;
-          case "file_category":
-            value = (
-              <span className="inline-flex items-center px-2 py-1 rounded text-xs font-medium bg-purple-100 text-purple-700 border border-purple-200">
-                {invoice.file_category || "Expense Invoice"}
-              </span>
-            );
-            break;
           case "gross_amount":
-            value = formatCurrency(getInvoiceGrossAmount(invoice));
+            value = formatInvoiceAmount(invoice, getInvoiceGrossAmount(invoice));
             break;
-          case "gst_amount":
-            value = formatCurrency(getInvoiceGstAmount(invoice));
+          case "tax_amount":
+            value = formatInvoiceAmount(invoice, getInvoiceTaxAmount(invoice));
             break;
           case "tds_amount":
-            value = formatCurrency(getInvoiceTdsAmount(invoice));
+            value = formatInvoiceAmount(invoice, getInvoiceTdsAmount(invoice));
             break;
           case "net_amount":
-            value = formatCurrency(getInvoiceNetAmount(invoice));
+            value = formatInvoiceAmount(invoice, getInvoiceNetAmount(invoice));
             break;
           case "approval_workflow_name":
             value = getApprovalWorkflowName(invoice);

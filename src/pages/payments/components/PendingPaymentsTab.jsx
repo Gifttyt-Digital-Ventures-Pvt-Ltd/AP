@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Button } from '../../../components/ui/button';
 import { Checkbox } from '../../../components/ui/checkbox';
 import AppDataTable from '../../../components/common/AppDataTable';
@@ -28,14 +28,6 @@ const PendingPaymentsTab = ({
   canRecordPayment = false,
   safeFormatDate,
 }) => {
-  const tableHeader = useMemo(
-    () =>
-      showRecordPaymentSelection
-        ? [{ key: 'select', title: '', headerClassName: 'w-[48px]' }, ...basePendingPaymentTableHeader]
-        : basePendingPaymentTableHeader,
-    [showRecordPaymentSelection],
-  );
-
   const selectedInvoices = invoices.filter((invoice) => selectedInvoiceIds.includes(invoice.id));
   const selectedTotal = selectedInvoices.reduce((sum, invoice) => sum + (invoice.amount || 0), 0);
   const allSelected = invoices.length > 0 && selectedInvoiceIds.length === invoices.length;
@@ -55,15 +47,20 @@ const PendingPaymentsTab = ({
         let value;
 
         switch (header.key) {
-          case 'select':
-            value = (
-              <div onClick={(event) => event.stopPropagation()}>
-                <Checkbox
-                  checked={selectedInvoiceIds.includes(invoice.id)}
-                  onCheckedChange={() => onToggleInvoice?.(invoice.id)}
-                  data-testid={`pending-invoice-select-${invoice.id}`}
-                />
+          case 'invoice_number':
+            value = showRecordPaymentSelection ? (
+              <div className="flex items-center gap-2">
+                <div onClick={(event) => event.stopPropagation()}>
+                  <Checkbox
+                    checked={selectedInvoiceIds.includes(invoice.id)}
+                    onCheckedChange={() => onToggleInvoice?.(invoice.id)}
+                    data-testid={`pending-invoice-select-${invoice.id}`}
+                  />
+                </div>
+                <span>{invoice.invoice_number || '-'}</span>
               </div>
+            ) : (
+              invoice.invoice_number || '-'
             );
             break;
           case 'amount':
@@ -133,14 +130,6 @@ const PendingPaymentsTab = ({
               </Button>
             )}
           </div>
-
-          {showRecordPaymentSelection && invoices.length > 0 && (
-            <div className="mt-3 flex justify-end">
-              <Button type="button" variant="outline" size="sm" onClick={onSelectAllInvoices}>
-                {allSelected ? 'Deselect All' : 'Select All'}
-              </Button>
-            </div>
-          )}
         </div>
       )}
 
@@ -149,9 +138,12 @@ const PendingPaymentsTab = ({
         data-testid="pending-invoices-table"
       >
         <AppDataTable
-          tableHeader={tableHeader}
+          tableHeader={basePendingPaymentTableHeader}
           tableData={filteredPendingInvoices}
           renderRow={renderPendingPaymentRow}
+          showCheckbox={showRecordPaymentSelection}
+          isChecked={allSelected}
+          onSelectAllChange={onSelectAllInvoices}
           emptyMessage="No pending payments. All invoices need approval first."
           emptyTestId="no-pending-payments"
         />

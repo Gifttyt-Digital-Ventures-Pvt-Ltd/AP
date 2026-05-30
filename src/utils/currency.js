@@ -207,16 +207,14 @@ export function formatCurrency(amount, currency = DEFAULT_CURRENCY) {
   }).format(amount || 0);
 }
 
-/** Omit param for default INR; send ALL/USD/etc. when explicitly selected. */
+/** Always send explicit currency code (including INR and ALL). */
 export function toCurrencyApiParam(selectedCurrency) {
   const value = normalizeCurrencyCode(selectedCurrency);
-  if (!value || value === DEFAULT_CURRENCY) return undefined;
-  return value;
+  return value || DEFAULT_CURRENCY;
 }
 
 export function buildCurrencyQueryParams(selectedCurrency, extraParams = {}) {
-  const currency = toCurrencyApiParam(selectedCurrency);
-  return currency ? { ...extraParams, currency } : extraParams;
+  return { ...extraParams, currency: toCurrencyApiParam(selectedCurrency) };
 }
 
 export const FALLBACK_CURRENCIES = ["INR", "USD", "EUR", "GBP"];
