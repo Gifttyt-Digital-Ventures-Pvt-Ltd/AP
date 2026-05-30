@@ -16,6 +16,7 @@ import {
   formatNumericInputValue,
   sanitizeNumericInput,
 } from "../utils/numericInput";
+import InvoiceChecklist from "./InvoiceFormChecklist";
 
 const lineItemTableHeader = [
   { key: "description", title: "Item Description", headerClassName: "min-w-[190px]", cellClassName: "min-w-[190px]" },
@@ -595,6 +596,13 @@ export const InvoiceForm = ({
           </Button>
         </div>
       )}
+
+      <InvoiceChecklist
+        formData={formData}
+        departmentMandatory={departmentMandatory}
+        categoryMandatory={categoryMandatory}
+        showCategoryField={showCategoryField}
+      />
     </div>
   );
 };

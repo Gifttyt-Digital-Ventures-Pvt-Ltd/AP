@@ -18,6 +18,10 @@ import {
   normalizeInvoiceMandatoryFields,
 } from './utils/mandatoryFields';
 import {
+  isDuplicateBulkExtractResult,
+  isDuplicateInvoiceError,
+} from './utils/duplicateInvoice';
+import {
   applyForeignLineItemTax,
   applyInrLineItemTax,
   calculateInvoiceTotals,
@@ -664,6 +668,19 @@ const InvoicesPage = () => {
     const formDataUpload = new FormData();
     formDataUpload.append('file', file);
 
+    const resetSingleUploadPreview = () => {
+      URL.revokeObjectURL(fileURL);
+      setUploadedFileURL(null);
+      setUploadedFile(null);
+      setExtractedData(null);
+      setFormData(null);
+      setUploadPreviewError(false);
+      setActiveTab('list');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    };
+
     try {
       const response = await scanInvoice(formDataUpload).unwrap();
       const normalizedResponse =
@@ -682,9 +699,8 @@ const InvoicesPage = () => {
       toast.success('Invoice scanned successfully!');
     } catch (error) {
       console.error('Scan error:', error);
-      setExtractedData(null);
-      setFormData(initializeFormData());
-      
+      resetSingleUploadPreview();
+
       const errorMessage =
         error?.data?.detail ||
         error?.data?.message ||
@@ -695,7 +711,7 @@ const InvoicesPage = () => {
           <p className="font-bold text-base">Scan Failed!</p>
           <p className="text-sm whitespace-pre-line">{errorMessage}</p>
         </div>,
-        { duration: 8000 }
+        { duration: 8000 },
       );
     } finally {
       setScanning(false);
@@ -738,7 +754,12 @@ const InvoicesPage = () => {
       );
 
       const previewItems = normalizedResults.map((result, index) => {
-        const isExtracted = result.status === 'success' && result.extracted && typeof result.extracted === 'object';
+        const isDuplicate = isDuplicateBulkExtractResult(result);
+        const isExtracted =
+          !isDuplicate &&
+          result.status === 'success' &&
+          result.extracted &&
+          typeof result.extracted === 'object';
         const normalizedInvoice = isExtracted ? normalizeScannedInvoice(result.extracted) : null;
         const invoicePayload = normalizedInvoice ? toCreateInvoicePayload(normalizedInvoice) : null;
         const matchingFile = fileMap.get(String(result?.filename || '').toLowerCase()) || null;
@@ -749,12 +770,17 @@ const InvoicesPage = () => {
         return {
           id: `${result?.filename || 'file'}-${index}`,
           filename: result?.filename || 'Unknown file',
-          status: vendorMissing ? 'failed' : result.status,
-          error: vendorMissing
-            ? `Vendor "${normalizedInvoice?.vendor_name || 'Unknown'}" not found`
-            : (result?.error || result?.message || ''),
-          selected: Boolean(invoicePayload && !vendorMissing),
-          invoicePayload,
+          status: isDuplicate ? 'duplicate' : vendorMissing ? 'failed' : result.status,
+          error: isDuplicate
+            ? result?.error ||
+              result?.message ||
+              'An invoice with the same invoice number and vendor already exists.'
+            : vendorMissing
+              ? `Vendor "${normalizedInvoice?.vendor_name || 'Unknown'}" not found`
+              : (result?.error || result?.message || ''),
+          isDuplicate,
+          selected: Boolean(invoicePayload && !vendorMissing && !isDuplicate),
+          invoicePayload: isDuplicate ? null : invoicePayload,
           file: matchingFile,
         };
       });
@@ -826,13 +852,18 @@ const InvoicesPage = () => {
           );
         } catch (error) {
           failedCount += 1;
+          const duplicate = isDuplicateInvoiceError(error);
           setBulkPreviewItems((prev) =>
             prev.map((row) =>
               row.id === item.id
                 ? {
                     ...row,
-                    status: 'upload_failed',
-                    error: error?.data?.detail || error?.data?.message || 'Upload failed',
+                    status: duplicate ? 'duplicate' : 'upload_failed',
+                    isDuplicate: duplicate || row.isDuplicate,
+                    error:
+                      error?.data?.detail ||
+                      error?.data?.message ||
+                      'Upload failed',
                     selected: false,
                   }
                 : row
@@ -1488,6 +1519,7 @@ const InvoicesPage = () => {
     if (normalized === 'success' || normalized === 'extracted') return 'Extracted';
     if (normalized === 'uploaded') return 'Uploaded';
     if (normalized === 'upload_failed') return 'Upload Failed';
+    if (normalized === 'duplicate') return 'Duplicate';
     if (normalized === 'failed' || normalized === 'error') return 'Extraction Failed';
     return 'Unknown';
   };
@@ -1496,6 +1528,7 @@ const InvoicesPage = () => {
     const normalized = String(status || '').toLowerCase();
     if (normalized === 'uploaded') return 'bg-blue-100 text-blue-800 border-blue-200';
     if (normalized === 'success' || normalized === 'extracted') return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+    if (normalized === 'duplicate') return 'bg-amber-100 text-amber-800 border-amber-200';
     if (normalized === 'upload_failed' || normalized === 'failed' || normalized === 'error') return 'bg-red-100 text-red-800 border-red-200';
     return 'bg-gray-100 text-gray-800 border-gray-200';
   };
