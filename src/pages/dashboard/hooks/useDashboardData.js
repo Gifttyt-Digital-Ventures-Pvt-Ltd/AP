@@ -28,12 +28,11 @@ export function useDashboardData() {
     selectedCurrency,
     setSelectedCurrency,
     currencyParam,
-    isAllSelected,
-  } = useCurrencyFilter(CURRENCY_SCREENS.ANALYTICS);
+  } = useCurrencyFilter(CURRENCY_SCREENS.ANALYTICS, { excludeAll: true });
 
   const displayCurrency = useMemo(
-    () => (isAllSelected ? DEFAULT_CURRENCY : normalizeCurrencyCode(selectedCurrency)),
-    [isAllSelected, selectedCurrency],
+    () => normalizeCurrencyCode(selectedCurrency),
+    [selectedCurrency],
   );
 
   const formatFullCurrency = useCallback(

@@ -111,19 +111,14 @@ export const auditTrailApi = serviceApi.injectEndpoints({
         return {
           url: `/api/v1/audit-logs/export${queryString ? `?${queryString}` : ""}`,
           method: "GET",
-          responseHandler: async (response) => {
-            const contentType = response.headers.get("content-type") || "";
-            if (!response.ok && contentType.includes("application/json")) {
-              return response.json();
-            }
-            return response.blob();
-          },
         };
       },
-      transformResponse: (blob, meta) => ({
-        blob,
-        contentDisposition: meta?.response?.headers?.get("content-disposition") || "",
-      }),
+      transformResponse: (response) => {
+        const payload = response?.download_url || response?.downloadUrl ? response : response?.data ?? response;
+        return {
+          downloadUrl: payload?.download_url ?? payload?.downloadUrl ?? null,
+        };
+      },
     }),
   }),
 });

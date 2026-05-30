@@ -157,6 +157,17 @@ const getFilename = (format, contentDisposition = "") => {
   return `audit-trail_${stamp}.${format}`;
 };
 
+const getFilenameFromDownloadUrl = (downloadUrl, format) => {
+  try {
+    const pathname = new URL(downloadUrl).pathname;
+    const name = pathname.split("/").pop();
+    if (name) return decodeURIComponent(name);
+  } catch {
+    // fall through to generated filename
+  }
+  return getFilename(format);
+};
+
 // Future use: client-side filter for SSE payloads before inserting live rows.
 // const matchesFilters = (entry, filters) => {
 //   if (!entry) return false;
@@ -426,7 +437,7 @@ const AuditTrail = () => {
     if (totalElements > 50000 && !window.confirm("Export may take time. Proceed?")) return;
     setExportingFormat(format);
     try {
-      const { blob, contentDisposition } = await exportAuditLogs({
+      const { downloadUrl } = await exportAuditLogs({
         ...filters,
         page: undefined,
         size: undefined,
@@ -434,14 +445,20 @@ const AuditTrail = () => {
         format,
         confirm: totalElements > 100000 ? true : undefined,
       }).unwrap();
-      const url = window.URL.createObjectURL(blob);
+
+      if (!downloadUrl) {
+        toast.error("Export failed: no download link returned.");
+        return;
+      }
+
       const link = document.createElement("a");
-      link.href = url;
-      link.download = getFilename(format, contentDisposition);
+      link.href = downloadUrl;
+      link.download = getFilenameFromDownloadUrl(downloadUrl, format);
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
       document.body.appendChild(link);
       link.click();
       link.remove();
-      window.URL.revokeObjectURL(url);
       toast.success("Audit logs exported");
     } catch (exportError) {
       toast.error(
