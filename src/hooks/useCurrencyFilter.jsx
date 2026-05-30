@@ -8,21 +8,43 @@ import {
   toCurrencyApiParam,
 } from "../utils/currency";
 
-export const useCurrencyFilter = (screen, { defaultCurrency = DEFAULT_CURRENCY } = {}) => {
+export const useCurrencyFilter = (
+  screen,
+  { defaultCurrency = DEFAULT_CURRENCY, excludeAll = false } = {},
+) => {
   const [selectedCurrency, setSelectedCurrency] = useState(defaultCurrency);
   const { data: availableCurrencies = [], isLoading, isError } =
     useGetAvailableCurrenciesQuery(screen, { skip: !screen });
 
   const currencies = useMemo(() => {
-    if (Array.isArray(availableCurrencies) && availableCurrencies.length > 0) {
-      return availableCurrencies.map(normalizeCurrencyCode);
+    let list =
+      Array.isArray(availableCurrencies) && availableCurrencies.length > 0
+        ? availableCurrencies.map(normalizeCurrencyCode)
+        : [...FALLBACK_CURRENCIES];
+
+    if (excludeAll) {
+      list = list.filter(
+        (currency) => normalizeCurrencyCode(currency) !== CURRENCY_FILTER_ALL,
+      );
     }
-    return FALLBACK_CURRENCIES;
-  }, [availableCurrencies]);
+
+    return list;
+  }, [availableCurrencies, excludeAll]);
+
+  const effectiveSelectedCurrency = useMemo(() => {
+    const normalized = normalizeCurrencyCode(selectedCurrency);
+    if (excludeAll && normalized === CURRENCY_FILTER_ALL) {
+      return defaultCurrency;
+    }
+    if (!currencies.includes(normalized) && currencies.length > 0) {
+      return currencies.includes(defaultCurrency) ? defaultCurrency : currencies[0];
+    }
+    return selectedCurrency;
+  }, [selectedCurrency, excludeAll, defaultCurrency, currencies]);
 
   const currencyParam = useMemo(
-    () => toCurrencyApiParam(selectedCurrency),
-    [selectedCurrency],
+    () => toCurrencyApiParam(effectiveSelectedCurrency),
+    [effectiveSelectedCurrency],
   );
 
   const queryArgs = useMemo(() => {
@@ -32,11 +54,11 @@ export const useCurrencyFilter = (screen, { defaultCurrency = DEFAULT_CURRENCY }
   }, [currencyParam]);
 
   const isAllSelected =
-    normalizeCurrencyCode(selectedCurrency) === CURRENCY_FILTER_ALL;
+    normalizeCurrencyCode(effectiveSelectedCurrency) === CURRENCY_FILTER_ALL;
 
   return {
     currencies,
-    selectedCurrency,
+    selectedCurrency: effectiveSelectedCurrency,
     setSelectedCurrency,
     currencyParam,
     queryArgs,
