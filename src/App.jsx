@@ -27,6 +27,7 @@ import Approvals from "./pages/approvals/Approvals";
 import Payments from "./pages/payments/Payments";
 import Banking from "./pages/banking/Banking";
 import UserRoles from "./pages/user-roles/UserRoles";
+import Profile from "./pages/profile/Profile";
 import TransactionsPage from "./pages/transactions/TransactionsPage";
 import PurchaseOrdersPage from "./pages/purchase-orders/PurchaseOrdersPage";
 import GoodsReceipt from "./pages/goods-receipt/GoodsReceipt";
@@ -231,6 +232,7 @@ function AppContent() {
             }
           />
           <Route path="/user-roles" element={<UserRoles />} />
+          <Route path="/profile" element={<Profile />} />
           <Route path="/transactions" element={<TransactionsPage />} />
           <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
           <Route path="/goods-receipt" element={<GoodsReceipt />} />
