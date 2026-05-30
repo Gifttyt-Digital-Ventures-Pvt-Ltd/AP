@@ -417,6 +417,7 @@ export const RBACProvider = ({ children }) => {
 
   const contextValue = {
     isLoaded,
+    isCorporateAdmin,
     permissions,
     permissionSource: computedPermissions.source,
     unmappedPermissions: computedPermissions.unmappedPermissions,

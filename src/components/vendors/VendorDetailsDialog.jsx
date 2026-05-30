@@ -1,6 +1,6 @@
 import React from 'react';
 import { Building2, User } from 'lucide-react';
-import { isIndiaCountry } from '../../utils/vendorValidation';
+import { isIndiaCountry, normalizePincodeInput } from '../../utils/vendorValidation';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
 import { Input } from '../ui/input';
@@ -61,7 +61,6 @@ const VendorDetailsDialog = ({
     { key: 'address_line2', label: 'Address Line 2', placeholder: 'Apartment, suite, etc.', required: requireFullMandatory, colSpan: 'col-span-2' },
     { key: 'city', label: 'City', placeholder: 'e.g., Mumbai', required: requireFullMandatory },
     { key: 'state', label: 'State', placeholder: 'e.g., Maharashtra', required: requireFullMandatory },
-    { key: 'pincode', label: 'Pincode', placeholder: 'e.g., 400001', required: requireFullMandatory },
     { key: 'country', label: 'Country', placeholder: 'India', required: requireFullMandatory },
   ];
 
@@ -181,6 +180,35 @@ const VendorDetailsDialog = ({
                 </div>
 
                 {addressFields.map(renderInputField)}
+
+                <div>
+                  <Label>
+                    {isIndia ? 'Pincode' : 'Postal Code'}
+                    {requireFullMandatory ? ' *' : ''}
+                  </Label>
+                  <Input
+                    type="text"
+                    inputMode={isIndia ? 'numeric' : 'text'}
+                    value={formData.pincode || ''}
+                    onChange={(event) =>
+                      updateField(
+                        'pincode',
+                        normalizePincodeInput(event.target.value, formData.country),
+                      )
+                    }
+                    placeholder={
+                      isIndia ? 'e.g., 400001' : 'e.g., 10001 or SW1A 1AA'
+                    }
+                    required={requireFullMandatory}
+                    maxLength={isIndia ? 6 : undefined}
+                    data-testid="vendor-pincode-input"
+                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {isIndia
+                      ? 'Enter a 6-digit pincode for India'
+                      : 'Enter the postal code for the selected country'}
+                  </p>
+                </div>
               </div>
             </TabsContent>
 

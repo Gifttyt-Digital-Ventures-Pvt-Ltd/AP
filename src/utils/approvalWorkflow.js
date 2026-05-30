@@ -77,25 +77,122 @@ export const emailsMatch = (left, right) => {
   return String(left).trim().toLowerCase() === String(right).trim().toLowerCase();
 };
 
+const pickEmailLikeValue = (values = []) =>
+  values.find((value) => typeof value === "string" && value.includes("@")) || "";
+
 export const resolveCreatorEmail = (entity = {}) => {
-  const candidates = [
+  const emailLike = pickEmailLikeValue([
     entity.created_by_email,
     entity.createdByEmail,
+    entity.requested_by_email,
+    entity.requestedByEmail,
+    entity.creator_email,
+    entity.creatorEmail,
+    entity.created_by_name,
+    entity.createdByName,
+    entity.requested_by_name,
+    entity.requestedByName,
     entity.created_by,
     entity.createdBy,
-  ];
-  const emailLike = candidates.find(
-    (value) => typeof value === "string" && value.includes("@"),
-  );
-  if (emailLike) return emailLike;
-  return candidates.find((value) => value) || "";
+    entity.requested_by,
+    entity.requestedBy,
+  ]);
+  return emailLike;
 };
 
-export const isEntityCreator = (entity, userEmail) => {
-  const creatorEmail = resolveCreatorEmail(entity);
-  if (!creatorEmail || !userEmail) return false;
-  return emailsMatch(creatorEmail, userEmail);
+export const resolveCreatorUserId = (entity = {}) => {
+  const idCandidates = [
+    entity.created_by_id,
+    entity.createdById,
+    entity.creator_id,
+    entity.creatorId,
+    entity.requested_by_id,
+    entity.requestedById,
+  ];
+
+  for (const value of idCandidates) {
+    if (value !== null && value !== undefined && value !== "" && !String(value).includes("@")) {
+      return value;
+    }
+  }
+
+  const legacyCreatedBy = entity.created_by ?? entity.createdBy;
+  if (
+    legacyCreatedBy !== null &&
+    legacyCreatedBy !== undefined &&
+    legacyCreatedBy !== "" &&
+    !String(legacyCreatedBy).includes("@")
+  ) {
+    return legacyCreatedBy;
+  }
+
+  return null;
 };
+
+const uniqueStrings = (values = []) =>
+  [...new Set(values.filter((value) => value !== null && value !== undefined && value !== "").map(String))];
+
+export const buildCurrentUserIdentity = ({ user, corporateUserContext } = {}) => {
+  const corporateUser = corporateUserContext?.corporateUser;
+  const employeeDetails = corporateUserContext?.employeeDetails;
+
+  const userEmails = uniqueStrings(
+    [
+      corporateUser?.email,
+      employeeDetails?.email,
+      user?.email,
+      user?.identifier,
+      typeof user?.name === "string" && user.name.includes("@") ? user.name : null,
+    ].filter((value) => typeof value === "string" && value.includes("@")),
+  ).map((email) => email.trim().toLowerCase());
+
+  const userIds = uniqueStrings([
+    corporateUser?.id,
+    corporateUser?.userId,
+    employeeDetails?.id,
+    employeeDetails?.employeeId,
+    employeeDetails?.optifiiUserId,
+    employeeDetails?.userId,
+    user?.id,
+  ]).filter((id) => !id.includes("@"));
+
+  return {
+    userEmail: userEmails[0] || "",
+    userId: userIds[0] || "",
+    userEmails,
+    userIds,
+  };
+};
+
+export const isEntityCreator = (
+  entity,
+  userEmail,
+  userId,
+  { userEmails = [], userIds = [] } = {},
+) => {
+  const emailsToCheck = uniqueStrings([userEmail, ...userEmails]).map((email) =>
+    email.toLowerCase(),
+  );
+  const idsToCheck = uniqueStrings([userId, ...userIds]).filter((id) => !id.includes("@"));
+
+  const creatorEmail = resolveCreatorEmail(entity);
+  if (creatorEmail && emailsToCheck.some((email) => emailsMatch(creatorEmail, email))) {
+    return true;
+  }
+
+  const creatorId = resolveCreatorUserId(entity);
+  if (creatorId !== null && idsToCheck.some((id) => String(creatorId) === String(id))) {
+    return true;
+  }
+
+  return false;
+};
+
+const matchesCreator = (entity, identity = {}) =>
+  isEntityCreator(entity, identity.userEmail, identity.userId, {
+    userEmails: identity.userEmails,
+    userIds: identity.userIds,
+  });
 
 export const extractApiErrorDetail = (error) => {
   const detail = error?.data?.detail ?? error?.data?.message;
@@ -106,21 +203,17 @@ export const extractApiErrorDetail = (error) => {
   return "";
 };
 
-const INVOICE_DELETABLE_STATUSES = new Set([
-  "Draft",
-  "Pending Checker",
-  "Pending Approver",
-  "Pending Approval",
-  "Rejected",
-]);
+const INVOICE_DELETABLE_STATUSES = new Set([NEEDS_CORRECTION_STATUS, "Rejected"]);
 
-export const canEditInvoice = (invoice, { userEmail, canUpdateInvoices }) => {
+export const canEditInvoice = (invoice, identity = {}) => {
+  const { canUpdateInvoices, isCorporateAdmin } = identity;
   if (!canUpdateInvoices) return false;
 
   const status = normalizeWorkflowStatus(invoice?.status);
   if (status !== NEEDS_CORRECTION_STATUS) return false;
 
-  return isEntityCreator(invoice, userEmail);
+  if (isCorporateAdmin) return true;
+  return matchesCreator(invoice, identity);
 };
 
 export const canDeleteInvoice = (status, canDeleteInvoices) => {
@@ -135,15 +228,31 @@ const VENDOR_MAKER_EDITABLE_STATUSES = new Set([
   "Draft",
 ]);
 
-export const canEditVendor = (vendor, { userEmail, canUpdateVendor }) => {
-  if (!canUpdateVendor) return false;
-
+export const canEditVendor = (vendor, identity = {}) => {
+  const { canUpdateVendor, canRequestVendor, isCorporateAdmin } = identity;
   const status = normalizeWorkflowStatus(vendor?.status);
   if (status === "Rejected") return false;
 
+  const isCreator = matchesCreator(vendor, identity);
+  const canMutateVendor = canUpdateVendor || canRequestVendor;
+
   if (status === NEEDS_CORRECTION_STATUS) {
-    return isEntityCreator(vendor, userEmail);
+    if (isCorporateAdmin && canUpdateVendor) return true;
+    return canMutateVendor && isCreator;
   }
 
+  if (!canUpdateVendor) return false;
   return VENDOR_MAKER_EDITABLE_STATUSES.has(status) || status === "";
+};
+
+export const canSaveVendorEdit = (vendor, identity = {}) => {
+  const { canUpdateVendor, canRequestVendor } = identity;
+  if (canUpdateVendor) return true;
+
+  const status = normalizeWorkflowStatus(vendor?.status);
+  if (status === NEEDS_CORRECTION_STATUS && canRequestVendor) {
+    return matchesCreator(vendor, identity);
+  }
+
+  return false;
 };

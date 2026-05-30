@@ -13,10 +13,13 @@ import { Input } from '../../components/ui/input';
 import { Search, Plus, Pencil, Trash2, Eye, X, Check, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
 import { useActionGuard } from '../../hooks/useActionGuard';
+import { useRBAC } from '../../contexts/RBACContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useGetCorporateUserDetailsQuery } from '../../Services/apis/corporateApi';
 import {
+  buildCurrentUserIdentity,
   canEditVendor,
+  canSaveVendorEdit,
   extractApiErrorDetail,
   formatWorkflowStatus,
   NEEDS_CORRECTION_ACTION,
@@ -160,19 +163,23 @@ const Vendors = () => {
   const { user } = useAuth();
   const { data: corporateUserContext = null } = useGetCorporateUserDetailsQuery();
   const { guardAction, canPerformAction } = useActionGuard();
-  const currentUserEmail =
-    corporateUserContext?.corporateUser?.email ||
-    corporateUserContext?.employeeDetails?.email ||
-    user?.email ||
-    user?.identifier ||
-    '';
+  const { isCorporateAdmin } = useRBAC();
   const canUpdateVendorPermission = canPerformAction('vendors.update');
+  const canRequestVendorPermission = canPerformAction('invoices.addVendor');
   const vendorEditContext = useMemo(
     () => ({
-      userEmail: currentUserEmail,
+      ...buildCurrentUserIdentity({ user, corporateUserContext }),
       canUpdateVendor: canUpdateVendorPermission,
+      canRequestVendor: canRequestVendorPermission,
+      isCorporateAdmin,
     }),
-    [currentUserEmail, canUpdateVendorPermission],
+    [
+      user,
+      corporateUserContext,
+      canUpdateVendorPermission,
+      canRequestVendorPermission,
+      isCorporateAdmin,
+    ],
   );
   const [searchTerm, setSearchTerm] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -236,10 +243,20 @@ const Vendors = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    const actionKey = editingVendor ? 'vendors.update' : 'vendors.create';
-    if (!guardAction(actionKey)) return;
+    if (editingVendor) {
+      if (!canSaveVendorEdit(editingVendor, vendorEditContext)) {
+        if (!guardAction('vendors.update')) return;
+        toast.error('Only the creator can edit a vendor in Needs Correction status');
+        return;
+      }
+    } else if (!guardAction('vendors.create')) {
+      return;
+    }
 
-    const validationErrors = getVendorValidationErrors(formData, { requireEmail: true });
+    const validationErrors = getVendorValidationErrors(formData, {
+      requireEmail: true,
+      requirePincode: true,
+    });
     if (validationErrors.length > 0) {
       toast.error(validationErrors[0]);
       return;
@@ -330,6 +347,7 @@ const Vendors = () => {
       rowIndex,
       requireEmail: true,
       requireVendorType: true,
+      requirePincode: true,
     });
 
   const downloadVendorTemplate = () => {
@@ -374,7 +392,7 @@ const Vendors = () => {
       ['Address Line 2', 'Mandatory'],
       ['City', 'Mandatory'],
       ['State', 'Mandatory'],
-      ['Pincode', 'Mandatory'],
+      ['Pincode', 'Mandatory. Must be 6 digits when Country is India, otherwise any postal code text'],
       ['Country', 'Mandatory'],
       ['PAN No', 'Mandatory when Country is India, otherwise Optional'],
       ['GST no', 'Mandatory when Country is India, otherwise Optional'],
@@ -661,14 +679,19 @@ const Vendors = () => {
                     </Button>
                   </>
                 )}
-                {(canEditVendorPermission || canDeleteVendor) && (
+                {(canEditVendor(vendor, vendorEditContext) || canDeleteVendor) && (
                   <>
-                    {canEditVendorPermission && canEditVendor(vendor, vendorEditContext) && (
+                    {canEditVendor(vendor, vendorEditContext) && (
                       <Button
                         variant="ghost"
                         size="sm"
                         className="w-8 h-8 p-0 rounded-md"
                         onClick={() => handleEdit(vendor)}
+                        title={
+                          formatWorkflowStatus(vendor.status) === NEEDS_CORRECTION_STATUS
+                            ? 'Edit vendor (creator)'
+                            : 'Edit vendor'
+                        }
                         data-testid={`edit-vendor-${vendor.id}`}
                       >
                         <Pencil className="h-4 w-4" />
