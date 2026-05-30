@@ -149,10 +149,15 @@ export const Layout = ({ children }) => {
 
             <div className="p-4 border-t border-border">
               {sidebarOpen && (user || corporateName || userName) && (
-                <div className="mb-4" data-testid="user-info">
+                <button
+                  type="button"
+                  onClick={() => handleNavigate('/profile')}
+                  className="mb-4 w-full rounded-md px-2 py-2 text-left transition-colors hover:bg-accent/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  data-testid="user-info"
+                >
                   <p className="text-sm font-medium">{sidebarPrimaryName}</p>
                   <p className="text-xs text-muted-foreground">{sidebarSecondaryLabel}</p>
-                </div>
+                </button>
               )}
               <Button
                 variant="ghost"
