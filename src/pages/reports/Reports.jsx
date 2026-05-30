@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   useGetExecutiveDashboardQuery,
   useGetApReportsQuery,
@@ -46,6 +46,13 @@ import ReportsHeader from './components/ReportsHeader';
 import MetricCard from './components/MetricCard';
 import ReportsTooltip from './components/ReportsTooltip';
 import { useRBAC } from '../../contexts/RBACContext';
+import { useCurrencyFilter } from '../../hooks/useCurrencyFilter';
+import {
+  CURRENCY_SCREENS,
+  DEFAULT_CURRENCY,
+  formatCurrency as formatCurrencyValue,
+  normalizeCurrencyCode,
+} from '../../utils/currency';
 
 const COLORS = ['#6366f1', '#8b5cf6', '#ec4899', '#f43f5e', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#06b6d4', '#3b82f6'];
 const STATUS_COLORS = {
@@ -57,24 +64,36 @@ const STATUS_COLORS = {
   'Draft': '#6b7280'
 };
 
-const formatCurrency = (amount) => {
-  if (amount >= 10000000) return `\u20B9${(amount / 10000000).toFixed(2)}Cr`;
-  if (amount >= 100000) return `\u20B9${(amount / 100000).toFixed(2)}L`;
-  if (amount >= 1000) return `\u20B9${(amount / 1000).toFixed(1)}K`;
-  return `\u20B9${amount?.toFixed(0) || 0}`;
-};
-
-const formatFullCurrency = (amount) => {
-  return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0
-  }).format(amount || 0);
-};
-
 const Reports = () => {
   const { isCorporateSectionEnabled } = useRBAC();
+  const {
+    currencies,
+    selectedCurrency,
+    setSelectedCurrency,
+    currencyParam,
+    isAllSelected,
+  } = useCurrencyFilter(CURRENCY_SCREENS.ANALYTICS);
+
+  const displayCurrency = useMemo(
+    () => (isAllSelected ? DEFAULT_CURRENCY : normalizeCurrencyCode(selectedCurrency)),
+    [isAllSelected, selectedCurrency],
+  );
+
+  const formatFullCurrency = useCallback(
+    (amount, currency = displayCurrency) => formatCurrencyValue(amount, currency),
+    [displayCurrency],
+  );
+
+  const formatCurrency = useCallback((amount) => {
+    const value = amount || 0;
+    if (displayCurrency === DEFAULT_CURRENCY) {
+      if (value >= 10000000) return `\u20B9${(value / 10000000).toFixed(2)}Cr`;
+      if (value >= 100000) return `\u20B9${(value / 100000).toFixed(2)}L`;
+      if (value >= 1000) return `\u20B9${(value / 1000).toFixed(1)}K`;
+      return `\u20B9${value.toFixed(0)}`;
+    }
+    return formatCurrencyValue(value, displayCurrency);
+  }, [displayCurrency]);
   const [activeTab, setActiveTab] = useState('executive');
   const [dateRange, setDateRange] = useState('30');
   const [customDays, setCustomDays] = useState('');
@@ -109,37 +128,41 @@ const Reports = () => {
 
   const days = getDays();
   const shouldSkip = !days || Number.isNaN(days) || days <= 0;
+  const reportQueryArgs = {
+    days,
+    ...(currencyParam ? { currency: currencyParam } : {}),
+  };
 
   const {
     data: executiveData = null,
     isLoading: executiveLoading,
     isFetching: executiveFetching,
     refetch: refetchExecutiveDashboard,
-  } = useGetExecutiveDashboardQuery({ days }, { skip: shouldSkip || !canViewExecutiveReports });
+  } = useGetExecutiveDashboardQuery(reportQueryArgs, { skip: shouldSkip || !canViewExecutiveReports });
   const {
     data: apData = null,
     isLoading: apLoading,
     isFetching: apFetching,
     refetch: refetchApReports,
-  } = useGetApReportsQuery({ days }, { skip: shouldSkip || !canViewApReports });
+  } = useGetApReportsQuery(reportQueryArgs, { skip: shouldSkip || !canViewApReports });
   const {
     data: vendorData = null,
     isLoading: vendorLoading,
     isFetching: vendorFetching,
     refetch: refetchVendorAnalytics,
-  } = useGetVendorAnalyticsQuery({ days }, { skip: shouldSkip || !canViewVendorReports });
+  } = useGetVendorAnalyticsQuery(reportQueryArgs, { skip: shouldSkip || !canViewVendorReports });
   const {
     data: taxData = null,
     isLoading: taxLoading,
     isFetching: taxFetching,
     refetch: refetchTaxReports,
-  } = useGetTaxReportsQuery({ days }, { skip: shouldSkip || !canViewTaxReports });
+  } = useGetTaxReportsQuery(reportQueryArgs, { skip: shouldSkip || !canViewTaxReports });
   const {
     data: paymentData = null,
     isLoading: paymentLoading,
     isFetching: paymentFetching,
     refetch: refetchPaymentAnalytics,
-  } = useGetPaymentAnalyticsQuery({ days }, { skip: shouldSkip || !canViewPaymentReports });
+  } = useGetPaymentAnalyticsQuery(reportQueryArgs, { skip: shouldSkip || !canViewPaymentReports });
 
   const loading =
     (canViewExecutiveReports && (executiveLoading || executiveFetching)) ||
@@ -185,6 +208,9 @@ const Reports = () => {
         setCustomDays={setCustomDays}
         fetchAllData={fetchAllData}
         loading={loading}
+        currencies={currencies}
+        selectedCurrency={selectedCurrency}
+        onCurrencyChange={setSelectedCurrency}
       />
 
       {/* Tabs */}

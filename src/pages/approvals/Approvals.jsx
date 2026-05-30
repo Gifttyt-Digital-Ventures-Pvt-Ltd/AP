@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { useGetPendingApprovalsQuery } from '../../Services/apis/approvalsPaymentsBankingApi';
 import {
   useGetInvoicesQuery,
@@ -11,6 +11,9 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
 import { useActionGuard } from '../../hooks/useActionGuard';
+import { useCurrencyFilter } from '../../hooks/useCurrencyFilter';
+import CurrencySelector from '../../components/common/CurrencySelector';
+import { CURRENCY_SCREENS } from '../../utils/currency';
 import NeedsApprovalTable from './components/NeedsApprovalTable';
 import PendingInvoicesTable from './components/PendingInvoicesTable';
 import AllInvoicesTable from './components/AllInvoicesTable';
@@ -31,11 +34,27 @@ const safeFormatDate = (value, pattern = 'dd MMM yy') => {
 };
 
 const Approvals = () => {
+  const { user } = useAuth();
+  const { canPerformAction } = useActionGuard();
+  const canCheckInvoices = canPerformAction('invoices.check');
+  const canApproveInvoices = canPerformAction('invoices.approve');
+
+  const currencyScreen = useMemo(() => {
+    if (canCheckInvoices && !canApproveInvoices) return CURRENCY_SCREENS.CHECKER;
+    return CURRENCY_SCREENS.APPROVAL;
+  }, [canApproveInvoices, canCheckInvoices]);
+
+  const {
+    currencies,
+    selectedCurrency,
+    setSelectedCurrency,
+    queryArgs: approvalQueryArgs,
+  } = useCurrencyFilter(currencyScreen);
   const { data: pendingApprovalsData = [], refetch: refetchPendingApprovals } =
-    useGetPendingApprovalsQuery();
+    useGetPendingApprovalsQuery(approvalQueryArgs);
   const { data: pendingCheckerData = [], refetch: refetchPendingChecker } =
-    useGetPendingCheckerInvoicesQuery();
-  const { data: allInvoicesData = [], refetch: refetchInvoices } = useGetInvoicesQuery();
+    useGetPendingCheckerInvoicesQuery(approvalQueryArgs);
+  const { data: allInvoicesData = [], refetch: refetchInvoices } = useGetInvoicesQuery(approvalQueryArgs);
   const [approveInvoice] = useApproveInvoiceMutation();
   const [checkInvoice] = useCheckInvoiceMutation();
 
@@ -43,10 +62,6 @@ const Approvals = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [comments, setComments] = useState('');
   const [actionType, setActionType] = useState('');
-  const { user } = useAuth();
-  const { canPerformAction } = useActionGuard();
-  const canCheckInvoices = canPerformAction('invoices.check');
-  const canApproveInvoices = canPerformAction('invoices.approve');
   const canPerformApprovalActions = canApproveInvoices || canCheckInvoices;
 
 
@@ -194,11 +209,20 @@ const Approvals = () => {
 
   return (
     <div data-testid="approvals-page">
-      <div className="mb-8">
-        <h1 className="text-4xl md:text-5xl font-bold font-['Manrope'] text-primary mb-2" data-testid="approvals-title">
-          Approvals
-        </h1>
-        <p className="text-muted-foreground">Review and approve invoices</p>
+      <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1 className="text-4xl md:text-5xl font-bold font-['Manrope'] text-primary mb-2" data-testid="approvals-title">
+            Approvals
+          </h1>
+          <p className="text-muted-foreground">Review and approve invoices</p>
+        </div>
+        <CurrencySelector
+          currencies={currencies}
+          value={selectedCurrency}
+          onChange={setSelectedCurrency}
+          variant="inline"
+          id="approvals-currency-filter"
+        />
       </div>
 
       {/* Each tab now delegates table rendering to focused components. */}

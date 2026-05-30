@@ -16,7 +16,7 @@ import {
   getWorkflowTypeLabel,
   WORKFLOW_TYPE_BADGE_CLASSES,
 } from "../constants/approvalWorkflowConfig";
-import { formatCurrency } from "../utils/approvalWorkflowUtils";
+import { formatCurrency } from "../../../utils/currency";
 
 const DetailField = ({ label, children }) => (
   <div className="space-y-1.5">
@@ -56,6 +56,7 @@ const WorkflowViewDialog = ({
   const departmentNames = Array.isArray(rule.departmentNames) ? rule.departmentNames : [];
   const categoryNames = Array.isArray(rule.categoryNames) ? rule.categoryNames : [];
   const approvers = Array.isArray(rule.approvers) ? rule.approvers : [];
+  const ruleCurrency = rule.currency || "INR";
   const isGeneric = rule.type === "GENERIC";
 
   return (
@@ -110,6 +111,10 @@ const WorkflowViewDialog = ({
                 {rule.approvalMode === "sequential" ? "Sequential" : "Parallel"}
               </Badge>
             </DetailField>
+
+            <DetailField label="Currency">
+              <Badge variant="secondary">{rule.currency || "INR"}</Badge>
+            </DetailField>
           </div>
 
           <Separator />
@@ -144,14 +149,14 @@ const WorkflowViewDialog = ({
                     <DetailField label="Min Amount">
                       <p>
                         {rule.minAmount !== null && rule.minAmount !== undefined
-                          ? formatCurrency(rule.minAmount)
+                          ? formatCurrency(rule.minAmount, ruleCurrency)
                           : "No minimum"}
                       </p>
                     </DetailField>
                     <DetailField label="Max Amount">
                       <p>
                         {rule.maxAmount !== null && rule.maxAmount !== undefined
-                          ? formatCurrency(rule.maxAmount)
+                          ? formatCurrency(rule.maxAmount, ruleCurrency)
                           : "No maximum"}
                       </p>
                     </DetailField>

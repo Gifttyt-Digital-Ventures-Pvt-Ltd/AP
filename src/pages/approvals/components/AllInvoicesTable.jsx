@@ -1,6 +1,7 @@
 import React from 'react';
 import AppDataTable from '../../../components/common/AppDataTable';
 import { TableCell, TableRow } from '../../../components/ui/table';
+import { formatCurrency } from '../../../utils/currency';
 
 const allInvoicesTableHeader = [
   { key: 'invoice_number', title: 'Invoice #', cellClassName: "font-['JetBrains_Mono'] font-medium" },
@@ -19,7 +20,7 @@ const AllInvoicesTable = ({ allInvoices, getStatusBadgeClass, formatStatus }) =>
 
         switch (header.key) {
           case 'amount':
-            value = `${invoice.amount.toLocaleString()} ${invoice.currency}`;
+            value = formatCurrency(invoice.amount, invoice.currency);
             break;
           case 'status':
             value = (

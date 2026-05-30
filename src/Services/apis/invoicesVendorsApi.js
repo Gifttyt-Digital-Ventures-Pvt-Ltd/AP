@@ -68,7 +68,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
       providesTags: ["Invoices"],
     }),
     getPendingCheckerInvoices: builder.query({
-      query: () => ({ url: "/checker/pending", method: "GET" }),
+      query: (params) => ({ url: "/checker/pending", method: "GET", params }),
       transformResponse: (response) =>
         Array.isArray(response) ? response.map(toInvoiceUiPayload) : [],
       providesTags: ["Invoices", "Approvals"],

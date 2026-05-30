@@ -7,42 +7,42 @@ export const dashboardReportsApi = serviceApi.injectEndpoints({
       providesTags: ["Dashboard"],
     }),
     getExecutiveDashboard: builder.query({
-      query: ({ days = 30 } = {}) => ({
+      query: ({ days = 30, currency } = {}) => ({
         url: "/analytics/executive-dashboard",
         method: "GET",
-        params: { days },
+        params: { days, ...(currency ? { currency } : {}) },
       }),
       providesTags: ["Dashboard", "Reports"],
     }),
     getApReports: builder.query({
-      query: ({ days = 30 } = {}) => ({
+      query: ({ days = 30, currency } = {}) => ({
         url: "/analytics/ap-reports",
         method: "GET",
-        params: { days },
+        params: { days, ...(currency ? { currency } : {}) },
       }),
       providesTags: ["Dashboard", "Reports"],
     }),
     getVendorAnalytics: builder.query({
-      query: ({ days = 30 } = {}) => ({
+      query: ({ days = 30, currency } = {}) => ({
         url: "/analytics/vendor-analytics",
         method: "GET",
-        params: { days },
+        params: { days, ...(currency ? { currency } : {}) },
       }),
       providesTags: ["Reports"],
     }),
     getTaxReports: builder.query({
-      query: ({ days = 30 } = {}) => ({
+      query: ({ days = 30, currency } = {}) => ({
         url: "/analytics/tax-reports",
         method: "GET",
-        params: { days },
+        params: { days, ...(currency ? { currency } : {}) },
       }),
       providesTags: ["Reports"],
     }),
     getPaymentAnalytics: builder.query({
-      query: ({ days = 30 } = {}) => ({
+      query: ({ days = 30, currency } = {}) => ({
         url: "/analytics/payment-analytics",
         method: "GET",
-        params: { days },
+        params: { days, ...(currency ? { currency } : {}) },
       }),
       providesTags: ["Reports"],
     }),

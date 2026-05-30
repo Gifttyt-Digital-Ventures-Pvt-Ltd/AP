@@ -44,6 +44,8 @@ import PendingPaymentsTab from './components/PendingPaymentsTab';
 import ReleasedPaymentsTab from './components/ReleasedPaymentsTab';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useRBAC } from '../../contexts/RBACContext';
+import { useCurrencyFilter } from '../../hooks/useCurrencyFilter';
+import { CURRENCY_SCREENS } from '../../utils/currency';
 
 const safeLower = (value) => String(value ?? '').toLowerCase();
 
@@ -64,20 +66,30 @@ const batchInvoiceTableHeader = [
 const Payments = () => {
   const { isPaymentBatchesFeatureEnabled, isConnectedBankingEnabled } = useRBAC();
   const {
+    currencies,
+    selectedCurrency,
+    setSelectedCurrency,
+    queryArgs: paymentQueryArgs,
+  } = useCurrencyFilter(CURRENCY_SCREENS.PAYMENT);
+  const invoiceQueryWithStatus = (status) => ({
+    ...paymentQueryArgs,
+    status,
+  });
+  const {
     data: paymentsData = [],
     isError: paymentsError,
-  } = useGetPaymentsQuery();
+  } = useGetPaymentsQuery(paymentQueryArgs);
   const {
     data: invoicesData = [],
     isError: invoicesError,
     refetch: refetchPendingPaymentInvoices,
-  } = useGetInvoicesQuery({ status: 'Pending Payment' });
+  } = useGetInvoicesQuery(invoiceQueryWithStatus('Pending Payment'));
   const {
     data: pendingApproverInvoicesData = [],
     isError: pendingApproverInvoicesError,
     refetch: refetchPendingApproverInvoices,
   } = useGetInvoicesQuery(
-    { status: 'Pending Approver' },
+    invoiceQueryWithStatus('Pending Approver'),
     { skip: !isPaymentBatchesFeatureEnabled },
   );
   const {
@@ -415,6 +427,9 @@ const Payments = () => {
         invoicesCount={invoices.length}
         handleBulkRelease={handleBulkRelease}
         canBulkRelease={canShowBulkRelease}
+        currencies={currencies}
+        selectedCurrency={selectedCurrency}
+        onCurrencyChange={setSelectedCurrency}
         batchDialogTrigger={canCreateBatch ? (
           <Button
             variant="default"

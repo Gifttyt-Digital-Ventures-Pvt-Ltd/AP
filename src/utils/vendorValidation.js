@@ -92,16 +92,13 @@ export const getVendorValidationErrors = (
     }
 
     if (!gstin) {
-      errors.push(`${prefix}GSTIN is required for vendors in India`);
+      errors.push(`${prefix}GSTIN/TAX ID is required for vendors in India`);
     } else if (gstin.length !== 15) {
-      errors.push(`${prefix}GSTIN must be 15 characters`);
+      errors.push(`${prefix}GSTIN must be 15 characters for vendors in India`);
     }
   } else {
     if (pan && pan.length !== 10) {
       errors.push(`${prefix}PAN must be 10 characters`);
-    }
-    if (gstin && gstin.length !== 15) {
-      errors.push(`${prefix}GSTIN must be 15 characters`);
     }
   }
 
@@ -110,8 +107,7 @@ export const getVendorValidationErrors = (
 
 /**
  * Lighter validation for Request Vendor from invoice upload (single + bulk).
- * Keeps the original invoice-flow rules (name, type, GSTIN) plus mandatory mobile.
- * Full PAN / India rules apply on the Vendors screen and bulk vendor upload only.
+ * Name, type, and mobile are always required. GSTIN/TAX ID is required for India only.
  */
 export const getInvoiceVendorRequestValidationErrors = (vendor = {}) => {
   const errors = [];
@@ -119,6 +115,7 @@ export const getInvoiceVendorRequestValidationErrors = (vendor = {}) => {
   const name = String(vendor.name || "").trim();
   const vendorType = String(vendor.vendor_type || vendor.vendorType || "").trim();
   const mobile = String(vendor.mobile || "").trim();
+  const country = String(vendor.country || "").trim();
   const gstin = String(vendor.gstin || "").trim().toUpperCase();
 
   if (!name) {
@@ -135,10 +132,12 @@ export const getInvoiceVendorRequestValidationErrors = (vendor = {}) => {
     errors.push("Mobile number is required");
   }
 
-  if (!gstin) {
-    errors.push("GSTIN is required");
-  } else if (gstin.length !== 15) {
-    errors.push("GSTIN must be 15 characters");
+  if (isIndiaCountry(country)) {
+    if (!gstin) {
+      errors.push("GSTIN/TAX ID is required for vendors in India");
+    } else if (gstin.length !== 15) {
+      errors.push("GSTIN must be 15 characters for vendors in India");
+    }
   }
 
   return errors;

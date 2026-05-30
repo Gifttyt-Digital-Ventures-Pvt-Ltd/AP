@@ -5,7 +5,7 @@ const RequestVendorDialog = (props) => (
   <VendorDetailsDialog
     {...props}
     title="Request Vendor Addition"
-    description="Enter vendor details for approval. Vendor name, type, mobile number, and GSTIN are required."
+    description="Enter vendor details for approval. Vendor name, type, and mobile number are required. GSTIN/TAX ID is required for vendors in India."
     submitLabel="Submit Request"
     requireEmail={false}
     invoiceVendorRequest

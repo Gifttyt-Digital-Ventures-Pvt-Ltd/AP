@@ -6,6 +6,16 @@ import { Label } from "../../../components/ui/label";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import AppDataTable from "../../../components/common/AppDataTable";
 import AppSelect from "../../../components/common/AppSelect";
+import CurrencySelector from "../../../components/common/CurrencySelector";
+import { DEFAULT_CURRENCY, formatCurrency } from "../../../utils/currency";
+import {
+  isInrInvoiceCurrency,
+  remapLineItemsForCurrencyChange,
+} from "../utils/invoiceTax";
+import {
+  formatNumericInputValue,
+  sanitizeNumericInput,
+} from "../utils/numericInput";
 
 const lineItemTableHeader = [
   { key: "description", title: "Item Description", headerClassName: "min-w-[190px]", cellClassName: "min-w-[190px]" },
@@ -48,6 +58,7 @@ export const InvoiceForm = ({
   showCategoryField = true,
   departmentMandatory = false,
   categoryMandatory = false,
+  currencyOptions = [],
   GST_TREATMENTS,
   INDIAN_STATES,
   FILE_CATEGORIES,
@@ -56,7 +67,10 @@ export const InvoiceForm = ({
   TAX_RATES,
 }) => {
   if (!formData) return null;
-  const totals = calculateTotals(formData.line_items);
+  const invoiceCurrency = formData.currency || DEFAULT_CURRENCY;
+  const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
+  const formatAmount = (amount) => formatCurrency(amount, invoiceCurrency);
+  const totals = calculateTotals(formData.line_items, invoiceCurrency);
   const tdsRate = Number.parseFloat(String(formData.tds || "").replace("%", "")) || 0;
   const tdsAmount = Math.round(((totals.subTotal * tdsRate) / 100) * 100) / 100;
   const netPayable = Math.max(Math.round((totals.total - tdsAmount) * 100) / 100, 0);
@@ -87,31 +101,78 @@ export const InvoiceForm = ({
             );
             break;
           case "tax":
-            value = (
+            value = useInrTax ? (
               <AppSelect value={item.tax} onChange={(e) => updateLineItem(index, "tax", e.target.value)} options={TAX_RATES} className={lineItemSelectClassName} />
+            ) : (
+              <div className="flex flex-col gap-1">
+                <Input
+                  value={item.tax_name || ""}
+                  onChange={(e) => updateLineItem(index, "tax_name", e.target.value)}
+                  placeholder="Tax name"
+                  className="h-7 text-xs"
+                />
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  value={formatNumericInputValue(item.tax_rate)}
+                  onChange={(e) =>
+                    updateLineItem(index, "tax_rate", sanitizeNumericInput(e.target.value))
+                  }
+                  placeholder="Rate %"
+                  className="h-7 text-xs"
+                />
+              </div>
             );
             break;
           case "quantity":
-            value = <Input type="number" value={item.quantity} onChange={(e) => updateLineItem(index, "quantity", parseFloat(e.target.value) || 0)} className="h-7 text-xs text-right px-1" min="0" />;
+            value = (
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={formatNumericInputValue(item.quantity)}
+                onChange={(e) =>
+                  updateLineItem(index, "quantity", sanitizeNumericInput(e.target.value))
+                }
+                className="h-7 text-xs text-right px-1"
+              />
+            );
             break;
           case "unit_rate":
-            value = <Input type="number" value={item.unit_rate} onChange={(e) => updateLineItem(index, "unit_rate", parseFloat(e.target.value) || 0)} className="h-7 text-xs text-right px-1" min="0" />;
+            value = (
+              <Input
+                type="text"
+                inputMode="decimal"
+                value={formatNumericInputValue(item.unit_rate)}
+                onChange={(e) =>
+                  updateLineItem(index, "unit_rate", sanitizeNumericInput(e.target.value))
+                }
+                className="h-7 text-xs text-right px-1"
+              />
+            );
             break;
           case "discount":
             value = (
               <div className="flex items-center gap-0.5">
-                <Input type="number" value={item.discount} onChange={(e) => updateLineItem(index, "discount", parseFloat(e.target.value) || 0)} className="h-7 text-xs text-right w-12 px-1" min="0" />
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  value={formatNumericInputValue(item.discount)}
+                  onChange={(e) =>
+                    updateLineItem(index, "discount", sanitizeNumericInput(e.target.value))
+                  }
+                  className="h-7 text-xs text-right w-12 px-1"
+                />
                 <AppSelect
                   value={item.discount_type}
                   onChange={(e) => updateLineItem(index, "discount_type", e.target.value)}
-                  options={["%", "₹"]}
+                  options={["%", invoiceCurrency === DEFAULT_CURRENCY ? "₹" : invoiceCurrency]}
                   className="h-7 w-14 rounded border text-xs bg-white pl-2 pr-6"
                 />
               </div>
             );
             break;
           case "subtotal":
-            value = `\u20B9${calculateLineItemSubtotal(item).toLocaleString("en-IN", { minimumFractionDigits: 2 })}`;
+            value = formatAmount(calculateLineItemSubtotal(item));
             break;
           case "actions":
             value = formData.line_items.length > 1 && (
@@ -241,6 +302,31 @@ export const InvoiceForm = ({
             <Label className="text-xs text-blue-400">* Due Date</Label>
             <Input type="date" value={formData.due_date} onChange={(e) => setFormData({ ...formData, due_date: e.target.value })} className="h-8 text-sm" />
           </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-3">
+          <CurrencySelector
+            currencies={currencyOptions}
+            value={invoiceCurrency}
+            onChange={(currency) => {
+              const switchingTaxMode =
+                isInrInvoiceCurrency(invoiceCurrency) !== isInrInvoiceCurrency(currency);
+              setFormData({
+                ...formData,
+                currency,
+                scanned_tax_amount: undefined,
+                scanned_tax_name: undefined,
+                scanned_tax_rate: undefined,
+                scanned_total: undefined,
+                line_items: switchingTaxMode
+                  ? remapLineItemsForCurrencyChange(formData.line_items, currency)
+                  : formData.line_items,
+              });
+            }}
+            label="Currency"
+            id="invoice-form-currency"
+            selectClassName="h-8 text-sm"
+          />
         </div>
 
         <div>
@@ -430,26 +516,35 @@ export const InvoiceForm = ({
       <div className="bg-gray-50 rounded-lg p-3 space-y-1.5">
         <div className="flex justify-between text-xs">
           <span>Sub Total</span>
-          <span className="font-medium">{"\u20B9"}{totals.subTotal.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+          <span className="font-medium">{formatAmount(totals.subTotal)}</span>
         </div>
-        {totals.cgst > 0 && (
+        {useInrTax && totals.cgst > 0 && (
           <div className="flex justify-between text-xs">
             <span>CGST 9%</span>
-            <span>{"\u20B9"}{totals.cgst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+            <span>{formatAmount(totals.cgst)}</span>
           </div>
         )}
-        {totals.sgst > 0 && (
+        {useInrTax && totals.sgst > 0 && (
           <div className="flex justify-between text-xs">
             <span>SGST 9%</span>
-            <span>{"\u20B9"}{totals.sgst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+            <span>{formatAmount(totals.sgst)}</span>
           </div>
         )}
-        {totals.igst > 0 && (
+        {useInrTax && totals.igst > 0 && (
           <div className="flex justify-between text-xs">
             <span>IGST</span>
-            <span>{"\u20B9"}{totals.igst.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+            <span>{formatAmount(totals.igst)}</span>
           </div>
         )}
+        {!useInrTax && totals.foreignTaxes?.map((entry) => (
+          <div key={`${entry.name}-${entry.rate}`} className="flex justify-between text-xs">
+            <span>
+              {entry.name}
+              {entry.rate > 0 ? ` ${entry.rate}%` : ""}
+            </span>
+            <span>{formatAmount(entry.amount)}</span>
+          </div>
+        ))}
         <div className="flex justify-between items-center pt-1.5 border-t text-xs">
           <div className="flex items-center gap-1.5">
             <span>TDS</span>
@@ -461,15 +556,15 @@ export const InvoiceForm = ({
               className="h-6 w-20 rounded border pl-1 pr-6 text-xs"
             />
           </div>
-          <span>{"\u20B9"}{tdsAmount.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+          <span>{formatAmount(tdsAmount)}</span>
         </div>
         <div className="flex justify-between text-sm pt-1.5 border-t">
           <span>Total</span>
-          <span>{"\u20B9"}{totals.total.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+          <span>{formatAmount(totals.total)}</span>
         </div>
         <div className="flex justify-between text-sm font-bold pt-1.5 border-t">
           <span>Net Payable</span>
-          <span>{"\u20B9"}{netPayable.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</span>
+          <span>{formatAmount(netPayable)}</span>
         </div>
       </div>
 

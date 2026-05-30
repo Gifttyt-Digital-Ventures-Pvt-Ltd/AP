@@ -1,6 +1,7 @@
 import React from 'react';
 import AppDataTable from '../../../components/common/AppDataTable';
 import { TableCell, TableRow } from '../../../components/ui/table';
+import { formatCurrency } from '../../../utils/currency';
 
 const pendingInvoicesTableHeader = [
   { key: 'vendor_name', title: 'Vendor' },
@@ -18,7 +19,7 @@ const PendingInvoicesTable = ({ otherPendingInvoices, getStatusBadgeClass, forma
 
         switch (header.key) {
           case 'amount':
-            value = `${invoice.amount.toLocaleString()} ${invoice.currency}`;
+            value = formatCurrency(invoice.amount, invoice.currency);
             break;
           case 'status':
             value = (

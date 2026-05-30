@@ -7,11 +7,11 @@ import {
 export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getPendingApprovals: builder.query({
-      query: () => ({ url: "/approvals/pending", method: "GET" }),
+      query: (params) => ({ url: "/approvals/pending", method: "GET", params }),
       providesTags: ["Approvals"],
     }),
     getPayments: builder.query({
-      query: () => ({ url: "/payments", method: "GET" }),
+      query: (params) => ({ url: "/payments", method: "GET", params }),
       providesTags: ["Payments"],
     }),
     createPayment: builder.mutation({
