@@ -5,7 +5,6 @@ import {
   DEFAULT_CURRENCY,
   FALLBACK_CURRENCIES,
   normalizeCurrencyCode,
-  toCurrencyApiParam,
 } from "../utils/currency";
 
 export const useCurrencyFilter = (
@@ -43,15 +42,14 @@ export const useCurrencyFilter = (
   }, [selectedCurrency, excludeAll, defaultCurrency, currencies]);
 
   const currencyParam = useMemo(
-    () => toCurrencyApiParam(effectiveSelectedCurrency),
+    () => normalizeCurrencyCode(effectiveSelectedCurrency) || DEFAULT_CURRENCY,
     [effectiveSelectedCurrency],
   );
 
-  const queryArgs = useMemo(() => {
-    const args = {};
-    if (currencyParam) args.currency = currencyParam;
-    return args;
-  }, [currencyParam]);
+  const queryArgs = useMemo(
+    () => ({ currency: currencyParam }),
+    [currencyParam],
+  );
 
   const isAllSelected =
     normalizeCurrencyCode(effectiveSelectedCurrency) === CURRENCY_FILTER_ALL;

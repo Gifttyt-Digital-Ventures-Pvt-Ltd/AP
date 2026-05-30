@@ -332,16 +332,18 @@ const WorkflowRuleRow = ({
             approvalMode={rule.approvalMode}
           />
 
-          <Badge
-            variant="outline"
-            className={
-              rule.approvalMode === "sequential"
-                ? "text-blue-700 border-blue-200 bg-blue-50"
-                : "text-emerald-700 border-emerald-200 bg-emerald-50"
-            }
-          >
-            {rule.approvalMode === "sequential" ? "Sequential" : "Parallel"}
-          </Badge>
+          {rule.approvers.length > 1 && (
+            <Badge
+              variant="outline"
+              className={
+                rule.approvalMode === "sequential"
+                  ? "text-blue-700 border-blue-200 bg-blue-50"
+                  : "text-emerald-700 border-emerald-200 bg-emerald-50"
+              }
+            >
+              {rule.approvalMode === "sequential" ? "Sequential" : "Parallel"}
+            </Badge>
+          )}
 
           <div
             className="flex items-center gap-3"
@@ -503,6 +505,24 @@ const ApprovalWorkflowTab = ({
   const groupedRules = useMemo(() => groupRulesByType(rules), [rules]);
   const noCatchAllRule = !hasCatchAllRule(rules);
 
+  const workflowSections = useMemo(() => {
+    const configured = WORKFLOW_SECTIONS.filter(
+      ({ type }) => categoryEnabled || !workflowTypeIncludesCategory(type),
+    );
+    const configuredTypes = new Set(configured.map((section) => section.type));
+    const extraTypes = Object.keys(groupedRules).filter(
+      (type) => !configuredTypes.has(type) && (groupedRules[type] || []).length > 0,
+    );
+
+    return [
+      ...configured,
+      ...extraTypes.map((type, index) => ({
+        type,
+        priority: configured.length + index + 1,
+      })),
+    ];
+  }, [groupedRules, categoryEnabled]);
+
   const workflowTypes = useMemo(() => {
     const types =
       Array.isArray(workflowTypesData) && workflowTypesData.length > 0
@@ -628,8 +648,8 @@ const ApprovalWorkflowTab = ({
             category?.category_name ??
             "",
         ).trim();
-        if (id && name) {
-          categoryMap.set(id, name);
+        if (id) {
+          categoryMap.set(id, name || `Category ${id}`);
         }
       });
     }
@@ -1394,10 +1414,7 @@ const ApprovalWorkflowTab = ({
             </div>
           )}
 
-          {WORKFLOW_SECTIONS.filter(
-            ({ type }) =>
-              categoryEnabled || !workflowTypeIncludesCategory(type),
-          ).map(({ type, priority }) => {
+          {workflowSections.map(({ type, priority }) => {
             const sectionRules = groupedRules[type] || [];
             if (sectionRules.length === 0) return null;
 

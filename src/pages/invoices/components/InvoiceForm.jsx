@@ -62,7 +62,6 @@ export const InvoiceForm = ({
   currencyOptions = [],
   GST_TREATMENTS,
   INDIAN_STATES,
-  FILE_CATEGORIES,
   INVOICE_SOURCES,
   LEDGER_OPTIONS,
   TAX_RATES,
@@ -274,6 +273,9 @@ export const InvoiceForm = ({
                     vendor_request_submitted: matched
                       ? formData.vendor_request_submitted
                       : false,
+                    gstin: matched?.gstin
+                      ? String(matched.gstin).trim().toUpperCase()
+                      : formData.gstin,
                   });
                 }}
                 placeholder="Select or enter vendor"
@@ -440,15 +442,9 @@ export const InvoiceForm = ({
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-3">
-          <div>
-            <Label className="text-xs text-blue-400">* File Category</Label>
-            <AppSelect value={formData.file_category} onChange={(e) => setFormData({ ...formData, file_category: e.target.value })} options={FILE_CATEGORIES} className="h-8 text-sm" data-testid="file-category-select" />
-          </div>
-          <div>
-            <Label className="text-xs text-blue-400">* Source</Label>
-            <AppSelect value={formData.source} onChange={(e) => setFormData({ ...formData, source: e.target.value })} options={INVOICE_SOURCES} className="h-8 text-sm" data-testid="source-select" />
-          </div>
+        <div>
+          <Label className="text-xs text-blue-400">* Source</Label>
+          <AppSelect value={formData.source} onChange={(e) => setFormData({ ...formData, source: e.target.value })} options={INVOICE_SOURCES} className="h-8 text-sm" data-testid="source-select" />
         </div>
         {formData.source === "Email" && (
           <div>

@@ -1,15 +1,13 @@
 import React from "react";
 import { format } from "date-fns";
-import { ArrowRight, FileText, History, Pencil, User } from "lucide-react";
+import { FileText, History, Pencil, User } from "lucide-react";
+import ApprovalHistoryTimeline from "../../../components/common/ApprovalHistoryTimeline";
 import { Button } from "../../../components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../../components/ui/dialog";
 import { Label } from "../../../components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
-import {
-  formatWorkflowStatus,
-  normalizeHistoryActionType,
-  PAID_STATUS,
-} from "../../../utils/approvalWorkflow";
+import { formatWorkflowStatus } from "../../../utils/approvalWorkflow";
+import { formatInvoiceAmount } from "../utils/invoiceAmounts";
 
 const ViewDialog = ({
   viewDialogOpen,
@@ -24,8 +22,6 @@ const ViewDialog = ({
   setViewTab,
   invoiceHistory,
   loadingHistory,
-  getHistoryIcon,
-  getHistoryBadgeClass,
   canEdit,
   handleEditInvoice,
 }) => {
@@ -77,7 +73,9 @@ const ViewDialog = ({
 
                   <div className="p-4 bg-primary/5 rounded-lg border">
                     <Label className="text-xs text-muted-foreground">Total Amount</Label>
-                    <p className="text-3xl font-bold font-['JetBrains_Mono'] text-primary">₹{selectedInvoice.amount.toLocaleString("en-IN")}</p>
+                    <p className="text-3xl font-bold font-['JetBrains_Mono'] text-primary">
+                      {formatInvoiceAmount(selectedInvoice, selectedInvoice.amount)}
+                    </p>
                   </div>
 
                   {selectedInvoice.line_items && selectedInvoice.line_items.length > 0 && (
@@ -98,8 +96,14 @@ const ViewDialog = ({
                               <tr key={index} className="border-b last:border-0">
                                 <td className="p-3 text-sm">{item.description}</td>
                                 <td className="p-3 text-sm text-right font-['JetBrains_Mono']">{item.quantity || "-"}</td>
-                                <td className="p-3 text-sm text-right font-['JetBrains_Mono']">{item.unit_price ? `₹${item.unit_price.toLocaleString("en-IN")}` : "-"}</td>
-                                <td className="p-3 text-sm text-right font-['JetBrains_Mono'] font-semibold">₹{item.amount.toLocaleString("en-IN")}</td>
+                                <td className="p-3 text-sm text-right font-['JetBrains_Mono']">
+                                  {item.unit_price != null
+                                    ? formatInvoiceAmount(selectedInvoice, item.unit_price)
+                                    : "-"}
+                                </td>
+                                <td className="p-3 text-sm text-right font-['JetBrains_Mono'] font-semibold">
+                                  {formatInvoiceAmount(selectedInvoice, item.amount)}
+                                </td>
                               </tr>
                             ))}
                           </tbody>
@@ -117,66 +121,10 @@ const ViewDialog = ({
                 </TabsContent>
 
                   <TabsContent value="history" className="space-y-4">
-                  {loadingHistory ? (
-                    <div className="flex items-center justify-center py-12">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                    </div>
-                  ) : invoiceHistory.length === 0 ? (
-                    <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg">
-                      <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                      <p>No history records found</p>
-                    </div>
-                  ) : (
-                    <div className="relative">
-                      <div className="absolute left-[19px] top-0 bottom-0 w-0.5 bg-border" />
-                      <div className="space-y-4">
-                        {invoiceHistory.map((entry) => (
-                          <div key={entry.id} className="relative flex gap-4">
-                            <div className={`relative z-10 w-10 h-10 rounded-full flex items-center justify-center border-2 border-background shadow-sm ${["Created", "Approved", "Payment Released", PAID_STATUS].includes(normalizeHistoryActionType(entry.action_type)) ? "bg-emerald-100" : entry.action_type === "Rejected" ? "bg-red-100" : entry.action_type === "Edited" || entry.action_type === "Edited & Resubmitted" ? "bg-blue-100" : "bg-gray-100"}`}>
-                              {getHistoryIcon(entry.action_type)}
-                            </div>
-                            <div className="flex-1 pb-4">
-                              <div className="bg-card border rounded-lg p-4 shadow-sm">
-                                <div className="flex items-start justify-between mb-2">
-                                  <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium border ${getHistoryBadgeClass(entry.action_type)}`}>{normalizeHistoryActionType(entry.action_type)}</span>
-                                  <div className="text-right text-xs text-muted-foreground">
-                                    <p>{format(new Date(entry.timestamp), "dd MMM yyyy")}</p>
-                                    <p>{format(new Date(entry.timestamp), "hh:mm a")}</p>
-                                  </div>
-                                </div>
-                                <p className="text-sm mb-3">{entry.action_description}</p>
-                                {entry.action_type === "Rejected" && entry.comments && (
-                                  <div className="mb-3 rounded-md border border-red-200 bg-red-50 px-3 py-2">
-                                    <p className="text-xs font-medium text-red-700">Rejection comments</p>
-                                    <p className="mt-1 text-sm text-red-900 whitespace-pre-line">{entry.comments}</p>
-                                  </div>
-                                )}
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                  <User className="h-3 w-3" />
-                                  <span className="font-medium">{entry.user_name}</span>
-                                  <span>|</span>
-                                  <span className="bg-muted px-2 py-0.5 rounded">{entry.user_role}</span>
-                                </div>
-                                {entry.changes && entry.changes.length > 0 && (
-                                  <div className="mt-3 pt-3 border-t">
-                                    <p className="text-xs font-medium text-muted-foreground mb-2">Changes:</p>
-                                    {entry.changes.map((change, idx) => (
-                                      <div key={idx} className="flex items-center gap-2 text-xs">
-                                        <span className="font-medium capitalize">{change.field_name.replace(/_/g, " ")}:</span>
-                                        <span className="text-red-500 line-through">{change.old_value || "empty"}</span>
-                                        <ArrowRight className="h-3 w-3" />
-                                        <span className="text-emerald-600">{change.new_value || "empty"}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
+                    <ApprovalHistoryTimeline
+                      history={invoiceHistory}
+                      loading={loadingHistory}
+                    />
                   </TabsContent>
                 </Tabs>
               </div>

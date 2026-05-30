@@ -2,12 +2,15 @@ import { serviceApi } from "../serviceApi";
 import {
   toBankAccountApiPayload,
   toBankAccountUiPayload,
+  toInvoiceUiPayload,
 } from "../utils/payloadMappers";
 
 export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getPendingApprovals: builder.query({
       query: (params) => ({ url: "/approvals/pending", method: "GET", params }),
+      transformResponse: (response) =>
+        Array.isArray(response) ? response.map(toInvoiceUiPayload) : [],
       providesTags: ["Approvals"],
     }),
     getPayments: builder.query({

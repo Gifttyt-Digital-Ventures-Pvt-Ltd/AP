@@ -99,18 +99,20 @@ const WorkflowViewDialog = ({
               </Badge>
             </DetailField>
 
-            <DetailField label="Approval Mode">
-              <Badge
-                variant="outline"
-                className={
-                  rule.approvalMode === "sequential"
-                    ? "border-blue-200 bg-blue-50 text-blue-700"
-                    : "border-emerald-200 bg-emerald-50 text-emerald-700"
-                }
-              >
-                {rule.approvalMode === "sequential" ? "Sequential" : "Parallel"}
-              </Badge>
-            </DetailField>
+            {approvers.length > 1 && (
+              <DetailField label="Approval Mode">
+                <Badge
+                  variant="outline"
+                  className={
+                    rule.approvalMode === "sequential"
+                      ? "border-blue-200 bg-blue-50 text-blue-700"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700"
+                  }
+                >
+                  {rule.approvalMode === "sequential" ? "Sequential" : "Parallel"}
+                </Badge>
+              </DetailField>
+            )}
 
             <DetailField label="Currency">
               <Badge variant="secondary">{rule.currency || "INR"}</Badge>

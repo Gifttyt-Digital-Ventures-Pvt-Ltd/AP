@@ -88,9 +88,8 @@ export const buildInvoiceFormChecklist = (
       ],
     },
     {
-      group: "Categorisation",
+      group: "Source",
       items: [
-        { label: "File category", done: !!formData.file_category },
         { label: "Source", done: !!formData.source },
         {
           label: "Source email",

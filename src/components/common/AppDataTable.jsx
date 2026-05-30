@@ -77,14 +77,18 @@ const AppDataTable = ({
                 column.headerClassName,
               )}
             >
-              {showCheckbox && index === 0 && (
-                <Checkbox
-                  checked={isChecked}
-                  onCheckedChange={selectAllHandler}
-                  className="mr-2 align-middle"
-                />
+              {showCheckbox && index === 0 ? (
+                <span className="inline-flex items-center gap-2">
+                  <Checkbox
+                    checked={isChecked}
+                    onCheckedChange={selectAllHandler}
+                    data-testid="table-select-all-checkbox"
+                  />
+                  {column.header}
+                </span>
+              ) : (
+                column.header
               )}
-              {column.header}
             </TableHead>
           ))}
         </TableRow>

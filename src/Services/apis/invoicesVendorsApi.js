@@ -1,15 +1,15 @@
 import { serviceApi } from "../serviceApi";
-import {
-  toInvoiceApiPayload,
-  toInvoiceUiPayload,
-  toVendorApiPayload,
-  toVendorUiPayload,
-} from "../utils/payloadMappers";
+import { toInvoiceApiPayload, toInvoiceUiPayload, toVendorApiPayload, toVendorUiPayload } from "../utils/payloadMappers";
+import { normalizeApprovalHistoryEntries } from "../../pages/invoices/utils/invoiceHistory";
 
 export const invoicesVendorsApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getInvoiceMandatoryFields: builder.query({
-      query: () => ({ url: "/invoice/mandatory-fields", method: "GET" }),
+      query: ({ userEmail } = {}) => ({
+        url: "/invoice/mandatory-fields",
+        method: "GET",
+        params: userEmail ? { userEmail } : {},
+      }),
     }),
     getInvoices: builder.query({
       query: (params) => ({ url: "/invoices", method: "GET", params }),
@@ -65,6 +65,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
     }),
     getInvoiceHistory: builder.query({
       query: (id) => ({ url: `/invoices/${id}/history`, method: "GET" }),
+      transformResponse: (response) => normalizeApprovalHistoryEntries(response),
       providesTags: ["Invoices"],
     }),
     getPendingCheckerInvoices: builder.query({
@@ -176,7 +177,8 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
       ],
     }),
     getVendorHistory: builder.query({
-      query: (id) => ({ url: `/vendors/${id}/history`, method: "GET" }),
+      query: (id) => ({ url: `/vendor/${id}/history`, method: "GET" }),
+      transformResponse: (response) => normalizeApprovalHistoryEntries(response),
       providesTags: (result, error, id) => [{ type: "Vendors", id }],
     }),
   }),

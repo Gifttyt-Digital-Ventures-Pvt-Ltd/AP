@@ -161,7 +161,7 @@ export const resolveScannedLineItemTax = (item, taxesRaw = [], currency = DEFAUL
 export const mapExtractedLineItemToForm = (item = {}, { useInrTax = true } = {}) => {
   const quantity = Number(item.quantity || 1);
   const lineTotal = Number(item.line_total ?? item.amount ?? item.lineTotal ?? 0);
-  const unitPrice = Number(item.unit_price ?? item.unit_rate ?? 0);
+  const unitPrice = Number(item.unit_price ?? item.unit_rate ?? item.unitPrice ?? 0);
   const unitRate =
     quantity > 0 && lineTotal > 0 ? lineTotal / quantity : unitPrice;
   const resolvedLineTotal = lineTotal > 0 ? lineTotal : quantity * unitRate;

@@ -56,7 +56,6 @@ const safeFormatDate = (value, pattern = 'dd MMM yy') => {
 };
 
 const batchInvoiceTableHeader = [
-  { key: 'select', title: '', headerClassName: 'w-[48px]' },
   { key: 'invoice_number', title: 'Invoice', cellClassName: 'font-medium' },
   { key: 'vendor_name', title: 'Vendor' },
   { key: 'amount', title: 'Amount' },
@@ -269,6 +268,9 @@ const Payments = () => {
   const selectedBatchTotal = batchEligibleInvoices
     .filter((invoice) => createBatchForm.invoice_ids.includes(invoice.id))
     .reduce((sum, invoice) => sum + (invoice.amount || 0), 0);
+  const allBatchInvoicesSelected =
+    batchEligibleInvoices.length > 0 &&
+    createBatchForm.invoice_ids.length === batchEligibleInvoices.length;
 
   const resetRecordPaymentForm = () => {
     setRecordPaymentInvoiceIds([]);
@@ -327,9 +329,18 @@ const Payments = () => {
       return;
     }
 
+    if (!recordPaymentForm.payment_method) {
+      toast.error('Payment method is required');
+      return;
+    }
+
     setRecordingPayments(true);
     try {
-      const response = await recordPayments({ invoiceNumbers }).unwrap();
+      const response = await recordPayments({
+        invoiceNumbers,
+        paymentDate: new Date(recordPaymentForm.payment_date).toISOString(),
+        paymentMethod: recordPaymentForm.payment_method,
+      }).unwrap();
       toast.success(response?.message || 'Payments recorded successfully (PAID)');
       await refetchPendingPaymentInvoices();
       setRecordPaymentDialogOpen(false);
@@ -394,14 +405,17 @@ const Payments = () => {
         let value;
 
         switch (header.key) {
-          case 'select':
+          case 'invoice_number':
             value = (
-              <div onClick={(e) => e.stopPropagation()}>
-                <Checkbox
-                  checked={createBatchForm.invoice_ids.includes(invoice.id)}
-                  onCheckedChange={() => toggleInvoiceSelection(invoice.id)}
-                  disabled={!canCreateBatch}
-                />
+              <div className="flex items-center gap-2">
+                <div onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    checked={createBatchForm.invoice_ids.includes(invoice.id)}
+                    onCheckedChange={() => toggleInvoiceSelection(invoice.id)}
+                    disabled={!canCreateBatch}
+                  />
+                </div>
+                <span>{invoice.invoice_number || '-'}</span>
               </div>
             );
             break;
@@ -522,14 +536,10 @@ const Payments = () => {
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
                   <Label className="text-base">Select Invoices</Label>
-                  <div className="flex items-center gap-4 text-sm">
-                    <Button variant="outline" size="sm" onClick={selectAllInvoices} disabled={!canCreateBatch}>
-                      {createBatchForm.invoice_ids.length === batchEligibleInvoices.length ? 'Deselect All' : 'Select All'}
-                    </Button>
-                    <span>
-                      Selected: <strong>{createBatchForm.invoice_ids.length}</strong> | Total: <strong>{'\u20B9'}{selectedBatchTotal.toLocaleString('en-IN')}</strong>
-                    </span>
-                  </div>
+                  <span className="text-sm">
+                    Selected: <strong>{createBatchForm.invoice_ids.length}</strong> | Total:{' '}
+                    <strong>{'\u20B9'}{selectedBatchTotal.toLocaleString('en-IN')}</strong>
+                  </span>
                 </div>
 
                 <div className="border rounded-lg max-h-80 overflow-y-auto">
@@ -537,6 +547,9 @@ const Payments = () => {
                     tableHeader={batchInvoiceTableHeader}
                     tableData={batchEligibleInvoices}
                     renderRow={renderBatchInvoiceRow}
+                    showCheckbox
+                    isChecked={allBatchInvoicesSelected}
+                    onSelectAllChange={selectAllInvoices}
                     emptyMessage="No invoices available for batch creation"
                   />
                 </div>

@@ -37,6 +37,8 @@ import {
   syncLineItemLineTotal,
 } from './utils/invoiceTax';
 import { parseNumericInput } from './utils/numericInput';
+import { buildInvoiceEditFormData } from './utils/invoiceFormData';
+import { normalizeInvoiceHistoryEntries } from './utils/invoiceHistory';
 import {
   buildCreateInvoiceRequestBody,
   extractVendorIdFromResponse,
@@ -49,7 +51,6 @@ import {
 } from '../../Services/apis/corporateApi';
 import { useGetCategoriesForInvoiceQuery } from '../../Services/apis/categoriesApi';
 import { useAuth } from '../../contexts/AuthContext';
-import { Plus, Pencil, Clock, CheckCircle2, XCircle, CreditCard } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -64,7 +65,6 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { useSidebar } from '../../components/Layout';
 import {
-  FILE_CATEGORIES,
   GST_TREATMENTS,
   INDIAN_STATES,
   INVOICE_SOURCES,
@@ -93,9 +93,7 @@ import {
   extractApiErrorDetail,
   formatWorkflowStatus,
   getInvoiceStatusBadgeClass,
-  normalizeHistoryActionType,
   NEEDS_CORRECTION_STATUS,
-  PAID_STATUS,
 } from '../../utils/approvalWorkflow';
 
 const FILE_BASE_URL = import.meta.env.VITE_BACKEND_URL ?? '';
@@ -113,7 +111,7 @@ const createEmptyVendorRequestForm = () => ({
   city: '',
   state: '',
   pincode: '',
-  country: 'India',
+  country: '',
   bank_name: '',
   account_number: '',
   ifsc_code: '',
@@ -133,7 +131,7 @@ const InvoicesPage = () => {
   const {
     data: corporateUserContext = null,
   } = useGetCorporateUserDetailsQuery();
-  const invoiceCategoryEmail =
+  const invoiceUserEmail =
     corporateUserContext?.corporateUser?.email ||
     corporateUserContext?.employeeDetails?.email ||
     user?.email ||
@@ -167,7 +165,10 @@ const InvoicesPage = () => {
   const {
     data: invoiceMandatoryFieldsData,
     isLoading: invoiceMandatoryFieldsLoading,
-  } = useGetInvoiceMandatoryFieldsQuery();
+  } = useGetInvoiceMandatoryFieldsQuery(
+    { userEmail: invoiceUserEmail },
+    { skip: !invoiceUserEmail },
+  );
   const invoiceMandatoryFields = useMemo(
     () => normalizeInvoiceMandatoryFields(invoiceMandatoryFieldsData),
     [invoiceMandatoryFieldsData],
@@ -182,11 +183,11 @@ const InvoicesPage = () => {
     isFetching: invoiceCategoriesFetching,
   } = useGetCategoriesForInvoiceQuery(
     {
-      userEmail: invoiceCategoryEmail,
+      userEmail: invoiceUserEmail,
       ...(currencyParam ? { currency: currencyParam } : {}),
     },
     {
-      skip: !invoiceCategoryEmail || !isCategoryFeatureEnabled,
+      skip: !invoiceUserEmail || !isCategoryFeatureEnabled,
     },
   );
   const [scanInvoice] = useScanInvoiceMutation();
@@ -228,9 +229,10 @@ const InvoicesPage = () => {
     () => ({
       ...buildCurrentUserIdentity({ user, corporateUserContext }),
       canUpdateInvoices,
+      canManageInvoices,
       isCorporateAdmin,
     }),
-    [user, corporateUserContext, canUpdateInvoices, isCorporateAdmin],
+    [user, corporateUserContext, canUpdateInvoices, canManageInvoices, isCorporateAdmin],
   );
   
   // PDF Zoom
@@ -365,6 +367,13 @@ const InvoicesPage = () => {
       invoiceVendorOptions.find(
         (vendor) => String(vendor?.name || '').toLowerCase().trim() === normalizedName,
       ) || null
+    );
+  }, [invoiceVendorOptions]);
+
+  const findVendorById = useCallback((vendorId) => {
+    if (vendorId === null || vendorId === undefined || vendorId === '') return null;
+    return (
+      invoiceVendorOptions.find((vendor) => String(vendor?.id) === String(vendorId)) || null
     );
   }, [invoiceVendorOptions]);
 
@@ -555,7 +564,6 @@ const InvoicesPage = () => {
           null,
         source: invoiceData.source || 'Upload',
         source_email: invoiceData.source === 'Email' ? invoiceData.source_email : null,
-        file_category: invoiceData.file_category || 'Expense Invoice',
       },
       {
         ...options,
@@ -617,13 +625,13 @@ const InvoicesPage = () => {
         extractedData?.billing_gstin ||
         extractedData?.billingGstin ||
         extractedData?.gstin ||
+        matchedVendor?.gstin ||
         '',
       source_of_supply: extractedData?.source_of_supply || extractedData?.place_of_supply || '',
       destination_of_supply: extractedData?.destination_of_supply || extractedData?.place_of_supply || '',
       location: extractedData?.location || extractedData?.place_of_supply || '',
       reverse_charges: extractedData?.reverse_charges || 'Not Applicable',
       discounts_level: extractedData?.discounts_level || 'At Line Item Level',
-      file_category: extractedData?.file_category || 'Expense Invoice',
       source: extractedData?.source || 'Upload',
       source_email: '',
       line_items: extractedData?.line_items?.length > 0
@@ -1316,42 +1324,19 @@ const InvoicesPage = () => {
     setLoadingHistory(true);
     try {
       const response = await getInvoiceHistory(invoice.id).unwrap();
-      const rawHistory = Array.isArray(response)
+      let normalizedHistory = Array.isArray(response)
         ? response
-        : Array.isArray(response?.history)
-          ? response.history
-          : Array.isArray(response?.data)
-            ? response.data
-            : Array.isArray(response?.results)
-              ? response.results
-              : Array.isArray(response?.content)
-                ? response.content
-                : [];
+        : normalizeInvoiceHistoryEntries(response);
 
-      const normalizedHistory = rawHistory.map((entry, index) => ({
-        id:
-          entry.id ||
-          entry.recordId ||
-          `${entry.userId || entry.user_id || 'user'}-${entry.timestamp || index}-${index}`,
-        action_type: entry.action_type || entry.actionType || entry.action || 'Updated',
-        action_description:
-          entry.action_description ||
-          entry.actionDescription ||
-          `${entry.action || entry.actionType || 'Updated'} by ${
-            entry.userName || entry.user_name || 'User'
-          }`,
-        timestamp: entry.timestamp || entry.createdAt || new Date().toISOString(),
-        user_name: entry.user_name || entry.userName || 'Unknown',
-        user_role: entry.user_role || entry.userRole || entry.level || '-',
-        comments:
-          entry.comments ||
-          entry.comment ||
-          entry.rejectionComment ||
-          entry.rejection_comment ||
-          entry.remarks ||
-          '',
-        changes: Array.isArray(entry.changes) ? entry.changes : [],
-      }));
+      if (
+        normalizedHistory.length === 0 &&
+        (Array.isArray(invoice.approval_records) || Array.isArray(invoice.approvalRecords))
+      ) {
+        normalizedHistory = normalizeInvoiceHistoryEntries(
+          invoice.approval_records || invoice.approvalRecords,
+        );
+      }
+
       setInvoiceHistory(normalizedHistory);
     } catch (error) {
       console.error('Failed to fetch invoice history:', error);
@@ -1364,7 +1349,7 @@ const InvoicesPage = () => {
   const handleEditInvoice = (invoice) => {
     if (!canEditInvoice(invoice, invoiceEditContext)) {
       const status = formatWorkflowStatus(invoice?.status);
-      if (!canUpdateInvoices) {
+      if (!canUpdateInvoices && !canManageInvoices) {
         toast.error('Only invoice makers can edit invoices in Needs Correction status');
       } else if (status !== NEEDS_CORRECTION_STATUS) {
         toast.error('Invoices can only be edited when status is Needs Correction');
@@ -1373,59 +1358,15 @@ const InvoicesPage = () => {
       }
       return;
     }
-    const sourceOfSupply =
-      invoice.source_of_supply ||
-      invoice.place_of_supply ||
-      '';
-    const destinationOfSupply =
-      invoice.destination_of_supply ||
-      invoice.place_of_supply ||
-      '';
-    const locationValue =
-      invoice.location ||
-      invoice.place_of_supply ||
-      '';
 
     setSelectedInvoice(invoice);
-    const editCurrency = normalizeCurrencyCode(invoice.currency) || DEFAULT_CURRENCY;
-    const useInrTax = isInrInvoiceCurrency(editCurrency);
-
-    setFormData({
-      vendor_name: invoice.vendor_name || '',
-      vendor_id: invoice.vendor_id || '',
-      invoice_number: invoice.invoice_number,
-      invoice_date: format(new Date(invoice.invoice_date), 'yyyy-MM-dd'),
-      due_date: format(new Date(invoice.due_date), 'yyyy-MM-dd'),
-      billing_address: invoice.billing_address || invoice.vendor_address || '',
-      gst_treatment: invoice.gst_treatment || 'Regular',
-      gstin: invoice.gstin || invoice.vendor_gstin || '',
-      source_of_supply: sourceOfSupply,
-      destination_of_supply: destinationOfSupply,
-      location: locationValue,
-      reverse_charges: invoice.reverse_charges || 'Not Applicable',
-      discounts_level: invoice.discounts_level || 'At Line Item Level',
-      file_category: invoice.file_category || 'Expense Invoice',
-      source: invoice.source || 'Upload',
-      source_email: invoice.source_email || '',
-      line_items: extractedData?.line_items?.length > 0
-        ? extractedData.line_items.map((item) =>
-            mapExtractedLineItemToForm(item, { useInrTax: isInrInvoiceCurrency(editCurrency) }),
-          )
-        : [createDefaultLineItem(editCurrency)],
-      description: invoice.memo || '',
-      tds: '',
-      amount: invoice.amount,
-      currency: editCurrency,
-      department_id: invoice.department_id || invoice.departmentId || '',
-      department_name: invoice.department_name || invoice.departmentName || '',
-      ...(isCategoryFeatureEnabled
-        ? {
-            category: invoice.category || null,
-            category_id: invoice.category_id || invoice.categoryId || invoice.category?.id || '',
-            category_name: invoice.category_name || invoice.categoryName || invoice.category?.name || '',
-          }
-        : {})
-    });
+    setFormData(
+      buildInvoiceEditFormData(invoice, {
+        isCategoryFeatureEnabled,
+        findVendorByName,
+        findVendorById,
+      }),
+    );
     setEditDialogOpen(true);
   };
 
@@ -1462,7 +1403,6 @@ const InvoicesPage = () => {
             hsn_sac: item.hsn_sac,
           })),
           memo: formData.description,
-          file_category: formData.file_category,
           source: formData.source,
           source_email: formData.source === 'Email' ? formData.source_email : null,
           department_id: formData.department_id || '',
@@ -1531,36 +1471,6 @@ const InvoicesPage = () => {
     if (normalized === 'duplicate') return 'bg-amber-100 text-amber-800 border-amber-200';
     if (normalized === 'upload_failed' || normalized === 'failed' || normalized === 'error') return 'bg-red-100 text-red-800 border-red-200';
     return 'bg-gray-100 text-gray-800 border-gray-200';
-  };
-
-  const getHistoryIcon = (actionType) => {
-    const normalizedAction = normalizeHistoryActionType(actionType);
-    switch (normalizedAction) {
-      case 'Created': return <Plus className="h-4 w-4 text-emerald-500" />;
-      case 'Edited': return <Pencil className="h-4 w-4 text-blue-500" />;
-      case 'Approved': return <CheckCircle2 className="h-4 w-4 text-emerald-500" />;
-      case 'Rejected': return <XCircle className="h-4 w-4 text-red-500" />;
-      case 'Edited & Resubmitted': return <Pencil className="h-4 w-4 text-amber-600" />;
-      case PAID_STATUS:
-      case 'Payment Released':
-        return <CreditCard className="h-4 w-4 text-emerald-500" />;
-      default: return <Clock className="h-4 w-4 text-muted-foreground" />;
-    }
-  };
-
-  const getHistoryBadgeClass = (actionType) => {
-    const normalizedAction = normalizeHistoryActionType(actionType);
-    switch (normalizedAction) {
-      case 'Created': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-      case 'Edited': return 'bg-blue-100 text-blue-700 border-blue-200';
-      case 'Approved': return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-      case 'Rejected': return 'bg-red-100 text-red-700 border-red-200';
-      case 'Edited & Resubmitted': return 'bg-amber-100 text-amber-800 border-amber-200';
-      case PAID_STATUS:
-      case 'Payment Released':
-        return 'bg-emerald-100 text-emerald-700 border-emerald-200';
-      default: return 'bg-gray-100 text-gray-700 border-gray-200';
-    }
   };
 
   const filteredInvoices = invoices.filter(invoice =>
@@ -1638,7 +1548,6 @@ const InvoicesPage = () => {
       currencyOptions={invoiceCurrencyOptions}
       GST_TREATMENTS={GST_TREATMENTS}
       INDIAN_STATES={INDIAN_STATES}
-      FILE_CATEGORIES={FILE_CATEGORIES}
       INVOICE_SOURCES={INVOICE_SOURCES}
       LEDGER_OPTIONS={LEDGER_OPTIONS}
       TAX_RATES={TAX_RATES}
@@ -1764,8 +1673,6 @@ const InvoicesPage = () => {
         setViewTab={setViewTab}
         invoiceHistory={invoiceHistory}
         loadingHistory={loadingHistory}
-        getHistoryIcon={getHistoryIcon}
-        getHistoryBadgeClass={getHistoryBadgeClass}
         canEdit={canEdit}
         handleEditInvoice={handleEditInvoice}
       />

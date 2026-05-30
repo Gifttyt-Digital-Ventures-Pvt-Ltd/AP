@@ -6,7 +6,6 @@ import {
   useDeleteVendorMutation,
   useGetPendingVendorApprovalsQuery,
   useApproveVendorMutation,
-  useLazyGetVendorHistoryQuery,
 } from '../../Services/apis/invoicesVendorsApi';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
@@ -159,7 +158,6 @@ const Vendors = () => {
   const [updateVendor] = useUpdateVendorMutation();
   const [deleteVendor] = useDeleteVendorMutation();
   const [approveVendor] = useApproveVendorMutation();
-  const [triggerVendorHistory] = useLazyGetVendorHistoryQuery();
   const { user } = useAuth();
   const { data: corporateUserContext = null } = useGetCorporateUserDetailsQuery();
   const { guardAction, canPerformAction } = useActionGuard();
@@ -499,14 +497,6 @@ const Vendors = () => {
       setApprovalComments('');
     } catch (error) {
       toast.error(error?.data?.detail || error?.data?.message || 'Failed to update vendor approval');
-    }
-  };
-
-  const handleViewVendorHistory = async (vendor) => {
-    try {
-      await triggerVendorHistory(vendor.id).unwrap();
-    } catch (_error) {
-      // History button is hidden for now; keep API helper for future enablement.
     }
   };
 

@@ -77,6 +77,17 @@ export const emailsMatch = (left, right) => {
   return String(left).trim().toLowerCase() === String(right).trim().toLowerCase();
 };
 
+const normalizeDisplayName = (value) =>
+  String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ");
+
+export const namesMatch = (left, right) => {
+  if (!left || !right) return false;
+  return normalizeDisplayName(left) === normalizeDisplayName(right);
+};
+
 const pickEmailLikeValue = (values = []) =>
   values.find((value) => typeof value === "string" && value.includes("@")) || "";
 
@@ -129,6 +140,13 @@ export const resolveCreatorUserId = (entity = {}) => {
   return null;
 };
 
+export const resolveCreatorDisplayName = (entity = {}) =>
+  entity.created_by_name ??
+  entity.createdByName ??
+  entity.requested_by_name ??
+  entity.requestedByName ??
+  "";
+
 const uniqueStrings = (values = []) =>
   [...new Set(values.filter((value) => value !== null && value !== undefined && value !== "").map(String))];
 
@@ -156,11 +174,29 @@ export const buildCurrentUserIdentity = ({ user, corporateUserContext } = {}) =>
     user?.id,
   ]).filter((id) => !id.includes("@"));
 
+  const employeeFullName = [employeeDetails?.firstName, employeeDetails?.lastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+
+  const userNames = uniqueStrings([
+    corporateUser?.name,
+    corporateUser?.userName,
+    employeeDetails?.name,
+    employeeDetails?.employeeName,
+    employeeDetails?.fullName,
+    employeeFullName || null,
+    user?.name,
+    typeof user?.identifier === "string" && !user.identifier.includes("@") ? user.identifier : null,
+  ]).filter((name) => !String(name).includes("@"));
+
   return {
     userEmail: userEmails[0] || "",
     userId: userIds[0] || "",
+    userName: userNames[0] || "",
     userEmails,
     userIds,
+    userNames,
   };
 };
 
@@ -168,12 +204,13 @@ export const isEntityCreator = (
   entity,
   userEmail,
   userId,
-  { userEmails = [], userIds = [] } = {},
+  { userEmails = [], userIds = [], userNames = [] } = {},
 ) => {
   const emailsToCheck = uniqueStrings([userEmail, ...userEmails]).map((email) =>
     email.toLowerCase(),
   );
   const idsToCheck = uniqueStrings([userId, ...userIds]).filter((id) => !id.includes("@"));
+  const namesToCheck = uniqueStrings(userNames);
 
   const creatorEmail = resolveCreatorEmail(entity);
   if (creatorEmail && emailsToCheck.some((email) => emailsMatch(creatorEmail, email))) {
@@ -185,6 +222,11 @@ export const isEntityCreator = (
     return true;
   }
 
+  const creatorName = resolveCreatorDisplayName(entity);
+  if (creatorName && namesToCheck.some((name) => namesMatch(creatorName, name))) {
+    return true;
+  }
+
   return false;
 };
 
@@ -192,6 +234,7 @@ const matchesCreator = (entity, identity = {}) =>
   isEntityCreator(entity, identity.userEmail, identity.userId, {
     userEmails: identity.userEmails,
     userIds: identity.userIds,
+    userNames: identity.userNames,
   });
 
 export const extractApiErrorDetail = (error) => {
@@ -206,8 +249,9 @@ export const extractApiErrorDetail = (error) => {
 const INVOICE_DELETABLE_STATUSES = new Set([NEEDS_CORRECTION_STATUS, "Rejected"]);
 
 export const canEditInvoice = (invoice, identity = {}) => {
-  const { canUpdateInvoices, isCorporateAdmin } = identity;
-  if (!canUpdateInvoices) return false;
+  const { canUpdateInvoices, canManageInvoices, isCorporateAdmin } = identity;
+  const canMutateInvoice = canUpdateInvoices || canManageInvoices;
+  if (!canMutateInvoice) return false;
 
   const status = normalizeWorkflowStatus(invoice?.status);
   if (status !== NEEDS_CORRECTION_STATUS) return false;

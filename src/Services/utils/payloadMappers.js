@@ -1,3 +1,5 @@
+import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../utils/currency";
+
 const toLocalDateTimeString = (value) => {
   if (!value) return value;
   if (typeof value !== "string") return value;
@@ -500,12 +502,38 @@ export const toInvoiceApiPayload = (invoice = {}) => {
 
 export const toInvoiceUiPayload = (invoice = {}) => ({
   ...invoice,
+  currency: normalizeCurrencyCode(invoice.currency ?? invoice.currencyCode ?? DEFAULT_CURRENCY),
   invoice_number: invoice.invoice_number ?? invoice.invoiceNumber,
   vendor_id: invoice.vendor_id ?? invoice.vendorId,
   vendor_name: invoice.vendor_name ?? invoice.vendorName,
   line_items: (invoice.line_items ?? invoice.lineItems)?.map?.(toInvoiceLineItemUiPayload) ?? [],
   invoice_date: invoice.invoice_date ?? invoice.invoiceDate,
   due_date: invoice.due_date ?? invoice.dueDate,
+  amount: invoice.amount ?? invoice.net_amount ?? invoice.netAmount,
+  memo: invoice.memo ?? invoice.description,
+  billing_address:
+    invoice.billing_address ??
+    invoice.billingAddress ??
+    invoice.vendor_address ??
+    invoice.vendorAddress,
+  vendor_address: invoice.vendor_address ?? invoice.vendorAddress,
+  gst_treatment: invoice.gst_treatment ?? invoice.gstTreatment,
+  gstin: invoice.gstin ?? invoice.vendor_gstin ?? invoice.vendorGstin,
+  source_of_supply:
+    invoice.source_of_supply ??
+    invoice.sourceOfSupply ??
+    invoice.place_of_supply ??
+    invoice.placeOfSupply,
+  destination_of_supply:
+    invoice.destination_of_supply ??
+    invoice.destinationOfSupply ??
+    invoice.place_of_supply ??
+    invoice.placeOfSupply,
+  location: invoice.location ?? invoice.place_of_supply ?? invoice.placeOfSupply,
+  place_of_supply: invoice.place_of_supply ?? invoice.placeOfSupply,
+  reverse_charges: invoice.reverse_charges ?? invoice.reverseCharges,
+  discounts_level: invoice.discounts_level ?? invoice.discountsLevel,
+  source: invoice.source,
   source_email: invoice.source_email ?? invoice.sourceEmail,
   file_id: invoice.file_id ?? invoice.fileId,
   file_hash: invoice.file_hash ?? invoice.fileHash,
@@ -521,6 +549,9 @@ export const toInvoiceUiPayload = (invoice = {}) => ({
   invoice_file_url: invoice.invoice_file_url ?? invoice.invoiceFileUrl,
   payment_date: invoice.payment_date ?? invoice.paymentDate,
   created_by_name: invoice.created_by_name ?? invoice.createdByName,
+  created_by_email: invoice.created_by_email ?? invoice.createdByEmail,
+  created_by_id: invoice.created_by_id ?? invoice.createdById,
+  created_by: invoice.created_by ?? invoice.createdBy,
   created_at: invoice.created_at ?? invoice.createdAt,
   matching_status: invoice.matching_status ?? invoice.matchingStatus,
   approval_records: invoice.approval_records ?? invoice.approvalRecords,
@@ -547,4 +578,10 @@ export const toInvoiceUiPayload = (invoice = {}) => ({
     invoice.workflowName ??
     invoice.approval_workflow_name ??
     invoice.approvalWorkflowName,
+  required_approval_levels:
+    invoice.required_approval_levels ?? invoice.requiredApprovalLevels,
+  current_approval_level:
+    invoice.current_approval_level ?? invoice.currentApprovalLevel,
+  is_sequential_approval:
+    invoice.is_sequential_approval ?? invoice.isSequentialApproval,
 });

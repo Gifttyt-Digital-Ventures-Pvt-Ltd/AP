@@ -34,14 +34,6 @@ export const LEDGER_OPTIONS = [
   "Marketing & Advertising", "Legal & Professional", "Maintenance",
 ];
 
-export const FILE_CATEGORIES = [
-  { value: "Expense Invoice", label: "Expense Invoice" },
-  { value: "Purchase Invoice", label: "Purchase Invoice" },
-  { value: "Revenue Invoice", label: "Revenue Invoice" },
-  { value: "Credit Note", label: "Credit Note" },
-  { value: "Debit Note", label: "Debit Note" },
-];
-
 export const INVOICE_SOURCES = [
   { value: "Upload", label: "Upload" },
   { value: "Email", label: "Email" },

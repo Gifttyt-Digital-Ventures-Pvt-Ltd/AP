@@ -14,6 +14,7 @@ export const WORKFLOW_TYPE_LABELS = {
   DEPARTMENT: 'Department',
   VENDOR: 'Vendor',
   AMOUNT: 'Amount',
+  CURRENCY: 'Currency',
   GENERIC: 'Generic',
 };
 
@@ -44,7 +45,8 @@ export const WORKFLOW_SECTIONS = [
   { type: 'DEPARTMENT', priority: 13 },
   { type: 'VENDOR', priority: 14 },
   { type: 'AMOUNT', priority: 15 },
-  { type: 'GENERIC', priority: 16 },
+  { type: 'CURRENCY', priority: 16 },
+  { type: 'GENERIC', priority: 17 },
 ];
 
 const WORKFLOW_TYPE_TOKENS = ['VENDOR', 'DEPARTMENT', 'AMOUNT', 'CATEGORY'];
@@ -65,6 +67,7 @@ const WORKFLOW_TYPE_SHORT_LABELS = {
   DEPARTMENT: 'Dept',
   VENDOR: 'Vendor',
   AMOUNT: 'Amount',
+  CURRENCY: 'Currency',
   GENERIC: 'Generic',
 };
 
@@ -103,6 +106,10 @@ export const getConditionVisibility = (type) => {
     return { showVendor: false, showDept: false, showAmount: false, showCategory: false };
   }
 
+  if (upperType === 'CURRENCY') {
+    return { showVendor: false, showDept: false, showAmount: false, showCategory: false };
+  }
+
   const includesKnownToken = WORKFLOW_TYPE_TOKENS.some((token) => hasTypeToken(upperType, token));
   if (!includesKnownToken) {
     return { showVendor: false, showDept: false, showAmount: false, showCategory: false };
@@ -132,6 +139,7 @@ export const WORKFLOW_TYPE_BADGE_CLASSES = {
   DEPARTMENT: 'bg-cyan-100 text-cyan-800 border-cyan-200',
   VENDOR: 'bg-pink-100 text-pink-800 border-pink-200',
   AMOUNT: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+  CURRENCY: 'bg-sky-100 text-sky-800 border-sky-200',
   GENERIC: 'bg-gray-100 text-gray-800 border-gray-200',
 };
 

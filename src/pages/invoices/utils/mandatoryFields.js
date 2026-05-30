@@ -1,7 +1,11 @@
-export const normalizeInvoiceMandatoryFields = (response) => ({
-  department: response?.department === true,
-  category: response?.category === true,
-});
+export const normalizeInvoiceMandatoryFields = (response) => {
+  const payload = response?.data ?? response ?? {};
+
+  return {
+    department: payload.department === true,
+    category: payload.category === true,
+  };
+};
 
 export const getInvoiceMandatoryFieldValidationMessage = (
   payload,

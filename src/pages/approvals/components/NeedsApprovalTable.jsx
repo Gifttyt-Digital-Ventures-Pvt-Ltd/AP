@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '../../../components/ui/button';
-import { CheckCircle, RotateCcw, XCircle } from 'lucide-react';
+import { CheckCircle, Eye, RotateCcw, XCircle } from 'lucide-react';
 import {
   isInvoiceAwaitingApproval,
   NEEDS_CORRECTION_ACTION,
@@ -26,6 +26,7 @@ const NeedsApprovalTable = ({
   getApprovalProgress,
   safeFormatDate,
   handleApprovalAction,
+  handleViewInvoice,
   canApproveInvoices,
 }) => {
   const renderNeedsApprovalRow = (invoice, rowIndex, headers) => {
@@ -47,7 +48,7 @@ const NeedsApprovalTable = ({
               value = (
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-muted-foreground">
-                    {progress.approved}/{progress.total} approved
+                    {progress.approved}/{progress.total} steps
                   </span>
                   <div className="flex gap-1">
                     {Array.from({ length: progress.total }).map((_, i) => (
@@ -72,6 +73,16 @@ const NeedsApprovalTable = ({
             case 'action':
               value = (
                 <div className="flex justify-end gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleViewInvoice?.(invoice)}
+                    data-testid={`view-invoice-${invoice.id}`}
+                    title="View Invoice"
+                    className="h-8 w-8 p-0"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
                   <Button
                     size="sm"
                     onClick={() => handleApprovalAction(invoice, isChecker ? 'Checked' : 'Approved')}
