@@ -1,6 +1,7 @@
 import React from 'react';
 import { Button } from '../../../components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
+import { isDuplicateBulkPreviewItem } from '../utils/duplicateInvoice';
 
 // Review and selection surface for extracted invoices before final creation.
 const BulkPreviewDialog = ({
@@ -110,13 +111,17 @@ const BulkPreviewDialog = ({
                 </tr>
               </thead>
               <tbody>
-                {bulkPreviewItems.map((item) => (
+                {bulkPreviewItems.map((item) => {
+                  const isDuplicateRow = isDuplicateBulkPreviewItem(item);
+                  const canEditRow = Boolean(item.invoicePayload) && !isDuplicateRow;
+
+                  return (
                   <tr key={item.id} className="border-b last:border-b-0">
                     <td className="p-3 w-12">
                       <input
                         type="checkbox"
-                        disabled={!item.invoicePayload || item.status === 'uploaded'}
-                        checked={Boolean(item.selected && item.invoicePayload)}
+                        disabled={!canEditRow || item.status === 'uploaded'}
+                        checked={Boolean(item.selected && canEditRow)}
                         onChange={(e) =>
                           setBulkPreviewItems((prev) =>
                             prev.map((row) =>
@@ -130,7 +135,7 @@ const BulkPreviewDialog = ({
                     <td className="p-3 whitespace-nowrap">{item.invoicePayload?.vendor_name || '-'}</td>
                     <td className="p-3 whitespace-nowrap font-['JetBrains_Mono']">{item.invoicePayload?.invoice_number || '-'}</td>
                     <td className="p-3 min-w-44">
-                      {item.invoicePayload ? (
+                      {canEditRow ? (
                         <select
                           value={item.invoicePayload.department_id || ''}
                           onChange={(e) =>
@@ -169,7 +174,7 @@ const BulkPreviewDialog = ({
                     </td>
                     {showCategoryField && (
                       <td className="p-3 min-w-44">
-                        {item.invoicePayload ? (
+                        {canEditRow ? (
                           <select
                             value={item.invoicePayload.category_id || item.invoicePayload.category?.id || ''}
                             onChange={(e) =>
@@ -223,25 +228,7 @@ const BulkPreviewDialog = ({
                       )}
                     </td>
                     <td className="p-3 text-right whitespace-nowrap">
-                      <div className="flex justify-end gap-2">
-                        {item.invoicePayload && !item.invoicePayload.vendor_id && (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            onClick={() => handleAddVendorForBulkItem(item.id)}
-                            disabled={bulkCreating || bulkExtracting || bulkAddingVendorItemId === item.id}
-                          >
-                            {bulkAddingVendorItemId === item.id ? 'Requesting...' : 'Request Vendor'}
-                          </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => openBulkEditDialog(item)}
-                          disabled={!item.invoicePayload || bulkAddingVendorItemId === item.id}
-                        >
-                          Edit
-                        </Button>
+                      {isDuplicateRow ? (
                         <Button
                           size="sm"
                           variant="destructive"
@@ -249,12 +236,43 @@ const BulkPreviewDialog = ({
                             setBulkPreviewItems((prev) => prev.filter((row) => row.id !== item.id))
                           }
                         >
-                          Remove
+                          Delete
                         </Button>
-                      </div>
+                      ) : (
+                        <div className="flex justify-end gap-2">
+                          {item.invoicePayload && !item.invoicePayload.vendor_id && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => handleAddVendorForBulkItem(item.id)}
+                              disabled={bulkCreating || bulkExtracting || bulkAddingVendorItemId === item.id}
+                            >
+                              {bulkAddingVendorItemId === item.id ? 'Requesting...' : 'Request Vendor'}
+                            </Button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openBulkEditDialog(item)}
+                            disabled={!item.invoicePayload || bulkAddingVendorItemId === item.id}
+                          >
+                            Edit
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() =>
+                              setBulkPreviewItems((prev) => prev.filter((row) => row.id !== item.id))
+                            }
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
