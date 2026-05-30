@@ -3,7 +3,11 @@ import { serviceApi } from "../serviceApi";
 export const dashboardReportsApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getDashboardStats: builder.query({
-      query: () => ({ url: "/dashboard/stats", method: "GET" }),
+      query: ({ currency } = {}) => ({
+        url: "/dashboard/stats",
+        method: "GET",
+        params: { ...(currency ? { currency } : {}) },
+      }),
       providesTags: ["Dashboard"],
     }),
     getExecutiveDashboard: builder.query({
