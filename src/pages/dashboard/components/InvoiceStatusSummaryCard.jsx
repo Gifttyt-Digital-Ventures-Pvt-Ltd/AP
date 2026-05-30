@@ -18,7 +18,9 @@ const InvoiceStatusSummaryCard = ({ stats }) => (
         </div>
         <div className="flex justify-between items-center p-2 bg-yellow-50 rounded">
           <span className="text-sm">Pending Payment</span>
-          <span className="font-semibold text-yellow-600">{stats?.approved_invoices || 0}</span>
+          <span className="font-semibold text-yellow-600">
+            {stats?.pending_payment_invoices || 0}
+          </span>
         </div>
       </div>
     </CardContent>

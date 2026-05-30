@@ -18,13 +18,15 @@ import PaymentSummaryCard from './components/PaymentSummaryCard';
 const Dashboard = () => {
   const {
     stats,
-    executiveData,
-    apData,
+    charts,
+    bottleneck,
     recentInvoices,
     pendingApprovals,
     paymentBatchStats,
+    showPaymentBatches,
     loading,
     refreshing,
+    isError,
     fetchAllData,
     approvalRate,
     corporateName,
@@ -33,7 +35,6 @@ const Dashboard = () => {
     paidValue,
     totalValue,
     paidPercentage,
-    isPaymentBatchesFeatureEnabled,
     currencies,
     selectedCurrency,
     setSelectedCurrency,
@@ -43,6 +44,27 @@ const Dashboard = () => {
 
   if (loading) {
     return <DashboardLoadingState />;
+  }
+
+  if (isError && !stats) {
+    return (
+      <div className="space-y-6" data-testid="dashboard-page">
+        <DashboardHeader
+          headerName={headerName}
+          corporateName={corporateName}
+          onRefresh={fetchAllData}
+          refreshing={refreshing}
+          currencies={currencies}
+          selectedCurrency={selectedCurrency}
+          onCurrencyChange={setSelectedCurrency}
+        />
+        <div className="flex min-h-[40vh] items-center justify-center rounded-xl border border-border bg-card/50">
+          <p className="text-sm text-muted-foreground">
+            Unable to load dashboard data. Please try again.
+          </p>
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -74,20 +96,20 @@ const Dashboard = () => {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <SpendingTrendChart
-          monthlyTrend={executiveData?.monthly_trend}
+          monthlyTrend={charts?.monthly_trend}
           formatCompactCurrency={formatCompactCurrency}
           formatFullCurrency={formatFullCurrency}
         />
-        <InvoiceStatusDistributionChart statusDistribution={executiveData?.status_distribution} />
+        <InvoiceStatusDistributionChart statusDistribution={charts?.status_distribution} />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <QuickActionsCard showPaymentBatches={isPaymentBatchesFeatureEnabled} />
+        <QuickActionsCard showPaymentBatches={showPaymentBatches} />
         <ApprovalBottleneckCard
-          bottleneckAnalysis={apData?.bottleneck_analysis}
-          avgProcessingDays={apData?.processing_metrics?.avg_processing_days || 0}
+          bottleneckAnalysis={bottleneck?.stages}
+          avgProcessingDays={bottleneck?.avg_processing_days || 0}
         />
-        {isPaymentBatchesFeatureEnabled && (
+        {showPaymentBatches && (
           <PaymentBatchesCard
             paymentBatchStats={paymentBatchStats}
             formatCompactCurrency={formatCompactCurrency}
@@ -101,7 +123,7 @@ const Dashboard = () => {
           formatFullCurrency={formatFullCurrency}
         />
         <TopVendorsCard
-          vendors={executiveData?.top_vendors}
+          vendors={charts?.top_vendors}
           formatFullCurrency={formatFullCurrency}
         />
       </div>

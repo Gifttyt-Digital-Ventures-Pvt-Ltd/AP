@@ -6,21 +6,17 @@ import {
   useGetCorporateDetailsQuery,
   useGetCorporateUserDetailsQuery,
 } from '../../../Services/apis/corporateApi';
-import {
-  useGetDashboardStatsQuery,
-  useGetExecutiveDashboardQuery,
-  useGetApReportsQuery,
-} from '../../../Services/apis/dashboardReportsApi';
-import { useGetInvoicesQuery } from '../../../Services/apis/invoicesVendorsApi';
-import { useGetPurchaseOrdersQuery } from '../../../Services/apis/purchaseOrdersMasterDataApi';
-import { useGetPaymentBatchStatsQuery } from '../../../Services/apis/paymentBatchesApi';
+import { useGetDashboardSummaryQuery } from '../../../Services/apis/dashboardReportsApi';
 import {
   CURRENCY_SCREENS,
   DEFAULT_CURRENCY,
   formatCurrency as formatCurrencyValue,
   normalizeCurrencyCode,
 } from '../../../utils/currency';
+import { mapDashboardSummary } from '../utils/mapDashboardSummary';
 import { toast } from 'sonner';
+
+const DASHBOARD_DAYS = 30;
 
 export function useDashboardData() {
   const { user } = useAuth();
@@ -59,133 +55,80 @@ export function useDashboardData() {
     [displayCurrency],
   );
 
-  const dashboardQueryArgs = useMemo(
+  const summaryQueryArgs = useMemo(
     () => ({
-      days: 30,
+      days: DASHBOARD_DAYS,
       ...(currencyParam ? { currency: currencyParam } : {}),
     }),
     [currencyParam],
   );
 
-  const invoiceQueryArgs = useMemo(
-    () => (currencyParam ? { currency: currencyParam } : {}),
-    [currencyParam],
-  );
+  const {
+    data: summaryRaw = null,
+    isLoading,
+    isFetching,
+    isError,
+    refetch,
+  } = useGetDashboardSummaryQuery(summaryQueryArgs);
 
-  const {
-    data: stats = null,
-    isLoading: statsLoading,
-    isFetching: statsFetching,
-    refetch: refetchStats,
-  } = useGetDashboardStatsQuery(
-    currencyParam ? { currency: currencyParam } : {},
-  );
-  const {
-    data: executiveData = null,
-    isLoading: executiveLoading,
-    isFetching: executiveFetching,
-    refetch: refetchExecutiveDashboard,
-  } = useGetExecutiveDashboardQuery(dashboardQueryArgs);
-  const {
-    data: apData = null,
-    isLoading: apLoading,
-    isFetching: apFetching,
-    refetch: refetchApReports,
-  } = useGetApReportsQuery(dashboardQueryArgs);
-  const {
-    data: recentInvoicesData = [],
-    isLoading: invoicesLoading,
-    isFetching: invoicesFetching,
-    refetch: refetchInvoices,
-  } = useGetInvoicesQuery({ limit: 5, ...invoiceQueryArgs });
-  const {
-    data: pendingApprovalsData = [],
-    isLoading: pendingApprovalsLoading,
-    isFetching: pendingApprovalsFetching,
-    refetch: refetchPendingApprovals,
-  } = useGetInvoicesQuery({ status: 'Pending Approver', ...invoiceQueryArgs });
-  const {
-    data: recentPOsData = [],
-    isLoading: purchaseOrdersLoading,
-    isFetching: purchaseOrdersFetching,
-    refetch: refetchPurchaseOrders,
-  } = useGetPurchaseOrdersQuery({ limit: 5 });
-  const {
-    data: paymentBatchStats = null,
-    isLoading: batchStatsLoading,
-    isFetching: batchStatsFetching,
-    refetch: refetchPaymentBatchStats,
-  } = useGetPaymentBatchStatsQuery(undefined, { skip: !isPaymentBatchesFeatureEnabled });
+  const summary = useMemo(() => mapDashboardSummary(summaryRaw), [summaryRaw]);
 
-  const recentInvoices = Array.isArray(recentInvoicesData)
-    ? recentInvoicesData.slice(0, 5)
-    : [];
-  const recentPOs = Array.isArray(recentPOsData) ? recentPOsData.slice(0, 5) : [];
-  const pendingApprovals = Array.isArray(pendingApprovalsData)
-    ? pendingApprovalsData.slice(0, 5)
-    : [];
+  const stats = summary?.stats ?? null;
+  const paymentProgress = summary?.paymentProgress ?? null;
+  const charts = summary?.charts ?? null;
+  const bottleneck = summary?.bottleneck ?? null;
+  const recentInvoices = summary?.recent_invoices ?? [];
+  const pendingApprovals = summary?.pending_your_approval ?? [];
+  const paymentBatchStats = summary?.payment_batches ?? null;
 
-  const loading =
-    statsLoading ||
-    executiveLoading ||
-    apLoading ||
-    invoicesLoading ||
-    pendingApprovalsLoading ||
-    purchaseOrdersLoading ||
-    (isPaymentBatchesFeatureEnabled && batchStatsLoading);
+  const showPaymentBatches =
+    isPaymentBatchesFeatureEnabled && paymentBatchStats?.enabled !== false;
 
-  const refreshing =
-    statsFetching ||
-    executiveFetching ||
-    apFetching ||
-    invoicesFetching ||
-    pendingApprovalsFetching ||
-    purchaseOrdersFetching ||
-    (isPaymentBatchesFeatureEnabled && batchStatsFetching);
+  const approvalRate = useMemo(() => {
+    if (stats?.completion_rate != null) return Number(stats.completion_rate).toFixed(1);
+    if (stats?.total_invoices > 0) {
+      return ((stats.paid_invoices / stats.total_invoices) * 100).toFixed(1);
+    }
+    return 0;
+  }, [stats]);
+
+  const corporateName =
+    String(summary?.header?.corporate_name || '').trim() ||
+    String(corporateContext?.corporate?.name || '').trim();
+  const resolvedUserName =
+    String(summary?.header?.user_name || '').trim() ||
+    String(corporateUserContext?.corporateUser?.name || '').trim() ||
+    String(user?.name || '').trim();
+  const headerName = resolvedUserName || 'User';
+
+  const pendingValue = paymentProgress?.pending_amount ?? stats?.pending_amount ?? 0;
+  const paidValue = paymentProgress?.paid_amount ?? stats?.paid_amount ?? 0;
+  const totalValue = paymentProgress?.total_amount ?? stats?.total_amount ?? 0;
+  const paidPercentage = useMemo(() => {
+    if (paymentProgress?.paid_percentage != null) return paymentProgress.paid_percentage;
+    return totalValue > 0 ? (paidValue / totalValue) * 100 : 0;
+  }, [paymentProgress, paidValue, totalValue]);
 
   const fetchAllData = async () => {
     try {
-      await Promise.all([
-        refetchStats(),
-        refetchExecutiveDashboard(),
-        refetchApReports(),
-        refetchInvoices(),
-        refetchPendingApprovals(),
-        refetchPurchaseOrders(),
-        refetchPaymentBatchStats(),
-      ]);
+      await refetch();
     } catch (error) {
       console.error('Error refreshing dashboard data:', error);
       toast.error('Failed to refresh dashboard data');
     }
   };
 
-  const approvalRate =
-    stats?.total_invoices > 0
-      ? ((stats.paid_invoices / stats.total_invoices) * 100).toFixed(1)
-      : 0;
-
-  const corporateName = String(corporateContext?.corporate?.name || '').trim();
-  const resolvedUserName =
-    String(corporateUserContext?.corporateUser?.name || '').trim() ||
-    String(user?.name || '').trim();
-  const headerName = resolvedUserName || 'User';
-
-  const pendingValue = stats?.pending_amount || 0;
-  const paidValue = stats?.paid_amount || 0;
-  const totalValue = stats?.total_amount || 0;
-  const paidPercentage = totalValue > 0 ? (paidValue / totalValue) * 100 : 0;
-
   return {
     stats,
-    executiveData,
-    apData,
+    charts,
+    bottleneck,
     recentInvoices,
-    recentPOs,
     pendingApprovals,
     paymentBatchStats,
-    loading,
-    refreshing,
+    showPaymentBatches,
+    loading: isLoading,
+    refreshing: isFetching,
+    isError,
     fetchAllData,
     approvalRate,
     corporateName,
@@ -194,7 +137,6 @@ export function useDashboardData() {
     paidValue,
     totalValue,
     paidPercentage,
-    isPaymentBatchesFeatureEnabled,
     currencies,
     selectedCurrency,
     setSelectedCurrency,

@@ -10,6 +10,14 @@ export const dashboardReportsApi = serviceApi.injectEndpoints({
       }),
       providesTags: ["Dashboard"],
     }),
+    getDashboardSummary: builder.query({
+      query: ({ days = 30, currency } = {}) => ({
+        url: "/dashboard/summary",
+        method: "GET",
+        params: { days, ...(currency ? { currency } : {}) },
+      }),
+      providesTags: ["Dashboard"],
+    }),
     getExecutiveDashboard: builder.query({
       query: ({ days = 30, currency } = {}) => ({
         url: "/analytics/executive-dashboard",
@@ -55,6 +63,7 @@ export const dashboardReportsApi = serviceApi.injectEndpoints({
 
 export const {
   useGetDashboardStatsQuery,
+  useGetDashboardSummaryQuery,
   useGetExecutiveDashboardQuery,
   useGetApReportsQuery,
   useGetVendorAnalyticsQuery,
