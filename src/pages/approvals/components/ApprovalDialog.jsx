@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../../compo
 import { Label } from '../../../components/ui/label';
 import { CheckCircle, RotateCcw, XCircle } from 'lucide-react';
 import { NEEDS_CORRECTION_ACTION } from '../../../utils/approvalWorkflow';
+import { formatCurrency } from '../../../utils/currency';
 
 // Confirmation dialog used for both approve and reject workflows.
 const ApprovalDialog = ({
@@ -38,7 +39,7 @@ const ApprovalDialog = ({
             <div className="flex justify-between">
               <span className="text-sm text-muted-foreground">Amount:</span>
               <span className="font-['JetBrains_Mono'] font-semibold">
-                {selectedInvoice.currency} {selectedInvoice.amount.toLocaleString()}
+                {formatCurrency(selectedInvoice.amount, selectedInvoice.currency)}
               </span>
             </div>
             <div className="flex justify-between">

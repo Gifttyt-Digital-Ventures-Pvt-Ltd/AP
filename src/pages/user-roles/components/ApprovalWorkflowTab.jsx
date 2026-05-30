@@ -72,6 +72,13 @@ import {
   hasCatchAllRule,
 } from "../utils/approvalWorkflowUtils";
 import WorkflowViewDialog from "./WorkflowViewDialog";
+import CurrencySelector from "../../../components/common/CurrencySelector";
+import { useCurrencyFilter } from "../../../hooks/useCurrencyFilter";
+import {
+  CURRENCY_FILTER_ALL,
+  CURRENCY_SCREENS,
+  DEFAULT_CURRENCY,
+} from "../../../utils/currency";
 
 const DEFAULT_WORKFLOW_TYPES = Object.keys(WORKFLOW_TYPE_LABELS);
 
@@ -89,6 +96,7 @@ const emptyFormState = {
   categoryIds: [],
   minAmount: "",
   maxAmount: "",
+  currency: DEFAULT_CURRENCY,
   approvers: [{ userId: "", userName: "" }],
   isSequential: false,
 };
@@ -236,6 +244,7 @@ const mapWorkflowToUiRule = (workflow = {}) => {
     categoryNames: categoryEntries.map((item) => item.name),
     minAmount: asNumberOrNull(workflow.minAmount),
     maxAmount: asNumberOrNull(workflow.maxAmount),
+    currency: String(workflow.currency || DEFAULT_CURRENCY).trim().toUpperCase(),
     approvalMode: workflow.isSequential ? "sequential" : "parallel",
     approvers,
     isActive: workflow.isActive === true,
@@ -392,9 +401,22 @@ const ApprovalWorkflowTab = ({
     departmentId: "",
     categoryId: "",
     amount: "",
+    currency: DEFAULT_CURRENCY,
     tested: false,
     result: null,
   });
+
+  const {
+    currencies: filterCurrencies,
+    selectedCurrency: listCurrency,
+    setSelectedCurrency: setListCurrency,
+    queryArgs: workflowListQueryArgs,
+  } = useCurrencyFilter(CURRENCY_SCREENS.WORKFLOW);
+
+  const workflowRuleCurrencies = useMemo(
+    () => filterCurrencies.filter((currency) => currency !== CURRENCY_FILTER_ALL),
+    [filterCurrencies],
+  );
 
   const {
     data: workflowTypesData = [],
@@ -412,7 +434,7 @@ const ApprovalWorkflowTab = ({
     isFetching: workflowsFetching,
     isError: workflowsError,
     refetch: refetchWorkflows,
-  } = useGetWorkflowsQuery();
+  } = useGetWorkflowsQuery(workflowListQueryArgs);
   const { data: departmentsData = [], isError: departmentsError } =
     useGetCorporateDepartmentsQuery();
   const { data: categoriesData = [], isError: categoriesError } =
@@ -669,6 +691,7 @@ const ApprovalWorkflowTab = ({
         rule.maxAmount !== undefined && rule.maxAmount !== null
           ? String(rule.maxAmount)
           : "",
+      currency: rule.currency || DEFAULT_CURRENCY,
       approvers:
         Array.isArray(rule.approvers) && rule.approvers.length > 0
           ? rule.approvers.map((approver) => ({
@@ -804,6 +827,7 @@ const ApprovalWorkflowTab = ({
         vendorId: tester.vendorId,
         departmentId: asNumberOrNull(tester.departmentId),
         amount: Number(tester.amount || 0),
+        currency: tester.currency || DEFAULT_CURRENCY,
         ...(categoryEnabled
           ? { categoryId: asNumberOrNull(tester.categoryId) }
           : {}),
@@ -997,6 +1021,7 @@ const ApprovalWorkflowTab = ({
     return {
       workflowName: formState.name.trim(),
       workflowType: formState.type,
+      currency: formState.currency || DEFAULT_CURRENCY,
       approvers,
       isSequential: formState.isSequential && formState.approvers.length > 1,
       config,
@@ -1084,7 +1109,7 @@ const ApprovalWorkflowTab = ({
         </CardHeader>
         <CardContent className="space-y-4">
           <div
-            className={`grid grid-cols-1 ${categoryEnabled ? "md:grid-cols-4" : "md:grid-cols-3"} gap-4`}
+            className={`grid grid-cols-1 ${categoryEnabled ? "md:grid-cols-5" : "md:grid-cols-4"} gap-4`}
           >
             <div>
               <Label>Vendor</Label>
@@ -1154,8 +1179,21 @@ const ApprovalWorkflowTab = ({
               </div>
             )}
 
+            <CurrencySelector
+              currencies={workflowRuleCurrencies}
+              value={tester.currency}
+              onChange={(currency) =>
+                setTester((prev) => ({
+                  ...prev,
+                  currency,
+                  tested: false,
+                }))
+              }
+              label="Currency"
+            />
+
             <div>
-              <Label>Amount (₹)</Label>
+              <Label>Amount ({tester.currency || DEFAULT_CURRENCY})</Label>
               <Input
                 type="number"
                 min="0"
@@ -1297,7 +1335,7 @@ const ApprovalWorkflowTab = ({
         </CardContent>
       </Card>
 
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h3 className="text-xl font-semibold">Invoice Approval Workflows</h3>
           <p className="text-muted-foreground text-sm">
@@ -1305,17 +1343,26 @@ const ApprovalWorkflowTab = ({
             {workflowsFetching ? " · refreshing..." : ""}
           </p>
         </div>
-        {canManageWorkflow && (
-          <Button
-            onClick={openCreateModal}
-            disabled={
-              workflowActionLoading || editableWorkflowTypes.length === 0
-            }
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            New Workflow
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-3">
+          <CurrencySelector
+            currencies={filterCurrencies}
+            value={listCurrency}
+            onChange={setListCurrency}
+            variant="inline"
+            id="workflow-list-currency-filter"
+          />
+          {canManageWorkflow && (
+            <Button
+              onClick={openCreateModal}
+              disabled={
+                workflowActionLoading || editableWorkflowTypes.length === 0
+              }
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              New Workflow
+            </Button>
+          )}
+        </div>
       </div>
 
       {noCatchAllRule && (
@@ -1463,6 +1510,16 @@ const ApprovalWorkflowTab = ({
               <div className="space-y-4 rounded-lg border p-4 bg-muted/30">
                 <p className="text-sm font-medium">Conditions</p>
 
+                <CurrencySelector
+                  currencies={workflowRuleCurrencies}
+                  value={formState.currency || DEFAULT_CURRENCY}
+                  onChange={(currency) =>
+                    setFormState((prev) => ({ ...prev, currency }))
+                  }
+                  disabled={workflowActionLoading}
+                  label="Rule Currency"
+                />
+
                 {visibility.showVendor && (
                   <div className="space-y-2">
                     <Label>Vendors</Label>
@@ -1571,7 +1628,7 @@ const ApprovalWorkflowTab = ({
                 {visibility.showAmount && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Min Amount (₹)</Label>
+                      <Label>Min Amount ({formState.currency || DEFAULT_CURRENCY})</Label>
                       <Input
                         type="number"
                         min="0"
@@ -1587,7 +1644,7 @@ const ApprovalWorkflowTab = ({
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Max Amount (₹)</Label>
+                      <Label>Max Amount ({formState.currency || DEFAULT_CURRENCY})</Label>
                       <Input
                         type="number"
                         min="0"

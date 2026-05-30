@@ -4,6 +4,19 @@ import { Button } from '../../../components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
+import CurrencySelector from '../../../components/common/CurrencySelector';
+import { DEFAULT_CURRENCY } from '../../../utils/currency';
+import {
+  createDefaultLineItem,
+  DEFAULT_INR_TAX,
+  isInrInvoiceCurrency,
+  remapLineItemsForCurrencyChange,
+} from '../utils/invoiceTax';
+import {
+  formatNumericInputValue,
+  parseNumericInput,
+  sanitizeNumericInput,
+} from '../utils/numericInput';
 
 // Editor for a single extracted row so users can fix fields before invoice creation.
 const BulkEditDialog = ({
@@ -30,8 +43,11 @@ const BulkEditDialog = ({
   showCategoryField = true,
   departmentMandatory = false,
   categoryMandatory = false,
+  currencyOptions = [],
 }) => {
   const selectedFile = bulkPreviewItems.find((item) => item.id === bulkEditItemId)?.file || null;
+  const bulkCurrency = bulkEditForm?.currency || DEFAULT_CURRENCY;
+  const useInrTax = isInrInvoiceCurrency(bulkCurrency);
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !bulkCreating && setOpen(nextOpen)}>
@@ -93,18 +109,36 @@ const BulkEditDialog = ({
                 <div>
                   <Label className="text-xs">Amount</Label>
                   <Input
-                    type="number"
-                    value={bulkEditForm.amount}
-                    onChange={(e) => setBulkEditForm((prev) => ({ ...prev, amount: Number(e.target.value || 0) }))}
+                    type="text"
+                    inputMode="decimal"
+                    value={formatNumericInputValue(bulkEditForm.amount)}
+                    onChange={(e) =>
+                      setBulkEditForm((prev) => ({
+                        ...prev,
+                        amount: sanitizeNumericInput(e.target.value),
+                      }))
+                    }
                   />
                 </div>
-                <div>
-                  <Label className="text-xs">Currency</Label>
-                  <Input
-                    value={bulkEditForm.currency}
-                    onChange={(e) => setBulkEditForm((prev) => ({ ...prev, currency: e.target.value }))}
-                  />
-                </div>
+                <CurrencySelector
+                  currencies={currencyOptions}
+                  value={bulkCurrency}
+                  onChange={(currency) =>
+                    setBulkEditForm((prev) => {
+                      const switchingTaxMode =
+                        isInrInvoiceCurrency(prev.currency) !== isInrInvoiceCurrency(currency);
+                      return {
+                        ...prev,
+                        currency,
+                        line_items: switchingTaxMode
+                          ? remapLineItemsForCurrencyChange(prev.line_items, currency)
+                          : prev.line_items,
+                      };
+                    })
+                  }
+                  label="Currency"
+                  id="bulk-edit-currency"
+                />
                 <div className={showCategoryField ? '' : 'col-span-2'}>
                   <Label className={`text-xs ${departmentMandatory ? 'text-blue-500' : ''}`}>
                     {departmentMandatory ? '* ' : ''}Department
@@ -208,37 +242,81 @@ const BulkEditDialog = ({
                             />
                           </td>
                           <td className="p-2">
-                            <select
-                              value={line.tax || 'CGST + SGST 18%'}
-                              onChange={(e) => updateBulkEditLineItem(index, 'tax', e.target.value)}
-                              className="h-10 w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
-                            >
-                              {taxRates.map((tax) => (
-                                <option key={tax.value} value={tax.value}>
-                                  {tax.label}
-                                </option>
-                              ))}
-                            </select>
+                            {useInrTax ? (
+                              <select
+                                value={line.tax || DEFAULT_INR_TAX}
+                                onChange={(e) => updateBulkEditLineItem(index, 'tax', e.target.value)}
+                                className="h-10 w-full rounded-md border border-input bg-background px-2 py-2 text-sm"
+                              >
+                                {taxRates.map((tax) => (
+                                  <option key={tax.value} value={tax.value}>
+                                    {tax.label}
+                                  </option>
+                                ))}
+                              </select>
+                            ) : (
+                              <div className="flex flex-col gap-1">
+                                <Input
+                                  value={line.tax_name || ''}
+                                  onChange={(e) => updateBulkEditLineItem(index, 'tax_name', e.target.value)}
+                                  placeholder="Tax name"
+                                />
+                                <Input
+                                  type="text"
+                                  inputMode="decimal"
+                                  value={formatNumericInputValue(line.tax_rate)}
+                                  onChange={(e) =>
+                                    updateBulkEditLineItem(
+                                      index,
+                                      'tax_rate',
+                                      sanitizeNumericInput(e.target.value),
+                                    )
+                                  }
+                                  placeholder="Rate %"
+                                />
+                              </div>
+                            )}
                           </td>
                           <td className="p-2">
                             <Input
-                              type="number"
-                              value={line.quantity}
-                              onChange={(e) => updateBulkEditLineItem(index, 'quantity', Number(e.target.value || 0))}
+                              type="text"
+                              inputMode="decimal"
+                              value={formatNumericInputValue(line.quantity)}
+                              onChange={(e) =>
+                                updateBulkEditLineItem(
+                                  index,
+                                  'quantity',
+                                  sanitizeNumericInput(e.target.value),
+                                )
+                              }
                             />
                           </td>
                           <td className="p-2">
                             <Input
-                              type="number"
-                              value={line.unit_price}
-                              onChange={(e) => updateBulkEditLineItem(index, 'unit_price', Number(e.target.value || 0))}
+                              type="text"
+                              inputMode="decimal"
+                              value={formatNumericInputValue(line.unit_price)}
+                              onChange={(e) =>
+                                updateBulkEditLineItem(
+                                  index,
+                                  'unit_price',
+                                  sanitizeNumericInput(e.target.value),
+                                )
+                              }
                             />
                           </td>
                           <td className="p-2">
                             <Input
-                              type="number"
-                              value={line.amount}
-                              onChange={(e) => updateBulkEditLineItem(index, 'amount', Number(e.target.value || 0))}
+                              type="text"
+                              inputMode="decimal"
+                              value={formatNumericInputValue(line.amount)}
+                              onChange={(e) =>
+                                updateBulkEditLineItem(
+                                  index,
+                                  'amount',
+                                  sanitizeNumericInput(e.target.value),
+                                )
+                              }
                             />
                           </td>
                           <td className="p-2 text-right">
@@ -268,20 +346,25 @@ const BulkEditDialog = ({
                 <Button
                   variant="outline"
                   onClick={() =>
-                    setBulkEditForm((prev) => ({
-                      ...prev,
-                      line_items: [
-                        ...prev.line_items,
-                        {
-                          description: '',
-                          quantity: 1,
-                          unit_price: 0,
-                          amount: 0,
-                          hsn_sac: '',
-                          tax: 'CGST + SGST 18%',
-                        },
-                      ],
-                    }))
+                    setBulkEditForm((prev) => {
+                      const nextLine = createDefaultLineItem(prev.currency);
+                      return {
+                        ...prev,
+                        line_items: [
+                          ...prev.line_items,
+                          {
+                            description: nextLine.description,
+                            quantity: nextLine.quantity,
+                            unit_price: nextLine.unit_rate,
+                            amount: 0,
+                            hsn_sac: nextLine.hsn_sac,
+                            tax: nextLine.tax,
+                            tax_name: nextLine.tax_name,
+                            tax_rate: nextLine.tax_rate,
+                          },
+                        ],
+                      };
+                    })
                   }
                 >
                   Add Line

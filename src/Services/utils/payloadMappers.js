@@ -176,6 +176,12 @@ export const resolveGstRateFromLineItem = (item = {}) => {
     return Number.isFinite(numeric) ? numeric : undefined;
   }
 
+  const explicitRate = item.tax_rate ?? item.taxRate;
+  if (explicitRate !== null && explicitRate !== undefined && explicitRate !== "") {
+    const numeric = Number(explicitRate);
+    return Number.isFinite(numeric) ? numeric : undefined;
+  }
+
   const taxLabel = String(item.tax ?? "").trim();
   if (!taxLabel) return undefined;
 

@@ -1,5 +1,7 @@
 import React from 'react';
 import { Building2, User } from 'lucide-react';
+import { useGetAvailableCurrenciesQuery } from '../../Services/apis/corporateApi';
+import { CURRENCY_SCREENS, FALLBACK_CURRENCIES } from '../../utils/currency';
 import { isIndiaCountry, normalizePincodeInput } from '../../utils/vendorValidation';
 import { Button } from '../ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -18,13 +20,6 @@ const CATEGORY_OPTIONS = [
   'Others',
 ];
 
-const CURRENCY_OPTIONS = [
-  { value: 'INR', label: 'INR - Indian Rupee' },
-  { value: 'USD', label: 'USD - US Dollar' },
-  { value: 'EUR', label: 'EUR - Euro' },
-  { value: 'GBP', label: 'GBP - British Pound' },
-];
-
 const VendorDetailsDialog = ({
   open,
   onOpenChange,
@@ -37,15 +32,25 @@ const VendorDetailsDialog = ({
   submitting = false,
   requireEmail = true,
   requireFullMandatory = false,
-  /** Invoice upload vendor request: GSTIN + mobile only; PAN optional */
+  /** Invoice upload vendor request: mobile required; GSTIN/TAX ID required for India only */
   invoiceVendorRequest = false,
   testId = 'vendor-dialog',
 }) => {
+  const { data: availableCurrencies = [] } = useGetAvailableCurrenciesQuery(
+    CURRENCY_SCREENS.INVOICE,
+    { skip: invoiceVendorRequest },
+  );
+
   if (!formData) return null;
+
   const isEmailRequired = requireEmail || requireFullMandatory;
   const isIndia = isIndiaCountry(formData.country);
-  const isGstinRequired = invoiceVendorRequest || isIndia;
+  const isGstinRequired = isIndia;
   const isPanRequired = isIndia && !invoiceVendorRequest;
+  const currencyOptions =
+    Array.isArray(availableCurrencies) && availableCurrencies.length > 0
+      ? availableCurrencies.filter((currency) => currency !== 'ALL')
+      : FALLBACK_CURRENCIES;
   const updateField = (field, value) => setFormData((prev) => ({ ...prev, [field]: value }));
 
   const basicInfoFields = [
@@ -173,8 +178,8 @@ const VendorDetailsDialog = ({
                     onChange={(event) => updateField('currency', event.target.value)}
                     className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   >
-                    {CURRENCY_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>{option.label}</option>
+                    {currencyOptions.map((option) => (
+                      <option key={option} value={option}>{option}</option>
                     ))}
                   </select>
                 </div>
@@ -230,17 +235,19 @@ const VendorDetailsDialog = ({
                 </div>
 
                 <div>
-                  <Label>GSTIN{isGstinRequired ? ' *' : ''}</Label>
+                  <Label>GSTIN/TAX ID{isGstinRequired ? ' *' : ''}</Label>
                   <Input
                     value={formData.gstin}
                     onChange={(event) => updateField('gstin', event.target.value.toUpperCase())}
-                    placeholder="29ABCDE1234F1Z5"
-                    maxLength={15}
+                    placeholder={isIndia ? '29ABCDE1234F1Z5' : 'Enter GSTIN or Tax ID'}
+                    maxLength={isIndia ? 15 : undefined}
                     className="uppercase"
                     required={isGstinRequired}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    15-digit GST Identification Number
+                    {isIndia
+                      ? '15-character GST Identification Number'
+                      : 'Optional tax identifier for the vendor country'}
                   </p>
                 </div>
 

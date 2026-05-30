@@ -1,5 +1,9 @@
+import { formatCurrency as formatCurrencyAmount } from "../../../utils/currency";
+
 export const SUPPORTED_PO_CURRENCIES = ["INR", "USD", "EUR", "GBP"];
 export const SUPPORTED_PO_TEMPLATES = ["T1", "T2", "T3", "T4", "T5"];
+
+export { formatCurrencyAmount as formatCurrency };
 
 export const DEFAULT_PO_FORMAT_CONFIG = {
   id: "default-format",
@@ -86,15 +90,6 @@ export const normalizePoTemplateCode = (templateCode = "T1") => {
   const raw = String(templateCode || "").trim().toUpperCase();
   if (!raw || raw === "DEFAULT") return "T1";
   return SUPPORTED_PO_TEMPLATES.includes(raw) ? raw : "T1";
-};
-
-export const formatCurrency = (amount, currency = "INR") => {
-  const safeCurrency = SUPPORTED_PO_CURRENCIES.includes(currency) ? currency : "INR";
-  return new Intl.NumberFormat(safeCurrency === "INR" ? "en-IN" : "en-US", {
-    style: "currency",
-    currency: safeCurrency,
-    minimumFractionDigits: 2,
-  }).format(amount || 0);
 };
 
 export const normalizePoStatus = (status = "") => {

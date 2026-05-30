@@ -1,3 +1,5 @@
+import { formatCurrency as formatCurrencyAmount } from "../../../utils/currency";
+
 const TYPE_PRIORITY = {
   VENDOR_DEPARTMENT_AMOUNT_CATEGORY: 15,
   VENDOR_DEPARTMENT_CATEGORY: 14,
@@ -74,21 +76,24 @@ export const hasCatchAllRule = (rules = []) => {
   return rules.some((rule) => rule.type === 'GENERIC' && rule.isActive);
 };
 
-export const formatCurrency = (amount = 0) => {
-  return `₹${Number(amount || 0).toLocaleString('en-IN')}`;
-};
+export { formatCurrencyAmount as formatCurrency };
 
 export const getConditionSummary = (rule) => {
   const parts = [];
   const vendorNames = Array.isArray(rule.vendorNames) ? rule.vendorNames : [];
   const departmentNames = Array.isArray(rule.departmentNames) ? rule.departmentNames : [];
   const categoryNames = Array.isArray(rule.categoryNames) ? rule.categoryNames : [];
+  const ruleCurrency = rule.currency || 'INR';
 
   if (vendorNames.length > 0) parts.push(vendorNames.join(', '));
   if (departmentNames.length > 0) parts.push(departmentNames.join(', '));
   if (categoryNames.length > 0) parts.push(categoryNames.join(', '));
-  if (rule.minAmount !== null && rule.minAmount !== undefined) parts.push(`≥ ${formatCurrency(rule.minAmount)}`);
-  if (rule.maxAmount !== null && rule.maxAmount !== undefined) parts.push(`≤ ${formatCurrency(rule.maxAmount)}`);
+  if (rule.minAmount !== null && rule.minAmount !== undefined) {
+    parts.push(`≥ ${formatCurrencyAmount(rule.minAmount, ruleCurrency)}`);
+  }
+  if (rule.maxAmount !== null && rule.maxAmount !== undefined) {
+    parts.push(`≤ ${formatCurrencyAmount(rule.maxAmount, ruleCurrency)}`);
+  }
 
   return parts.join(' · ') || 'All invoices';
 };

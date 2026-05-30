@@ -393,6 +393,23 @@ export const corporateApi = serviceApi.injectEndpoints({
       }),
       invalidatesTags: ["Users"],
     }),
+    getAvailableCurrencies: builder.query({
+      query: (screen) => ({
+        url: "/corporate/ap/getAvailableCurrencies",
+        method: "GET",
+        params: { screen },
+      }),
+      transformResponse: (response) => {
+        const currencies = Array.isArray(response?.currencies)
+          ? response.currencies
+          : Array.isArray(response)
+            ? response
+            : [];
+        return currencies
+          .map((currency) => String(currency || "").trim().toUpperCase())
+          .filter(Boolean);
+      },
+    }),
   }),
 });
 
@@ -417,4 +434,5 @@ export const {
   useAddCorporateUsersMutation,
   useUpdateCorporateEmployeeMutation,
   useDeleteCorporateEmployeeMutation,
+  useGetAvailableCurrenciesQuery,
 } = corporateApi;

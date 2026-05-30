@@ -76,10 +76,13 @@ export const categoriesApi = serviceApi.injectEndpoints({
       providesTags: ["Categories"],
     }),
     getCategoriesForInvoice: builder.query({
-      query: (userEmail) => ({
+      query: ({ userEmail, currency } = {}) => ({
         url: "/api/categories/for-invoice",
         method: "GET",
-        params: { userEmail },
+        params: {
+          ...(userEmail ? { userEmail } : {}),
+          ...(currency ? { currency } : {}),
+        },
       }),
       transformResponse: (response) => toArray(response).map(normalizeCategory),
       providesTags: ["Categories"],

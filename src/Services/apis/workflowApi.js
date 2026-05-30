@@ -1,4 +1,5 @@
 import { serviceApi } from "../serviceApi";
+import { DEFAULT_CURRENCY } from "../../utils/currency";
 
 const normalizeWorkflowTypeMap = (value) => {
   if (!value || typeof value !== "object") {
@@ -56,6 +57,7 @@ const normalizeWorkflowResponse = (workflow = {}) => {
     category: categories,
     minAmount: workflow.minAmount ?? null,
     maxAmount: workflow.maxAmount ?? null,
+    currency: workflow.currency ?? DEFAULT_CURRENCY,
     isSequential: workflow.isSequential === true,
     isActive: workflow.isActive === true,
     approvers,
@@ -76,7 +78,7 @@ export const workflowApi = serviceApi.injectEndpoints({
       transformResponse: (response) => (Array.isArray(response) ? response : []),
     }),
     getWorkflows: builder.query({
-      query: () => ({ url: "/workflow/list", method: "GET" }),
+      query: (params) => ({ url: "/workflow/list", method: "GET", params }),
       providesTags: ["Workflow"],
       transformResponse: (response) => {
         const workflowTypeId = normalizeWorkflowTypeMap(response?.workflowTypeId);

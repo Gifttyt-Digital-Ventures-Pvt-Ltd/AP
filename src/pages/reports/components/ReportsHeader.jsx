@@ -9,19 +9,37 @@ import {
 } from '../../../components/ui/select';
 import { Input } from '../../../components/ui/input';
 import { Calendar, RefreshCw } from 'lucide-react';
+import CurrencySelector from '../../../components/common/CurrencySelector';
 
 // Top controls for date window selection and data refresh.
-const ReportsHeader = ({ dateRange, setDateRange, customDays, setCustomDays, fetchAllData, loading }) => (
-  <div className="flex justify-between items-center">
+const ReportsHeader = ({
+  dateRange,
+  setDateRange,
+  customDays,
+  setCustomDays,
+  fetchAllData,
+  loading,
+  currencies = [],
+  selectedCurrency,
+  onCurrencyChange,
+}) => (
+  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
     <div>
       <h1 className="text-2xl font-bold">Reports & Analytics</h1>
       <p className="text-muted-foreground">Comprehensive insights into your accounts payable</p>
     </div>
-    <div className="flex items-center gap-4">
+    <div className="flex flex-wrap items-center gap-3">
+      <CurrencySelector
+        currencies={currencies}
+        value={selectedCurrency}
+        onChange={onCurrencyChange}
+        variant="inline"
+        id="reports-currency-filter"
+      />
       <div className="flex items-center gap-2">
         <Calendar className="h-4 w-4 text-muted-foreground" />
         <Select value={dateRange} onValueChange={setDateRange}>
-          <SelectTrigger className="w-[140px]" data-testid="date-range-select">
+          <SelectTrigger className="h-10 w-[140px]" data-testid="date-range-select">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -35,7 +53,7 @@ const ReportsHeader = ({ dateRange, setDateRange, customDays, setCustomDays, fet
           <Input
             type="number"
             placeholder="Days"
-            className="w-20"
+            className="h-10 w-20"
             value={customDays}
             onChange={(e) => setCustomDays(e.target.value)}
             data-testid="custom-days-input"

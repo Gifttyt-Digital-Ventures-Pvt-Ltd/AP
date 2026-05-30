@@ -18,6 +18,22 @@ import {
   normalizeInvoiceMandatoryFields,
 } from './utils/mandatoryFields';
 import {
+  applyForeignLineItemTax,
+  applyInrLineItemTax,
+  calculateInvoiceTotals,
+  createDefaultLineItem,
+  DEFAULT_INR_TAX,
+  isInrInvoiceCurrency,
+  mapExtractedLineItemToForm,
+  remapLineItemsForCurrencyChange,
+  resolveLineItemSubtotal,
+  resolveScannedInvoiceTaxSummary,
+  resolveScannedLineItemPricing,
+  resolveScannedLineItemTax,
+  syncLineItemLineTotal,
+} from './utils/invoiceTax';
+import { parseNumericInput } from './utils/numericInput';
+import {
   buildCreateInvoiceRequestBody,
   extractVendorIdFromResponse,
   mergeInvoiceVendorOptions,
@@ -64,6 +80,8 @@ import RequestVendorDialog from './components/RequestVendorDialog';
 import { getInvoiceVendorRequestValidationErrors } from '../../utils/vendorValidation';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useRBAC } from '../../contexts/RBACContext';
+import { useCurrencyFilter } from '../../hooks/useCurrencyFilter';
+import { CURRENCY_SCREENS, DEFAULT_CURRENCY, normalizeCurrencyCode } from '../../utils/currency';
 import {
   buildCurrentUserIdentity,
   canDeleteInvoice,
@@ -118,8 +136,19 @@ const InvoicesPage = () => {
     user?.identifier ||
     '';
   const {
+    currencies,
+    selectedCurrency,
+    setSelectedCurrency,
+    currencyParam,
+    queryArgs: invoiceQueryArgs,
+  } = useCurrencyFilter(CURRENCY_SCREENS.INVOICE);
+  const invoiceCurrencyOptions = useMemo(
+    () => currencies.filter((currency) => currency !== 'ALL'),
+    [currencies],
+  );
+  const {
     data: invoicesData = [],
-  } = useGetInvoicesQuery();
+  } = useGetInvoicesQuery(invoiceQueryArgs);
   const {
     data: vendorsData = [],
     refetch: refetchVendors,
@@ -147,9 +176,15 @@ const InvoicesPage = () => {
     data: invoiceCategoriesData = [],
     isLoading: invoiceCategoriesLoading,
     isFetching: invoiceCategoriesFetching,
-  } = useGetCategoriesForInvoiceQuery(invoiceCategoryEmail, {
-    skip: !invoiceCategoryEmail || !isCategoryFeatureEnabled,
-  });
+  } = useGetCategoriesForInvoiceQuery(
+    {
+      userEmail: invoiceCategoryEmail,
+      ...(currencyParam ? { currency: currencyParam } : {}),
+    },
+    {
+      skip: !invoiceCategoryEmail || !isCategoryFeatureEnabled,
+    },
+  );
   const [scanInvoice] = useScanInvoiceMutation();
   const [bulkUploadInvoices] = useBulkUploadInvoicesMutation();
   const [requestVendorAddition, { isLoading: requestVendorLoading }] = useRequestVendorAdditionMutation();
@@ -329,20 +364,25 @@ const InvoicesPage = () => {
     );
   }, [invoiceVendorOptions]);
 
-  const buildVendorRequestForm = (source = {}) => ({
-    ...createEmptyVendorRequestForm(),
-    name: source.vendor_name || source.name || '',
-    gstin: source.gstin || source.vendor_gstin || '',
-    mobile:
-      source.mobile ||
-      source.vendor_mobile ||
-      source.vendorMobile ||
-      '',
-    phone: source.phone || source.vendor_phone || source.vendorPhone || '',
-    pan: source.pan || source.vendor_pan || source.vendorPan || '',
-    address_line1: source.billing_address || source.vendor_address || source.address_line1 || '',
-    notes: source.memo || source.description || '',
-  });
+  const buildVendorRequestForm = (source = {}) => {
+    const invoiceCurrency = normalizeCurrencyCode(source.currency) || DEFAULT_CURRENCY;
+    return {
+      ...createEmptyVendorRequestForm(),
+      name: source.vendor_name || source.name || '',
+      gstin: source.gstin || source.vendor_gstin || '',
+      mobile:
+        source.mobile ||
+        source.vendor_mobile ||
+        source.vendorMobile ||
+        '',
+      phone: source.phone || source.vendor_phone || source.vendorPhone || '',
+      pan: source.pan || source.vendor_pan || source.vendorPan || '',
+      address_line1: source.billing_address || source.vendor_address || source.address_line1 || '',
+      notes: source.memo || source.description || '',
+      country: source.country || (isInrInvoiceCurrency(invoiceCurrency) ? 'India' : ''),
+      currency: invoiceCurrency,
+    };
+  };
 
   const openRequestVendorDialog = ({ source = {}, context }) => {
     setRequestVendorContext(context);
@@ -414,43 +454,44 @@ const InvoicesPage = () => {
         ? scanResponse.items
         : [];
     const taxesRaw = Array.isArray(scanResponse?.taxes) ? scanResponse.taxes : [];
-
-    const resolveTaxLabel = (item) => {
-      if (item?.tax) return item.tax;
-      const rate = Number(item?.taxRate ?? item?.tax_rate ?? 0);
-      const hasAnyTaxData =
-        rate > 0 ||
-        taxesRaw.some((t) => Number(t?.amount ?? 0) > 0 || Number(t?.taxRate ?? t?.tax_rate ?? 0) > 0);
-      if (!hasAnyTaxData) return 'Exempt';
-      if (!rate) return 'CGST + SGST 18%';
-      const hasIgst = taxesRaw.some((t) => String(t?.name || '').toUpperCase().includes('IGST'));
-      if (hasIgst) return `IGST ${rate}%`;
-      return `CGST + SGST ${rate}%`;
-    };
+    const invoiceCurrency = normalizeCurrencyCode(scanResponse?.currency) || DEFAULT_CURRENCY;
 
     const lineItems = lineItemsRaw.map((item) => {
-      const quantity = Number(item?.quantity ?? item?.qty ?? 1) || 1;
-      const unitPrice = Number(item?.unit_price ?? item?.unitPrice ?? item?.price ?? 0) || 0;
-      const amount = Number(item?.amount ?? item?.lineTotal ?? quantity * unitPrice) || 0;
+      const pricing = resolveScannedLineItemPricing(item);
+      const taxFields = resolveScannedLineItemTax(item, taxesRaw, invoiceCurrency);
+
       return {
         description: item?.description ?? item?.name ?? '',
-        quantity,
-        unit_price: unitPrice,
-        amount,
+        quantity: pricing.quantity,
+        unit_price: pricing.unit_price,
+        amount: pricing.amount,
+        line_total: pricing.line_total,
         hsn_sac: item?.hsn_sac ?? item?.hsnSac ?? '',
-        tax: resolveTaxLabel(item),
+        ...taxFields,
       };
     });
 
     const computedAmount = lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
+    const taxSummary = resolveScannedInvoiceTaxSummary(scanResponse, taxesRaw);
+
+    const vendorAddress =
+      scanResponse?.vendor_address ??
+      scanResponse?.vendorAddress ??
+      scanResponse?.address ??
+      '';
 
     return {
       vendor_name: scanResponse?.vendor_name ?? scanResponse?.vendorName ?? scanResponse?.merchant ?? '',
       vendor_gstin: scanResponse?.vendor_gstin ?? scanResponse?.vendorGstin ?? '',
-      vendor_address:
-        scanResponse?.address ??
-        scanResponse?.vendor_address ??
-        scanResponse?.vendorAddress ??
+      billing_gstin: scanResponse?.billingGstin ?? scanResponse?.billing_gstin ?? '',
+      vendor_address: vendorAddress,
+      billing_address:
+        scanResponse?.billingAddress ??
+        scanResponse?.billing_address ??
+        vendorAddress,
+      shipping_address:
+        scanResponse?.shippingAddress ??
+        scanResponse?.shipping_address ??
         '',
       invoice_number: scanResponse?.invoice_number ?? scanResponse?.invoiceNumber ?? '',
       invoice_date:
@@ -460,8 +501,9 @@ const InvoicesPage = () => {
         toDateOnly(scanResponse?.due_date ?? scanResponse?.dueDate ?? scanResponse?.datetime) ||
         format(new Date(), 'yyyy-MM-dd'),
       line_items: lineItems,
-      amount: Number(scanResponse?.amount ?? scanResponse?.total ?? scanResponse?.subtotal ?? computedAmount) || 0,
-      currency: scanResponse?.currency ?? 'INR',
+      amount: Number(scanResponse?.total ?? scanResponse?.amount ?? computedAmount) || 0,
+      currency: normalizeCurrencyCode(scanResponse?.currency) || DEFAULT_CURRENCY,
+      ...taxSummary,
       file_id: scanResponse?.file_id ?? scanResponse?.fileId ?? null,
       file_hash: scanResponse?.file_hash ?? scanResponse?.fileHash ?? null,
       original_filename: scanResponse?.original_filename ?? scanResponse?.originalFileName ?? null,
@@ -543,26 +585,35 @@ const InvoicesPage = () => {
   const initializeFormData = (extractedData = null) => {
     const matchedVendor = extractedData?.vendor_name ? findVendorByName(extractedData.vendor_name) : null;
     const notesText = Array.isArray(extractedData?.notes) ? extractedData.notes.join('\n') : '';
-    const extractedGstin = extractedData?.billing_gstin || extractedData?.vendor_gstin || '';
-    const extractedAddress =
-      extractedData?.address ||
+    const invoiceCurrency = normalizeCurrencyCode(extractedData?.currency) || DEFAULT_CURRENCY;
+    const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
+    const vendorAddress =
       extractedData?.vendor_address ||
-      extractedData?.billing_address ||
+      extractedData?.address ||
       '';
+    const billingAddress =
+      extractedData?.billing_address ||
+      extractedData?.billingAddress ||
+      vendorAddress;
     return {
       vendor_name: extractedData?.vendor_name || '',
       vendor_id: matchedVendor?.id || '',
       vendor_matched: !!matchedVendor,
       vendor_request_submitted: false,
       vendor_request_pending: Boolean(matchedVendor?.is_pending_approval),
-      vendor_gstin: extractedData?.vendor_gstin || extractedData?.billing_gstin || '',
-      vendor_address: extractedAddress,
+      vendor_gstin: extractedData?.vendor_gstin || '',
+      vendor_address: vendorAddress,
       invoice_number: extractedData?.invoice_number || '',
       invoice_date: extractedData?.invoice_date || format(new Date(), 'yyyy-MM-dd'),
       due_date: extractedData?.due_date || format(new Date(), 'yyyy-MM-dd'),
-      billing_address: extractedAddress,
+      billing_address: billingAddress,
+      shipping_address: extractedData?.shipping_address || extractedData?.shippingAddress || '',
       gst_treatment: extractedData?.gst_treatment || 'Regular',
-      gstin: extractedGstin,
+      gstin:
+        extractedData?.billing_gstin ||
+        extractedData?.billingGstin ||
+        extractedData?.gstin ||
+        '',
       source_of_supply: extractedData?.source_of_supply || extractedData?.place_of_supply || '',
       destination_of_supply: extractedData?.destination_of_supply || extractedData?.place_of_supply || '',
       location: extractedData?.location || extractedData?.place_of_supply || '',
@@ -571,31 +622,19 @@ const InvoicesPage = () => {
       file_category: extractedData?.file_category || 'Expense Invoice',
       source: extractedData?.source || 'Upload',
       source_email: '',
-      line_items: extractedData?.line_items?.length > 0 ? extractedData.line_items.map(item => ({
-        description: item.description || '',
-        ledger: item.ledger || 'Cloud Services',
-        tax: item.tax || 'CGST + SGST 18%',
-        quantity: item.quantity || 1,
-        unit_rate: item.unit_price || item.amount || 0,
-        discount: item.discount || 0,
-        discount_type: item.discount_type || '%',
-        hsn_sac: item.hsn_sac || '',
-        eligible_for_itc: item.eligible_for_itc ?? true
-      })) : [{
-        description: '',
-        ledger: 'Cloud Services',
-        tax: 'CGST + SGST 18%',
-        quantity: 1,
-        unit_rate: 0,
-        discount: 0,
-        discount_type: '%',
-        hsn_sac: '',
-        eligible_for_itc: true
-      }],
+      line_items: extractedData?.line_items?.length > 0
+        ? extractedData.line_items.map((item) =>
+            mapExtractedLineItemToForm(item, { useInrTax }),
+          )
+        : [createDefaultLineItem(invoiceCurrency)],
       description: extractedData?.description || notesText || '',
       tds: '',
       amount: extractedData?.amount || 0,
-      currency: extractedData?.currency || 'INR',
+      currency: normalizeCurrencyCode(extractedData?.currency) || DEFAULT_CURRENCY,
+      scanned_tax_amount: extractedData?.invoice_tax_amount,
+      scanned_tax_name: extractedData?.invoice_tax_name,
+      scanned_tax_rate: extractedData?.invoice_tax_rate,
+      scanned_total: extractedData?.invoice_total,
       file_id: extractedData?.file_id || null,
       file_hash: extractedData?.file_hash || null,
       original_file_name: extractedData?.original_filename || null,
@@ -830,7 +869,7 @@ const InvoicesPage = () => {
       invoice_date: item.invoicePayload.invoice_date || format(new Date(), 'yyyy-MM-dd'),
       due_date: item.invoicePayload.due_date || format(new Date(), 'yyyy-MM-dd'),
       amount: Number(item.invoicePayload.amount || 0),
-      currency: item.invoicePayload.currency || 'INR',
+      currency: normalizeCurrencyCode(item.invoicePayload.currency) || DEFAULT_CURRENCY,
       department_id: item.invoicePayload.department_id || '',
       department_name: item.invoicePayload.department_name || '',
       ...(isCategoryFeatureEnabled
@@ -852,7 +891,9 @@ const InvoicesPage = () => {
         unit_price: Number(line.unit_price || 0),
         amount: Number(line.amount || (Number(line.quantity || 1) * Number(line.unit_price || 0))),
         hsn_sac: line.hsn_sac || '',
-        tax: line.tax || 'CGST + SGST 18%',
+        tax: line.tax || (isInrInvoiceCurrency(item.invoicePayload.currency) ? DEFAULT_INR_TAX : ''),
+        tax_name: line.tax_name || '',
+        tax_rate: line.tax_rate ?? '',
       })),
     });
     setBulkEditOpen(true);
@@ -863,9 +904,21 @@ const InvoicesPage = () => {
       if (!prev) return prev;
       const nextLines = prev.line_items.map((line, i) => {
         if (i !== index) return line;
-        const updated = { ...line, [field]: value };
+        let updated = { ...line, [field]: value };
         if (field === 'quantity' || field === 'unit_price') {
-          updated.amount = Number(updated.quantity || 0) * Number(updated.unit_price || 0);
+          updated.amount =
+            parseNumericInput(updated.quantity, 0) * parseNumericInput(updated.unit_price, 0);
+        }
+        if (!isInrInvoiceCurrency(prev.currency)) {
+          if (field === 'tax_name' || field === 'tax_rate') {
+            updated = applyForeignLineItemTax(
+              updated,
+              field === 'tax_name' ? value : updated.tax_name,
+              field === 'tax_rate' ? value : updated.tax_rate,
+            );
+          }
+        } else if (field === 'tax') {
+          updated = applyInrLineItemTax(updated, value);
         }
         return updated;
       });
@@ -894,13 +947,16 @@ const InvoicesPage = () => {
           ...item.invoicePayload,
           ...bulkEditForm,
           vendor_id: matchedVendorId,
+          amount: parseNumericInput(bulkEditForm.amount, 0),
           line_items: bulkEditForm.line_items.map((line) => ({
             description: line.description,
-            quantity: Number(line.quantity || 0),
-            unit_price: Number(line.unit_price || 0),
-            amount: Number(line.amount || 0),
+            quantity: parseNumericInput(line.quantity, 0),
+            unit_price: parseNumericInput(line.unit_price, 0),
+            amount: parseNumericInput(line.amount, 0),
             hsn_sac: line.hsn_sac || '',
-            tax: line.tax || 'CGST + SGST 18%',
+            tax: line.tax || (isInrInvoiceCurrency(bulkEditForm.currency) ? DEFAULT_INR_TAX : ''),
+            tax_name: line.tax_name || '',
+            tax_rate: line.tax_rate ?? '',
           })),
         };
         if (!isCategoryFeatureEnabled) {
@@ -961,69 +1017,69 @@ const InvoicesPage = () => {
   };
 
   // Calculate line item subtotal
-  const calculateLineItemSubtotal = (item) => {
-    const subtotal = item.quantity * item.unit_rate;
-    if (item.discount_type === '%') {
-      return subtotal - (subtotal * item.discount / 100);
-    }
-    return subtotal - item.discount;
-  };
+  const calculateLineItemSubtotal = (item) => resolveLineItemSubtotal(item);
 
   // Calculate totals
-  const calculateTotals = (lineItems) => {
-    let subTotal = 0;
-    let cgst = 0;
-    let sgst = 0;
-    let igst = 0;
-
-    lineItems.forEach(item => {
-      const itemSubtotal = calculateLineItemSubtotal(item);
-      subTotal += itemSubtotal;
-
-      const taxRate = TAX_RATES.find(t => t.value === item.tax);
-      if (taxRate) {
-        if (taxRate.cgst) cgst += itemSubtotal * taxRate.cgst / 100;
-        if (taxRate.sgst) sgst += itemSubtotal * taxRate.sgst / 100;
-        if (taxRate.igst) igst += itemSubtotal * taxRate.igst / 100;
-      }
+  const calculateTotals = (lineItems, currency = formData?.currency ?? DEFAULT_CURRENCY) =>
+    calculateInvoiceTotals({
+      lineItems,
+      currency,
+      calculateLineItemSubtotal,
+      taxRates: TAX_RATES,
+      invoiceTaxAmount: formData?.scanned_tax_amount,
+      invoiceTaxName: formData?.scanned_tax_name,
+      invoiceTaxRate: formData?.scanned_tax_rate,
     });
-
-    return { subTotal, cgst, sgst, igst, total: subTotal + cgst + sgst + igst };
-  };
 
   // Add line item
   const addLineItem = () => {
-    setFormData(prev => ({
+    setFormData(prev => clearScannedTaxSummary({
       ...prev,
-      line_items: [...prev.line_items, {
-        description: '',
-        ledger: 'Cloud Services',
-        tax: 'CGST + SGST 18%',
-        quantity: 1,
-        unit_rate: 0,
-        discount: 0,
-        discount_type: '%',
-        hsn_sac: '',
-        eligible_for_itc: true
-      }]
+      line_items: [...prev.line_items, createDefaultLineItem(prev.currency)],
     }));
   };
 
   // Remove line item
   const removeLineItem = (index) => {
-    setFormData(prev => ({
+    setFormData(prev => clearScannedTaxSummary({
       ...prev,
-      line_items: prev.line_items.filter((_, i) => i !== index)
+      line_items: prev.line_items.filter((_, i) => i !== index),
     }));
   };
 
   // Update line item
+  const clearScannedTaxSummary = (data = {}) => ({
+    ...data,
+    scanned_tax_amount: undefined,
+    scanned_tax_name: undefined,
+    scanned_tax_rate: undefined,
+    scanned_total: undefined,
+  });
+
   const updateLineItem = (index, field, value) => {
-    setFormData(prev => ({
+    setFormData(prev => clearScannedTaxSummary({
       ...prev,
-      line_items: prev.line_items.map((item, i) => 
-        i === index ? { ...item, [field]: value } : item
-      )
+      line_items: prev.line_items.map((item, i) => {
+        if (i !== index) return item;
+
+        let updated = { ...item, [field]: value };
+        if (field === 'quantity' || field === 'unit_rate') {
+          updated = syncLineItemLineTotal(updated);
+        }
+        if (!isInrInvoiceCurrency(prev.currency)) {
+          if (field === 'tax_name' || field === 'tax_rate') {
+            updated = applyForeignLineItemTax(
+              updated,
+              field === 'tax_name' ? value : updated.tax_name,
+              field === 'tax_rate' ? value : updated.tax_rate,
+            );
+          }
+        } else if (field === 'tax') {
+          updated = applyInrLineItemTax(updated, value);
+        }
+
+        return updated;
+      }),
     }));
   };
 
@@ -1209,7 +1265,6 @@ const InvoicesPage = () => {
       setFormData(null);
       setActiveTab('list');
     } catch (error) {
-      console.log(error)
       const errorMessage = error?.data?.detail || 'Failed to add invoice';
       toast.error(
         <div className="space-y-2">
@@ -1301,6 +1356,9 @@ const InvoicesPage = () => {
       '';
 
     setSelectedInvoice(invoice);
+    const editCurrency = normalizeCurrencyCode(invoice.currency) || DEFAULT_CURRENCY;
+    const useInrTax = isInrInvoiceCurrency(editCurrency);
+
     setFormData({
       vendor_name: invoice.vendor_name || '',
       vendor_id: invoice.vendor_id || '',
@@ -1318,31 +1376,15 @@ const InvoicesPage = () => {
       file_category: invoice.file_category || 'Expense Invoice',
       source: invoice.source || 'Upload',
       source_email: invoice.source_email || '',
-      line_items: invoice.line_items?.length > 0 ? invoice.line_items.map(item => ({
-        description: item.description || '',
-        ledger: item.ledger || 'Cloud Services',
-        tax: item.tax || 'CGST + SGST 18%',
-        quantity: item.quantity || 1,
-        unit_rate: item.unit_price || item.amount || 0,
-        discount: item.discount || 0,
-        discount_type: item.discount_type || '%',
-        hsn_sac: item.hsn_sac || '',
-        eligible_for_itc: item.eligible_for_itc ?? true
-      })) : [{
-        description: '',
-        ledger: 'Cloud Services',
-        tax: 'CGST + SGST 18%',
-        quantity: 1,
-        unit_rate: invoice.amount || 0,
-        discount: 0,
-        discount_type: '%',
-        hsn_sac: '',
-        eligible_for_itc: true
-      }],
+      line_items: extractedData?.line_items?.length > 0
+        ? extractedData.line_items.map((item) =>
+            mapExtractedLineItemToForm(item, { useInrTax: isInrInvoiceCurrency(editCurrency) }),
+          )
+        : [createDefaultLineItem(editCurrency)],
       description: invoice.memo || '',
       tds: '',
       amount: invoice.amount,
-      currency: invoice.currency || 'INR',
+      currency: editCurrency,
       department_id: invoice.department_id || invoice.departmentId || '',
       department_name: invoice.department_name || invoice.departmentName || '',
       ...(isCategoryFeatureEnabled
@@ -1560,6 +1602,7 @@ const InvoicesPage = () => {
       invoiceCategories={invoiceCategories}
       invoiceCategoriesLoading={invoiceCategoriesLoading || invoiceCategoriesFetching}
       showCategoryField={isCategoryFeatureEnabled}
+      currencyOptions={invoiceCurrencyOptions}
       GST_TREATMENTS={GST_TREATMENTS}
       INDIAN_STATES={INDIAN_STATES}
       FILE_CATEGORIES={FILE_CATEGORIES}
@@ -1581,6 +1624,9 @@ const InvoicesPage = () => {
         openSingleFilePicker={openSingleFilePicker}
         fileInputRef={fileInputRef}
         handleSingleFileUpload={handleSingleFileUpload}
+        currencies={currencies}
+        selectedCurrency={selectedCurrency}
+        onCurrencyChange={setSelectedCurrency}
       />
 
       <InvoiceTabs
@@ -1665,6 +1711,7 @@ const InvoicesPage = () => {
         showCategoryField={isCategoryFeatureEnabled}
         departmentMandatory={invoiceMandatoryFields.department}
         categoryMandatory={invoiceMandatoryFields.category}
+        currencyOptions={invoiceCurrencyOptions}
         taxRates={TAX_RATES}
         updateBulkEditLineItem={updateBulkEditLineItem}
         saveBulkEditChanges={saveBulkEditChanges}
