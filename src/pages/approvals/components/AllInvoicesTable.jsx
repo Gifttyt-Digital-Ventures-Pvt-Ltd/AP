@@ -1,5 +1,7 @@
 import React from 'react';
+import { Eye } from 'lucide-react';
 import AppDataTable from '../../../components/common/AppDataTable';
+import { Button } from '../../../components/ui/button';
 import { TableCell, TableRow } from '../../../components/ui/table';
 import { formatCurrency } from '../../../utils/currency';
 
@@ -9,10 +11,16 @@ const allInvoicesTableHeader = [
   { key: 'amount', title: 'Amount', cellClassName: "  font-semibold" },
   { key: 'status', title: 'Status' },
   { key: 'created_by_name', title: 'Created By', cellClassName: 'text-sm text-muted-foreground' },
+  { key: 'actions', title: 'Actions', headerClassName: 'text-left', cellClassName: 'text-left' },
 ];
 
 // Full invoice list table for audit visibility across all statuses.
-const AllInvoicesTable = ({ allInvoices, getStatusBadgeClass, formatStatus }) => {
+const AllInvoicesTable = ({
+  allInvoices,
+  getStatusBadgeClass,
+  formatStatus,
+  handleViewInvoice,
+}) => {
   const renderAllInvoiceRow = (invoice, rowIndex, headers) => (
     <TableRow key={invoice.id ?? rowIndex}>
       {headers.map((header) => {
@@ -27,6 +35,25 @@ const AllInvoicesTable = ({ allInvoices, getStatusBadgeClass, formatStatus }) =>
               <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStatusBadgeClass(invoice.status)}`}>
                 {formatStatus(invoice.status)}
               </span>
+            );
+            break;
+          case 'actions':
+            value = (
+              <div
+                className="flex justify-start gap-1"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleViewInvoice?.(invoice)}
+                  data-testid={`view-invoice-${invoice.id}`}
+                  title="View Invoice"
+                  className="h-8 w-8 p-0"
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+              </div>
             );
             break;
           default:
