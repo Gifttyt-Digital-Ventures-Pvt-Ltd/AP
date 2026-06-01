@@ -39,7 +39,7 @@ const BulkPreviewDialog = ({
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !bulkCreating && setBulkPreviewOpen(nextOpen)}>
       <DialogContent
-        className="max-w-5xl max-h-[90vh] overflow-y-auto"
+        className="max-w-[95vw] max-h-[90vh] overflow-y-auto"
         data-testid="bulk-preview-dialog"
         onInteractOutside={(event) => event.preventDefault()}
       >
