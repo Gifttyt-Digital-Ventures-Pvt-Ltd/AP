@@ -43,7 +43,7 @@ const LinkInvoiceDialog = ({
                   <tr>
                     <th className="p-3 text-left font-medium">Invoice #</th>
                     <th className="p-3 text-left font-medium">Vendor</th>
-                    <th className="p-3 text-right font-medium">Amount</th>
+                    <th className="p-3 text-left font-medium">Amount</th>
                     <th className="p-3 text-center font-medium">Action</th>
                   </tr>
                 </thead>
@@ -52,7 +52,7 @@ const LinkInvoiceDialog = ({
                     <tr key={inv.id} className="hover:bg-gray-50">
                       <td className="p-3 font-medium">{inv.invoice_number}</td>
                       <td className="p-3">{inv.vendor_name}</td>
-                      <td className="p-3 text-right">₹{inv.amount?.toLocaleString("en-IN")}</td>
+                      <td className="p-3 text-left">₹{inv.amount?.toLocaleString("en-IN")}</td>
                       <td className="p-3 text-center">
                         <Button
                           size="sm"

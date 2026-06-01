@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Button } from '../../../components/ui/button';
 import {
   Dialog,
@@ -20,6 +20,13 @@ const RecordPaymentDialog = ({
   submitting = false,
 }) => {
   const selectedTotal = selectedInvoices.reduce((sum, invoice) => sum + (invoice.amount || 0), 0);
+  const maxPaymentDate = useMemo(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, [open]);
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -58,6 +65,7 @@ const RecordPaymentDialog = ({
               id="record-payment-date"
               type="date"
               value={formData.payment_date}
+              max={maxPaymentDate}
               onChange={(e) => setFormData((prev) => ({ ...prev, payment_date: e.target.value }))}
               required
               data-testid="record-payment-date-input"

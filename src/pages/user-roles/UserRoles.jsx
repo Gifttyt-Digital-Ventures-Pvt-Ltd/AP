@@ -54,6 +54,7 @@ import RolesTab from "./components/RolesTab";
 import UsersTable from "./components/UsersTable";
 import ApprovalWorkflowTab from "./components/ApprovalWorkflowTab";
 import CategoriesTab from "./components/CategoriesTab";
+import UserDetailsDialog from "./components/UserDetailsDialog";
 import { useActionGuard } from "../../hooks/useActionGuard";
 import { FULL_ACCESS_PERMISSION } from "../../constants/rbacPolicy";
 
@@ -67,6 +68,8 @@ const UserRoles = () => {
   const [assignRoleSetsDialogOpen, setAssignRoleSetsDialogOpen] =
     useState(false);
   const [selectedRole, setSelectedRole] = useState(null);
+  const [selectedUserDetails, setSelectedUserDetails] = useState(null);
+  const [userDetailsDialogOpen, setUserDetailsDialogOpen] = useState(false);
   const [selectedUserForRoleSets, setSelectedUserForRoleSets] = useState(null);
   const [selectedUserInitialRoleIds, setSelectedUserInitialRoleIds] = useState(
     [],
@@ -764,6 +767,11 @@ const UserRoles = () => {
     setViewRoleDialogOpen(true);
   };
 
+  const handleViewUserDetails = (user) => {
+    setSelectedUserDetails(user);
+    setUserDetailsDialogOpen(true);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -848,6 +856,7 @@ const UserRoles = () => {
               handleDeleteUser={handleDeleteUser}
               handleEditUser={openEditUserDialog}
               handleAssignRoles={openAssignRoleSetsDialog}
+              handleViewUserDetails={handleViewUserDetails}
               canManageUserRecords={canManageUserRecords}
               canAssignRoles={canAssignRoleSets}
             />
@@ -934,6 +943,15 @@ const UserRoles = () => {
         onSave={handleSaveRoleChanges}
         saving={updateCustomRoleLoading || deleteCustomRoleLoading}
         canManageRoles={canManageRoles}
+      />
+
+      <UserDetailsDialog
+        open={userDetailsDialogOpen}
+        onOpenChange={(open) => {
+          setUserDetailsDialogOpen(open);
+          if (!open) setSelectedUserDetails(null);
+        }}
+        user={selectedUserDetails}
       />
 
       <AlertDialog

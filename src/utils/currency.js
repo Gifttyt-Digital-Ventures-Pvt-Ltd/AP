@@ -194,6 +194,26 @@ export function normalizeCurrencyCode(currency = DEFAULT_CURRENCY) {
   return value || DEFAULT_CURRENCY;
 }
 
+/** Ensures current/scanned currency codes appear in form dropdowns even if not in corp config. */
+export function mergeCurrencyOptions(baseOptions = [], ...extraCurrencies) {
+  const merged = [];
+  const seen = new Set();
+
+  const add = (code) => {
+    const normalized = normalizeCurrencyCode(code);
+    if (!normalized || normalized === CURRENCY_FILTER_ALL || seen.has(normalized)) {
+      return;
+    }
+    seen.add(normalized);
+    merged.push(normalized);
+  };
+
+  (Array.isArray(baseOptions) ? baseOptions : []).forEach(add);
+  extraCurrencies.flat().forEach(add);
+
+  return merged;
+}
+
 export function formatCurrency(amount, currency = DEFAULT_CURRENCY) {
   const normalizedCurrency = normalizeCurrencyCode(currency);
   const locale = localeMap[normalizedCurrency] ?? "en-US";

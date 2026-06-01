@@ -38,7 +38,11 @@ const BulkPreviewDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={(nextOpen) => !bulkCreating && setBulkPreviewOpen(nextOpen)}>
-      <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto" data-testid="bulk-preview-dialog">
+      <DialogContent
+        className="max-w-5xl max-h-[90vh] overflow-y-auto"
+        data-testid="bulk-preview-dialog"
+        onInteractOutside={(event) => event.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>Review Bulk Invoices</DialogTitle>
         </DialogHeader>
@@ -106,15 +110,16 @@ const BulkPreviewDialog = ({
                       {categoryMandatory ? '* ' : ''}Category
                     </th>
                   )}
-                  <th className="p-3 text-right">Amount</th>
+                  <th className="p-3 text-left">Amount</th>
                   <th className="p-3 text-left">Status</th>
-                  <th className="p-3 text-right">Actions</th>
+                  <th className="p-3 text-left">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {bulkPreviewItems.map((item) => {
                   const isDuplicateRow = isDuplicateBulkPreviewItem(item);
-                  const canEditRow = Boolean(item.invoicePayload) && !isDuplicateRow;
+                  const isUploadedRow = item.status === 'uploaded';
+                  const canEditRow = Boolean(item.invoicePayload) && !isDuplicateRow && !isUploadedRow;
 
                   return (
                   <tr key={item.id} className="border-b last:border-b-0">
@@ -215,7 +220,7 @@ const BulkPreviewDialog = ({
                         )}
                       </td>
                     )}
-                    <td className="p-3 text-right whitespace-nowrap font-['JetBrains_Mono']">
+                    <td className="p-3 text-left whitespace-nowrap font-['JetBrains_Mono']">
                       {item.invoicePayload
                         ? formatInvoiceAmount(item.invoicePayload, item.invoicePayload.amount)
                         : '-'}
@@ -230,7 +235,7 @@ const BulkPreviewDialog = ({
                         <p className="text-[11px] text-red-600 mt-1">{item.error}</p>
                       )}
                     </td>
-                    <td className="p-3 text-right whitespace-nowrap">
+                    <td className="p-3 text-left whitespace-nowrap">
                       {isDuplicateRow ? (
                         <Button
                           size="sm"
@@ -257,7 +262,7 @@ const BulkPreviewDialog = ({
                             size="sm"
                             variant="outline"
                             onClick={() => openBulkEditDialog(item)}
-                            disabled={!item.invoicePayload || bulkAddingVendorItemId === item.id}
+                            disabled={!canEditRow || bulkAddingVendorItemId === item.id}
                           >
                             Edit
                           </Button>

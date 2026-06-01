@@ -9,6 +9,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui
 import { formatWorkflowStatus } from "../../../utils/approvalWorkflow";
 import { formatInvoiceAmount } from "../utils/invoiceAmounts";
 
+const formatOptionalDate = (value, pattern) => {
+  if (!value) return "-";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return "-";
+  return format(parsed, pattern);
+};
+
 const ViewDialog = ({
   viewDialogOpen,
   setViewDialogOpen,
@@ -66,8 +73,8 @@ const ViewDialog = ({
                     <div className="grid grid-cols-2 gap-4">
                       <div><Label className="text-xs text-muted-foreground">Vendor Name</Label><p className="font-medium">{selectedInvoice.vendor_name}</p></div>
                       <div><Label className="text-xs text-muted-foreground">Bill Number</Label><p className="font-['JetBrains_Mono'] font-medium">{selectedInvoice.invoice_number}</p></div>
-                      <div><Label className="text-xs text-muted-foreground">Billing Date</Label><p className="font-medium">{format(new Date(selectedInvoice.invoice_date), "MMMM do, yyyy")}</p></div>
-                      <div><Label className="text-xs text-muted-foreground">Due Date</Label><p className="font-medium">{format(new Date(selectedInvoice.due_date), "MMMM do, yyyy")}</p></div>
+                      <div><Label className="text-xs text-muted-foreground">Billing Date</Label><p className="font-medium">{formatOptionalDate(selectedInvoice.invoice_date, "MMMM do, yyyy")}</p></div>
+                      <div><Label className="text-xs text-muted-foreground">Due Date</Label><p className="font-medium">{formatOptionalDate(selectedInvoice.due_date, "MMMM do, yyyy")}</p></div>
                     </div>
                   </div>
 
@@ -86,22 +93,22 @@ const ViewDialog = ({
                           <thead className="bg-muted/50 border-b">
                             <tr>
                               <th className="p-3 text-left text-xs font-medium">Description</th>
-                              <th className="p-3 text-right text-xs font-medium">Qty</th>
-                              <th className="p-3 text-right text-xs font-medium">Unit Price</th>
-                              <th className="p-3 text-right text-xs font-medium">Amount</th>
+                              <th className="p-3 text-left text-xs font-medium">Qty</th>
+                              <th className="p-3 text-left text-xs font-medium">Unit Price</th>
+                              <th className="p-3 text-left text-xs font-medium">Amount</th>
                             </tr>
                           </thead>
                           <tbody>
                             {selectedInvoice.line_items.map((item, index) => (
                               <tr key={index} className="border-b last:border-0">
                                 <td className="p-3 text-sm">{item.description}</td>
-                                <td className="p-3 text-sm text-right font-['JetBrains_Mono']">{item.quantity || "-"}</td>
-                                <td className="p-3 text-sm text-right font-['JetBrains_Mono']">
+                                <td className="p-3 text-sm text-left font-['JetBrains_Mono']">{item.quantity || "-"}</td>
+                                <td className="p-3 text-sm text-left font-['JetBrains_Mono']">
                                   {item.unit_price != null
                                     ? formatInvoiceAmount(selectedInvoice, item.unit_price)
                                     : "-"}
                                 </td>
-                                <td className="p-3 text-sm text-right font-['JetBrains_Mono'] font-semibold">
+                                <td className="p-3 text-sm text-left font-['JetBrains_Mono'] font-semibold">
                                   {formatInvoiceAmount(selectedInvoice, item.amount)}
                                 </td>
                               </tr>
@@ -115,7 +122,7 @@ const ViewDialog = ({
                   <div className="pt-4 border-t">
                     <div className="flex items-center gap-2 text-sm text-muted-foreground">
                       <User className="h-4 w-4" />
-                      <span>Created by {selectedInvoice.created_by_name} on {format(new Date(selectedInvoice.created_at), "dd MMM yyyy, hh:mm a")}</span>
+                      <span>Created by {selectedInvoice.created_by_name || "-"} on {formatOptionalDate(selectedInvoice.created_at, "dd MMM yyyy, hh:mm a")}</span>
                     </div>
                   </div>
                 </TabsContent>

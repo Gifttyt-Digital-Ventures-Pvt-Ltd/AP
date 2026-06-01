@@ -569,7 +569,7 @@ const Vendors = () => {
     { key: 'contact', title: 'Contact' },
     { key: 'pan', title: 'PAN' },
     { key: 'gstin', title: 'GSTIN' },
-    { key: 'actions', title: 'Actions', headerClassName: 'text-right' },
+    { key: 'actions', title: 'Actions', headerClassName: 'text-left' },
   ];
 
   const renderVendorRow = (vendor, rowIndex, headers) => (
@@ -710,7 +710,7 @@ const Vendors = () => {
         const className = [
           header.cellClassName,
           header.key === 'pan' || header.key === 'gstin' ? "font-['JetBrains_Mono'] text-sm" : '',
-          header.key === 'actions' ? 'text-right' : '',
+          header.key === 'actions' ? 'text-left' : '',
         ]
           .filter(Boolean)
           .join(' ');

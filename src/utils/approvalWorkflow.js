@@ -246,7 +246,15 @@ export const extractApiErrorDetail = (error) => {
   return "";
 };
 
-const INVOICE_DELETABLE_STATUSES = new Set([NEEDS_CORRECTION_STATUS, "Rejected"]);
+const INVOICE_MUTABLE_STATUSES = new Set([
+  NEEDS_CORRECTION_STATUS,
+  "Pending Checker",
+  "Vendor Approval Pending",
+]);
+const INVOICE_DELETABLE_STATUSES = new Set([
+  ...INVOICE_MUTABLE_STATUSES,
+  "Rejected",
+]);
 
 export const canEditInvoice = (invoice, identity = {}) => {
   const { canUpdateInvoices, canManageInvoices, isCorporateAdmin } = identity;
@@ -254,10 +262,11 @@ export const canEditInvoice = (invoice, identity = {}) => {
   if (!canMutateInvoice) return false;
 
   const status = normalizeWorkflowStatus(invoice?.status);
-  if (status !== NEEDS_CORRECTION_STATUS) return false;
+  if (!INVOICE_MUTABLE_STATUSES.has(status)) return false;
 
   if (isCorporateAdmin) return true;
-  return matchesCreator(invoice, identity);
+  if (status === NEEDS_CORRECTION_STATUS) return matchesCreator(invoice, identity);
+  return true;
 };
 
 export const canDeleteInvoice = (status, canDeleteInvoices) => {

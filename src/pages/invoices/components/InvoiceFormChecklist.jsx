@@ -81,10 +81,12 @@ export const buildInvoiceFormChecklist = (
         {
           label: isInrInvoiceCurrency(formData.currency) ? "GSTIN" : "GSTIN / Tax ID",
           done: !!formData.gstin?.trim(),
+          optional:
+            !isInrInvoiceCurrency(formData.currency) ||
+            formData.gst_treatment === "N/A",
         },
         { label: "Source of supply", done: !!formData.source_of_supply },
         { label: "Destination", done: !!formData.destination_of_supply },
-        { label: "Location", done: !!formData.location?.trim() },
       ],
     },
     {

@@ -114,10 +114,10 @@ const Approvals = () => {
     setDialogOpen(true);
   };
 
-  const handleViewInvoice = async (invoice) => {
+  const handleViewInvoice = async (invoice, initialTab = 'details') => {
     setViewInvoice(normalizeInvoice(invoice));
     setViewDialogOpen(true);
-    setViewTab('details');
+    setViewTab(initialTab);
     setViewPreviewError(false);
     setInvoiceHistory([]);
     setLoadingHistory(true);
@@ -284,7 +284,9 @@ const Approvals = () => {
             safeFormatDate={safeFormatDate}
             handleApprovalAction={handleApprovalAction}
             handleViewInvoice={handleViewInvoice}
-            canApproveInvoices={canPerformApprovalActions}
+            canApproveInvoices={canApproveInvoices}
+            canCheckInvoices={canCheckInvoices}
+            showApprovalProgress={canApproveInvoices}
           />
         </TabsContent>
 

@@ -17,7 +17,7 @@ const needsApprovalTableHeader = [
   { key: 'payment_date', title: 'Payment date', cellClassName: 'text-sm text-muted-foreground' },
   { key: 'due_date', title: 'Due date', cellClassName: 'text-sm text-muted-foreground' },
   { key: 'invoice_date', title: 'Invoice date', cellClassName: 'text-sm text-muted-foreground' },
-  { key: 'action', title: 'Action', headerClassName: 'text-right', cellClassName: 'text-right' },
+  { key: 'action', title: 'Action', headerClassName: 'text-left', cellClassName: 'text-left' },
 ];
 
 // Table of invoices that require current user's approval action.
@@ -28,12 +28,20 @@ const NeedsApprovalTable = ({
   handleApprovalAction,
   handleViewInvoice,
   canApproveInvoices,
+  canCheckInvoices,
+  showApprovalProgress = false,
 }) => {
+  const tableHeaders = showApprovalProgress
+    ? needsApprovalTableHeader
+    : needsApprovalTableHeader.filter((header) => header.key !== 'approval');
+
   const renderNeedsApprovalRow = (invoice, rowIndex, headers) => {
     const progress = getApprovalProgress(invoice);
     const status = normalizeWorkflowStatus(invoice.status);
     const isChecker = status === 'Pending Checker';
-    const canAct = canApproveInvoices && isInvoiceAwaitingApproval(invoice.status);
+    const canAct =
+      isInvoiceAwaitingApproval(invoice.status) &&
+      (isChecker ? canCheckInvoices : canApproveInvoices);
 
     return (
       <TableRow key={invoice.id ?? rowIndex} data-testid={`approval-row-${invoice.id}`}>
@@ -47,9 +55,15 @@ const NeedsApprovalTable = ({
             case 'approval':
               value = (
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-auto p-0 text-sm text-muted-foreground underline underline-offset-4"
+                    onClick={() => handleViewInvoice?.(invoice, 'history')}
+                    data-testid={`approval-history-${invoice.id}`}
+                  >
                     {progress.approved}/{progress.total} steps
-                  </span>
+                  </Button>
                   <div className="flex gap-1">
                     {Array.from({ length: progress.total }).map((_, i) => (
                       <div
@@ -132,7 +146,7 @@ const NeedsApprovalTable = ({
   return (
   <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden" data-testid="needs-approval-table">
     <AppDataTable
-      tableHeader={needsApprovalTableHeader}
+      tableHeader={tableHeaders}
       tableData={myPendingInvoices}
       renderRow={renderNeedsApprovalRow}
       emptyMessage="No invoices need your approval"

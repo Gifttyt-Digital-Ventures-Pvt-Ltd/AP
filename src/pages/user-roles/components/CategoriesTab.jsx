@@ -20,7 +20,7 @@ const categoryTableHeader = [
   { key: "description", title: "Description", cellClassName: "max-w-md" },
   { key: "assignedUsers", title: "Assigned Approvers" },
   { key: "createdDate", title: "Created Date" },
-  { key: "actions", title: "Actions", headerClassName: "text-right", cellClassName: "text-right" },
+  { key: "actions", title: "Actions", headerClassName: "text-left", cellClassName: "text-left" },
 ];
 
 const formatDate = (value) => {

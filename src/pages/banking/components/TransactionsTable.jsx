@@ -16,8 +16,8 @@ const transactionTableHeader = [
         <ChevronDown className="h-4 w-4" />
       </span>
     ),
-    headerClassName: 'text-right',
-    cellClassName: "text-right font-['JetBrains_Mono'] font-semibold",
+    headerClassName: 'text-left',
+    cellClassName: "text-left font-['JetBrains_Mono'] font-semibold",
   },
   {
     key: 'deposit',
@@ -27,8 +27,8 @@ const transactionTableHeader = [
         <ChevronDown className="h-4 w-4" />
       </span>
     ),
-    headerClassName: 'text-right',
-    cellClassName: "text-right font-['JetBrains_Mono'] font-semibold text-emerald-600",
+    headerClassName: 'text-left',
+    cellClassName: "text-left font-['JetBrains_Mono'] font-semibold text-emerald-600",
   },
   {
     key: 'closing_balance',
@@ -38,8 +38,8 @@ const transactionTableHeader = [
         <ChevronDown className="h-4 w-4" />
       </span>
     ),
-    headerClassName: 'text-right',
-    cellClassName: "text-right font-['JetBrains_Mono'] font-semibold",
+    headerClassName: 'text-left',
+    cellClassName: "text-left font-['JetBrains_Mono'] font-semibold",
   },
   { key: 'authorized_by', title: 'Authorized By' },
 ];

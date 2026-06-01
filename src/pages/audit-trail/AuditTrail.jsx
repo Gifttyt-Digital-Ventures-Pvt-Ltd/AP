@@ -590,7 +590,7 @@ const AuditTrail = () => {
             Audit Trail
           </h1>
           <p className="mt-2 text-muted-foreground">
-            Search, filter, and export immutable Accounts Payable activity logs.
+            Search, filter, and export Accounts Payable activity logs.
           </p>
         </div>
         {!forbidden && (

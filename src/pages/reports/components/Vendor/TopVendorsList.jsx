@@ -20,7 +20,7 @@ const TopVendorsList = ({ vendorBreakdown = [], formatFullCurrency }) => (
                 <p className="text-xs text-muted-foreground">{vendor.total_invoices} invoices</p>
               </div>
             </div>
-            <div className="text-right">
+            <div className="text-left">
               <p className="font-medium">{formatFullCurrency(vendor.total_amount)}</p>
               <p className="text-xs text-green-600">{formatFullCurrency(vendor.paid_amount)} paid</p>
             </div>

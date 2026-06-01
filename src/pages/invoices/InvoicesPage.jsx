@@ -19,6 +19,7 @@ import {
 } from './utils/mandatoryFields';
 import {
   isDuplicateBulkExtractResult,
+  isDuplicateBulkPreviewItem,
   isDuplicateInvoiceError,
 } from './utils/duplicateInvoice';
 import {
@@ -51,16 +52,6 @@ import {
 } from '../../Services/apis/corporateApi';
 import { useGetCategoriesForInvoiceQuery } from '../../Services/apis/categoriesApi';
 import { useAuth } from '../../contexts/AuthContext';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '../../components/ui/alert-dialog';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { useSidebar } from '../../components/Layout';
@@ -74,13 +65,8 @@ import {
 import { InvoicePdfPreview } from './components/InvoicePdfPreview';
 import { InvoiceForm } from './components/InvoiceForm';
 import InvoiceHeader from './components/InvoiceHeader';
-import InvoiceTabs from './components/InvoiceTabs';
-import ViewDialog from './components/ViewDialog';
-import EditDialog from './components/EditDialog';
-import BulkExtractLoaderDialog from './components/BulkExtractLoaderDialog';
-import BulkPreviewDialog from './components/BulkPreviewDialog';
-import BulkEditDialog from './components/BulkEditDialog';
-import RequestVendorDialog from './components/RequestVendorDialog';
+import InvoicesWorkspace from './components/InvoicesWorkspace';
+import InvoicesDialogs from './components/InvoicesDialogs';
 import { getInvoiceVendorRequestValidationErrors } from '../../utils/vendorValidation';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useRBAC } from '../../contexts/RBACContext';
@@ -359,6 +345,18 @@ const InvoicesPage = () => {
     return () => clearInterval(timerId);
   }, [bulkExtracting, bulkExtractStartedAt]);
 
+  useEffect(() => {
+    if (!bulkPreviewOpen || bulkCreating || bulkPreviewItems.length === 0) return;
+    const creatableRows = bulkPreviewItems.filter(
+      (item) => item.invoicePayload && !isDuplicateBulkPreviewItem(item),
+    );
+    if (creatableRows.length === 0) return;
+    const allUploaded = creatableRows.every((item) => item.status === 'uploaded');
+    if (allUploaded) {
+      setBulkPreviewOpen(false);
+    }
+  }, [bulkPreviewOpen, bulkCreating, bulkPreviewItems]);
+
 
   const findVendorByName = useCallback((vendorName) => {
     if (!vendorName) return null;
@@ -382,7 +380,13 @@ const InvoicesPage = () => {
     return {
       ...createEmptyVendorRequestForm(),
       name: source.vendor_name || source.name || '',
-      gstin: source.gstin || source.vendor_gstin || '',
+      gstin:
+        source.vendor_gstin ||
+        source.vendorGstin ||
+        source.gstin ||
+        source.billing_gstin ||
+        source.billingGstin ||
+        '',
       mobile:
         source.mobile ||
         source.vendor_mobile ||
@@ -390,7 +394,11 @@ const InvoicesPage = () => {
         '',
       phone: source.phone || source.vendor_phone || source.vendorPhone || '',
       pan: source.pan || source.vendor_pan || source.vendorPan || '',
-      address_line1: source.billing_address || source.vendor_address || source.address_line1 || '',
+      address_line1: '',
+      address_line2: '',
+      city: '',
+      state: '',
+      pincode: '',
       notes: source.memo || source.description || '',
       country: source.country || (isInrInvoiceCurrency(invoiceCurrency) ? 'India' : ''),
       currency: invoiceCurrency,
@@ -599,6 +607,7 @@ const InvoicesPage = () => {
     const notesText = Array.isArray(extractedData?.notes) ? extractedData.notes.join('\n') : '';
     const invoiceCurrency = normalizeCurrencyCode(extractedData?.currency) || DEFAULT_CURRENCY;
     const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
+    const defaultGstTreatment = useInrTax ? 'Regular' : 'N/A';
     const vendorAddress =
       extractedData?.vendor_address ||
       extractedData?.address ||
@@ -620,8 +629,10 @@ const InvoicesPage = () => {
       due_date: extractedData?.due_date || format(new Date(), 'yyyy-MM-dd'),
       billing_address: billingAddress,
       shipping_address: extractedData?.shipping_address || extractedData?.shippingAddress || '',
-      gst_treatment: extractedData?.gst_treatment || 'Regular',
+      gst_treatment: extractedData?.gst_treatment || extractedData?.gstTreatment || defaultGstTreatment,
       gstin:
+        extractedData?.vendor_gstin ||
+        extractedData?.vendorGstin ||
         extractedData?.billing_gstin ||
         extractedData?.billingGstin ||
         extractedData?.gstin ||
@@ -632,6 +643,8 @@ const InvoicesPage = () => {
       location: extractedData?.location || extractedData?.place_of_supply || '',
       reverse_charges: extractedData?.reverse_charges || 'Not Applicable',
       discounts_level: extractedData?.discounts_level || 'At Line Item Level',
+      invoice_discount: extractedData?.invoice_discount || 0,
+      invoice_discount_type: extractedData?.invoice_discount_type || '%',
       source: extractedData?.source || 'Upload',
       source_email: '',
       line_items: extractedData?.line_items?.length > 0
@@ -662,6 +675,21 @@ const InvoicesPage = () => {
     };
   };
 
+  const resetSingleUploadSession = () => {
+    setUploadedFileURL((currentUrl) => {
+      if (currentUrl) URL.revokeObjectURL(currentUrl);
+      return null;
+    });
+    setUploadedFile(null);
+    setExtractedData(null);
+    setFormData(null);
+    setUploadPreviewError(false);
+    setActiveTab('list');
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const handleSingleFileUpload = async (e) => {
     if (!guardAction('invoices.scan')) return;
     const file = e.target.files[0];
@@ -676,19 +704,6 @@ const InvoicesPage = () => {
     const formDataUpload = new FormData();
     formDataUpload.append('file', file);
 
-    const resetSingleUploadPreview = () => {
-      URL.revokeObjectURL(fileURL);
-      setUploadedFileURL(null);
-      setUploadedFile(null);
-      setExtractedData(null);
-      setFormData(null);
-      setUploadPreviewError(false);
-      setActiveTab('list');
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    };
-
     try {
       const response = await scanInvoice(formDataUpload).unwrap();
       const normalizedResponse =
@@ -701,23 +716,59 @@ const InvoicesPage = () => {
         throw new Error('Scan API returned empty response');
       }
 
+      if (isDuplicateBulkExtractResult(normalizedResponse)) {
+        resetSingleUploadSession();
+        toast.error(
+          <div className="space-y-2">
+            <p className="font-bold text-base">Duplicate Invoice</p>
+            <p className="text-sm whitespace-pre-line">
+              {normalizedResponse?.error ||
+                normalizedResponse?.message ||
+                'An invoice with the same invoice number and vendor already exists.'}
+            </p>
+          </div>,
+          { duration: 8000 },
+        );
+        return;
+      }
+
       const extractedInvoice = normalizeScannedInvoice(normalizedResponse);
       setExtractedData(extractedInvoice);
       setFormData(initializeFormData(extractedInvoice));
       toast.success('Invoice scanned successfully!');
     } catch (error) {
       console.error('Scan error:', error);
-      resetSingleUploadPreview();
 
       const errorMessage =
-        error?.data?.detail ||
+        extractApiErrorDetail(error) ||
         error?.data?.message ||
         error?.message ||
         'Failed to scan invoice';
-      toast.error(
+
+      if (isDuplicateInvoiceError(error)) {
+        resetSingleUploadSession();
+        toast.error(
+          <div className="space-y-2">
+            <p className="font-bold text-base">Duplicate Invoice</p>
+            <p className="text-sm whitespace-pre-line">{errorMessage}</p>
+          </div>,
+          { duration: 8000 },
+        );
+        return;
+      }
+
+      setExtractedData(null);
+      setFormData({
+        ...initializeFormData(null),
+        original_file_name: file.name,
+      });
+      toast.warning(
         <div className="space-y-2">
-          <p className="font-bold text-base">Scan Failed!</p>
-          <p className="text-sm whitespace-pre-line">{errorMessage}</p>
+          <p className="font-bold text-base">Scan Failed</p>
+          <p className="text-sm whitespace-pre-line">
+            {errorMessage}
+          </p>
+          <p className="text-sm">Enter invoice details manually using the form.</p>
         </div>,
         { duration: 8000 },
       );
@@ -778,13 +829,13 @@ const InvoicesPage = () => {
         return {
           id: `${result?.filename || 'file'}-${index}`,
           filename: result?.filename || 'Unknown file',
-          status: isDuplicate ? 'duplicate' : vendorMissing ? 'failed' : result.status,
+          status: isDuplicate ? 'duplicate' : vendorMissing ? 'vendor_missing' : result.status,
           error: isDuplicate
             ? result?.error ||
               result?.message ||
               'An invoice with the same invoice number and vendor already exists.'
             : vendorMissing
-              ? `Vendor "${normalizedInvoice?.vendor_name || 'Unknown'}" not found`
+              ? `Vendor "${normalizedInvoice?.vendor_name || 'Unknown'}" not found in vendor master`
               : (result?.error || result?.message || ''),
           isDuplicate,
           selected: Boolean(invoicePayload && !vendorMissing && !isDuplicate),
@@ -922,18 +973,15 @@ const InvoicesPage = () => {
       gstin: item.invoicePayload.gstin || '',
       source_of_supply: item.invoicePayload.source_of_supply || '',
       destination_of_supply: item.invoicePayload.destination_of_supply || '',
-      location: item.invoicePayload.location || '',
+      gst_treatment: item.invoicePayload.gst_treatment || (isInrInvoiceCurrency(item.invoicePayload.currency) ? 'Regular' : 'N/A'),
+      source: item.invoicePayload.source || 'Upload',
+      discounts_level: item.invoicePayload.discounts_level || 'At Line Item Level',
+      invoice_discount: item.invoicePayload.invoice_discount || 0,
+      invoice_discount_type: item.invoicePayload.invoice_discount_type || '%',
       memo: item.invoicePayload.memo || '',
-      line_items: (item.invoicePayload.line_items || []).map((line) => ({
-        description: line.description || '',
-        quantity: Number(line.quantity || 1),
-        unit_price: Number(line.unit_price || 0),
-        amount: Number(line.amount || (Number(line.quantity || 1) * Number(line.unit_price || 0))),
-        hsn_sac: line.hsn_sac || '',
-        tax: line.tax || (isInrInvoiceCurrency(item.invoicePayload.currency) ? DEFAULT_INR_TAX : ''),
-        tax_name: line.tax_name || '',
-        tax_rate: line.tax_rate ?? '',
-      })),
+      line_items: (item.invoicePayload.line_items || []).map((line) =>
+        mapBulkLineItemToEditForm(line, item.invoicePayload.currency),
+      ),
     });
     setBulkEditOpen(true);
   };
@@ -944,9 +992,9 @@ const InvoicesPage = () => {
       const nextLines = prev.line_items.map((line, i) => {
         if (i !== index) return line;
         let updated = { ...line, [field]: value };
-        if (field === 'quantity' || field === 'unit_price') {
-          updated.amount =
-            parseNumericInput(updated.quantity, 0) * parseNumericInput(updated.unit_price, 0);
+        if (field === 'quantity' || field === 'unit_rate') {
+          updated = syncLineItemLineTotal(updated);
+          updated.amount = parseNumericInput(updated.line_total, 0);
         }
         if (!isInrInvoiceCurrency(prev.currency)) {
           if (field === 'tax_name' || field === 'tax_rate') {
@@ -968,15 +1016,7 @@ const InvoicesPage = () => {
   const saveBulkEditChanges = () => {
     if (!bulkEditForm || !bulkEditItemId) return;
 
-    const mandatoryValidationMessage = getInvoiceMandatoryFieldValidationMessage(
-      bulkEditForm,
-      invoiceMandatoryFields,
-      mandatoryFieldOptions,
-    );
-    if (mandatoryValidationMessage) {
-      toast.error(mandatoryValidationMessage);
-      return;
-    }
+    if (!validateMandatoryPayload(bulkEditForm)) return;
 
     const matchedVendorId = findVendorByName(bulkEditForm.vendor_name)?.id || '';
     setBulkPreviewItems((prev) =>
@@ -987,16 +1027,9 @@ const InvoicesPage = () => {
           ...bulkEditForm,
           vendor_id: matchedVendorId,
           amount: parseNumericInput(bulkEditForm.amount, 0),
-          line_items: bulkEditForm.line_items.map((line) => ({
-            description: line.description,
-            quantity: parseNumericInput(line.quantity, 0),
-            unit_price: parseNumericInput(line.unit_price, 0),
-            amount: parseNumericInput(line.amount, 0),
-            hsn_sac: line.hsn_sac || '',
-            tax: line.tax || (isInrInvoiceCurrency(bulkEditForm.currency) ? DEFAULT_INR_TAX : ''),
-            tax_name: line.tax_name || '',
-            tax_rate: line.tax_rate ?? '',
-          })),
+          line_items: bulkEditForm.line_items.map((line) =>
+            mapBulkLineItemToPayload(line, bulkEditForm.currency),
+          ),
         };
         if (!isCategoryFeatureEnabled) {
           delete updatedPayload.category;
@@ -1008,8 +1041,9 @@ const InvoicesPage = () => {
           ...item,
           invoicePayload: updatedPayload,
           selected: !vendorMissing,
+          status: vendorMissing ? 'vendor_missing' : item.status,
           error: vendorMissing
-            ? `Vendor "${bulkEditForm.vendor_name || 'Unknown'}" not found`
+            ? `Vendor "${bulkEditForm.vendor_name || 'Unknown'}" not found in vendor master`
             : '',
         };
       })
@@ -1040,7 +1074,7 @@ const InvoicesPage = () => {
                 invoicePayload: { ...item.invoicePayload, vendor_id: existingVendor.id },
                 selected: item.status !== 'uploaded',
                 error: '',
-                status: item.status === 'failed' ? 'success' : item.status,
+                status: item.status === 'vendor_missing' || item.status === 'failed' ? 'success' : item.status,
               }
             : item
         )
@@ -1056,7 +1090,14 @@ const InvoicesPage = () => {
   };
 
   // Calculate line item subtotal
-  const calculateLineItemSubtotal = (item) => resolveLineItemSubtotal(item);
+  const calculateLineItemSubtotal = (item) => {
+    if (formData?.discounts_level === 'At Invoice Level') {
+      const lineTotal = parseNumericInput(item.line_total ?? item.amount, 0);
+      if (lineTotal > 0) return lineTotal;
+      return parseNumericInput(item.quantity, 0) * parseNumericInput(item.unit_rate, 0);
+    }
+    return resolveLineItemSubtotal(item);
+  };
 
   // Calculate totals
   const calculateTotals = (lineItems, currency = formData?.currency ?? DEFAULT_CURRENCY) =>
@@ -1068,6 +1109,9 @@ const InvoicesPage = () => {
       invoiceTaxAmount: formData?.scanned_tax_amount,
       invoiceTaxName: formData?.scanned_tax_name,
       invoiceTaxRate: formData?.scanned_tax_rate,
+      discountsLevel: formData?.discounts_level,
+      invoiceDiscount: formData?.invoice_discount,
+      invoiceDiscountType: formData?.invoice_discount_type,
     });
 
   // Add line item
@@ -1121,6 +1165,62 @@ const InvoicesPage = () => {
       }),
     }));
   };
+
+  const resetUploadWorkspace = () => {
+    resetSingleUploadSession();
+  };
+
+  const validateMandatoryPayload = (payload) => {
+    const message = getInvoiceMandatoryFieldValidationMessage(
+      payload,
+      invoiceMandatoryFields,
+      mandatoryFieldOptions,
+    );
+    if (message) {
+      toast.error(message);
+      return false;
+    }
+    return true;
+  };
+
+  const mapBulkLineItemToEditForm = (line = {}, currency = DEFAULT_CURRENCY) => ({
+    description: line.description || '',
+    ledger: line.ledger || 'Cloud Services',
+    quantity: Number(line.quantity || 1),
+    unit_rate: Number(line.unit_rate ?? line.unit_price ?? 0),
+    amount: Number(
+      line.amount ||
+        Number(line.quantity || 1) * Number(line.unit_rate ?? line.unit_price ?? 0),
+    ),
+    line_total: Number(
+      line.line_total ??
+        line.amount ??
+        Number(line.quantity || 1) * Number(line.unit_rate ?? line.unit_price ?? 0),
+    ),
+    hsn_sac: line.hsn_sac || '',
+    tax: line.tax || (isInrInvoiceCurrency(currency) ? DEFAULT_INR_TAX : ''),
+    tax_name: line.tax_name || '',
+    tax_rate: line.tax_rate ?? '',
+    discount: line.discount || 0,
+    discount_type: line.discount_type || '%',
+    eligible_for_itc: line.eligible_for_itc ?? true,
+  });
+
+  const mapBulkLineItemToPayload = (line = {}, currency = DEFAULT_CURRENCY) => ({
+    description: line.description,
+    quantity: parseNumericInput(line.quantity, 0),
+    unit_rate: parseNumericInput(line.unit_rate, 0),
+    unit_price: parseNumericInput(line.unit_rate, 0),
+    amount: parseNumericInput(line.amount ?? line.line_total, 0),
+    hsn_sac: line.hsn_sac || '',
+    tax: line.tax || (isInrInvoiceCurrency(currency) ? DEFAULT_INR_TAX : ''),
+    tax_name: line.tax_name || '',
+    tax_rate: line.tax_rate ?? '',
+    ledger: line.ledger || 'Cloud Services',
+    discount: parseNumericInput(line.discount, 0),
+    discount_type: line.discount_type || '%',
+    eligible_for_itc: line.eligible_for_itc ?? true,
+  });
 
   // Add vendor from scanned invoice data
   const handleAddVendorFromInvoice = async () => {
@@ -1276,15 +1376,7 @@ const InvoicesPage = () => {
       toast.error('Vendor name is required');
       return;
     }
-    const mandatoryValidationMessage = getInvoiceMandatoryFieldValidationMessage(
-      invoicePayload,
-      invoiceMandatoryFields,
-      mandatoryFieldOptions,
-    );
-    if (mandatoryValidationMessage) {
-      toast.error(mandatoryValidationMessage);
-      return;
-    }
+    if (!validateMandatoryPayload(invoicePayload)) return;
 
     try {
       if (uploadedFile) {
@@ -1298,19 +1390,28 @@ const InvoicesPage = () => {
       }
 
       toast.success('Invoice added successfully');
-      setUploadedFile(null);
-      setUploadedFileURL(null);
-      setExtractedData(null);
-      setFormData(null);
-      setActiveTab('list');
+      resetUploadWorkspace();
     } catch (error) {
-      const errorMessage = error?.data?.detail || 'Failed to add invoice';
+      const errorMessage = extractApiErrorDetail(error) || 'Failed to add invoice';
+
+      if (isDuplicateInvoiceError(error)) {
+        resetUploadWorkspace();
+        toast.error(
+          <div className="space-y-2">
+            <p className="font-bold text-base">Duplicate Invoice</p>
+            <p className="text-sm whitespace-pre-line">{errorMessage}</p>
+          </div>,
+          { duration: 8000 },
+        );
+        return;
+      }
+
       toast.error(
         <div className="space-y-2">
           <p className="font-bold text-base">Cannot Add Invoice!</p>
           <p className="text-sm whitespace-pre-line">{errorMessage}</p>
         </div>,
-        { duration: 8000 }
+        { duration: 8000 },
       );
     }
   };
@@ -1374,15 +1475,7 @@ const InvoicesPage = () => {
     if (!guardAction('invoices.update')) return;
     if (!selectedInvoice || !formData) return;
 
-    const mandatoryValidationMessage = getInvoiceMandatoryFieldValidationMessage(
-      formData,
-      invoiceMandatoryFields,
-      mandatoryFieldOptions,
-    );
-    if (mandatoryValidationMessage) {
-      toast.error(mandatoryValidationMessage);
-      return;
-    }
+    if (!validateMandatoryPayload(formData)) return;
 
     const totals = calculateTotals(formData.line_items);
 
@@ -1457,6 +1550,7 @@ const InvoicesPage = () => {
   const formatBulkStatusLabel = (status) => {
     const normalized = String(status || '').toLowerCase();
     if (normalized === 'success' || normalized === 'extracted') return 'Extracted';
+    if (normalized === 'vendor_missing') return 'Vendor Not Matched';
     if (normalized === 'uploaded') return 'Uploaded';
     if (normalized === 'upload_failed') return 'Upload Failed';
     if (normalized === 'duplicate') return 'Duplicate';
@@ -1468,6 +1562,7 @@ const InvoicesPage = () => {
     const normalized = String(status || '').toLowerCase();
     if (normalized === 'uploaded') return 'bg-blue-100 text-blue-800 border-blue-200';
     if (normalized === 'success' || normalized === 'extracted') return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+    if (normalized === 'vendor_missing') return 'bg-amber-100 text-amber-800 border-amber-200';
     if (normalized === 'duplicate') return 'bg-amber-100 text-amber-800 border-amber-200';
     if (normalized === 'upload_failed' || normalized === 'failed' || normalized === 'error') return 'bg-red-100 text-red-800 border-red-200';
     return 'bg-gray-100 text-gray-800 border-gray-200';
@@ -1554,6 +1649,79 @@ const InvoicesPage = () => {
     />
   );
 
+  const renderBulkEditInvoiceForm = () => (
+    <InvoiceForm
+      formData={bulkEditForm}
+      setFormData={setBulkEditForm}
+      isEdit
+      hideActions
+      calculateTotals={(lineItems, currency = bulkEditForm?.currency ?? DEFAULT_CURRENCY) =>
+        calculateInvoiceTotals({
+          lineItems,
+          currency,
+          calculateLineItemSubtotal: (item) => {
+            if (bulkEditForm?.discounts_level === 'At Invoice Level') {
+              const lineTotal = parseNumericInput(item.line_total ?? item.amount, 0);
+              if (lineTotal > 0) return lineTotal;
+              return parseNumericInput(item.quantity, 0) * parseNumericInput(item.unit_rate, 0);
+            }
+            return resolveLineItemSubtotal(item);
+          },
+          taxRates: TAX_RATES,
+          invoiceTaxAmount: bulkEditForm?.scanned_tax_amount,
+          invoiceTaxName: bulkEditForm?.scanned_tax_name,
+          invoiceTaxRate: bulkEditForm?.scanned_tax_rate,
+          discountsLevel: bulkEditForm?.discounts_level,
+          invoiceDiscount: bulkEditForm?.invoice_discount,
+          invoiceDiscountType: bulkEditForm?.invoice_discount_type,
+        })}
+      findVendorByName={findVendorByName}
+      handleAddVendorFromInvoice={() => {
+        if (bulkEditItemId) handleAddVendorForBulkItem(bulkEditItemId);
+      }}
+      updateLineItem={updateBulkEditLineItem}
+      removeLineItem={(index) =>
+        setBulkEditForm((prev) => ({
+          ...prev,
+          line_items: prev.line_items.filter((_, i) => i !== index),
+        }))}
+      addLineItem={() =>
+        setBulkEditForm((prev) => ({
+          ...prev,
+          line_items: [...prev.line_items, createDefaultLineItem(prev.currency)],
+        }))}
+      calculateLineItemSubtotal={(item) => {
+        if (bulkEditForm?.discounts_level === 'At Invoice Level') {
+          const lineTotal = parseNumericInput(item.line_total ?? item.amount, 0);
+          if (lineTotal > 0) return lineTotal;
+          return parseNumericInput(item.quantity, 0) * parseNumericInput(item.unit_rate, 0);
+        }
+        return resolveLineItemSubtotal(item);
+      }}
+      setEditDialogOpen={setBulkEditOpen}
+      setUploadedFile={() => {}}
+      setUploadedFileURL={() => {}}
+      setActiveTab={() => {}}
+      handleUpdateInvoice={saveBulkEditChanges}
+      handleAddInvoice={saveBulkEditChanges}
+      canAddVendor={canAddVendors}
+      canSubmit
+      departmentMandatory={invoiceMandatoryFields.department}
+      categoryMandatory={invoiceMandatoryFields.category}
+      vendorOptions={invoiceVendorOptions}
+      departments={departments}
+      invoiceCategories={invoiceCategories}
+      invoiceCategoriesLoading={invoiceCategoriesLoading || invoiceCategoriesFetching}
+      showCategoryField={isCategoryFeatureEnabled}
+      currencyOptions={invoiceCurrencyOptions}
+      GST_TREATMENTS={GST_TREATMENTS}
+      INDIAN_STATES={INDIAN_STATES}
+      INVOICE_SOURCES={INVOICE_SOURCES}
+      LEDGER_OPTIONS={LEDGER_OPTIONS}
+      TAX_RATES={TAX_RATES}
+    />
+  );
+
   return (
     <div data-testid="invoices-page">
       <InvoiceHeader
@@ -1571,10 +1739,20 @@ const InvoicesPage = () => {
         onCurrencyChange={setSelectedCurrency}
       />
 
-      <InvoiceTabs
-        activeTab={activeTab}
-        setActiveTab={setActiveTab}
+      <InvoicesWorkspace
         uploadedFile={uploadedFile}
+        setUploadedFile={setUploadedFile}
+        setUploadedFileURL={setUploadedFileURL}
+        setFormData={setFormData}
+        setActiveTab={setActiveTab}
+        renderPdfPreview={renderPdfPreview}
+        uploadedFileURL={uploadedFileURL}
+        pdfZoom={pdfZoom}
+        uploadPreviewError={uploadPreviewError}
+        setUploadPreviewError={setUploadPreviewError}
+        scanning={scanning}
+        renderInvoiceForm={renderInvoiceForm}
+        handleAddInvoice={handleAddInvoice}
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}
         filteredInvoices={filteredInvoices}
@@ -1584,38 +1762,20 @@ const InvoicesPage = () => {
         handleEditInvoice={handleEditInvoice}
         canDelete={canDelete}
         handleDeleteInvoice={handleDeleteInvoice}
-        setUploadedFile={setUploadedFile}
-        setUploadedFileURL={setUploadedFileURL}
-        setFormData={setFormData}
-        renderPdfPreview={renderPdfPreview}
-        uploadedFileURL={uploadedFileURL}
-        pdfZoom={pdfZoom}
-        uploadPreviewError={uploadPreviewError}
-        setUploadPreviewError={setUploadPreviewError}
-        scanning={scanning}
-        canManageInvoices={canManageInvoices}
-        renderInvoiceForm={renderInvoiceForm}
-        handleAddInvoice={handleAddInvoice}
-      />
-      {/* Keeps upload extraction progress isolated from page orchestration code. */}
-      <BulkExtractLoaderDialog
-        open={bulkExtracting}
-        totalFiles={bulkExtractTotalFiles}
-        progress={bulkExtractProgress}
-        elapsedSeconds={bulkExtractElapsedSeconds}
-        formatDuration={formatDuration}
       />
 
-      {/* Centralized review/selection dialog for bulk extracted invoices. */}
-      <BulkPreviewDialog
-        open={bulkPreviewOpen}
-        bulkCreating={bulkCreating}
+      <InvoicesDialogs
         bulkExtracting={bulkExtracting}
+        bulkExtractTotalFiles={bulkExtractTotalFiles}
+        bulkExtractProgress={bulkExtractProgress}
+        bulkExtractElapsedSeconds={bulkExtractElapsedSeconds}
+        formatDuration={formatDuration}
+        bulkPreviewOpen={bulkPreviewOpen}
+        bulkCreating={bulkCreating}
         bulkAddingVendorItemId={bulkAddingVendorItemId}
         bulkPreviewItems={bulkPreviewItems}
         bulkProgress={bulkProgress}
         bulkElapsedSeconds={bulkElapsedSeconds}
-        formatDuration={formatDuration}
         formatBulkStatusLabel={formatBulkStatusLabel}
         getBulkStatusBadgeClass={getBulkStatusBadgeClass}
         setBulkPreviewOpen={setBulkPreviewOpen}
@@ -1627,45 +1787,23 @@ const InvoicesPage = () => {
         getDepartmentNameById={getDepartmentNameById}
         invoiceCategories={invoiceCategories}
         getCategoryNameById={getCategoryNameById}
-        showCategoryField={isCategoryFeatureEnabled}
-        departmentMandatory={invoiceMandatoryFields.department}
-        categoryMandatory={invoiceMandatoryFields.category}
-      />
-
-      {/* Dedicated editor dialog for per-item corrections before creation. */}
-      <BulkEditDialog
-        open={bulkEditOpen}
-        setOpen={setBulkEditOpen}
-        bulkCreating={bulkCreating}
+        isCategoryFeatureEnabled={isCategoryFeatureEnabled}
+        invoiceMandatoryFields={invoiceMandatoryFields}
+        bulkEditOpen={bulkEditOpen}
+        setBulkEditOpen={setBulkEditOpen}
         bulkEditForm={bulkEditForm}
         setBulkEditForm={setBulkEditForm}
         bulkEditItemId={bulkEditItemId}
-        bulkPreviewItems={bulkPreviewItems}
         bulkEditFileURL={bulkEditFileURL}
         pdfZoom={pdfZoom}
         bulkEditPreviewError={bulkEditPreviewError}
         setBulkEditPreviewError={setBulkEditPreviewError}
-        vendors={invoiceVendorOptions}
-        departments={departments}
-        getDepartmentNameById={getDepartmentNameById}
-        invoiceCategories={invoiceCategories}
-        getCategoryNameById={getCategoryNameById}
-        showCategoryField={isCategoryFeatureEnabled}
-        departmentMandatory={invoiceMandatoryFields.department}
-        categoryMandatory={invoiceMandatoryFields.category}
-        currencyOptions={invoiceCurrencyOptions}
-        taxRates={TAX_RATES}
-        updateBulkEditLineItem={updateBulkEditLineItem}
         saveBulkEditChanges={saveBulkEditChanges}
         renderPdfPreview={renderPdfPreview}
-      />
-      {/* View Invoice Dialog - Split Screen */}
-      <ViewDialog
+        renderBulkEditInvoiceForm={renderBulkEditInvoiceForm}
         viewDialogOpen={viewDialogOpen}
         setViewDialogOpen={setViewDialogOpen}
         selectedInvoice={selectedInvoice}
-        renderPdfPreview={renderPdfPreview}
-        pdfZoom={pdfZoom}
         viewPreviewError={viewPreviewError}
         setViewPreviewError={setViewPreviewError}
         getStatusBadgeClass={getStatusBadgeClass}
@@ -1675,44 +1813,21 @@ const InvoicesPage = () => {
         loadingHistory={loadingHistory}
         canEdit={canEdit}
         handleEditInvoice={handleEditInvoice}
-      />
-
-      <EditDialog
         editDialogOpen={editDialogOpen}
         setEditDialogOpen={setEditDialogOpen}
-        selectedInvoice={selectedInvoice}
         formData={formData}
         handleUpdateInvoice={handleUpdateInvoice}
-        renderPdfPreview={renderPdfPreview}
-        pdfZoom={pdfZoom}
-        viewPreviewError={viewPreviewError}
-        setViewPreviewError={setViewPreviewError}
         renderInvoiceForm={renderInvoiceForm}
+        requestVendorOpen={requestVendorOpen}
+        handleRequestVendorOpenChange={handleRequestVendorOpenChange}
+        requestVendorForm={requestVendorForm}
+        setRequestVendorForm={setRequestVendorForm}
+        handleSubmitVendorRequest={handleSubmitVendorRequest}
+        requestVendorLoading={requestVendorLoading}
+        invoiceDeleteTarget={invoiceDeleteTarget}
+        setInvoiceDeleteTarget={setInvoiceDeleteTarget}
+        confirmDeleteInvoice={confirmDeleteInvoice}
       />
-
-      <RequestVendorDialog
-        open={requestVendorOpen}
-        onOpenChange={handleRequestVendorOpenChange}
-        formData={requestVendorForm}
-        setFormData={setRequestVendorForm}
-        onSubmit={handleSubmitVendorRequest}
-        submitting={requestVendorLoading}
-      />
-
-      <AlertDialog open={Boolean(invoiceDeleteTarget)} onOpenChange={(open) => !open && setInvoiceDeleteTarget(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Invoice?</AlertDialogTitle>
-            <AlertDialogDescription>
-              Are you sure you want to delete invoice {invoiceDeleteTarget?.invoice_number}?
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmDeleteInvoice}>Delete</AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   );
 };

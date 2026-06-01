@@ -255,7 +255,7 @@ export const corporateApi = serviceApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Users"],
+      invalidatesTags: ["Users", "Categories"],
     }),
     updateCustomRole: builder.mutation({
       query: ({ roleId, body }) => ({
@@ -263,14 +263,14 @@ export const corporateApi = serviceApi.injectEndpoints({
         method: "PUT",
         body,
       }),
-      invalidatesTags: ["Users"],
+      invalidatesTags: ["Users", "Categories"],
     }),
     deleteCustomRole: builder.mutation({
       query: (roleId) => ({
         url: `/corporate/custom-roles/${roleId}`,
         method: "DELETE",
       }),
-      invalidatesTags: ["Users"],
+      invalidatesTags: ["Users", "Categories"],
     }),
     assignPermissionsToCustomRole: builder.mutation({
       query: ({ roleId, permissions }) => ({
@@ -278,7 +278,7 @@ export const corporateApi = serviceApi.injectEndpoints({
         method: "POST",
         body: { permissions },
       }),
-      invalidatesTags: ["Users"],
+      invalidatesTags: ["Users", "Categories"],
     }),
     removePermissionsFromCustomRole: builder.mutation({
       query: ({ roleId, permissions }) => ({
@@ -286,7 +286,7 @@ export const corporateApi = serviceApi.injectEndpoints({
         method: "DELETE",
         body: { permissions },
       }),
-      invalidatesTags: ["Users"],
+      invalidatesTags: ["Users", "Categories"],
     }),
     assignCustomRoleToEmployees: builder.mutation({
       query: ({ roleId, employeeIds }) => ({
@@ -294,7 +294,7 @@ export const corporateApi = serviceApi.injectEndpoints({
         method: "POST",
         body: { employeeIds },
       }),
-      invalidatesTags: ["Users"],
+      invalidatesTags: ["Users", "Categories"],
     }),
     removeCustomRoleFromEmployees: builder.mutation({
       query: ({ roleId, employeeIds }) => ({
@@ -302,7 +302,7 @@ export const corporateApi = serviceApi.injectEndpoints({
         method: "DELETE",
         body: { employeeIds },
       }),
-      invalidatesTags: ["Users"],
+      invalidatesTags: ["Users", "Categories"],
     }),
     getCorporateEmployees: builder.query({
       query: ({
@@ -329,7 +329,12 @@ export const corporateApi = serviceApi.injectEndpoints({
         const rows = Array.isArray(response?.data) ? response.data : [];
         const data = rows.map((item) => ({
           id: item?.id ?? null,
-          empId: item?.empId ?? item?.id ?? "",
+          empId:
+            item?.empId ??
+            item?.employeeId ??
+            item?.employeeCode ??
+            item?.empCode ??
+            "",
           name: item?.name ?? "",
           email: item?.email ?? "",
           phoneNumber: item?.phoneNumber ?? item?.mobile ?? "",
@@ -374,7 +379,7 @@ export const corporateApi = serviceApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Users"],
+      invalidatesTags: ["Users", "Categories"],
     }),
     updateCorporateEmployee: builder.mutation({
       query: (body) => ({
@@ -382,7 +387,7 @@ export const corporateApi = serviceApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Users"],
+      invalidatesTags: ["Users", "Categories"],
     }),
     deleteCorporateEmployee: builder.mutation({
       query: ({ id }) => ({
@@ -391,7 +396,7 @@ export const corporateApi = serviceApi.injectEndpoints({
         params: { employeeId: id },
         body: {},
       }),
-      invalidatesTags: ["Users"],
+      invalidatesTags: ["Users", "Categories"],
     }),
     getAvailableCurrencies: builder.query({
       query: (screen) => ({

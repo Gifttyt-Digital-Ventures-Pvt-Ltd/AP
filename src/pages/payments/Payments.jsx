@@ -69,7 +69,7 @@ const Payments = () => {
     selectedCurrency,
     setSelectedCurrency,
     queryArgs: paymentQueryArgs,
-  } = useCurrencyFilter(CURRENCY_SCREENS.PAYMENT);
+  } = useCurrencyFilter(CURRENCY_SCREENS.PAYMENT, { excludeAll: true });
   const invoiceQueryWithStatus = (status) => ({
     ...paymentQueryArgs,
     status,
@@ -329,6 +329,13 @@ const Payments = () => {
       return;
     }
 
+    const now = new Date();
+    const maxPaymentDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    if (recordPaymentForm.payment_date > maxPaymentDate) {
+      toast.error('Payment date cannot be in the future');
+      return;
+    }
+
     if (!recordPaymentForm.payment_method) {
       toast.error('Payment method is required');
       return;
@@ -392,8 +399,6 @@ const Payments = () => {
       safeLower(invoice.vendor_name).includes(safeLower(searchTerm)) ||
       safeLower(invoice.invoice_number).includes(safeLower(searchTerm))
   );
-
-  const totalPendingAmount = invoices.reduce((sum, inv) => sum + inv.amount, 0);
 
   const renderBatchInvoiceRow = (invoice, rowIndex, headers) => (
     <TableRow
@@ -606,7 +611,6 @@ const Payments = () => {
           <PendingPaymentsTab
             invoices={invoices}
             filteredPendingInvoices={filteredPendingInvoices}
-            totalPendingAmount={totalPendingAmount}
             handleBulkRelease={handleBulkRelease}
             canBulkRelease={canShowBulkRelease}
             showRecordPaymentSelection={canShowRecordPayment}

@@ -30,15 +30,15 @@ const invoiceTableHeader = [
   { key: "invoice_number", title: "Invoice #", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 font-['JetBrains_Mono'] text-sm font-medium" },
   { key: "vendor_name", title: "Vendor", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 text-sm" },
   { key: "original_file_name", title: "Original File Name", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 text-xs font-['JetBrains_Mono'] text-muted-foreground" },
-  { key: "gross_amount", title: "Gross Amount", headerClassName: "p-3 text-right text-xs font-medium", cellClassName: "p-3 font-['JetBrains_Mono'] text-sm font-semibold text-right" },
-  { key: "tax_amount", title: "GST / Tax", headerClassName: "p-3 text-right text-xs font-medium", cellClassName: "p-3 font-['JetBrains_Mono'] text-sm text-right" },
-  { key: "tds_amount", title: "TDS", headerClassName: "p-3 text-right text-xs font-medium", cellClassName: "p-3 font-['JetBrains_Mono'] text-sm text-right" },
-  { key: "net_amount", title: "Net Amount", headerClassName: "p-3 text-right text-xs font-medium", cellClassName: "p-3 font-['JetBrains_Mono'] text-sm font-semibold text-right" },
+  { key: "gross_amount", title: "Gross Amount", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 font-['JetBrains_Mono'] text-sm font-semibold text-left" },
+  { key: "tax_amount", title: "GST / Tax", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 font-['JetBrains_Mono'] text-sm text-left" },
+  { key: "tds_amount", title: "TDS", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 font-['JetBrains_Mono'] text-sm text-left" },
+  { key: "net_amount", title: "Net Amount", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 font-['JetBrains_Mono'] text-sm font-semibold text-left" },
   { key: "approval_workflow_name", title: "Approval Workflow", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 text-sm whitespace-nowrap" },
   { key: "invoice_date", title: "Invoice Date", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 text-xs text-muted-foreground whitespace-nowrap" },
   { key: "status", title: "Status", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3" },
   { key: "created_at", title: "Created At", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 text-xs text-muted-foreground whitespace-nowrap" },
-  { key: "actions", title: "Actions", headerClassName: "p-3 text-right text-xs font-medium", cellClassName: "p-3 text-right" },
+  { key: "actions", title: "Actions", headerClassName: "p-3 text-left text-xs font-medium", cellClassName: "p-3 text-left" },
 ];
 
 const InvoicesTable = ({
@@ -109,7 +109,7 @@ const InvoicesTable = ({
             break;
           case "actions":
             value = (
-              <div className="flex justify-end gap-1">
+              <div className="flex justify-start gap-1">
                 <Button variant="ghost" size="sm" onClick={() => handleViewInvoice(invoice)} data-testid={`view-invoice-${invoice.id}`} title="View Invoice" className="h-8 w-8 p-0">
                   <Eye className="h-4 w-4" />
                 </Button>

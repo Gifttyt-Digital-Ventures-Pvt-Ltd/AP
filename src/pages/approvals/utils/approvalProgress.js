@@ -48,23 +48,21 @@ const countParallelApproverCompletions = (invoice, approverLevels) => {
 export const getApprovalProgress = (invoice = {}) => {
   const status = normalizeWorkflowStatus(invoice.status);
   const approverLevels = getApproverLevels(invoice);
-  const total = 2 + approverLevels;
+  const total = approverLevels;
 
   if (!APPROVAL_PIPELINE_STATUSES.has(status)) {
     return { approved: 0, total, percentage: 0 };
   }
 
-  let completed = 1;
-
   if (status === 'Pending Checker') {
     return {
-      approved: completed,
+      approved: 0,
       total,
-      percentage: total > 0 ? (completed / total) * 100 : 0,
+      percentage: 0,
     };
   }
 
-  completed += 1;
+  let completed = 0;
 
   if (status === 'Pending Approver' || status === 'Pending Approval') {
     const isSequential = invoice.is_sequential_approval ?? invoice.isSequentialApproval ?? true;
