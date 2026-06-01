@@ -2,71 +2,158 @@ import React, { createContext, useState, useContext, useEffect } from 'react';
 import {
   useCorporateLoginMutation,
   useGetCorporatesByEmailMutation,
-  useLoginMutation,
-  useRegisterMutation,
+  useLazyExchangeHandoffTokenQuery,
   useSendCorporateLoginOtpMutation,
-} from '../Services/apiSlice';
+} from '../Services/serviceApi';
+import { redirectToOriginLogin } from '../utils/authRedirect';
 
 const AuthContext = createContext(null);
-const AUTH_PROVIDER = import.meta.env.VITE_AUTH_PROVIDER ?? "ap";
+
+const decodeBase64 = (value = "") => {
+  try {
+    const normalized = value.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = normalized.padEnd(
+      normalized.length + ((4 - (normalized.length % 4)) % 4),
+      "=",
+    );
+    return atob(padded);
+  } catch {
+    return null;
+  }
+};
+
+const parseJwtPayload = (token = "") => {
+  const tokenParts = String(token).split(".");
+  if (tokenParts.length !== 3) return null;
+
+  const decodedPayload = decodeBase64(tokenParts[1]);
+  if (!decodedPayload) return null;
+
+  try {
+    return JSON.parse(decodedPayload);
+  } catch {
+    return null;
+  }
+};
+
+const resolveUserFromExchangeResponse = (response = {}) => {
+  const responseUser =
+    response?.user ||
+    response?.corporateUser ||
+    response?.data?.user;
+
+  if (responseUser) return responseUser;
+
+  const authToken = response?.authToken;
+  const decodedToken = decodeBase64(authToken);
+  const jwtPayload = parseJwtPayload(authToken) || parseJwtPayload(decodedToken);
+
+  if (!jwtPayload) {
+    return { name: "User", role: "Admin" };
+  }
+
+  return {
+    id: jwtPayload.id || jwtPayload.jti || jwtPayload.sub || jwtPayload.identifier,
+    name: jwtPayload.name || jwtPayload.identifier || jwtPayload.email || "User",
+    email: jwtPayload.email || jwtPayload.identifier,
+    corpId: jwtPayload.corpId,
+    role: jwtPayload.role || jwtPayload.authorities,
+  };
+};
 
 export const AuthProvider = ({ children }) => {
-  const [loginMutation] = useLoginMutation();
   const [corporateLoginMutation] = useCorporateLoginMutation();
   const [getCorporatesMutation] = useGetCorporatesByEmailMutation();
   const [sendCorporateLoginOtpMutation] = useSendCorporateLoginOtpMutation();
-  const [registerMutation] = useRegisterMutation();
+  const [exchangeHandoffToken] = useLazyExchangeHandoffTokenQuery();
   const [user, setUser] = useState(null);
   const [token, setToken] = useState(sessionStorage.getItem('token'));
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const storedUser = sessionStorage.getItem('user');
-    const storedToken = sessionStorage.getItem('token');
-    
-    if (storedUser && storedToken) {
-      setUser(JSON.parse(storedUser));
-      setToken(storedToken);
-    }
-    setLoading(false);
-  }, []);
+    const initializeAuth = async () => {
+      const storedUser = sessionStorage.getItem('user');
+      const storedToken = sessionStorage.getItem('token');
 
-  const login = async (email, password, corpId = null) => {
-    if (AUTH_PROVIDER === "corporate") {
-      const response = await corporateLoginMutation({
-        email,
-        otp: password,
-        ...(corpId ? { corpId } : {}),
-      }).unwrap();
-      const tokenValue = response?.authToken;
-      const userData =
-        response?.user ||
-        response?.corporateUser ||
-        response?.data?.user ||
-        { name: email, role: "Admin" };
+      if (storedUser && storedToken) {
+        try {
+          setUser(JSON.parse(storedUser));
+          setToken(storedToken);
+        } catch {
+          sessionStorage.removeItem('user');
+          sessionStorage.removeItem('token');
+          sessionStorage.removeItem('tokenExpiry');
+          setToken(null);
+        }
+        setLoading(false);
+        return;
+      }
 
-      if (tokenValue) {
+      const params = new URLSearchParams(window.location.search);
+      const handoffToken = params.get("token");
+
+      if (!handoffToken) {
+        redirectToOriginLogin();
+        return;
+      }
+
+      try {
+        const response = await exchangeHandoffToken(handoffToken).unwrap();
+        const tokenValue = response?.authToken;
+        const userData = resolveUserFromExchangeResponse(response);
+
+        if (!tokenValue) {
+          throw new Error("Invalid handoff token exchange response");
+        }
+
         sessionStorage.setItem("token", tokenValue);
         sessionStorage.setItem("user", JSON.stringify(userData));
-        if (response?.validTill) {
-          sessionStorage.setItem("tokenExpiry", String(response.validTill));
+        const tokenExpiry = response?.validTill || response?.expiry;
+        if (tokenExpiry) {
+          sessionStorage.setItem("tokenExpiry", String(tokenExpiry));
         }
+
         setToken(tokenValue);
         setUser(userData);
-        return userData;
+        window.history.replaceState({}, document.title, window.location.pathname);
+      } catch {
+        sessionStorage.removeItem('token');
+        sessionStorage.removeItem('user');
+        sessionStorage.removeItem('tokenExpiry');
+        redirectToOriginLogin();
+        return;
       }
-      throw new Error("Corporate login did not return authToken");
+
+      setLoading(false);
+    };
+
+    initializeAuth();
+  }, [exchangeHandoffToken]);
+
+  const login = async (email, otp, corpId = null) => {
+    const response = await corporateLoginMutation({
+      email,
+      otp,
+      ...(corpId ? { corpId } : {}),
+    }).unwrap();
+    const tokenValue = response?.authToken;
+    const userData =
+      response?.user ||
+      response?.corporateUser ||
+      response?.data?.user ||
+      { name: email, role: "Admin" };
+
+    if (tokenValue) {
+      sessionStorage.setItem("token", tokenValue);
+      sessionStorage.setItem("user", JSON.stringify(userData));
+      if (response?.validTill) {
+        sessionStorage.setItem("tokenExpiry", String(response.validTill));
+      }
+      setToken(tokenValue);
+      setUser(userData);
+      return userData;
     }
-
-    const response = await loginMutation({ email, password }).unwrap();
-    const { access_token, user: userData } = response;
-
-    sessionStorage.setItem("token", access_token);
-    sessionStorage.setItem("user", JSON.stringify(userData));
-    setToken(access_token);
-    setUser(userData);
-
-    return userData;
+    throw new Error("Corporate login did not return authToken");
   };
 
   const getCorporatesByEmail = async (email) => {
@@ -75,18 +162,6 @@ export const AuthProvider = ({ children }) => {
 
   const sendCorporateLoginOtp = async (email, corpId) => {
     return sendCorporateLoginOtpMutation({ email, corpId }).unwrap();
-  };
-
-  const register = async (email, password, name, role = 'Maker') => {
-    const response = await registerMutation({ email, password, name, role }).unwrap();
-    const { access_token, user: userData } = response;
-    
-    sessionStorage.setItem('token', access_token);
-    sessionStorage.setItem('user', JSON.stringify(userData));
-    setToken(access_token);
-    setUser(userData);
-    
-    return userData;
   };
 
   const logout = () => {
@@ -102,7 +177,6 @@ export const AuthProvider = ({ children }) => {
       user,
       token,
       login,
-      register,
       logout,
       loading,
       getCorporatesByEmail,
@@ -120,6 +194,3 @@ export const useAuth = () => {
   }
   return context;
 };
-
-
-
