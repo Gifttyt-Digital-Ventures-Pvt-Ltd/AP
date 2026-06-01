@@ -275,7 +275,7 @@ export const canDeleteInvoice = (status, canDeleteInvoices) => {
 };
 
 const VENDOR_MAKER_EDITABLE_STATUSES = new Set([
-  "Request Create",
+  "Create Request",
   "Pending Approval",
   "Approved",
   "Draft",

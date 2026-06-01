@@ -20,3 +20,10 @@ export const getInvoiceFileUrl = (invoice) => {
   }
   return null;
 };
+
+export const openInvoiceFileDownload = (invoice) => {
+  const url = getInvoiceFileUrl(invoice);
+  if (!url) return false;
+  window.open(url, "_blank", "noopener,noreferrer");
+  return true;
+};

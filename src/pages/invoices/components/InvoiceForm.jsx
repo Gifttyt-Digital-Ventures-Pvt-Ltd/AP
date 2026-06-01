@@ -627,6 +627,7 @@ export const InvoiceForm = ({
                 options={INDIAN_STATES}
                 placeholder="Select source of supply"
                 className="h-8 text-xs"
+                required
               />
             ) : (
               <Input
@@ -634,6 +635,7 @@ export const InvoiceForm = ({
                 onChange={(e) => setFormData({ ...formData, source_of_supply: e.target.value })}
                 placeholder="Enter source of supply"
                 className="h-8 text-xs"
+                required
               />
             )}
           </div>
@@ -646,6 +648,7 @@ export const InvoiceForm = ({
                 options={INDIAN_STATES}
                 placeholder="Select destination"
                 className="h-8 text-xs"
+                required
               />
             ) : (
               <Input
@@ -653,6 +656,7 @@ export const InvoiceForm = ({
                 onChange={(e) => setFormData({ ...formData, destination_of_supply: e.target.value })}
                 placeholder="Enter destination"
                 className="h-8 text-xs"
+                required
               />
             )}
           </div>

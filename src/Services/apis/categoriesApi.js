@@ -29,14 +29,44 @@ const normalizeAssignedUser = (user = {}) => ({
   email: user.email ?? "",
 });
 
+const dedupeUsersById = (users = []) => {
+  const seen = new Map();
+  users.forEach((user) => {
+    const key = user.id || `${user.email}-${user.name}`;
+    if (!seen.has(key)) {
+      seen.set(key, user);
+    }
+  });
+  return Array.from(seen.values());
+};
+
+const normalizeApproverEntry = (approver = {}) =>
+  normalizeAssignedUser({
+    userId: approver.userId ?? approver.id,
+    name: approver.userName ?? approver.name,
+    email: approver.email,
+  });
+
 export const normalizeCategory = (category = {}) => {
   const assignedUsers = toArray(category?.assignedUsers?.users).map(normalizeAssignedUser);
   const assignedMakers = toArray(
-    category?.assignedMakers?.users ?? category?.makers ?? category?.makerUsers,
+    category?.assignedMakers?.users ??
+      category?.makers?.users ??
+      category?.makerUsers,
   ).map(normalizeAssignedUser);
   const assignedCheckers = toArray(
-    category?.assignedCheckers?.users ?? category?.checkers ?? category?.checkerUsers,
+    category?.assignedCheckers?.users ??
+      category?.checkers?.users ??
+      category?.checkerUsers,
   ).map(normalizeAssignedUser);
+  const approverUsers = dedupeUsersById(
+    toArray(
+      category?.assignedApprovers?.users ??
+        category?.approvers?.users ??
+        category?.approverUsers ??
+        category?.approvers,
+    ).map(normalizeApproverEntry),
+  );
   const makerAssignedUserIds = assignedMakers.map((user) => user.id).filter(Boolean);
   const checkerAssignedUserIds = assignedCheckers.map((user) => user.id).filter(Boolean);
   const fallbackAssignedIds = assignedUsers.map((user) => user.id).filter(Boolean);
@@ -51,6 +81,7 @@ export const normalizeCategory = (category = {}) => {
     assignedUsers,
     makerAssignedUsers: assignedMakers,
     checkerAssignedUsers: assignedCheckers,
+    approverUsers,
     makerAssignedUserIds,
     checkerAssignedUserIds,
     assignedUserIds,

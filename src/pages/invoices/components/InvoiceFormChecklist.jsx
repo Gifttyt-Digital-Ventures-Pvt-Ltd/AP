@@ -125,8 +125,16 @@ export const buildInvoiceFormChecklist = (
               ? "required"
               : "optional",
         }),
-        item({ label: "Source of supply", done: !!formData.source_of_supply }),
-        item({ label: "Destination", done: !!formData.destination_of_supply }),
+        item({
+          label: "Source of supply",
+          done: !!String(formData.source_of_supply ?? "").trim(),
+          hint: "required",
+        }),
+        item({
+          label: "Destination",
+          done: !!String(formData.destination_of_supply ?? "").trim(),
+          hint: "required",
+        }),
       ],
     },
     {

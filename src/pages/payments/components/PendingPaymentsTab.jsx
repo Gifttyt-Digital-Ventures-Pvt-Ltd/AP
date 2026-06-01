@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import { Download, Eye } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Checkbox } from '../../../components/ui/checkbox';
 import AppDataTable from '../../../components/common/AppDataTable';
@@ -40,6 +41,7 @@ const basePendingPaymentTableHeader = [
   { key: 'invoice_date', title: 'Invoice Date', cellClassName: 'text-sm text-muted-foreground' },
   { key: 'due_date', title: 'Due Date', cellClassName: 'text-sm text-muted-foreground' },
   { key: 'status', title: 'Status' },
+  { key: 'actions', title: 'Actions', headerClassName: 'text-left', cellClassName: 'text-left' },
 ];
 
 // Pending tab with summary card and pending invoice table.
@@ -55,6 +57,8 @@ const PendingPaymentsTab = ({
   onOpenRecordPayment,
   canRecordPayment = false,
   safeFormatDate,
+  handleViewInvoice,
+  handleDownloadInvoice,
 }) => {
   const selectedInvoices = invoices.filter((invoice) => selectedInvoiceIds.includes(invoice.id));
   const totalPendingByCurrency = useMemo(
@@ -112,6 +116,35 @@ const PendingPaymentsTab = ({
               <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border bg-blue-100 text-blue-800 border-blue-200">
                 Pending Payment
               </span>
+            );
+            break;
+          case 'actions':
+            value = (
+              <div
+                className="flex justify-start gap-1"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleViewInvoice?.(invoice)}
+                  data-testid={`view-pending-invoice-${invoice.id}`}
+                  title="View Invoice"
+                  className="h-8 w-8 p-0"
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleDownloadInvoice?.(invoice)}
+                  data-testid={`download-pending-invoice-${invoice.id}`}
+                  title="Download Invoice"
+                  className="h-8 w-8 p-0"
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+              </div>
             );
             break;
           default:
