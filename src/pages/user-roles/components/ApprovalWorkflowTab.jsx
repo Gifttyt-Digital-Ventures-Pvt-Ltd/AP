@@ -244,7 +244,9 @@ const mapWorkflowToUiRule = (workflow = {}) => {
     categoryNames: categoryEntries.map((item) => item.name),
     minAmount: asNumberOrNull(workflow.minAmount),
     maxAmount: asNumberOrNull(workflow.maxAmount),
-    currency: String(workflow.currency || DEFAULT_CURRENCY).trim().toUpperCase(),
+    currency: String(workflow.currency || DEFAULT_CURRENCY)
+      .trim()
+      .toUpperCase(),
     approvalMode: workflow.isSequential ? "sequential" : "parallel",
     approvers,
     isActive: workflow.isActive === true,
@@ -416,7 +418,8 @@ const ApprovalWorkflowTab = ({
   } = useCurrencyFilter(CURRENCY_SCREENS.WORKFLOW);
 
   const workflowRuleCurrencies = useMemo(
-    () => filterCurrencies.filter((currency) => currency !== CURRENCY_FILTER_ALL),
+    () =>
+      filterCurrencies.filter((currency) => currency !== CURRENCY_FILTER_ALL),
     [filterCurrencies],
   );
 
@@ -511,7 +514,8 @@ const ApprovalWorkflowTab = ({
     );
     const configuredTypes = new Set(configured.map((section) => section.type));
     const extraTypes = Object.keys(groupedRules).filter(
-      (type) => !configuredTypes.has(type) && (groupedRules[type] || []).length > 0,
+      (type) =>
+        !configuredTypes.has(type) && (groupedRules[type] || []).length > 0,
     );
 
     return [
@@ -840,8 +844,6 @@ const ApprovalWorkflowTab = ({
   };
 
   const handleTestRouting = async () => {
-    if (!tester.vendorId || !tester.amount) return;
-
     try {
       const response = await testWorkflow({
         vendorId: tester.vendorId,
@@ -1234,7 +1236,7 @@ const ApprovalWorkflowTab = ({
           <Button
             className="w-full md:w-auto"
             onClick={handleTestRouting}
-            disabled={!tester.vendorId || !tester.amount || testWorkflowLoading}
+            disabled={testWorkflowLoading}
           >
             {testWorkflowLoading ? (
               <>
@@ -1317,7 +1319,9 @@ const ApprovalWorkflowTab = ({
                 <p className="text-base leading-7 text-foreground">
                   <span className="bg-background/80 px-1.5 py-0.5 rounded-sm">
                     Rules checked in priority order:{" "}
-                    <span className="font-semibold">{matchingPriorityOrder}</span>
+                    <span className="font-semibold">
+                      {matchingPriorityOrder}
+                    </span>
                   </span>
                 </p>
               </div>
@@ -1645,7 +1649,9 @@ const ApprovalWorkflowTab = ({
                 {visibility.showAmount && (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Min Amount ({formState.currency || DEFAULT_CURRENCY})</Label>
+                      <Label>
+                        Min Amount ({formState.currency || DEFAULT_CURRENCY})
+                      </Label>
                       <Input
                         type="number"
                         min="0"
@@ -1661,7 +1667,9 @@ const ApprovalWorkflowTab = ({
                       />
                     </div>
                     <div className="space-y-2">
-                      <Label>Max Amount ({formState.currency || DEFAULT_CURRENCY})</Label>
+                      <Label>
+                        Max Amount ({formState.currency || DEFAULT_CURRENCY})
+                      </Label>
                       <Input
                         type="number"
                         min="0"

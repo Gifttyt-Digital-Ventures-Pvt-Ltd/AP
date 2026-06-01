@@ -1,8 +1,38 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { Download, Eye } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Checkbox } from '../../../components/ui/checkbox';
 import AppDataTable from '../../../components/common/AppDataTable';
 import { TableCell, TableRow } from '../../../components/ui/table';
+import { formatCurrency } from '../../../utils/currency';
+import {
+  formatInvoiceAmount,
+  sumInvoiceAmountsByCurrency,
+} from '../../invoices/utils/invoiceAmounts';
+
+const renderCurrencyTotals = (totals, className) => {
+  if (totals.length === 0) {
+    return <p className={className}>{formatCurrency(0)}</p>;
+  }
+
+  if (totals.length === 1) {
+    return (
+      <p className={className}>
+        {formatCurrency(totals[0].total, totals[0].currency)}
+      </p>
+    );
+  }
+
+  return (
+    <div className="space-y-1">
+      {totals.map(({ currency, total }) => (
+        <p key={currency} className={className}>
+          {formatCurrency(total, currency)}
+        </p>
+      ))}
+    </div>
+  );
+};
 
 const basePendingPaymentTableHeader = [
   { key: 'invoice_number', title: 'Invoice #', cellClassName: "font-['JetBrains_Mono'] font-medium" },
@@ -11,13 +41,13 @@ const basePendingPaymentTableHeader = [
   { key: 'invoice_date', title: 'Invoice Date', cellClassName: 'text-sm text-muted-foreground' },
   { key: 'due_date', title: 'Due Date', cellClassName: 'text-sm text-muted-foreground' },
   { key: 'status', title: 'Status' },
+  { key: 'actions', title: 'Actions', headerClassName: 'text-left', cellClassName: 'text-left' },
 ];
 
 // Pending tab with summary card and pending invoice table.
 const PendingPaymentsTab = ({
   invoices,
   filteredPendingInvoices,
-  totalPendingAmount,
   handleBulkRelease,
   canBulkRelease = true,
   showRecordPaymentSelection = false,
@@ -27,9 +57,18 @@ const PendingPaymentsTab = ({
   onOpenRecordPayment,
   canRecordPayment = false,
   safeFormatDate,
+  handleViewInvoice,
+  handleDownloadInvoice,
 }) => {
   const selectedInvoices = invoices.filter((invoice) => selectedInvoiceIds.includes(invoice.id));
-  const selectedTotal = selectedInvoices.reduce((sum, invoice) => sum + (invoice.amount || 0), 0);
+  const totalPendingByCurrency = useMemo(
+    () => sumInvoiceAmountsByCurrency(invoices),
+    [invoices],
+  );
+  const selectedTotalByCurrency = useMemo(
+    () => sumInvoiceAmountsByCurrency(selectedInvoices),
+    [selectedInvoices],
+  );
   const allSelected = invoices.length > 0 && selectedInvoiceIds.length === invoices.length;
 
   const renderPendingPaymentRow = (invoice, rowIndex, headers) => (
@@ -64,7 +103,7 @@ const PendingPaymentsTab = ({
             );
             break;
           case 'amount':
-            value = `₹${Number(invoice.amount || 0).toLocaleString('en-IN')}`;
+            value = formatInvoiceAmount(invoice, invoice.amount || 0);
             break;
           case 'invoice_date':
             value = safeFormatDate(invoice.invoice_date);
@@ -77,6 +116,35 @@ const PendingPaymentsTab = ({
               <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border bg-blue-100 text-blue-800 border-blue-200">
                 Pending Payment
               </span>
+            );
+            break;
+          case 'actions':
+            value = (
+              <div
+                className="flex justify-start gap-1"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleViewInvoice?.(invoice)}
+                  data-testid={`view-pending-invoice-${invoice.id}`}
+                  title="View Invoice"
+                  className="h-8 w-8 p-0"
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleDownloadInvoice?.(invoice)}
+                  data-testid={`download-pending-invoice-${invoice.id}`}
+                  title="Download Invoice"
+                  className="h-8 w-8 p-0"
+                >
+                  <Download className="h-4 w-4" />
+                </Button>
+              </div>
             );
             break;
           default:
@@ -99,17 +167,33 @@ const PendingPaymentsTab = ({
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-medium">Total Pending Amount</p>
-              <p className="text-2xl font-bold font-['JetBrains_Mono'] text-accent">
-                {'\u20B9'}{totalPendingAmount.toLocaleString('en-IN')}
-              </p>
+              {renderCurrencyTotals(
+                totalPendingByCurrency,
+                "text-2xl font-bold font-['JetBrains_Mono'] text-accent",
+              )}
               {showRecordPaymentSelection && selectedInvoiceIds.length > 0 && (
-                <p className="mt-1 text-sm text-muted-foreground">
+                <div className="mt-1 text-sm text-muted-foreground">
                   Selected {selectedInvoiceIds.length} invoice
-                  {selectedInvoiceIds.length === 1 ? '' : 's'} ·{' '}
-                  <span className="font-['JetBrains_Mono'] font-medium text-foreground">
-                    {'\u20B9'}{selectedTotal.toLocaleString('en-IN')}
-                  </span>
-                </p>
+                  {selectedInvoiceIds.length === 1 ? '' : 's'}
+                  {selectedTotalByCurrency.length === 1 ? (
+                    <>
+                      {' '}
+                      ·{' '}
+                      <span className="font-['JetBrains_Mono'] font-medium text-foreground">
+                        {formatCurrency(
+                          selectedTotalByCurrency[0].total,
+                          selectedTotalByCurrency[0].currency,
+                        )}
+                      </span>
+                    </>
+                  ) : (
+                    <div className="mt-1 space-y-0.5 font-['JetBrains_Mono'] font-medium text-foreground">
+                      {selectedTotalByCurrency.map(({ currency, total }) => (
+                        <p key={currency}>{formatCurrency(total, currency)}</p>
+                      ))}
+                    </div>
+                  )}
+                </div>
               )}
             </div>
 

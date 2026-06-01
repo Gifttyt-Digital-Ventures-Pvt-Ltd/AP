@@ -15,6 +15,23 @@ export const getInvoiceCurrency = (invoice) =>
 export const formatInvoiceAmount = (invoice, amount) =>
   formatCurrency(amount, getInvoiceCurrency(invoice));
 
+export const sumInvoiceAmountsByCurrency = (
+  invoices = [],
+  getAmount = (invoice) => invoice?.amount ?? 0,
+) => {
+  const totals = new Map();
+
+  invoices.forEach((invoice) => {
+    const currency = getInvoiceCurrency(invoice);
+    const amount = Number(getAmount(invoice)) || 0;
+    totals.set(currency, (totals.get(currency) || 0) + amount);
+  });
+
+  return Array.from(totals.entries())
+    .map(([currency, total]) => ({ currency, total }))
+    .sort((left, right) => left.currency.localeCompare(right.currency));
+};
+
 export const getInvoiceGrossAmount = (invoice) => {
   const explicitGross = toNumber(
     invoice?.gross_amount ??

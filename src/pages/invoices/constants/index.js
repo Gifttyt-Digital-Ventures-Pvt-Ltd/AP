@@ -1,4 +1,5 @@
 export const GST_TREATMENTS = [
+  { value: "N/A", label: "N/A" },
   { value: "Regular", label: "Regular" },
   { value: "Composition", label: "Composition" },
   { value: "Unregistered", label: "Unregistered" },
@@ -8,12 +9,39 @@ export const GST_TREATMENTS = [
 ];
 
 export const INDIAN_STATES = [
-  "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chhattisgarh",
-  "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jharkhand", "Karnataka",
-  "Kerala", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya", "Mizoram",
-  "Nagaland", "Odisha", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu",
-  "Telangana", "Tripura", "Uttar Pradesh", "Uttarakhand", "West Bengal",
-  "Delhi", "Jammu and Kashmir", "Ladakh", "Puducherry", "Chandigarh",
+  "Andhra Pradesh",
+  "Arunachal Pradesh",
+  "Assam",
+  "Bihar",
+  "Chhattisgarh",
+  "Goa",
+  "Gujarat",
+  "Haryana",
+  "Himachal Pradesh",
+  "Jharkhand",
+  "Karnataka",
+  "Kerala",
+  "Madhya Pradesh",
+  "Maharashtra",
+  "Manipur",
+  "Meghalaya",
+  "Mizoram",
+  "Nagaland",
+  "Odisha",
+  "Punjab",
+  "Rajasthan",
+  "Sikkim",
+  "Tamil Nadu",
+  "Telangana",
+  "Tripura",
+  "Uttar Pradesh",
+  "Uttarakhand",
+  "West Bengal",
+  "Delhi",
+  "Jammu and Kashmir",
+  "Ladakh",
+  "Puducherry",
+  "Chandigarh",
 ];
 
 export const TAX_RATES = [
@@ -28,13 +56,19 @@ export const TAX_RATES = [
   { value: "Exempt", label: "Exempt", cgst: 0, sgst: 0 },
 ];
 
-export const LEDGER_OPTIONS = [
-  "Cloud Services", "Software Subscription", "Professional Services",
-  "Office Supplies", "Travel & Conveyance", "Rent", "Utilities",
-  "Marketing & Advertising", "Legal & Professional", "Maintenance",
-];
-
 export const INVOICE_SOURCES = [
   { value: "Upload", label: "Upload" },
   { value: "Email", label: "Email" },
+];
+export const LEDGER_OPTIONS = [
+  "Cloud Services",
+  "Software Subscription",
+  "Professional Services",
+  "Office Supplies",
+  "Travel & Conveyance",
+  "Rent",
+  "Utilities",
+  "Marketing & Advertising",
+  "Legal & Professional",
+  "Maintenance",
 ];

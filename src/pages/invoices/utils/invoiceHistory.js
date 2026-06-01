@@ -105,6 +105,22 @@ const buildHistoryActionDescription = (actionRaw, userName, level = "") => {
   return String(actionRaw || "Updated");
 };
 
+const normalizeCreatorStageAction = (actionType, level = "") => {
+  const normalizedAction = String(actionType || "").trim();
+  const normalizedLevel = String(level || "").trim().toLowerCase();
+  const isCreatorStage =
+    normalizedLevel === "creator" ||
+    normalizedLevel === "maker" ||
+    normalizedLevel.includes("creator") ||
+    normalizedLevel.includes("maker");
+
+  if (isCreatorStage && normalizedAction === "Approved") {
+    return "Created";
+  }
+
+  return normalizedAction;
+};
+
 /** Normalizes approval/history record arrays (invoice + vendor). */
 export const normalizeApprovalHistoryEntries = (response) => {
   const rawHistory = extractRawHistory(response);
@@ -116,10 +132,13 @@ export const normalizeApprovalHistoryEntries = (response) => {
       entry.action ||
       entry.status ||
       "Updated";
-    const action_type = normalizeApprovalAction(actionRaw);
     const level = String(
       entry.level || entry.approval_level || entry.approvalLevel || "",
     ).trim();
+    const action_type = normalizeCreatorStageAction(
+      normalizeApprovalAction(actionRaw),
+      level,
+    );
     const user_name = resolveHistoryUserName(entry, level);
     const comments = resolveHistoryEntryComments(entry);
 
@@ -132,7 +151,7 @@ export const normalizeApprovalHistoryEntries = (response) => {
       action_description:
         entry.action_description ||
         entry.actionDescription ||
-        buildHistoryActionDescription(actionRaw, user_name, level),
+        buildHistoryActionDescription(action_type, user_name, level),
       timestamp:
         entry.timestamp ||
         entry.createdAt ||

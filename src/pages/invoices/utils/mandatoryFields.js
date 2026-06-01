@@ -14,6 +14,14 @@ export const getInvoiceMandatoryFieldValidationMessage = (
 ) => {
   if (!payload) return null;
 
+  if (!String(payload.source_of_supply ?? "").trim()) {
+    return "Please enter source of supply before creating invoice";
+  }
+
+  if (!String(payload.destination_of_supply ?? "").trim()) {
+    return "Please enter destination before creating invoice";
+  }
+
   if (department && !payload.department_id) {
     return 'Please select a department before creating invoice';
   }

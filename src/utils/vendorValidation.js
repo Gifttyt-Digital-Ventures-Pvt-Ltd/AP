@@ -106,17 +106,14 @@ export const getVendorValidationErrors = (
 };
 
 /**
- * Lighter validation for Request Vendor from invoice upload (single + bulk).
- * Name, type, and mobile are always required. GSTIN/TAX ID is required for India only.
+ * Validation for Request Vendor from invoice upload (single + bulk).
+ * Only vendor name and vendor type are mandatory.
  */
 export const getInvoiceVendorRequestValidationErrors = (vendor = {}) => {
   const errors = [];
 
   const name = String(vendor.name || "").trim();
   const vendorType = String(vendor.vendor_type || vendor.vendorType || "").trim();
-  const mobile = String(vendor.mobile || "").trim();
-  const country = String(vendor.country || "").trim();
-  const gstin = String(vendor.gstin || "").trim().toUpperCase();
 
   if (!name) {
     errors.push("Vendor name is required");
@@ -126,18 +123,6 @@ export const getInvoiceVendorRequestValidationErrors = (vendor = {}) => {
     errors.push("Vendor type is required");
   } else if (!["company", "individual"].includes(vendorType.toLowerCase())) {
     errors.push("Vendor type must be Company or Individual");
-  }
-
-  if (!mobile) {
-    errors.push("Mobile number is required");
-  }
-
-  if (isIndiaCountry(country)) {
-    if (!gstin) {
-      errors.push("GSTIN/TAX ID is required for vendors in India");
-    } else if (gstin.length !== 15) {
-      errors.push("GSTIN must be 15 characters for vendors in India");
-    }
   }
 
   return errors;

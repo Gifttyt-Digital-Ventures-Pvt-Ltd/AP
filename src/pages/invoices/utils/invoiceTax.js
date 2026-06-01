@@ -212,6 +212,9 @@ export const calculateInvoiceTotals = ({
   invoiceTaxAmount,
   invoiceTaxName = "Tax",
   invoiceTaxRate,
+  discountsLevel = "At Line Item Level",
+  invoiceDiscount = 0,
+  invoiceDiscountType = "%",
 }) => {
   let subTotal = 0;
   let cgst = 0;
@@ -234,6 +237,30 @@ export const calculateInvoiceTotals = ({
       }
     }
   });
+
+  const subTotalBeforeDiscount = subTotal;
+  const discountValue = parseNumericInput(invoiceDiscount, 0);
+  const invoiceLevelDiscountEnabled = discountsLevel === "At Invoice Level";
+  const invoiceDiscountAmount = invoiceLevelDiscountEnabled
+    ? invoiceDiscountType === "%"
+      ? (subTotal * discountValue) / 100
+      : discountValue
+    : 0;
+  const boundedInvoiceDiscountAmount = Math.max(
+    0,
+    Math.min(invoiceDiscountAmount, subTotalBeforeDiscount),
+  );
+  const discountFactor =
+    subTotalBeforeDiscount > 0
+      ? (subTotalBeforeDiscount - boundedInvoiceDiscountAmount) / subTotalBeforeDiscount
+      : 1;
+
+  if (invoiceLevelDiscountEnabled) {
+    subTotal -= boundedInvoiceDiscountAmount;
+    cgst *= discountFactor;
+    sgst *= discountFactor;
+    igst *= discountFactor;
+  }
 
   let foreignTaxes = [];
   let foreignTax = 0;
@@ -270,6 +297,14 @@ export const calculateInvoiceTotals = ({
       foreignTaxes = Array.from(foreignTaxMap.values());
       foreignTax = foreignTaxes.reduce((sum, entry) => sum + entry.amount, 0);
     }
+
+    if (invoiceLevelDiscountEnabled) {
+      foreignTaxes = foreignTaxes.map((entry) => ({
+        ...entry,
+        amount: entry.amount * discountFactor,
+      }));
+      foreignTax *= discountFactor;
+    }
   }
 
   const total = isInrInvoiceCurrency(currency)
@@ -278,11 +313,13 @@ export const calculateInvoiceTotals = ({
 
   return {
     subTotal,
+    subTotalBeforeDiscount,
     cgst,
     sgst,
     igst,
     foreignTax,
     foreignTaxes,
+    invoiceDiscountAmount: boundedInvoiceDiscountAmount,
     total,
     isInr: isInrInvoiceCurrency(currency),
   };

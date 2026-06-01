@@ -29,16 +29,65 @@ const normalizeAssignedUser = (user = {}) => ({
   email: user.email ?? "",
 });
 
+const dedupeUsersById = (users = []) => {
+  const seen = new Map();
+  users.forEach((user) => {
+    const key = user.id || `${user.email}-${user.name}`;
+    if (!seen.has(key)) {
+      seen.set(key, user);
+    }
+  });
+  return Array.from(seen.values());
+};
+
+const normalizeApproverEntry = (approver = {}) =>
+  normalizeAssignedUser({
+    userId: approver.userId ?? approver.id,
+    name: approver.userName ?? approver.name,
+    email: approver.email,
+  });
+
 export const normalizeCategory = (category = {}) => {
   const assignedUsers = toArray(category?.assignedUsers?.users).map(normalizeAssignedUser);
+  const assignedMakers = toArray(
+    category?.assignedMakers?.users ??
+      category?.makers?.users ??
+      category?.makerUsers,
+  ).map(normalizeAssignedUser);
+  const assignedCheckers = toArray(
+    category?.assignedCheckers?.users ??
+      category?.checkers?.users ??
+      category?.checkerUsers,
+  ).map(normalizeAssignedUser);
+  const approverUsers = dedupeUsersById(
+    toArray(
+      category?.assignedApprovers?.users ??
+        category?.approvers?.users ??
+        category?.approverUsers ??
+        category?.approvers,
+    ).map(normalizeApproverEntry),
+  );
+  const makerAssignedUserIds = assignedMakers.map((user) => user.id).filter(Boolean);
+  const checkerAssignedUserIds = assignedCheckers.map((user) => user.id).filter(Boolean);
+  const fallbackAssignedIds = assignedUsers.map((user) => user.id).filter(Boolean);
+  const assignedUserIds = Array.from(
+    new Set([...makerAssignedUserIds, ...checkerAssignedUserIds, ...fallbackAssignedIds]),
+  );
 
   return {
     id: category.id,
     name: category.name ?? "",
     description: category.description ?? "",
     assignedUsers,
-    assignedUserIds: assignedUsers.map((user) => user.id).filter(Boolean),
-    assignedUsersCount: category?.assignedUsers?.totalCount ?? assignedUsers.length,
+    makerAssignedUsers: assignedMakers,
+    checkerAssignedUsers: assignedCheckers,
+    approverUsers,
+    makerAssignedUserIds,
+    checkerAssignedUserIds,
+    assignedUserIds,
+    assignedUsersCount:
+      category?.assignedUsers?.totalCount ??
+      assignedUserIds.length,
     createdDate: category.createdAt ?? category.created_at ?? null,
     raw: category,
   };
@@ -64,16 +113,28 @@ const toCategoryBody = (category = {}, approvers = []) => {
     approvers.map((approver) => [normalizeUserId(approver.id ?? approver.userId), approver]),
   );
 
+  const makerAssignedIds = toArray(category.makerAssignedUserIds);
+  const checkerAssignedIds = toArray(category.checkerAssignedUserIds);
+  const mergedAssignedIds = Array.from(
+    new Set([...makerAssignedIds, ...checkerAssignedIds, ...toArray(category.assignedUserIds)]),
+  );
+
+  const toAssignedUserPayload = (userId) => {
+    const approver = approverById.get(normalizeUserId(userId));
+    return {
+      userId: toApiUserId(userId),
+      userName: approver?.name || approver?.userName || approver?.email || undefined,
+    };
+  };
+
   return {
     name: category.name,
     description: category.description,
-    assignedUsers: toArray(category.assignedUserIds).map((userId) => {
-      const approver = approverById.get(normalizeUserId(userId));
-      return {
-        userId: toApiUserId(userId),
-        userName: approver?.name || approver?.userName || approver?.email || undefined,
-      };
-    }),
+    // Backward-compatible field
+    assignedUsers: mergedAssignedIds.map(toAssignedUserPayload),
+    // Role-specific assignment fields
+    assignedMakers: makerAssignedIds.map(toAssignedUserPayload),
+    assignedCheckers: checkerAssignedIds.map(toAssignedUserPayload),
   };
 };
 

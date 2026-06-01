@@ -1,5 +1,9 @@
-import React, { useEffect, useState } from 'react';
-import { useGetInvoicesQuery } from '../../Services/apis/invoicesVendorsApi';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  useGetInvoicesQuery,
+  useLazyGetInvoiceHistoryQuery,
+} from '../../Services/apis/invoicesVendorsApi';
+import { toInvoiceUiPayload } from '../../Services/utils/payloadMappers';
 import {
   useGetPaymentsQuery,
   useGetBankAccountsQuery,
@@ -42,6 +46,11 @@ import PaymentDialog from './components/PaymentDialog';
 import RecordPaymentDialog from './components/RecordPaymentDialog';
 import PendingPaymentsTab from './components/PendingPaymentsTab';
 import ReleasedPaymentsTab from './components/ReleasedPaymentsTab';
+import ViewDialog from '../invoices/components/ViewDialog';
+import { InvoicePdfPreview } from '../invoices/components/InvoicePdfPreview';
+import { getInvoiceFileUrl, openInvoiceFileDownload } from '../invoices/utils/invoicePreview';
+import { normalizeInvoiceHistoryEntries } from '../invoices/utils/invoiceHistory';
+import { getInvoiceStatusBadgeClass } from '../../utils/approvalWorkflow';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useRBAC } from '../../contexts/RBACContext';
 import { useCurrencyFilter } from '../../hooks/useCurrencyFilter';
@@ -69,7 +78,7 @@ const Payments = () => {
     selectedCurrency,
     setSelectedCurrency,
     queryArgs: paymentQueryArgs,
-  } = useCurrencyFilter(CURRENCY_SCREENS.PAYMENT);
+  } = useCurrencyFilter(CURRENCY_SCREENS.PAYMENT, { excludeAll: true });
   const invoiceQueryWithStatus = (status) => ({
     ...paymentQueryArgs,
     status,
@@ -83,6 +92,7 @@ const Payments = () => {
     isError: invoicesError,
     refetch: refetchPendingPaymentInvoices,
   } = useGetInvoicesQuery(invoiceQueryWithStatus('Pending Payment'));
+  const { data: allInvoicesData = [] } = useGetInvoicesQuery(paymentQueryArgs);
   const {
     data: pendingApproverInvoicesData = [],
     isError: pendingApproverInvoicesError,
@@ -100,6 +110,7 @@ const Payments = () => {
   const [createPayment] = useCreatePaymentMutation();
   const [recordPayments] = useRecordPaymentsMutation();
   const [createPaymentBatch] = useCreatePaymentBatchMutation();
+  const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
   const { guardAction, canPerformAction } = useActionGuard();
   const [searchTerm, setSearchTerm] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -127,9 +138,17 @@ const Payments = () => {
     invoice_ids: [],
     notes: '',
   });
+  const [viewInvoice, setViewInvoice] = useState(null);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [viewTab, setViewTab] = useState('details');
+  const [invoiceHistory, setInvoiceHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [viewPreviewError, setViewPreviewError] = useState(false);
+  const [pdfZoom, setPdfZoom] = useState(100);
 
   const normalizePayment = (payment = {}) => ({
     ...payment,
+    invoice_id: payment.invoice_id ?? payment.invoiceId,
     invoice_number: payment.invoice_number ?? payment.invoiceNumber,
     vendor_name: payment.vendor_name ?? payment.vendorName,
     payment_date: payment.payment_date ?? payment.paymentDate,
@@ -147,6 +166,13 @@ const Payments = () => {
 
   const payments = Array.isArray(paymentsData) ? paymentsData.map(normalizePayment) : [];
   const pendingPaymentInvoices = Array.isArray(invoicesData) ? invoicesData.map(normalizeInvoice) : [];
+  const allInvoices = useMemo(
+    () =>
+      Array.isArray(allInvoicesData)
+        ? allInvoicesData.map((invoice) => toInvoiceUiPayload(invoice))
+        : [],
+    [allInvoicesData],
+  );
   const pendingApproverInvoices = Array.isArray(pendingApproverInvoicesData)
     ? pendingApproverInvoicesData.map(normalizeInvoice)
     : [];
@@ -329,6 +355,13 @@ const Payments = () => {
       return;
     }
 
+    const now = new Date();
+    const maxPaymentDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    if (recordPaymentForm.payment_date > maxPaymentDate) {
+      toast.error('Payment date cannot be in the future');
+      return;
+    }
+
     if (!recordPaymentForm.payment_method) {
       toast.error('Payment method is required');
       return;
@@ -387,13 +420,95 @@ const Payments = () => {
       safeLower(payment.invoice_number).includes(safeLower(searchTerm))
   );
 
+  const resolvePaymentInvoice = (payment) => {
+    const normalizedPayment = normalizePayment(payment);
+    if (normalizedPayment.invoice_id) {
+      const matchById = allInvoices.find((invoice) => invoice.id === normalizedPayment.invoice_id);
+      if (matchById) return matchById;
+    }
+    if (normalizedPayment.invoice_number) {
+      return allInvoices.find(
+        (invoice) => invoice.invoice_number === normalizedPayment.invoice_number,
+      );
+    }
+    return null;
+  };
+
+  const handleViewInvoice = async (invoice, initialTab = 'details') => {
+    const preparedInvoice = toInvoiceUiPayload(invoice);
+    setViewInvoice(preparedInvoice);
+    setViewDialogOpen(true);
+    setViewTab(initialTab);
+    setViewPreviewError(false);
+    setInvoiceHistory([]);
+    setLoadingHistory(true);
+
+    try {
+      const response = await getInvoiceHistory(invoice.id).unwrap();
+      let historyEntries = Array.isArray(response)
+        ? response
+        : normalizeInvoiceHistoryEntries(response);
+
+      if (historyEntries.length === 0) {
+        const approvalRecords =
+          preparedInvoice.approval_records ||
+          preparedInvoice.approvalRecords ||
+          invoice.approval_records ||
+          invoice.approvalRecords;
+        if (Array.isArray(approvalRecords) && approvalRecords.length > 0) {
+          historyEntries = normalizeInvoiceHistoryEntries(approvalRecords);
+        }
+      }
+
+      setInvoiceHistory(historyEntries);
+    } catch (error) {
+      console.error('Failed to fetch invoice history:', error);
+      toast.error('Failed to load invoice history');
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleViewPaymentInvoice = async (payment, initialTab = 'details') => {
+    const invoice = resolvePaymentInvoice(payment);
+    if (!invoice) {
+      toast.error('Invoice details are not available');
+      return;
+    }
+    await handleViewInvoice(invoice, initialTab);
+  };
+
+  const handleDownloadInvoice = (invoice) => {
+    const preparedInvoice = toInvoiceUiPayload(invoice);
+    if (!openInvoiceFileDownload(preparedInvoice)) {
+      toast.error('No invoice file available for download');
+    }
+  };
+
+  const handleDownloadPaymentInvoice = (payment) => {
+    const invoice = resolvePaymentInvoice(payment);
+    if (!invoice) {
+      toast.error('Invoice file is not available');
+      return;
+    }
+    handleDownloadInvoice(invoice);
+  };
+
+  const getStatusBadgeClass = (status) => getInvoiceStatusBadgeClass(status);
+
+  const renderPdfPreview = (props = {}) => (
+    <InvoicePdfPreview
+      {...props}
+      setPdfZoom={setPdfZoom}
+      getInvoiceFileUrl={getInvoiceFileUrl}
+    />
+  );
+
   const filteredPendingInvoices = invoices.filter(
     (invoice) =>
       safeLower(invoice.vendor_name).includes(safeLower(searchTerm)) ||
       safeLower(invoice.invoice_number).includes(safeLower(searchTerm))
   );
-
-  const totalPendingAmount = invoices.reduce((sum, inv) => sum + inv.amount, 0);
 
   const renderBatchInvoiceRow = (invoice, rowIndex, headers) => (
     <TableRow
@@ -606,7 +721,6 @@ const Payments = () => {
           <PendingPaymentsTab
             invoices={invoices}
             filteredPendingInvoices={filteredPendingInvoices}
-            totalPendingAmount={totalPendingAmount}
             handleBulkRelease={handleBulkRelease}
             canBulkRelease={canShowBulkRelease}
             showRecordPaymentSelection={canShowRecordPayment}
@@ -616,11 +730,19 @@ const Payments = () => {
             onOpenRecordPayment={openRecordPaymentDialog}
             canRecordPayment={canShowRecordPayment}
             safeFormatDate={safeFormatDate}
+            handleViewInvoice={handleViewInvoice}
+            handleDownloadInvoice={handleDownloadInvoice}
           />
         </TabsContent>
 
         <TabsContent value="released">
-          <ReleasedPaymentsTab filteredPayments={filteredPayments} safeFormatDate={safeFormatDate} />
+          <ReleasedPaymentsTab
+            filteredPayments={filteredPayments}
+            safeFormatDate={safeFormatDate}
+            resolvePaymentInvoice={resolvePaymentInvoice}
+            handleViewPaymentInvoice={handleViewPaymentInvoice}
+            handleDownloadPaymentInvoice={handleDownloadPaymentInvoice}
+          />
         </TabsContent>
       </Tabs>
 
@@ -654,6 +776,23 @@ const Payments = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ViewDialog
+        viewDialogOpen={viewDialogOpen}
+        setViewDialogOpen={setViewDialogOpen}
+        selectedInvoice={viewInvoice}
+        renderPdfPreview={renderPdfPreview}
+        pdfZoom={pdfZoom}
+        viewPreviewError={viewPreviewError}
+        setViewPreviewError={setViewPreviewError}
+        getStatusBadgeClass={getStatusBadgeClass}
+        viewTab={viewTab}
+        setViewTab={setViewTab}
+        invoiceHistory={invoiceHistory}
+        loadingHistory={loadingHistory}
+        canEdit={() => false}
+        handleEditInvoice={() => {}}
+      />
     </div>
   );
 };

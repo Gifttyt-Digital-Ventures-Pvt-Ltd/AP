@@ -743,7 +743,7 @@ const TransactionsPage = () => {
                     </th>
                     
                     {/* Amount Column with Filter */}
-                    <th className="p-3 text-right font-medium text-gray-600 relative">
+                    <th className="p-3 text-left font-medium text-gray-600 relative">
                       <button 
                         onClick={() => toggleColumnFilter('amount')}
                         className={`flex items-center gap-1 hover:text-gray-900 justify-end w-full ${appliedAmountFilter.min || appliedAmountFilter.max ? 'text-blue-600' : ''}`}
@@ -836,7 +836,7 @@ const TransactionsPage = () => {
                             ))}
                           </select>
                         </td>
-                        <td className="p-3 text-right">
+                        <td className="p-3 text-left">
                           <div>
                             <span className="font-medium">₹{txn.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                             <span className={`block text-xs ${txn.is_credit ? 'text-green-600' : 'text-red-600'}`}>
@@ -1048,7 +1048,7 @@ const TransactionsPage = () => {
                     <th className="p-3 text-left font-medium text-gray-600">
                       Ledger <ChevronDown className="inline h-3 w-3" />
                     </th>
-                    <th className="p-3 text-right font-medium text-gray-600">
+                    <th className="p-3 text-left font-medium text-gray-600">
                       Amount <ChevronDown className="inline h-3 w-3" />
                     </th>
                     <th className="p-3 text-center font-medium text-gray-600">Undo</th>
@@ -1091,7 +1091,7 @@ const TransactionsPage = () => {
                             {txn.ledger || '-'}
                           </span>
                         </td>
-                        <td className="p-3 text-right">
+                        <td className="p-3 text-left">
                           <div>
                             <span className="font-medium">₹{txn.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                             <span className={`block text-xs ${txn.is_credit ? 'text-green-600' : 'text-red-600'}`}>

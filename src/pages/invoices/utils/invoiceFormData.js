@@ -45,6 +45,7 @@ export const buildInvoiceEditFormData = (
 ) => {
   const editCurrency = normalizeCurrencyCode(invoice.currency) || DEFAULT_CURRENCY;
   const useInrTax = isInrInvoiceCurrency(editCurrency);
+  const defaultGstTreatment = useInrTax ? "Regular" : "N/A";
   const invoiceLineItems = Array.isArray(invoice.line_items) ? invoice.line_items : [];
   const invoiceVendorId = invoice.vendor_id ?? invoice.vendorId ?? "";
   const matchedVendorByName =
@@ -92,13 +93,21 @@ export const buildInvoiceEditFormData = (
       invoice.vendor_address ||
       invoice.vendorAddress ||
       "",
-    gst_treatment: invoice.gst_treatment || invoice.gstTreatment || "Regular",
+    gst_treatment: invoice.gst_treatment || invoice.gstTreatment || defaultGstTreatment,
     gstin: resolveInvoiceFormGstin(invoice, vendor),
     source_of_supply: sourceOfSupply,
     destination_of_supply: destinationOfSupply,
     location: locationValue,
     reverse_charges: invoice.reverse_charges || invoice.reverseCharges || "Not Applicable",
     discounts_level: invoice.discounts_level || invoice.discountsLevel || "At Line Item Level",
+    invoice_discount:
+      invoice.invoice_discount ??
+      invoice.invoiceDiscount ??
+      0,
+    invoice_discount_type:
+      invoice.invoice_discount_type ??
+      invoice.invoiceDiscountType ??
+      "%",
     source: invoice.source || "Upload",
     source_email: invoice.source_email || invoice.sourceEmail || "",
     line_items:
