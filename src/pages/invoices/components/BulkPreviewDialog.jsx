@@ -139,7 +139,7 @@ const BulkPreviewDialog = ({
                     </td>
                     <td className="p-3 whitespace-nowrap">{item.filename}</td>
                     <td className="p-3 whitespace-nowrap">{item.invoicePayload?.vendor_name || '-'}</td>
-                    <td className="p-3 whitespace-nowrap font-['JetBrains_Mono']">{item.invoicePayload?.invoice_number || '-'}</td>
+                    <td className="p-3 whitespace-nowrap  ">{item.invoicePayload?.invoice_number || '-'}</td>
                     <td className="p-3 min-w-44">
                       {canEditRow ? (
                         <select
@@ -220,7 +220,7 @@ const BulkPreviewDialog = ({
                         )}
                       </td>
                     )}
-                    <td className="p-3 text-left whitespace-nowrap font-['JetBrains_Mono']">
+                    <td className="p-3 text-left whitespace-nowrap  ">
                       {item.invoicePayload
                         ? formatInvoiceAmount(item.invoicePayload, item.invoicePayload.amount)
                         : '-'}

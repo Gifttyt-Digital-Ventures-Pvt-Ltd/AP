@@ -1872,6 +1872,8 @@ const InvoicesPage = () => {
         loadingHistory={loadingHistory}
         canEdit={canEdit}
         handleEditInvoice={handleEditInvoice}
+        findVendorByName={findVendorByName}
+        findVendorById={findVendorById}
         editDialogOpen={editDialogOpen}
         setEditDialogOpen={setEditDialogOpen}
         formData={formData}

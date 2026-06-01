@@ -38,13 +38,13 @@ const ApprovalDialog = ({
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-muted-foreground">Amount:</span>
-              <span className="font-['JetBrains_Mono'] font-semibold">
+              <span className="  font-semibold">
                 {formatCurrency(selectedInvoice.amount, selectedInvoice.currency)}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-muted-foreground">Invoice #:</span>
-              <span className="font-['JetBrains_Mono']">{selectedInvoice.invoice_number}</span>
+              <span className=" ">{selectedInvoice.invoice_number}</span>
             </div>
           </div>
         )}

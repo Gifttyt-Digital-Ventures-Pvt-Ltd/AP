@@ -21,7 +21,7 @@ const BankingHeader = ({
         </h1>
 
         <div className="flex flex-wrap items-center gap-4 text-sm">
-          <span className="font-['JetBrains_Mono'] bg-secondary/50 px-3 py-1 rounded border border-border">
+          <span className="  bg-secondary/50 px-3 py-1 rounded border border-border">
             {showFullAccount
               ? selectedAccount.account_number || '-'
               : `D*************${(selectedAccount.account_number || '').slice(-4)}`}

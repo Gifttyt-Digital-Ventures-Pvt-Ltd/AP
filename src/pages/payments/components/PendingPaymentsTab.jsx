@@ -35,9 +35,9 @@ const renderCurrencyTotals = (totals, className) => {
 };
 
 const basePendingPaymentTableHeader = [
-  { key: 'invoice_number', title: 'Invoice #', cellClassName: "font-['JetBrains_Mono'] font-medium" },
+  { key: 'invoice_number', title: 'Invoice #', cellClassName: "  font-medium" },
   { key: 'vendor_name', title: 'Vendor' },
-  { key: 'amount', title: 'Amount', cellClassName: "font-['JetBrains_Mono'] font-semibold" },
+  { key: 'amount', title: 'Amount', cellClassName: "  font-semibold" },
   { key: 'invoice_date', title: 'Invoice Date', cellClassName: 'text-sm text-muted-foreground' },
   { key: 'due_date', title: 'Due Date', cellClassName: 'text-sm text-muted-foreground' },
   { key: 'status', title: 'Status' },
@@ -169,7 +169,7 @@ const PendingPaymentsTab = ({
               <p className="text-sm font-medium">Total Pending Amount</p>
               {renderCurrencyTotals(
                 totalPendingByCurrency,
-                "text-2xl font-bold font-['JetBrains_Mono'] text-accent",
+                "text-2xl font-bold   text-accent",
               )}
               {showRecordPaymentSelection && selectedInvoiceIds.length > 0 && (
                 <div className="mt-1 text-sm text-muted-foreground">
@@ -179,7 +179,7 @@ const PendingPaymentsTab = ({
                     <>
                       {' '}
                       ·{' '}
-                      <span className="font-['JetBrains_Mono'] font-medium text-foreground">
+                      <span className="  font-medium text-foreground">
                         {formatCurrency(
                           selectedTotalByCurrency[0].total,
                           selectedTotalByCurrency[0].currency,
@@ -187,7 +187,7 @@ const PendingPaymentsTab = ({
                       </span>
                     </>
                   ) : (
-                    <div className="mt-1 space-y-0.5 font-['JetBrains_Mono'] font-medium text-foreground">
+                    <div className="mt-1 space-y-0.5   font-medium text-foreground">
                       {selectedTotalByCurrency.map(({ currency, total }) => (
                         <p key={currency}>{formatCurrency(total, currency)}</p>
                       ))}

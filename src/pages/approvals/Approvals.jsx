@@ -296,6 +296,7 @@ const Approvals = () => {
             getStatusBadgeClass={getStatusBadgeClass}
             formatStatus={formatStatus}
             safeFormatDate={safeFormatDate}
+            handleViewInvoice={handleViewInvoice}
           />
         </TabsContent>
 
@@ -304,6 +305,7 @@ const Approvals = () => {
             allInvoices={allInvoices}
             getStatusBadgeClass={getStatusBadgeClass}
             formatStatus={formatStatus}
+            handleViewInvoice={handleViewInvoice}
           />
         </TabsContent>
       </Tabs>

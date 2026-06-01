@@ -7,7 +7,7 @@ import { TableCell, TableRow } from '../../../components/ui/table';
 const transactionTableHeader = [
   { key: 'vendor', title: 'Vendor/Payer' },
   { key: 'date', title: 'Date', cellClassName: 'text-sm' },
-  { key: 'ref_number', title: 'Ref. No.', cellClassName: "text-sm font-['JetBrains_Mono']" },
+  { key: 'ref_number', title: 'Ref. No.', cellClassName: "text-sm  " },
   {
     key: 'withdrawal',
     title: (
@@ -17,7 +17,7 @@ const transactionTableHeader = [
       </span>
     ),
     headerClassName: 'text-left',
-    cellClassName: "text-left font-['JetBrains_Mono'] font-semibold",
+    cellClassName: "text-left   font-semibold",
   },
   {
     key: 'deposit',
@@ -28,7 +28,7 @@ const transactionTableHeader = [
       </span>
     ),
     headerClassName: 'text-left',
-    cellClassName: "text-left font-['JetBrains_Mono'] font-semibold text-emerald-600",
+    cellClassName: "text-left   font-semibold text-emerald-600",
   },
   {
     key: 'closing_balance',
@@ -39,7 +39,7 @@ const transactionTableHeader = [
       </span>
     ),
     headerClassName: 'text-left',
-    cellClassName: "text-left font-['JetBrains_Mono'] font-semibold",
+    cellClassName: "text-left   font-semibold",
   },
   { key: 'authorized_by', title: 'Authorized By' },
 ];

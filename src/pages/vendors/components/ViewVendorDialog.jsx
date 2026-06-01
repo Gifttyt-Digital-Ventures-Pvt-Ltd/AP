@@ -41,8 +41,8 @@ const VendorDetailsTab = ({ vendor }) => (
     <div>
       <h3 className="font-semibold mb-3">Tax Information</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div><p className="text-muted-foreground">PAN</p><p className="font-medium font-['JetBrains_Mono']">{vendor.pan || '-'}</p></div>
-        <div><p className="text-muted-foreground">GSTIN</p><p className="font-medium font-['JetBrains_Mono']">{vendor.gstin || '-'}</p></div>
+        <div><p className="text-muted-foreground">PAN</p><p className="font-medium  ">{vendor.pan || '-'}</p></div>
+        <div><p className="text-muted-foreground">GSTIN</p><p className="font-medium  ">{vendor.gstin || '-'}</p></div>
       </div>
     </div>
 
@@ -63,8 +63,8 @@ const VendorDetailsTab = ({ vendor }) => (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div><p className="text-muted-foreground">Bank Name</p><p className="font-medium">{vendor.bank_name || '-'}</p></div>
         <div><p className="text-muted-foreground">Account Holder Name</p><p className="font-medium">{vendor.account_holder_name || '-'}</p></div>
-        <div><p className="text-muted-foreground">Account Number</p><p className="font-medium font-['JetBrains_Mono']">{vendor.account_number || '-'}</p></div>
-        <div><p className="text-muted-foreground">IFSC</p><p className="font-medium font-['JetBrains_Mono']">{vendor.ifsc_code || '-'}</p></div>
+        <div><p className="text-muted-foreground">Account Number</p><p className="font-medium  ">{vendor.account_number || '-'}</p></div>
+        <div><p className="text-muted-foreground">IFSC</p><p className="font-medium  ">{vendor.ifsc_code || '-'}</p></div>
         <div><p className="text-muted-foreground">Branch</p><p className="font-medium">{vendor.branch || '-'}</p></div>
       </div>
     </div>

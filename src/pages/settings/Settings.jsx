@@ -417,7 +417,7 @@ const Settings = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <code className="bg-blue-100 text-blue-800 px-3 py-1.5 rounded-md font-['JetBrains_Mono'] text-sm">
+                        <code className="bg-blue-100 text-blue-800 px-3 py-1.5 rounded-md   text-sm">
                           {orgDetails.platform_email}
                         </code>
                         <Button 
@@ -721,12 +721,12 @@ const Settings = () => {
                     <p className="text-sm text-muted-foreground">
                       {account.bank_name} - {account.account_type}
                     </p>
-                    <p className="text-xs font-['JetBrains_Mono'] text-muted-foreground mt-1">
+                    <p className="text-xs   text-muted-foreground mt-1">
                       **** {account.account_number.slice(-4)}
                     </p>
                   </div>
                   <div className="flex items-center gap-4">
-                    <span className="text-sm font-['JetBrains_Mono'] font-semibold">{account.currency}</span>
+                    <span className="text-sm   font-semibold">{account.currency}</span>
                     <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                       account.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-800'
                     }`}>
