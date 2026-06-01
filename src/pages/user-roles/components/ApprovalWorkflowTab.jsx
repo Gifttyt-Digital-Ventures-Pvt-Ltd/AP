@@ -1313,7 +1313,7 @@ const ApprovalWorkflowTab = ({
               </div>
 
               <div className="flex items-start gap-4">
-                <div className="h-8 w-8 rounded-full border border-primary/20 bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold">
+                <div className="h-8 w-8 rounded-full border border-primary/20 bg-primary/10 text-primary flex items-center justify-center text-sm font-semibold shrink-0">
                   2
                 </div>
                 <p className="text-base leading-7 text-foreground">
