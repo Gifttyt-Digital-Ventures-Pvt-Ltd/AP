@@ -314,8 +314,8 @@ export const InvoiceForm = ({
           <div className="flex items-center gap-2">
             <Building2 className="h-4 w-4 text-amber-600" />
             <div>
-              <p className="font-medium text-amber-800 text-xs">Vendor not registered</p>
-              <p className="text-[11px] text-amber-600">"{formData.vendor_name}" is not in the system</p>
+              <p className="font-medium text-amber-800 text-xs">Vendor does not match</p>
+              <p className="text-[11px] text-amber-600">"{formData.vendor_name}" does not match any vendor in the system</p>
             </div>
           </div>
           <Button
@@ -835,14 +835,12 @@ export const InvoiceForm = ({
         </div>
       )}
 
-      {!hideActions && (
-        <InvoiceChecklist
-          formData={formData}
-          departmentMandatory={departmentMandatory}
-          categoryMandatory={categoryMandatory}
-          showCategoryField={showCategoryField}
-        />
-      )}
+      <InvoiceChecklist
+        formData={formData}
+        departmentMandatory={departmentMandatory}
+        categoryMandatory={categoryMandatory}
+        showCategoryField={showCategoryField}
+      />
     </div>
   );
 };

@@ -20,6 +20,22 @@ export const buildInvoiceFormChecklist = (
 ) => {
   if (!formData) return [];
 
+  const item = ({
+    label,
+    done,
+    optional = false,
+    hint,
+    hidden = false,
+    warn,
+  }) => ({
+    label,
+    done,
+    optional,
+    hint,
+    hidden,
+    warn: warn !== undefined ? warn : !optional && !done,
+  });
+
   const validLineItems = (formData.line_items || []).filter(
     (item) => item.description?.trim() && Number(item.unit_rate) > 0,
   );
@@ -29,87 +45,111 @@ export const buildInvoiceFormChecklist = (
       (item) => item.description?.trim() && Number(item.unit_rate) > 0,
     );
 
+  const hasVendorName = !!formData.vendor_name?.trim();
+  const vendorUnmatched =
+    hasVendorName &&
+    !formData.vendor_matched &&
+    !formData.vendor_request_submitted;
   const vendorResolved =
     !!formData.vendor_matched || !!formData.vendor_request_submitted;
+
+  const vendorChecklistItems = [
+    item({
+      label: "Vendor name",
+      done: hasVendorName,
+    }),
+  ];
+
+  if (vendorUnmatched) {
+    vendorChecklistItems.push(
+      item({
+        label: "Vendor does not match",
+        done: false,
+        warn: true,
+      }),
+    );
+  } else if (hasVendorName) {
+    vendorChecklistItems.push(
+      item({
+        label: "Vendor matched in system",
+        done: vendorResolved,
+        optional: true,
+        hint: "warning",
+      }),
+    );
+  }
 
   return [
     {
       group: "Vendor",
-      items: [
-        {
-          label: "Vendor name",
-          done: !!formData.vendor_name?.trim(),
-        },
-        {
-          label: "Vendor matched in system",
-          done: vendorResolved,
-          optional: true,
-          warn:
-            !!formData.vendor_name?.trim() &&
-            !formData.vendor_matched &&
-            !formData.vendor_request_submitted,
-        },
-      ],
+      items: vendorChecklistItems,
     },
     {
       group: "Invoice details",
       items: [
-        { label: "Bill number", done: !!formData.invoice_number?.trim() },
-        { label: "Billing date", done: !!formData.invoice_date },
-        { label: "Due date", done: !!formData.due_date },
-        {
+        item({ label: "Bill number", done: !!formData.invoice_number?.trim() }),
+        item({ label: "Billing date", done: !!formData.invoice_date }),
+        item({ label: "Due date", done: !!formData.due_date }),
+        item({
           label: "Currency",
           done: !!(formData.currency || DEFAULT_CURRENCY).trim(),
-        },
-        {
+        }),
+        item({
           label: "Department",
           done: !!formData.department_id,
           optional: !departmentMandatory,
-        },
-        {
+          hint: departmentMandatory ? "required" : "optional",
+        }),
+        item({
           label: "Category",
           done: !!(formData.category_id || formData.category?.id),
           optional: !categoryMandatory,
+          hint: categoryMandatory ? "required" : "optional",
           hidden: !showCategoryField,
-        },
+        }),
       ],
     },
     {
       group: "Tax & compliance",
       items: [
-        { label: "GST treatment", done: !!formData.gst_treatment },
-        {
+        item({ label: "GST treatment", done: !!formData.gst_treatment }),
+        item({
           label: isInrInvoiceCurrency(formData.currency) ? "GSTIN" : "GSTIN / Tax ID",
           done: !!formData.gstin?.trim(),
           optional:
             !isInrInvoiceCurrency(formData.currency) ||
             formData.gst_treatment === "N/A",
-        },
-        { label: "Source of supply", done: !!formData.source_of_supply },
-        { label: "Destination", done: !!formData.destination_of_supply },
+          hint:
+            isInrInvoiceCurrency(formData.currency) &&
+            formData.gst_treatment !== "N/A"
+              ? "required"
+              : "optional",
+        }),
+        item({ label: "Source of supply", done: !!formData.source_of_supply }),
+        item({ label: "Destination", done: !!formData.destination_of_supply }),
       ],
     },
     {
       group: "Source",
       items: [
-        { label: "Source", done: !!formData.source },
-        {
+        item({ label: "Source", done: !!formData.source }),
+        item({
           label: "Source email",
           done: !!formData.source_email?.trim(),
           hidden: formData.source !== "Email",
-        },
+        }),
       ],
     },
     {
       group: "Line items",
       items: [
-        {
+        item({
           label:
             validLineItems.length === 0
               ? "At least one line item required"
               : `${validLineItems.length} of ${formData.line_items.length} item${formData.line_items.length !== 1 ? "s" : ""} complete`,
           done: allLineItemsValid,
-        },
+        }),
       ],
     },
   ];
@@ -297,7 +337,7 @@ export const InvoiceChecklist = ({
                             }}
                           >
                             {item.label}
-                            {item.optional && (
+                            {item.hint ? (
                               <span
                                 style={{
                                   fontSize: "10px",
@@ -305,9 +345,9 @@ export const InvoiceChecklist = ({
                                   color: "var(--color-text-tertiary)",
                                 }}
                               >
-                                (warning)
+                                ({item.hint})
                               </span>
-                            )}
+                            ) : null}
                           </span>
                         </div>
                       ))}
