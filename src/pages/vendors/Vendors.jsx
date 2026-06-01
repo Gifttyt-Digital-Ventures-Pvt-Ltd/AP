@@ -709,7 +709,7 @@ const Vendors = () => {
 
         const className = [
           header.cellClassName,
-          header.key === 'pan' || header.key === 'gstin' ? "font-['JetBrains_Mono'] text-sm" : '',
+          header.key === 'pan' || header.key === 'gstin' ? "  text-sm" : '',
           header.key === 'actions' ? 'text-left' : '',
         ]
           .filter(Boolean)

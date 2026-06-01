@@ -7,12 +7,12 @@ import { formatCurrency } from '../../../utils/currency';
 import { formatInvoiceAmount } from '../../invoices/utils/invoiceAmounts';
 
 const releasedPaymentTableHeader = [
-  { key: 'invoice_number', title: 'Invoice #', cellClassName: "font-['JetBrains_Mono'] font-medium" },
+  { key: 'invoice_number', title: 'Invoice #', cellClassName: "  font-medium" },
   { key: 'vendor_name', title: 'Vendor' },
-  { key: 'amount', title: 'Amount', cellClassName: "font-['JetBrains_Mono'] font-semibold" },
+  { key: 'amount', title: 'Amount', cellClassName: "  font-semibold" },
   { key: 'payment_date', title: 'Payment Date', cellClassName: 'text-sm text-muted-foreground' },
   { key: 'payment_method', title: 'Method', cellClassName: 'text-sm' },
-  { key: 'reference_number', title: 'Reference', cellClassName: "text-sm font-['JetBrains_Mono']" },
+  { key: 'reference_number', title: 'Reference', cellClassName: "text-sm  " },
   { key: 'actions', title: 'Actions', headerClassName: 'text-left', cellClassName: 'text-left' },
 ];
 

@@ -16,7 +16,7 @@ const AvailableBalanceCard = ({ showAvailableBalance, setShowAvailableBalance, a
         {showAvailableBalance ? 'Hide Balance' : 'Show Balance'}
       </button>
     </div>
-    <p className="text-5xl font-bold font-['JetBrains_Mono'] text-primary">
+    <p className="text-5xl font-bold   text-primary">
       {showAvailableBalance
         ? `INR ${availableBalance.toLocaleString('en-IN', {
             minimumFractionDigits: 2,

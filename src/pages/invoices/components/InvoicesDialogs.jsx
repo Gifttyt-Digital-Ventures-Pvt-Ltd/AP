@@ -66,6 +66,8 @@ const InvoicesDialogs = (props) => {
     loadingHistory,
     canEdit,
     handleEditInvoice,
+    findVendorByName,
+    findVendorById,
     editDialogOpen,
     setEditDialogOpen,
     formData,
@@ -149,6 +151,10 @@ const InvoicesDialogs = (props) => {
         loadingHistory={loadingHistory}
         canEdit={canEdit}
         handleEditInvoice={handleEditInvoice}
+        showCategoryField={isCategoryFeatureEnabled}
+        isCategoryFeatureEnabled={isCategoryFeatureEnabled}
+        findVendorByName={findVendorByName}
+        findVendorById={findVendorById}
       />
 
       <EditDialog

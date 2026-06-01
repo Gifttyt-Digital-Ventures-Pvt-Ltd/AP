@@ -5,7 +5,7 @@ import { formatCurrency } from '../../../utils/currency';
 
 const pendingInvoicesTableHeader = [
   { key: 'vendor_name', title: 'Vendor' },
-  { key: 'amount', title: 'Amount', cellClassName: "font-['JetBrains_Mono'] font-semibold" },
+  { key: 'amount', title: 'Amount', cellClassName: "  font-semibold" },
   { key: 'status', title: 'Status' },
   { key: 'due_date', title: 'Due date', cellClassName: 'text-sm text-muted-foreground' },
 ];

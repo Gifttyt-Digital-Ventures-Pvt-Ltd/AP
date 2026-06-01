@@ -4,9 +4,9 @@ import { TableCell, TableRow } from '../../../components/ui/table';
 import { formatCurrency } from '../../../utils/currency';
 
 const allInvoicesTableHeader = [
-  { key: 'invoice_number', title: 'Invoice #', cellClassName: "font-['JetBrains_Mono'] font-medium" },
+  { key: 'invoice_number', title: 'Invoice #', cellClassName: "  font-medium" },
   { key: 'vendor_name', title: 'Vendor' },
-  { key: 'amount', title: 'Amount', cellClassName: "font-['JetBrains_Mono'] font-semibold" },
+  { key: 'amount', title: 'Amount', cellClassName: "  font-semibold" },
   { key: 'status', title: 'Status' },
   { key: 'created_by_name', title: 'Created By', cellClassName: 'text-sm text-muted-foreground' },
 ];
