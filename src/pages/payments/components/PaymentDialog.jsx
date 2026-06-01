@@ -80,7 +80,7 @@ const PaymentDialog = ({
             data-testid="payment-method-select"
           >
             <option value="Bank Transfer">Bank Transfer</option>
-            <option value="Check">Check</option>
+            <option value="Cheque">Cheque</option>
             <option value="Cash">Cash</option>
             <option value="Credit Card">Credit Card</option>
           </select>
