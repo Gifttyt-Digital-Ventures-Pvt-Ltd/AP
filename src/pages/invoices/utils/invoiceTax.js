@@ -70,22 +70,32 @@ export const resolveInrTaxLabel = (item, taxesRaw = []) => {
   if (item?.tax) return item.tax;
 
   const rate = Number(item?.taxRate ?? item?.tax_rate ?? 0);
-  const hasAnyTaxData =
-    rate > 0 ||
-    taxesRaw.some(
-      (entry) =>
-        Number(entry?.amount ?? 0) > 0 ||
-        Number(entry?.taxRate ?? entry?.tax_rate ?? 0) > 0,
-    );
-
-  if (!hasAnyTaxData) return "Exempt";
-  if (!rate) return DEFAULT_INR_TAX;
-
-  const hasIgst = taxesRaw.some((entry) =>
-    String(entry?.name || "").toUpperCase().includes("IGST"),
+  const hasLineRate = rate > 0;
+  const totalTaxAmount = taxesRaw.reduce(
+    (sum, entry) => sum + (Number(entry?.amount ?? 0) || 0),
+    0,
   );
-  if (hasIgst) return `IGST ${rate}%`;
-  return `CGST + SGST ${rate}%`;
+
+  if (!hasLineRate && totalTaxAmount <= 0) return "Exempt";
+
+  const igstAmount = taxesRaw
+    .filter((entry) => /IGST/i.test(String(entry?.name ?? "")))
+    .reduce((sum, entry) => sum + (Number(entry?.amount ?? 0) || 0), 0);
+  const cgstSgstAmount = taxesRaw
+    .filter((entry) => /CGST|SGST/i.test(String(entry?.name ?? "")))
+    .reduce((sum, entry) => sum + (Number(entry?.amount ?? 0) || 0), 0);
+
+  if (igstAmount > 0 && cgstSgstAmount === 0) {
+    return rate > 0 ? `IGST ${rate}%` : DEFAULT_INR_TAX;
+  }
+
+  if (cgstSgstAmount > 0 || hasLineRate) {
+    const combinedRate = rate > 0 ? rate * 2 : 18;
+    return `CGST + SGST ${combinedRate}%`;
+  }
+
+  if (!rate) return DEFAULT_INR_TAX;
+  return `IGST ${rate}%`;
 };
 
 export const resolveScannedLineItemPricing = (item = {}) => {

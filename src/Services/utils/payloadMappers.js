@@ -382,6 +382,23 @@ export const buildCreateInvoiceRequestBody = (invoice = {}, options = {}) => {
       invoice.approvalWorkflowName ??
       "",
     ...(category ? { category, category_id: category.id, category_name: category.name } : {}),
+    gst_treatment: invoice.gst_treatment ?? invoice.gstTreatment ?? "",
+    gstin:
+      invoice.gstin ??
+      invoice.vendor_gstin ??
+      invoice.vendorGstin ??
+      "",
+    source_of_supply: invoice.source_of_supply ?? invoice.sourceOfSupply ?? "",
+    destination_of_supply:
+      invoice.destination_of_supply ?? invoice.destinationOfSupply ?? "",
+    billing_address: invoice.billing_address ?? invoice.billingAddress ?? "",
+    shipping_address: invoice.shipping_address ?? invoice.shippingAddress ?? "",
+    discounts_level: invoice.discounts_level ?? invoice.discountsLevel ?? "",
+    invoice_discount: Number(
+      invoice.invoice_discount ?? invoice.invoiceDiscount ?? 0,
+    ),
+    invoice_discount_type:
+      invoice.invoice_discount_type ?? invoice.invoiceDiscountType ?? "%",
   };
 };
 
@@ -497,6 +514,15 @@ export const toInvoiceApiPayload = (invoice = {}) => {
     ),
     departmentName: invoice.department_name ?? invoice.departmentName ?? department_name,
     category: categoryPayload ?? category,
+    gstTreatment: invoice.gst_treatment ?? invoice.gstTreatment,
+    gstin: invoice.gstin ?? invoice.vendor_gstin ?? invoice.vendorGstin,
+    sourceOfSupply: invoice.source_of_supply ?? invoice.sourceOfSupply,
+    destinationOfSupply: invoice.destination_of_supply ?? invoice.destinationOfSupply,
+    billingAddress: invoice.billing_address ?? invoice.billingAddress,
+    shippingAddress: invoice.shipping_address ?? invoice.shippingAddress,
+    discountsLevel: invoice.discounts_level ?? invoice.discountsLevel,
+    invoiceDiscount: invoice.invoice_discount ?? invoice.invoiceDiscount,
+    invoiceDiscountType: invoice.invoice_discount_type ?? invoice.invoiceDiscountType,
   };
 };
 

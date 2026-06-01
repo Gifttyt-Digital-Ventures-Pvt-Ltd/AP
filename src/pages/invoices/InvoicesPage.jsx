@@ -471,9 +471,11 @@ const InvoicesPage = () => {
 
     const lineItemsRaw = Array.isArray(scanResponse?.line_items)
       ? scanResponse.line_items
-      : Array.isArray(scanResponse?.items)
-        ? scanResponse.items
-        : [];
+      : Array.isArray(scanResponse?.lineItems)
+        ? scanResponse.lineItems
+        : Array.isArray(scanResponse?.items)
+          ? scanResponse.items
+          : [];
     const taxesRaw = Array.isArray(scanResponse?.taxes) ? scanResponse.taxes : [];
     const invoiceCurrency = normalizeCurrencyCode(scanResponse?.currency) || DEFAULT_CURRENCY;
 
@@ -501,10 +503,23 @@ const InvoicesPage = () => {
       scanResponse?.address ??
       '';
 
+    const vendorGstin =
+      scanResponse?.vendor_gstin ??
+      scanResponse?.vendorGstin ??
+      scanResponse?.gstin ??
+      '';
+    const placeOfSupply =
+      scanResponse?.place_of_supply ??
+      scanResponse?.placeOfSupply ??
+      scanResponse?.source_of_supply ??
+      scanResponse?.sourceOfSupply ??
+      '';
+
     return {
       vendor_name: scanResponse?.vendor_name ?? scanResponse?.vendorName ?? scanResponse?.merchant ?? '',
-      vendor_gstin: scanResponse?.vendor_gstin ?? scanResponse?.vendorGstin ?? '',
+      vendor_gstin: vendorGstin,
       billing_gstin: scanResponse?.billingGstin ?? scanResponse?.billing_gstin ?? '',
+      gstin: vendorGstin,
       vendor_address: vendorAddress,
       billing_address:
         scanResponse?.billingAddress ??
@@ -514,6 +529,27 @@ const InvoicesPage = () => {
         scanResponse?.shippingAddress ??
         scanResponse?.shipping_address ??
         '',
+      gst_treatment: scanResponse?.gst_treatment ?? scanResponse?.gstTreatment ?? '',
+      source_of_supply:
+        scanResponse?.source_of_supply ??
+        scanResponse?.sourceOfSupply ??
+        placeOfSupply,
+      destination_of_supply:
+        scanResponse?.destination_of_supply ??
+        scanResponse?.destinationOfSupply ??
+        placeOfSupply,
+      place_of_supply: placeOfSupply,
+      discounts_level:
+        scanResponse?.discounts_level ??
+        scanResponse?.discountsLevel ??
+        'At Line Item Level',
+      invoice_discount:
+        Number(scanResponse?.invoice_discount ?? scanResponse?.invoiceDiscount ?? 0) || 0,
+      invoice_discount_type:
+        scanResponse?.invoice_discount_type ??
+        scanResponse?.invoiceDiscountType ??
+        '%',
+      source: scanResponse?.source ?? 'Upload',
       invoice_number: scanResponse?.invoice_number ?? scanResponse?.invoiceNumber ?? '',
       invoice_date:
         toDateOnly(scanResponse?.invoice_date ?? scanResponse?.invoiceDate ?? scanResponse?.datetime) ||
@@ -633,18 +669,41 @@ const InvoicesPage = () => {
       gstin:
         extractedData?.vendor_gstin ||
         extractedData?.vendorGstin ||
+        extractedData?.gstin ||
         extractedData?.billing_gstin ||
         extractedData?.billingGstin ||
-        extractedData?.gstin ||
         matchedVendor?.gstin ||
         '',
-      source_of_supply: extractedData?.source_of_supply || extractedData?.place_of_supply || '',
-      destination_of_supply: extractedData?.destination_of_supply || extractedData?.place_of_supply || '',
-      location: extractedData?.location || extractedData?.place_of_supply || '',
+      source_of_supply:
+        extractedData?.source_of_supply ||
+        extractedData?.sourceOfSupply ||
+        extractedData?.place_of_supply ||
+        extractedData?.placeOfSupply ||
+        '',
+      destination_of_supply:
+        extractedData?.destination_of_supply ||
+        extractedData?.destinationOfSupply ||
+        extractedData?.place_of_supply ||
+        extractedData?.placeOfSupply ||
+        '',
+      location:
+        extractedData?.location ||
+        extractedData?.place_of_supply ||
+        extractedData?.placeOfSupply ||
+        '',
       reverse_charges: extractedData?.reverse_charges || 'Not Applicable',
-      discounts_level: extractedData?.discounts_level || 'At Line Item Level',
-      invoice_discount: extractedData?.invoice_discount || 0,
-      invoice_discount_type: extractedData?.invoice_discount_type || '%',
+      discounts_level:
+        extractedData?.discounts_level ||
+        extractedData?.discountsLevel ||
+        'At Line Item Level',
+      invoice_discount:
+        extractedData?.invoice_discount ??
+        extractedData?.invoiceDiscount ??
+        0,
+      invoice_discount_type:
+        extractedData?.invoice_discount_type ||
+        extractedData?.invoiceDiscountType ||
+        '%',
       source: extractedData?.source || 'Upload',
       source_email: '',
       line_items: extractedData?.line_items?.length > 0
@@ -1376,7 +1435,7 @@ const InvoicesPage = () => {
       toast.error('Vendor name is required');
       return;
     }
-    if (!validateMandatoryPayload(invoicePayload)) return;
+    if (!validateMandatoryPayload(formData)) return;
 
     try {
       if (uploadedFile) {
