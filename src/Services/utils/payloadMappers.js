@@ -78,6 +78,7 @@ export const toVendorUiPayload = (vendor = {}) => ({
   created_by_name: vendor.created_by_name ?? vendor.createdByName,
   created_by_id: vendor.created_by_id ?? vendor.createdById,
   created_by: vendor.created_by ?? vendor.createdBy,
+  createdAt: vendor.createdAt ?? vendor.created_at ?? null,
   requested_by_email: vendor.requested_by_email ?? vendor.requestedByEmail,
   requested_by: vendor.requested_by ?? vendor.requestedBy,
 });

@@ -353,6 +353,9 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
     invoiceTax: pickInvoiceField(invoice, "invoiceTax", "invoice_tax", ""),
     invoiceTaxName: pickInvoiceField(invoice, "invoiceTaxName", "invoice_tax_name", ""),
     invoiceTaxRate: pickInvoiceField(invoice, "invoiceTaxRate", "invoice_tax_rate", ""),
+    ...(invoice.status != null && invoice.status !== ""
+      ? { status: invoice.status }
+      : {}),
     ...(invoice.action != null && invoice.action !== ""
       ? { action: invoice.action }
       : {}),

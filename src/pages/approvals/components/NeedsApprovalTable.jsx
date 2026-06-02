@@ -83,7 +83,7 @@ const NeedsApprovalTable = ({
               break;
             case 'action':
               value = (
-                <div className="flex justify-end gap-2">
+                <div className="flex justify-start gap-2">
                   <Button
                     variant="ghost"
                     size="sm"

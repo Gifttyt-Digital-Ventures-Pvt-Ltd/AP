@@ -4,6 +4,9 @@ export const NEEDS_CORRECTION_ACTION = "Needs Correction";
 export const LEGACY_SENT_BACK_ACTION = "Sent Back";
 export const PAID_STATUS = "Paid";
 export const LEGACY_AMOUNT_RELEASED_STATUS = "Amount Released";
+export const SAVED_STATUS = "Saved";
+export const PENDING_CHECKER_STATUS = "Pending Checker";
+export const VENDOR_APPROVAL_PENDING_STATUS = "Vendor Approval Pending";
 
 const TITLE_CASE_STATUS_ALIASES = {
   PAID: PAID_STATUS,
@@ -73,6 +76,22 @@ export const normalizeApprovalAction = (action) => {
 };
 
 export const formatWorkflowStatus = (status) => normalizeWorkflowStatus(status);
+
+export const resolveInitialInvoiceStatus = ({
+  vendorId,
+  vendorRequestSubmitted = false,
+  findVendorById,
+} = {}) => {
+  if (vendorRequestSubmitted) return VENDOR_APPROVAL_PENDING_STATUS;
+  if (!vendorId) return VENDOR_APPROVAL_PENDING_STATUS;
+
+  const vendor = findVendorById?.(vendorId);
+  if (vendor?.isPendingApproval) return VENDOR_APPROVAL_PENDING_STATUS;
+
+  return PENDING_CHECKER_STATUS;
+};
+
+export const resolveBulkCreateInvoiceStatus = () => SAVED_STATUS;
 
 export const emailsMatch = (left, right) => {
   if (!left || !right) return false;
