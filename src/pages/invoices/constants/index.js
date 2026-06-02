@@ -72,3 +72,12 @@ export const LEDGER_OPTIONS = [
   "Legal & Professional",
   "Maintenance",
 ];
+
+export const INVOICE_LIST_FILTERS = [
+  { value: "all", label: "All" },
+  { value: "saved", label: "Saved" },
+  { value: "pending", label: "Pending" },
+  { value: "approved", label: "Approved" },
+];
+
+export const INVOICE_LIST_PAGE_SIZE = 20;

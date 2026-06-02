@@ -35,11 +35,11 @@ const renderCurrencyTotals = (totals, className) => {
 };
 
 const basePendingPaymentTableHeader = [
-  { key: 'invoice_number', title: 'Invoice #', cellClassName: "  font-medium" },
-  { key: 'vendor_name', title: 'Vendor' },
+  { key: 'invoiceNumber', title: 'Invoice #', cellClassName: "  font-medium" },
+  { key: 'vendorName', title: 'Vendor' },
   { key: 'amount', title: 'Amount', cellClassName: "  font-semibold" },
-  { key: 'invoice_date', title: 'Invoice Date', cellClassName: 'text-sm text-muted-foreground' },
-  { key: 'due_date', title: 'Due Date', cellClassName: 'text-sm text-muted-foreground' },
+  { key: 'invoiceDate', title: 'Invoice Date', cellClassName: 'text-sm text-muted-foreground' },
+  { key: 'dueDate', title: 'Due Date', cellClassName: 'text-sm text-muted-foreground' },
   { key: 'status', title: 'Status' },
   { key: 'actions', title: 'Actions', headerClassName: 'text-left', cellClassName: 'text-left' },
 ];
@@ -86,7 +86,7 @@ const PendingPaymentsTab = ({
         let value;
 
         switch (header.key) {
-          case 'invoice_number':
+          case 'invoiceNumber':
             value = showRecordPaymentSelection ? (
               <div className="flex items-center gap-2">
                 <div onClick={(event) => event.stopPropagation()}>
@@ -96,20 +96,20 @@ const PendingPaymentsTab = ({
                     data-testid={`pending-invoice-select-${invoice.id}`}
                   />
                 </div>
-                <span>{invoice.invoice_number || '-'}</span>
+                <span>{invoice.invoiceNumber || '-'}</span>
               </div>
             ) : (
-              invoice.invoice_number || '-'
+              invoice.invoiceNumber || '-'
             );
             break;
           case 'amount':
             value = formatInvoiceAmount(invoice, invoice.amount || 0);
             break;
-          case 'invoice_date':
-            value = safeFormatDate(invoice.invoice_date);
+          case 'invoiceDate':
+            value = safeFormatDate(invoice.invoiceDate);
             break;
-          case 'due_date':
-            value = safeFormatDate(invoice.due_date);
+          case 'dueDate':
+            value = safeFormatDate(invoice.dueDate);
             break;
           case 'status':
             value = (

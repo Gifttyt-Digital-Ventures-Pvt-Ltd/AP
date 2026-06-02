@@ -101,7 +101,7 @@ const VendorDetailsDialog = ({
       key: "address_line2",
       label: "Address Line 2",
       placeholder: "Apartment, suite, etc.",
-      required: requireFullMandatory,
+      required: false,
       colSpan: "col-span-2",
     },
     {

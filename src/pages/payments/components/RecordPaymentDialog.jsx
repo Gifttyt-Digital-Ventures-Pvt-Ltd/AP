@@ -43,7 +43,7 @@ const RecordPaymentDialog = ({
                 <ul className="space-y-1">
                   {selectedInvoices.map((invoice) => (
                     <li key={invoice.id} className="flex justify-between gap-2">
-                      <span className="font-medium">{invoice.invoice_number || '-'}</span>
+                      <span className="font-medium">{invoice.invoiceNumber || '-'}</span>
                       <span className="text-muted-foreground shrink-0">
                         ₹{Number(invoice.amount || 0).toLocaleString('en-IN')}
                       </span>
@@ -64,9 +64,9 @@ const RecordPaymentDialog = ({
             <Input
               id="record-payment-date"
               type="date"
-              value={formData.payment_date}
+              value={formData.paymentDate}
               max={maxPaymentDate}
-              onChange={(e) => setFormData((prev) => ({ ...prev, payment_date: e.target.value }))}
+              onChange={(e) => setFormData((prev) => ({ ...prev, paymentDate: e.target.value }))}
               required
               data-testid="record-payment-date-input"
             />
@@ -82,7 +82,7 @@ const RecordPaymentDialog = ({
               data-testid="record-payment-method-select"
             >
               <option value="Bank Transfer">Bank Transfer</option>
-              <option value="Check">Check</option>
+              <option value="Cheque">Cheque</option>
               <option value="Cash">Cash</option>
               <option value="Credit Card">Credit Card</option>
               <option value="NEFT">NEFT</option>
@@ -90,6 +90,19 @@ const RecordPaymentDialog = ({
               <option value="IMPS">IMPS</option>
               <option value="UPI">UPI</option>
             </select>
+          </div>
+
+          <div>
+            <Label htmlFor="record-payment-reference">Reference Number</Label>
+            <Input
+              id="record-payment-reference"
+              value={formData.reference_number || ''}
+              onChange={(e) =>
+                setFormData((prev) => ({ ...prev, reference_number: e.target.value }))
+              }
+              placeholder="UTR / transaction reference"
+              data-testid="record-payment-reference-input"
+            />
           </div>
 
           <Button

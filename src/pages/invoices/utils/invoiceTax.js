@@ -2,6 +2,8 @@ import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../../utils/currency
 import { parseNumericInput } from "./numericInput";
 
 export const DEFAULT_INR_TAX = "CGST + SGST 18%";
+export const LINE_ITEM_LEVEL = "At Line Item Level";
+export const INVOICE_LEVEL = "At Invoice Level";
 
 export const isInrInvoiceCurrency = (currency) =>
   normalizeCurrencyCode(currency) === DEFAULT_CURRENCY;
@@ -34,8 +36,8 @@ export const applyForeignLineItemTax = (item, taxName, taxRate) => {
   const normalizedName = String(taxName || "").trim();
   return {
     ...item,
-    tax_name: normalizedName,
-    tax_rate: normalizedRate,
+    taxName: normalizedName,
+    taxRate: normalizedRate,
     tax: formatForeignTaxLabel(normalizedName, normalizedRate),
   };
 };
@@ -43,8 +45,8 @@ export const applyForeignLineItemTax = (item, taxName, taxRate) => {
 export const applyInrLineItemTax = (item, tax = DEFAULT_INR_TAX) => ({
   ...item,
   tax,
-  tax_name: "",
-  tax_rate: "",
+  taxName: "",
+  taxRate: "",
 });
 
 export const createDefaultLineItem = (currency = DEFAULT_CURRENCY) => {
@@ -52,24 +54,24 @@ export const createDefaultLineItem = (currency = DEFAULT_CURRENCY) => {
     description: "",
     ledger: "Cloud Services",
     quantity: 1,
-    unit_rate: 0,
+    unitRate: 0,
     discount: 0,
-    discount_type: "%",
-    hsn_sac: "",
-    eligible_for_itc: true,
+    discountType: "%",
+    hsnSac: "",
+    eligibleForItc: true,
   };
 
   if (isInrInvoiceCurrency(currency)) {
-    return { ...base, tax: DEFAULT_INR_TAX, line_total: 0 };
+    return { ...base, tax: DEFAULT_INR_TAX, lineTotal: 0 };
   }
 
-  return { ...base, tax_name: "", tax_rate: "", tax: "", line_total: 0 };
+  return { ...base, taxName: "", taxRate: "", tax: "", lineTotal: 0 };
 };
 
 export const resolveInrTaxLabel = (item, taxesRaw = []) => {
   if (item?.tax) return item.tax;
 
-  const rate = Number(item?.taxRate ?? item?.tax_rate ?? 0);
+  const rate = Number(item?.taxRate ?? item?.taxRate ?? 0);
   const hasLineRate = rate > 0;
   const totalTaxAmount = taxesRaw.reduce(
     (sum, entry) => sum + (Number(entry?.amount ?? 0) || 0),
@@ -101,37 +103,37 @@ export const resolveInrTaxLabel = (item, taxesRaw = []) => {
 export const resolveScannedLineItemPricing = (item = {}) => {
   const quantity = Number(item?.quantity ?? item?.qty ?? 1) || 1;
   const listUnitPrice =
-    Number(item?.unit_price ?? item?.unitPrice ?? item?.price ?? 0) || 0;
+    Number(item?.unitPrice ?? item?.unitPrice ?? item?.price ?? 0) || 0;
   const lineTotal = Number(
-    item?.lineTotal ?? item?.line_total ?? item?.amount ?? 0,
+    item?.lineTotal ?? item?.lineTotal ?? item?.amount ?? 0,
   );
   const amount = lineTotal > 0 ? lineTotal : quantity * listUnitPrice;
   const effectiveUnitPrice = quantity > 0 ? amount / quantity : listUnitPrice;
 
   return {
     quantity,
-    unit_price: effectiveUnitPrice,
+    unitPrice: effectiveUnitPrice,
     amount,
-    line_total: amount,
-    list_unit_price: listUnitPrice,
-    list_amount: quantity * listUnitPrice,
+    lineTotal: amount,
+    listUnitPrice: listUnitPrice,
+    listAmount: quantity * listUnitPrice,
   };
 };
 
 export const resolveScannedInvoiceTaxSummary = (scanResponse = {}, taxesRaw = []) => {
   const totalTaxAmount = Number(
     scanResponse?.totalTaxAmount ??
-      scanResponse?.total_tax_amount ??
+      scanResponse?.totalTaxAmount ??
       taxesRaw.reduce((sum, entry) => sum + (Number(entry?.amount ?? 0) || 0), 0),
   );
 
   const primaryTax = taxesRaw[0] ?? {};
   return {
-    invoice_subtotal: Number(scanResponse?.subtotal ?? 0) || 0,
-    invoice_tax_amount: Number.isFinite(totalTaxAmount) ? totalTaxAmount : 0,
-    invoice_tax_name: primaryTax?.name ?? "",
-    invoice_tax_rate: Number(primaryTax?.taxRate ?? primaryTax?.tax_rate ?? 0) || 0,
-    invoice_total: Number(scanResponse?.total ?? 0) || 0,
+    invoiceSubtotal: Number(scanResponse?.subtotal ?? 0) || 0,
+    invoiceTaxAmount: Number.isFinite(totalTaxAmount) ? totalTaxAmount : 0,
+    invoiceTaxName: primaryTax?.name ?? "",
+    invoiceTaxRate: Number(primaryTax?.taxRate ?? primaryTax?.taxRate ?? 0) || 0,
+    invoiceTotal: Number(scanResponse?.total ?? 0) || 0,
   };
 };
 
@@ -140,21 +142,21 @@ export const resolveScannedLineItemTax = (item, taxesRaw = [], currency = DEFAUL
     return { tax: resolveInrTaxLabel(item, taxesRaw) };
   }
 
-  const rate = Number(item?.taxRate ?? item?.tax_rate ?? 0) || 0;
+  const rate = Number(item?.taxRate ?? item?.taxRate ?? 0) || 0;
   if (rate <= 0) {
     return {
-      tax_name: "",
-      tax_rate: 0,
+      taxName: "",
+      taxRate: 0,
       tax: "Exempt",
     };
   }
 
-  let taxName = item?.taxName ?? item?.tax_name ?? "";
+  let taxName = item?.taxName ?? item?.taxName ?? "";
 
   if (!taxName && taxesRaw.length) {
     const match =
       taxesRaw.find(
-        (entry) => Number(entry?.taxRate ?? entry?.tax_rate ?? 0) === rate,
+        (entry) => Number(entry?.taxRate ?? entry?.taxRate ?? 0) === rate,
       ) || taxesRaw[0];
     taxName = match?.name ?? "";
   }
@@ -162,16 +164,16 @@ export const resolveScannedLineItemTax = (item, taxesRaw = [], currency = DEFAUL
   if (!taxName) taxName = "Tax";
 
   return {
-    tax_name: taxName,
-    tax_rate: rate,
+    taxName: taxName,
+    taxRate: rate,
     tax: formatForeignTaxLabel(taxName, rate),
   };
 };
 
 export const mapExtractedLineItemToForm = (item = {}, { useInrTax = true } = {}) => {
   const quantity = Number(item.quantity || 1);
-  const lineTotal = Number(item.line_total ?? item.amount ?? item.lineTotal ?? 0);
-  const unitPrice = Number(item.unit_price ?? item.unit_rate ?? item.unitPrice ?? 0);
+  const lineTotal = Number(item.lineTotal ?? item.amount ?? item.lineTotal ?? 0);
+  const unitPrice = Number(item.unitPrice ?? item.unitRate ?? item.unitPrice ?? 0);
   const unitRate =
     quantity > 0 && lineTotal > 0 ? lineTotal / quantity : unitPrice;
   const resolvedLineTotal = lineTotal > 0 ? lineTotal : quantity * unitRate;
@@ -180,26 +182,26 @@ export const mapExtractedLineItemToForm = (item = {}, { useInrTax = true } = {})
     description: item.description || "",
     ledger: item.ledger || "Cloud Services",
     tax: item.tax || (useInrTax ? DEFAULT_INR_TAX : ""),
-    tax_name: item.tax_name || "",
-    tax_rate: item.tax_rate ?? "",
+    taxName: item.taxName || "",
+    taxRate: item.taxRate ?? "",
     quantity,
-    unit_rate: unitRate,
-    line_total: resolvedLineTotal,
+    unitRate: unitRate,
+    lineTotal: resolvedLineTotal,
     discount: item.discount || 0,
-    discount_type: item.discount_type || "%",
-    hsn_sac: item.hsn_sac || "",
-    eligible_for_itc: item.eligible_for_itc ?? true,
+    discountType: item.discountType || "%",
+    hsnSac: item.hsnSac || "",
+    eligibleForItc: item.eligibleForItc ?? true,
   };
 };
 
 export const resolveLineItemSubtotal = (item = {}) => {
-  const lineTotal = parseNumericInput(item.line_total ?? item.amount, 0);
+  const lineTotal = parseNumericInput(item.lineTotal ?? item.amount, 0);
   const base =
     lineTotal > 0
       ? lineTotal
-      : parseNumericInput(item.quantity, 0) * parseNumericInput(item.unit_rate, 0);
+      : parseNumericInput(item.quantity, 0) * parseNumericInput(item.unitRate, 0);
 
-  if (item.discount_type === "%") {
+  if (item.discountType === "%") {
     return base - (base * parseNumericInput(item.discount, 0)) / 100;
   }
   return base - parseNumericInput(item.discount, 0);
@@ -207,10 +209,10 @@ export const resolveLineItemSubtotal = (item = {}) => {
 
 export const syncLineItemLineTotal = (item = {}) => {
   const quantity = parseNumericInput(item.quantity, 0);
-  const unitRate = parseNumericInput(item.unit_rate, 0);
+  const unitRate = parseNumericInput(item.unitRate, 0);
   return {
     ...item,
-    line_total: quantity * unitRate,
+    lineTotal: quantity * unitRate,
   };
 };
 
@@ -222,7 +224,9 @@ export const calculateInvoiceTotals = ({
   invoiceTaxAmount,
   invoiceTaxName = "Tax",
   invoiceTaxRate,
-  discountsLevel = "At Line Item Level",
+  invoiceTax,
+  taxesLevel = LINE_ITEM_LEVEL,
+  discountsLevel = LINE_ITEM_LEVEL,
   invoiceDiscount = 0,
   invoiceDiscountType = "%",
 }) => {
@@ -232,13 +236,15 @@ export const calculateInvoiceTotals = ({
   let igst = 0;
   const foreignTaxMap = new Map();
 
+  const invoiceLevelTaxEnabled = taxesLevel === INVOICE_LEVEL;
+
   lineItems.forEach((item) => {
     const itemSubtotal = calculateLineItemSubtotal
       ? calculateLineItemSubtotal(item)
       : resolveLineItemSubtotal(item);
     subTotal += itemSubtotal;
 
-    if (isInrInvoiceCurrency(currency)) {
+    if (isInrInvoiceCurrency(currency) && !invoiceLevelTaxEnabled) {
       const taxRate = taxRates.find((entry) => entry.value === item.tax);
       if (taxRate) {
         if (taxRate.cgst) cgst += (itemSubtotal * taxRate.cgst) / 100;
@@ -250,7 +256,7 @@ export const calculateInvoiceTotals = ({
 
   const subTotalBeforeDiscount = subTotal;
   const discountValue = parseNumericInput(invoiceDiscount, 0);
-  const invoiceLevelDiscountEnabled = discountsLevel === "At Invoice Level";
+  const invoiceLevelDiscountEnabled = discountsLevel === INVOICE_LEVEL;
   const invoiceDiscountAmount = invoiceLevelDiscountEnabled
     ? invoiceDiscountType === "%"
       ? (subTotal * discountValue) / 100
@@ -272,12 +278,29 @@ export const calculateInvoiceTotals = ({
     igst *= discountFactor;
   }
 
+  if (isInrInvoiceCurrency(currency) && invoiceLevelTaxEnabled) {
+    const taxRate = taxRates.find((entry) => entry.value === invoiceTax);
+    if (taxRate) {
+      if (taxRate.cgst) cgst = (subTotal * taxRate.cgst) / 100;
+      if (taxRate.sgst) sgst = (subTotal * taxRate.sgst) / 100;
+      if (taxRate.igst) igst = (subTotal * taxRate.igst) / 100;
+    }
+  }
+
   let foreignTaxes = [];
   let foreignTax = 0;
 
   if (!isInrInvoiceCurrency(currency)) {
     const parsedInvoiceTaxAmount = Number(invoiceTaxAmount);
-    if (Number.isFinite(parsedInvoiceTaxAmount) && parsedInvoiceTaxAmount > 0) {
+    if (invoiceLevelTaxEnabled) {
+      const rate = Number(invoiceTaxRate) || 0;
+      const name = invoiceTaxName || "Tax";
+      foreignTax = rate > 0 ? (subTotal * rate) / 100 : 0;
+      foreignTaxes =
+        foreignTax > 0
+          ? [{ name, rate, amount: foreignTax }]
+          : [];
+    } else if (Number.isFinite(parsedInvoiceTaxAmount) && parsedInvoiceTaxAmount > 0) {
       foreignTax = parsedInvoiceTaxAmount;
       foreignTaxes = [
         {
@@ -291,11 +314,11 @@ export const calculateInvoiceTotals = ({
         const itemSubtotal = calculateLineItemSubtotal
           ? calculateLineItemSubtotal(item)
           : resolveLineItemSubtotal(item);
-        const rate = Number(item?.tax_rate ?? parseTaxRateFromLabel(item?.tax)) || 0;
+        const rate = Number(item?.taxRate ?? parseTaxRateFromLabel(item?.tax)) || 0;
         if (rate <= 0) return;
 
         const taxName = String(
-          item?.tax_name || parseTaxNameFromLabel(item?.tax) || "Tax",
+          item?.taxName || parseTaxNameFromLabel(item?.tax) || "Tax",
         ).trim();
         const taxAmount = (itemSubtotal * rate) / 100;
         const key = `${taxName}::${rate}`;
@@ -307,8 +330,7 @@ export const calculateInvoiceTotals = ({
       foreignTaxes = Array.from(foreignTaxMap.values());
       foreignTax = foreignTaxes.reduce((sum, entry) => sum + entry.amount, 0);
     }
-
-    if (invoiceLevelDiscountEnabled) {
+    if (invoiceLevelDiscountEnabled && !invoiceLevelTaxEnabled) {
       foreignTaxes = foreignTaxes.map((entry) => ({
         ...entry,
         amount: entry.amount * discountFactor,
@@ -346,8 +368,8 @@ export const remapLineItemsForCurrencyChange = (lineItems, nextCurrency) => {
 
     return applyForeignLineItemTax(
       item,
-      item.tax_name || parseTaxNameFromLabel(item.tax),
-      item.tax_rate ?? parseTaxRateFromLabel(item.tax),
+      item.taxName || parseTaxNameFromLabel(item.tax),
+      item.taxRate ?? parseTaxRateFromLabel(item.tax),
     );
   });
 };

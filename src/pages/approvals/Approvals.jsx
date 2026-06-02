@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useGetPendingApprovalsQuery } from '../../Services/apis/approvalsPaymentsBankingApi';
 import {
   useGetInvoicesQuery,
@@ -7,18 +7,21 @@ import {
   useCheckInvoiceMutation,
   useLazyGetInvoiceHistoryQuery,
 } from '../../Services/apis/invoicesVendorsApi';
-import { toInvoiceUiPayload } from '../../Services/utils/payloadMappers';
+import { toInvoiceUiPayload, EMPTY_INVOICE_LIST_RESPONSE, getInvoiceListItems } from '../../Services/utils/payloadMappers';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useCurrencyFilter } from '../../hooks/useCurrencyFilter';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import CurrencySelector from '../../components/common/CurrencySelector';
 import { CURRENCY_SCREENS } from '../../utils/currency';
+import { INVOICE_LIST_PAGE_SIZE } from '../invoices/constants';
 import NeedsApprovalTable from './components/NeedsApprovalTable';
 import PendingInvoicesTable from './components/PendingInvoicesTable';
 import AllInvoicesTable from './components/AllInvoicesTable';
+import InvoiceHistorySheet from './components/InvoiceHistorySheet';
 import ApprovalDialog from './components/ApprovalDialog';
 import ViewDialog from '../invoices/components/ViewDialog';
 import { InvoicePdfPreview } from '../invoices/components/InvoicePdfPreview';
@@ -56,12 +59,35 @@ const Approvals = () => {
     selectedCurrency,
     setSelectedCurrency,
     queryArgs: approvalQueryArgs,
+    currencyParam,
   } = useCurrencyFilter(currencyScreen);
+  const [allTabSearchTerm, setAllTabSearchTerm] = useState('');
+  const [allTabPageOffset, setAllTabPageOffset] = useState(0);
+  const debouncedAllTabSearch = useDebouncedValue(allTabSearchTerm.trim(), 300);
+
+  useEffect(() => {
+    setAllTabPageOffset(0);
+  }, [debouncedAllTabSearch, currencyParam]);
+
+  const allInvoicesQueryArgs = useMemo(
+    () => ({
+      ...approvalQueryArgs,
+      limit: INVOICE_LIST_PAGE_SIZE,
+      offset: allTabPageOffset,
+      ...(debouncedAllTabSearch ? { search: debouncedAllTabSearch } : {}),
+    }),
+    [approvalQueryArgs, allTabPageOffset, debouncedAllTabSearch],
+  );
+
   const { data: pendingApprovalsData = [], refetch: refetchPendingApprovals } =
     useGetPendingApprovalsQuery(approvalQueryArgs);
   const { data: pendingCheckerData = [], refetch: refetchPendingChecker } =
     useGetPendingCheckerInvoicesQuery(approvalQueryArgs);
-  const { data: allInvoicesData = [], refetch: refetchInvoices } = useGetInvoicesQuery(approvalQueryArgs);
+  const {
+    data: allInvoicesListData = EMPTY_INVOICE_LIST_RESPONSE,
+    isFetching: allInvoicesFetching,
+    refetch: refetchInvoices,
+  } = useGetInvoicesQuery(allInvoicesQueryArgs);
   const [approveInvoice] = useApproveInvoiceMutation();
   const [checkInvoice] = useCheckInvoiceMutation();
   const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
@@ -73,6 +99,8 @@ const Approvals = () => {
   const [viewTab, setViewTab] = useState('details');
   const [invoiceHistory, setInvoiceHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
+  const [historySheetOpen, setHistorySheetOpen] = useState(false);
+  const [historySheetInvoice, setHistorySheetInvoice] = useState(null);
   const [viewPreviewError, setViewPreviewError] = useState(false);
   const [pdfZoom, setPdfZoom] = useState(100);
   const [comments, setComments] = useState('');
@@ -90,7 +118,39 @@ const Approvals = () => {
   // Deduplicate in case an invoice appears in both (shouldn't happen, but safe)
   const uniquePendingInvoices = Array.from(new Map(pendingInvoicesList.map(item => [item.id, item])).values());
   const pendingInvoices = uniquePendingInvoices.map(normalizeInvoice);
-  const allInvoices = Array.isArray(allInvoicesData) ? allInvoicesData.map(normalizeInvoice) : [];
+  const allInvoices = getInvoiceListItems(allInvoicesListData);
+
+  const allInvoicesPagination = useMemo(() => {
+    const total = Number(allInvoicesListData.total ?? 0) || 0;
+    const offset = Number(allInvoicesListData.offset ?? allTabPageOffset) || 0;
+    const limit = Number(allInvoicesListData.limit ?? INVOICE_LIST_PAGE_SIZE) || INVOICE_LIST_PAGE_SIZE;
+    const currentPage = limit > 0 ? Math.floor(offset / limit) : 0;
+    const totalPages = total > 0 ? Math.ceil(total / limit) : 0;
+
+    return {
+      total,
+      offset,
+      limit,
+      hasMore: Boolean(allInvoicesListData.hasMore),
+      currentPage,
+      totalPages,
+      startRecord: total === 0 ? 0 : offset + 1,
+      endRecord: total === 0 ? 0 : Math.min(offset + allInvoices.length, total),
+    };
+  }, [allInvoicesListData, allTabPageOffset, allInvoices.length]);
+
+  const visibleAllInvoicePageNumbers = useMemo(() => {
+    const { totalPages, currentPage } = allInvoicesPagination;
+    if (totalPages <= 5) {
+      return Array.from({ length: totalPages }, (_, index) => index);
+    }
+    const start = Math.min(Math.max(currentPage - 2, 0), totalPages - 5);
+    return Array.from({ length: 5 }, (_, index) => start + index);
+  }, [allInvoicesPagination]);
+
+  const goToAllInvoicesPage = useCallback((pageIndex) => {
+    setAllTabPageOffset(Math.max(0, pageIndex) * INVOICE_LIST_PAGE_SIZE);
+  }, []);
 
   const handleApprovalAction = (invoice, action) => {
     if (!isInvoiceAwaitingApproval(invoice.status)) {
@@ -114,14 +174,7 @@ const Approvals = () => {
     setDialogOpen(true);
   };
 
-  const handleViewInvoice = async (invoice, initialTab = 'details') => {
-    setViewInvoice(normalizeInvoice(invoice));
-    setViewDialogOpen(true);
-    setViewTab(initialTab);
-    setViewPreviewError(false);
-    setInvoiceHistory([]);
-    setLoadingHistory(true);
-
+  const loadInvoiceHistory = async (invoice) => {
     try {
       const response = await getInvoiceHistory(invoice.id).unwrap();
       const normalized = normalizeInvoice(invoice);
@@ -131,9 +184,9 @@ const Approvals = () => {
 
       if (historyEntries.length === 0) {
         const approvalRecords =
-          normalized.approval_records ||
           normalized.approvalRecords ||
-          invoice.approval_records ||
+          normalized.approvalRecords ||
+          invoice.approvalRecords ||
           invoice.approvalRecords;
         if (Array.isArray(approvalRecords) && approvalRecords.length > 0) {
           historyEntries = normalizeInvoiceHistoryEntries(approvalRecords);
@@ -147,6 +200,24 @@ const Approvals = () => {
     } finally {
       setLoadingHistory(false);
     }
+  };
+
+  const handleViewInvoice = async (invoice, initialTab = 'details') => {
+    setViewInvoice(normalizeInvoice(invoice));
+    setViewDialogOpen(true);
+    setViewTab(initialTab);
+    setViewPreviewError(false);
+    setInvoiceHistory([]);
+    setLoadingHistory(true);
+    await loadInvoiceHistory(invoice);
+  };
+
+  const handleOpenInvoiceHistory = async (invoice) => {
+    setHistorySheetInvoice(normalizeInvoice(invoice));
+    setHistorySheetOpen(true);
+    setInvoiceHistory([]);
+    setLoadingHistory(true);
+    await loadInvoiceHistory(invoice);
   };
 
   const renderPdfPreview = (props = {}) => (
@@ -284,6 +355,7 @@ const Approvals = () => {
             safeFormatDate={safeFormatDate}
             handleApprovalAction={handleApprovalAction}
             handleViewInvoice={handleViewInvoice}
+            handleOpenInvoiceHistory={handleOpenInvoiceHistory}
             canApproveInvoices={canApproveInvoices}
             canCheckInvoices={canCheckInvoices}
             showApprovalProgress={canApproveInvoices}
@@ -295,16 +367,27 @@ const Approvals = () => {
             otherPendingInvoices={otherPendingInvoices}
             getStatusBadgeClass={getStatusBadgeClass}
             formatStatus={formatStatus}
+            getApprovalProgress={getApprovalProgress}
             safeFormatDate={safeFormatDate}
             handleViewInvoice={handleViewInvoice}
+            handleOpenInvoiceHistory={handleOpenInvoiceHistory}
           />
         </TabsContent>
 
         <TabsContent value="all">
           <AllInvoicesTable
             allInvoices={allInvoices}
+            searchTerm={allTabSearchTerm}
+            setSearchTerm={setAllTabSearchTerm}
+            pagination={allInvoicesPagination}
+            visiblePageNumbers={visibleAllInvoicePageNumbers}
+            onPageChange={goToAllInvoicesPage}
+            isLoading={allInvoicesFetching}
             getStatusBadgeClass={getStatusBadgeClass}
             formatStatus={formatStatus}
+            getApprovalProgress={getApprovalProgress}
+            safeFormatDate={safeFormatDate}
+            handleOpenInvoiceHistory={handleOpenInvoiceHistory}
             handleViewInvoice={handleViewInvoice}
           />
         </TabsContent>
@@ -318,6 +401,15 @@ const Approvals = () => {
         comments={comments}
         setComments={setComments}
         submitApproval={submitApproval}
+      />
+
+      <InvoiceHistorySheet
+        open={historySheetOpen}
+        onOpenChange={setHistorySheetOpen}
+        invoice={historySheetInvoice}
+        history={invoiceHistory}
+        loading={loadingHistory}
+        getStatusBadgeClass={getStatusBadgeClass}
       />
 
       <ViewDialog

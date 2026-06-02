@@ -6,10 +6,11 @@ import { TableCell, TableRow } from '../../../components/ui/table';
 import { formatCurrency } from '../../../utils/currency';
 
 const pendingInvoicesTableHeader = [
-  { key: 'vendor_name', title: 'Vendor' },
+  { key: 'vendorName', title: 'Vendor' },
   { key: 'amount', title: 'Amount', cellClassName: "  font-semibold" },
+  { key: 'approval', title: 'Approval' },
   { key: 'status', title: 'Status' },
-  { key: 'due_date', title: 'Due date', cellClassName: 'text-sm text-muted-foreground' },
+  { key: 'dueDate', title: 'Due date', cellClassName: 'text-sm text-muted-foreground' },
   { key: 'actions', title: 'Actions', headerClassName: 'text-left', cellClassName: 'text-left' },
 ];
 
@@ -18,17 +19,35 @@ const PendingInvoicesTable = ({
   otherPendingInvoices,
   getStatusBadgeClass,
   formatStatus,
+  getApprovalProgress,
   safeFormatDate,
   handleViewInvoice,
+  handleOpenInvoiceHistory,
 }) => {
-  const renderPendingInvoiceRow = (invoice, rowIndex, headers) => (
-    <TableRow key={invoice.id ?? rowIndex}>
-      {headers.map((header) => {
+  const renderPendingInvoiceRow = (invoice, rowIndex, headers) => {
+    const progress = getApprovalProgress(invoice);
+
+    return (
+      <TableRow key={invoice.id ?? rowIndex}>
+        {headers.map((header) => {
         let value;
 
         switch (header.key) {
           case 'amount':
             value = formatCurrency(invoice.amount, invoice.currency);
+            break;
+          case 'approval':
+            value = (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-auto p-0 text-sm text-muted-foreground underline underline-offset-4"
+                onClick={() => handleOpenInvoiceHistory?.(invoice)}
+                data-testid={`pending-approval-history-${invoice.id}`}
+              >
+                {progress.approved}/{progress.total} steps
+              </Button>
+            );
             break;
           case 'status':
             value = (
@@ -37,8 +56,8 @@ const PendingInvoicesTable = ({
               </span>
             );
             break;
-          case 'due_date':
-            value = safeFormatDate(invoice.due_date || invoice.dueDate);
+          case 'dueDate':
+            value = safeFormatDate(invoice.dueDate || invoice.dueDate);
             break;
           case 'actions':
             value = (
@@ -69,8 +88,9 @@ const PendingInvoicesTable = ({
           </TableCell>
         );
       })}
-    </TableRow>
-  );
+      </TableRow>
+    );
+  };
 
   return (
   <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">

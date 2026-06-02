@@ -1,9 +1,20 @@
 import React from "react";
+import { format } from "date-fns";
 import { FileText, History, Pencil } from "lucide-react";
 import ApprovalHistoryTimeline from "../../../components/common/ApprovalHistoryTimeline";
 import { Button } from "../../../components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../../components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "../../../components/ui/dialog";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "../../../components/ui/tabs";
 import { formatWorkflowStatus } from "../../../utils/approvalWorkflow";
 import InvoiceReadOnlyDetails from "./InvoiceReadOnlyDetails";
 
@@ -49,7 +60,18 @@ const ViewDialog = ({
               <div className="p-6 min-h-0 overflow-y-auto flex-1 scrollbar-thin-muted">
                 <DialogHeader className="mb-4">
                   <DialogTitle className="text-2xl font-bold flex items-center justify-between gap-3">
-                    <span>Invoice {selectedInvoice.invoice_number}</span>
+                    <div>
+                      <span>Invoice {selectedInvoice.invoiceNumber}</span>
+                      <p className="mt-1 text-xs font-normal text-muted-foreground">
+                        Created by{" "}
+                        {selectedInvoice.createdByName || "-"}
+                        {selectedInvoice.createdAt &&
+                          ` on ${format(
+                            new Date(selectedInvoice.createdAt),
+                            "dd MMM yyyy, hh:mm a",
+                          )}`}
+                      </p>
+                    </div>
                     <span
                       className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-medium border shrink-0 ${getStatusBadgeClass(selectedInvoice.status)}`}
                     >
@@ -58,7 +80,11 @@ const ViewDialog = ({
                   </DialogTitle>
                 </DialogHeader>
 
-                <Tabs value={viewTab} onValueChange={setViewTab} className="w-full">
+                <Tabs
+                  value={viewTab}
+                  onValueChange={setViewTab}
+                  className="w-full"
+                >
                   <TabsList className="grid w-full grid-cols-2 mb-4">
                     <TabsTrigger value="details">
                       <FileText className="h-4 w-4 mr-2" />

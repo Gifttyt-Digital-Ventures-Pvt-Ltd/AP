@@ -16,7 +16,10 @@ import {
   normalizeCurrencyCode,
 } from "../../../utils/currency";
 import {
+  DEFAULT_INR_TAX,
+  INVOICE_LEVEL,
   isInrInvoiceCurrency,
+  LINE_ITEM_LEVEL,
   remapLineItemsForCurrencyChange,
 } from "../utils/invoiceTax";
 import {
@@ -27,10 +30,10 @@ import InvoiceChecklist from "./InvoiceFormChecklist";
 
 const lineItemTableHeader = [
   { key: "description", title: "Item Description", headerClassName: "min-w-[190px]", cellClassName: "min-w-[190px]" },
-  // { key: "ledger", title: "*Ledger", headerClassName: "w-[160px] text-blue-500", cellClassName: "w-[200px]" },
-  { key: "tax", title: "*Tax", headerClassName: "w-[150px] text-blue-500", cellClassName: "w-[200px]" },
+  // { key: "ledger", title: "Ledger", headerClassName: "w-[160px]", cellClassName: "w-[200px]" },
+  { key: "tax", title: "Tax", headerClassName: "w-[150px]", cellClassName: "w-[200px]" },
   { key: "quantity", title: "Qty", headerClassName: "w-[60px] text-left", cellClassName: "w-[60px]" },
-  { key: "unit_rate", title: "Rate", headerClassName: "w-[80px] text-left", cellClassName: "w-[80px]" },
+  { key: "unitRate", title: "Rate", headerClassName: "w-[80px] text-left", cellClassName: "w-[80px]" },
   { key: "discount", title: "Discount", headerClassName: "w-[120px] text-left", cellClassName: "w-[120px]" },
   { key: "subtotal", title: "Subtotal", headerClassName: "w-[100px] text-left", cellClassName: "w-[100px] text-left" },
   { key: "actions", title: "", headerClassName: "w-[32px]", cellClassName: "w-[32px] text-center" },
@@ -39,11 +42,19 @@ const lineItemTableHeader = [
 const lineItemSelectClassName =
   "h-7 w-full rounded border bg-white pl-2 pr-7 text-xs";
 
+const RequiredLabel = ({ children, required = false, className = "" }) => (
+  <Label className={cn("text-xs", required && "text-blue-400", className)}>
+    {required ? "* " : ""}
+    {children}
+  </Label>
+);
+
 export const InvoiceForm = ({
   formData,
   setFormData,
   isEdit = false,
   hideActions = false,
+  isSavedDraft = false,
   calculateTotals,
   findVendorByName,
   handleAddVendorFromInvoice,
@@ -78,13 +89,13 @@ export const InvoiceForm = ({
   const [currencyQuery, setCurrencyQuery] = useState("");
 
   const filteredVendorOptions = useMemo(() => {
-    const query = String(formData?.vendor_name || "").toLowerCase().trim();
+    const query = String(formData?.vendorName || "").toLowerCase().trim();
     const options = Array.isArray(vendorOptions) ? vendorOptions : [];
     if (!query) return options;
     return options.filter((vendor) =>
       String(vendor?.name || "").toLowerCase().includes(query),
     );
-  }, [formData?.vendor_name, vendorOptions]);
+  }, [formData?.vendorName, vendorOptions]);
 
   const resolvedCurrencyOptions = useMemo(
     () => mergeCurrencyOptions(currencyOptions, FALLBACK_CURRENCIES, formData?.currency),
@@ -108,18 +119,18 @@ export const InvoiceForm = ({
       return {
         ...prev,
         currency: normalized,
-        gst_treatment: nextUseInrTax
-          ? prev.gst_treatment === "N/A"
+        gstTreatment: nextUseInrTax
+          ? prev.gstTreatment === "N/A"
             ? "Regular"
-            : prev.gst_treatment
+            : prev.gstTreatment
           : "N/A",
-        scanned_tax_amount: undefined,
-        scanned_tax_name: undefined,
-        scanned_tax_rate: undefined,
-        scanned_total: undefined,
-        line_items: switchingTaxMode
-          ? remapLineItemsForCurrencyChange(prev.line_items, normalized)
-          : prev.line_items,
+        scannedTaxAmount: undefined,
+        scannedTaxName: undefined,
+        scannedTaxRate: undefined,
+        scannedTotal: undefined,
+        lineItems: switchingTaxMode
+          ? remapLineItemsForCurrencyChange(prev.lineItems, normalized)
+          : prev.lineItems,
       };
     });
     setCurrencyQuery(normalized);
@@ -132,13 +143,15 @@ export const InvoiceForm = ({
   if (!formData) return null;
   const invoiceCurrency = formData.currency || DEFAULT_CURRENCY;
   const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
-  const isGstinRequired = useInrTax && formData.gst_treatment !== "N/A";
-  const isInvoiceLevelDiscount = formData.discounts_level === "At Invoice Level";
-  const lineItemHeaders = isInvoiceLevelDiscount
-    ? lineItemTableHeader.filter((column) => column.key !== "discount")
-    : lineItemTableHeader;
+  const isGstinRequired = useInrTax && formData.gstTreatment !== "N/A";
+  const isInvoiceLevelDiscount = formData.discountsLevel === INVOICE_LEVEL;
+  const isInvoiceLevelTax = formData.taxesLevel === INVOICE_LEVEL;
+  const lineItemHeaders = lineItemTableHeader.filter((column) =>
+    (isInvoiceLevelDiscount ? column.key !== "discount" : true) &&
+    (isInvoiceLevelTax ? column.key !== "tax" : true),
+  );
   const formatAmount = (amount) => formatCurrency(amount, invoiceCurrency);
-  const totals = calculateTotals(formData.line_items, invoiceCurrency);
+  const totals = calculateTotals(formData.lineItems, invoiceCurrency);
   const tdsRate = Number.parseFloat(String(formData.tds || "").replace("%", "")) || 0;
   const tdsAmount = Math.round(((totals.subTotal * tdsRate) / 100) * 100) / 100;
   const netPayable = Math.max(Math.round((totals.total - tdsAmount) * 100) / 100, 0);
@@ -147,11 +160,11 @@ export const InvoiceForm = ({
     const matched = findVendorByName(newName);
     setFormData({
       ...formData,
-      vendor_name: newName,
-      vendor_id: matched?.id || "",
-      vendor_matched: !!matched,
-      vendor_request_pending: Boolean(matched?.is_pending_approval),
-      vendor_request_submitted: matched ? formData.vendor_request_submitted : false,
+      vendorName: newName,
+      vendorId: matched?.id || "",
+      vendorMatched: !!matched,
+      vendorRequestPending: Boolean(matched?.isPendingApproval),
+      vendorRequestSubmitted: matched ? formData.vendorRequestSubmitted : false,
       gstin: matched?.gstin
         ? String(matched.gstin).trim().toUpperCase()
         : formData.gstin,
@@ -161,11 +174,11 @@ export const InvoiceForm = ({
   const clearVendorSelection = () => {
     setFormData({
       ...formData,
-      vendor_name: "",
-      vendor_id: "",
-      vendor_matched: false,
-      vendor_request_pending: false,
-      vendor_request_submitted: false,
+      vendorName: "",
+      vendorId: "",
+      vendorMatched: false,
+      vendorRequestPending: false,
+      vendorRequestSubmitted: false,
     });
   };
 
@@ -181,7 +194,7 @@ export const InvoiceForm = ({
                 <Input value={item.description} onChange={(e) => updateLineItem(index, "description", e.target.value)} placeholder="Description" className="h-7 text-xs" />
                 <div className="flex items-center gap-1 mt-0.5">
                   <span className="text-[10px] text-gray-400">HSN:</span>
-                  <Input value={item.hsn_sac} onChange={(e) => updateLineItem(index, "hsn_sac", e.target.value)} placeholder="Code" className="h-5 text-[10px] w-16 px-1" />
+                  <Input value={item.hsnSac} onChange={(e) => updateLineItem(index, "hsnSac", e.target.value)} placeholder="Code" className="h-5 text-[10px] w-16 px-1" />
                 </div>
               </div>
             );
@@ -197,8 +210,8 @@ export const InvoiceForm = ({
             ) : (
               <div className="flex flex-col gap-1">
                 <Input
-                  value={item.tax_name || ""}
-                  onChange={(e) => updateLineItem(index, "tax_name", e.target.value)}
+                  value={item.taxName || ""}
+                  onChange={(e) => updateLineItem(index, "taxName", e.target.value)}
                   placeholder="Tax name"
                   className="h-7 text-xs"
                 />
@@ -206,9 +219,9 @@ export const InvoiceForm = ({
                   <Input
                     type="text"
                     inputMode="decimal"
-                    value={formatNumericInputValue(item.tax_rate)}
+                    value={formatNumericInputValue(item.taxRate)}
                     onChange={(e) =>
-                      updateLineItem(index, "tax_rate", sanitizeNumericInput(e.target.value))
+                      updateLineItem(index, "taxRate", sanitizeNumericInput(e.target.value))
                     }
                     placeholder="Rate"
                     className="h-7 text-xs text-right pr-6"
@@ -233,14 +246,14 @@ export const InvoiceForm = ({
               />
             );
             break;
-          case "unit_rate":
+          case "unitRate":
             value = (
               <Input
                 type="text"
                 inputMode="decimal"
-                value={formatNumericInputValue(item.unit_rate)}
+                value={formatNumericInputValue(item.unitRate)}
                 onChange={(e) =>
-                  updateLineItem(index, "unit_rate", sanitizeNumericInput(e.target.value))
+                  updateLineItem(index, "unitRate", sanitizeNumericInput(e.target.value))
                 }
                 className="h-7 text-xs text-right px-1"
               />
@@ -263,8 +276,8 @@ export const InvoiceForm = ({
                   className="h-7 text-xs text-right w-12 px-1"
                 />
                 <AppSelect
-                  value={item.discount_type}
-                  onChange={(e) => updateLineItem(index, "discount_type", e.target.value)}
+                  value={item.discountType}
+                  onChange={(e) => updateLineItem(index, "discountType", e.target.value)}
                   options={["%", invoiceCurrency === DEFAULT_CURRENCY ? "₹" : invoiceCurrency]}
                   className="h-7 w-14 rounded border text-xs bg-white pl-2 pr-6"
                 />
@@ -275,7 +288,7 @@ export const InvoiceForm = ({
             value = formatAmount(calculateLineItemSubtotal(item));
             break;
           case "actions":
-            value = formData.line_items.length > 1 && (
+            value = formData.lineItems.length > 1 && (
               <button type="button" onClick={() => removeLineItem(index)} className="text-red-500 hover:text-red-700 p-0.5">
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -296,26 +309,25 @@ export const InvoiceForm = ({
 
   return (
     <div className="space-y-4">
-      {!isEdit &&
-        formData.vendor_name &&
-        formData.vendor_request_submitted &&
-        !formData.vendor_matched && (
+      {formData.vendorName &&
+        formData.vendorRequestSubmitted &&
+        !formData.vendorMatched && (
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 flex items-center gap-2">
           <CheckCircle2 className="h-4 w-4 text-blue-600" />
           <p className="text-xs text-blue-700">
-            <span className="font-medium">Vendor request submitted:</span> "{formData.vendor_name}"
-            {' '}(you can add this invoice while approval is pending)
+            <span className="font-medium">Vendor request submitted:</span> "{formData.vendorName}"
+            {' '}(you can {isEdit ? 'save this invoice' : 'add this invoice'} while approval is pending)
           </p>
         </div>
       )}
 
-      {!isEdit && formData.vendor_name && !formData.vendor_matched && !formData.vendor_request_submitted && (
+      {formData.vendorName && !formData.vendorMatched && !formData.vendorRequestSubmitted && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Building2 className="h-4 w-4 text-amber-600" />
             <div>
               <p className="font-medium text-amber-800 text-xs">Vendor does not match</p>
-              <p className="text-[11px] text-amber-600">"{formData.vendor_name}" does not match any vendor in the system</p>
+              <p className="text-[11px] text-amber-600">"{formData.vendorName}" does not match any vendor in the system</p>
             </div>
           </div>
           <Button
@@ -335,14 +347,14 @@ export const InvoiceForm = ({
         </div>
       )}
 
-      {!isEdit && formData.vendor_name && formData.vendor_matched && (
+      {formData.vendorName && formData.vendorMatched && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2 flex items-center gap-2">
           <CheckCircle2 className="h-4 w-4 text-emerald-600" />
           <p className="text-xs text-emerald-700">
             <span className="font-medium">
-              {formData.vendor_request_pending ? 'Vendor linked (pending approval):' : 'Vendor matched:'}
+              {formData.vendorRequestPending ? 'Vendor linked (pending approval):' : 'Vendor matched:'}
             </span>{' '}
-            "{formData.vendor_name}"
+            "{formData.vendorName}"
           </p>
         </div>
       )}
@@ -351,12 +363,12 @@ export const InvoiceForm = ({
         <h3 className="text-sm font-semibold text-gray-800">Vendor Details</h3>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label className="text-xs text-blue-400">* Vendor Name</Label>
+            <RequiredLabel required>Vendor Name</RequiredLabel>
             <Popover open={vendorPickerOpen} onOpenChange={setVendorPickerOpen}>
               <PopoverAnchor asChild>
                 <div className="relative">
                   <Input
-                    value={formData.vendor_name || ""}
+                    value={formData.vendorName || ""}
                     onChange={(e) => {
                       applyVendorNameChange(e.target.value);
                       setVendorPickerOpen(true);
@@ -367,7 +379,7 @@ export const InvoiceForm = ({
                     autoComplete="off"
                   />
                   <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-                    {formData.vendor_name && (
+                    {formData.vendorName && (
                       <button
                         type="button"
                         onClick={clearVendorSelection}
@@ -407,7 +419,7 @@ export const InvoiceForm = ({
                         type="button"
                         className={cn(
                           "flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent",
-                          formData.vendor_name === vendor.name && "bg-accent",
+                          formData.vendorName === vendor.name && "bg-accent",
                         )}
                         onMouseDown={(event) => event.preventDefault()}
                         onClick={() => {
@@ -416,7 +428,7 @@ export const InvoiceForm = ({
                         }}
                       >
                         <span className="truncate">{vendor.name}</span>
-                        {vendor.is_pending_approval && (
+                        {vendor.isPendingApproval && (
                           <span className="ml-auto shrink-0 text-[10px] text-amber-600">
                             Pending
                           </span>
@@ -429,25 +441,25 @@ export const InvoiceForm = ({
             </Popover>
           </div>
           <div>
-            <Label className="text-xs text-blue-400">* Bill Number</Label>
-            <Input value={formData.invoice_number} onChange={(e) => setFormData({ ...formData, invoice_number: e.target.value })} placeholder="Invoice number" className="h-8 text-sm" />
+            <RequiredLabel required>Bill Number</RequiredLabel>
+            <Input value={formData.invoiceNumber} onChange={(e) => setFormData({ ...formData, invoiceNumber: e.target.value })} placeholder="Invoice number" className="h-8 text-sm" />
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label className="text-xs text-blue-400">* Billing Date</Label>
-            <Input type="date" value={formData.invoice_date} onChange={(e) => setFormData({ ...formData, invoice_date: e.target.value })} className="h-8 text-sm" />
+            <RequiredLabel required>Billing Date</RequiredLabel>
+            <Input type="date" value={formData.invoiceDate} onChange={(e) => setFormData({ ...formData, invoiceDate: e.target.value })} className="h-8 text-sm" />
           </div>
           <div>
-            <Label className="text-xs text-blue-400">* Due Date</Label>
-            <Input type="date" value={formData.due_date} onChange={(e) => setFormData({ ...formData, due_date: e.target.value })} className="h-8 text-sm" />
+            <RequiredLabel required>Due Date</RequiredLabel>
+            <Input type="date" value={formData.dueDate} onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })} className="h-8 text-sm" />
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label className="text-xs text-blue-400">* Currency</Label>
+            <RequiredLabel required>Currency</RequiredLabel>
             <Popover open={currencyPickerOpen} onOpenChange={setCurrencyPickerOpen}>
               <PopoverAnchor asChild>
                 <div className="relative">
@@ -525,23 +537,21 @@ export const InvoiceForm = ({
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label className={`text-xs ${departmentMandatory ? "text-blue-400" : ""}`}>
-              {departmentMandatory ? "* " : ""}Department
-            </Label>
+            <RequiredLabel required={departmentMandatory}>Department</RequiredLabel>
             <AppSelect
-              value={formData.department_id || ""}
+              value={formData.departmentId || ""}
               onChange={(e) => {
                 const selectedDepartment = departments.find((department) => {
-                  const departmentId = department?.id ?? department?.departmentId ?? department?.department_id;
+                  const departmentId = department?.id ?? department?.departmentId ?? department?.departmentId;
                   return String(departmentId ?? "") === e.target.value;
                 });
                 setFormData({
                   ...formData,
-                  department_id: e.target.value,
-                  department_name:
+                  departmentId: e.target.value,
+                  departmentName:
                     selectedDepartment?.name ||
                     selectedDepartment?.departmentName ||
-                    selectedDepartment?.department_name ||
+                    selectedDepartment?.departmentName ||
                     "",
                 });
               }}
@@ -550,26 +560,24 @@ export const InvoiceForm = ({
               required={departmentMandatory}
               placeholder="Select department"
               options={departments.map((department) => ({
-                value: department?.id ?? department?.departmentId ?? department?.department_id,
-                label: department?.name ?? department?.departmentName ?? department?.department_name,
+                value: department?.id ?? department?.departmentId ?? department?.departmentId,
+                label: department?.name ?? department?.departmentName ?? department?.departmentName,
               }))}
             />
           </div>
           {showCategoryField && (
             <div>
-              <Label className={`text-xs ${categoryMandatory ? "text-blue-400" : ""}`}>
-                {categoryMandatory ? "* " : ""}Category
-              </Label>
+              <RequiredLabel required={categoryMandatory}>Category</RequiredLabel>
               <AppSelect
-                value={formData.category_id || ""}
+                value={formData.categoryId || ""}
                 onChange={(e) => {
                   const selectedCategory = invoiceCategories.find(
                     (category) => String(category.id ?? "") === e.target.value,
                   );
                   setFormData({
                     ...formData,
-                    category_id: e.target.value,
-                    category_name: selectedCategory?.name || "",
+                    categoryId: e.target.value,
+                    categoryName: selectedCategory?.name || "",
                     category: selectedCategory
                       ? { id: selectedCategory.id, name: selectedCategory.name }
                       : null,
@@ -592,8 +600,8 @@ export const InvoiceForm = ({
         <div>
           <Label className="text-xs">Billing Address</Label>
           <textarea
-            value={formData.billing_address}
-            onChange={(e) => setFormData({ ...formData, billing_address: e.target.value })}
+            value={formData.billingAddress}
+            onChange={(e) => setFormData({ ...formData, billingAddress: e.target.value })}
             placeholder="Enter billing address"
             className="w-full min-h-[50px] rounded-md border border-input bg-background px-2 py-1.5 text-xs resize-none"
           />
@@ -601,13 +609,13 @@ export const InvoiceForm = ({
 
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label className="text-xs text-blue-400">GST Treatment</Label>
-            <AppSelect value={formData.gst_treatment} onChange={(e) => setFormData({ ...formData, gst_treatment: e.target.value })} options={GST_TREATMENTS} className="h-8 text-sm" />
+            <RequiredLabel required>GST Treatment</RequiredLabel>
+            <AppSelect value={formData.gstTreatment} onChange={(e) => setFormData({ ...formData, gstTreatment: e.target.value })} options={GST_TREATMENTS} className="h-8 text-sm" />
           </div>
           <div>
-            <Label className="text-xs text-blue-400">
-              {isGstinRequired ? "* GSTIN" : "GSTIN / Tax ID"}
-            </Label>
+            <RequiredLabel required={isGstinRequired}>
+              {isGstinRequired ? "GSTIN" : "GSTIN / Tax ID"}
+            </RequiredLabel>
             <Input
               value={formData.gstin}
               onChange={(e) => setFormData({ ...formData, gstin: e.target.value.toUpperCase() })}
@@ -619,60 +627,56 @@ export const InvoiceForm = ({
 
         <div className="grid grid-cols-2 gap-2">
           <div>
-            <Label className="text-xs text-blue-400">* Source of Supply</Label>
+            <RequiredLabel>Source of Supply</RequiredLabel>
             {useInrTax ? (
               <AppSelect
-                value={formData.source_of_supply || ""}
-                onChange={(e) => setFormData({ ...formData, source_of_supply: e.target.value })}
+                value={formData.sourceOfSupply || ""}
+                onChange={(e) => setFormData({ ...formData, sourceOfSupply: e.target.value })}
                 options={INDIAN_STATES}
                 placeholder="Select source of supply"
                 className="h-8 text-xs"
-                required
               />
             ) : (
               <Input
-                value={formData.source_of_supply || ""}
-                onChange={(e) => setFormData({ ...formData, source_of_supply: e.target.value })}
+                value={formData.sourceOfSupply || ""}
+                onChange={(e) => setFormData({ ...formData, sourceOfSupply: e.target.value })}
                 placeholder="Enter source of supply"
                 className="h-8 text-xs"
-                required
               />
             )}
           </div>
           <div>
-            <Label className="text-xs text-blue-400">* Destination</Label>
+            <RequiredLabel>Destination</RequiredLabel>
             {useInrTax ? (
               <AppSelect
-                value={formData.destination_of_supply || ""}
-                onChange={(e) => setFormData({ ...formData, destination_of_supply: e.target.value })}
+                value={formData.destinationOfSupply || ""}
+                onChange={(e) => setFormData({ ...formData, destinationOfSupply: e.target.value })}
                 options={INDIAN_STATES}
                 placeholder="Select destination"
                 className="h-8 text-xs"
-                required
               />
             ) : (
               <Input
-                value={formData.destination_of_supply || ""}
-                onChange={(e) => setFormData({ ...formData, destination_of_supply: e.target.value })}
+                value={formData.destinationOfSupply || ""}
+                onChange={(e) => setFormData({ ...formData, destinationOfSupply: e.target.value })}
                 placeholder="Enter destination"
                 className="h-8 text-xs"
-                required
               />
             )}
           </div>
         </div>
 
         <div>
-          <Label className="text-xs text-blue-400">* Source</Label>
+          <RequiredLabel required>Source</RequiredLabel>
           <AppSelect value={formData.source} onChange={(e) => setFormData({ ...formData, source: e.target.value })} options={INVOICE_SOURCES} className="h-8 text-sm" data-testid="source-select" />
         </div>
         {formData.source === "Email" && (
           <div>
-            <Label className="text-xs text-blue-400">Source Email</Label>
+            <RequiredLabel required>Source Email</RequiredLabel>
             <Input
               type="email"
-              value={formData.source_email}
-              onChange={(e) => setFormData({ ...formData, source_email: e.target.value })}
+              value={formData.sourceEmail}
+              onChange={(e) => setFormData({ ...formData, sourceEmail: e.target.value })}
               placeholder="vendor@example.com"
               className="w-full h-8 text-sm"
               data-testid="source-email-input"
@@ -684,9 +688,30 @@ export const InvoiceForm = ({
           <div className="flex items-center gap-1.5">
             <span className="text-gray-600">Discounts:</span>
             <AppSelect
-              value={formData.discounts_level}
-              onChange={(e) => setFormData({ ...formData, discounts_level: e.target.value })}
-              options={["At Line Item Level", "At Invoice Level"]}
+              value={formData.discountsLevel}
+              onChange={(e) => setFormData({ ...formData, discountsLevel: e.target.value })}
+              options={[LINE_ITEM_LEVEL, INVOICE_LEVEL]}
+              className="h-6 w-auto border-none bg-transparent pl-0 pr-6 text-xs text-blue-600 shadow-none"
+            />
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-gray-600">Taxes:</span>
+            <AppSelect
+              value={formData.taxesLevel || LINE_ITEM_LEVEL}
+              onChange={(e) =>
+                setFormData({
+                  ...formData,
+                  taxesLevel: e.target.value,
+                  invoiceTax: formData.invoiceTax || DEFAULT_INR_TAX,
+                  invoiceTaxName: formData.invoiceTaxName || "Tax",
+                  invoiceTaxRate: formData.invoiceTaxRate ?? "",
+                  scannedTaxAmount: undefined,
+                  scannedTaxName: undefined,
+                  scannedTaxRate: undefined,
+                  scannedTotal: undefined,
+                })
+              }
+              options={[LINE_ITEM_LEVEL, INVOICE_LEVEL]}
               className="h-6 w-auto border-none bg-transparent pl-0 pr-6 text-xs text-blue-600 shadow-none"
             />
           </div>
@@ -699,7 +724,7 @@ export const InvoiceForm = ({
           <div className="overflow-x-auto scrollbar-thin-muted">
             <AppDataTable
               tableHeader={lineItemHeaders}
-              tableData={formData.line_items}
+              tableData={formData.lineItems}
               renderRow={renderLineItemRow}
               tableClassName="min-w-[890px] border-separate border-spacing-0"
               headClassName="bg-gray-50 border-b"
@@ -721,6 +746,50 @@ export const InvoiceForm = ({
         <textarea value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} placeholder="Enter Description (Optional)" className="w-full min-h-[50px] rounded-md border border-input bg-background px-2 py-1.5 text-xs resize-none" />
       </div>
 
+      {isInvoiceLevelTax && (
+        <div className="grid grid-cols-2 gap-3">
+          {useInrTax ? (
+            <div className="max-w-xs">
+              <RequiredLabel>Invoice Tax</RequiredLabel>
+              <AppSelect
+                value={formData.invoiceTax || DEFAULT_INR_TAX}
+                onChange={(e) => setFormData({ ...formData, invoiceTax: e.target.value })}
+                options={TAX_RATES}
+                className="h-8 max-w-[220px] text-sm"
+              />
+            </div>
+          ) : (
+            <>
+              <div className="max-w-xs">
+                <RequiredLabel>Tax Name</RequiredLabel>
+                <Input
+                  value={formData.invoiceTaxName || ""}
+                  onChange={(e) => setFormData({ ...formData, invoiceTaxName: e.target.value })}
+                  placeholder="Tax name"
+                  className="h-8 max-w-[220px] text-sm"
+                />
+              </div>
+              <div className="max-w-[140px]">
+                <RequiredLabel>Tax Rate %</RequiredLabel>
+                <Input
+                  type="text"
+                  inputMode="decimal"
+                  value={formatNumericInputValue(formData.invoiceTaxRate)}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      invoiceTaxRate: sanitizeNumericInput(e.target.value),
+                    })
+                  }
+                  placeholder="Rate"
+                  className="h-8 max-w-[120px] text-sm text-right"
+                />
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       <div className="bg-gray-50 rounded-lg p-3 space-y-1.5">
         <div className="flex justify-between text-xs">
           <span>Sub Total</span>
@@ -737,21 +806,21 @@ export const InvoiceForm = ({
               <Input
                 type="text"
                 inputMode="decimal"
-                value={formatNumericInputValue(formData.invoice_discount)}
+                value={formatNumericInputValue(formData.invoiceDiscount)}
                 onChange={(e) =>
                   setFormData({
                     ...formData,
-                    invoice_discount: sanitizeNumericInput(e.target.value),
+                    invoiceDiscount: sanitizeNumericInput(e.target.value),
                   })
                 }
                 className="h-6 w-16 text-xs text-right px-1"
               />
               <AppSelect
-                value={formData.invoice_discount_type || "%"}
+                value={formData.invoiceDiscountType || "%"}
                 onChange={(e) =>
                   setFormData({
                     ...formData,
-                    invoice_discount_type: e.target.value,
+                    invoiceDiscountType: e.target.value,
                   })
                 }
                 options={["%", invoiceCurrency === DEFAULT_CURRENCY ? "₹" : invoiceCurrency]}
@@ -834,7 +903,7 @@ export const InvoiceForm = ({
             className="flex-1"
             disabled={!canSubmit}
           >
-            {isEdit ? "Update Invoice" : "Add Invoice"}
+            {isEdit ? (isSavedDraft ? "Save Draft" : "Update Invoice") : "Add Invoice"}
           </Button>
         </div>
       )}

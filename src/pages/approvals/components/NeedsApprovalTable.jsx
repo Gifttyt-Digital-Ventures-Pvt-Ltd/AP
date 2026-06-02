@@ -11,12 +11,11 @@ import { TableCell, TableRow } from '../../../components/ui/table';
 import { formatCurrency } from '../../../utils/currency';
 
 const needsApprovalTableHeader = [
-  { key: 'vendor_name', title: 'Vendor' },
+  { key: 'vendorName', title: 'Vendor' },
   { key: 'amount', title: 'Amount', cellClassName: "  font-semibold" },
   { key: 'approval', title: 'Approval' },
-  { key: 'payment_date', title: 'Payment date', cellClassName: 'text-sm text-muted-foreground' },
-  { key: 'due_date', title: 'Due date', cellClassName: 'text-sm text-muted-foreground' },
-  { key: 'invoice_date', title: 'Invoice date', cellClassName: 'text-sm text-muted-foreground' },
+  { key: 'dueDate', title: 'Due date', cellClassName: 'text-sm text-muted-foreground' },
+  { key: 'invoiceDate', title: 'Invoice date', cellClassName: 'text-sm text-muted-foreground' },
   { key: 'action', title: 'Action', headerClassName: 'text-left', cellClassName: 'text-left' },
 ];
 
@@ -27,6 +26,7 @@ const NeedsApprovalTable = ({
   safeFormatDate,
   handleApprovalAction,
   handleViewInvoice,
+  handleOpenInvoiceHistory,
   canApproveInvoices,
   canCheckInvoices,
   showApprovalProgress = false,
@@ -59,7 +59,7 @@ const NeedsApprovalTable = ({
                     variant="ghost"
                     size="sm"
                     className="h-auto p-0 text-sm text-muted-foreground underline underline-offset-4"
-                    onClick={() => handleViewInvoice?.(invoice, 'history')}
+                    onClick={() => handleOpenInvoiceHistory?.(invoice)}
                     data-testid={`approval-history-${invoice.id}`}
                   >
                     {progress.approved}/{progress.total} steps
@@ -75,14 +75,11 @@ const NeedsApprovalTable = ({
                 </div>
               );
               break;
-            case 'payment_date':
-              value = safeFormatDate(invoice.payment_date || invoice.paymentDate);
+            case 'dueDate':
+              value = safeFormatDate(invoice.dueDate || invoice.dueDate);
               break;
-            case 'due_date':
-              value = safeFormatDate(invoice.due_date || invoice.dueDate);
-              break;
-            case 'invoice_date':
-              value = safeFormatDate(invoice.invoice_date || invoice.invoiceDate);
+            case 'invoiceDate':
+              value = safeFormatDate(invoice.invoiceDate || invoice.invoiceDate);
               break;
             case 'action':
               value = (

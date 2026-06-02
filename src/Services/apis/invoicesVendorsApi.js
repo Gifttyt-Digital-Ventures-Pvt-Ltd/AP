@@ -1,5 +1,5 @@
 import { serviceApi } from "../serviceApi";
-import { toInvoiceApiPayload, toInvoiceUiPayload, toVendorApiPayload, toVendorUiPayload } from "../utils/payloadMappers";
+import { toInvoiceApiPayload, toInvoiceUiPayload, toVendorApiPayload, toVendorUiPayload, normalizeInvoiceListResponse } from "../utils/payloadMappers";
 import { normalizeApprovalHistoryEntries } from "../../pages/invoices/utils/invoiceHistory";
 
 export const invoicesVendorsApi = serviceApi.injectEndpoints({
@@ -13,10 +13,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
     }),
     getInvoices: builder.query({
       query: (params) => ({ url: "/invoices", method: "GET", params }),
-      transformResponse: (response) =>
-        Array.isArray(response)
-          ? response.map(toInvoiceUiPayload)
-          : toInvoiceUiPayload(response),
+      transformResponse: normalizeInvoiceListResponse,
       providesTags: ["Invoices"],
     }),
     createInvoice: builder.mutation({
@@ -34,6 +31,14 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
         body: toInvoiceApiPayload(body),
       }),
       invalidatesTags: ["Invoices", "Dashboard", "Reports"],
+    }),
+    forwardInvoice: builder.mutation({
+      query: (body) => ({
+        url: "/invoices/forward",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Invoices", "Approvals", "Dashboard", "Reports"],
     }),
     deleteInvoice: builder.mutation({
       query: (id) => ({ url: `/invoices/${id}`, method: "DELETE" }),
@@ -189,6 +194,7 @@ export const {
   useGetInvoicesQuery,
   useCreateInvoiceMutation,
   useUpdateInvoiceMutation,
+  useForwardInvoiceMutation,
   useDeleteInvoiceMutation,
   useScanInvoiceMutation,
   useBulkUploadInvoicesMutation,

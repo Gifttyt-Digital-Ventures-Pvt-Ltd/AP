@@ -8,7 +8,7 @@ import {
   ClipboardList,
 } from "lucide-react";
 import { DEFAULT_CURRENCY } from "../../../utils/currency";
-import { isInrInvoiceCurrency } from "../utils/invoiceTax";
+import { INVOICE_LEVEL, isInrInvoiceCurrency } from "../utils/invoiceTax";
 
 export const buildInvoiceFormChecklist = (
   formData,
@@ -23,60 +23,113 @@ export const buildInvoiceFormChecklist = (
   const item = ({
     label,
     done,
-    optional = false,
+    required = false,
+    optional,
     hint,
     hidden = false,
     warn,
-  }) => ({
-    label,
-    done,
-    optional,
-    hint,
-    hidden,
-    warn: warn !== undefined ? warn : !optional && !done,
-  });
+  }) => {
+    const isOptional = optional ?? !required;
+    const resolvedHint =
+      hint ?? (isOptional ? "optional" : "required");
 
-  const validLineItems = (formData.line_items || []).filter(
-    (item) => item.description?.trim() && Number(item.unit_rate) > 0,
+    return {
+      label,
+      done,
+      required: !isOptional,
+      optional: isOptional,
+      hint: resolvedHint,
+      hidden,
+      warn: warn !== undefined ? warn : !isOptional && !done,
+    };
+  };
+
+  const validLineItems = (formData.lineItems || []).filter(
+    (item) => item.description?.trim() && Number(item.unitRate) > 0,
   );
   const allLineItemsValid =
-    (formData.line_items || []).length > 0 &&
-    (formData.line_items || []).every(
-      (item) => item.description?.trim() && Number(item.unit_rate) > 0,
+    (formData.lineItems || []).length > 0 &&
+    (formData.lineItems || []).every(
+      (item) => item.description?.trim() && Number(item.unitRate) > 0,
     );
 
-  const hasVendorName = !!formData.vendor_name?.trim();
+  const hasVendorName = !!formData.vendorName?.trim();
   const vendorUnmatched =
     hasVendorName &&
-    !formData.vendor_matched &&
-    !formData.vendor_request_submitted;
+    !formData.vendorMatched &&
+    !formData.vendorRequestSubmitted;
   const vendorResolved =
-    !!formData.vendor_matched || !!formData.vendor_request_submitted;
+    !!formData.vendorMatched || !!formData.vendorRequestSubmitted;
+
+  const useInrTax = isInrInvoiceCurrency(formData.currency);
+  const isGstinRequired = useInrTax && formData.gstTreatment !== "N/A";
+  const isInvoiceLevelTax = formData.taxesLevel === INVOICE_LEVEL;
+  const isSourceEmailRequired = formData.source === "Email";
 
   const vendorChecklistItems = [
     item({
       label: "Vendor name",
       done: hasVendorName,
+      required: true,
     }),
   ];
 
-  if (vendorUnmatched) {
-    vendorChecklistItems.push(
-      item({
-        label: "Vendor does not match",
-        done: false,
-        warn: true,
-      }),
-    );
-  } else if (hasVendorName) {
+  if (hasVendorName) {
     vendorChecklistItems.push(
       item({
         label: "Vendor matched in system",
         done: vendorResolved,
-        optional: true,
-        hint: "warning",
+        required: true,
+        warn: vendorUnmatched,
+        hint: vendorUnmatched ? "action needed" : undefined,
       }),
     );
+  }
+
+  const taxComplianceItems = [
+    item({
+      label: "GST treatment",
+      done: !!formData.gstTreatment,
+      required: true,
+    }),
+    item({
+      label: useInrTax ? "GSTIN" : "GSTIN / Tax ID",
+      done: !!formData.gstin?.trim(),
+      required: isGstinRequired,
+    }),
+    item({
+      label: "Source of supply",
+      done: !!String(formData.sourceOfSupply ?? "").trim(),
+    }),
+    item({
+      label: "Destination",
+      done: !!String(formData.destinationOfSupply ?? "").trim(),
+    }),
+  ];
+
+  if (isInvoiceLevelTax) {
+    if (useInrTax) {
+      taxComplianceItems.push(
+        item({
+          label: "Invoice tax",
+          done: !!formData.invoiceTax?.trim(),
+          required: true,
+        }),
+      );
+    } else {
+      taxComplianceItems.push(
+        item({
+          label: "Tax name",
+          done: !!String(formData.invoiceTaxName ?? "").trim(),
+          required: true,
+        }),
+        item({
+          label: "Tax rate %",
+          done: Number(formData.invoiceTaxRate) > 0,
+          required: true,
+        }),
+      );
+    }
   }
 
   return [
@@ -87,64 +140,56 @@ export const buildInvoiceFormChecklist = (
     {
       group: "Invoice details",
       items: [
-        item({ label: "Bill number", done: !!formData.invoice_number?.trim() }),
-        item({ label: "Billing date", done: !!formData.invoice_date }),
-        item({ label: "Due date", done: !!formData.due_date }),
+        item({
+          label: "Bill number",
+          done: !!formData.invoiceNumber?.trim(),
+          required: true,
+        }),
+        item({
+          label: "Billing date",
+          done: !!formData.invoiceDate,
+          required: true,
+        }),
+        item({
+          label: "Due date",
+          done: !!formData.dueDate,
+          required: true,
+        }),
         item({
           label: "Currency",
           done: !!(formData.currency || DEFAULT_CURRENCY).trim(),
+          required: true,
         }),
         item({
           label: "Department",
-          done: !!formData.department_id,
-          optional: !departmentMandatory,
-          hint: departmentMandatory ? "required" : "optional",
+          done: !!formData.departmentId,
+          required: departmentMandatory,
         }),
         item({
           label: "Category",
-          done: !!(formData.category_id || formData.category?.id),
-          optional: !categoryMandatory,
-          hint: categoryMandatory ? "required" : "optional",
+          done: !!(formData.categoryId || formData.category?.id),
+          required: categoryMandatory,
           hidden: !showCategoryField,
         }),
       ],
     },
     {
       group: "Tax & compliance",
-      items: [
-        item({ label: "GST treatment", done: !!formData.gst_treatment }),
-        item({
-          label: isInrInvoiceCurrency(formData.currency) ? "GSTIN" : "GSTIN / Tax ID",
-          done: !!formData.gstin?.trim(),
-          optional:
-            !isInrInvoiceCurrency(formData.currency) ||
-            formData.gst_treatment === "N/A",
-          hint:
-            isInrInvoiceCurrency(formData.currency) &&
-            formData.gst_treatment !== "N/A"
-              ? "required"
-              : "optional",
-        }),
-        item({
-          label: "Source of supply",
-          done: !!String(formData.source_of_supply ?? "").trim(),
-          hint: "required",
-        }),
-        item({
-          label: "Destination",
-          done: !!String(formData.destination_of_supply ?? "").trim(),
-          hint: "required",
-        }),
-      ],
+      items: taxComplianceItems,
     },
     {
       group: "Source",
       items: [
-        item({ label: "Source", done: !!formData.source }),
+        item({
+          label: "Source",
+          done: !!formData.source,
+          required: true,
+        }),
         item({
           label: "Source email",
-          done: !!formData.source_email?.trim(),
-          hidden: formData.source !== "Email",
+          done: !!formData.sourceEmail?.trim(),
+          required: isSourceEmailRequired,
+          hidden: !isSourceEmailRequired,
         }),
       ],
     },
@@ -154,9 +199,10 @@ export const buildInvoiceFormChecklist = (
         item({
           label:
             validLineItems.length === 0
-              ? "At least one line item required"
-              : `${validLineItems.length} of ${formData.line_items.length} item${formData.line_items.length !== 1 ? "s" : ""} complete`,
+              ? "At least one line item"
+              : `${validLineItems.length} of ${formData.lineItems.length} item${formData.lineItems.length !== 1 ? "s" : ""} complete`,
           done: allLineItemsValid,
+          required: true,
         }),
       ],
     },
@@ -350,7 +396,12 @@ export const InvoiceChecklist = ({
                                 style={{
                                   fontSize: "10px",
                                   marginLeft: "4px",
-                                  color: "var(--color-text-tertiary)",
+                                  color:
+                                    item.required
+                                      ? "rgb(96, 165, 250)"
+                                      : item.warn
+                                        ? "#92400e"
+                                        : "var(--color-text-tertiary)",
                                 }}
                               >
                                 ({item.hint})

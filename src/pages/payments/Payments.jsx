@@ -3,7 +3,7 @@ import {
   useGetInvoicesQuery,
   useLazyGetInvoiceHistoryQuery,
 } from '../../Services/apis/invoicesVendorsApi';
-import { toInvoiceUiPayload } from '../../Services/utils/payloadMappers';
+import { toInvoiceUiPayload, EMPTY_INVOICE_LIST_RESPONSE, getInvoiceListItems } from '../../Services/utils/payloadMappers';
 import {
   useGetPaymentsQuery,
   useGetBankAccountsQuery,
@@ -65,8 +65,8 @@ const safeFormatDate = (value, pattern = 'dd MMM yy') => {
 };
 
 const batchInvoiceTableHeader = [
-  { key: 'invoice_number', title: 'Invoice', cellClassName: 'font-medium' },
-  { key: 'vendor_name', title: 'Vendor' },
+  { key: 'invoiceNumber', title: 'Invoice', cellClassName: 'font-medium' },
+  { key: 'vendorName', title: 'Vendor' },
   { key: 'amount', title: 'Amount' },
   { key: 'status', title: 'Status' },
 ];
@@ -88,13 +88,13 @@ const Payments = () => {
     isError: paymentsError,
   } = useGetPaymentsQuery(paymentQueryArgs);
   const {
-    data: invoicesData = [],
+    data: pendingPaymentInvoicesListData = EMPTY_INVOICE_LIST_RESPONSE,
     isError: invoicesError,
     refetch: refetchPendingPaymentInvoices,
   } = useGetInvoicesQuery(invoiceQueryWithStatus('Pending Payment'));
-  const { data: allInvoicesData = [] } = useGetInvoicesQuery(paymentQueryArgs);
+  const { data: allInvoicesListData = EMPTY_INVOICE_LIST_RESPONSE } = useGetInvoicesQuery(paymentQueryArgs);
   const {
-    data: pendingApproverInvoicesData = [],
+    data: pendingApproverInvoicesListData = EMPTY_INVOICE_LIST_RESPONSE,
     isError: pendingApproverInvoicesError,
     refetch: refetchPendingApproverInvoices,
   } = useGetInvoicesQuery(
@@ -121,12 +121,13 @@ const Payments = () => {
   const [recordingPayments, setRecordingPayments] = useState(false);
   const [recordPaymentInvoiceIds, setRecordPaymentInvoiceIds] = useState([]);
   const [recordPaymentForm, setRecordPaymentForm] = useState({
-    payment_date: '',
+    paymentDate: '',
     payment_method: 'Bank Transfer',
+    reference_number: '',
   });
   const [formData, setFormData] = useState({
     invoice_id: '',
-    payment_date: '',
+    paymentDate: '',
     payment_method: 'Bank Transfer',
     bank_account_id: '',
     reference_number: '',
@@ -149,33 +150,28 @@ const Payments = () => {
   const normalizePayment = (payment = {}) => ({
     ...payment,
     invoice_id: payment.invoice_id ?? payment.invoiceId,
-    invoice_number: payment.invoice_number ?? payment.invoiceNumber,
-    vendor_name: payment.vendor_name ?? payment.vendorName,
-    payment_date: payment.payment_date ?? payment.paymentDate,
+    invoiceNumber: payment.invoiceNumber ?? payment.invoiceNumber,
+    vendorName: payment.vendorName ?? payment.vendorName,
+    paymentDate: payment.paymentDate ?? payment.paymentDate,
     payment_method: payment.payment_method ?? payment.paymentMethod,
     reference_number: payment.reference_number ?? payment.referenceNumber,
   });
 
   const normalizeInvoice = (invoice = {}) => ({
     ...invoice,
-    invoice_number: invoice.invoice_number ?? invoice.invoiceNumber,
-    vendor_name: invoice.vendor_name ?? invoice.vendorName,
-    invoice_date: invoice.invoice_date ?? invoice.invoiceDate,
-    due_date: invoice.due_date ?? invoice.dueDate,
+    invoiceNumber: invoice.invoiceNumber ?? invoice.invoiceNumber,
+    vendorName: invoice.vendorName ?? invoice.vendorName,
+    invoiceDate: invoice.invoiceDate ?? invoice.invoiceDate,
+    dueDate: invoice.dueDate ?? invoice.dueDate,
   });
 
   const payments = Array.isArray(paymentsData) ? paymentsData.map(normalizePayment) : [];
-  const pendingPaymentInvoices = Array.isArray(invoicesData) ? invoicesData.map(normalizeInvoice) : [];
+  const pendingPaymentInvoices = getInvoiceListItems(pendingPaymentInvoicesListData).map(normalizeInvoice);
   const allInvoices = useMemo(
-    () =>
-      Array.isArray(allInvoicesData)
-        ? allInvoicesData.map((invoice) => toInvoiceUiPayload(invoice))
-        : [],
-    [allInvoicesData],
+    () => getInvoiceListItems(allInvoicesListData).map((invoice) => toInvoiceUiPayload(invoice)),
+    [allInvoicesListData],
   );
-  const pendingApproverInvoices = Array.isArray(pendingApproverInvoicesData)
-    ? pendingApproverInvoicesData.map(normalizeInvoice)
-    : [];
+  const pendingApproverInvoices = getInvoiceListItems(pendingApproverInvoicesListData).map(normalizeInvoice);
   const invoices = pendingPaymentInvoices;
   const batchEligibleInvoices = [...pendingPaymentInvoices, ...pendingApproverInvoices];
   const bankAccounts = Array.isArray(bankAccountsData) ? bankAccountsData : [];
@@ -211,7 +207,7 @@ const Payments = () => {
   const resetForm = () => {
     setFormData({
       invoice_id: '',
-      payment_date: '',
+      paymentDate: '',
       payment_method: 'Bank Transfer',
       bank_account_id: '',
       reference_number: '',
@@ -250,7 +246,7 @@ const Payments = () => {
     try {
       const paymentPayload = {
         ...formData,
-        payment_date: new Date(formData.payment_date).toISOString(),
+        paymentDate: new Date(formData.paymentDate).toISOString(),
       };
       if (!isConnectedBankingEnabled) {
         delete paymentPayload.bank_account_id;
@@ -301,8 +297,9 @@ const Payments = () => {
   const resetRecordPaymentForm = () => {
     setRecordPaymentInvoiceIds([]);
     setRecordPaymentForm({
-      payment_date: '',
+      paymentDate: '',
       payment_method: 'Bank Transfer',
+      reference_number: '',
     });
   };
 
@@ -318,7 +315,7 @@ const Payments = () => {
     setRecordPaymentForm((prev) => ({
       ...prev,
       payment_method: prev.payment_method || 'Bank Transfer',
-      payment_date: prev.payment_date || new Date().toISOString().slice(0, 10),
+      paymentDate: prev.paymentDate || new Date().toISOString().slice(0, 10),
     }));
     setRecordPaymentDialogOpen(true);
   };
@@ -342,7 +339,7 @@ const Payments = () => {
     if (!guardAction('payments.create')) return;
 
     const invoiceNumbers = selectedRecordPaymentInvoices
-      .map((invoice) => String(invoice.invoice_number || '').trim())
+      .map((invoice) => String(invoice.invoiceNumber || '').trim())
       .filter(Boolean);
 
     if (invoiceNumbers.length === 0) {
@@ -350,14 +347,14 @@ const Payments = () => {
       return;
     }
 
-    if (!recordPaymentForm.payment_date) {
+    if (!recordPaymentForm.paymentDate) {
       toast.error('Payment date is required');
       return;
     }
 
     const now = new Date();
     const maxPaymentDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
-    if (recordPaymentForm.payment_date > maxPaymentDate) {
+    if (recordPaymentForm.paymentDate > maxPaymentDate) {
       toast.error('Payment date cannot be in the future');
       return;
     }
@@ -367,12 +364,15 @@ const Payments = () => {
       return;
     }
 
+    const referenceNumber = String(recordPaymentForm.reference_number || '').trim();
+
     setRecordingPayments(true);
     try {
       const response = await recordPayments({
         invoiceNumbers,
-        paymentDate: new Date(recordPaymentForm.payment_date).toISOString(),
+        paymentDate: new Date(recordPaymentForm.paymentDate).toISOString(),
         paymentMethod: recordPaymentForm.payment_method,
+        ...(referenceNumber ? { referenceNumber } : {}),
       }).unwrap();
       toast.success(response?.message || 'Payments recorded successfully (PAID)');
       await refetchPendingPaymentInvoices();
@@ -416,8 +416,8 @@ const Payments = () => {
 
   const filteredPayments = payments.filter(
     (payment) =>
-      safeLower(payment.vendor_name).includes(safeLower(searchTerm)) ||
-      safeLower(payment.invoice_number).includes(safeLower(searchTerm))
+      safeLower(payment.vendorName).includes(safeLower(searchTerm)) ||
+      safeLower(payment.invoiceNumber).includes(safeLower(searchTerm))
   );
 
   const resolvePaymentInvoice = (payment) => {
@@ -426,9 +426,9 @@ const Payments = () => {
       const matchById = allInvoices.find((invoice) => invoice.id === normalizedPayment.invoice_id);
       if (matchById) return matchById;
     }
-    if (normalizedPayment.invoice_number) {
+    if (normalizedPayment.invoiceNumber) {
       return allInvoices.find(
-        (invoice) => invoice.invoice_number === normalizedPayment.invoice_number,
+        (invoice) => invoice.invoiceNumber === normalizedPayment.invoiceNumber,
       );
     }
     return null;
@@ -451,9 +451,9 @@ const Payments = () => {
 
       if (historyEntries.length === 0) {
         const approvalRecords =
-          preparedInvoice.approval_records ||
           preparedInvoice.approvalRecords ||
-          invoice.approval_records ||
+          preparedInvoice.approvalRecords ||
+          invoice.approvalRecords ||
           invoice.approvalRecords;
         if (Array.isArray(approvalRecords) && approvalRecords.length > 0) {
           historyEntries = normalizeInvoiceHistoryEntries(approvalRecords);
@@ -506,8 +506,8 @@ const Payments = () => {
 
   const filteredPendingInvoices = invoices.filter(
     (invoice) =>
-      safeLower(invoice.vendor_name).includes(safeLower(searchTerm)) ||
-      safeLower(invoice.invoice_number).includes(safeLower(searchTerm))
+      safeLower(invoice.vendorName).includes(safeLower(searchTerm)) ||
+      safeLower(invoice.invoiceNumber).includes(safeLower(searchTerm))
   );
 
   const renderBatchInvoiceRow = (invoice, rowIndex, headers) => (
@@ -520,7 +520,7 @@ const Payments = () => {
         let value;
 
         switch (header.key) {
-          case 'invoice_number':
+          case 'invoiceNumber':
             value = (
               <div className="flex items-center gap-2">
                 <div onClick={(e) => e.stopPropagation()}>
@@ -530,7 +530,7 @@ const Payments = () => {
                     disabled={!canCreateBatch}
                   />
                 </div>
-                <span>{invoice.invoice_number || '-'}</span>
+                <span>{invoice.invoiceNumber || '-'}</span>
               </div>
             );
             break;

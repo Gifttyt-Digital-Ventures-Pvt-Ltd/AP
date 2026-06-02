@@ -1,12 +1,12 @@
 import React, { useMemo } from "react";
 import { format } from "date-fns";
-import { User } from "lucide-react";
 import { Label } from "../../../components/ui/label";
 import { formatCurrency, normalizeCurrencyCode } from "../../../utils/currency";
 import { TAX_RATES } from "../constants";
 import { buildInvoiceEditFormData } from "../utils/invoiceFormData";
 import {
   calculateInvoiceTotals,
+  INVOICE_LEVEL,
   isInrInvoiceCurrency,
   resolveLineItemSubtotal,
 } from "../utils/invoiceTax";
@@ -58,55 +58,64 @@ const InvoiceReadOnlyDetails = ({
 
   const invoiceCurrency = normalizeCurrencyCode(formData.currency);
   const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
-  const isInvoiceLevelDiscount = formData.discounts_level === "At Invoice Level";
+  const isInvoiceLevelDiscount = formData.discountsLevel === INVOICE_LEVEL;
+  const isInvoiceLevelTax = formData.taxesLevel === INVOICE_LEVEL;
   const formatAmount = (amount) => formatCurrency(amount, invoiceCurrency);
 
   const calculateLineItemSubtotal = (item) => {
     if (isInvoiceLevelDiscount) {
-      const lineTotal = parseNumericInput(item.line_total ?? item.amount, 0);
+      const lineTotal = parseNumericInput(item.lineTotal ?? item.amount, 0);
       if (lineTotal > 0) return lineTotal;
       return (
-        parseNumericInput(item.quantity, 0) * parseNumericInput(item.unit_rate, 0)
+        parseNumericInput(item.quantity, 0) * parseNumericInput(item.unitRate, 0)
       );
     }
     return resolveLineItemSubtotal(item);
   };
 
   const totals = calculateInvoiceTotals({
-    lineItems: formData.line_items,
+    lineItems: formData.lineItems,
     currency: invoiceCurrency,
     calculateLineItemSubtotal,
     taxRates: TAX_RATES,
-    invoiceTaxAmount: formData.scanned_tax_amount ?? invoice.gst_amount ?? invoice.gstAmount,
-    invoiceTaxName: formData.scanned_tax_name ?? "Tax",
-    invoiceTaxRate: formData.scanned_tax_rate,
-    discountsLevel: formData.discounts_level,
-    invoiceDiscount: formData.invoice_discount,
-    invoiceDiscountType: formData.invoice_discount_type,
+    invoiceTaxAmount: formData.scannedTaxAmount ?? invoice.gstAmount,
+    invoiceTaxName:
+      isInvoiceLevelTax
+        ? formData.invoiceTaxName
+        : formData.scannedTaxName ?? "Tax",
+    invoiceTaxRate:
+      isInvoiceLevelTax
+        ? formData.invoiceTaxRate
+        : formData.scannedTaxRate,
+    invoiceTax: formData.invoiceTax,
+    taxesLevel: formData.taxesLevel,
+    discountsLevel: formData.discountsLevel,
+    invoiceDiscount: formData.invoiceDiscount,
+    invoiceDiscountType: formData.invoiceDiscountType,
   });
 
   const tdsAmountFromRate = computeTdsAmount(
-    formData.line_items,
+    formData.lineItems,
     formData.tds,
     isInvoiceLevelDiscount ? totals.subTotalBeforeDiscount : totals.subTotal,
   );
   const tdsAmount =
     tdsAmountFromRate ||
-    Number(invoice.tds_amount ?? invoice.tdsAmount ?? 0) ||
+    Number(invoice.tdsAmount ?? 0) ||
     0;
   const netPayable =
-    Number(invoice.net_amount ?? invoice.netAmount) ||
+    Number(invoice.netAmount) ||
     Math.max(Math.round((totals.total - tdsAmount) * 100) / 100, 0);
 
   const showCategory =
     showCategoryField &&
     isCategoryFeatureEnabled &&
-    (formData.category_id || formData.category_name);
+    (formData.categoryId || formData.categoryName);
 
   const formatLineItemTax = (item) => {
     if (useInrTax) return item.tax || "-";
-    const name = item.tax_name || item.tax || "Tax";
-    const rate = item.tax_rate;
+    const name = item.taxName || item.tax || "Tax";
+    const rate = item.taxRate;
     if (rate === "" || rate === undefined || rate === null) return name;
     return `${name} ${rate}%`;
   };
@@ -115,7 +124,7 @@ const InvoiceReadOnlyDetails = ({
     if (isInvoiceLevelDiscount) return "-";
     const discount = parseNumericInput(item.discount, 0);
     if (!discount) return "-";
-    return item.discount_type === "%"
+    return item.discountType === "%"
       ? `${discount}%`
       : formatAmount(discount);
   };
@@ -125,39 +134,42 @@ const InvoiceReadOnlyDetails = ({
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-gray-800">Vendor Details</h3>
         <div className="grid grid-cols-2 gap-3">
-          <DetailField label="Vendor Name" value={formData.vendor_name} />
-          <DetailField label="Bill Number" value={formData.invoice_number} mono />
-          <DetailField label="Billing Date" value={formatDisplayDate(formData.invoice_date)} />
-          <DetailField label="Due Date" value={formatDisplayDate(formData.due_date)} />
+          <DetailField label="Vendor Name" value={formData.vendorName} />
+          <DetailField label="Bill Number" value={formData.invoiceNumber} mono />
+          <DetailField label="Billing Date" value={formatDisplayDate(formData.invoiceDate)} />
+          <DetailField label="Due Date" value={formatDisplayDate(formData.dueDate)} />
           <DetailField label="Currency" value={invoiceCurrency} mono />
-          <DetailField label="Department" value={formData.department_name} />
+          <DetailField label="Department" value={formData.departmentName} />
           {showCategory && (
-            <DetailField label="Category" value={formData.category_name} />
+            <DetailField label="Category" value={formData.categoryName} />
           )}
         </div>
 
-        {formData.billing_address && (
-          <DetailField label="Billing Address" value={formData.billing_address} />
+        {formData.billingAddress && (
+          <DetailField label="Billing Address" value={formData.billingAddress} />
         )}
 
         <div className="grid grid-cols-2 gap-3">
-          <DetailField label="GST Treatment" value={formData.gst_treatment} />
+          <DetailField label="GST Treatment" value={formData.gstTreatment} />
           <DetailField label="GSTIN / Tax ID" value={formData.gstin} mono />
-          <DetailField label="Source of Supply" value={formData.source_of_supply} />
-          <DetailField label="Destination" value={formData.destination_of_supply} />
+          <DetailField label="Source of Supply" value={formData.sourceOfSupply} />
+          <DetailField label="Destination" value={formData.destinationOfSupply} />
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <DetailField label="Source" value={formData.source} />
           {formData.source === "Email" && (
-            <DetailField label="Source Email" value={formData.source_email} />
+            <DetailField label="Source Email" value={formData.sourceEmail} />
           )}
         </div>
 
-        <DetailField label="Discounts" value={formData.discounts_level} />
+        <div className="grid grid-cols-2 gap-3">
+          <DetailField label="Discounts" value={formData.discountsLevel} />
+          <DetailField label="Taxes" value={formData.taxesLevel} />
+        </div>
       </div>
 
-      {formData.line_items?.length > 0 && (
+      {formData.lineItems?.length > 0 && (
         <div className="space-y-3">
           <h3 className="text-sm font-semibold text-gray-800">Line Items</h3>
           <div className="border rounded-lg overflow-hidden">
@@ -166,7 +178,9 @@ const InvoiceReadOnlyDetails = ({
                 <thead className="bg-gray-50 border-b">
                   <tr>
                     <th className="p-2 text-left font-medium min-w-[180px]">Item Description</th>
-                    <th className="p-2 text-left font-medium w-[130px]">Tax</th>
+                    {!isInvoiceLevelTax && (
+                      <th className="p-2 text-left font-medium w-[130px]">Tax</th>
+                    )}
                     <th className="p-2 text-left font-medium w-[50px]">Qty</th>
                     <th className="p-2 text-left font-medium w-[80px]">Rate</th>
                     {!isInvoiceLevelDiscount && (
@@ -176,20 +190,22 @@ const InvoiceReadOnlyDetails = ({
                   </tr>
                 </thead>
                 <tbody>
-                  {formData.line_items.map((item, index) => (
+                  {formData.lineItems.map((item, index) => (
                     <tr key={index} className="border-b last:border-b-0 align-top">
                       <td className="p-2">
                         <p>{item.description || "-"}</p>
-                        {item.hsn_sac && (
+                        {item.hsnSac && (
                           <p className="text-[10px] text-muted-foreground mt-0.5">
-                            HSN: {item.hsn_sac}
+                            HSN: {item.hsnSac}
                           </p>
                         )}
                       </td>
-                      <td className="p-2">{formatLineItemTax(item)}</td>
+                      {!isInvoiceLevelTax && (
+                        <td className="p-2">{formatLineItemTax(item)}</td>
+                      )}
                       <td className="p-2  ">{item.quantity ?? "-"}</td>
                       <td className="p-2  ">
-                        {formatAmount(item.unit_rate ?? item.unit_price ?? 0)}
+                        {formatAmount(item.unitRate ?? item.unitPrice ?? 0)}
                       </td>
                       {!isInvoiceLevelDiscount && (
                         <td className="p-2">{formatLineItemDiscount(item)}</td>
@@ -223,8 +239,8 @@ const InvoiceReadOnlyDetails = ({
           <div className="flex justify-between text-xs">
             <span>
               Discount
-              {formData.invoice_discount
-                ? ` (${formData.invoice_discount}${formData.invoice_discount_type === "%" ? "%" : ""})`
+              {formData.invoiceDiscount
+                ? ` (${formData.invoiceDiscount}${formData.invoiceDiscountType === "%" ? "%" : ""})`
                 : ""}
             </span>
             <span className=" ">
@@ -276,7 +292,7 @@ const InvoiceReadOnlyDetails = ({
         </div>
       </div>
 
-      <div className="pt-2 border-t">
+      {/* <div className="pt-2 border-t">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <User className="h-4 w-4 shrink-0" />
           <span>
@@ -286,7 +302,7 @@ const InvoiceReadOnlyDetails = ({
               : ""}
           </span>
         </div>
-      </div>
+      </div> */}
     </div>
   );
 };

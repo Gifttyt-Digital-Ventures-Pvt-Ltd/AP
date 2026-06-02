@@ -15,6 +15,7 @@ const TITLE_CASE_STATUS_ALIASES = {
   VENDOR_APPROVAL_PENDING: "Vendor Approval Pending",
   NEEDS_CORRECTION: NEEDS_CORRECTION_STATUS,
   DRAFT: "Draft",
+  SAVED: "Saved",
   REJECTED: "Rejected",
 };
 
@@ -33,6 +34,7 @@ export const getInvoiceStatusBadgeClass = (status) => {
   const normalizedStatus = normalizeWorkflowStatus(status);
   const statusMap = {
     Draft: "bg-gray-100 text-gray-800 border-gray-200",
+    Saved: "bg-slate-100 text-slate-800 border-slate-200",
     "Pending Checker": "bg-yellow-100 text-yellow-800 border-yellow-200",
     "Pending Approver": "bg-yellow-100 text-yellow-800 border-yellow-200",
     "Pending Approval": "bg-[#FFF7CC] text-[#7A4A00] border-[#F2D675]",
@@ -93,13 +95,13 @@ const pickEmailLikeValue = (values = []) =>
 
 export const resolveCreatorEmail = (entity = {}) => {
   const emailLike = pickEmailLikeValue([
-    entity.created_by_email,
+    entity.createdByEmail,
     entity.createdByEmail,
     entity.requested_by_email,
     entity.requestedByEmail,
     entity.creator_email,
     entity.creatorEmail,
-    entity.created_by_name,
+    entity.createdByName,
     entity.createdByName,
     entity.requested_by_name,
     entity.requestedByName,
@@ -113,7 +115,7 @@ export const resolveCreatorEmail = (entity = {}) => {
 
 export const resolveCreatorUserId = (entity = {}) => {
   const idCandidates = [
-    entity.created_by_id,
+    entity.createdById,
     entity.createdById,
     entity.creator_id,
     entity.creatorId,
@@ -141,7 +143,7 @@ export const resolveCreatorUserId = (entity = {}) => {
 };
 
 export const resolveCreatorDisplayName = (entity = {}) =>
-  entity.created_by_name ??
+  entity.createdByName ??
   entity.createdByName ??
   entity.requested_by_name ??
   entity.requestedByName ??
@@ -248,9 +250,19 @@ export const extractApiErrorDetail = (error) => {
 
 const INVOICE_MUTABLE_STATUSES = new Set([
   NEEDS_CORRECTION_STATUS,
+  "Saved",
   "Pending Checker",
   "Vendor Approval Pending",
 ]);
+
+export const isSavedInvoiceStatus = (status) =>
+  normalizeWorkflowStatus(status) === "Saved";
+
+export const canForwardSavedInvoice = (invoice, identity = {}) => {
+  if (!isSavedInvoiceStatus(invoice?.status)) return false;
+  const { canUpdateInvoices, canManageInvoices } = identity;
+  return Boolean(canUpdateInvoices || canManageInvoices);
+};
 const INVOICE_DELETABLE_STATUSES = new Set([
   ...INVOICE_MUTABLE_STATUSES,
   "Rejected",
