@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useGetInvoicesQuery, useGetVendorsQuery } from '../../Services/apis/invoicesVendorsApi';
+import { EMPTY_INVOICE_LIST_RESPONSE, getInvoiceListItems } from '../../Services/utils/payloadMappers';
 import {
   useGetGstEntriesQuery,
   useGetGstSummaryQuery,
@@ -112,7 +113,7 @@ const TaxManagement = () => {
     refetch: refetchGstSummary,
   } = useGetGstSummaryQuery(undefined, { skip: !canViewGst });
   const {
-    data: invoicesData = [],
+    data: invoicesListData = EMPTY_INVOICE_LIST_RESPONSE,
     isLoading: invoicesLoading,
     isFetching: invoicesFetching,
     refetch: refetchInvoices,
@@ -182,7 +183,7 @@ const TaxManagement = () => {
   });
 
   const gstEntries = Array.isArray(gstEntriesData) ? gstEntriesData : [];
-  const invoices = Array.isArray(invoicesData) ? invoicesData : [];
+  const invoices = getInvoiceListItems(invoicesListData);
   const vendors = Array.isArray(vendorsData) ? vendorsData : [];
   const tdsEntries = Array.isArray(tdsEntriesData) ? tdsEntriesData : [];
   const tdsSections = Array.isArray(tdsSectionsData) ? tdsSectionsData : [];

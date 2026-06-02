@@ -34,7 +34,7 @@ const ApprovalDialog = ({
           <div className="bg-muted/50 rounded-lg p-4 space-y-2">
             <div className="flex justify-between">
               <span className="text-sm text-muted-foreground">Vendor:</span>
-              <span className="font-medium">{selectedInvoice.vendor_name}</span>
+              <span className="font-medium">{selectedInvoice.vendorName}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-muted-foreground">Amount:</span>
@@ -44,7 +44,7 @@ const ApprovalDialog = ({
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-muted-foreground">Invoice #:</span>
-              <span className=" ">{selectedInvoice.invoice_number}</span>
+              <span className=" ">{selectedInvoice.invoiceNumber}</span>
             </div>
           </div>
         )}

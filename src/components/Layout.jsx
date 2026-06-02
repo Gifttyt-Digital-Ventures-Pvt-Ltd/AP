@@ -58,7 +58,6 @@ export const Layout = ({ children }) => {
 
   const menuItems = [
     { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard' },
-    { icon: Users, label: 'Vendors', path: '/vendors' },
     { icon: ShoppingCart, label: 'Purchase Orders', path: '/purchase-orders' },
     { icon: Package, label: 'Goods Receipt', path: '/goods-receipt' },
     { icon: FileText, label: 'Invoices', path: '/invoices' },
@@ -67,6 +66,7 @@ export const Layout = ({ children }) => {
     { icon: CheckCircle, label: 'Approvals', path: '/approvals' },
     { icon: CreditCard, label: 'Payments', path: '/payments' },
     { icon: Layers, label: 'Payment Batches', path: '/payment-batches' },
+    { icon: Users, label: 'Vendors', path: '/vendors' },
     { icon: Calculator, label: 'Tax Management', path: '/tax-management' },
     { icon: BarChart3, label: 'Reports', path: '/reports' },
     { icon: History, label: 'Audit Trail', path: '/audit-trail' },

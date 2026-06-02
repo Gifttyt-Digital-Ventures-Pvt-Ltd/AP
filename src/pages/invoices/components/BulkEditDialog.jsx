@@ -43,7 +43,7 @@ const BulkEditDialog = ({
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
                 <span className="truncate font-semibold text-sm">
-                  Bulk Edit Invoice - {bulkEditForm.invoice_number || selectedItem?.filename || 'Draft'}
+                  Bulk Edit Invoice - {bulkEditForm.invoiceNumber || selectedItem?.filename || 'Draft'}
                 </span>
               </div>
               <div className="shrink-0 flex items-center gap-2">

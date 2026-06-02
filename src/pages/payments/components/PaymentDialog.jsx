@@ -52,19 +52,19 @@ const PaymentDialog = ({
             <option value="">Select invoice</option>
             {invoices.map((invoice) => (
               <option key={invoice.id} value={invoice.id}>
-                {invoice.invoice_number} - {invoice.vendor_name} - {'\u20B9'}{invoice.amount.toLocaleString('en-IN')}
+                {invoice.invoiceNumber} - {invoice.vendorName} - {'\u20B9'}{invoice.amount.toLocaleString('en-IN')}
               </option>
             ))}
           </select>
         </div>
 
         <div>
-          <Label htmlFor="payment_date">Payment Date *</Label>
+          <Label htmlFor="paymentDate">Payment Date *</Label>
           <Input
-            id="payment_date"
+            id="paymentDate"
             type="date"
-            value={formData.payment_date}
-            onChange={(e) => setFormData({ ...formData, payment_date: e.target.value })}
+            value={formData.paymentDate}
+            onChange={(e) => setFormData({ ...formData, paymentDate: e.target.value })}
             required
             data-testid="payment-date-input"
           />

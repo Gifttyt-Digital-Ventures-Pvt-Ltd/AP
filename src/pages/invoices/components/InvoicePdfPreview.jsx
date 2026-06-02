@@ -13,7 +13,7 @@ export const InvoicePdfPreview = ({
   getInvoiceFileUrl = () => null,
 }) => {
   const displayUrl = fileURL || getInvoiceFileUrl(invoice);
-  const fileName = file?.name || invoice?.original_file_name || "Invoice.pdf";
+  const fileName = file?.name || invoice?.originalFileName || "Invoice.pdf";
   const isPdf = file?.type?.includes("pdf") || fileName?.toLowerCase().endsWith(".pdf");
   const isImage = file?.type?.includes("image") || [".png", ".jpg", ".jpeg", ".gif", ".webp"].some((ext) => fileName?.toLowerCase().endsWith(ext));
   const hasFile = Boolean(displayUrl);

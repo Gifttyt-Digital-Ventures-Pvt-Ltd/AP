@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useGetInvoicesQuery } from '../../Services/apis/invoicesVendorsApi';
+import { EMPTY_INVOICE_LIST_RESPONSE, getInvoiceListItems } from '../../Services/utils/payloadMappers';
 import {
   useGetStatementsQuery,
   useGetTransactionsQuery,
@@ -59,7 +60,7 @@ const TransactionsPage = () => {
     data: ledgerOptionsData = [],
   } = useGetLedgersQuery();
   const {
-    data: invoicesData = [],
+    data: invoicesListData = EMPTY_INVOICE_LIST_RESPONSE,
   } = useGetInvoicesQuery();
   const [uploadStatement] = useUploadStatementMutation();
   const [deleteStatement] = useDeleteStatementMutation();
@@ -73,7 +74,7 @@ const TransactionsPage = () => {
 
   const statements = Array.isArray(statementsData) ? statementsData : [];
   const transactions = Array.isArray(transactionsData) ? transactionsData : [];
-  const invoices = Array.isArray(invoicesData) ? invoicesData : [];
+  const invoices = getInvoiceListItems(invoicesListData);
   const ledgerOptions =
     Array.isArray(ledgerOptionsData) && ledgerOptionsData.length > 0
       ? ledgerOptionsData
