@@ -11,6 +11,7 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Search, Plus, Pencil, Trash2, Eye, X, Check, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
+import { format } from 'date-fns';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useRBAC } from '../../contexts/RBACContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -563,6 +564,7 @@ const Vendors = () => {
 
   const vendorsTableHeader = [
     { key: 'vendor', title: 'Vendor' },
+    { key: 'createdAt', title: 'Created Date', cellClassName: 'text-xs text-muted-foreground whitespace-nowrap' },
     { key: 'type', title: 'Type' },
     { key: 'status', title: 'Status' },
     { key: 'contact', title: 'Contact' },
@@ -621,9 +623,18 @@ const Vendors = () => {
           case 'gstin':
             value = vendor.gstin ? `${vendor.gstin.substring(0, 4)}...${vendor.gstin.slice(-4)}` : '-';
             break;
+          case 'createdAt': {
+            const createdAt = vendor.createdAt || vendor.created_at;
+            const createdDate = createdAt ? new Date(createdAt) : null;
+            value =
+              createdDate && !Number.isNaN(createdDate.getTime())
+                ? format(createdDate, 'dd MMM yy, hh:mm a')
+                : '-';
+            break;
+          }
           case 'actions':
             value = (
-              <div className="inline-flex justify-start items-center gap-1 pl-3">
+              <div className="inline-flex justify-start items-center gap-1">
                 <Button
                   variant="ghost"
                   size="sm"

@@ -276,6 +276,7 @@ export const buildToCreateInvoicePayload = (
       ...invoiceData,
       lineItems: lineItems,
       vendorId: invoiceData.vendorId || findVendorByName(invoiceData.vendorName)?.id || "",
+      status: invoiceData.status ?? options.status,
       departmentName:
         invoiceData.departmentName ||
         invoiceData.departmentName ||

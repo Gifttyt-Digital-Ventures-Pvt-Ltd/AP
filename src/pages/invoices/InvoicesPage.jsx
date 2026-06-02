@@ -19,9 +19,12 @@ import {
   normalizeInvoiceMandatoryFields,
 } from './utils/mandatoryFields';
 import {
+  getBulkExtractResults,
+  getDuplicateInvoiceMessage,
   isDuplicateBulkExtractResult,
   isDuplicateBulkPreviewItem,
   isDuplicateInvoiceError,
+  normalizeBulkExtractResult,
 } from './utils/duplicateInvoice';
 import {
   applyForeignLineItemTax,
@@ -125,6 +128,8 @@ import {
   isSavedInvoiceStatus,
   canForwardSavedInvoice,
   NEEDS_CORRECTION_STATUS,
+  resolveBulkCreateInvoiceStatus,
+  resolveInitialInvoiceStatus,
 } from '../../utils/approvalWorkflow';
 
 const getApprovalWorkflowName = (invoice) =>
@@ -491,12 +496,15 @@ const InvoicesPage = () => {
           originalFileName: filename || file?.name || null,
         };
 
-    return toCreateInvoicePayload({
-      ...formBase,
-      vendorName: formBase.vendorName?.trim() || '',
-      originalFileName: formBase.originalFileName || filename || file?.name || null,
-      currentFileName: file?.name || filename || null,
-    });
+    return toCreateInvoicePayload(
+      {
+        ...formBase,
+        vendorName: formBase.vendorName?.trim() || '',
+        originalFileName: formBase.originalFileName || filename || file?.name || null,
+        currentFileName: file?.name || filename || null,
+        status: resolveBulkCreateInvoiceStatus(),
+      },
+    );
   };
 
   const initializeFormData = (extractedData = null) =>
@@ -554,9 +562,7 @@ const InvoicesPage = () => {
           <div className="space-y-2">
             <p className="font-bold text-base">Duplicate Invoice</p>
             <p className="text-sm whitespace-pre-line">
-              {normalizedResponse?.error ||
-                normalizedResponse?.message ||
-                'An invoice with the same invoice number and vendor already exists.'}
+              {getDuplicateInvoiceMessage(normalizedResponse)}
             </p>
           </div>,
           { duration: 8000 },
@@ -631,20 +637,14 @@ const InvoicesPage = () => {
     try {
       const response = await bulkUploadInvoices(formDataUpload).unwrap();
 
-      const results = Array.isArray(response?.results) ? response.results : [];
-
-      const normalizedResults = results.map((r) => ({
-        ...r,
-        status: (r?.status || '').toLowerCase(),
-        extracted: r?.extractedData ?? r?.extracted_data ?? null,
-      }));
+      const normalizedResults = getBulkExtractResults(response).map(normalizeBulkExtractResult);
 
       const fileMap = new Map(
         files.map((file) => [String(file.name || '').toLowerCase(), file])
       );
 
       const previewItemsFromResults = normalizedResults.map((result, index) => {
-        const isDuplicate = isDuplicateBulkExtractResult(result);
+        const isDuplicate = result.isDuplicate;
         const hasExtracted =
           result.status === 'success' &&
           result.extracted &&
@@ -662,9 +662,7 @@ const InvoicesPage = () => {
           filename,
           status: isDuplicate ? 'duplicate' : result.status || 'failed',
           error: isDuplicate
-            ? result?.error ||
-              result?.message ||
-              'An invoice with the same invoice number and vendor already exists.'
+            ? result.duplicateMessage || getDuplicateInvoiceMessage(result)
             : (result?.error || result?.message || ''),
           isDuplicate,
           selected: false,
@@ -693,9 +691,15 @@ const InvoicesPage = () => {
 
       setBulkPreviewItems(previewItems);
       setBulkPreviewOpen(true);
-      toast.success(`${previewItems.length} invoice${previewItems.length === 1 ? '' : 's'} scanned.`, {
-        duration: 4000,
-      });
+      const scannedCount = previewItems.length;
+      const duplicateCount = previewItems.filter((item) => item.isDuplicate).length;
+      const successCount = Number(response?.successful ?? normalizedResults.filter((r) => r.status === 'success' && !r.isDuplicate).length);
+      toast.success(
+        duplicateCount > 0
+          ? `${scannedCount} file${scannedCount === 1 ? '' : 's'} scanned (${successCount} ok, ${duplicateCount} duplicate${duplicateCount === 1 ? '' : 's'}).`
+          : `${scannedCount} invoice${scannedCount === 1 ? '' : 's'} scanned.`,
+        { duration: 4000 },
+      );
     } catch (error) {
       const errorMessage = error?.data?.detail || 'Bulk upload failed';
       toast.error(errorMessage, { duration: 6000 });
@@ -1285,10 +1289,16 @@ const InvoicesPage = () => {
     if (!formData) return;
 
     const totals = calculateTotals(formData.lineItems);
+    const createStatus = resolveInitialInvoiceStatus({
+      vendorId: formData.vendorId || findVendorByName(formData.vendorName)?.id || '',
+      vendorRequestSubmitted: formData.vendorRequestSubmitted,
+      findVendorById,
+    });
     const invoicePayload = toCreateInvoicePayload(
       {
         ...formData,
         vendorName: formData.vendorName?.trim() || '',
+        status: createStatus,
         lineItems: normalizeLineItemsForTaxLevel({
           ...formData,
           lineItems: formData.lineItems.map((item) => ({
@@ -1302,6 +1312,7 @@ const InvoicesPage = () => {
         currentFileName: uploadedFile?.name || formData.originalFileName || null,
       },
       {
+        status: createStatus,
         totals,
         tdsAmount: computeTdsAmount(formData.lineItems, formData.tds, calculateLineItemSubtotal),
         uploadedFileName: uploadedFile?.name,
