@@ -1741,8 +1741,11 @@ const InvoicesPage = () => {
   );
 
   return (
-    <div data-testid="invoices-page">
-      <div className="flex flex-col gap-4 mb-8 lg:flex-row lg:items-center lg:justify-between">
+    <div
+      className="flex min-h-0 flex-1 flex-col gap-6"
+      data-testid="invoices-page"
+    >
+      <div className="flex shrink-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-4xl md:text-5xl font-bold font-['Manrope'] text-primary mb-2" data-testid="invoices-title">
             Invoices
@@ -1784,7 +1787,7 @@ const InvoicesPage = () => {
         disabled={scanning || bulkExtracting || !canUploadInvoices}
       />
 
-      <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center">
         <div className="flex flex-wrap gap-2">
           {INVOICE_LIST_FILTERS.map(({ value, label }) => (
             <Button
@@ -1811,68 +1814,86 @@ const InvoicesPage = () => {
         </div>
       </div>
 
-      <div className="bg-card border border-border rounded-lg shadow-sm overflow-x-auto" data-testid="invoices-table">
-        <AppDataTable
-          tableHeader={invoiceTableHeader}
-          tableData={invoices}
-          renderRow={renderInvoiceRow}
-          isLoading={invoicesFetching}
-          loadingRowCount={8}
-          tableClassName="min-w-[1900px]"
-          headClassName="border-b border-border bg-muted/50"
-          emptyMessage="No invoices found. Upload your first invoice to get started!"
-          emptyTestId="no-invoices"
-        />
-      </div>
-
-      {invoiceTotalPages > 0 && (
-        <div className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-muted-foreground" data-testid="invoice-pagination-summary">
-            Showing {invoiceStartRecord}-{invoiceEndRecord} of {invoiceTotal.toLocaleString('en-IN')}
-          </p>
-          <Pagination className="mx-0 w-auto justify-start sm:justify-end">
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious
-                  href="#"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    goToInvoicePage(invoiceCurrentPage - 1);
-                  }}
-                  className={invoiceCurrentPage === 0 ? 'pointer-events-none opacity-50' : undefined}
-                  data-testid="invoice-pagination-previous"
-                />
-              </PaginationItem>
-              {visibleInvoicePageNumbers.map((pageNumber) => (
-                <PaginationItem key={pageNumber}>
-                  <PaginationLink
-                    href="#"
-                    isActive={pageNumber === invoiceCurrentPage}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      goToInvoicePage(pageNumber);
-                    }}
-                    data-testid={`invoice-pagination-page-${pageNumber + 1}`}
-                  >
-                    {pageNumber + 1}
-                  </PaginationLink>
-                </PaginationItem>
-              ))}
-              <PaginationItem>
-                <PaginationNext
-                  href="#"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    goToInvoicePage(invoiceCurrentPage + 1);
-                  }}
-                  className={!invoiceHasMore && invoiceCurrentPage >= invoiceTotalPages - 1 ? 'pointer-events-none opacity-50' : undefined}
-                  data-testid="invoice-pagination-next"
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
+      <div
+        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm"
+        data-testid="invoices-table"
+      >
+        <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-thin-muted">
+          <AppDataTable
+            tableHeader={invoiceTableHeader}
+            tableData={invoices}
+            renderRow={renderInvoiceRow}
+            isLoading={invoicesFetching}
+            loadingRowCount={8}
+            tableClassName="min-w-[1900px]"
+            headClassName="border-b border-border bg-muted/50"
+            emptyMessage="No invoices found. Upload your first invoice to get started!"
+            emptyTestId="no-invoices"
+          />
         </div>
-      )}
+        <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+          {invoiceTotalPages > 0 ? (
+            <>
+              <p
+                className="text-sm text-muted-foreground"
+                data-testid="invoice-pagination-summary"
+              >
+                Showing {invoiceStartRecord}-{invoiceEndRecord} of{' '}
+                {invoiceTotal.toLocaleString('en-IN')}
+              </p>
+              <Pagination className="mx-0 w-auto justify-start sm:justify-end">
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      href="#"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        goToInvoicePage(invoiceCurrentPage - 1);
+                      }}
+                      className={
+                        invoiceCurrentPage === 0
+                          ? 'pointer-events-none opacity-50'
+                          : undefined
+                      }
+                      data-testid="invoice-pagination-previous"
+                    />
+                  </PaginationItem>
+                  {visibleInvoicePageNumbers.map((pageNumber) => (
+                    <PaginationItem key={pageNumber}>
+                      <PaginationLink
+                        href="#"
+                        isActive={pageNumber === invoiceCurrentPage}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          goToInvoicePage(pageNumber);
+                        }}
+                        data-testid={`invoice-pagination-page-${pageNumber + 1}`}
+                      >
+                        {pageNumber + 1}
+                      </PaginationLink>
+                    </PaginationItem>
+                  ))}
+                  <PaginationItem>
+                    <PaginationNext
+                      href="#"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        goToInvoicePage(invoiceCurrentPage + 1);
+                      }}
+                      className={
+                        !invoiceHasMore && invoiceCurrentPage >= invoiceTotalPages - 1
+                          ? 'pointer-events-none opacity-50'
+                          : undefined
+                      }
+                      data-testid="invoice-pagination-next"
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </>
+          ) : null}
+        </div>
+      </div>
 
       <UploadSection
         uploadedFile={uploadedFile}

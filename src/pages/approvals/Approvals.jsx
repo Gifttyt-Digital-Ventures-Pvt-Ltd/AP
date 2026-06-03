@@ -319,8 +319,11 @@ const Approvals = () => {
   });
 
   return (
-    <div data-testid="approvals-page">
-      <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <div
+      className="flex min-h-0 flex-1 flex-col"
+      data-testid="approvals-page"
+    >
+      <div className="mb-6 flex shrink-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-4xl md:text-5xl font-bold font-['Manrope'] text-primary mb-2" data-testid="approvals-title">
             Approvals
@@ -337,8 +340,12 @@ const Approvals = () => {
       </div>
 
       {/* Each tab now delegates table rendering to focused components. */}
-      <Tabs defaultValue="needs-approval" className="space-y-6" data-testid="approval-tabs">
-        <TabsList>
+      <Tabs
+        defaultValue="needs-approval"
+        className="flex min-h-0 flex-1 flex-col gap-6"
+        data-testid="approval-tabs"
+      >
+        <TabsList className="shrink-0 w-fit">
           <TabsTrigger value="needs-approval" data-testid="tab-needs-approval">
             Needs your approval
           </TabsTrigger>
@@ -350,7 +357,7 @@ const Approvals = () => {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="needs-approval">
+        <TabsContent value="needs-approval" className="mt-0 min-h-0 flex-1 focus-visible:outline-none">
           <NeedsApprovalTable
             myPendingInvoices={myPendingInvoices}
             getApprovalProgress={getApprovalProgress}
@@ -364,7 +371,7 @@ const Approvals = () => {
           />
         </TabsContent>
 
-        <TabsContent value="pending">
+        <TabsContent value="pending" className="mt-0 min-h-0 flex-1 focus-visible:outline-none">
           <PendingInvoicesTable
             otherPendingInvoices={otherPendingInvoices}
             getStatusBadgeClass={getStatusBadgeClass}
@@ -376,7 +383,10 @@ const Approvals = () => {
           />
         </TabsContent>
 
-        <TabsContent value="all">
+        <TabsContent
+          value="all"
+          className="mt-0 flex min-h-0 flex-1 flex-col focus-visible:outline-none"
+        >
           <AllInvoicesTable
             allInvoices={allInvoices}
             searchTerm={allTabSearchTerm}
