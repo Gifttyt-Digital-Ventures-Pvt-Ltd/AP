@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGetVendorsQuery } from "../../Services/apis/invoicesVendorsApi";
 import {
@@ -247,7 +247,77 @@ const UserRoles = () => {
     return rows.map((role) => toUiRole(role, users));
   }, [rolesData, users]);
 
-  const allRoles = useMemo(() => backendRoles, [backendRoles]);
+  const isMappedPermissionEntitled = useCallback(
+    (backendEntry) => {
+      if (!backendEntry?.screen) return false;
+      if (backendEntry.screen === "CATEGORY") return isCategoryFeatureEnabled;
+      if (backendEntry.screen === "VENDOR_APPROVAL_WORKFLOW") {
+        return (
+          isCorporateSectionEnabled("MANAGE_ROLE_APPROVAL_WORKFLOW") ||
+          isCorporateSectionEnabled("VENDOR_APPROVAL_WORKFLOW_ALL")
+        );
+      }
+      if (backendEntry.screen === "SETTINGS") {
+        if (backendEntry.permissionType === "ORG")
+          return isCorporateSectionEnabled("SETTINGS_ORG_DETAILS");
+        if (backendEntry.permissionType === "BANKING")
+          return isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING");
+        if (backendEntry.permissionType === "INTERACTION")
+          return isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
+      }
+      if (backendEntry.screen === "PAYMENTS") {
+        return (
+          isCorporateScreenAllowed("PAYMENTS") &&
+          isCorporateSectionEnabled("PAYMENTS_ALL")
+        );
+      }
+      if (backendEntry.screen === "PAYMENT_BATCHES") {
+        return (
+          isCorporateScreenAllowed("PAYMENT_BATCHES") &&
+          isCorporateSectionEnabled("PAYMENT_BATCHES_ALL")
+        );
+      }
+      if (backendEntry.screen === "BANKING") {
+        return isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING");
+      }
+      return isCorporateScreenAllowed(backendEntry.screen);
+    },
+    [
+      isCategoryFeatureEnabled,
+      isCorporateScreenAllowed,
+      isCorporateSectionEnabled,
+    ],
+  );
+
+  const supportedCustomRolePermissionKeys = useMemo(() => {
+    if (
+      !Array.isArray(availableCustomRoleScreens) ||
+      availableCustomRoleScreens.length === 0
+    ) {
+      return null;
+    }
+
+    const keys = new Set();
+    availableCustomRoleScreens.forEach((screen) => {
+      const screenName = String(screen?.screen || "").trim().toUpperCase();
+      const permissionTypes = Array.isArray(screen?.permissionTypes)
+        ? screen.permissionTypes
+        : [];
+      permissionTypes.forEach((permissionTypeEntry) => {
+        const permissionType = String(
+          permissionTypeEntry?.permissionType ??
+            permissionTypeEntry?.type ??
+            "",
+        )
+          .trim()
+          .toUpperCase();
+        if (screenName && permissionType) {
+          keys.add(`${screenName}:${permissionType}`);
+        }
+      });
+    });
+    return keys;
+  }, [availableCustomRoleScreens]);
 
   const availablePermissionKeys = useMemo(() => {
     if (
@@ -282,47 +352,12 @@ const UserRoles = () => {
   }, [availableCustomRoleScreens]);
 
   const filteredPermissionGroups = useMemo(() => {
-    const isPermissionScreenEntitled = (backendEntry) => {
-      if (!backendEntry?.screen) return false;
-      if (backendEntry.screen === "CATEGORY") return isCategoryFeatureEnabled;
-      if (backendEntry.screen === "VENDOR_APPROVAL_WORKFLOW") {
-        return (
-          isCorporateSectionEnabled("MANAGE_ROLE_APPROVAL_WORKFLOW") ||
-          isCorporateSectionEnabled("VENDOR_APPROVAL_WORKFLOW_ALL")
-        );
-      }
-      if (backendEntry.screen === "SETTINGS") {
-        if (backendEntry.permissionType === "ORG")
-          return isCorporateSectionEnabled("SETTINGS_ORG_DETAILS");
-        if (backendEntry.permissionType === "BANKING")
-          return isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING");
-        if (backendEntry.permissionType === "INTERACTION")
-          return isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
-      }
-      if (backendEntry.screen === "PAYMENTS") {
-        return (
-          isCorporateScreenAllowed("PAYMENTS") &&
-          isCorporateSectionEnabled("PAYMENTS_ALL")
-        );
-      }
-      if (backendEntry.screen === "PAYMENT_BATCHES") {
-        return (
-          isCorporateScreenAllowed("PAYMENT_BATCHES") &&
-          isCorporateSectionEnabled("PAYMENT_BATCHES_ALL")
-        );
-      }
-      if (backendEntry.screen === "BANKING") {
-        return isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING");
-      }
-      return isCorporateScreenAllowed(backendEntry.screen);
-    };
-
     const groups = PERMISSION_GROUPS.map((group) => ({
       ...group,
       permissions: group.permissions.filter((permission) => {
         const backendEntry = CUSTOM_ROLE_PERMISSION_MAP[permission.id];
         if (!backendEntry) return false;
-        if (!isPermissionScreenEntitled(backendEntry)) return false;
+        if (!isMappedPermissionEntitled(backendEntry)) return false;
         if (
           availablePermissionKeys &&
           !availablePermissionKeys.has(permission.id)
@@ -335,63 +370,75 @@ const UserRoles = () => {
     return groups;
   }, [
     availablePermissionKeys,
-    isCategoryFeatureEnabled,
-    isCorporateScreenAllowed,
-    isCorporateSectionEnabled,
+    isMappedPermissionEntitled,
   ]);
 
-  const validateMappedPermissions = (mappedPermissions = []) => {
-    if (!isCategoryFeatureEnabled) {
-      const categoryPermission = mappedPermissions.find(
-        (permission) => permission.screen === "CATEGORY",
-      );
-      if (categoryPermission) {
-        toast.error(
-          "Category permissions are not enabled for your corporate setup",
-        );
-        return false;
-      }
-    }
-
-    if (
-      Array.isArray(availableCustomRoleScreens) &&
-      availableCustomRoleScreens.length > 0
-    ) {
-      const supportedPermissionKeys = new Set();
-      availableCustomRoleScreens.forEach((screen) => {
-        const permissionTypes = Array.isArray(screen?.permissionTypes)
-          ? screen.permissionTypes
-          : [];
-        permissionTypes.forEach((permissionTypeEntry) => {
-          const permissionType = String(
-            permissionTypeEntry?.permissionType ??
-              permissionTypeEntry?.type ??
-              "",
-          )
-            .trim()
-            .toUpperCase();
-          if (screen?.screen && permissionType) {
-            supportedPermissionKeys.add(
-              `${String(screen.screen).trim().toUpperCase()}:${permissionType}`,
-            );
-          }
-        });
+  const visiblePermissionIds = useMemo(() => {
+    const ids = new Set();
+    filteredPermissionGroups.forEach((group) => {
+      group.permissions.forEach((permission) => {
+        if (permission?.id) ids.add(permission.id);
       });
-      const unsupportedEntry = mappedPermissions.find(
-        (permission) =>
-          !supportedPermissionKeys.has(
-            `${permission.screen}:${permission.permissionType}`,
-          ),
-      );
-      if (unsupportedEntry) {
-        toast.error(
-          `Permission "${unsupportedEntry.screen} - ${unsupportedEntry.permissionType}" is not enabled for your corporate setup`,
-        );
-        return false;
-      }
-    }
+    });
+    return ids;
+  }, [filteredPermissionGroups]);
 
-    return true;
+  const filterRoleForVisiblePermissions = useCallback(
+    (role) => {
+      const visiblePermissions = (Array.isArray(role?.permissions)
+        ? role.permissions
+        : []
+      ).filter((permissionId) => visiblePermissionIds.has(permissionId));
+      const visiblePermissionSet = new Set(visiblePermissions);
+      const visiblePermissionEntries = (Array.isArray(role?.permissionEntries)
+        ? role.permissionEntries
+        : []
+      ).filter(
+        (entry) =>
+          entry?.canonicalId && visiblePermissionSet.has(entry.canonicalId),
+      );
+
+      return {
+        ...role,
+        permissions: visiblePermissions,
+        permissionEntries: visiblePermissionEntries,
+        permissionsCount: visiblePermissions.length,
+      };
+    },
+    [visiblePermissionIds],
+  );
+
+  const allRoles = useMemo(
+    () => backendRoles.map((role) => filterRoleForVisiblePermissions(role)),
+    [backendRoles, filterRoleForVisiblePermissions],
+  );
+
+  const filterMappedPermissionsForCorporate = (mappedPermissions = []) => {
+    const enabledPermissions = [];
+    const removedPermissions = [];
+
+    mappedPermissions.forEach((permission) => {
+      const screen = String(permission?.screen || "").trim().toUpperCase();
+      const permissionType = String(permission?.permissionType || "")
+        .trim()
+        .toUpperCase();
+      const permissionKey = `${screen}:${permissionType}`;
+      const isSupported =
+        !supportedCustomRolePermissionKeys ||
+        supportedCustomRolePermissionKeys.has(permissionKey);
+      const isEntitled = isMappedPermissionEntitled({
+        screen,
+        permissionType,
+      });
+
+      if (screen && permissionType && isSupported && isEntitled) {
+        enabledPermissions.push({ screen, permissionType });
+      } else {
+        removedPermissions.push({ screen, permissionType });
+      }
+    });
+
+    return { enabledPermissions, removedPermissions };
   };
 
   const getAssignedRoleIdsForUser = (user) => {
@@ -561,19 +608,35 @@ const UserRoles = () => {
       return false;
     }
 
-    if (!validateMappedPermissions(mappedPermissions)) return false;
+    const { enabledPermissions, removedPermissions } =
+      filterMappedPermissionsForCorporate(mappedPermissions);
+
+    if (enabledPermissions.length === 0) {
+      toast.error(
+        "Select at least one permission enabled for your corporate setup",
+      );
+      return false;
+    }
+
+    if (removedPermissions.length > 0) {
+      toast.info(
+        "Permissions from disabled modules were removed from the role payload",
+      );
+    }
 
     try {
       const body = {
         roleCode: buildCustomRoleCode(name),
         roleName: name.trim(),
         description: description?.trim() || "",
-        permissions: mappedPermissions,
+        permissions: enabledPermissions,
       };
 
       const response = await createCustomRole(body).unwrap();
       await refetchRoles();
-      const createdRole = toUiRole(response, users);
+      const createdRole = filterRoleForVisiblePermissions(
+        toUiRole(response, users),
+      );
       toast.success(`Role "${createdRole.name}" created successfully`);
       setSelectedRole(createdRole);
       setRoleDialogMode("assignUsers");
@@ -637,7 +700,21 @@ const UserRoles = () => {
           return false;
         }
 
-        if (!validateMappedPermissions(mappedPermissions)) return false;
+        const { enabledPermissions, removedPermissions } =
+          filterMappedPermissionsForCorporate(mappedPermissions);
+
+        if (enabledPermissions.length === 0) {
+          toast.error(
+            "Select at least one permission enabled for your corporate setup",
+          );
+          return false;
+        }
+
+        if (removedPermissions.length > 0) {
+          toast.info(
+            "Permissions from disabled modules were removed from the role payload",
+          );
+        }
 
         await updateCustomRole({
           roleId: roleDraft.id,
@@ -645,7 +722,7 @@ const UserRoles = () => {
             roleName,
             description: roleDraft.description?.trim() || "",
             active: roleDraft.active !== false,
-            permissions: mappedPermissions,
+            permissions: enabledPermissions,
           },
         }).unwrap();
       }

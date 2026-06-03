@@ -103,7 +103,7 @@ export const PERMISSION_GROUPS = [
     permissions: [
       { id: "settings-org", label: "Manage Organisation Details" },
       { id: "settings-banking", label: "Manage Connected Banking" },
-      { id: "settings-interaction", label: "Interaction Rules" },
+      { id: "settings-interaction", label: "Integrations" },
     ],
   },
   {
@@ -153,7 +153,7 @@ export const PERMISSION_LABELS = {
   "vendor-workflow-manage": "Vendor Approval Workflow - Manage",
   "settings-org": "Settings - Manage Organisation",
   "settings-banking": "Settings - Manage Banking",
-  "settings-interaction": "Settings - Interaction Rules",
+  "settings-interaction": "Settings - Integrations",
   "category-view": "Category - View Only",
   "category-manage": "Category - Manage (Add, Delete, Edit)",
 };
