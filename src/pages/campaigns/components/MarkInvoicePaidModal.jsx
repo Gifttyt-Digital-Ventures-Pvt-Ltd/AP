@@ -31,7 +31,7 @@ const MarkInvoicePaidModal = ({
   onSubmit,
   saving,
 }) => {
-  const outstanding = Number(row?.invoice?.outstanding || 0);
+  const outstanding = Number(row?.outstanding ?? 0);
   const [form, setForm] = useState({
     amount: "",
     mode: "",

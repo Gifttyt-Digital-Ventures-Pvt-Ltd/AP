@@ -92,10 +92,9 @@ export const getVendorRowActions = ({ row, campaign, access }) => {
     recordAdvance:
       access.canRecordAdvance &&
       ["no_invoice", "pending_checker", "pending_approval", "pending_payment"].includes(status),
-    submitInvoice:
-      access.canSubmitInvoice && ["no_invoice", "rejected"].includes(status),
-    reviewChecker: access.canCheckInvoice && status === "pending_checker",
-    reviewApprover: access.canApproveInvoice && status === "pending_approval",
+    submitInvoice: access.canSubmitInvoice,
+    reviewChecker: false,
+    reviewApprover: false,
     markPaid: access.canMarkPaid && status === "pending_payment",
   };
 };
