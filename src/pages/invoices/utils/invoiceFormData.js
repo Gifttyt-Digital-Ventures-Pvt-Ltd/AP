@@ -41,6 +41,7 @@ export const buildInvoiceEditFormData = (
   invoice = {},
   {
     isCategoryFeatureEnabled = false,
+    isCampaignFeatureEnabled = false,
     findVendorByName,
     findVendorById,
   } = {},
@@ -145,5 +146,21 @@ export const buildInvoiceEditFormData = (
             invoice.categoryName || invoice.categoryName || invoice.category?.name || "",
         }
       : {}),
+    ...(isCampaignFeatureEnabled
+      ? {
+          campaignId: invoice.campaignId || invoice.campaign_id || "",
+          campaignName: invoice.campaignName || invoice.campaign_name || "",
+          referenceNumber:
+            invoice.referenceNumber ||
+            invoice.reference_number ||
+            invoice.referenceCode ||
+            invoice.reference_code ||
+            "",
+        }
+      : {
+          campaignId: "",
+          campaignName: "",
+          referenceNumber: "",
+        }),
   };
 };

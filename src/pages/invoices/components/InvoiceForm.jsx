@@ -27,6 +27,7 @@ import {
   sanitizeNumericInput,
 } from "../utils/numericInput";
 import InvoiceChecklist from "./InvoiceFormChecklist";
+import InvoiceCampaignFields from "./InvoiceCampaignFields";
 
 const lineItemTableHeader = [
   { key: "description", title: "Item Description", headerClassName: "min-w-[190px]", cellClassName: "min-w-[190px]" },
@@ -75,6 +76,9 @@ export const InvoiceForm = ({
   invoiceCategories = [],
   invoiceCategoriesLoading = false,
   showCategoryField = true,
+  showCampaignField = false,
+  lockedCampaign = false,
+  lockedCampaignPrefill = null,
   departmentMandatory = false,
   categoryMandatory = false,
   currencyOptions = [],
@@ -168,6 +172,9 @@ export const InvoiceForm = ({
       gstin: matched?.gstin
         ? String(matched.gstin).trim().toUpperCase()
         : formData.gstin,
+      campaignId: "",
+      campaignName: "",
+      referenceNumber: "",
     });
   };
 
@@ -179,6 +186,9 @@ export const InvoiceForm = ({
       vendorMatched: false,
       vendorRequestPending: false,
       vendorRequestSubmitted: false,
+      campaignId: "",
+      campaignName: "",
+      referenceNumber: "",
     });
   };
 
@@ -440,6 +450,13 @@ export const InvoiceForm = ({
               </PopoverContent>
             </Popover>
           </div>
+          <InvoiceCampaignFields
+            formData={formData}
+            setFormData={setFormData}
+            showCampaignField={showCampaignField}
+            lockedCampaign={lockedCampaign}
+            lockedCampaignPrefill={lockedCampaignPrefill}
+          />
           <div>
             <RequiredLabel required>Bill Number</RequiredLabel>
             <Input value={formData.invoiceNumber} onChange={(e) => setFormData({ ...formData, invoiceNumber: e.target.value })} placeholder="Invoice number" className="h-8 text-sm" />
@@ -913,6 +930,7 @@ export const InvoiceForm = ({
         departmentMandatory={departmentMandatory}
         categoryMandatory={categoryMandatory}
         showCategoryField={showCategoryField}
+        showCampaignField={showCampaignField}
       />
     </div>
   );

@@ -28,7 +28,8 @@ import {
   Layers,
   Bell,
   BarChart3,
-  History
+  History,
+  Megaphone
 } from 'lucide-react';
 
 // Context to control sidebar visibility from child components
@@ -67,6 +68,7 @@ export const Layout = ({ children }) => {
     { icon: CreditCard, label: 'Payments', path: '/payments' },
     { icon: Layers, label: 'Payment Batches', path: '/payment-batches' },
     { icon: Users, label: 'Vendors', path: '/vendors' },
+    { icon: Megaphone, label: 'Campaigns', path: '/campaigns' },
     { icon: Calculator, label: 'Tax Management', path: '/tax-management' },
     { icon: BarChart3, label: 'Reports', path: '/reports' },
     { icon: History, label: 'Audit Trail', path: '/audit-trail' },
@@ -175,10 +177,16 @@ export const Layout = ({ children }) => {
         {/* Main Content */}
         <main
           ref={mainContentRef}
-          className="flex-1 min-h-0 overflow-y-auto overscroll-contain"
+          className="flex min-h-0 flex-1 flex-col overflow-hidden overscroll-contain"
           data-testid="main-content"
         >
-          <div className={hideSidebar ? "p-4 min-h-full" : "p-6 md:p-8 lg:p-12 min-h-full"}>
+          <div
+            className={
+              hideSidebar
+                ? "flex min-h-0 flex-1 flex-col overflow-y-auto p-4"
+                : "flex min-h-0 flex-1 flex-col overflow-y-auto p-6 md:p-8 lg:p-12"
+            }
+          >
             {children}
           </div>
         </main>

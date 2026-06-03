@@ -140,6 +140,7 @@ const normalizeCorporateScreensResponse = (response = {}) => {
     screenSectionsByScreen,
     sectionScreens: Object.fromEntries(sectionScreens),
     isCategoryFeatureEnabled: enabledSections.has("MANAGE_ROLE_CATEGORIES"),
+    isCampaignFeatureEnabled: enabledSections.has("CAMPAIGN_ALL"),
   };
 };
 

@@ -40,18 +40,27 @@ const computeTdsAmount = (lineItems = [], tdsValue = "", subTotalOverride) => {
 const InvoiceReadOnlyDetails = ({
   invoice,
   showCategoryField = true,
+  showCampaignField = false,
   findVendorByName,
   findVendorById,
   isCategoryFeatureEnabled = true,
+  isCampaignFeatureEnabled = false,
 }) => {
   const formData = useMemo(
     () =>
       buildInvoiceEditFormData(invoice, {
         isCategoryFeatureEnabled,
+        isCampaignFeatureEnabled,
         findVendorByName,
         findVendorById,
       }),
-    [invoice, isCategoryFeatureEnabled, findVendorByName, findVendorById],
+    [
+      invoice,
+      isCategoryFeatureEnabled,
+      isCampaignFeatureEnabled,
+      findVendorByName,
+      findVendorById,
+    ],
   );
 
   if (!formData) return null;
@@ -112,6 +121,11 @@ const InvoiceReadOnlyDetails = ({
     isCategoryFeatureEnabled &&
     (formData.categoryId || formData.categoryName);
 
+  const showCampaign =
+    showCampaignField &&
+    isCampaignFeatureEnabled &&
+    (formData.campaignId || formData.campaignName || formData.referenceNumber);
+
   const formatLineItemTax = (item) => {
     if (useInrTax) return item.tax || "-";
     const name = item.taxName || item.tax || "Tax";
@@ -142,6 +156,16 @@ const InvoiceReadOnlyDetails = ({
           <DetailField label="Department" value={formData.departmentName} />
           {showCategory && (
             <DetailField label="Category" value={formData.categoryName} />
+          )}
+          {showCampaign && (
+            <>
+              <DetailField label="Campaign" value={formData.campaignName} />
+              <DetailField
+                label="Reference Number"
+                value={formData.referenceNumber}
+                mono
+              />
+            </>
           )}
         </div>
 

@@ -35,6 +35,8 @@ const ViewDialog = ({
   handleEditInvoice,
   showCategoryField = true,
   isCategoryFeatureEnabled = true,
+  showCampaignField = false,
+  isCampaignFeatureEnabled = false,
   findVendorByName,
   findVendorById,
 }) => {
@@ -101,6 +103,8 @@ const ViewDialog = ({
                       invoice={selectedInvoice}
                       showCategoryField={showCategoryField}
                       isCategoryFeatureEnabled={isCategoryFeatureEnabled}
+                      showCampaignField={showCampaignField}
+                      isCampaignFeatureEnabled={isCampaignFeatureEnabled}
                       findVendorByName={findVendorByName}
                       findVendorById={findVendorById}
                     />

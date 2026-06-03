@@ -45,6 +45,14 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    title: "Campaigns",
+    permissions: [
+      { id: "campaign-manage", label: "Manage (Create Campaign, Invoices, Advances, Settlement)" },
+      { id: "campaign-approve", label: "Approve (Campaign Approval Only)" },
+      { id: "campaign-view", label: "View Only" },
+    ],
+  },
+  {
     title: "Invoice Matching",
     permissions: [
       { id: "matching-manage", label: "Manage" },
@@ -134,6 +142,9 @@ export const PERMISSION_LABELS = {
   "invoice-view": "Invoice - View Only",
   "invoice-checker": "Invoice - Checker",
   "invoice-approver": "Invoice - Approver",
+  "campaign-view": "Campaigns - View Only",
+  "campaign-manage": "Campaigns - Manage",
+  "campaign-approve": "Campaigns - Approve",
   "matching-manage": "Invoice Matching - Manage",
   "matching-view": "Invoice Matching - View Only",
   "payments-manage": "Payments - Manage",
@@ -157,3 +168,11 @@ export const PERMISSION_LABELS = {
   "category-view": "Category - View Only",
   "category-manage": "Category - Manage (Add, Delete, Edit)",
 };
+
+export const CAMPAIGN_PERMISSION_IDS = [
+  "campaign-view",
+  "campaign-manage",
+  "campaign-approve",
+];
+
+export const CAMPAIGN_BACKEND_PERMISSION_TYPES = ["VIEW", "MANAGE", "APPROVE"];

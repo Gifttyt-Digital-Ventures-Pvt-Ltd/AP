@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/ta
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
+import { useRBAC } from '../../contexts/RBACContext';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useCurrencyFilter } from '../../hooks/useCurrencyFilter';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
@@ -45,6 +46,7 @@ const safeFormatDate = (value, pattern = 'dd MMM yy') => {
 
 const Approvals = () => {
   const { user } = useAuth();
+  const { isCategoryFeatureEnabled, isCampaignFeatureEnabled } = useRBAC();
   const { canPerformAction } = useActionGuard();
   const canCheckInvoices = canPerformAction('invoices.check');
   const canApproveInvoices = canPerformAction('invoices.approve');
@@ -317,8 +319,11 @@ const Approvals = () => {
   });
 
   return (
-    <div data-testid="approvals-page">
-      <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+    <div
+      className="flex min-h-0 flex-1 flex-col"
+      data-testid="approvals-page"
+    >
+      <div className="mb-6 flex shrink-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h1 className="text-4xl md:text-5xl font-bold font-['Manrope'] text-primary mb-2" data-testid="approvals-title">
             Approvals
@@ -335,8 +340,12 @@ const Approvals = () => {
       </div>
 
       {/* Each tab now delegates table rendering to focused components. */}
-      <Tabs defaultValue="needs-approval" className="space-y-6" data-testid="approval-tabs">
-        <TabsList>
+      <Tabs
+        defaultValue="needs-approval"
+        className="flex min-h-0 flex-1 flex-col gap-6"
+        data-testid="approval-tabs"
+      >
+        <TabsList className="shrink-0 w-fit">
           <TabsTrigger value="needs-approval" data-testid="tab-needs-approval">
             Needs your approval
           </TabsTrigger>
@@ -348,7 +357,7 @@ const Approvals = () => {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="needs-approval">
+        <TabsContent value="needs-approval" className="mt-0 min-h-0 flex-1 focus-visible:outline-none">
           <NeedsApprovalTable
             myPendingInvoices={myPendingInvoices}
             getApprovalProgress={getApprovalProgress}
@@ -362,7 +371,7 @@ const Approvals = () => {
           />
         </TabsContent>
 
-        <TabsContent value="pending">
+        <TabsContent value="pending" className="mt-0 min-h-0 flex-1 focus-visible:outline-none">
           <PendingInvoicesTable
             otherPendingInvoices={otherPendingInvoices}
             getStatusBadgeClass={getStatusBadgeClass}
@@ -374,7 +383,10 @@ const Approvals = () => {
           />
         </TabsContent>
 
-        <TabsContent value="all">
+        <TabsContent
+          value="all"
+          className="mt-0 flex min-h-0 flex-1 flex-col focus-visible:outline-none"
+        >
           <AllInvoicesTable
             allInvoices={allInvoices}
             searchTerm={allTabSearchTerm}
@@ -427,6 +439,10 @@ const Approvals = () => {
         loadingHistory={loadingHistory}
         canEdit={() => false}
         handleEditInvoice={() => {}}
+        showCategoryField={isCategoryFeatureEnabled}
+        isCategoryFeatureEnabled={isCategoryFeatureEnabled}
+        showCampaignField={isCampaignFeatureEnabled}
+        isCampaignFeatureEnabled={isCampaignFeatureEnabled}
       />
     </div>
   );

@@ -13,6 +13,8 @@ const InvoiceUploadDialog = ({
   onOpenChange,
   onFilesSelected,
   disabled = false,
+  overlayClassName,
+  contentClassName,
 }) => {
   const inputRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -51,7 +53,8 @@ const InvoiceUploadDialog = ({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-2xl"
+        overlayClassName={overlayClassName}
+        className={contentClassName ? `z-[100] max-w-2xl ${contentClassName}` : "max-w-2xl"}
         data-testid="invoice-upload-dialog"
         onInteractOutside={(event) => event.preventDefault()}
       >

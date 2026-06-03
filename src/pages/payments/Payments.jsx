@@ -72,7 +72,12 @@ const batchInvoiceTableHeader = [
 ];
 
 const Payments = () => {
-  const { isPaymentBatchesFeatureEnabled, isConnectedBankingEnabled } = useRBAC();
+  const {
+    isPaymentBatchesFeatureEnabled,
+    isConnectedBankingEnabled,
+    isCategoryFeatureEnabled,
+    isCampaignFeatureEnabled,
+  } = useRBAC();
   const {
     currencies,
     selectedCurrency,
@@ -792,6 +797,10 @@ const Payments = () => {
         loadingHistory={loadingHistory}
         canEdit={() => false}
         handleEditInvoice={() => {}}
+        showCategoryField={isCategoryFeatureEnabled}
+        isCategoryFeatureEnabled={isCategoryFeatureEnabled}
+        showCampaignField={isCampaignFeatureEnabled}
+        isCampaignFeatureEnabled={isCampaignFeatureEnabled}
       />
     </div>
   );

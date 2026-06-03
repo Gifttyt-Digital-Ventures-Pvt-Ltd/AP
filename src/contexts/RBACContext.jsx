@@ -27,6 +27,7 @@ const RBACContext = createContext({
   isCorporateSectionEnabled: () => false,
   isCorporateScreenSectionEnabled: () => false,
   isCategoryFeatureEnabled: false,
+  isCampaignFeatureEnabled: false,
   isPaymentBatchesFeatureEnabled: false,
   isConnectedBankingEnabled: false,
 });
@@ -77,14 +78,18 @@ const getAssignedRoles = (employeeDetails = null) => {
 };
 
 const FALLBACK_DIRECT_ROLE_PERMISSIONS = {
+  CREATOR: ["campaign-manage"],
+  MAKER: ["campaign-manage"],
   CHECKER: ["invoice-checker"],
-  APPROVER: ["invoice-approver"],
+  APPROVER: ["invoice-approver", "campaign-approve"],
+  FINANCE: ["campaign-manage"],
   ACCOUNTANT: [
     "payments-manage",
     "payments-view",
     "payment-batches-manage",
     "payment-batches-view",
     "tax-manage",
+    "campaign-manage",
   ],
 };
 
@@ -311,6 +316,17 @@ export const RBACProvider = ({ children }) => {
   };
 
   const isCategoryFeatureEnabled = Boolean(corporateScreens?.isCategoryFeatureEnabled);
+  const isCampaignFeatureEnabled = useMemo(
+    () =>
+      Boolean(corporateScreens?.isCampaignFeatureEnabled) ||
+      (isCorporateScreenAllowed("CAMPAIGN") &&
+        isCorporateSectionEnabled("CAMPAIGN_ALL")),
+    [
+      corporateScreens?.isCampaignFeatureEnabled,
+      allowedScreensSet,
+      enabledSectionsSet,
+    ],
+  );
 
   const isPaymentBatchesFeatureEnabled = useMemo(() => {
     const screen = normalizeEntitlementToken("PAYMENT_BATCHES");
@@ -392,6 +408,9 @@ export const RBACProvider = ({ children }) => {
     if (actionKey.startsWith("categories.")) {
       return isCategoryFeatureEnabled;
     }
+    if (actionKey.startsWith("campaigns.")) {
+      return isCampaignFeatureEnabled;
+    }
     if (actionKey === "settings.createBankAccount") {
       return isConnectedBankingEnabled;
     }
@@ -431,6 +450,7 @@ export const RBACProvider = ({ children }) => {
     isCorporateSectionEnabled,
     isCorporateScreenSectionEnabled,
     isCategoryFeatureEnabled,
+    isCampaignFeatureEnabled,
     isPaymentBatchesFeatureEnabled,
     isConnectedBankingEnabled,
     permissionLabels: PERMISSION_LABELS,

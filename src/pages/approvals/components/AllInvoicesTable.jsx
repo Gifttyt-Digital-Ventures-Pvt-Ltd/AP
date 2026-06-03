@@ -123,8 +123,8 @@ const AllInvoicesTable = ({
   };
 
   return (
-    <div className="space-y-4">
-      <div className="relative w-full sm:w-64 sm:max-w-xs">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <div className="relative w-full shrink-0 sm:w-64 sm:max-w-xs">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           placeholder="Search invoices..."
@@ -135,66 +135,77 @@ const AllInvoicesTable = ({
         />
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm">
-        <AppDataTable
-          tableHeader={allInvoicesTableHeader}
-          tableData={allInvoices}
-          renderRow={renderAllInvoiceRow}
-          isLoading={isLoading}
-          loadingRowCount={8}
-          emptyMessage="No invoices found"
-          emptyTestId="approvals-all-no-invoices"
-        />
-      </div>
-
-      {totalPages > 0 && (
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <p className="text-sm text-muted-foreground" data-testid="approvals-all-pagination-summary">
-            Showing {startRecord}-{endRecord} of {total.toLocaleString('en-IN')}
-          </p>
-          <Pagination className="mx-0 w-auto justify-start sm:justify-end">
-            <PaginationContent>
-              <PaginationItem>
-                <PaginationPrevious
-                  href="#"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    onPageChange?.(currentPage - 1);
-                  }}
-                  className={currentPage === 0 ? 'pointer-events-none opacity-50' : undefined}
-                  data-testid="approvals-all-pagination-previous"
-                />
-              </PaginationItem>
-              {visiblePageNumbers.map((pageNumber) => (
-                <PaginationItem key={pageNumber}>
-                  <PaginationLink
-                    href="#"
-                    isActive={pageNumber === currentPage}
-                    onClick={(event) => {
-                      event.preventDefault();
-                      onPageChange?.(pageNumber);
-                    }}
-                    data-testid={`approvals-all-pagination-page-${pageNumber + 1}`}
-                  >
-                    {pageNumber + 1}
-                  </PaginationLink>
-                </PaginationItem>
-              ))}
-              <PaginationItem>
-                <PaginationNext
-                  href="#"
-                  onClick={(event) => {
-                    event.preventDefault();
-                    onPageChange?.(currentPage + 1);
-                  }}
-                  className={!hasMore && currentPage >= totalPages - 1 ? 'pointer-events-none opacity-50' : undefined}
-                  data-testid="approvals-all-pagination-next"
-                />
-              </PaginationItem>
-            </PaginationContent>
-          </Pagination>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
+        <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-thin-muted">
+          <AppDataTable
+            tableHeader={allInvoicesTableHeader}
+            tableData={allInvoices}
+            renderRow={renderAllInvoiceRow}
+            isLoading={isLoading}
+            loadingRowCount={8}
+            emptyMessage="No invoices found"
+            emptyTestId="approvals-all-no-invoices"
+          />
         </div>
-      )}
+
+        <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+          {totalPages > 0 ? (
+            <>
+              <p
+                className="text-sm text-muted-foreground"
+                data-testid="approvals-all-pagination-summary"
+              >
+                Showing {startRecord}-{endRecord} of {total.toLocaleString('en-IN')}
+              </p>
+              <Pagination className="mx-0 w-auto justify-start sm:justify-end">
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      href="#"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        onPageChange?.(currentPage - 1);
+                      }}
+                      className={currentPage === 0 ? 'pointer-events-none opacity-50' : undefined}
+                      data-testid="approvals-all-pagination-previous"
+                    />
+                  </PaginationItem>
+                  {visiblePageNumbers.map((pageNumber) => (
+                    <PaginationItem key={pageNumber}>
+                      <PaginationLink
+                        href="#"
+                        isActive={pageNumber === currentPage}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          onPageChange?.(pageNumber);
+                        }}
+                        data-testid={`approvals-all-pagination-page-${pageNumber + 1}`}
+                      >
+                        {pageNumber + 1}
+                      </PaginationLink>
+                    </PaginationItem>
+                  ))}
+                  <PaginationItem>
+                    <PaginationNext
+                      href="#"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        onPageChange?.(currentPage + 1);
+                      }}
+                      className={
+                        !hasMore && currentPage >= totalPages - 1
+                          ? 'pointer-events-none opacity-50'
+                          : undefined
+                      }
+                      data-testid="approvals-all-pagination-next"
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </>
+          ) : null}
+        </div>
+      </div>
     </div>
   );
 };

@@ -41,6 +41,7 @@ const InvoicesDialogs = (props) => {
     invoiceCategories,
     getCategoryNameById,
     isCategoryFeatureEnabled,
+    isCampaignFeatureEnabled,
     invoiceMandatoryFields,
     bulkEditOpen,
     setBulkEditOpen,
@@ -142,6 +143,8 @@ const InvoicesDialogs = (props) => {
         handleEditInvoice={handleEditInvoice}
         showCategoryField={isCategoryFeatureEnabled}
         isCategoryFeatureEnabled={isCategoryFeatureEnabled}
+        showCampaignField={isCampaignFeatureEnabled}
+        isCampaignFeatureEnabled={isCampaignFeatureEnabled}
         findVendorByName={findVendorByName}
         findVendorById={findVendorById}
       />
