@@ -28,6 +28,7 @@ const AppDataTable = ({
   getRowClassName,
   getRowProps,
   emptyTestId,
+  emptyCellClassName,
   isLoading = false,
   loadingRowCount,
   length = 5,
@@ -117,7 +118,10 @@ const AppDataTable = ({
           <TableRow>
             <TableCell
               colSpan={resolvedEmptyColSpan}
-              className="px-4 py-8 text-center text-sm italic text-muted-foreground"
+              className={cn(
+                "px-4 py-8 text-center text-sm italic text-muted-foreground",
+                emptyCellClassName,
+              )}
               data-testid={emptyTestId}
             >
               {resolvedEmptyMessage}

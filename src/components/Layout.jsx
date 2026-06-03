@@ -177,10 +177,16 @@ export const Layout = ({ children }) => {
         {/* Main Content */}
         <main
           ref={mainContentRef}
-          className="flex-1 min-h-0 overflow-y-auto overscroll-contain"
+          className="flex min-h-0 flex-1 flex-col overflow-hidden overscroll-contain"
           data-testid="main-content"
         >
-          <div className={hideSidebar ? "p-4 min-h-full" : "p-6 md:p-8 lg:p-12 min-h-full"}>
+          <div
+            className={
+              hideSidebar
+                ? "flex min-h-0 flex-1 flex-col overflow-y-auto p-4"
+                : "flex min-h-0 flex-1 flex-col overflow-y-auto p-6 md:p-8 lg:p-12"
+            }
+          >
             {children}
           </div>
         </main>

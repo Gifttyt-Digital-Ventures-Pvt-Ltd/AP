@@ -182,6 +182,43 @@ export const normalizeCampaign = (campaign = {}) => {
 export const normalizeCampaignListResponse = (response) =>
   unwrapList(response, ["campaigns"]).map(normalizeCampaign);
 
+export const EMPTY_CAMPAIGN_LIST_PAGE = {
+  items: [],
+  page: 0,
+  size: 20,
+  totalElements: 0,
+  totalPages: 0,
+  numberOfElements: 0,
+  first: true,
+  last: true,
+};
+
+/** Spring page response: { content, pageable, totalElements, totalPages, ... } */
+export const normalizeCampaignPageResponse = (response = {}) => {
+  const items = normalizeCampaignListResponse(response);
+  const page = Number(
+    response.number ?? response.page ?? response?.pageable?.pageNumber ?? 0,
+  );
+  const size = Number(
+    response.size ?? response?.pageable?.pageSize ?? (items.length || 20),
+  );
+  const totalElements = Number(response.totalElements ?? items.length);
+  const totalPages = Number(
+    response.totalPages ?? (size > 0 ? Math.ceil(totalElements / size) : 0),
+  );
+
+  return {
+    items,
+    page,
+    size,
+    totalElements,
+    totalPages,
+    numberOfElements: Number(response.numberOfElements ?? items.length),
+    first: response.first ?? page === 0,
+    last: response.last ?? (totalPages > 0 ? page >= totalPages - 1 : true),
+  };
+};
+
 export const normalizeVendorCampaignsResponse = (response) =>
   normalizeCampaignListResponse(response).filter(
     (campaign) => campaign.status === "approved",
@@ -196,8 +233,20 @@ export const normalizeCampaignVendorsResponse = (response) =>
 export const campaignsApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getCampaigns: builder.query({
-      query: (params = {}) => ({ url: "/campaigns", method: "GET", params }),
-      transformResponse: normalizeCampaignListResponse,
+      query: (params = {}) => {
+        const { page = 0, size = 20, search, ...rest } = params;
+        return {
+          url: "/campaigns",
+          method: "GET",
+          params: {
+            page,
+            size,
+            ...(search ? { search } : {}),
+            ...rest,
+          },
+        };
+      },
+      transformResponse: normalizeCampaignPageResponse,
       providesTags: [{ type: "Campaigns", id: "LIST" }],
     }),
     createCampaign: builder.mutation({
