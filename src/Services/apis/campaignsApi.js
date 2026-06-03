@@ -136,17 +136,30 @@ export const normalizeCampaign = (campaign = {}) => {
     ? toArray(campaign.vendorBreakdown).map((row) => {
         const invoice = row.invoice ? normalizeInvoice(row.invoice) : null;
         const advances = toArray(row.advances).map(normalizePayment);
+        const advancesTotal = toNumber(row.advancesTotal ?? row.advances_total);
+        const isPaid = invoice?.status && normalizeStatus(invoice.status) === "paid";
+        const paidAmount = isPaid ? toNumber(invoice.amount) : 0;
+        const outstanding = toNumber(row.cost) - advancesTotal - paidAmount;
         return {
           vendorId: String(row.vendorId ?? row.vendor_id ?? ""),
           vendorName: row.vendorName ?? row.vendor_name ?? "",
           cost: toNumber(row.cost),
           status: normalizeStatus(row.status) || "no_invoice",
           invoice,
-          advancesTotal: toNumber(row.advancesTotal ?? row.advances_total),
+          advancesTotal,
           advances,
+          outstanding,
         };
       })
-    : buildVendorBreakdown({ ...campaign, vendors, invoices });
+    : buildVendorBreakdown({ ...campaign, vendors, invoices }).map((row) => {
+        const isPaid = row.invoice?.status && normalizeStatus(row.invoice.status) === "paid";
+        const paidAmount = isPaid ? toNumber(row.invoice.amount) : 0;
+        const outstanding = toNumber(row.cost) - toNumber(row.advancesTotal) - paidAmount;
+        return {
+          ...row,
+          outstanding,
+        };
+      });
   const invoiceSummary =
     campaign.invoiceSummary ?? campaign.invoice_summary ?? buildInvoiceSummary(vendorBreakdown);
 

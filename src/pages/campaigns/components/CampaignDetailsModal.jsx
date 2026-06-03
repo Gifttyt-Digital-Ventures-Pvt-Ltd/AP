@@ -102,7 +102,7 @@ const CampaignDetailsModal = ({
                 value = formatCurrency(row.advancesTotal);
                 break;
               case "outstanding":
-                value = invoice ? formatCurrency(invoice.outstanding) : "—";
+                value = formatCurrency(row.outstanding);
                 break;
               case "status":
                 value = <InvoiceStatusBadge status={row.status} />;
@@ -129,22 +129,6 @@ const CampaignDetailsModal = ({
                         }}
                       >
                         Submit Invoice
-                      </Button>
-                    )}
-                    {actions.reviewChecker && (
-                      <Button
-                        size="sm"
-                        onClick={() => onReviewInvoice(row, "checker")}
-                      >
-                        Review
-                      </Button>
-                    )}
-                    {actions.reviewApprover && (
-                      <Button
-                        size="sm"
-                        onClick={() => onReviewInvoice(row, "approver")}
-                      >
-                        Review
                       </Button>
                     )}
                     {actions.markPaid && (
