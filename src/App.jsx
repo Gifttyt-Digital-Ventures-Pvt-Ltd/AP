@@ -34,6 +34,7 @@ import GoodsReceipt from "./pages/goods-receipt/GoodsReceipt";
 import InvoiceMatching from "./pages/invoice-matching/InvoiceMatching";
 import PaymentBatches from "./pages/payment-batches/PaymentBatches";
 import Notifications from "./pages/notifications/Notifications";
+import CampaignsPage from "./pages/campaigns/CampaignsPage";
 const loadSettingsPage = () => import("./pages/settings/Settings");
 const loadTaxManagementPage = () => import("./pages/tax-management/TaxManagement");
 const loadReportsPage = () => import("./pages/reports/Reports");
@@ -219,6 +220,7 @@ function AppContent() {
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/vendors" element={<Vendors />} />
+          <Route path="/campaigns" element={<CampaignsPage />} />
           <Route path="/invoices" element={<InvoicesPage />} />
           <Route path="/approvals" element={<Approvals />} />
           <Route path="/payments" element={<Payments />} />

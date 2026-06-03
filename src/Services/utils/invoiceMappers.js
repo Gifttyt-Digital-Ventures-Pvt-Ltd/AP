@@ -241,6 +241,11 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
     invoiceDiscount: pickInvoiceField(invoice, "invoiceDiscount", "invoice_discount"),
     invoiceDiscountType:
       pickInvoiceField(invoice, "invoiceDiscountType", "invoice_discount_type"),
+    campaignId: pickInvoiceField(invoice, "campaignId", "campaign_id", ""),
+    campaignName: pickInvoiceField(invoice, "campaignName", "campaign_name", ""),
+    referenceNumber:
+      pickInvoiceField(invoice, "referenceNumber", "reference_number") ||
+      pickInvoiceField(invoice, "referenceCode", "reference_code", ""),
   };
 };
 
@@ -248,7 +253,13 @@ export const toInvoiceUiPayload = normalizeInvoiceResponse;
 
 /** Builds camelCase API payload from camelCase form/list state. */
 export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
-  const { totals, tdsAmount, uploadedFileName, categoryEnabled = true } = options;
+  const {
+    totals,
+    tdsAmount,
+    uploadedFileName,
+    categoryEnabled = true,
+    campaignEnabled = true,
+  } = options;
   const lineItemsSource = invoice.lineItems ?? invoice.line_items ?? [];
   const normalizedLineItems = Array.isArray(lineItemsSource)
     ? lineItemsSource.map(normalizeInvoiceLineItem)
@@ -299,7 +310,10 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
     amount,
     gstAmount,
     tdsAmount: resolvedTdsAmount,
-    currency: invoice.currency || "INR",
+    currency:
+      normalizeCurrencyCode(
+        pickInvoiceField(invoice, "currency", "currency_code", ""),
+      ) || DEFAULT_CURRENCY,
     memo:
       invoice.memo ??
       invoice.description ??
@@ -358,6 +372,15 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
       : {}),
     ...(invoice.action != null && invoice.action !== ""
       ? { action: invoice.action }
+      : {}),
+    ...(campaignEnabled && pickInvoiceField(invoice, "campaignId", "campaign_id")
+      ? {
+          campaignId: pickInvoiceField(invoice, "campaignId", "campaign_id"),
+          campaignName: pickInvoiceField(invoice, "campaignName", "campaign_name", ""),
+          referenceNumber:
+            pickInvoiceField(invoice, "referenceNumber", "reference_number") ||
+            pickInvoiceField(invoice, "referenceCode", "reference_code", ""),
+        }
       : {}),
   };
 };

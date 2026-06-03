@@ -12,6 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/ta
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { useAuth } from '../../contexts/AuthContext';
+import { useRBAC } from '../../contexts/RBACContext';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useCurrencyFilter } from '../../hooks/useCurrencyFilter';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
@@ -45,6 +46,7 @@ const safeFormatDate = (value, pattern = 'dd MMM yy') => {
 
 const Approvals = () => {
   const { user } = useAuth();
+  const { isCategoryFeatureEnabled, isCampaignFeatureEnabled } = useRBAC();
   const { canPerformAction } = useActionGuard();
   const canCheckInvoices = canPerformAction('invoices.check');
   const canApproveInvoices = canPerformAction('invoices.approve');
@@ -427,6 +429,10 @@ const Approvals = () => {
         loadingHistory={loadingHistory}
         canEdit={() => false}
         handleEditInvoice={() => {}}
+        showCategoryField={isCategoryFeatureEnabled}
+        isCategoryFeatureEnabled={isCategoryFeatureEnabled}
+        showCampaignField={isCampaignFeatureEnabled}
+        isCampaignFeatureEnabled={isCampaignFeatureEnabled}
       />
     </div>
   );

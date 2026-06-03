@@ -16,6 +16,7 @@ export const buildInvoiceFormChecklist = (
     departmentMandatory = false,
     categoryMandatory = false,
     showCategoryField = true,
+    showCampaignField = false,
   } = {},
 ) => {
   if (!formData) return [];
@@ -206,6 +207,27 @@ export const buildInvoiceFormChecklist = (
         }),
       ],
     },
+    ...(showCampaignField
+      ? [
+          {
+            group: "Campaign",
+            items: [
+              item({
+                label: "Campaign",
+                done: !!(
+                  formData.campaignId || formData.campaignName?.trim()
+                ),
+                optional: true,
+              }),
+              item({
+                label: "Reference number",
+                done: !!String(formData.referenceNumber ?? "").trim(),
+                optional: true,
+              }),
+            ],
+          },
+        ]
+      : []),
   ];
 };
 
@@ -214,6 +236,7 @@ export const InvoiceChecklist = ({
   departmentMandatory = false,
   categoryMandatory = false,
   showCategoryField = true,
+  showCampaignField = false,
 }) => {
   const [open, setOpen] = useState(true);
 
@@ -223,8 +246,15 @@ export const InvoiceChecklist = ({
         departmentMandatory,
         categoryMandatory,
         showCategoryField,
+        showCampaignField,
       }),
-    [formData, departmentMandatory, categoryMandatory, showCategoryField],
+    [
+      formData,
+      departmentMandatory,
+      categoryMandatory,
+      showCategoryField,
+      showCampaignField,
+    ],
   );
 
   const allItems = groups.flatMap((group) =>

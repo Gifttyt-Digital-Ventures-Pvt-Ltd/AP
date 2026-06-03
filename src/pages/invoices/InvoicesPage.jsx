@@ -157,7 +157,7 @@ const invoiceTableHeader = [
 
 const InvoicesPage = () => {
   const { user } = useAuth();
-  const { isCategoryFeatureEnabled, isCorporateAdmin } = useRBAC();
+  const { isCategoryFeatureEnabled, isCampaignFeatureEnabled, isCorporateAdmin } = useRBAC();
   const {
     data: corporateUserContext = null,
   } = useGetCorporateUserDetailsQuery();
@@ -480,6 +480,7 @@ const InvoicesPage = () => {
     getDepartmentNameById,
     getCategoryNameById,
     isCategoryFeatureEnabled,
+    isCampaignFeatureEnabled,
   };
 
   const toCreateInvoicePayload = (invoiceData = {}, options = {}) =>
@@ -1091,61 +1092,37 @@ const InvoicesPage = () => {
     isInvoiceMandatoryFieldsSatisfied(payload, invoiceMandatoryFields, mandatoryFieldOptions);
 
   const buildUpdateInvoiceBody = (data, { keepSaved = false } = {}) => {
-    const totals = calculateTotals(data.lineItems);
+    const totals = calculateTotals(data.lineItems, data.currency);
     const resolvedVendorId = data.vendorId || findVendorByName(data.vendorName)?.id || '';
 
-    return {
-      vendorId: resolvedVendorId,
-      vendorName: data.vendorName?.trim() || '',
-      invoiceNumber: data.invoiceNumber,
-      invoiceDate: new Date(data.invoiceDate).toISOString(),
-      dueDate: new Date(data.dueDate).toISOString(),
-      amount: totals.total,
-      gstAmount:
-        (Number(totals.cgst) || 0) +
-        (Number(totals.sgst) || 0) +
-        (Number(totals.igst) || 0) +
-        (Number(totals.foreignTax) || 0),
-      tdsAmount: computeTdsAmount(data.lineItems, data.tds, calculateLineItemSubtotal),
-      lineItems: normalizeLineItemsForTaxLevel({
+    return toCreateInvoicePayload(
+      {
         ...data,
-        lineItems: data.lineItems.map((item) => ({
-          description: item.description,
-          quantity: item.quantity,
-          unitPrice: item.unitRate,
-          amount: calculateLineItemSubtotal(item),
-          tax: item.tax,
-          taxName: item.taxName,
-          taxRate: item.taxRate,
-          hsnSac: item.hsnSac,
-        })),
-      }),
-      memo: data.description,
-      source: data.source,
-      sourceEmail: data.source === 'Email' ? data.sourceEmail : null,
-      gstTreatment: data.gstTreatment,
-      gstin: data.gstin,
-      sourceOfSupply: data.sourceOfSupply,
-      destinationOfSupply: data.destinationOfSupply,
-      billingAddress: data.billingAddress,
-      discountsLevel: data.discountsLevel,
-      invoiceDiscount: data.invoiceDiscount,
-      invoiceDiscountType: data.invoiceDiscountType,
-      taxesLevel: data.taxesLevel,
-      invoiceTax: data.invoiceTax,
-      invoiceTaxName: data.invoiceTaxName,
-      invoiceTaxRate: data.invoiceTaxRate,
-      departmentId: data.departmentId || '',
-      departmentName: data.departmentName || getDepartmentNameById(data.departmentId),
-      ...(isCategoryFeatureEnabled
-        ? {
-            category: buildCategoryPayload(data),
-            categoryId: data.categoryId || '',
-            categoryName: data.categoryName || '',
-          }
-        : {}),
-      ...(keepSaved ? { action: 'saved' } : {}),
-    };
+        vendorId: resolvedVendorId,
+        vendorName: data.vendorName?.trim() || '',
+        lineItems: normalizeLineItemsForTaxLevel({
+          ...data,
+          lineItems: data.lineItems.map((item) => ({
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitRate,
+            amount: calculateLineItemSubtotal(item),
+            tax: item.tax,
+            taxName: item.taxName,
+            taxRate: item.taxRate,
+            hsnSac: item.hsnSac,
+          })),
+        }),
+        memo: data.description,
+        sourceEmail: data.source === 'Email' ? data.sourceEmail : null,
+        departmentName: data.departmentName || getDepartmentNameById(data.departmentId),
+        ...(keepSaved ? { action: 'saved' } : {}),
+      },
+      {
+        totals,
+        tdsAmount: computeTdsAmount(data.lineItems, data.tds, calculateLineItemSubtotal),
+      },
+    );
   };
 
   // Add vendor from scanned invoice data
@@ -1414,6 +1391,7 @@ const InvoicesPage = () => {
     setFormData(
       buildInvoiceEditFormData(invoice, {
         isCategoryFeatureEnabled,
+        isCampaignFeatureEnabled,
         findVendorByName,
         findVendorById,
       }),
@@ -1557,6 +1535,7 @@ const InvoicesPage = () => {
       invoiceCategories={invoiceCategories}
       invoiceCategoriesLoading={invoiceCategoriesLoading || invoiceCategoriesFetching}
       showCategoryField={isCategoryFeatureEnabled}
+      showCampaignField={isCampaignFeatureEnabled}
       currencyOptions={invoiceCurrencyOptions}
       GST_TREATMENTS={GST_TREATMENTS}
       INDIAN_STATES={INDIAN_STATES}
@@ -1751,6 +1730,7 @@ const InvoicesPage = () => {
       invoiceCategories={invoiceCategories}
       invoiceCategoriesLoading={invoiceCategoriesLoading || invoiceCategoriesFetching}
       showCategoryField={isCategoryFeatureEnabled}
+      showCampaignField={isCampaignFeatureEnabled}
       currencyOptions={invoiceCurrencyOptions}
       GST_TREATMENTS={GST_TREATMENTS}
       INDIAN_STATES={INDIAN_STATES}
@@ -1934,6 +1914,7 @@ const InvoicesPage = () => {
         invoiceCategories={invoiceCategories}
         getCategoryNameById={getCategoryNameById}
         isCategoryFeatureEnabled={isCategoryFeatureEnabled}
+        isCampaignFeatureEnabled={isCampaignFeatureEnabled}
         invoiceMandatoryFields={invoiceMandatoryFields}
         bulkEditOpen={bulkEditOpen}
         setBulkEditOpen={setBulkEditOpen}

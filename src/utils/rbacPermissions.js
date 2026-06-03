@@ -51,6 +51,25 @@ const mapInvoicePermission = (permissionType) => {
   return null;
 };
 
+const mapCampaignPermission = (permissionType) => {
+  if (permissionType === "VIEW") return "campaign-view";
+  if (
+    permissionType === "MANAGE" ||
+    permissionType === "CREATOR" ||
+    permissionType === "MAKER" ||
+    permissionType === "FINANCE"
+  ) {
+    return "campaign-manage";
+  }
+  if (permissionType === "APPROVER" || permissionType === "APPROVE") {
+    return "campaign-approve";
+  }
+  if (permissionType === "ADMIN" || permissionType === "FULL") {
+    return ["campaign-view", "campaign-manage", "campaign-approve"];
+  }
+  return null;
+};
+
 const mapInvoiceMatchingPermission = (permissionType) => {
   if (permissionType === "VIEW") return "matching-view";
   if (permissionType === "MANAGE") return "matching-manage";
@@ -149,6 +168,10 @@ export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput)
 
   if (screen === "INVOICE" || screen === "INVOICES") {
     return mapInvoicePermission(permissionType);
+  }
+
+  if (screen === "CAMPAIGN" || screen === "CAMPAIGNS") {
+    return mapCampaignPermission(permissionType);
   }
 
   if (screen === "INVOICE_MATCHING" || screen === "MATCHING") {

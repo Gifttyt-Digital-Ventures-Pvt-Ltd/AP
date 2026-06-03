@@ -36,6 +36,8 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useRBAC } from "../../contexts/RBACContext";
 import { GitBranch, Shield, ShieldAlert, UserPlus, Users } from "lucide-react";
 import {
+  CAMPAIGN_BACKEND_PERMISSION_TYPES,
+  CAMPAIGN_PERMISSION_IDS,
   PERMISSION_GROUPS,
   PERMISSION_LABELS,
 } from "./constants/permissionConfig";
@@ -99,6 +101,7 @@ const UserRoles = () => {
     isCorporateScreenAllowed,
     isCorporateSectionEnabled,
     isCategoryFeatureEnabled,
+    isCampaignFeatureEnabled,
   } = useRBAC();
   const { guardAction } = useActionGuard();
   const navigate = useNavigate();
@@ -250,6 +253,13 @@ const UserRoles = () => {
   const isMappedPermissionEntitled = useCallback(
     (backendEntry) => {
       if (!backendEntry?.screen) return false;
+      if (backendEntry.screen === "CAMPAIGN" || backendEntry.screen === "CAMPAIGNS") {
+        return (
+          isCampaignFeatureEnabled ||
+          (isCorporateScreenAllowed("CAMPAIGN") &&
+            isCorporateSectionEnabled("CAMPAIGN_ALL"))
+        );
+      }
       if (backendEntry.screen === "CATEGORY") return isCategoryFeatureEnabled;
       if (backendEntry.screen === "VENDOR_APPROVAL_WORKFLOW") {
         return (
@@ -283,6 +293,7 @@ const UserRoles = () => {
       return isCorporateScreenAllowed(backendEntry.screen);
     },
     [
+      isCampaignFeatureEnabled,
       isCategoryFeatureEnabled,
       isCorporateScreenAllowed,
       isCorporateSectionEnabled,
@@ -313,11 +324,25 @@ const UserRoles = () => {
           .toUpperCase();
         if (screenName && permissionType) {
           keys.add(`${screenName}:${permissionType}`);
+          if (screenName === "CAMPAIGN") {
+            keys.add(`CAMPAIGNS:${permissionType}`);
+          }
+          if (screenName === "CAMPAIGNS") {
+            keys.add(`CAMPAIGN:${permissionType}`);
+          }
         }
       });
     });
+
+    if (isCampaignFeatureEnabled) {
+      CAMPAIGN_BACKEND_PERMISSION_TYPES.forEach((permissionType) => {
+        keys.add(`CAMPAIGN:${permissionType}`);
+        keys.add(`CAMPAIGNS:${permissionType}`);
+      });
+    }
+
     return keys;
-  }, [availableCustomRoleScreens]);
+  }, [availableCustomRoleScreens, isCampaignFeatureEnabled]);
 
   const availablePermissionKeys = useMemo(() => {
     if (
@@ -348,8 +373,13 @@ const UserRoles = () => {
           .forEach((permissionId) => keys.add(permissionId));
       });
     });
+
+    if (isCampaignFeatureEnabled) {
+      CAMPAIGN_PERMISSION_IDS.forEach((permissionId) => keys.add(permissionId));
+    }
+
     return keys;
-  }, [availableCustomRoleScreens]);
+  }, [availableCustomRoleScreens, isCampaignFeatureEnabled]);
 
   const filteredPermissionGroups = useMemo(() => {
     const groups = PERMISSION_GROUPS.map((group) => ({
@@ -358,11 +388,14 @@ const UserRoles = () => {
         const backendEntry = CUSTOM_ROLE_PERMISSION_MAP[permission.id];
         if (!backendEntry) return false;
         if (!isMappedPermissionEntitled(backendEntry)) return false;
+        const isCampaignPermission = CAMPAIGN_PERMISSION_IDS.includes(permission.id);
         if (
           availablePermissionKeys &&
-          !availablePermissionKeys.has(permission.id)
-        )
+          !availablePermissionKeys.has(permission.id) &&
+          !(isCampaignFeatureEnabled && isCampaignPermission)
+        ) {
           return false;
+        }
         return true;
       }),
     })).filter((group) => group.permissions.length > 0);
@@ -370,6 +403,7 @@ const UserRoles = () => {
     return groups;
   }, [
     availablePermissionKeys,
+    isCampaignFeatureEnabled,
     isMappedPermissionEntitled,
   ]);
 
@@ -423,7 +457,10 @@ const UserRoles = () => {
         .trim()
         .toUpperCase();
       const permissionKey = `${screen}:${permissionType}`;
+      const isCampaignPermission =
+        (screen === "CAMPAIGN" || screen === "CAMPAIGNS") && isCampaignFeatureEnabled;
       const isSupported =
+        isCampaignPermission ||
         !supportedCustomRolePermissionKeys ||
         supportedCustomRolePermissionKeys.has(permissionKey);
       const isEntitled = isMappedPermissionEntitled({
@@ -1013,9 +1050,16 @@ const UserRoles = () => {
         dialogMode={roleDialogMode}
         permissionGroups={filteredPermissionGroups}
         permissionLabels={PERMISSION_LABELS}
-        hiddenPermissionIds={
-          isCategoryFeatureEnabled ? [] : ["category-view", "category-manage"]
-        }
+        hiddenPermissionIds={[
+          ...(isCategoryFeatureEnabled ? [] : ["category-view", "category-manage"]),
+          ...(isCampaignFeatureEnabled
+            ? []
+            : [
+                "campaign-view",
+                "campaign-manage",
+                "campaign-approve",
+              ]),
+        ]}
         availableUsers={users.filter((user) => user?.id)}
         onSave={handleSaveRoleChanges}
         saving={updateCustomRoleLoading || deleteCustomRoleLoading}

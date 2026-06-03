@@ -28,7 +28,8 @@ import {
   Layers,
   Bell,
   BarChart3,
-  History
+  History,
+  Megaphone
 } from 'lucide-react';
 
 // Context to control sidebar visibility from child components
@@ -67,6 +68,7 @@ export const Layout = ({ children }) => {
     { icon: CreditCard, label: 'Payments', path: '/payments' },
     { icon: Layers, label: 'Payment Batches', path: '/payment-batches' },
     { icon: Users, label: 'Vendors', path: '/vendors' },
+    { icon: Megaphone, label: 'Campaigns', path: '/campaigns' },
     { icon: Calculator, label: 'Tax Management', path: '/tax-management' },
     { icon: BarChart3, label: 'Reports', path: '/reports' },
     { icon: History, label: 'Audit Trail', path: '/audit-trail' },

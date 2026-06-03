@@ -3,6 +3,9 @@ export const FULL_ACCESS_PERMISSION = "FULL_ACCESS";
 export const ROUTE_PERMISSION_RULES = {
   "/dashboard": { anyOf: ["dashboard-view"] },
   "/vendors": { anyOf: ["vendors-view", "vendors-manage", "vendors-approve"] },
+  "/campaigns": {
+    anyOf: ["campaign-view", "campaign-manage", "campaign-approve"],
+  },
   "/purchase-orders": { anyOf: ["po-view", "po-manage", "po-approve"] },
   "/goods-receipt": { anyOf: ["grn-view", "grn-manage", "grn-approve"] },
   "/invoices": {
@@ -48,6 +51,7 @@ export const ROUTE_PERMISSION_RULES = {
 export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
   "/dashboard": { screen: "DASHBOARD", anySections: ["DASHBOARD_ALL"] },
   "/vendors": { screen: "VENDORS", anySections: ["VENDORS_ALL"] },
+  "/campaigns": { screen: "CAMPAIGN", anySections: ["CAMPAIGN_ALL"] },
   "/purchase-orders": {
     screen: "PURCHASE_ORDER",
     anySections: ["PURCHASE_ORDER_CREATE", "PURCHASE_ORDER_UPLOAD", "PURCHASE_ORDER_ALL"],
@@ -85,6 +89,7 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
 export const DEFAULT_ROUTE_PRIORITY = [
   "/dashboard",
   "/vendors",
+  "/campaigns",
   "/purchase-orders",
   "/goods-receipt",
   "/invoices",
@@ -121,6 +126,14 @@ export const ACTION_PERMISSION_RULES = {
   "invoices.delete": { anyOf: ["invoice-maker"] },
   "invoices.check": { anyOf: ["invoice-checker"] },
   "invoices.approve": { anyOf: ["invoice-approver"] },
+
+  "campaigns.create": { anyOf: ["campaign-manage"] },
+  "campaigns.approve": { anyOf: ["campaign-approve"] },
+  "campaigns.submitInvoice": { anyOf: ["campaign-manage"] },
+  "campaigns.checkInvoice": { anyOf: ["invoice-checker"] },
+  "campaigns.approveInvoice": { anyOf: ["invoice-approver"] },
+  "campaigns.recordAdvance": { anyOf: ["campaign-manage"] },
+  "campaigns.markPaid": { anyOf: ["campaign-manage"] },
 
   "po.create": { anyOf: ["po-manage"] },
   "po.submit": { anyOf: ["po-manage"] },

@@ -251,6 +251,14 @@ export const initializeInvoiceFormData = (
             "",
         }
       : {}),
+    campaignId: extractedData?.campaignId || extractedData?.campaign_id || "",
+    campaignName: extractedData?.campaignName || extractedData?.campaign_name || "",
+    referenceNumber:
+      extractedData?.referenceNumber ||
+      extractedData?.reference_number ||
+      extractedData?.referenceCode ||
+      extractedData?.reference_code ||
+      "",
   };
 };
 
@@ -262,6 +270,7 @@ export const buildToCreateInvoicePayload = (
     getDepartmentNameById,
     getCategoryNameById,
     isCategoryFeatureEnabled,
+    isCampaignFeatureEnabled = false,
   },
 ) => {
   const lineItems = normalizeLineItemsForTaxLevel(invoiceData);
@@ -307,6 +316,13 @@ export const buildToCreateInvoicePayload = (
         null,
       source: invoiceData.source || "Upload",
       sourceEmail: invoiceData.source === "Email" ? invoiceData.sourceEmail : null,
+      ...(isCampaignFeatureEnabled
+        ? {
+            campaignId: invoiceData.campaignId || "",
+            campaignName: invoiceData.campaignName || "",
+            referenceNumber: invoiceData.referenceNumber || "",
+          }
+        : {}),
     },
     {
       ...options,
@@ -315,9 +331,13 @@ export const buildToCreateInvoicePayload = (
         options.tdsAmount ??
         computeTdsAmount(lineItems, invoiceData.tds, calculateLineItemSubtotal),
       categoryEnabled: isCategoryFeatureEnabled,
+      campaignEnabled: isCampaignFeatureEnabled,
     },
   );
 };
+
+/** Same shape as create; used for PUT /invoices/{id}. */
+export const buildToUpdateInvoicePayload = buildToCreateInvoicePayload;
 
 export const buildInvoiceMultipartPayload = (
   invoicePayload,
