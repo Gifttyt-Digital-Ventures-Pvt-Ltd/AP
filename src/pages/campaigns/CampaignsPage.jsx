@@ -7,6 +7,7 @@ import {
   useApproveCampaignMutation,
   useCheckCampaignInvoiceMutation,
   useCreateCampaignMutation,
+  useUpdateCampaignMutation,
   useGetCampaignDetailQuery,
   useGetCampaignsQuery,
   useGetCampaignVendorsQuery,
@@ -62,6 +63,7 @@ const CampaignsPage = () => {
   const [campaignPage, setCampaignPage] = useState(0);
   const debouncedSearch = useDebouncedValue(search.trim(), 300);
   const [showCreate, setShowCreate] = useState(false);
+  const [editCampaign, setEditCampaign] = useState(null);
   const [detailsCampaignId, setDetailsCampaignId] = useState(null);
   const [reviewCampaign, setReviewCampaign] = useState(null);
   const [advanceRow, setAdvanceRow] = useState(null);
@@ -112,6 +114,8 @@ const CampaignsPage = () => {
 
   const [createCampaign, { isLoading: creatingCampaign }] =
     useCreateCampaignMutation();
+  const [updateCampaign, { isLoading: updatingCampaign }] =
+    useUpdateCampaignMutation();
   const [approveCampaign, { isLoading: approvingCampaign }] =
     useApproveCampaignMutation();
   const [updateCampaignStatus, { isLoading: updatingCampaignStatus }] =
@@ -196,6 +200,13 @@ const CampaignsPage = () => {
       setShowCreate(false),
     );
 
+  const handleUpdateCampaign = (body) =>
+    runMutation(
+      updateCampaign({ id: editCampaign.id, body }),
+      "Campaign updated successfully",
+      () => setEditCampaign(null),
+    );
+
   const handleApproveCampaign = (body) =>
     runMutation(
       approveCampaign({ id: reviewCampaign.id, body }),
@@ -278,6 +289,11 @@ const CampaignsPage = () => {
                 >
                   Details
                 </Button>
+                {access.canCreateCampaign && campaign.status === "correction_needed" && (
+                  <Button size="sm" onClick={() => setEditCampaign(campaign)}>
+                    Edit
+                  </Button>
+                )}
                 {access.canReviewCampaign && campaign.status === "pending_approval" && (
                   <Button size="sm" onClick={() => setReviewCampaign(campaign)}>
                     Review
@@ -450,11 +466,17 @@ const CampaignsPage = () => {
       </div>
 
       <CreateCampaignModal
-        open={showCreate}
-        onOpenChange={setShowCreate}
+        open={showCreate || Boolean(editCampaign)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowCreate(false);
+            setEditCampaign(null);
+          }
+        }}
         vendors={vendors}
-        onSubmit={handleCreateCampaign}
-        saving={creatingCampaign}
+        campaign={editCampaign}
+        onSubmit={editCampaign ? handleUpdateCampaign : handleCreateCampaign}
+        saving={creatingCampaign || updatingCampaign}
       />
       <ApproveCampaignModal
         open={Boolean(reviewCampaign)}

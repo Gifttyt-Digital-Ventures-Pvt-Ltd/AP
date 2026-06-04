@@ -43,6 +43,7 @@ const CreateCampaignModal = ({
   vendors = [],
   onSubmit,
   saving = false,
+  campaign = null,
 }) => {
   const [form, setForm] = useState(initialForm);
   const [selectedVendorIds, setSelectedVendorIds] = useState([]);
@@ -51,11 +52,28 @@ const CreateCampaignModal = ({
 
   useEffect(() => {
     if (!open) return;
-    setForm(initialForm);
-    setSelectedVendorIds([]);
-    setVendorCosts({});
+    if (campaign) {
+      setForm({
+        name: campaign.name || "",
+        startDate: campaign.startDate || "",
+        endDate: campaign.endDate || "",
+        budget: campaign.budget || "",
+        totalCost: campaign.totalCost || "",
+      });
+      const ids = (campaign.vendors || []).map((v) => String(v.vendorId || v.id));
+      setSelectedVendorIds(ids);
+      const costs = {};
+      (campaign.vendors || []).forEach((v) => {
+        costs[String(v.vendorId || v.id)] = v.cost;
+      });
+      setVendorCosts(costs);
+    } else {
+      setForm(initialForm);
+      setSelectedVendorIds([]);
+      setVendorCosts({});
+    }
     setErrors({});
-  }, [open]);
+  }, [open, campaign]);
 
   const selectedVendors = useMemo(
     () =>
@@ -140,7 +158,7 @@ const CreateCampaignModal = ({
         onInteractOutside={(event) => event.preventDefault()}
       >
         <DialogHeader>
-          <DialogTitle>Create Campaign</DialogTitle>
+          <DialogTitle>{campaign ? "Edit Campaign" : "Create Campaign"}</DialogTitle>
           <DialogDescription>
             Select campaign vendors once, then enter the cost for each vendor.
           </DialogDescription>
@@ -298,7 +316,7 @@ const CreateCampaignModal = ({
             Cancel
           </Button>
           <Button onClick={handleSubmit} disabled={saving}>
-            {saving ? "Creating..." : "Create Campaign"}
+            {saving ? (campaign ? "Saving..." : "Creating...") : (campaign ? "Save Changes" : "Create Campaign")}
           </Button>
         </DialogFooter>
       </DialogContent>
