@@ -864,6 +864,12 @@ const Vendors = () => {
         open={Boolean(viewingVendor)}
         onOpenChange={(open) => !open && setViewingVendor(null)}
         vendor={viewingVendor}
+        canApprove={canApproveVendor}
+        isPendingApproval={viewingVendor ? isPendingApprovalVendor(viewingVendor) : false}
+        onApproveAction={(vendor, action) => {
+          setViewingVendor(null);
+          openVendorApprovalDialog(vendor, action);
+        }}
       />
 
       <VendorApprovalDialog

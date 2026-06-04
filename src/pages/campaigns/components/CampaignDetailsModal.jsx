@@ -11,10 +11,19 @@ import {
 } from "../../../components/ui/dialog";
 import AppDataTable from "../../../components/common/AppDataTable";
 import { TableCell, TableRow } from "../../../components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../../components/ui/tabs";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "../../../components/ui/tabs";
 import ViewDialog from "../../invoices/components/ViewDialog";
 import InvoicePdfPreview from "../../invoices/components/InvoicePdfPreview";
-import { CampaignStatusBadge, InvoiceStatusBadge, SummaryTile } from "./CampaignShared";
+import {
+  CampaignStatusBadge,
+  InvoiceStatusBadge,
+  SummaryTile,
+} from "./CampaignShared";
 import {
   formatCurrency,
   formatDate,
@@ -137,7 +146,11 @@ const CampaignDetailsModal = ({
     const isExpanded = expandedRows.includes(row.vendorId);
     const invoice = row.invoice;
     const actions = getVendorRowActions({ row, campaign, access });
-    const rowInvoices = row.invoices?.length ? row.invoices : invoice ? [invoice] : [];
+    const rowInvoices = row.invoices?.length
+      ? row.invoices
+      : invoice
+        ? [invoice]
+        : [];
     const payments = [
       ...(row.advances || []),
       ...(row.payments || []),
@@ -171,7 +184,9 @@ const CampaignDetailsModal = ({
                     event.stopPropagation();
                     setViewTab("details");
                     setViewPreviewError(false);
-                    setSelectedInvoice(getInvoiceReadOnlyPayload(invoiceItem, campaign));
+                    setSelectedInvoice(
+                      getInvoiceReadOnlyPayload(invoiceItem, campaign),
+                    );
                   }}
                 >
                   <Eye className="h-4 w-4" />
@@ -179,7 +194,7 @@ const CampaignDetailsModal = ({
               );
               break;
             default:
-              value = invoiceItem?.[header.key] || "—";
+              value = invoiceItem?.[header.key] || "-";
           }
 
           return (
@@ -214,13 +229,13 @@ const CampaignDetailsModal = ({
                 value = formatCurrency(row.cost);
                 break;
               case "invoiceNo":
-                value = invoice?.invoiceNumber || "—";
+                value = invoice?.invoiceNumber || "-";
                 break;
               case "invoiceAmount":
                 value =
                   row.invoiceCost || invoice
                     ? formatCurrency(row.invoiceCost || invoice?.amount)
-                    : "—";
+                    : "-";
                 break;
               case "advances":
                 value = formatCurrency(row.advancesTotal);
@@ -229,7 +244,17 @@ const CampaignDetailsModal = ({
                 value = formatCurrency(row.outstanding);
                 break;
               case "status":
-                value = <InvoiceStatusBadge status={row.status} />;
+                value =
+                  String(campaign?.status || "").toLowerCase() ===
+                  "rejected" ? (
+                    "-"
+                  ) : campaign?.status !== "approved" ? (
+                    <CampaignStatusBadge status={campaign.status} />
+                  ) : String(row.status || "").toLowerCase() === "rejected" ? (
+                    "-"
+                  ) : (
+                    <InvoiceStatusBadge status={row.status} />
+                  );
                 break;
               case "actions":
                 value = (
@@ -261,13 +286,13 @@ const CampaignDetailsModal = ({
                       </Button>
                     )}
                     {!Object.values(actions).some(Boolean) && (
-                      <span className="text-xs text-muted-foreground">—</span>
+                      <span className="text-xs text-muted-foreground">-</span>
                     )}
                   </div>
                 );
                 break;
               default:
-                value = row?.[header.key] || "—";
+                value = row?.[header.key] || "-";
             }
 
             return (
@@ -340,90 +365,130 @@ const CampaignDetailsModal = ({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-7xl max-h-[92vh] overflow-y-auto" 
-          onInteractOutside={(event) => event.preventDefault()}>
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-3">
-            {campaign.name}
-            <CampaignStatusBadge status={campaign.status} />
-          </DialogTitle>
-          <DialogDescription>
-            Campaign and per-vendor invoice/payment breakdown.
-          </DialogDescription>
-        </DialogHeader>
+        <DialogContent
+          className="max-w-7xl max-h-[92vh] overflow-y-auto"
+          onInteractOutside={(event) => event.preventDefault()}
+        >
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-3">
+              {campaign.name}
+              <CampaignStatusBadge status={campaign.status} />
+            </DialogTitle>
+            <DialogDescription>
+              Campaign and per-vendor invoice/payment breakdown.
+            </DialogDescription>
+          </DialogHeader>
 
-        <div className="rounded-lg border border-border p-4 space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm text-muted-foreground">Reference No.</span>
-            <span className="font-medium">{campaign.referenceCode || "—"}</span>
-            {campaign.referenceCode && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={copyReferenceCode}
-              >
-                <Copy className="h-4 w-4" />
-              </Button>
-            )}
+          <div className="rounded-lg border border-border p-4 space-y-4">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-sm text-muted-foreground">
+                Reference No.
+              </span>
+              <span className="font-medium">
+                {campaign.referenceCode || "-"}
+              </span>
+              {campaign.referenceCode && (
+                <Button variant="ghost" size="sm" onClick={copyReferenceCode}>
+                  <Copy className="h-4 w-4" />
+                </Button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
+              <p>
+                <span className="text-muted-foreground">Created:</span>{" "}
+                {formatDate(campaign.createdDate)}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Created By:</span>{" "}
+                {campaign.createdBy || "-"}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Approved By:</span>{" "}
+                {campaign.approvedBy || "-"}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Period:</span>{" "}
+                {formatDate(campaign.startDate)} -{" "}
+                {formatDate(campaign.endDate)}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Budget:</span>{" "}
+                {formatCurrency(campaign.budget)}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Total Cost:</span>{" "}
+                {formatCurrency(campaign.totalCost)}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Include GST:</span>{" "}
+                {campaign.includeGst ? "Yes" : "No"}
+              </p>
+              {campaign.includeGst && (
+                <p>
+                  <span className="text-muted-foreground">GST:</span>{" "}
+                  {campaign.gstOption || "-"}
+                </p>
+              )}
+              <p>
+                <span className="text-muted-foreground">Gross Amount:</span>{" "}
+                {formatCurrency(campaign.grossAmount)}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Net Amount:</span>{" "}
+                {formatCurrency(campaign.netAmount)}
+              </p>
+            </div>
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 text-sm">
-            <p><span className="text-muted-foreground">Created:</span> {formatDate(campaign.createdDate)}</p>
-            <p><span className="text-muted-foreground">Created By:</span> {campaign.createdBy || "-"}</p>
-            <p><span className="text-muted-foreground">Approved By:</span> {campaign.approvedBy || "-"}</p>
-            <p><span className="text-muted-foreground">Period:</span> {formatDate(campaign.startDate)} - {formatDate(campaign.endDate)}</p>
-            <p><span className="text-muted-foreground">Budget:</span> {formatCurrency(campaign.budget)}</p>
-            <p><span className="text-muted-foreground">Total Cost:</span> {formatCurrency(campaign.totalCost)}</p>
-            <p><span className="text-muted-foreground">Include GST:</span> {campaign.includeGst ? "Yes" : "No"}</p>
-            {campaign.includeGst && (
-              <>
-                <p><span className="text-muted-foreground">GST:</span> {campaign.gstOption || "-"}</p>
-                <p><span className="text-muted-foreground">Gross Amount:</span> {formatCurrency(campaign.grossAmount)}</p>
-                <p><span className="text-muted-foreground">Net Amount:</span> {formatCurrency(campaign.netAmount)}</p>
-              </>
-            )}
+
+          {showCampaignRemark && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <p className="font-medium">
+                {campaign.status === "rejected"
+                  ? "Rejection Remark"
+                  : "Correction Remark"}
+              </p>
+              <p className="mt-1 whitespace-pre-wrap">{campaign.remark}</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
+            <SummaryTile
+              label="Total Vendors"
+              value={summary.totalVendors || 0}
+            />
+            <SummaryTile
+              label="Pending Invoices"
+              value={summary.noInvoice || 0}
+            />
+            <SummaryTile
+              label="Pending"
+              value={
+                summary.pending ||
+                summary.pendingCheck +
+                  summary.pendingApproval +
+                  summary.pendingPayment ||
+                0
+              }
+            />
+            <SummaryTile label="Paid" value={summary.paid || 0} />
+            <SummaryTile label="Rejected" value={summary.rejected || 0} />
           </div>
-        </div>
 
-        {showCampaignRemark && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
-            <p className="font-medium">
-              {campaign.status === "rejected"
-                ? "Rejection Remark"
-                : "Correction Remark"}
-            </p>
-            <p className="mt-1 whitespace-pre-wrap">{campaign.remark}</p>
+          {!isApproved && (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+              Invoice and advance actions are available only after campaign
+              approval.
+            </div>
+          )}
+
+          <div className="rounded-lg border border-border overflow-hidden">
+            <AppDataTable
+              tableHeader={vendorBreakdownHeader}
+              tableData={campaign.vendorBreakdown || []}
+              renderRow={renderVendorRow}
+              emptyMessage="No campaign vendors found"
+            />
           </div>
-        )}
-
-        <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-6 gap-3">
-          <SummaryTile label="Total Vendors" value={summary.totalVendors || 0} />
-          <SummaryTile label="No Invoice" value={summary.noInvoice || 0} />
-          <SummaryTile
-            label="Pending"
-            value={
-              summary.pending ||
-              summary.pendingCheck + summary.pendingApproval + summary.pendingPayment ||
-              0
-            }
-          />
-          <SummaryTile label="Paid" value={summary.paid || 0} />
-          <SummaryTile label="Rejected" value={summary.rejected || 0} />
-        </div>
-
-        {!isApproved && (
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            Invoice and advance actions are available only after campaign approval.
-          </div>
-        )}
-
-        <div className="rounded-lg border border-border overflow-hidden">
-          <AppDataTable
-            tableHeader={vendorBreakdownHeader}
-            tableData={campaign.vendorBreakdown || []}
-            renderRow={renderVendorRow}
-            emptyMessage="No campaign vendors found"
-          />
-        </div>
         </DialogContent>
       </Dialog>
 
