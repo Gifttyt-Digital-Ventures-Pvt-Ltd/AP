@@ -83,6 +83,7 @@ const normalizeVendorCost = (vendor = {}) => ({
 });
 
 export const normalizeCampaign = (campaign = {}) => {
+  const totalCost = toNumber(campaign.totalCost ?? campaign.total_cost);
   const vendors = toArray(
     campaign.vendors ?? campaign.vendorCosts ?? campaign.vendor_costs,
   ).map(normalizeVendorCost);
@@ -117,7 +118,15 @@ export const normalizeCampaign = (campaign = {}) => {
     createdBy: campaign.createdBy ?? campaign.created_by ?? "",
     approvedBy: campaign.approvedBy ?? campaign.approved_by ?? "",
     budget: toNumber(campaign.budget),
-    totalCost: toNumber(campaign.totalCost ?? campaign.total_cost),
+    totalCost,
+    includeGst: Boolean(
+      campaign.includeGst ?? campaign.include_gst ?? campaign.gstIncluded ?? false,
+    ),
+    gstOption: campaign.gstOption ?? campaign.gst_option ?? "",
+    grossAmount: toNumber(
+      campaign.grossAmount ?? campaign.gross_amount ?? totalCost,
+    ),
+    netAmount: toNumber(campaign.netAmount ?? campaign.net_amount ?? totalCost),
     pendingAmount: toNumber(campaign.pendingAmount ?? campaign.pending_amount),
     startDate: campaign.startDate ?? campaign.start_date ?? "",
     endDate: campaign.endDate ?? campaign.end_date ?? "",
