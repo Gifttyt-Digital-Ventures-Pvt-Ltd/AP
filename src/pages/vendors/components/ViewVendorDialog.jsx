@@ -79,7 +79,7 @@ const VendorDetailsTab = ({ vendor }) => (
   </div>
 );
 
-const ViewVendorDialog = ({ open, onOpenChange, vendor }) => {
+const ViewVendorDialog = ({ open, onOpenChange, vendor, canApprove, isPendingApproval, onApproveAction }) => {
   const [viewTab, setViewTab] = useState('details');
   const [vendorHistory, setVendorHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -155,7 +155,33 @@ const ViewVendorDialog = ({ open, onOpenChange, vendor }) => {
           </Tabs>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="flex justify-between items-center w-full gap-2 sm:justify-between">
+          <div className="flex gap-2">
+            {canApprove && isPendingApproval && vendor && (
+              <>
+                <Button
+                  variant="outline"
+                  className="border-amber-200 hover:bg-amber-50 text-amber-700 h-9"
+                  onClick={() => onApproveAction(vendor, 'Needs Correction')}
+                >
+                  Needs Correction
+                </Button>
+                <Button
+                  variant="destructive"
+                  className="h-9"
+                  onClick={() => onApproveAction(vendor, 'Rejected')}
+                >
+                  Reject
+                </Button>
+                <Button
+                  className="bg-button-primary hover:bg-button-primary-hover text-button-primary-foreground h-9 font-medium"
+                  onClick={() => onApproveAction(vendor, 'Approved')}
+                >
+                  Approve
+                </Button>
+              </>
+            )}
+          </div>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
         </DialogFooter>
       </DialogContent>

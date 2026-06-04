@@ -1,19 +1,19 @@
-import React from 'react';
-import { useDashboardData } from './hooks/useDashboardData';
-import DashboardLoadingState from './components/DashboardLoadingState';
-import DashboardHeader from './components/DashboardHeader';
-import DashboardStatsGrid from './components/DashboardStatsGrid';
-import PaymentProgressCard from './components/PaymentProgressCard';
-import SpendingTrendChart from './components/SpendingTrendChart';
-import InvoiceStatusDistributionChart from './components/InvoiceStatusDistributionChart';
-import QuickActionsCard from './components/QuickActionsCard';
-import ApprovalBottleneckCard from './components/ApprovalBottleneckCard';
-import PaymentBatchesCard from './components/PaymentBatchesCard';
-import RecentInvoicesCard from './components/RecentInvoicesCard';
-import TopVendorsCard from './components/TopVendorsCard';
-import PendingApprovalsAlert from './components/PendingApprovalsAlert';
-import InvoiceStatusSummaryCard from './components/InvoiceStatusSummaryCard';
-import PaymentSummaryCard from './components/PaymentSummaryCard';
+import React from "react";
+import { useDashboardData } from "./hooks/useDashboardData";
+import DashboardLoadingState from "./components/DashboardLoadingState";
+import DashboardHeader from "./components/DashboardHeader";
+import DashboardStatsGrid from "./components/DashboardStatsGrid";
+import PaymentProgressCard from "./components/PaymentProgressCard";
+import SpendingTrendChart from "./components/SpendingTrendChart";
+import InvoiceStatusDistributionChart from "./components/InvoiceStatusDistributionChart";
+import QuickActionsCard from "./components/QuickActionsCard";
+import ApprovalBottleneckCard from "./components/ApprovalBottleneckCard";
+import PaymentBatchesCard from "./components/PaymentBatchesCard";
+import RecentInvoicesCard from "./components/RecentInvoicesCard";
+import TopVendorsCard from "./components/TopVendorsCard";
+import PendingApprovalsAlert from "./components/PendingApprovalsAlert";
+import InvoiceStatusSummaryCard from "./components/InvoiceStatusSummaryCard";
+import PaymentSummaryCard from "./components/PaymentSummaryCard";
 
 const Dashboard = () => {
   const {
@@ -86,6 +86,10 @@ const Dashboard = () => {
         formatCompactCurrency={formatCompactCurrency}
       />
 
+      <PendingApprovalsAlert
+        pendingApprovals={pendingApprovals}
+        formatFullCurrency={formatFullCurrency}
+      />
       <PaymentProgressCard
         paidValue={paidValue}
         totalValue={totalValue}
@@ -100,10 +104,12 @@ const Dashboard = () => {
           formatCompactCurrency={formatCompactCurrency}
           formatFullCurrency={formatFullCurrency}
         />
-        <InvoiceStatusDistributionChart statusDistribution={charts?.status_distribution} />
+        <InvoiceStatusDistributionChart
+          statusDistribution={charts?.status_distribution}
+        />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <QuickActionsCard showPaymentBatches={showPaymentBatches} />
         <ApprovalBottleneckCard
           bottleneckAnalysis={bottleneck?.stages}
@@ -128,15 +134,10 @@ const Dashboard = () => {
         />
       </div>
 
-      <PendingApprovalsAlert
-        pendingApprovals={pendingApprovals}
-        formatFullCurrency={formatFullCurrency}
-      />
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <InvoiceStatusSummaryCard stats={stats} />
         <PaymentSummaryCard stats={stats} formatFullCurrency={formatFullCurrency} />
-      </div>
+      </div> */}
     </div>
   );
 };

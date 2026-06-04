@@ -391,8 +391,8 @@ const CreateCampaignModal = ({
               Include GST
             </label>
 
-            {form.includeGst && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {form.includeGst && (
                 <div className="space-y-2">
                   <Label>GST Option *</Label>
                   <Select
@@ -412,20 +412,20 @@ const CreateCampaignModal = ({
                   </Select>
                   <FieldError>{errors.gstOption}</FieldError>
                 </div>
-                <div className="space-y-2">
-                  <Label>Gross Amount</Label>
-                  <div className="h-9 rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium">
-                    {formatCurrency(grossAmount)}
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  <Label>Net Amount</Label>
-                  <div className="h-9 rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium">
-                    {formatCurrency(netAmount)}
-                  </div>
+              )}
+              <div className="space-y-2">
+                <Label>Gross Amount</Label>
+                <div className="h-9 rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium">
+                  {formatCurrency(grossAmount)}
                 </div>
               </div>
-            )}
+              <div className="space-y-2">
+                <Label>Net Amount</Label>
+                <div className="h-9 rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium">
+                  {formatCurrency(netAmount)}
+                </div>
+              </div>
+            </div>
           </div>
         </div>
 

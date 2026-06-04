@@ -14,7 +14,12 @@ import {
 } from "../Services/apis/corporateApi";
 import { redirectToOriginLogin } from "../utils/authRedirect";
 import { Button } from "./ui/button";
-import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "./ui/tooltip";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+  TooltipProvider,
+} from "./ui/tooltip";
 import {
   LayoutDashboard,
   Users,
@@ -37,7 +42,7 @@ import {
   BarChart3,
   History,
   Megaphone,
-  User
+  User,
 } from "lucide-react";
 
 // Context to control sidebar visibility from child components
@@ -80,11 +85,11 @@ export const Layout = ({ children }) => {
     { icon: Megaphone, label: "Campaigns", path: "/campaigns" },
     { icon: Calculator, label: "Tax Management", path: "/tax-management" },
     { icon: BarChart3, label: "Reports", path: "/reports" },
-    { icon: History, label: "Audit Trail", path: "/audit-trail" },
     { icon: Building2, label: "Banking", path: "/banking" },
     { icon: Bell, label: "Notifications", path: "/notifications" },
     { icon: Shield, label: "User Roles", path: "/user-roles" },
-    { icon: Settings, label: "Settings", path: "/settings" }
+    { icon: Settings, label: "Settings", path: "/settings" },
+    { icon: History, label: "Audit Trail", path: "/audit-trail" },
   ];
 
   const handleLogout = () => {
@@ -115,159 +120,156 @@ export const Layout = ({ children }) => {
           className="flex h-screen overflow-hidden bg-background"
           data-testid="layout-container"
         >
-        {/* Sidebar - Hidden when hideSidebar is true */}
-        {!hideSidebar && (
-          <aside
-            className={`${
-              sidebarOpen ? "w-64" : "w-16"
-            } border-r border-border bg-card transition-all duration-300 flex flex-col min-h-0`}
-            data-testid="sidebar"
-          >
-            <div className="p-4 border-b border-border flex items-center justify-between">
-              {sidebarOpen && (
-                <h1 className="text-xl font-bold" data-testid="app-title">
-                  AP Portal
-                </h1>
-              )}
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-                data-testid="sidebar-toggle"
-              >
-                {sidebarOpen ? (
-                  <X className="h-4 w-4" />
-                ) : (
-                  <Menu className="h-4 w-4" />
-                )}
-              </Button>
-            </div>
-
-            <nav
-              className="flex-1 min-h-0 overflow-y-auto scrollbar-none p-4 space-y-2"
-              data-testid="sidebar-nav"
+          {/* Sidebar - Hidden when hideSidebar is true */}
+          {!hideSidebar && (
+            <aside
+              className={`${
+                sidebarOpen ? "w-52" : "w-[72px]"
+              } border-r border-border bg-card transition-all duration-300 flex flex-col min-h-0`}
+              data-testid="sidebar"
             >
-              {menuItems.map((item) => {
-                if (!canShowNavItem(item.path)) return null;
-
-                const Icon = item.icon;
-                const buttonElement = (
-                  <button
-                    onClick={() => handleNavigate(item.path)}
-                    className={`w-full flex items-center gap-3 px-2 py-2 rounded-md transition-all ${
-                      isActive(item.path)
-                        ? "bg-button-primary text-button-primary-foreground"
-                        : "hover:bg-button-primary-hover hover:text-primary-foreground"
-                    }`}
-                    data-testid={`nav-${item.label.toLowerCase()}`}
-                  >
-                    <Icon className="h-5 w-5" />
-                    {sidebarOpen && (
-                      <span className="text-sm font-medium">{item.label}</span>
-                    )}
-                  </button>
-                );
-
-                if (!sidebarOpen) {
-                  return (
-                    <Tooltip key={item.path}>
-                      <TooltipTrigger asChild>
-                        {buttonElement}
-                      </TooltipTrigger>
-                      <TooltipContent side="right">
-                        {item.label}
-                      </TooltipContent>
-                    </Tooltip>
-                  );
-                }
-
-                return React.cloneElement(buttonElement, { key: item.path });
-              })}
-            </nav>
-
-            <div className="p-4 border-t border-border">
-              {(user || corporateName || userName) && (
-                !sidebarOpen ? (
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={() => handleNavigate("/profile")}
-                        className="mb-4 w-full flex items-center justify-start px-2 py-2 rounded-md transition-all hover:bg-button-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        data-testid="user-info-collapsed"
-                      >
-                        <User className="h-5 w-5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="right">
-                      Profile
-                    </TooltipContent>
-                  </Tooltip>
-                ) : (
-                  <button
-                    type="button"
-                    onClick={() => handleNavigate("/profile")}
-                    className="mb-4 w-full flex items-center gap-3 px-2 py-2 rounded-md text-left transition-colors hover:bg-button-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    data-testid="user-info"
-                  >
-                    <User className="h-5 w-5 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium truncate">{sidebarPrimaryName}</p>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {sidebarSecondaryLabel}
-                      </p>
-                    </div>
-                  </button>
-                )
-              )}
-              {!sidebarOpen ? (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      className="w-full justify-start"
-                      onClick={handleLogout}
-                      data-testid="logout-button"
-                    >
-                      <LogOut className="h-5 w-5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    Logout
-                  </TooltipContent>
-                </Tooltip>
-              ) : (
+              <div className="p-4 border-b border-border flex items-center justify-between">
+                {sidebarOpen && (
+                  <h1 className="text-xl font-bold" data-testid="app-title">
+                    AP Portal
+                  </h1>
+                )}
                 <Button
                   variant="ghost"
-                  className="w-full justify-start"
-                  onClick={handleLogout}
-                  data-testid="logout-button"
+                  size="sm"
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                  data-testid="sidebar-toggle"
                 >
-                  <LogOut className="h-5 w-5" />
-                  <span className="ml-3">Logout</span>
+                  {sidebarOpen ? (
+                    <X className="h-4 w-4" />
+                  ) : (
+                    <Menu className="h-4 w-4" />
+                  )}
                 </Button>
-              )}
-            </div>
-          </aside>
-        )}
+              </div>
 
-        {/* Main Content */}
-        <main
-          ref={mainContentRef}
-          className="flex min-h-0 flex-1 flex-col overflow-hidden overscroll-contain"
-          data-testid="main-content"
-        >
-          <div
-            className={
-              hideSidebar
-                ? "flex min-h-0 flex-1 flex-col overflow-y-auto p-4"
-                : "flex min-h-0 flex-1 flex-col overflow-y-auto p-2 md:p-6 lg:p-6"
-            }
+              <nav
+                className="flex-1 min-h-0 overflow-y-auto scrollbar-none p-4 space-y-2"
+                data-testid="sidebar-nav"
+              >
+                {menuItems.map((item) => {
+                  if (!canShowNavItem(item.path)) return null;
+
+                  const Icon = item.icon;
+                  const buttonElement = (
+                    <button
+                      onClick={() => handleNavigate(item.path)}
+                      className={`w-full flex items-center gap-3 px-2 py-2 rounded-md transition-all ${
+                        isActive(item.path)
+                          ? "bg-button-primary text-button-primary-foreground"
+                          : "hover:bg-button-primary-hover hover:text-primary-foreground"
+                      }`}
+                      data-testid={`nav-${item.label.toLowerCase()}`}
+                    >
+                      <Icon className="h-6 w-6" />
+                      {sidebarOpen && (
+                        <span className="text-sm font-medium">
+                          {item.label}
+                        </span>
+                      )}
+                    </button>
+                  );
+
+                  if (!sidebarOpen) {
+                    return (
+                      <Tooltip key={item.path}>
+                        <TooltipTrigger asChild>{buttonElement}</TooltipTrigger>
+                        <TooltipContent side="right">
+                          {item.label}
+                        </TooltipContent>
+                      </Tooltip>
+                    );
+                  }
+
+                  return React.cloneElement(buttonElement, { key: item.path });
+                })}
+              </nav>
+
+              <div className="p-4 border-t border-border">
+                {(user || corporateName || userName) &&
+                  (!sidebarOpen ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={() => handleNavigate("/profile")}
+                          className="mb-4 w-full flex items-center justify-start px-2 py-2 rounded-md transition-all hover:bg-button-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          data-testid="user-info-collapsed"
+                        >
+                          <User className="h-7 w-7" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">Profile</TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => handleNavigate("/profile")}
+                      className="mb-4 w-full flex items-center gap-3 px-2 py-2 rounded-md text-left transition-colors hover:bg-button-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      data-testid="user-info"
+                    >
+                      <User className="h-5 w-5 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium truncate">
+                          {sidebarPrimaryName}
+                        </p>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {sidebarSecondaryLabel}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                {!sidebarOpen ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        className="w-full justify-start"
+                        onClick={handleLogout}
+                        data-testid="logout-button"
+                      >
+                        <LogOut className="h-6 w-6" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">Logout</TooltipContent>
+                  </Tooltip>
+                ) : (
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start"
+                    onClick={handleLogout}
+                    data-testid="logout-button"
+                  >
+                    <LogOut className="h-5 w-5" />
+                    <span className="ml-3">Logout</span>
+                  </Button>
+                )}
+              </div>
+            </aside>
+          )}
+
+          {/* Main Content */}
+          <main
+            ref={mainContentRef}
+            className="flex min-h-0 flex-1 flex-col overflow-hidden overscroll-contain"
+            data-testid="main-content"
           >
-            {children}
-          </div>
-        </main>
-      </div>
+            <div
+              className={
+                hideSidebar
+                  ? "flex min-h-0 flex-1 flex-col overflow-y-auto p-4"
+                  : "flex min-h-0 flex-1 flex-col overflow-y-auto p-2 md:p-6 lg:p-6"
+              }
+            >
+              {children}
+            </div>
+          </main>
+        </div>
       </TooltipProvider>
     </SidebarContext.Provider>
   );

@@ -149,6 +149,7 @@ const formatTimestamp = (value) => {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
+    hour12: true,
   }).format(date);
 };
 
@@ -260,7 +261,7 @@ const AuditBadge = ({ type, value }) => (
 
 const AuditRow = memo(({ entry, highlighted }) => (
   <TableRow className={highlighted ? "bg-yellow-50 transition-colors" : undefined}>
-    <TableCell className="w-[180px]" title={getUtcTitle(entry.timestamp)}>
+    <TableCell className="w-[180px]">
       {formatTimestamp(entry.timestamp)}
     </TableCell>
     <TableCell className="w-[180px]">
