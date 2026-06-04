@@ -266,6 +266,17 @@ export const campaignsApi = serviceApi.injectEndpoints({
       query: (body) => ({ url: "/campaigns", method: "POST", body }),
       invalidatesTags: [{ type: "Campaigns", id: "LIST" }],
     }),
+    updateCampaign: builder.mutation({
+      query: ({ id, body }) => ({
+        url: `/campaigns/${id}`,
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: "Campaigns", id },
+        { type: "Campaigns", id: "LIST" },
+      ],
+    }),
     getCampaignDetail: builder.query({
       query: (id) => ({ url: `/campaigns/${id}`, method: "GET" }),
       transformResponse: normalizeCampaign,
@@ -364,6 +375,7 @@ export const campaignsApi = serviceApi.injectEndpoints({
 export const {
   useGetCampaignsQuery,
   useCreateCampaignMutation,
+  useUpdateCampaignMutation,
   useGetCampaignDetailQuery,
   useApproveCampaignMutation,
   useUpdateCampaignStatusMutation,
