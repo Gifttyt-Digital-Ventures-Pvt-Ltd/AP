@@ -26,7 +26,15 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "../../../components/ui/popover";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../components/ui/select";
 import { cn } from "../../../lib/utils";
+import { TAX_RATES } from "../../invoices/constants";
 import { FieldError } from "./CampaignShared";
 import { formatCurrency, formatDate } from "../utils/campaignFormatters";
 
@@ -36,6 +44,8 @@ const initialForm = {
   endDate: "",
   budget: "",
   totalCost: "",
+  includeGst: false,
+  gstOption: "",
 };
 
 const parseDateValue = (value) => {
@@ -57,6 +67,38 @@ const campaignCalendarStartMonth = new Date(new Date().getFullYear() - 10, 0);
 const campaignCalendarEndMonth = new Date(2099, 11);
 
 const sanitizeNumberInput = (value) => String(value).replace(/\D/g, "");
+
+const getTaxRateValue = (taxRate = {}) => {
+  if (taxRate.igst != null) return Number(taxRate.igst) || 0;
+  const splitTaxRate = Number(taxRate.cgst || 0) + Number(taxRate.sgst || 0);
+  if (splitTaxRate > 0) return splitTaxRate;
+  const labelRate = String(taxRate.value || taxRate.label || "").match(
+    /(\d+(?:\.\d+)?)%/,
+  );
+  return labelRate ? Number(labelRate[1]) : 0;
+};
+
+const CAMPAIGN_GST_OPTIONS = TAX_RATES.map((taxRate) => ({
+  value: taxRate.value,
+  label: taxRate.label,
+  rate: getTaxRateValue(taxRate),
+}));
+
+const getCampaignGstRate = (gstOption) =>
+  CAMPAIGN_GST_OPTIONS.find((option) => option.value === gstOption)?.rate ?? 0;
+
+const calculateCampaignGstAmounts = ({ totalCost, includeGst, gstOption }) => {
+  const grossAmount = Number(totalCost || 0);
+  if (!includeGst) {
+    return { grossAmount, netAmount: grossAmount };
+  }
+  const gstRate = getCampaignGstRate(gstOption);
+  const netAmount =
+    gstRate > 0
+      ? Math.round((grossAmount + (grossAmount * gstRate) / 100) * 100) / 100
+      : grossAmount;
+  return { grossAmount, netAmount };
+};
 
 const CreateCampaignModal = ({
   open,
@@ -82,6 +124,8 @@ const CreateCampaignModal = ({
         endDate: campaign.endDate || "",
         budget: campaign.budget || "",
         totalCost: campaign.totalCost || "",
+        includeGst: Boolean(campaign.includeGst),
+        gstOption: campaign.gstOption || "",
       });
       const ids = (campaign.vendors || []).map((v) => String(v.vendorId || v.id));
       setSelectedVendorIds(ids);
@@ -114,6 +158,11 @@ const CreateCampaignModal = ({
   );
   const totalCost = Number(form.totalCost || 0);
   const totalMatches = totalCost > 0 && vendorCostTotal === totalCost;
+  const { grossAmount, netAmount } = calculateCampaignGstAmounts({
+    totalCost: form.totalCost,
+    includeGst: form.includeGst,
+    gstOption: form.gstOption,
+  });
 
   const updateForm = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -163,6 +212,9 @@ const CreateCampaignModal = ({
     if (Number(form.budget) <= 0) nextErrors.budget = "Budget must be > 0";
     if (Number(form.totalCost) <= 0)
       nextErrors.totalCost = "Total cost must be > 0";
+    if (form.includeGst && !form.gstOption) {
+      nextErrors.gstOption = "GST option is required";
+    }
     if (selectedVendorIds.length === 0)
       nextErrors.vendors = "Select at least one vendor";
     selectedVendorIds.forEach((vendorId) => {
@@ -185,6 +237,10 @@ const CreateCampaignModal = ({
       endDate: form.endDate,
       budget: Number(form.budget),
       totalCost: Number(form.totalCost),
+      includeGst: Boolean(form.includeGst),
+      gstOption: form.includeGst ? form.gstOption : "",
+      grossAmount,
+      netAmount,
       vendors: selectedVendorIds.map((vendorId) => ({
         vendorId,
         cost: Number(vendorCosts[vendorId]),
@@ -318,6 +374,58 @@ const CreateCampaignModal = ({
               }
             />
             <FieldError>{errors.totalCost}</FieldError>
+          </div>
+          <div className="space-y-3 md:col-span-2 rounded-lg border border-border p-3">
+            <label className="flex items-center gap-2 text-sm font-medium">
+              <Checkbox
+                checked={form.includeGst}
+                onCheckedChange={(checked) => {
+                  setForm((prev) => ({
+                    ...prev,
+                    includeGst: Boolean(checked),
+                    gstOption: checked ? prev.gstOption : "",
+                  }));
+                  setErrors((prev) => ({ ...prev, gstOption: "" }));
+                }}
+              />
+              Include GST
+            </label>
+
+            {form.includeGst && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="space-y-2">
+                  <Label>GST Option *</Label>
+                  <Select
+                    value={form.gstOption}
+                    onValueChange={(value) => updateForm("gstOption", value)}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select GST" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CAMPAIGN_GST_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldError>{errors.gstOption}</FieldError>
+                </div>
+                <div className="space-y-2">
+                  <Label>Gross Amount</Label>
+                  <div className="h-9 rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium">
+                    {formatCurrency(grossAmount)}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Net Amount</Label>
+                  <div className="h-9 rounded-md border bg-muted/30 px-3 py-2 text-sm font-medium">
+                    {formatCurrency(netAmount)}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 

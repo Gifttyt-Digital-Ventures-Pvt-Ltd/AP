@@ -373,6 +373,14 @@ const CampaignDetailsModal = ({
             <p><span className="text-muted-foreground">Period:</span> {formatDate(campaign.startDate)} - {formatDate(campaign.endDate)}</p>
             <p><span className="text-muted-foreground">Budget:</span> {formatCurrency(campaign.budget)}</p>
             <p><span className="text-muted-foreground">Total Cost:</span> {formatCurrency(campaign.totalCost)}</p>
+            <p><span className="text-muted-foreground">Include GST:</span> {campaign.includeGst ? "Yes" : "No"}</p>
+            {campaign.includeGst && (
+              <>
+                <p><span className="text-muted-foreground">GST:</span> {campaign.gstOption || "-"}</p>
+                <p><span className="text-muted-foreground">Gross Amount:</span> {formatCurrency(campaign.grossAmount)}</p>
+                <p><span className="text-muted-foreground">Net Amount:</span> {formatCurrency(campaign.netAmount)}</p>
+              </>
+            )}
           </div>
         </div>
 
