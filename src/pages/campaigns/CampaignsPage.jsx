@@ -30,6 +30,7 @@ import {
   PaginationPrevious,
 } from "../../components/ui/pagination";
 import AppDataTable from "../../components/common/AppDataTable";
+import RefreshButton from "../../components/common/RefreshButton";
 import { TableCell, TableRow } from "../../components/ui/table";
 import ApproveCampaignModal from "./components/ApproveCampaignModal";
 import CampaignDetailsModal from "./components/CampaignDetailsModal";
@@ -53,9 +54,15 @@ const campaignTableHeader = [
   { key: "createdBy", title: "Created By" },
   { key: "approvedBy", title: "Approved By" },
   { key: "budget", title: "Budget" },
-  { key: "amount", title: "Amount" },
+  { key: "totalCost", title: "Amount" },
+  { key: "pendingAmount", title: "Pending Amount" },
   { key: "status", title: "Status" },
-  { key: "actions", title: "Actions", headerClassName: "text-left", cellClassName: "text-left" },
+  {
+    key: "actions",
+    title: "Actions",
+    headerClassName: "text-left",
+    cellClassName: "text-left",
+  },
 ];
 
 const CampaignsPage = () => {
@@ -75,7 +82,8 @@ const CampaignsPage = () => {
 
   const { user } = useAuth();
   const { hasPermission } = useRBAC();
-  const { data: corporateUserContext = null } = useGetCorporateUserDetailsQuery();
+  const { data: corporateUserContext = null } =
+    useGetCorporateUserDetailsQuery();
   const access = useMemo(
     () => buildCampaignAccess({ user, corporateUserContext, hasPermission }),
     [user, corporateUserContext, hasPermission],
@@ -104,13 +112,14 @@ const CampaignsPage = () => {
   const {
     data: vendorsData = [],
     isError: vendorsError,
-  } = useGetCampaignVendorsQuery();
-  const {
-    data: detailsData,
-    refetch: refetchDetails,
-  } = useGetCampaignDetailQuery(detailsCampaignId, {
-    skip: !detailsCampaignId,
-  });
+    isFetching: vendorsFetching,
+    refetch: refetchVendors,
+  } =
+    useGetCampaignVendorsQuery();
+  const { data: detailsData, refetch: refetchDetails } =
+    useGetCampaignDetailQuery(detailsCampaignId, {
+      skip: !detailsCampaignId,
+    });
 
   const [createCampaign, { isLoading: creatingCampaign }] =
     useCreateCampaignMutation();
@@ -137,10 +146,13 @@ const CampaignsPage = () => {
     null;
 
   const campaignPagination = useMemo(() => {
-    const { page, size, totalElements, totalPages, numberOfElements, last } = campaignsPage;
+    const { page, size, totalElements, totalPages, numberOfElements, last } =
+      campaignsPage;
     const startRecord = totalElements === 0 ? 0 : page * size + 1;
     const endRecord =
-      totalElements === 0 ? 0 : Math.min(page * size + numberOfElements, totalElements);
+      totalElements === 0
+        ? 0
+        : Math.min(page * size + numberOfElements, totalElements);
 
     return {
       page,
@@ -169,15 +181,34 @@ const CampaignsPage = () => {
   const stats = useMemo(
     () => ({
       total: campaignPagination.totalElements,
-      pending: campaigns.filter((campaign) => campaign.status === "pending_approval").length,
-      approved: campaigns.filter((campaign) => campaign.status === "approved").length,
-      totalBudget: campaigns.reduce((sum, campaign) => sum + Number(campaign.budget || 0), 0),
+      pending: campaigns.filter(
+        (campaign) => campaign.status === "pending_approval",
+      ).length,
+      approved: campaigns.filter((campaign) => campaign.status === "approved")
+        .length,
+      totalBudget: campaigns.reduce(
+        (sum, campaign) => sum + Number(campaign.budget || 0),
+        0,
+      ),
     }),
     [campaigns, campaignPagination.totalElements],
   );
   const firstPendingCampaign = campaigns.find(
     (campaign) => campaign.status === "pending_approval",
   );
+
+  const handleRefreshCampaigns = async () => {
+    try {
+      await Promise.all([
+        refetchCampaigns(),
+        refetchVendors(),
+        detailsCampaignId ? refetchDetails() : Promise.resolve(),
+      ]);
+      toast.success("Campaigns refreshed");
+    } catch {
+      toast.error("Failed to refresh campaigns");
+    }
+  };
 
   const refreshAfterMutation = async () => {
     await refetchCampaigns();
@@ -271,10 +302,9 @@ const CampaignsPage = () => {
             value = campaign.approvedBy || "-";
             break;
           case "budget":
-            value = formatCurrency(campaign.budget);
-            break;
-          case "amount":
-            value = formatCurrency(campaign.totalCost);
+          case "totalCost":
+          case "pendingAmount":
+            value = formatCurrency(campaign?.[header.key] || 0);
             break;
           case "status":
             value = <CampaignStatusBadge status={campaign.status} />;
@@ -289,16 +319,21 @@ const CampaignsPage = () => {
                 >
                   Details
                 </Button>
-                {access.canCreateCampaign && campaign.status === "correction_needed" && (
-                  <Button size="sm" onClick={() => setEditCampaign(campaign)}>
-                    Edit
-                  </Button>
-                )}
-                {access.canReviewCampaign && campaign.status === "pending_approval" && (
-                  <Button size="sm" onClick={() => setReviewCampaign(campaign)}>
-                    Review
-                  </Button>
-                )}
+                {access.canCreateCampaign &&
+                  campaign.status === "correction_needed" && (
+                    <Button size="sm" onClick={() => setEditCampaign(campaign)}>
+                      Edit
+                    </Button>
+                  )}
+                {access.canReviewCampaign &&
+                  campaign.status === "pending_approval" && (
+                    <Button
+                      size="sm"
+                      onClick={() => setReviewCampaign(campaign)}
+                    >
+                      Review
+                    </Button>
+                  )}
               </div>
             );
             break;
@@ -325,15 +360,24 @@ const CampaignsPage = () => {
             Campaigns
           </h1>
           <p className="text-muted-foreground">
-            Manage campaign approvals, vendor invoices, advances, and settlements.
+            Manage campaign approvals, vendor invoices, advances, and
+            settlements.
           </p>
         </div>
-        {access.canCreateCampaign && (
-          <Button onClick={() => setShowCreate(true)}>
-            <Plus className="h-4 w-4 mr-2" />
-            New Campaign
-          </Button>
-        )}
+        <div className="flex flex-wrap gap-2">
+          <RefreshButton
+            onClick={handleRefreshCampaigns}
+            refreshing={campaignsFetching || vendorsFetching}
+          >
+            Refresh
+          </RefreshButton>
+          {access.canCreateCampaign && (
+            <Button onClick={() => setShowCreate(true)}>
+              <Plus className="h-4 w-4 mr-2" />
+              New Campaign
+            </Button>
+          )}
+        </div>
       </div>
 
       {campaignsError && (
@@ -357,7 +401,10 @@ const CampaignsPage = () => {
               <span className="font-medium">{firstPendingCampaign.name}</span>.
             </p>
           </div>
-          <Button size="sm" onClick={() => setReviewCampaign(firstPendingCampaign)}>
+          <Button
+            size="sm"
+            onClick={() => setReviewCampaign(firstPendingCampaign)}
+          >
             Review now
           </Button>
         </div>
@@ -367,7 +414,10 @@ const CampaignsPage = () => {
         <SummaryTile label="Total Campaigns" value={stats.total} />
         <SummaryTile label="Pending Approval" value={stats.pending} />
         <SummaryTile label="Approved" value={stats.approved} />
-        <SummaryTile label="Total Budget" value={formatCurrency(stats.totalBudget)} />
+        <SummaryTile
+          label="Total Budget"
+          value={formatCurrency(stats.totalBudget)}
+        />
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card">
@@ -403,63 +453,65 @@ const CampaignsPage = () => {
         <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-border p-4 sm:flex-row sm:items-center sm:justify-between">
           {campaignPagination.totalPages > 0 ? (
             <>
-            <p
-              className="text-sm text-muted-foreground"
-              data-testid="campaign-pagination-summary"
-            >
-              Showing {campaignPagination.startRecord}-{campaignPagination.endRecord} of{" "}
-              {campaignPagination.totalElements.toLocaleString("en-IN")}
-            </p>
-            <Pagination className="mx-0 w-auto justify-start sm:justify-end">
-              <PaginationContent>
-                <PaginationItem>
-                  <PaginationPrevious
-                    href="#"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      goToCampaignPage(campaignPagination.page - 1);
-                    }}
-                    className={
-                      campaignPagination.page === 0
-                        ? "pointer-events-none opacity-50"
-                        : undefined
-                    }
-                    data-testid="campaign-pagination-previous"
-                  />
-                </PaginationItem>
-                {visibleCampaignPageNumbers.map((pageNumber) => (
-                  <PaginationItem key={pageNumber}>
-                    <PaginationLink
+              <p
+                className="text-sm text-muted-foreground"
+                data-testid="campaign-pagination-summary"
+              >
+                Showing {campaignPagination.startRecord}-
+                {campaignPagination.endRecord} of{" "}
+                {campaignPagination.totalElements.toLocaleString("en-IN")}
+              </p>
+              <Pagination className="mx-0 w-auto justify-start sm:justify-end">
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
                       href="#"
-                      isActive={pageNumber === campaignPagination.page}
                       onClick={(event) => {
                         event.preventDefault();
-                        goToCampaignPage(pageNumber);
+                        goToCampaignPage(campaignPagination.page - 1);
                       }}
-                      data-testid={`campaign-pagination-page-${pageNumber + 1}`}
-                    >
-                      {pageNumber + 1}
-                    </PaginationLink>
+                      className={
+                        campaignPagination.page === 0
+                          ? "pointer-events-none opacity-50"
+                          : undefined
+                      }
+                      data-testid="campaign-pagination-previous"
+                    />
                   </PaginationItem>
-                ))}
-                <PaginationItem>
-                  <PaginationNext
-                    href="#"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      goToCampaignPage(campaignPagination.page + 1);
-                    }}
-                    className={
-                      !campaignPagination.hasMore &&
-                      campaignPagination.page >= campaignPagination.totalPages - 1
-                        ? "pointer-events-none opacity-50"
-                        : undefined
-                    }
-                    data-testid="campaign-pagination-next"
-                  />
-                </PaginationItem>
-              </PaginationContent>
-            </Pagination>
+                  {visibleCampaignPageNumbers.map((pageNumber) => (
+                    <PaginationItem key={pageNumber}>
+                      <PaginationLink
+                        href="#"
+                        isActive={pageNumber === campaignPagination.page}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          goToCampaignPage(pageNumber);
+                        }}
+                        data-testid={`campaign-pagination-page-${pageNumber + 1}`}
+                      >
+                        {pageNumber + 1}
+                      </PaginationLink>
+                    </PaginationItem>
+                  ))}
+                  <PaginationItem>
+                    <PaginationNext
+                      href="#"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        goToCampaignPage(campaignPagination.page + 1);
+                      }}
+                      className={
+                        !campaignPagination.hasMore &&
+                        campaignPagination.page >=
+                          campaignPagination.totalPages - 1
+                          ? "pointer-events-none opacity-50"
+                          : undefined
+                      }
+                      data-testid="campaign-pagination-next"
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
             </>
           ) : null}
         </div>

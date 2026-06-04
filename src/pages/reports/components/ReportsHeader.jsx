@@ -8,8 +8,9 @@ import {
   SelectValue,
 } from '../../../components/ui/select';
 import { Input } from '../../../components/ui/input';
-import { Calendar, RefreshCw } from 'lucide-react';
+import { Calendar } from 'lucide-react';
 import CurrencySelector from '../../../components/common/CurrencySelector';
+import RefreshButton from '../../../components/common/RefreshButton';
 
 // Top controls for date window selection and data refresh.
 const ReportsHeader = ({
@@ -60,10 +61,9 @@ const ReportsHeader = ({
           />
         )}
       </div>
-      <Button variant="outline" onClick={fetchAllData} disabled={loading}>
-        <RefreshCw className={`h-4 w-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
+      <RefreshButton onClick={fetchAllData} refreshing={loading}>
         Refresh
-      </Button>
+      </RefreshButton>
     </div>
   </div>
 );

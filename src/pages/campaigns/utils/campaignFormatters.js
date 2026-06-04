@@ -6,10 +6,11 @@ export const CAMPAIGN_STATUS_LABELS = {
 };
 
 export const INVOICE_STATUS_LABELS = {
-  no_invoice: "No Invoice",
+  no_invoice: "Pending Invoice",
   pending_checker: "Pending Check",
   pending_approval: "Pending Approval",
   pending_payment: "Pending Payment",
+  pending: "Pending",
   paid: "Paid",
   rejected: "Rejected",
 };

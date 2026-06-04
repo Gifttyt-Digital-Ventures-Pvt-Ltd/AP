@@ -28,6 +28,7 @@ import {
 import VendorDetailsDialog from '../../components/vendors/VendorDetailsDialog';
 import * as XLSX from '@e965/xlsx';
 import AppDataTable from '../../components/common/AppDataTable';
+import RefreshButton from '../../components/common/RefreshButton';
 import { TableCell, TableRow } from '../../components/ui/table';
 import MultipleVendorUploadDialog from './components/MultipleVendorUploadDialog';
 import { getVendorValidationErrors } from '../../utils/vendorValidation';
@@ -148,10 +149,14 @@ const Vendors = () => {
   const {
     data: vendorsData = [],
     isError: vendorsError,
+    isFetching: vendorsFetching,
+    refetch: refetchVendors,
   } = useGetVendorsQuery();
   const {
     data: pendingApprovalsData = [],
     isError: pendingApprovalsError,
+    isFetching: pendingApprovalsFetching,
+    refetch: refetchPendingApprovals,
   } = useGetPendingVendorApprovalsQuery();
 
   const [createVendor, { isLoading: createVendorLoading }] = useCreateVendorMutation();
@@ -551,6 +556,16 @@ const Vendors = () => {
   const canEditVendorPermission = canUpdateVendorPermission;
   const canDeleteVendor = canPerformAction('vendors.delete');
   const canApproveVendor = canPerformAction('vendors.approve');
+  const vendorsRefreshing = vendorsFetching || pendingApprovalsFetching;
+
+  const handleRefreshVendors = async () => {
+    try {
+      await Promise.all([refetchVendors(), refetchPendingApprovals()]);
+      toast.success('Vendors refreshed');
+    } catch {
+      toast.error('Failed to refresh vendors');
+    }
+  };
 
   const isPendingApprovalVendor = (vendor) => {
     const normalizedStatus = String(vendor?.status || '')
@@ -743,32 +758,40 @@ const Vendors = () => {
           </h1>
           <p className="text-muted-foreground">Manage your vendor relationships</p>
         </div>
-        {canCreateVendor && (
-          <div className="relative">
-            <Button data-testid="new-vendor-button" onClick={() => setVendorUploadOptionOpen((prev) => !prev)}>
-              <Plus className="h-4 w-4 mr-2" />
-              New Vendor
-            </Button>
-            {vendorUploadOptionOpen && (
-              <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-md border border-border bg-background p-2 shadow-md">
-                <button
-                  type="button"
-                  className="w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-muted"
-                  onClick={openSingleVendorDialog}
-                >
-                  Single Vendor
-                </button>
-                <button
-                  type="button"
-                  className="w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-muted"
-                  onClick={openMultipleVendorDialog}
-                >
-                  Multiple Vendors
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <RefreshButton
+            onClick={handleRefreshVendors}
+            refreshing={vendorsRefreshing}
+          >
+            Refresh
+          </RefreshButton>
+          {canCreateVendor && (
+            <div className="relative">
+              <Button data-testid="new-vendor-button" onClick={() => setVendorUploadOptionOpen((prev) => !prev)}>
+                <Plus className="h-4 w-4 mr-2" />
+                New Vendor
+              </Button>
+              {vendorUploadOptionOpen && (
+                <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-md border border-border bg-background p-2 shadow-md">
+                  <button
+                    type="button"
+                    className="w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-muted"
+                    onClick={openSingleVendorDialog}
+                  >
+                    Single Vendor
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-muted"
+                    onClick={openMultipleVendorDialog}
+                  >
+                    Multiple Vendors
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <MultipleVendorUploadDialog

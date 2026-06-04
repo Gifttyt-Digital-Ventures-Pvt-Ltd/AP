@@ -2,6 +2,18 @@ import { serviceApi } from "../serviceApi";
 import { toInvoiceApiPayload, toInvoiceUiPayload, toVendorApiPayload, toVendorUiPayload, normalizeInvoiceListResponse } from "../utils/payloadMappers";
 import { normalizeApprovalHistoryEntries } from "../../pages/invoices/utils/invoiceHistory";
 
+const unwrapVendorList = (response) => {
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response?.data)) return response.data;
+  if (Array.isArray(response?.content)) return response.content;
+  if (Array.isArray(response?.items)) return response.items;
+  if (Array.isArray(response?.vendors)) return response.vendors;
+  if (response && (response.id || response.vendorId || response.vendor_id)) {
+    return [response];
+  }
+  return [];
+};
+
 export const invoicesVendorsApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getInvoiceMandatoryFields: builder.query({
@@ -90,9 +102,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
     getVendors: builder.query({
       query: () => ({ url: "/vendors", method: "GET" }),
       transformResponse: (response) =>
-        Array.isArray(response)
-          ? response.map(toVendorUiPayload)
-          : toVendorUiPayload(response),
+        unwrapVendorList(response).map(toVendorUiPayload),
       providesTags: (result) => {
         if (Array.isArray(result)) {
           return [
@@ -164,7 +174,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
     getPendingVendorApprovals: builder.query({
       query: () => ({ url: "/vendors/approvals/pending", method: "GET" }),
       transformResponse: (response) =>
-        Array.isArray(response) ? response.map(toVendorUiPayload) : [],
+        unwrapVendorList(response).map(toVendorUiPayload),
       providesTags: [{ type: "Vendors", id: "PENDING" }],
     }),
     approveVendor: builder.mutation({

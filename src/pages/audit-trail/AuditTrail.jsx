@@ -6,12 +6,12 @@ import {
   Download,
   Filter,
   Loader2,
-  RefreshCw,
   Search,
   ShieldCheck,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import RefreshButton from "../../components/common/RefreshButton";
 import {
   AUDIT_ACTIONS,
   AUDIT_STATUSES,
@@ -698,10 +698,17 @@ const AuditTrail = () => {
               <X className="h-4 w-4" />
               Clear Filters
             </Button>
-            <Button type="button" variant="outline" onClick={() => { refetch(); refetchUsers(); }} className="gap-2">
-              <RefreshCw className="h-4 w-4" />
+            <RefreshButton
+              type="button"
+              onClick={() => {
+                refetch();
+                refetchUsers();
+              }}
+              refreshing={isFetching && !isLoading}
+              className="gap-2"
+            >
               Refresh
-            </Button>
+            </RefreshButton>
           </div>
         </div>
         {invalidDateRange && (

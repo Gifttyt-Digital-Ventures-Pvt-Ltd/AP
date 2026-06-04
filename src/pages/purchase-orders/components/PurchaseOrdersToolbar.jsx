@@ -2,6 +2,7 @@ import React from "react";
 import { CheckCircle, Clock, FileText, IndianRupee, Plus, Settings2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent } from "../../../components/ui/card";
+import RefreshButton from "../../../components/common/RefreshButton";
 import { normalizePoTemplateCode } from "../utils";
 
 const PurchaseOrdersToolbar = ({
@@ -11,6 +12,8 @@ const PurchaseOrdersToolbar = ({
   formatCurrency,
   canManagePo,
   activeFormat,
+  onRefresh,
+  refreshing = false,
 }) => {
   return (
     <>
@@ -25,6 +28,9 @@ const PurchaseOrdersToolbar = ({
           )}
         </div>
         <div className="flex gap-2">
+          <RefreshButton onClick={onRefresh} refreshing={refreshing}>
+            Refresh
+          </RefreshButton>
           {canManagePo && (
             <>
               <Button variant="outline" onClick={() => setShowBuilderDialog(true)} data-testid="open-po-builder-btn">

@@ -17,6 +17,7 @@ import { useActionGuard } from '../../hooks/useActionGuard';
 import { useCurrencyFilter } from '../../hooks/useCurrencyFilter';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import CurrencySelector from '../../components/common/CurrencySelector';
+import RefreshButton from '../../components/common/RefreshButton';
 import { CURRENCY_SCREENS } from '../../utils/currency';
 import { INVOICE_LIST_PAGE_SIZE } from '../invoices/constants';
 import NeedsApprovalTable from './components/NeedsApprovalTable';
@@ -90,6 +91,7 @@ const Approvals = () => {
     isFetching: allInvoicesFetching,
     refetch: refetchInvoices,
   } = useGetInvoicesQuery(allInvoicesQueryArgs);
+  const approvalsRefreshing = allInvoicesFetching;
   const [approveInvoice] = useApproveInvoiceMutation();
   const [checkInvoice] = useCheckInvoiceMutation();
   const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
@@ -103,6 +105,19 @@ const Approvals = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historySheetOpen, setHistorySheetOpen] = useState(false);
   const [historySheetInvoice, setHistorySheetInvoice] = useState(null);
+
+  const handleRefreshApprovals = async () => {
+    try {
+      await Promise.all([
+        refetchPendingApprovals(),
+        refetchPendingChecker(),
+        refetchInvoices(),
+      ]);
+      toast.success('Approvals refreshed');
+    } catch {
+      toast.error('Failed to refresh approvals');
+    }
+  };
   const [viewPreviewError, setViewPreviewError] = useState(false);
   const [pdfZoom, setPdfZoom] = useState(100);
   const [comments, setComments] = useState('');
@@ -330,13 +345,21 @@ const Approvals = () => {
           </h1>
           <p className="text-muted-foreground">Review and approve invoices</p>
         </div>
-        <CurrencySelector
-          currencies={currencies}
-          value={selectedCurrency}
-          onChange={setSelectedCurrency}
-          variant="inline"
-          id="approvals-currency-filter"
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <CurrencySelector
+            currencies={currencies}
+            value={selectedCurrency}
+            onChange={setSelectedCurrency}
+            variant="inline"
+            id="approvals-currency-filter"
+          />
+          <RefreshButton
+            onClick={handleRefreshApprovals}
+            refreshing={approvalsRefreshing}
+          >
+            Refresh
+          </RefreshButton>
+        </div>
       </div>
 
       {/* Each tab now delegates table rendering to focused components. */}

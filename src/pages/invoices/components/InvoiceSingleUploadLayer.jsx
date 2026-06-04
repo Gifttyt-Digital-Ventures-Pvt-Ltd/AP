@@ -605,6 +605,7 @@ const InvoiceSingleUploadLayer = ({
       lockedCampaign={lockCampaign}
       lockedCampaignPrefill={prefillCampaign}
       currencyOptions={invoiceCurrencyOptions}
+      vendorOptions={invoiceVendorOptions}
       GST_TREATMENTS={GST_TREATMENTS}
       INDIAN_STATES={INDIAN_STATES}
       INVOICE_SOURCES={INVOICE_SOURCES}

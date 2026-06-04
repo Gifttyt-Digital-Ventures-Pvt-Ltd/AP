@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Building2, CheckCircle2, ChevronsUpDown, Plus, X } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
@@ -89,17 +89,19 @@ export const InvoiceForm = ({
   TAX_RATES,
 }) => {
   const [vendorPickerOpen, setVendorPickerOpen] = useState(false);
+  const [vendorQuery, setVendorQuery] = useState("");
+  const vendorAnchorRef = useRef(null);
   const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false);
   const [currencyQuery, setCurrencyQuery] = useState("");
 
   const filteredVendorOptions = useMemo(() => {
-    const query = String(formData?.vendorName || "").toLowerCase().trim();
+    const query = String(vendorQuery || "").toLowerCase().trim();
     const options = Array.isArray(vendorOptions) ? vendorOptions : [];
     if (!query) return options;
     return options.filter((vendor) =>
       String(vendor?.name || "").toLowerCase().includes(query),
     );
-  }, [formData?.vendorName, vendorOptions]);
+  }, [vendorOptions, vendorQuery]);
 
   const resolvedCurrencyOptions = useMemo(
     () => mergeCurrencyOptions(currencyOptions, FALLBACK_CURRENCIES, formData?.currency),
@@ -179,6 +181,7 @@ export const InvoiceForm = ({
   };
 
   const clearVendorSelection = () => {
+    setVendorQuery("");
     setFormData({
       ...formData,
       vendorName: "",
@@ -376,14 +379,18 @@ export const InvoiceForm = ({
             <RequiredLabel required>Vendor Name</RequiredLabel>
             <Popover open={vendorPickerOpen} onOpenChange={setVendorPickerOpen}>
               <PopoverAnchor asChild>
-                <div className="relative">
+                <div className="relative" ref={vendorAnchorRef}>
                   <Input
                     value={formData.vendorName || ""}
                     onChange={(e) => {
+                      setVendorQuery(e.target.value);
                       applyVendorNameChange(e.target.value);
                       setVendorPickerOpen(true);
                     }}
-                    onFocus={() => setVendorPickerOpen(true)}
+                    onFocus={() => {
+                      setVendorQuery("");
+                      setVendorPickerOpen(true);
+                    }}
                     placeholder="Select or enter vendor"
                     className="pr-16 h-8 text-sm"
                     autoComplete="off"
@@ -401,7 +408,10 @@ export const InvoiceForm = ({
                     )}
                     <button
                       type="button"
-                      onClick={() => setVendorPickerOpen((open) => !open)}
+                      onClick={() => {
+                        setVendorQuery("");
+                        setVendorPickerOpen(true);
+                      }}
                       className="text-gray-400 hover:text-gray-600 p-1"
                       aria-label="Show vendor list"
                     >
@@ -411,9 +421,14 @@ export const InvoiceForm = ({
                 </div>
               </PopoverAnchor>
               <PopoverContent
-                className="w-[var(--radix-popover-trigger-width)] p-0"
+                className="z-[120] min-w-[260px] w-[var(--radix-popover-trigger-width)] p-0"
                 align="start"
                 onOpenAutoFocus={(event) => event.preventDefault()}
+                onInteractOutside={(event) => {
+                  if (vendorAnchorRef.current?.contains(event.target)) {
+                    event.preventDefault();
+                  }
+                }}
               >
                 <div className="max-h-56 overflow-y-auto py-1">
                   {filteredVendorOptions.length === 0 ? (
@@ -434,6 +449,7 @@ export const InvoiceForm = ({
                         onMouseDown={(event) => event.preventDefault()}
                         onClick={() => {
                           applyVendorNameChange(vendor.name);
+                          setVendorQuery("");
                           setVendorPickerOpen(false);
                         }}
                       >
@@ -776,17 +792,17 @@ export const InvoiceForm = ({
               />
             </div>
           ) : (
-            <>
-              <div className="max-w-xs">
+            <div className="col-span-2 grid max-w-md grid-cols-[minmax(180px,1fr)_120px] gap-3">
+              <div>
                 <RequiredLabel>Tax Name</RequiredLabel>
                 <Input
                   value={formData.invoiceTaxName || ""}
                   onChange={(e) => setFormData({ ...formData, invoiceTaxName: e.target.value })}
                   placeholder="Tax name"
-                  className="h-8 max-w-[220px] text-sm"
+                  className="h-8 text-sm"
                 />
               </div>
-              <div className="max-w-[140px]">
+              <div>
                 <RequiredLabel>Tax Rate %</RequiredLabel>
                 <Input
                   type="text"
@@ -799,10 +815,10 @@ export const InvoiceForm = ({
                     })
                   }
                   placeholder="Rate"
-                  className="h-8 max-w-[120px] text-sm text-right"
+                  className="h-8 text-sm text-right"
                 />
               </div>
-            </>
+            </div>
           )}
         </div>
       )}

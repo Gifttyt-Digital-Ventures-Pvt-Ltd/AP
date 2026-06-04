@@ -107,6 +107,7 @@ import { TableCell, TableRow } from '../../components/ui/table';
 import { cn } from '../../lib/utils';
 import AppDataTable from '../../components/common/AppDataTable';
 import CurrencySelector from '../../components/common/CurrencySelector';
+import RefreshButton from '../../components/common/RefreshButton';
 import { InvoicePdfPreview } from './components/InvoicePdfPreview';
 import { InvoiceForm } from './components/InvoiceForm';
 import UploadSection from './components/UploadSection';
@@ -200,13 +201,16 @@ const InvoicesPage = () => {
   const {
     data: invoicesListData = EMPTY_INVOICE_LIST_RESPONSE,
     isFetching: invoicesFetching,
+    refetch: refetchInvoices,
   } = useGetInvoicesQuery(invoiceQueryArgs);
   const {
     data: vendorsData = [],
+    isFetching: vendorsFetching,
     refetch: refetchVendors,
   } = useGetVendorsQuery();
   const {
     data: pendingVendorsData = [],
+    isFetching: pendingVendorsFetching,
     refetch: refetchPendingVendors,
   } = useGetPendingVendorApprovalsQuery();
   const {
@@ -1261,6 +1265,19 @@ const InvoicesPage = () => {
     }
   };
 
+  const handleRefreshInvoices = async () => {
+    try {
+      await Promise.all([
+        refetchInvoices(),
+        refetchVendors(),
+        refetchPendingVendors(),
+      ]);
+      toast.success('Invoices refreshed');
+    } catch {
+      toast.error('Failed to refresh invoices');
+    }
+  };
+
   const handleAddInvoice = async () => {
     if (!guardAction('invoices.create')) return;
     if (!formData) return;
@@ -1760,6 +1777,12 @@ const InvoicesPage = () => {
             variant="inline"
             id="invoice-currency-filter"
           />
+          <RefreshButton
+            onClick={handleRefreshInvoices}
+            refreshing={invoicesFetching || vendorsFetching || pendingVendorsFetching}
+          >
+            Refresh
+          </RefreshButton>
           <Button
             onClick={() => setInvoiceUploadDialogOpen(true)}
             data-testid="upload-invoice-button"

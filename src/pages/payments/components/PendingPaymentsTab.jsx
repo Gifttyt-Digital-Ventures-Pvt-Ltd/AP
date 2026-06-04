@@ -169,7 +169,7 @@ const PendingPaymentsTab = ({
               <p className="text-sm font-medium">Total Pending Amount</p>
               {renderCurrencyTotals(
                 totalPendingByCurrency,
-                "text-2xl font-bold   text-accent",
+                "text-2xl font-bold   text-primary",
               )}
               {showRecordPaymentSelection && selectedInvoiceIds.length > 0 && (
                 <div className="mt-1 text-sm text-muted-foreground">

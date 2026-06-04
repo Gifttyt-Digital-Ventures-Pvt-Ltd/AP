@@ -623,6 +623,8 @@ const PurchaseOrdersPage = () => {
         formatCurrency={formatCurrency}
         canManagePo={canManagePo}
         activeFormat={activeFormatConfig}
+        onRefresh={fetchData}
+        refreshing={loading}
       />
 
       <PoListTable
