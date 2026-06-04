@@ -50,6 +50,7 @@ const normalizePayment = (payment = {}) => ({
 
 const normalizeInvoice = (invoice = {}) => {
   const payments = toArray(invoice.payments).map(normalizePayment);
+  const details = invoice.details ?? invoice.invoiceDetails ?? invoice.invoice_details ?? null;
   return {
     id: normalizeId(invoice),
     campaignId:
@@ -69,6 +70,7 @@ const normalizeInvoice = (invoice = {}) => {
     advancesTotal: toNumber(invoice.advancesTotal ?? invoice.advances_total),
     settledTotal: toNumber(invoice.settledTotal ?? invoice.settled_total),
     outstanding: toNumber(invoice.outstanding),
+    details,
     payments,
   };
 };
@@ -80,88 +82,32 @@ const normalizeVendorCost = (vendor = {}) => ({
   cost: toNumber(vendor.cost ?? vendor.amount),
 });
 
-const buildVendorBreakdown = (campaign = {}) => {
-  const invoices = toArray(campaign.invoices).map(normalizeInvoice);
-  return toArray(campaign.vendors ?? campaign.vendorCosts ?? campaign.vendor_costs)
-    .map(normalizeVendorCost)
-    .map((vendor) => {
-      const invoice =
-        invoices.find(
-          (item) => String(item.vendorId) === String(vendor.vendorId),
-        ) || null;
-      const advances = toArray(invoice?.payments).filter(
-        (payment) => payment.paymentType === "advance",
-      );
-      const advancesTotal = invoice
-        ? toNumber(invoice.advancesTotal) ||
-          advances.reduce((sum, payment) => sum + toNumber(payment.amount), 0)
-        : 0;
-      return {
-        ...vendor,
-        status: invoice?.status || "no_invoice",
-        invoice,
-        advancesTotal,
-        advances,
-      };
-    });
-};
-
-const buildInvoiceSummary = (vendorBreakdown = []) => {
-  const summary = {
-    totalVendors: vendorBreakdown.length,
-    noInvoice: 0,
-    pendingCheck: 0,
-    pendingApproval: 0,
-    pendingPayment: 0,
-    paid: 0,
-    rejected: 0,
-  };
-  vendorBreakdown.forEach((row) => {
-    if (row.status === "no_invoice") summary.noInvoice += 1;
-    if (row.status === "pending_checker") summary.pendingCheck += 1;
-    if (row.status === "pending_approval") summary.pendingApproval += 1;
-    if (row.status === "pending_payment") summary.pendingPayment += 1;
-    if (row.status === "paid") summary.paid += 1;
-    if (row.status === "rejected") summary.rejected += 1;
-  });
-  return summary;
-};
-
 export const normalizeCampaign = (campaign = {}) => {
   const vendors = toArray(
     campaign.vendors ?? campaign.vendorCosts ?? campaign.vendor_costs,
   ).map(normalizeVendorCost);
   const invoices = toArray(campaign.invoices).map(normalizeInvoice);
-  const vendorBreakdown = toArray(campaign.vendorBreakdown).length
-    ? toArray(campaign.vendorBreakdown).map((row) => {
-        const invoice = row.invoice ? normalizeInvoice(row.invoice) : null;
-        const advances = toArray(row.advances).map(normalizePayment);
-        const advancesTotal = toNumber(row.advancesTotal ?? row.advances_total);
-        const isPaid = invoice?.status && normalizeStatus(invoice.status) === "paid";
-        const paidAmount = isPaid ? toNumber(invoice.amount) : 0;
-        const outstanding = toNumber(row.cost) - advancesTotal - paidAmount;
-        return {
-          vendorId: String(row.vendorId ?? row.vendor_id ?? ""),
-          vendorName: row.vendorName ?? row.vendor_name ?? "",
-          cost: toNumber(row.cost),
-          status: normalizeStatus(row.status) || "no_invoice",
-          invoice,
-          advancesTotal,
-          advances,
-          outstanding,
-        };
-      })
-    : buildVendorBreakdown({ ...campaign, vendors, invoices }).map((row) => {
-        const isPaid = row.invoice?.status && normalizeStatus(row.invoice.status) === "paid";
-        const paidAmount = isPaid ? toNumber(row.invoice.amount) : 0;
-        const outstanding = toNumber(row.cost) - toNumber(row.advancesTotal) - paidAmount;
-        return {
-          ...row,
-          outstanding,
-        };
-      });
-  const invoiceSummary =
-    campaign.invoiceSummary ?? campaign.invoice_summary ?? buildInvoiceSummary(vendorBreakdown);
+  const vendorBreakdown = toArray(campaign.vendorBreakdown).map((row) => {
+    const invoice = row.invoice ? normalizeInvoice(row.invoice) : null;
+    const rowInvoices = toArray(row.invoices).map(normalizeInvoice);
+    const advances = toArray(row.advances).map(normalizePayment);
+    const payments = toArray(row.payments).map(normalizePayment);
+    return {
+      vendorId: String(row.vendorId ?? row.vendor_id ?? ""),
+      vendorName: row.vendorName ?? row.vendor_name ?? "",
+      cost: toNumber(row.cost),
+      invoiceCost: toNumber(row.invoiceCost ?? row.invoice_cost),
+      status: normalizeStatus(row.status) || "no_invoice",
+      invoice,
+      invoices: rowInvoices.length ? rowInvoices : invoice ? [invoice] : [],
+      advancesTotal: toNumber(row.advancesTotal ?? row.advances_total),
+      settledTotal: toNumber(row.settledTotal ?? row.settled_total),
+      outstanding: toNumber(row.outstanding),
+      advances,
+      payments,
+    };
+  });
+  const invoiceSummary = campaign.invoiceSummary ?? campaign.invoice_summary ?? {};
 
   return {
     id: normalizeId(campaign),
@@ -172,10 +118,17 @@ export const normalizeCampaign = (campaign = {}) => {
     approvedBy: campaign.approvedBy ?? campaign.approved_by ?? "",
     budget: toNumber(campaign.budget),
     totalCost: toNumber(campaign.totalCost ?? campaign.total_cost),
+    pendingAmount: toNumber(campaign.pendingAmount ?? campaign.pending_amount),
     startDate: campaign.startDate ?? campaign.start_date ?? "",
     endDate: campaign.endDate ?? campaign.end_date ?? "",
     vendors,
     status: normalizeStatus(campaign.status),
+    remark:
+      campaign.remark ??
+      campaign.remarks ??
+      campaign.notes ??
+      campaign.note ??
+      "",
     referenceCode:
       campaign.referenceCode ?? campaign.reference_code ?? campaign.refCode ?? "",
     invoices,
@@ -183,6 +136,7 @@ export const normalizeCampaign = (campaign = {}) => {
     invoiceSummary: {
       totalVendors: toNumber(invoiceSummary.totalVendors ?? invoiceSummary.total_vendors),
       noInvoice: toNumber(invoiceSummary.noInvoice ?? invoiceSummary.no_invoice),
+      pending: toNumber(invoiceSummary.pending),
       pendingCheck: toNumber(invoiceSummary.pendingCheck ?? invoiceSummary.pending_check),
       pendingApproval: toNumber(invoiceSummary.pendingApproval ?? invoiceSummary.pending_approval),
       pendingPayment: toNumber(invoiceSummary.pendingPayment ?? invoiceSummary.pending_payment),

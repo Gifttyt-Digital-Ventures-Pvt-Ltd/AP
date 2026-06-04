@@ -50,17 +50,23 @@ const TransactionsPage = () => {
   const [transactionQueryParams, setTransactionQueryParams] = useState({});
   const {
     data: statementsData = [],
+    isFetching: statementsFetching,
     refetch: refetchStatements,
   } = useGetStatementsQuery();
   const {
     data: transactionsData = [],
+    isFetching: transactionsFetching,
     refetch: refetchTransactions,
   } = useGetTransactionsQuery(transactionQueryParams);
   const {
     data: ledgerOptionsData = [],
+    isFetching: ledgersFetching,
+    refetch: refetchLedgers,
   } = useGetLedgersQuery();
   const {
     data: invoicesListData = EMPTY_INVOICE_LIST_RESPONSE,
+    isFetching: invoicesFetching,
+    refetch: refetchInvoices,
   } = useGetInvoicesQuery();
   const [uploadStatement] = useUploadStatementMutation();
   const [deleteStatement] = useDeleteStatementMutation();
@@ -137,6 +143,22 @@ const TransactionsPage = () => {
   const canUpdateTransactions = canPerformAction('transactions.update');
   const canReviewTransactions = canPerformAction('transactions.review');
   const canUndoTransactions = canPerformAction('transactions.undo');
+  const transactionsRefreshing =
+    statementsFetching || transactionsFetching || ledgersFetching || invoicesFetching;
+
+  const handleRefreshTransactions = async () => {
+    try {
+      await Promise.all([
+        refetchStatements(),
+        refetchTransactions(),
+        refetchLedgers(),
+        refetchInvoices(),
+      ]);
+      toast.success('Transactions refreshed');
+    } catch {
+      toast.error('Failed to refresh transactions');
+    }
+  };
   const canUploadVouchers = canPerformAction('transactions.uploadVoucher');
   const canLinkInvoices = canPerformAction('transactions.linkInvoice');
 
@@ -535,6 +557,8 @@ const TransactionsPage = () => {
         <TransactionsToolbar
           needsReviewTransactions={needsReviewTransactions}
           accountingReadyTransactions={accountingReadyTransactions}
+          onRefresh={handleRefreshTransactions}
+          refreshing={transactionsRefreshing}
         />
 
         <StatementsTab
@@ -1187,4 +1211,3 @@ const TransactionsPage = () => {
 };
 
 export default TransactionsPage;
-

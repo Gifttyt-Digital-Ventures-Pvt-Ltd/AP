@@ -44,9 +44,9 @@ import {
   Loader2,
   Receipt,
   Building2,
-  AlertCircle,
-  RefreshCw
+  AlertCircle
 } from 'lucide-react';
+import RefreshButton from '../../components/common/RefreshButton';
 import GstCalculationDialog from './components/GstCalculationDialog';
 import TdsCalculationDialog from './components/TdsCalculationDialog';
 import Form16ADialog from './components/Form16ADialog';
@@ -192,6 +192,14 @@ const TaxManagement = () => {
     (canViewGst && (gstEntriesLoading || gstSummaryLoading)) ||
     (canViewTds && (tdsEntriesLoading || tdsSummaryLoading || tdsSectionsLoading)) ||
     (taxTabs.length > 0 && (invoicesLoading || vendorsLoading));
+  const refreshing =
+    gstEntriesFetching ||
+    gstSummaryFetching ||
+    invoicesFetching ||
+    vendorsFetching ||
+    tdsEntriesFetching ||
+    tdsSummaryFetching ||
+    tdsSectionsFetching;
 
   const fetchData = async () => {
     try {
@@ -307,10 +315,9 @@ const TaxManagement = () => {
           <h1 className="text-2xl font-bold">Tax Management</h1>
           <p className="text-muted-foreground">Manage GST and TDS compliance</p>
         </div>
-        <Button variant="outline" onClick={fetchData}>
-          <RefreshCw className="h-4 w-4 mr-2" />
+        <RefreshButton onClick={fetchData} refreshing={refreshing}>
           Refresh
-        </Button>
+        </RefreshButton>
       </div>
 
       {/* Tabs */}

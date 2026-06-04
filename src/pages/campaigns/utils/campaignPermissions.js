@@ -88,10 +88,12 @@ export const buildCampaignAccess = ({
 export const getVendorRowActions = ({ row, campaign, access }) => {
   if (campaign?.status !== "approved") return {};
   const status = row?.status || "no_invoice";
+  const outstanding = Number(row?.outstanding || 0);
   return {
     recordAdvance:
       access.canRecordAdvance &&
-      ["no_invoice", "pending_checker", "pending_approval", "pending_payment"].includes(status),
+      (outstanding > 0 ||
+        ["no_invoice", "pending_checker", "pending_approval", "pending_payment"].includes(status)),
     submitInvoice: access.canSubmitInvoice,
     reviewChecker: false,
     reviewApprover: false,

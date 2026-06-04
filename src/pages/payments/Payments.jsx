@@ -91,16 +91,24 @@ const Payments = () => {
   const {
     data: paymentsData = [],
     isError: paymentsError,
+    isFetching: paymentsFetching,
+    refetch: refetchPayments,
   } = useGetPaymentsQuery(paymentQueryArgs);
   const {
     data: pendingPaymentInvoicesListData = EMPTY_INVOICE_LIST_RESPONSE,
     isError: invoicesError,
+    isFetching: pendingPaymentInvoicesFetching,
     refetch: refetchPendingPaymentInvoices,
   } = useGetInvoicesQuery(invoiceQueryWithStatus('Pending Payment'));
-  const { data: allInvoicesListData = EMPTY_INVOICE_LIST_RESPONSE } = useGetInvoicesQuery(paymentQueryArgs);
+  const {
+    data: allInvoicesListData = EMPTY_INVOICE_LIST_RESPONSE,
+    isFetching: allInvoicesFetching,
+    refetch: refetchAllInvoices,
+  } = useGetInvoicesQuery(paymentQueryArgs);
   const {
     data: pendingApproverInvoicesListData = EMPTY_INVOICE_LIST_RESPONSE,
     isError: pendingApproverInvoicesError,
+    isFetching: pendingApproverInvoicesFetching,
     refetch: refetchPendingApproverInvoices,
   } = useGetInvoicesQuery(
     invoiceQueryWithStatus('Pending Approver'),
@@ -109,6 +117,8 @@ const Payments = () => {
   const {
     data: bankAccountsData = [],
     isError: bankAccountsError,
+    isFetching: bankAccountsFetching,
+    refetch: refetchBankAccounts,
   } = useGetBankAccountsQuery(undefined, { skip: !isConnectedBankingEnabled });
 
   const [bulkReleasePayments] = useBulkReleasePaymentsMutation();
@@ -190,6 +200,29 @@ const Payments = () => {
   const canShowSinglePayment = showBankingBatchPaymentActions && canManagePayments;
   const canShowBulkRelease = showBankingBatchPaymentActions && canBulkRelease;
   const canShowRecordPayment = showRecordPaymentFlow && canManagePayments;
+  const paymentsRefreshing =
+    paymentsFetching ||
+    pendingPaymentInvoicesFetching ||
+    allInvoicesFetching ||
+    pendingApproverInvoicesFetching ||
+    bankAccountsFetching;
+
+  const handleRefreshPayments = async () => {
+    try {
+      await Promise.all([
+        refetchPayments(),
+        refetchPendingPaymentInvoices(),
+        refetchAllInvoices(),
+        isPaymentBatchesFeatureEnabled
+          ? refetchPendingApproverInvoices()
+          : Promise.resolve(),
+        isConnectedBankingEnabled ? refetchBankAccounts() : Promise.resolve(),
+      ]);
+      toast.success('Payments refreshed');
+    } catch {
+      toast.error('Failed to refresh payments');
+    }
+  };
 
   useEffect(() => {
     if (paymentsError) toast.error('Failed to load payments');
@@ -564,6 +597,8 @@ const Payments = () => {
         currencies={currencies}
         selectedCurrency={selectedCurrency}
         onCurrencyChange={setSelectedCurrency}
+        onRefresh={handleRefreshPayments}
+        refreshing={paymentsRefreshing}
         batchDialogTrigger={canCreateBatch ? (
           <Button
             variant="default"

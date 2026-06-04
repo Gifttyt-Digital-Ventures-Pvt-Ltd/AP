@@ -51,6 +51,7 @@ import {
   ClipboardCheck
 } from 'lucide-react';
 import { useActionGuard } from '../../hooks/useActionGuard';
+import RefreshButton from '../../components/common/RefreshButton';
 
 const statusColors = {
   'Draft': 'bg-gray-500',
@@ -390,16 +391,21 @@ const GoodsReceipt = () => {
           <h1 className="text-2xl font-bold">Goods Receipt Notes</h1>
           <p className="text-muted-foreground">Record receipt of goods against purchase orders</p>
         </div>
-        {canCreateGrn && (
-          <Button 
-            onClick={() => setShowSelectPODialog(true)} 
-            disabled={purchaseOrders.length === 0}
-            data-testid="create-grn-btn"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Create GRN
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <RefreshButton onClick={fetchData} refreshing={loading}>
+            Refresh
+          </RefreshButton>
+          {canCreateGrn && (
+            <Button 
+              onClick={() => setShowSelectPODialog(true)} 
+              disabled={purchaseOrders.length === 0}
+              data-testid="create-grn-btn"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create GRN
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Stats Cards */}

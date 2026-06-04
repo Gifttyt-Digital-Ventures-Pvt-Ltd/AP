@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "../../../components/ui/button";
+import { Calendar } from "../../../components/ui/calendar";
 import { Checkbox } from "../../../components/ui/checkbox";
 import {
   Command,
@@ -27,7 +28,7 @@ import {
 } from "../../../components/ui/popover";
 import { cn } from "../../../lib/utils";
 import { FieldError } from "./CampaignShared";
-import { formatCurrency } from "../utils/campaignFormatters";
+import { formatCurrency, formatDate } from "../utils/campaignFormatters";
 
 const initialForm = {
   name: "",
@@ -36,6 +37,26 @@ const initialForm = {
   budget: "",
   totalCost: "",
 };
+
+const parseDateValue = (value) => {
+  if (!value) return undefined;
+  const [year, month, day] = String(value).split("-").map(Number);
+  if (!year || !month || !day) return undefined;
+  return new Date(year, month - 1, day);
+};
+
+const toDateValue = (date) => {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const campaignCalendarStartMonth = new Date(new Date().getFullYear() - 10, 0);
+const campaignCalendarEndMonth = new Date(2099, 11);
+
+const sanitizeNumberInput = (value) => String(value).replace(/\D/g, "");
 
 const CreateCampaignModal = ({
   open,
@@ -49,6 +70,8 @@ const CreateCampaignModal = ({
   const [selectedVendorIds, setSelectedVendorIds] = useState([]);
   const [vendorCosts, setVendorCosts] = useState({});
   const [errors, setErrors] = useState({});
+  const [startDateOpen, setStartDateOpen] = useState(false);
+  const [endDateOpen, setEndDateOpen] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -73,6 +96,8 @@ const CreateCampaignModal = ({
       setVendorCosts({});
     }
     setErrors({});
+    setStartDateOpen(false);
+    setEndDateOpen(false);
   }, [open, campaign]);
 
   const selectedVendors = useMemo(
@@ -93,6 +118,22 @@ const CreateCampaignModal = ({
   const updateForm = (key, value) => {
     setForm((prev) => ({ ...prev, [key]: value }));
     setErrors((prev) => ({ ...prev, [key]: "" }));
+  };
+
+  const updateNumberField = (key, value) => {
+    updateForm(key, sanitizeNumberInput(value));
+  };
+
+  const updateVendorCost = (vendorId, value) => {
+    setVendorCosts((prev) => ({
+      ...prev,
+      [vendorId]: sanitizeNumberInput(value),
+    }));
+    setErrors((prev) => ({
+      ...prev,
+      vendorCosts: "",
+      vendorTotal: "",
+    }));
   };
 
   const toggleVendor = (vendorId) => {
@@ -151,6 +192,25 @@ const CreateCampaignModal = ({
     });
   };
 
+  const handleStartDateSelect = (date) => {
+    if (!date) return;
+    const nextStartDate = toDateValue(date);
+    setForm((prev) => ({
+      ...prev,
+      startDate: nextStartDate,
+      endDate: "",
+    }));
+    setErrors((prev) => ({ ...prev, startDate: "", endDate: "" }));
+    setStartDateOpen(false);
+    setEndDateOpen(true);
+  };
+
+  const handleEndDateSelect = (date) => {
+    if (!date) return;
+    updateForm("endDate", toDateValue(date));
+    setEndDateOpen(false);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
@@ -176,36 +236,86 @@ const CreateCampaignModal = ({
           <div className="space-y-2">
             <Label>Budget (₹) *</Label>
             <Input
-              type="number"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={form.budget}
-              onChange={(event) => updateForm("budget", event.target.value)}
+              onChange={(event) => updateNumberField("budget", event.target.value)}
             />
             <FieldError>{errors.budget}</FieldError>
           </div>
           <div className="space-y-2">
             <Label>Start Date *</Label>
-            <Input
-              type="date"
-              value={form.startDate}
-              onChange={(event) => updateForm("startDate", event.target.value)}
-            />
+            <Popover open={startDateOpen} onOpenChange={setStartDateOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={cn(
+                    "h-9 w-full justify-start text-left font-normal",
+                    !form.startDate && "text-muted-foreground",
+                  )}
+                >
+                  {form.startDate ? formatDate(form.startDate) : "Select start date"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="z-[60] w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  captionLayout="dropdown"
+                  navLayout="after"
+                  startMonth={campaignCalendarStartMonth}
+                  endMonth={campaignCalendarEndMonth}
+                  selected={parseDateValue(form.startDate)}
+                  onSelect={handleStartDateSelect}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
             <FieldError>{errors.startDate}</FieldError>
           </div>
           <div className="space-y-2">
             <Label>End Date *</Label>
-            <Input
-              type="date"
-              value={form.endDate}
-              onChange={(event) => updateForm("endDate", event.target.value)}
-            />
+            <Popover open={endDateOpen} onOpenChange={setEndDateOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className={cn(
+                    "h-9 w-full justify-start text-left font-normal",
+                    !form.endDate && "text-muted-foreground",
+                  )}
+                >
+                  {form.endDate ? formatDate(form.endDate) : "Select end date"}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="z-[60] w-auto p-0" align="start">
+                <Calendar
+                  mode="single"
+                  captionLayout="dropdown"
+                  navLayout="after"
+                  startMonth={campaignCalendarStartMonth}
+                  endMonth={campaignCalendarEndMonth}
+                  selected={parseDateValue(form.endDate)}
+                  onSelect={handleEndDateSelect}
+                  disabled={(date) => {
+                    const startDate = parseDateValue(form.startDate);
+                    return startDate ? date < startDate : false;
+                  }}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
             <FieldError>{errors.endDate}</FieldError>
           </div>
           <div className="space-y-2 md:col-span-2">
             <Label>Total Cost (₹) *</Label>
             <Input
-              type="number"
+              inputMode="numeric"
+              pattern="[0-9]*"
               value={form.totalCost}
-              onChange={(event) => updateForm("totalCost", event.target.value)}
+              onChange={(event) =>
+                updateNumberField("totalCost", event.target.value)
+              }
             />
             <FieldError>{errors.totalCost}</FieldError>
           </div>
@@ -271,20 +381,13 @@ const CreateCampaignModal = ({
                   >
                     <p className="font-medium">{vendor.name}</p>
                     <Input
-                      type="number"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
                       placeholder="Cost"
                       value={vendorCosts[vendorId] || ""}
-                      onChange={(event) => {
-                        setVendorCosts((prev) => ({
-                          ...prev,
-                          [vendorId]: event.target.value,
-                        }));
-                        setErrors((prev) => ({
-                          ...prev,
-                          vendorCosts: "",
-                          vendorTotal: "",
-                        }));
-                      }}
+                      onChange={(event) =>
+                        updateVendorCost(vendorId, event.target.value)
+                      }
                     />
                   </div>
                 );

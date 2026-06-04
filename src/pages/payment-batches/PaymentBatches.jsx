@@ -18,6 +18,7 @@ import {
   DialogFooter,
 } from '../../components/ui/dialog';
 import AppDataTable from '../../components/common/AppDataTable';
+import RefreshButton from '../../components/common/RefreshButton';
 import { TableCell, TableRow } from '../../components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
@@ -28,7 +29,6 @@ import {
   CheckCircle,
   Clock,
   Loader2,
-  RefreshCw,
   Download,
   DollarSign,
   CreditCard,
@@ -369,10 +369,9 @@ const PaymentBatches = () => {
           <p className="text-muted-foreground">Create and process bulk vendor payments</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={fetchData}>
-            <RefreshCw className="h-4 w-4 mr-2" />
+          <RefreshButton onClick={fetchData} refreshing={loading}>
             Refresh
-          </Button>
+          </RefreshButton>
         </div>
       </div>
 

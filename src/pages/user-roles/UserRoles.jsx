@@ -15,6 +15,7 @@ import {
   useUpdateCorporateEmployeeMutation,
 } from "../../Services/apis/corporateApi";
 import { Button } from "../../components/ui/button";
+import RefreshButton from "../../components/common/RefreshButton";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -158,6 +159,7 @@ const UserRoles = () => {
     data: vendorsData = [],
     isLoading: vendorsLoading,
     isError: vendorsError,
+    refetch: refetchVendors,
   } = useGetVendorsQuery(undefined, { skip: shouldSkipVendors });
 
   const [addCorporateUsers] = useAddCorporateUsersMutation();
@@ -177,9 +179,27 @@ const UserRoles = () => {
   const {
     data: availableCustomRoleScreens = [],
     isError: customRoleScreensError,
+    refetch: refetchCustomRoleScreens,
   } = useGetCustomRoleScreensQuery(undefined, {
     skip: !currentUser || !canManageRoles || !canViewRolesTab,
   });
+  const userRolesRefreshing = usersLoading || rolesLoading || vendorsLoading;
+
+  const handleRefreshUserRoles = async () => {
+    try {
+      await Promise.all([
+        shouldSkipUsersAndRoles ? Promise.resolve() : refetchUsers(),
+        shouldSkipUsersAndRoles ? Promise.resolve() : refetchRoles(),
+        shouldSkipVendors ? Promise.resolve() : refetchVendors(),
+        !currentUser || !canManageRoles || !canViewRolesTab
+          ? Promise.resolve()
+          : refetchCustomRoleScreens(),
+      ]);
+      toast.success("User roles refreshed");
+    } catch {
+      toast.error("Failed to refresh user roles");
+    }
+  };
 
   useEffect(() => {
     if (currentUser) {
@@ -927,12 +947,20 @@ const UserRoles = () => {
             Manage user permissions and access rights
           </p>
         </div>
-        {canManageUserRecords && canViewUsersTab && activeTab === "users" && (
-          <Button onClick={openAddUserDialog} data-testid="invite-user-btn">
-            <UserPlus className="h-4 w-4 mr-2" />
-            Add User
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <RefreshButton
+            onClick={handleRefreshUserRoles}
+            refreshing={userRolesRefreshing}
+          >
+            Refresh
+          </RefreshButton>
+          {canManageUserRecords && canViewUsersTab && activeTab === "users" && (
+            <Button onClick={openAddUserDialog} data-testid="invite-user-btn">
+              <UserPlus className="h-4 w-4 mr-2" />
+              Add User
+            </Button>
+          )}
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">

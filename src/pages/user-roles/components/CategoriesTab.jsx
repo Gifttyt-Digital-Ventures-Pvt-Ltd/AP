@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Eye, Loader2, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
+import { Eye, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   useCreateCategoryMutation,
@@ -9,6 +9,7 @@ import {
   useUpdateCategoryMutation,
 } from "../../../Services/apis/categoriesApi";
 import AppDataTable from "../../../components/common/AppDataTable";
+import RefreshButton from "../../../components/common/RefreshButton";
 import { Button } from "../../../components/ui/button";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import { useActionGuard } from "../../../hooks/useActionGuard";
@@ -228,10 +229,9 @@ const CategoriesTab = () => {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {(categoriesError || approversError) && (
-            <Button type="button" variant="outline" onClick={retryCategoryData} className="gap-2">
-              <RefreshCw className="h-4 w-4" />
+            <RefreshButton type="button" onClick={retryCategoryData} className="gap-2">
               Retry
-            </Button>
+            </RefreshButton>
           )}
           <Button
             type="button"

@@ -1,6 +1,7 @@
 import React from 'react';
 import { Button } from '../../../components/ui/button';
 import CurrencySelector from '../../../components/common/CurrencySelector';
+import RefreshButton from '../../../components/common/RefreshButton';
 
 // Page header with global payment actions.
 const PaymentsHeader = ({
@@ -12,6 +13,8 @@ const PaymentsHeader = ({
   currencies = [],
   selectedCurrency,
   onCurrencyChange,
+  onRefresh,
+  refreshing = false,
 }) => (
   <div className="flex flex-col gap-4 mb-8 lg:flex-row lg:items-center lg:justify-between">
     <div>
@@ -28,6 +31,9 @@ const PaymentsHeader = ({
         variant="inline"
         id="payments-currency-filter"
       />
+      <RefreshButton onClick={onRefresh} refreshing={refreshing}>
+        Refresh
+      </RefreshButton>
       {invoicesCount > 0 && canBulkRelease && (
         <Button
           variant="default"
