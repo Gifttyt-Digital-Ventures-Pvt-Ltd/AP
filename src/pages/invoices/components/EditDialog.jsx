@@ -1,5 +1,5 @@
-import React from "react";
-import { ChevronLeft } from "lucide-react";
+import React, { useState } from "react";
+import { ChevronLeft, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import {
   Dialog,
@@ -26,6 +26,7 @@ const EditDialog = ({
 }) => {
   const isSavedDraft = isSavedInvoiceStatus(selectedInvoice?.status);
   const isSaving = forwardSavedInvoiceLoading;
+  const [previewOpen, setPreviewOpen] = useState(true);
 
   return (
     <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
@@ -55,6 +56,22 @@ const EditDialog = ({
                   {isSavedDraft ? "Edit Saved Draft" : "Edit Invoice"} -{" "}
                   {selectedInvoice.invoiceNumber || "Draft"}
                 </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setPreviewOpen((p) => !p)}
+                  className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground ml-1"
+                  title={previewOpen ? "Hide preview" : "Show preview"}
+                >
+                  {previewOpen ? (
+                    <PanelLeftClose className="h-4 w-4" />
+                  ) : (
+                    <PanelLeftOpen className="h-4 w-4" />
+                  )}
+                  <span className="hidden sm:inline">
+                    {previewOpen ? "Hide Preview" : "Show Preview"}
+                  </span>
+                </Button>
               </div>
               <div className="shrink-0 flex items-center gap-2">
                 <Button
@@ -87,8 +104,12 @@ const EditDialog = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-[35%_65%] flex-1 min-h-0 overflow-hidden">
-              <div className="border-r h-full min-h-0 overflow-hidden">
+            <div className="flex flex-1 min-h-0 overflow-hidden">
+              <div
+                className={`transition-all duration-300 ease-in-out min-h-0 overflow-hidden border-r flex-shrink-0 ${
+                  previewOpen ? "w-[35%]" : "w-0 border-r-0"
+                }`}
+              >
                 {renderPdfPreview({
                   invoice: selectedInvoice,
                   zoom: pdfZoom,
@@ -96,7 +117,7 @@ const EditDialog = ({
                   setImageError: setViewPreviewError,
                 })}
               </div>
-              <div className="min-h-0 overflow-y-auto p-4 scrollbar-thin-muted">
+              <div className="flex-1 min-w-0 min-h-0 p-4 flex flex-col">
                 {renderInvoiceForm({
                   isEdit: true,
                   hideActions: true,

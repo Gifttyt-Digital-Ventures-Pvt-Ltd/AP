@@ -147,6 +147,8 @@ const InvoicesDialogs = (props) => {
         isCampaignFeatureEnabled={isCampaignFeatureEnabled}
         findVendorByName={findVendorByName}
         findVendorById={findVendorById}
+        departmentMandatory={invoiceMandatoryFields?.department}
+        categoryMandatory={invoiceMandatoryFields?.category}
       />
 
       <EditDialog

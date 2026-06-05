@@ -1,7 +1,12 @@
-import React from "react";
-import { ChevronLeft } from "lucide-react";
+import React, { useState } from "react";
+import { ChevronLeft, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Button } from "../../../components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../../components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "../../../components/ui/dialog";
 
 const ScanningOverlay = () => (
   <div
@@ -9,7 +14,9 @@ const ScanningOverlay = () => (
     data-testid="invoice-scanning-overlay"
   >
     <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4" />
-    <p className="text-sm font-medium text-primary">Extracting bill details...</p>
+    <p className="text-sm font-medium text-primary">
+      Extracting bill details...
+    </p>
     <p className="text-xs text-muted-foreground mt-1">
       Please wait while AI reads your invoice
     </p>
@@ -31,6 +38,8 @@ const UploadSection = ({
   renderInvoiceForm,
   handleAddInvoice,
 }) => {
+  const [previewOpen, setPreviewOpen] = useState(true);
+  
   if (!uploadedFile) return null;
   const closeUpload = () => {
     setUploadedFile(null);
@@ -40,7 +49,10 @@ const UploadSection = ({
   };
 
   return (
-    <Dialog open={Boolean(uploadedFile)} onOpenChange={(open) => !open && closeUpload()}>
+    <Dialog
+      open={Boolean(uploadedFile)}
+      onOpenChange={(open) => !open && closeUpload()}
+    >
       <DialogContent
         fullscreen
         hideClose
@@ -64,12 +76,26 @@ const UploadSection = ({
               <span className="truncate text-sm font-semibold">
                 Upload & Scan Invoice - {uploadedFile?.name || "Draft"}
               </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setPreviewOpen((p) => !p)}
+                className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground ml-1"
+                title={previewOpen ? "Hide preview" : "Show preview"}
+              >
+                {previewOpen ? <PanelLeftClose className="h-4 w-4" /> : <PanelLeftOpen className="h-4 w-4" />}
+                <span className="hidden sm:inline">{previewOpen ? "Hide Preview" : "Show Preview"}</span>
+              </Button>
             </div>
           </div>
 
           <div className="relative min-h-0 flex-1 overflow-hidden">
-            <div className="grid h-full min-h-0 grid-cols-1 overflow-hidden lg:grid-cols-[35%_65%]">
-              <div className="min-h-0 h-full overflow-hidden border-r">
+            <div className="flex h-full min-h-0 overflow-hidden">
+              <div
+                className={`transition-all duration-300 ease-in-out min-h-0 overflow-hidden border-r flex-shrink-0 ${
+                  previewOpen ? "w-[35%]" : "w-0 border-r-0"
+                }`}
+              >
                 {renderPdfPreview({
                   fileURL: uploadedFileURL,
                   file: uploadedFile,
@@ -79,14 +105,18 @@ const UploadSection = ({
                 })}
               </div>
 
-              <div className="flex min-h-0 flex-col overflow-hidden p-4">
+              <div className="flex flex-1 min-h-0 flex-col overflow-hidden p-4">
                 {!scanning ? (
                   <>
-                    <div className="min-h-0 flex-1 overflow-y-auto pr-2 scrollbar-thin-muted">
+                    <div className="min-w-0 min-h-0 flex-1 flex flex-col">
                       {renderInvoiceForm({ isEdit: false, hideActions: true })}
                     </div>
                     <div className="mt-4 flex shrink-0 gap-3 border-t bg-white pt-4">
-                      <Button variant="outline" onClick={closeUpload} className="flex-1">
+                      <Button
+                        variant="outline"
+                        onClick={closeUpload}
+                        className="flex-1"
+                      >
                         Cancel
                       </Button>
                       <Button
