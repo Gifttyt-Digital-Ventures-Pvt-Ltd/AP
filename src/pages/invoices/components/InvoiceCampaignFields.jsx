@@ -1,6 +1,7 @@
-import React, { useEffect, useRef } from "react";
+import React from "react";
 import { useGetVendorCampaignsQuery } from "../../../Services/apis/campaignsApi";
 import AppSelect from "../../../components/common/AppSelect";
+import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 
@@ -8,7 +9,14 @@ const EMPTY_CAMPAIGN = {
   campaignId: "",
   campaignName: "",
   referenceNumber: "",
+  campaignReferenceNumber: "",
 };
+
+const isCampaignEmpty = (formData = {}) =>
+  !formData.campaignId &&
+  !formData.campaignName &&
+  !formData.referenceNumber &&
+  !formData.campaignReferenceNumber;
 
 const InvoiceCampaignFields = ({
   formData,
@@ -18,7 +26,6 @@ const InvoiceCampaignFields = ({
   lockedCampaignPrefill = null,
 }) => {
   const vendorId = String(formData?.vendorId || "").trim();
-  const previousVendorIdRef = useRef(vendorId);
   const lockedPrefill = lockedCampaign ? lockedCampaignPrefill : null;
 
   const {
@@ -28,35 +35,6 @@ const InvoiceCampaignFields = ({
   } = useGetVendorCampaignsQuery(vendorId, {
     skip: !showCampaignField || !vendorId || lockedCampaign,
   });
-
-  useEffect(() => {
-    if (!showCampaignField || lockedCampaign) return;
-    const previous = previousVendorIdRef.current;
-    previousVendorIdRef.current = vendorId;
-    if (previous && previous !== vendorId) {
-      setFormData((prev) => ({
-        ...prev,
-        ...EMPTY_CAMPAIGN,
-      }));
-    }
-  }, [vendorId, showCampaignField, lockedCampaign, setFormData]);
-
-  useEffect(() => {
-    if (!showCampaignField || !lockedCampaign || !lockedPrefill?.campaignId) return;
-    setFormData((prev) => ({
-      ...prev,
-      campaignId: lockedPrefill.campaignId || prev.campaignId,
-      campaignName: lockedPrefill.campaignName || prev.campaignName,
-      referenceNumber: lockedPrefill.referenceNumber || prev.referenceNumber,
-    }));
-  }, [
-    showCampaignField,
-    lockedCampaign,
-    lockedPrefill?.campaignId,
-    lockedPrefill?.campaignName,
-    lockedPrefill?.referenceNumber,
-    setFormData,
-  ]);
 
   if (!showCampaignField) return null;
 
@@ -74,7 +52,19 @@ const InvoiceCampaignFields = ({
       campaignId: selected?.id || "",
       campaignName: selected?.name || "",
       referenceNumber: selected?.referenceCode || "",
+      campaignReferenceNumber: selected?.referenceCode || "",
     }));
+  };
+
+  const clearCampaign = () => {
+    setFormData((prev) =>
+      isCampaignEmpty(prev)
+        ? prev
+        : {
+            ...prev,
+            ...EMPTY_CAMPAIGN,
+          },
+    );
   };
 
   const displayCampaignId = formData.campaignId || lockedPrefill?.campaignId || "";
@@ -82,17 +72,29 @@ const InvoiceCampaignFields = ({
     formData.campaignName || lockedPrefill?.campaignName || "";
   const displayReferenceNumber =
     formData.referenceNumber || lockedPrefill?.referenceNumber || "";
-
   return (
     <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
-      <h3 className="text-sm font-semibold text-gray-800">
-        Campaign{" "}
-        {lockedCampaign ? (
-          <span className="font-normal text-muted-foreground">(from campaign)</span>
-        ) : (
-          <span className="font-normal text-muted-foreground">(optional)</span>
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-gray-800">
+          Campaign{" "}
+          {lockedCampaign ? (
+            <span className="font-normal text-muted-foreground">(from campaign)</span>
+          ) : (
+            <span className="font-normal text-muted-foreground">(optional)</span>
+          )}
+        </h3>
+        {!lockedCampaign && displayCampaignId && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-6 px-2 text-xs"
+            onClick={clearCampaign}
+          >
+            Clear
+          </Button>
         )}
-      </h3>
+      </div>
       {lockedCampaign && lockedPrefill?.campaignId ? (
         <div className="grid grid-cols-2 gap-3">
           <div>
@@ -114,7 +116,7 @@ const InvoiceCampaignFields = ({
             />
           </div>
         </div>
-      ) : !vendorId ? (
+      ) : !vendorId && !displayCampaignName ? (
         <p className="text-xs text-muted-foreground">
           Select a vendor to load approved campaigns.
         </p>

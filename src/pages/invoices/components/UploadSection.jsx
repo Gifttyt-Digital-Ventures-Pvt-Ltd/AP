@@ -44,8 +44,7 @@ const UploadSection = ({
       <DialogContent
         fullscreen
         hideClose
-        overlayClassName="z-[100] bg-black/80"
-        className="z-[100]"
+        overlayClassName="bg-black/80"
         data-testid="upload-invoice-dialog"
       >
         <DialogHeader className="sr-only">

@@ -54,7 +54,7 @@ const campaignTableHeader = [
   { key: "createdBy", title: "Created By" },
   { key: "approvedBy", title: "Approved By" },
   { key: "budget", title: "Budget" },
-  { key: "totalCost", title: "Amount" },
+  { key: "totalCost", title: "Total Cost" },
   { key: "pendingAmount", title: "Pending Amount" },
   { key: "status", title: "Status" },
   {
@@ -75,8 +75,6 @@ const CampaignsPage = () => {
   const [reviewCampaign, setReviewCampaign] = useState(null);
   const [advanceRow, setAdvanceRow] = useState(null);
   const [invoiceUploadOpen, setInvoiceUploadOpen] = useState(false);
-  const [invoiceVendorRow, setInvoiceVendorRow] = useState(null);
-  const [invoiceCampaignPrefill, setInvoiceCampaignPrefill] = useState(null);
   const [invoiceReview, setInvoiceReview] = useState(null);
   const [markPaidRow, setMarkPaidRow] = useState(null);
 
@@ -410,7 +408,7 @@ const CampaignsPage = () => {
         </div>
       )}
 
-      <div className="grid shrink-0 grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid shrink-0 grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         <SummaryTile label="Total Campaigns" value={stats.total} />
         <SummaryTile label="Pending Approval" value={stats.pending} />
         <SummaryTile label="Approved" value={stats.approved} />
@@ -418,6 +416,7 @@ const CampaignsPage = () => {
           label="Total Budget"
           value={formatCurrency(stats.totalBudget)}
         />
+        <SummaryTile label="Total Cost" value={formatCurrency(campaignsPage.totalCost)} />
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card">
@@ -544,14 +543,8 @@ const CampaignsPage = () => {
         campaign={detailsCampaign}
         access={access}
         onRecordAdvance={setAdvanceRow}
-        onSubmitInvoice={(row) => {
+        onSubmitInvoice={() => {
           if (!detailsCampaign) return;
-          setInvoiceVendorRow(row);
-          setInvoiceCampaignPrefill({
-            campaignId: String(detailsCampaign.id || ""),
-            campaignName: detailsCampaign.name || "",
-            referenceNumber: detailsCampaign.referenceCode || "",
-          });
           setInvoiceUploadOpen(true);
           setDetailsCampaignId(null);
         }}
@@ -563,24 +556,8 @@ const CampaignsPage = () => {
         filePickerOpen={invoiceUploadOpen}
         onFilePickerOpenChange={(open) => {
           setInvoiceUploadOpen(open);
-          if (!open) {
-            setInvoiceVendorRow(null);
-            setInvoiceCampaignPrefill(null);
-          }
         }}
-        prefillVendor={
-          invoiceVendorRow
-            ? {
-                vendorId: String(invoiceVendorRow.vendorId || ""),
-                vendorName: invoiceVendorRow.vendorName || "",
-              }
-            : null
-        }
-        prefillCampaign={invoiceCampaignPrefill}
-        lockCampaign={Boolean(invoiceCampaignPrefill?.campaignId)}
         onInvoiceAdded={async () => {
-          setInvoiceVendorRow(null);
-          setInvoiceCampaignPrefill(null);
           setInvoiceUploadOpen(false);
           await refreshAfterMutation();
         }}

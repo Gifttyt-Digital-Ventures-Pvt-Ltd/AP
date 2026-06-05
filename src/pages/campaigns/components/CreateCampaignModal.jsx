@@ -156,7 +156,10 @@ const CreateCampaignModal = ({
     (sum, vendorId) => sum + Number(vendorCosts[vendorId] || 0),
     0,
   );
+  const budget = Number(form.budget || 0);
   const totalCost = Number(form.totalCost || 0);
+  const remainingBudget = budget - totalCost;
+  const remainingVendorCost = totalCost - vendorCostTotal;
   const totalMatches = totalCost > 0 && vendorCostTotal === totalCost;
   const { grossAmount, netAmount } = calculateCampaignGstAmounts({
     totalCost: form.totalCost,
@@ -171,6 +174,9 @@ const CreateCampaignModal = ({
 
   const updateNumberField = (key, value) => {
     updateForm(key, sanitizeNumberInput(value));
+    if (key === "budget" || key === "totalCost") {
+      setErrors((prev) => ({ ...prev, budget: "", totalCost: "" }));
+    }
   };
 
   const updateVendorCost = (vendorId, value) => {
@@ -209,9 +215,12 @@ const CreateCampaignModal = ({
     if (form.startDate && form.endDate && form.endDate < form.startDate) {
       nextErrors.endDate = "End date must be on or after start date";
     }
-    if (Number(form.budget) <= 0) nextErrors.budget = "Budget must be > 0";
-    if (Number(form.totalCost) <= 0)
+    if (budget <= 0) nextErrors.budget = "Budget must be > 0";
+    if (totalCost <= 0)
       nextErrors.totalCost = "Total cost must be > 0";
+    if (budget > 0 && totalCost > budget) {
+      nextErrors.totalCost = "Total cost cannot be greater than budget";
+    }
     if (form.includeGst && !form.gstOption) {
       nextErrors.gstOption = "GST option is required";
     }
@@ -364,7 +373,17 @@ const CreateCampaignModal = ({
             <FieldError>{errors.endDate}</FieldError>
           </div>
           <div className="space-y-2 md:col-span-2">
-            <Label>Total Cost (₹) *</Label>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <Label>Total Cost (₹) *</Label>
+              <span
+                className={cn(
+                  "text-xs font-medium",
+                  remainingBudget < 0 ? "text-red-600" : "text-muted-foreground",
+                )}
+              >
+                Remaining budget: {formatCurrency(remainingBudget)}
+              </span>
+            </div>
             <Input
               inputMode="numeric"
               pattern="[0-9]*"
@@ -506,14 +525,19 @@ const CreateCampaignModal = ({
 
           <div
             className={cn(
-              "rounded-lg border p-3 text-sm",
+              "rounded-lg border p-3 text-sm space-y-1 flex justify-between",
               totalMatches
                 ? "border-green-200 bg-green-50 text-green-700"
                 : "border-red-200 bg-red-50 text-red-700",
             )}
           >
-            Vendor cost total: {formatCurrency(vendorCostTotal)} / Total cost:{" "}
-            {formatCurrency(totalCost)}
+            <p>
+              Vendor cost total: {formatCurrency(vendorCostTotal)} / Total cost:{" "}
+              {formatCurrency(totalCost)}
+            </p>
+            <p>
+              Remaining cost: {formatCurrency(remainingVendorCost)}
+            </p>
           </div>
           <FieldError>{errors.vendorTotal}</FieldError>
         </div>

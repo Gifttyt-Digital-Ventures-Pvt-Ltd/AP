@@ -177,6 +177,7 @@ export const InvoiceForm = ({
       campaignId: "",
       campaignName: "",
       referenceNumber: "",
+      campaignReferenceNumber: "",
     });
   };
 
@@ -192,6 +193,7 @@ export const InvoiceForm = ({
       campaignId: "",
       campaignName: "",
       referenceNumber: "",
+      campaignReferenceNumber: "",
     });
   };
 

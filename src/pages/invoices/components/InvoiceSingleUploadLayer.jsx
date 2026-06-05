@@ -5,6 +5,7 @@ import {
   useGetInvoiceMandatoryFieldsQuery,
   useGetPendingVendorApprovalsQuery,
   useGetVendorsQuery,
+  useRequestVendorAdditionMutation,
   useScanInvoiceMutation,
 } from "../../../Services/apis/invoicesVendorsApi";
 import {
@@ -12,7 +13,10 @@ import {
   useGetCorporateUserDetailsQuery,
 } from "../../../Services/apis/corporateApi";
 import { useGetCategoriesForInvoiceQuery } from "../../../Services/apis/categoriesApi";
-import { mergeInvoiceVendorOptions } from "../../../Services/utils/payloadMappers";
+import {
+  extractVendorIdFromResponse,
+  mergeInvoiceVendorOptions,
+} from "../../../Services/utils/payloadMappers";
 import { useAuth } from "../../../contexts/AuthContext";
 import { useRBAC } from "../../../contexts/RBACContext";
 import { useActionGuard } from "../../../hooks/useActionGuard";
@@ -61,9 +65,15 @@ import { InvoiceForm } from "./InvoiceForm";
 import { InvoicePdfPreview } from "./InvoicePdfPreview";
 import UploadSection from "./UploadSection";
 import InvoiceUploadDialog from "./InvoiceUploadDialog";
+import RequestVendorDialog from "./RequestVendorDialog";
 import { getInvoiceFileUrl } from "../utils/invoicePreview";
+import {
+  buildVendorRequestForm,
+  createEmptyVendorRequestForm,
+} from "../utils/invoiceBulkUtils";
 import { useCurrencyFilter } from "../../../hooks/useCurrencyFilter";
 import { CURRENCY_SCREENS } from "../../../utils/currency";
+import { getInvoiceVendorRequestValidationErrors } from "../../../utils/vendorValidation";
 
 const applyPrefillVendor = (formState, prefillVendor, prefillCampaign) => {
   const hasVendor = Boolean(prefillVendor?.vendorId || prefillVendor?.vendorName);
@@ -85,6 +95,10 @@ const applyPrefillVendor = (formState, prefillVendor, prefillCampaign) => {
           campaignName: prefillCampaign.campaignName || formState.campaignName || "",
           referenceNumber:
             prefillCampaign.referenceNumber || formState.referenceNumber || "",
+          campaignReferenceNumber:
+            prefillCampaign.referenceNumber ||
+            formState.campaignReferenceNumber ||
+            "",
         }
       : {}),
   };
@@ -125,11 +139,16 @@ const InvoiceSingleUploadLayer = ({
   const [uploadPreviewError, setUploadPreviewError] = useState(false);
   const [pdfZoom, setPdfZoom] = useState(100);
   const [activeTab, setActiveTab] = useState("list");
+  const [requestVendorOpen, setRequestVendorOpen] = useState(false);
+  const [requestVendorForm, setRequestVendorForm] = useState(
+    createEmptyVendorRequestForm,
+  );
   const uploadInProgressRef = useRef(false);
   const uploadedFileRef = useRef(null);
 
-  const { data: vendorsData = [] } = useGetVendorsQuery();
-  const { data: pendingVendorsData = [] } = useGetPendingVendorApprovalsQuery();
+  const { data: vendorsData = [], refetch: refetchVendors } = useGetVendorsQuery();
+  const { data: pendingVendorsData = [], refetch: refetchPendingVendors } =
+    useGetPendingVendorApprovalsQuery();
   const { data: departmentsData = [] } = useGetCorporateDepartmentsQuery();
   const { data: invoiceMandatoryFieldsData, isLoading: invoiceMandatoryFieldsLoading } =
     useGetInvoiceMandatoryFieldsQuery(
@@ -147,6 +166,8 @@ const InvoiceSingleUploadLayer = ({
 
   const [scanInvoice] = useScanInvoiceMutation();
   const [createInvoice] = useCreateInvoiceMutation();
+  const [requestVendorAddition, { isLoading: requestVendorLoading }] =
+    useRequestVendorAdditionMutation();
 
   const invoiceMandatoryFields = useMemo(
     () => normalizeInvoiceMandatoryFields(invoiceMandatoryFieldsData),
@@ -180,6 +201,7 @@ const InvoiceSingleUploadLayer = ({
 
   const canScanInvoices = canPerformAction("invoices.scan");
   const canManageInvoices = canPerformAction("invoices.create");
+  const canAddVendors = canPerformAction("invoices.addVendor");
 
   useEffect(() => {
     setHideSidebar(Boolean(uploadedFile));
@@ -469,6 +491,20 @@ const InvoiceSingleUploadLayer = ({
       formData.campaignName || prefillCampaignRef.current?.campaignName || "";
     const referenceNumber =
       formData.referenceNumber || prefillCampaignRef.current?.referenceNumber || "";
+    const expectedCampaignReferenceNumber =
+      formData.campaignReferenceNumber ||
+      prefillCampaignRef.current?.referenceNumber ||
+      "";
+
+    if (
+      campaignId &&
+      expectedCampaignReferenceNumber &&
+      String(referenceNumber || "").trim() !==
+        String(expectedCampaignReferenceNumber || "").trim()
+    ) {
+      toast.error("Reference number must match the selected campaign");
+      return;
+    }
 
     const invoicePayload = toCreateInvoicePayload(
       {
@@ -566,6 +602,91 @@ const InvoiceSingleUploadLayer = ({
       Boolean(prefillRef.current?.vendorId) ||
       Boolean(formData?.vendorRequestSubmitted));
 
+  const handleRequestVendorOpenChange = (open) => {
+    setRequestVendorOpen(open);
+    if (!open) {
+      setRequestVendorForm(createEmptyVendorRequestForm());
+    }
+  };
+
+  const handleAddVendorFromInvoice = () => {
+    if (!guardAction("invoices.addVendor")) return;
+    if (!formData?.vendorName) {
+      toast.error("Vendor name is required");
+      return;
+    }
+    setRequestVendorForm(buildVendorRequestForm(formData));
+    setRequestVendorOpen(true);
+  };
+
+  const handleSubmitVendorRequest = async (event) => {
+    event.preventDefault();
+    if (!guardAction("invoices.addVendor")) return;
+
+    const vendorName = requestVendorForm.name.trim();
+    const vendorType = requestVendorForm.vendor_type || requestVendorForm.vendorType;
+    const gstin = requestVendorForm.gstin.trim();
+    const validationErrors = getInvoiceVendorRequestValidationErrors(requestVendorForm);
+
+    if (validationErrors.length > 0) {
+      toast.error(validationErrors[0]);
+      return;
+    }
+
+    try {
+      const response = await requestVendorAddition({
+        ...requestVendorForm,
+        name: vendorName,
+        vendor_type: vendorType,
+        gstin,
+      }).unwrap();
+      const requestedVendorId = extractVendorIdFromResponse(response);
+      const [vendorsResult, pendingResult] = await Promise.all([
+        refetchVendors(),
+        refetchPendingVendors(),
+      ]);
+      const freshVendorOptions = mergeInvoiceVendorOptions(
+        vendorsResult?.data || [],
+        pendingResult?.data || [],
+      );
+      const normalizedVendorName = vendorName.toLowerCase().trim();
+      const matchedVendor =
+        (requestedVendorId
+          ? freshVendorOptions.find(
+              (vendor) => String(vendor.id) === String(requestedVendorId),
+            )
+          : null) ||
+        freshVendorOptions.find(
+          (vendor) =>
+            String(vendor?.name || "").toLowerCase().trim() === normalizedVendorName,
+        ) ||
+        null;
+      const resolvedVendorId = matchedVendor?.id || requestedVendorId || "";
+
+      setFormData((prev) =>
+        prev
+          ? {
+              ...prev,
+              vendorName,
+              vendorId: resolvedVendorId,
+              vendorMatched: Boolean(resolvedVendorId),
+              vendorRequestSubmitted: true,
+              vendorRequestPending: Boolean(matchedVendor?.isPendingApproval),
+            }
+          : prev,
+      );
+
+      toast.success(
+        resolvedVendorId
+          ? `Vendor "${vendorName}" requested. You can add the invoice now.`
+          : `Vendor addition requested for "${vendorName}". You can add the invoice while approval is pending.`,
+      );
+      handleRequestVendorOpenChange(false);
+    } catch (error) {
+      toast.error(extractApiErrorDetail(error) || "Failed to request vendor addition");
+    }
+  };
+
   const renderPdfPreview = (props) => (
     <InvoicePdfPreview
       {...props}
@@ -582,7 +703,7 @@ const InvoiceSingleUploadLayer = ({
       hideActions={hideActions}
       calculateTotals={calculateTotals}
       findVendorByName={findVendorByName}
-      handleAddVendorFromInvoice={() => {}}
+      handleAddVendorFromInvoice={handleAddVendorFromInvoice}
       updateLineItem={updateLineItem}
       removeLineItem={removeLineItem}
       addLineItem={addLineItem}
@@ -593,7 +714,7 @@ const InvoiceSingleUploadLayer = ({
       setActiveTab={setActiveTab}
       handleUpdateInvoice={() => {}}
       handleAddInvoice={handleAddInvoice}
-      canAddVendor={false}
+      canAddVendor={canAddVendors}
       canSubmit={canSubmit}
       departmentMandatory={invoiceMandatoryFields.department}
       categoryMandatory={invoiceMandatoryFields.category}
@@ -638,8 +759,7 @@ const InvoiceSingleUploadLayer = ({
           onOpenChange={handlePickerOpenChange}
           onFilesSelected={handlePickerFiles}
           disabled={scanning || uploadInProgressRef.current || !canScanInvoices}
-          overlayClassName="z-[100] bg-black/80"
-          contentClassName="z-[100]"
+          overlayClassName="bg-black/80"
         />
       )}
       <UploadSection
@@ -656,6 +776,14 @@ const InvoiceSingleUploadLayer = ({
         scanning={scanning}
         renderInvoiceForm={renderInvoiceForm}
         handleAddInvoice={handleAddInvoice}
+      />
+      <RequestVendorDialog
+        open={requestVendorOpen}
+        onOpenChange={handleRequestVendorOpenChange}
+        formData={requestVendorForm}
+        setFormData={setRequestVendorForm}
+        onSubmit={handleSubmitVendorRequest}
+        submitting={requestVendorLoading}
       />
     </>
   );
