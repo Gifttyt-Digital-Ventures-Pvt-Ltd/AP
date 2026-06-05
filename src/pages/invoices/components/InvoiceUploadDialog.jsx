@@ -54,7 +54,7 @@ const InvoiceUploadDialog = ({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         overlayClassName={overlayClassName}
-        className={contentClassName ? `z-[100] max-w-2xl ${contentClassName}` : "max-w-2xl"}
+        className={contentClassName ? `max-w-2xl ${contentClassName}` : "max-w-2xl"}
         data-testid="invoice-upload-dialog"
         onInteractOutside={(event) => event.preventDefault()}
       >
