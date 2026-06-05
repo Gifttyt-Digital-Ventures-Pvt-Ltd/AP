@@ -178,22 +178,18 @@ const CampaignsPage = () => {
 
   const stats = useMemo(
     () => ({
-      total: campaignPagination.totalElements,
-      pending: campaigns.filter(
-        (campaign) => campaign.status === "pending_approval",
-      ).length,
-      approved: campaigns.filter((campaign) => campaign.status === "approved")
-        .length,
-      totalBudget: campaigns.reduce(
-        (sum, campaign) => sum + Number(campaign.budget || 0),
-        0,
-      ),
+      total: campaignsPage.totalCampaigns || campaignPagination.totalElements,
+      pendingAmount: campaignsPage.totalPending || 0,
+      approved: campaignsPage.totalApproved || 0,
+      totalBudget: campaignsPage.totalBudget || 0,
+      totalCost: campaignsPage.totalCost || 0,
     }),
-    [campaigns, campaignPagination.totalElements],
+    [campaignPagination.totalElements, campaignsPage],
   );
-  const firstPendingCampaign = campaigns.find(
+  const pendingApprovalCampaigns = campaigns.filter(
     (campaign) => campaign.status === "pending_approval",
   );
+  const firstPendingCampaign = pendingApprovalCampaigns[0];
 
   const handleRefreshCampaigns = async () => {
     try {
@@ -395,7 +391,8 @@ const CampaignsPage = () => {
           <div className="flex items-center gap-3">
             <Megaphone className="h-5 w-5" />
             <p>
-              {stats.pending} campaign(s) need approval. Review{" "}
+              {pendingApprovalCampaigns.length} campaign(s) need approval.
+              Review{" "}
               <span className="font-medium">{firstPendingCampaign.name}</span>.
             </p>
           </div>
@@ -410,13 +407,19 @@ const CampaignsPage = () => {
 
       <div className="grid shrink-0 grid-cols-1 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         <SummaryTile label="Total Campaigns" value={stats.total} />
-        <SummaryTile label="Pending Approval" value={stats.pending} />
+        <SummaryTile
+          label="Total Pending"
+          value={formatCurrency(stats.pendingAmount)}
+        />
         <SummaryTile label="Approved" value={stats.approved} />
         <SummaryTile
           label="Total Budget"
           value={formatCurrency(stats.totalBudget)}
         />
-        <SummaryTile label="Total Cost" value={formatCurrency(campaignsPage.totalCost)} />
+        <SummaryTile
+          label="Total Cost"
+          value={formatCurrency(stats.totalCost)}
+        />
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card">
