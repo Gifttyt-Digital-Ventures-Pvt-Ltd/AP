@@ -179,7 +179,7 @@ const CampaignsPage = () => {
   const stats = useMemo(
     () => ({
       total: campaignsPage.totalCampaigns || campaignPagination.totalElements,
-      pendingAmount: campaignsPage.totalPending || 0,
+      totalPending: campaignsPage.totalPending || 0,
       approved: campaignsPage.totalApproved || 0,
       totalBudget: campaignsPage.totalBudget || 0,
       totalCost: campaignsPage.totalCost || 0,
@@ -409,7 +409,7 @@ const CampaignsPage = () => {
         <SummaryTile label="Total Campaigns" value={stats.total} />
         <SummaryTile
           label="Total Pending"
-          value={formatCurrency(stats.pendingAmount)}
+          value={stats.totalPending}
         />
         <SummaryTile label="Approved" value={stats.approved} />
         <SummaryTile
