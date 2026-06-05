@@ -167,6 +167,11 @@ export const EMPTY_CAMPAIGN_LIST_PAGE = {
   numberOfElements: 0,
   first: true,
   last: true,
+  totalCampaigns: 0,
+  totalPending: 0,
+  totalApproved: 0,
+  totalBudget: 0,
+  totalCost: 0,
 };
 
 /** Spring page response: { content, pageable, totalElements, totalPages, ... } */
@@ -192,6 +197,11 @@ export const normalizeCampaignPageResponse = (response = {}) => {
     numberOfElements: Number(response.numberOfElements ?? items.length),
     first: response.first ?? page === 0,
     last: response.last ?? (totalPages > 0 ? page >= totalPages - 1 : true),
+    totalCampaigns: toNumber(response.totalCampaigns ?? response.total_campaigns ?? totalElements),
+    totalPending: toNumber(response.totalPending ?? response.total_pending),
+    totalApproved: toNumber(response.totalApproved ?? response.total_approved),
+    totalBudget: toNumber(response.totalBudget ?? response.total_budget),
+    totalCost: toNumber(response.totalCost ?? response.total_cost),
   };
 };
 
