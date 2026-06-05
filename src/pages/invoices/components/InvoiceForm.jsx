@@ -323,7 +323,9 @@ export const InvoiceForm = ({
   );
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-row items-stretch gap-4 w-full h-full min-h-0 min-w-0">
+      <div className="flex-1 min-w-0 flex flex-col min-h-0">
+        <div className="flex-1 overflow-y-auto space-y-4 pr-3 pb-2 scrollbar-thin-muted">
       {formData.vendorName &&
         formData.vendorRequestSubmitted &&
         !formData.vendorMatched && (
@@ -915,8 +917,10 @@ export const InvoiceForm = ({
         </div>
       </div>
 
+        </div>
+
       {!hideActions && (
-        <div className="flex gap-3 pt-4 border-t sticky bottom-0 bg-white">
+        <div className="flex gap-3 pt-4 border-t shrink-0 bg-white">
           <Button
             variant="outline"
             onClick={() => {
@@ -942,6 +946,8 @@ export const InvoiceForm = ({
           </Button>
         </div>
       )}
+
+      </div>
 
       <InvoiceChecklist
         formData={formData}

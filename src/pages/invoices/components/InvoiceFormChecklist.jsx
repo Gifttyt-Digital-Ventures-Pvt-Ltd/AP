@@ -31,8 +31,7 @@ export const buildInvoiceFormChecklist = (
     warn,
   }) => {
     const isOptional = optional ?? !required;
-    const resolvedHint =
-      hint ?? (isOptional ? "optional" : "required");
+    const resolvedHint = hint ?? (isOptional ? "optional" : "required");
 
     return {
       label,
@@ -214,9 +213,7 @@ export const buildInvoiceFormChecklist = (
             items: [
               item({
                 label: "Campaign",
-                done: !!(
-                  formData.campaignId || formData.campaignName?.trim()
-                ),
+                done: !!(formData.campaignId || formData.campaignName?.trim()),
                 optional: true,
               }),
               item({
@@ -263,270 +260,129 @@ export const InvoiceChecklist = ({
   const doneCount = allItems.filter((item) => item.done).length;
   const totalCount = allItems.length;
   const allDone = totalCount > 0 && doneCount === totalCount;
-  const warnItems = groups
-    .flatMap((group) => group.items)
-    .filter((item) => item.warn && !item.hidden);
-  const hasWarnings = warnItems.length > 0;
   const pct = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
 
   return (
-    <>
-      <div
-        style={{
-          position: "sticky",
-          bottom: "0px",
-          zIndex: 40,
-          display: "flex",
-          justifyContent: "flex-end",
-          pointerEvents: "none",
-          marginRight: "-8px",
-        }}
+    <div
+      className={`shrink-0 sticky top-0 transition-all duration-300 ease-in-out border border-border bg-card rounded-lg relative flex flex-col h-full ${
+        open ? "w-[260px]" : "w-10 border-none bg-transparent"
+      }`}
+      style={{ minHeight: "200px" }}
+    >
+      {/* Collapse/Expand Toggle Button */}
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className={`absolute top-3 z-10 flex h-6 w-6 items-center justify-center rounded-md border border-border bg-white shadow-sm hover:bg-muted text-muted-foreground transition-all ${
+          open ? "-left-3" : "left-2"
+        }`}
+        title={open ? "Collapse checklist" : "Expand checklist"}
       >
-        <div
-          style={{ pointerEvents: "auto" }}
-          className="flex flex-col gap-1 justify-end items-end"
-        >
-          {open && (
-            <div
-              style={{
-                width: "272px",
-                background: "var(--color-background-primary, #fff)",
-                border: "0.5px solid var(--color-border-secondary, #e2e8f0)",
-                borderRadius: "12px",
-                boxShadow: "0 4px 24px rgba(0,0,0,0.10)",
-                marginBottom: "8px",
-                overflow: "hidden",
-                animation: "cl-slide-up 0.18s ease",
-              }}
-            >
-              <div
-                style={{
-                  padding: "10px 14px 8px",
-                  borderBottom:
-                    "0.5px solid var(--color-border-tertiary, #f0f0f0)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: "12px",
-                    fontWeight: 500,
-                    color: "var(--color-text-primary)",
-                  }}
-                >
-                  Form checklist
-                </span>
-                <span
-                  style={{
-                    fontSize: "11px",
-                    color: allDone
-                      ? "var(--color-text-success, #16a34a)"
-                      : "var(--color-text-secondary)",
-                  }}
-                >
-                  {doneCount}/{totalCount} complete
-                </span>
-              </div>
-
-              <div
-                style={{
-                  height: "3px",
-                  background: "var(--color-background-tertiary, #f5f5f5)",
-                }}
-              >
-                <div
-                  style={{
-                    height: "100%",
-                    width: `${pct}%`,
-                    background: allDone
-                      ? "var(--color-background-success, #16a34a)"
-                      : "var(--color-background-info, #3b82f6)",
-                    transition: "width 0.3s ease",
-                  }}
-                />
-              </div>
-
-              <div
-                style={{
-                  maxHeight: "340px",
-                  overflowY: "auto",
-                  padding: "8px 0",
-                }}
-              >
-                {groups.map((group) => {
-                  const visibleItems = group.items.filter((item) => !item.hidden);
-                  if (visibleItems.length === 0) return null;
-                  return (
-                    <div key={group.group} style={{ marginBottom: "4px" }}>
-                      <div
-                        style={{
-                          fontSize: "10px",
-                          fontWeight: 500,
-                          letterSpacing: "0.06em",
-                          textTransform: "uppercase",
-                          color: "var(--color-text-tertiary)",
-                          padding: "4px 14px 2px",
-                        }}
-                      >
-                        {group.group}
-                      </div>
-                      {visibleItems.map((item) => (
-                        <div
-                          key={item.label}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "8px",
-                            padding: "3px 14px",
-                          }}
-                        >
-                          {item.warn ? (
-                            <AlertCircle
-                              style={{
-                                width: "13px",
-                                height: "13px",
-                                flexShrink: 0,
-                                color: "#d97706",
-                              }}
-                            />
-                          ) : item.done ? (
-                            <CheckCircle2
-                              style={{
-                                width: "13px",
-                                height: "13px",
-                                flexShrink: 0,
-                                color: "var(--color-text-success, #16a34a)",
-                              }}
-                            />
-                          ) : (
-                            <Circle
-                              style={{
-                                width: "13px",
-                                height: "13px",
-                                flexShrink: 0,
-                                color: "var(--color-border-secondary, #cbd5e1)",
-                              }}
-                            />
-                          )}
-                          <span
-                            style={{
-                              fontSize: "12px",
-                              color: item.warn
-                                ? "#92400e"
-                                : item.done
-                                  ? "var(--color-text-primary)"
-                                  : "var(--color-text-secondary)",
-                            }}
-                          >
-                            {item.label}
-                            {item.hint ? (
-                              <span
-                                style={{
-                                  fontSize: "10px",
-                                  marginLeft: "4px",
-                                  color:
-                                    item.required
-                                      ? "rgb(96, 165, 250)"
-                                      : item.warn
-                                        ? "#92400e"
-                                        : "var(--color-text-tertiary)",
-                                }}
-                              >
-                                ({item.hint})
-                              </span>
-                            ) : null}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={() => setOpen((value) => !value)}
-            className="max-w-min"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "7px",
-              padding: "7px 12px",
-              borderRadius: "99px",
-              border: `1.5px solid ${
-                allDone
-                  ? "var(--color-border-success, #16a34a)"
-                  : hasWarnings
-                    ? "#d97706"
-                    : "var(--color-border-secondary, #e2e8f0)"
-              }`,
-              background: allDone
-                ? "var(--color-background-success, #f0fdf4)"
-                : "var(--color-background-primary, #fff)",
-              cursor: "pointer",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-              transition: "box-shadow 0.15s",
-            }}
-            aria-expanded={open}
-            aria-label="Toggle form checklist"
+        {open ? (
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={2.5}
+            stroke="currentColor"
+            className="h-3 w-3"
           >
-            <ClipboardList
-              style={{
-                width: "14px",
-                height: "14px",
-                color: allDone
-                  ? "var(--color-text-success, #16a34a)"
-                  : "var(--color-text-secondary)",
-              }}
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M8.25 4.5l7.5 7.5-7.5 7.5"
             />
+          </svg>
+        ) : (
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={2.5}
+            stroke="currentColor"
+            className="h-3 w-3"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M15.75 19.5L8.25 12l7.5-7.5"
+            />
+          </svg>
+        )}
+      </button>
+
+      {open ? (
+        <div className="flex flex-col h-full min-h-0 overflow-hidden">
+          {/* Header */}
+          <div className="p-3 border-b border-border flex items-center justify-between bg-muted/30">
+            <span className="text-xs font-semibold text-foreground">
+              Form Checklist
+            </span>
             <span
-              style={{
-                fontSize: "12px",
-                fontWeight: 500,
-                color: allDone
-                  ? "var(--color-text-success, #16a34a)"
-                  : "var(--color-text-primary)",
-              }}
+              className={`text-[10px] font-medium ${allDone ? "text-green-600" : "text-muted-foreground"}`}
             >
               {doneCount}/{totalCount}
             </span>
-            {hasWarnings && !allDone && (
-              <AlertCircle
-                style={{ width: "13px", height: "13px", color: "#d97706" }}
-              />
-            )}
-            {open ? (
-              <ChevronDown
-                style={{
-                  width: "13px",
-                  height: "13px",
-                  color: "var(--color-text-secondary)",
-                }}
-              />
-            ) : (
-              <ChevronUp
-                style={{
-                  width: "13px",
-                  height: "13px",
-                  color: "var(--color-text-secondary)",
-                }}
-              />
-            )}
-          </button>
-        </div>
-      </div>
+          </div>
 
-      <style>{`
-        @keyframes cl-slide-up {
-          from { opacity: 0; transform: translateY(8px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
-    </>
+          {/* Progress Bar */}
+          <div className="h-1 w-full bg-muted">
+            <div
+              className={`h-full transition-all duration-300 ${allDone ? "bg-green-500" : "bg-blue-500"}`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+
+          {/* Checklist Groups */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-3 scrollbar-thin-muted">
+            {groups.map((group) => {
+              const visibleItems = group.items.filter((item) => !item.hidden);
+              if (visibleItems.length === 0) return null;
+              return (
+                <div key={group.group} className="space-y-1">
+                  <span className="text-[9px] font-bold tracking-wider text-muted-foreground uppercase">
+                    {group.group}
+                  </span>
+                  <div className="space-y-1">
+                    {visibleItems.map((item) => (
+                      <div
+                        key={item.label}
+                        className="flex items-start gap-2 text-xs py-0.5"
+                      >
+                        {item.warn ? (
+                          <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+                        ) : item.done ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0 mt-0.5" />
+                        ) : (
+                          <Circle className="h-3.5 w-3.5 text-muted-foreground/30 shrink-0 mt-0.5" />
+                        )}
+                        <span
+                          className={`leading-tight ${item.warn ? "text-amber-800" : item.done ? "text-foreground" : "text-muted-foreground"}`}
+                        >
+                          {item.label}
+                          {item.hint && (
+                            <span className="text-[9px] ml-1 text-muted-foreground">
+                              ({item.hint})
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center pt-12 gap-2 text-foreground select-none">
+          <ClipboardList className="h-4 w-4 text-primary animate-bounce" />
+          <span className="text-[10px] font-black uppercase tracking-widest [writing-mode:vertical-lr] rotate-180">
+            Checklist ({doneCount}/{totalCount})
+          </span>
+        </div>
+      )}
+    </div>
   );
 };
 
