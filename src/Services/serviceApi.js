@@ -66,6 +66,7 @@ export const serviceApi = createApi({
     "Batches",
     "Notifications",
     "Reports",
+    "ReportExports",
     "MasterData",
     "Workflow",
     "Categories",
