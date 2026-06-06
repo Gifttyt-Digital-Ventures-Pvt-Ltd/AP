@@ -25,10 +25,29 @@ export const normalizeScannedInvoice = (scanResponse = {}) => {
         : [];
   const taxesRaw = Array.isArray(scanResponse?.taxes) ? scanResponse.taxes : [];
   const invoiceCurrency = normalizeCurrencyCode(scanResponse?.currency) || DEFAULT_CURRENCY;
+  const taxSummary = resolveScannedInvoiceTaxSummary(scanResponse, taxesRaw);
+  const scannedForeignTaxDefaults = {
+    defaultTaxLabel: scanResponse?.invoiceTax ?? scanResponse?.invoice_tax ?? "",
+    defaultTaxName:
+      scanResponse?.invoiceTaxName ??
+      scanResponse?.invoice_tax_name ??
+      taxSummary.invoiceTaxName ??
+      "",
+    defaultTaxRate:
+      scanResponse?.invoiceTaxRate ??
+      scanResponse?.invoice_tax_rate ??
+      taxSummary.invoiceTaxRate ??
+      0,
+  };
 
   const lineItems = lineItemsRaw.map((item) => {
     const pricing = resolveScannedLineItemPricing(item);
-    const taxFields = resolveScannedLineItemTax(item, taxesRaw, invoiceCurrency);
+    const taxFields = resolveScannedLineItemTax(
+      item,
+      taxesRaw,
+      invoiceCurrency,
+      scannedForeignTaxDefaults,
+    );
 
     return {
       description: item?.description ?? item?.name ?? "",
@@ -42,7 +61,6 @@ export const normalizeScannedInvoice = (scanResponse = {}) => {
   });
 
   const computedAmount = lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-  const taxSummary = resolveScannedInvoiceTaxSummary(scanResponse, taxesRaw);
 
   const vendorAddress =
     scanResponse?.vendorAddress ??

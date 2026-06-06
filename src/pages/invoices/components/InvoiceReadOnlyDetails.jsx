@@ -127,8 +127,11 @@ const InvoiceReadOnlyDetails = ({
     isCampaignFeatureEnabled &&
     (formData.campaignId || formData.campaignName || formData.referenceNumber);
 
+  const getInrTaxDisplayLabel = (taxValue) =>
+    TAX_RATES.find((entry) => entry.value === taxValue)?.label || taxValue || "-";
+
   const formatLineItemTax = (item) => {
-    if (useInrTax) return item.tax || "-";
+    if (useInrTax) return getInrTaxDisplayLabel(item.tax);
     const name = item.taxName || item.tax || "Tax";
     const rate = item.taxRate;
     if (rate === "" || rate === undefined || rate === null) return name;

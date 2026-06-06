@@ -11,7 +11,8 @@ export const isInrInvoiceCurrency = (currency) =>
 export const formatForeignTaxLabel = (taxName, taxRate) => {
   const name = String(taxName || "Tax").trim() || "Tax";
   const rate = Number(taxRate);
-  if (!Number.isFinite(rate) || rate <= 0) return "Exempt";
+  if (!Number.isFinite(rate)) return "Exempt";
+  if (rate <= 0) return `${name} 0%`;
   return `${name} ${rate}%`;
 };
 
@@ -73,6 +74,7 @@ export const resolveInrTaxLabel = (item, taxesRaw = []) => {
 
   const rate = Number(item?.taxRate ?? item?.tax_rate ?? 0);
   const hasLineRate = rate > 0;
+  const lineTaxAmount = Number(item?.taxAmount ?? item?.tax_amount ?? 0) || 0;
   const totalTaxAmount = taxesRaw.reduce(
     (sum, entry) => sum + (Number(entry?.amount ?? 0) || 0),
     0,
@@ -80,12 +82,45 @@ export const resolveInrTaxLabel = (item, taxesRaw = []) => {
 
   if (!hasLineRate && totalTaxAmount <= 0) return "Exempt";
 
-  const igstAmount = taxesRaw
-    .filter((entry) => /IGST/i.test(String(entry?.name ?? "")))
-    .reduce((sum, entry) => sum + (Number(entry?.amount ?? 0) || 0), 0);
-  const cgstSgstAmount = taxesRaw
-    .filter((entry) => /CGST|SGST/i.test(String(entry?.name ?? "")))
-    .reduce((sum, entry) => sum + (Number(entry?.amount ?? 0) || 0), 0);
+  const normalizedTaxes = taxesRaw.map((entry) => ({
+    name: String(entry?.name ?? entry?.tax_name ?? "").trim(),
+    rate: Number(entry?.taxRate ?? entry?.tax_rate ?? 0) || 0,
+    amount: Number(entry?.amount ?? 0) || 0,
+  }));
+  const approxEquals = (left, right) => Math.abs(Number(left || 0) - Number(right || 0)) < 0.01;
+
+  const exactMatch =
+    hasLineRate && lineTaxAmount > 0
+      ? normalizedTaxes.find(
+          (entry) => approxEquals(entry.rate, rate) && approxEquals(entry.amount, lineTaxAmount),
+        )
+      : null;
+
+  if (exactMatch) {
+    if (/IGST/i.test(exactMatch.name)) return `IGST ${rate}%`;
+    if (/CGST|SGST/i.test(exactMatch.name)) return `CGST + SGST ${rate * 2}%`;
+  }
+
+  const sameRateTaxes = normalizedTaxes.filter((entry) => approxEquals(entry.rate, rate));
+  const hasIgstAtRate = sameRateTaxes.some((entry) => /IGST/i.test(entry.name));
+  const hasCgstAtRate = sameRateTaxes.some((entry) => /CGST/i.test(entry.name));
+  const hasSgstAtRate = sameRateTaxes.some((entry) => /SGST/i.test(entry.name));
+
+  if (hasIgstAtRate && !(hasCgstAtRate || hasSgstAtRate)) {
+    return rate > 0 ? `IGST ${rate}%` : DEFAULT_INR_TAX;
+  }
+
+  if (hasCgstAtRate || hasSgstAtRate) {
+    const combinedRate = rate > 0 ? rate * 2 : 18;
+    return `CGST + SGST ${combinedRate}%`;
+  }
+
+  const igstAmount = normalizedTaxes
+    .filter((entry) => /IGST/i.test(entry.name))
+    .reduce((sum, entry) => sum + entry.amount, 0);
+  const cgstSgstAmount = normalizedTaxes
+    .filter((entry) => /CGST|SGST/i.test(entry.name))
+    .reduce((sum, entry) => sum + entry.amount, 0);
 
   if (igstAmount > 0 && cgstSgstAmount === 0) {
     return rate > 0 ? `IGST ${rate}%` : DEFAULT_INR_TAX;
@@ -133,8 +168,16 @@ export const resolveScannedInvoiceTaxSummary = (scanResponse = {}, taxesRaw = []
   return {
     invoiceSubtotal: Number(scanResponse?.subtotal ?? 0) || 0,
     invoiceTaxAmount: Number.isFinite(totalTaxAmount) ? totalTaxAmount : 0,
-    invoiceTaxName: primaryTax?.name ?? primaryTax?.tax_name ?? "",
-    invoiceTaxRate: Number(primaryTax?.taxRate ?? primaryTax?.tax_rate ?? 0) || 0,
+    invoiceTaxName:
+      scanResponse?.invoiceTaxName ??
+      scanResponse?.invoice_tax_name ??
+      primaryTax?.name ??
+      primaryTax?.tax_name ??
+      "",
+    invoiceTaxRate:
+      scanResponse?.invoiceTaxRate ??
+      scanResponse?.invoice_tax_rate ??
+      (Number(primaryTax?.taxRate ?? primaryTax?.tax_rate ?? 0) || 0),
     invoiceTotal: Number(scanResponse?.total ?? 0) || 0,
   };
 };
@@ -193,21 +236,35 @@ export const resolveInrInvoiceTaxLabelFromScan = (
   return `CGST + SGST ${resolvedTaxRate}%`;
 };
 
-export const resolveScannedLineItemTax = (item, taxesRaw = [], currency = DEFAULT_CURRENCY) => {
+export const resolveScannedLineItemTax = (
+  item,
+  taxesRaw = [],
+  currency = DEFAULT_CURRENCY,
+  fallback = {},
+) => {
   if (isInrInvoiceCurrency(currency)) {
     return { tax: resolveInrTaxLabel(item, taxesRaw) };
   }
 
-  const rate = Number(item?.taxRate ?? item?.tax_rate ?? 0) || 0;
-  if (rate <= 0) {
-    return {
-      taxName: "",
-      taxRate: 0,
-      tax: "Exempt",
-    };
-  }
+  const fallbackLabel = fallback?.defaultTaxLabel ?? "";
+  const fallbackRateCandidate =
+    item?.taxRate ??
+    item?.tax_rate ??
+    fallback?.defaultTaxRate ??
+    parseTaxRateFromLabel(item?.tax) ??
+    parseTaxRateFromLabel(fallbackLabel) ??
+    taxesRaw?.[0]?.taxRate ??
+    taxesRaw?.[0]?.tax_rate;
+  const parsedRate = Number(fallbackRateCandidate);
+  const rate = Number.isFinite(parsedRate) ? parsedRate : 0;
 
-  let taxName = item?.taxName ?? item?.tax_name ?? "";
+  let taxName =
+    item?.taxName ??
+    item?.tax_name ??
+    parseTaxNameFromLabel(item?.tax) ??
+    fallback?.defaultTaxName ??
+    parseTaxNameFromLabel(fallbackLabel) ??
+    "";
 
   if (!taxName && taxesRaw.length) {
     const match =
@@ -220,9 +277,9 @@ export const resolveScannedLineItemTax = (item, taxesRaw = [], currency = DEFAUL
   if (!taxName) taxName = "Tax";
 
   return {
-    taxName: taxName,
+    taxName,
     taxRate: rate,
-    tax: formatForeignTaxLabel(taxName, rate),
+    tax: item?.tax || formatForeignTaxLabel(taxName, rate),
   };
 };
 

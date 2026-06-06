@@ -142,7 +142,10 @@ export const buildInvoiceFormChecklist = (
         }),
         item({
           label: "Tax rate %",
-          done: Number(formData.invoiceTaxRate) > 0,
+          done:
+            formData.invoiceTaxRate !== "" &&
+            formData.invoiceTaxRate !== null &&
+            formData.invoiceTaxRate !== undefined,
           required: true,
         }),
       );
