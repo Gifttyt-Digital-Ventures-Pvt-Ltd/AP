@@ -237,6 +237,12 @@ export const InvoiceForm = ({
     });
   const formatAmount = (amount) => formatCurrency(amount, invoiceCurrency);
   const totals = calculateTotals(formData.lineItems, invoiceCurrency);
+  const totalTax = useInrTax
+    ? (Number(totals.cgst) || 0) + (Number(totals.sgst) || 0) + (Number(totals.igst) || 0)
+    : (totals.foreignTaxes || []).reduce(
+        (sum, entry) => sum + (Number(entry.amount) || 0),
+        0,
+      );
   const tdsRate =
     Number.parseFloat(String(formData.tds || "").replace("%", "")) || 0;
   const tdsAmount = Math.round(((totals.subTotal * tdsRate) / 100) * 100) / 100;
@@ -1210,6 +1216,10 @@ export const InvoiceForm = ({
                   <span>{formatAmount(entry.amount)}</span>
                 </div>
               ))}
+            <div className="flex justify-between text-xs">
+              <span>Total Tax</span>
+              <span className="font-medium">{formatAmount(totalTax)}</span>
+            </div>
             <div className="flex justify-between items-center pt-1.5 border-t text-xs">
               <div className="flex items-center gap-1.5">
                 <span>TDS</span>

@@ -113,6 +113,12 @@ const InvoiceReadOnlyDetails = ({
     tdsAmountFromRate ||
     Number(invoice.tdsAmount ?? 0) ||
     0;
+  const totalTax = useInrTax
+    ? (Number(totals.cgst) || 0) + (Number(totals.sgst) || 0) + (Number(totals.igst) || 0)
+    : (totals.foreignTaxes || []).reduce(
+        (sum, entry) => sum + (Number(entry.amount) || 0),
+        0,
+      );
   const netPayable =
     Number(invoice.netAmount) ||
     Math.max(Math.round((totals.total - tdsAmount) * 100) / 100, 0);
@@ -335,6 +341,10 @@ const InvoiceReadOnlyDetails = ({
               <span className=" ">{formatAmount(entry.amount)}</span>
             </div>
           ))}
+        <div className="flex justify-between text-xs">
+          <span>Total Tax</span>
+          <span className="font-medium">{formatAmount(totalTax)}</span>
+        </div>
         <div className="flex justify-between items-center pt-1.5 border-t text-xs">
           <span>TDS{formData.tds ? ` (${formData.tds})` : ""}</span>
           <span className=" ">{formatAmount(tdsAmount)}</span>
