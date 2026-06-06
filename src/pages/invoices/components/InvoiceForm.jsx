@@ -24,6 +24,7 @@ import {
   INVOICE_LEVEL,
   isInrInvoiceCurrency,
   LINE_ITEM_LEVEL,
+  parseTaxRateFromLabel,
   remapLineItemsForCurrencyChange,
 } from "../utils/invoiceTax";
 import {
@@ -67,7 +68,19 @@ const lineItemTableHeader = [
   },
   {
     key: "subtotal",
-    title: "Subtotal",
+    title: "Taxable Amount",
+    headerClassName: "w-[100px] text-left",
+    cellClassName: "w-[100px] text-left",
+  },
+  {
+    key: "taxAmount",
+    title: "Tax Amount",
+    headerClassName: "w-[100px] text-left",
+    cellClassName: "w-[100px] text-left",
+  },
+  {
+    key: "netAmount",
+    title: "Net Amount",
     headerClassName: "w-[100px] text-left",
     cellClassName: "w-[100px] text-left",
   },
@@ -203,11 +216,25 @@ export const InvoiceForm = ({
   const isGstinRequired = useInrTax && formData.gstTreatment !== "N/A";
   const isInvoiceLevelDiscount = formData.discountsLevel === INVOICE_LEVEL;
   const isInvoiceLevelTax = formData.taxesLevel === INVOICE_LEVEL;
-  const lineItemHeaders = lineItemTableHeader.filter(
-    (column) =>
-      (isInvoiceLevelDiscount ? column.key !== "discount" : true) &&
-      (isInvoiceLevelTax ? column.key !== "tax" : true),
-  );
+  const lineItemHeaders = lineItemTableHeader
+    .filter(
+      (column) =>
+        (isInvoiceLevelDiscount ? column.key !== "discount" : true) &&
+        (isInvoiceLevelTax
+          ? column.key !== "tax" &&
+            column.key !== "taxAmount" &&
+            column.key !== "netAmount"
+          : true),
+    )
+    .map((column) => {
+      if (column.key === "subtotal") {
+        return {
+          ...column,
+          title: isInvoiceLevelTax ? "Net Amount" : "Taxable Amount",
+        };
+      }
+      return column;
+    });
   const formatAmount = (amount) => formatCurrency(amount, invoiceCurrency);
   const totals = calculateTotals(formData.lineItems, invoiceCurrency);
   const tdsRate =
@@ -408,6 +435,26 @@ export const InvoiceForm = ({
             break;
           case "subtotal":
             value = formatAmount(calculateLineItemSubtotal(item));
+            break;
+          case "taxAmount":
+            {
+              const taxableAmount = calculateLineItemSubtotal(item);
+              const rate = useInrTax
+                ? parseTaxRateFromLabel(item.tax)
+                : (Number(item.taxRate) || parseTaxRateFromLabel(item.tax) || 0);
+              const taxAmount = (taxableAmount * rate) / 100;
+              value = formatAmount(taxAmount);
+            }
+            break;
+          case "netAmount":
+            {
+              const taxableAmount = calculateLineItemSubtotal(item);
+              const rate = useInrTax
+                ? parseTaxRateFromLabel(item.tax)
+                : (Number(item.taxRate) || parseTaxRateFromLabel(item.tax) || 0);
+              const taxAmount = isInvoiceLevelTax ? 0 : (taxableAmount * rate) / 100;
+              value = formatAmount(taxableAmount + taxAmount);
+            }
             break;
           case "actions":
             value = formData.lineItems.length > 1 && (
