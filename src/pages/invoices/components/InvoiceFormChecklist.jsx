@@ -74,6 +74,21 @@ export const buildInvoiceFormChecklist = (
     }),
   ];
 
+  if (showCampaignField) {
+    vendorChecklistItems.push(
+      item({
+        label: "Campaign",
+        done: !!(formData.campaignId || formData.campaignName?.trim()),
+        optional: true,
+      }),
+      item({
+        label: "Reference number",
+        done: !!String(formData.referenceNumber ?? "").trim(),
+        optional: true,
+      }),
+    );
+  }
+
   if (hasVendorName) {
     vendorChecklistItems.push(
       item({
@@ -208,25 +223,6 @@ export const buildInvoiceFormChecklist = (
         }),
       ],
     },
-    ...(showCampaignField
-      ? [
-          {
-            group: "Campaign",
-            items: [
-              item({
-                label: "Campaign",
-                done: !!(formData.campaignId || formData.campaignName?.trim()),
-                optional: true,
-              }),
-              item({
-                label: "Reference number",
-                done: !!String(formData.referenceNumber ?? "").trim(),
-                optional: true,
-              }),
-            ],
-          },
-        ]
-      : []),
   ];
 };
 
