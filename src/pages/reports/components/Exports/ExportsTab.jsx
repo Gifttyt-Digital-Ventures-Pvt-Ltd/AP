@@ -41,7 +41,7 @@ import {
 const DEFAULT_REPORT_TYPES = [
   {
     id: "invoice-register",
-    name: "Invoice Register Report",
+    name: "Invoice Report",
     description:
       "Complete list of invoices including vendor details, dates, amounts, and statuses.",
     metrics: "Invoices",
@@ -50,7 +50,7 @@ const DEFAULT_REPORT_TYPES = [
   },
   {
     id: "payment-register",
-    name: "Payment Register Report",
+    name: "Payment Report",
     description: "Track completed, pending, and failed payments.",
     metrics: "Payments",
     columns:
@@ -77,7 +77,7 @@ const DEFAULT_REPORT_TYPES = [
   },
   {
     id: "approval-audit",
-    name: "Approval Audit Report",
+    name: "Approvals Report",
     description:
       "Track invoice approvals, approvers, remarks, and decision history.",
     metrics: "Approvals",
