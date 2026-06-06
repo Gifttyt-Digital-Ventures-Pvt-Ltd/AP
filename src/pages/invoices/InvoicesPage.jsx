@@ -56,7 +56,6 @@ import { normalizeScannedInvoice } from './utils/scanNormalization';
 import {
   createEmptyVendorRequestForm,
   buildVendorRequestForm,
-  formatBulkDuration,
   formatBulkStatusLabel,
   getBulkStatusBadgeClass,
 } from './utils/invoiceBulkUtils';
@@ -334,7 +333,6 @@ const InvoicesPage = () => {
   const [bulkExtracting, setBulkExtracting] = useState(false);
   const [bulkExtractTotalFiles, setBulkExtractTotalFiles] = useState(0);
   const [bulkExtractStartedAt, setBulkExtractStartedAt] = useState(null);
-  const [bulkExtractElapsedSeconds, setBulkExtractElapsedSeconds] = useState(0);
   const [bulkExtractProgress, setBulkExtractProgress] = useState(0);
   const [bulkProgress, setBulkProgress] = useState({
     total: 0,
@@ -343,7 +341,6 @@ const InvoicesPage = () => {
     failed: 0,
     startedAt: null,
   });
-  const [bulkElapsedSeconds, setBulkElapsedSeconds] = useState(0);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
   const [bulkEditItemId, setBulkEditItemId] = useState('');
   const [bulkEditForm, setBulkEditForm] = useState(null);
@@ -386,27 +383,12 @@ const InvoicesPage = () => {
   }, [bulkEditOpen, bulkEditItemId, bulkPreviewItems]);
 
   useEffect(() => {
-    if (!bulkCreating || !bulkProgress.startedAt) {
-      setBulkElapsedSeconds(0);
-      return;
-    }
-    const timerId = setInterval(() => {
-      const elapsed = Math.max(0, Math.floor((Date.now() - bulkProgress.startedAt) / 1000));
-      setBulkElapsedSeconds(elapsed);
-    }, 1000);
-
-    return () => clearInterval(timerId);
-  }, [bulkCreating, bulkProgress.startedAt]);
-
-  useEffect(() => {
     if (!bulkExtracting || !bulkExtractStartedAt) {
-      setBulkExtractElapsedSeconds(0);
       setBulkExtractProgress(0);
       return;
     }
     const timerId = setInterval(() => {
       const elapsed = Math.max(0, Math.floor((Date.now() - bulkExtractStartedAt) / 1000));
-      setBulkExtractElapsedSeconds(elapsed);
       // Simulated determinate progress until API returns (caps at 95%)
       setBulkExtractProgress((prev) => {
         const target = Math.min(95, 12 + elapsed * 8);
@@ -626,7 +608,6 @@ const InvoicesPage = () => {
     const files = Array.from(filesInput || []);
     if (!files || files.length === 0) return false;
     setBulkProgress({ total: 0, processed: 0, success: 0, failed: 0, startedAt: null });
-    setBulkElapsedSeconds(0);
     setBulkExtracting(true);
     setBulkExtractTotalFiles(files.length);
     setBulkExtractStartedAt(Date.now());
@@ -832,7 +813,7 @@ const InvoicesPage = () => {
       vendorRequestPending: Boolean(matchedVendor?.isPendingApproval),
       invoiceNumber: item.invoicePayload.invoiceNumber || '',
       invoiceDate: item.invoicePayload.invoiceDate || format(new Date(), 'yyyy-MM-dd'),
-      dueDate: item.invoicePayload.dueDate || format(new Date(), 'yyyy-MM-dd'),
+      dueDate: item.invoicePayload.dueDate || '',
       amount: Number(item.invoicePayload.amount || 0),
       currency: normalizeCurrencyCode(item.invoicePayload.currency) || DEFAULT_CURRENCY,
       departmentId: item.invoicePayload.departmentId || '',
@@ -1489,8 +1470,6 @@ const InvoicesPage = () => {
     }
   };
 
-  const formatDuration = formatBulkDuration;
-
   const canEdit = (invoice) => canEditInvoice(invoice, invoiceEditContext);
   const canDelete = (status) => canDeleteInvoice(status, canDeleteInvoices);
 
@@ -1938,14 +1917,11 @@ const InvoicesPage = () => {
         bulkExtracting={bulkExtracting}
         bulkExtractTotalFiles={bulkExtractTotalFiles}
         bulkExtractProgress={bulkExtractProgress}
-        bulkExtractElapsedSeconds={bulkExtractElapsedSeconds}
-        formatDuration={formatDuration}
         bulkPreviewOpen={bulkPreviewOpen}
         bulkCreating={bulkCreating}
         bulkAddingVendorItemId={bulkAddingVendorItemId}
         bulkPreviewItems={bulkPreviewItems}
         bulkProgress={bulkProgress}
-        bulkElapsedSeconds={bulkElapsedSeconds}
         formatBulkStatusLabel={formatBulkStatusLabel}
         getBulkStatusBadgeClass={getBulkStatusBadgeClass}
         setBulkPreviewOpen={setBulkPreviewOpen}

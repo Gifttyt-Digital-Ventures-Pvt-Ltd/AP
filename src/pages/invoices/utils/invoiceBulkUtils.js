@@ -58,12 +58,6 @@ export const buildVendorRequestForm = (source = {}) => {
   };
 };
 
-export const formatBulkDuration = (totalSeconds) => {
-  const mins = Math.floor(totalSeconds / 60);
-  const secs = totalSeconds % 60;
-  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-};
-
 export const formatBulkStatusLabel = (status) => {
   const normalized = String(status || "").toLowerCase();
   if (normalized === "success" || normalized === "extracted") return "Extracted";

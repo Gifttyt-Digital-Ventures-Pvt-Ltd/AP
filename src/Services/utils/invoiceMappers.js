@@ -297,6 +297,7 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
 
   const category = categoryEnabled ? resolveInvoiceCategoryPayload(invoice) : undefined;
   const normalizedSource = source || "Upload";
+  const dueDate = toLocalDateTimeString(pickInvoiceField(invoice, "dueDate", "due_date", ""));
 
   return {
     invoiceNumber: pickInvoiceField(invoice, "invoiceNumber", "invoice_number", ""),
@@ -306,7 +307,7 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
     invoiceDate: toLocalDateTimeString(
       pickInvoiceField(invoice, "invoiceDate", "invoice_date", ""),
     ),
-    dueDate: toLocalDateTimeString(pickInvoiceField(invoice, "dueDate", "due_date", "")),
+    dueDate: dueDate || null,
     amount,
     gstAmount,
     tdsAmount: resolvedTdsAmount,

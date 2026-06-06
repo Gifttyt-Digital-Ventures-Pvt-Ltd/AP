@@ -8,6 +8,7 @@ import {
   calculateInvoiceTotals,
   INVOICE_LEVEL,
   isInrInvoiceCurrency,
+  parseTaxRateFromLabel,
   resolveLineItemSubtotal,
 } from "../utils/invoiceTax";
 import { parseNumericInput } from "../utils/numericInput";
@@ -210,7 +211,15 @@ const InvoiceReadOnlyDetails = ({
                     {!isInvoiceLevelDiscount && (
                       <th className="p-2 text-left font-medium w-[80px]">Discount</th>
                     )}
-                    <th className="p-2 text-left font-medium w-[90px]">Subtotal</th>
+                    <th className="p-2 text-left font-medium w-[90px]">
+                      {isInvoiceLevelTax ? "Net Amount" : "Taxable Amount"}
+                    </th>
+                    {!isInvoiceLevelTax && (
+                      <>
+                        <th className="p-2 text-left font-medium w-[90px]">Tax Amount</th>
+                        <th className="p-2 text-left font-medium w-[90px]">Net Amount</th>
+                      </>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -234,9 +243,32 @@ const InvoiceReadOnlyDetails = ({
                       {!isInvoiceLevelDiscount && (
                         <td className="p-2">{formatLineItemDiscount(item)}</td>
                       )}
-                      <td className="p-2   font-semibold">
+                      <td className="p-2 font-semibold">
                         {formatAmount(calculateLineItemSubtotal(item))}
                       </td>
+                      {!isInvoiceLevelTax && (
+                        <>
+                          <td className="p-2">
+                            {(() => {
+                              const taxableAmount = calculateLineItemSubtotal(item);
+                              const rate = useInrTax
+                                ? parseTaxRateFromLabel(item.tax)
+                                : (Number(item.taxRate) || parseTaxRateFromLabel(item.tax) || 0);
+                              return formatAmount((taxableAmount * rate) / 100);
+                            })()}
+                          </td>
+                          <td className="p-2">
+                            {(() => {
+                              const taxableAmount = calculateLineItemSubtotal(item);
+                              const rate = useInrTax
+                                ? parseTaxRateFromLabel(item.tax)
+                                : (Number(item.taxRate) || parseTaxRateFromLabel(item.tax) || 0);
+                              const taxAmount = (taxableAmount * rate) / 100;
+                              return formatAmount(taxableAmount + taxAmount);
+                            })()}
+                          </td>
+                        </>
+                      )}
                     </tr>
                   ))}
                 </tbody>
