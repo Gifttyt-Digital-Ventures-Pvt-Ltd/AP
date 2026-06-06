@@ -6,6 +6,7 @@ import {
   Building2,
   Calculator,
   CreditCard,
+  Download,
 } from 'lucide-react';
 
 const ReportsTabsList = ({
@@ -14,8 +15,9 @@ const ReportsTabsList = ({
   canViewVendorReports,
   canViewTaxReports,
   canViewPaymentReports,
+  canViewExportReports,
 }) => (
-  <TabsList className="flex w-full max-w-3xl flex-wrap">
+  <TabsList className="flex w-full max-w-4xl flex-wrap">
     {canViewExecutiveReports && (
       <TabsTrigger value="executive" data-testid="tab-executive">
         <BarChart3 className="h-4 w-4 mr-2" />
@@ -44,6 +46,12 @@ const ReportsTabsList = ({
       <TabsTrigger value="payment" data-testid="tab-payment">
         <CreditCard className="h-4 w-4 mr-2" />
         Payments
+      </TabsTrigger>
+    )}
+    {canViewExportReports && (
+      <TabsTrigger value="exports" data-testid="tab-exports">
+        <Download className="h-4 w-4 mr-2" />
+        Exports
       </TabsTrigger>
     )}
   </TabsList>
