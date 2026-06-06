@@ -21,14 +21,11 @@ const InvoicesDialogs = (props) => {
     bulkExtracting,
     bulkExtractTotalFiles,
     bulkExtractProgress,
-    bulkExtractElapsedSeconds,
-    formatDuration,
     bulkPreviewOpen,
     bulkCreating,
     bulkAddingVendorItemId,
     bulkPreviewItems,
     bulkProgress,
-    bulkElapsedSeconds,
     formatBulkStatusLabel,
     getBulkStatusBadgeClass,
     setBulkPreviewOpen,
@@ -94,8 +91,6 @@ const InvoicesDialogs = (props) => {
         open={bulkExtracting}
         totalFiles={bulkExtractTotalFiles}
         progress={bulkExtractProgress}
-        elapsedSeconds={bulkExtractElapsedSeconds}
-        formatDuration={formatDuration}
       />
 
       <BulkPreviewDialog
@@ -103,8 +98,6 @@ const InvoicesDialogs = (props) => {
         bulkCreating={bulkCreating}
         bulkPreviewItems={bulkPreviewItems}
         bulkProgress={bulkProgress}
-        bulkElapsedSeconds={bulkElapsedSeconds}
-        formatDuration={formatDuration}
         setBulkPreviewOpen={setBulkPreviewOpen}
         handleCreateBulkInvoices={handleCreateBulkInvoices}
       />

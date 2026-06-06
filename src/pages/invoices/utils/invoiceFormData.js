@@ -89,7 +89,7 @@ export const buildInvoiceEditFormData = (
     vendorRequestPending: Boolean(vendor?.isPendingApproval),
     invoiceNumber: invoice.invoiceNumber || invoice.invoiceNumber || "",
     invoiceDate: invoiceDate || format(new Date(), "yyyy-MM-dd"),
-    dueDate: dueDate || format(new Date(), "yyyy-MM-dd"),
+    dueDate: dueDate || "",
     billingAddress:
       invoice.billingAddress ||
       invoice.billingAddress ||

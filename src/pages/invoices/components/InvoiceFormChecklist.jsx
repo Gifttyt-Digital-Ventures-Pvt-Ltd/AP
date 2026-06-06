@@ -77,7 +77,9 @@ export const buildInvoiceFormChecklist = (
   if (hasVendorName) {
     vendorChecklistItems.push(
       item({
-        label: "Vendor matched in system",
+        label: vendorUnmatched
+          ? "Vendor Name not matched"
+          : "Vendor matched in system",
         done: vendorResolved,
         required: true,
         warn: vendorUnmatched,
@@ -152,8 +154,8 @@ export const buildInvoiceFormChecklist = (
         }),
         item({
           label: "Due date",
-          done: !!formData.dueDate,
-          required: true,
+          done: true,
+          required: false,
         }),
         item({
           label: "Currency",

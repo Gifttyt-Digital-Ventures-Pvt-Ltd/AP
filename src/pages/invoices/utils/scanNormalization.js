@@ -3,6 +3,7 @@ import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../../utils/currency
 import {
   DEFAULT_INR_TAX,
   LINE_ITEM_LEVEL,
+  resolveInrInvoiceTaxLabelFromScan,
   resolveScannedInvoiceTaxSummary,
   resolveScannedLineItemPricing,
   resolveScannedLineItemTax,
@@ -97,22 +98,20 @@ export const normalizeScannedInvoice = (scanResponse = {}) => {
       "%",
     taxesLevel:
       scanResponse?.taxesLevel ??
-      scanResponse?.taxesLevel ??
+      scanResponse?.taxes_level ??
       scanResponse?.tax_level ??
       scanResponse?.taxLevel ??
       LINE_ITEM_LEVEL,
     invoiceTax:
-      scanResponse?.invoiceTax ??
-      scanResponse?.invoiceTax ??
-      DEFAULT_INR_TAX,
+      resolveInrInvoiceTaxLabelFromScan(scanResponse, taxesRaw) || DEFAULT_INR_TAX,
     invoiceTaxName:
       scanResponse?.invoiceTaxName ??
-      scanResponse?.invoiceTaxName ??
+      scanResponse?.invoice_tax_name ??
       taxSummary.invoiceTaxName ??
       "Tax",
     invoiceTaxRate:
       scanResponse?.invoiceTaxRate ??
-      scanResponse?.invoiceTaxRate ??
+      scanResponse?.invoice_tax_rate ??
       taxSummary.invoiceTaxRate ??
       "",
     source: scanResponse?.source ?? "Upload",
@@ -121,8 +120,7 @@ export const normalizeScannedInvoice = (scanResponse = {}) => {
       toDateOnly(scanResponse?.invoiceDate ?? scanResponse?.invoiceDate ?? scanResponse?.datetime) ||
       format(new Date(), "yyyy-MM-dd"),
     dueDate:
-      toDateOnly(scanResponse?.dueDate ?? scanResponse?.dueDate ?? scanResponse?.datetime) ||
-      format(new Date(), "yyyy-MM-dd"),
+      toDateOnly(scanResponse?.dueDate ?? scanResponse?.due_date),
     lineItems: lineItems,
     amount: Number(scanResponse?.total ?? scanResponse?.amount ?? computedAmount) || 0,
     currency: normalizeCurrencyCode(scanResponse?.currency) || DEFAULT_CURRENCY,

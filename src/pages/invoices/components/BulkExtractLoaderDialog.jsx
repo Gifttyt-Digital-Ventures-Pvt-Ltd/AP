@@ -6,8 +6,6 @@ const BulkExtractLoaderDialog = ({
   open,
   totalFiles,
   progress,
-  elapsedSeconds,
-  formatDuration,
 }) => {
   const safeTotalFiles = Math.max(0, Number(totalFiles) || 0);
   const safeProgress = Math.min(100, Math.max(0, Number(progress) || 0));
@@ -35,7 +33,6 @@ const BulkExtractLoaderDialog = ({
           </div>
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>Please wait, do not close this window.</span>
-            <span>{formatDuration(elapsedSeconds)}</span>
           </div>
         </div>
       </DialogContent>

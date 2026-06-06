@@ -158,7 +158,7 @@ export const initializeInvoiceFormData = (
     vendorAddress: vendorAddress,
     invoiceNumber: extractedData?.invoiceNumber || "",
     invoiceDate: extractedData?.invoiceDate || format(new Date(), "yyyy-MM-dd"),
-    dueDate: extractedData?.dueDate || format(new Date(), "yyyy-MM-dd"),
+    dueDate: extractedData?.dueDate || "",
     billingAddress: billingAddress,
     shippingAddress: extractedData?.shippingAddress || extractedData?.shippingAddress || "",
     gstTreatment: extractedData?.gstTreatment || extractedData?.gstTreatment || defaultGstTreatment,
@@ -202,19 +202,19 @@ export const initializeInvoiceFormData = (
       "%",
     taxesLevel:
       extractedData?.taxesLevel ||
-      extractedData?.taxesLevel ||
+      extractedData?.taxes_level ||
       LINE_ITEM_LEVEL,
     invoiceTax:
       extractedData?.invoiceTax ||
-      extractedData?.invoiceTax ||
+      extractedData?.invoice_tax ||
       DEFAULT_INR_TAX,
     invoiceTaxName:
       extractedData?.invoiceTaxName ||
-      extractedData?.invoiceTaxName ||
+      extractedData?.invoice_tax_name ||
       "Tax",
     invoiceTaxRate:
       extractedData?.invoiceTaxRate ??
-      extractedData?.invoiceTaxRate ??
+      extractedData?.invoice_tax_rate ??
       "",
     source: extractedData?.source || "Upload",
     sourceEmail: "",
@@ -227,9 +227,16 @@ export const initializeInvoiceFormData = (
     tds: "",
     amount: extractedData?.amount || 0,
     currency: normalizeCurrencyCode(extractedData?.currency) || DEFAULT_CURRENCY,
-    scannedTaxAmount: extractedData?.invoiceTaxAmount,
-    scannedTaxName: extractedData?.invoiceTaxName,
-    scannedTaxRate: extractedData?.invoiceTaxRate,
+    scannedTaxAmount:
+      extractedData?.invoiceTaxAmount ??
+      extractedData?.totalTaxAmount ??
+      extractedData?.total_tax_amount ??
+      extractedData?.gstAmount ??
+      extractedData?.gst_amount,
+    scannedTaxName:
+      extractedData?.invoiceTaxName ?? extractedData?.invoice_tax_name,
+    scannedTaxRate:
+      extractedData?.invoiceTaxRate ?? extractedData?.invoice_tax_rate,
     scannedTotal: extractedData?.invoiceTotal,
     fileId: extractedData?.fileId || null,
     fileHash: extractedData?.fileHash || null,

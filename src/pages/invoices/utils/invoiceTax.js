@@ -71,7 +71,7 @@ export const createDefaultLineItem = (currency = DEFAULT_CURRENCY) => {
 export const resolveInrTaxLabel = (item, taxesRaw = []) => {
   if (item?.tax) return item.tax;
 
-  const rate = Number(item?.taxRate ?? item?.taxRate ?? 0);
+  const rate = Number(item?.taxRate ?? item?.tax_rate ?? 0);
   const hasLineRate = rate > 0;
   const totalTaxAmount = taxesRaw.reduce(
     (sum, entry) => sum + (Number(entry?.amount ?? 0) || 0),
@@ -123,7 +123,9 @@ export const resolveScannedLineItemPricing = (item = {}) => {
 export const resolveScannedInvoiceTaxSummary = (scanResponse = {}, taxesRaw = []) => {
   const totalTaxAmount = Number(
     scanResponse?.totalTaxAmount ??
-      scanResponse?.totalTaxAmount ??
+      scanResponse?.total_tax_amount ??
+      scanResponse?.gstAmount ??
+      scanResponse?.gst_amount ??
       taxesRaw.reduce((sum, entry) => sum + (Number(entry?.amount ?? 0) || 0), 0),
   );
 
@@ -131,10 +133,64 @@ export const resolveScannedInvoiceTaxSummary = (scanResponse = {}, taxesRaw = []
   return {
     invoiceSubtotal: Number(scanResponse?.subtotal ?? 0) || 0,
     invoiceTaxAmount: Number.isFinite(totalTaxAmount) ? totalTaxAmount : 0,
-    invoiceTaxName: primaryTax?.name ?? "",
-    invoiceTaxRate: Number(primaryTax?.taxRate ?? primaryTax?.taxRate ?? 0) || 0,
+    invoiceTaxName: primaryTax?.name ?? primaryTax?.tax_name ?? "",
+    invoiceTaxRate: Number(primaryTax?.taxRate ?? primaryTax?.tax_rate ?? 0) || 0,
     invoiceTotal: Number(scanResponse?.total ?? 0) || 0,
   };
+};
+
+const parseTaxRateFromScanLabel = (label = "") => {
+  const match = String(label).match(/(\d+(?:\.\d+)?)\s*%/);
+  return match ? Number(match[1]) || 0 : 0;
+};
+
+export const resolveInrInvoiceTaxLabelFromScan = (
+  scanResponse = {},
+  taxesRaw = [],
+) => {
+  const explicitLabel = scanResponse?.invoiceTax ?? scanResponse?.invoice_tax;
+  const taxRate =
+    Number(
+      scanResponse?.invoiceTaxRate ??
+        scanResponse?.invoice_tax_rate ??
+        scanResponse?.taxRate ??
+        scanResponse?.tax_rate ??
+        taxesRaw?.[0]?.taxRate ??
+        taxesRaw?.[0]?.tax_rate,
+    ) || 0;
+  const explicitTaxRate = parseTaxRateFromScanLabel(explicitLabel);
+  const resolvedTaxRate = explicitTaxRate || taxRate;
+
+  if (explicitLabel) {
+    const normalizedLabel = String(explicitLabel).trim();
+    if (/^IGST\s+\d+(?:\.\d+)?%$/i.test(normalizedLabel) && resolvedTaxRate > 0) {
+      return `IGST ${resolvedTaxRate}%`;
+    }
+    if (/^CGST\s*\+\s*SGST\s+\d+(?:\.\d+)?%$/i.test(normalizedLabel)) {
+      return resolvedTaxRate > 0
+        ? `CGST + SGST ${resolvedTaxRate}%`
+        : normalizedLabel.replace(/\s*\+\s*/g, " + ");
+    }
+    if (/igst|integrated tax/i.test(normalizedLabel) && resolvedTaxRate > 0) {
+      return `IGST ${resolvedTaxRate}%`;
+    }
+    if (/cgst|sgst|central tax|state tax/i.test(normalizedLabel) && resolvedTaxRate > 0) {
+      return `CGST + SGST ${resolvedTaxRate}%`;
+    }
+    return normalizedLabel;
+  }
+
+  if (resolvedTaxRate <= 0) return "";
+
+  const taxNames = taxesRaw
+    .map((entry) => String(entry?.name ?? entry?.tax_name ?? ""))
+    .join(" ");
+
+  if (/igst/i.test(taxNames) && !/cgst|sgst/i.test(taxNames)) {
+    return `IGST ${resolvedTaxRate}%`;
+  }
+
+  return `CGST + SGST ${resolvedTaxRate}%`;
 };
 
 export const resolveScannedLineItemTax = (item, taxesRaw = [], currency = DEFAULT_CURRENCY) => {
@@ -142,7 +198,7 @@ export const resolveScannedLineItemTax = (item, taxesRaw = [], currency = DEFAUL
     return { tax: resolveInrTaxLabel(item, taxesRaw) };
   }
 
-  const rate = Number(item?.taxRate ?? item?.taxRate ?? 0) || 0;
+  const rate = Number(item?.taxRate ?? item?.tax_rate ?? 0) || 0;
   if (rate <= 0) {
     return {
       taxName: "",
@@ -151,12 +207,12 @@ export const resolveScannedLineItemTax = (item, taxesRaw = [], currency = DEFAUL
     };
   }
 
-  let taxName = item?.taxName ?? item?.taxName ?? "";
+  let taxName = item?.taxName ?? item?.tax_name ?? "";
 
   if (!taxName && taxesRaw.length) {
     const match =
       taxesRaw.find(
-        (entry) => Number(entry?.taxRate ?? entry?.taxRate ?? 0) === rate,
+        (entry) => Number(entry?.taxRate ?? entry?.tax_rate ?? 0) === rate,
       ) || taxesRaw[0];
     taxName = match?.name ?? "";
   }

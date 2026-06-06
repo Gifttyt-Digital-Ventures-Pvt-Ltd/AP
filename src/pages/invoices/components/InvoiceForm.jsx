@@ -489,7 +489,7 @@ export const InvoiceForm = ({
             <Input type="date" value={formData.invoiceDate} onChange={(e) => setFormData({ ...formData, invoiceDate: e.target.value })} className="h-8 text-sm" />
           </div>
           <div>
-            <RequiredLabel required>Due Date</RequiredLabel>
+            <RequiredLabel>Due Date</RequiredLabel>
             <Input type="date" value={formData.dueDate} onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })} className="h-8 text-sm" />
           </div>
         </div>

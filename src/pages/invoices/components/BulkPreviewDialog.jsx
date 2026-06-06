@@ -8,8 +8,6 @@ const BulkPreviewDialog = ({
   bulkCreating,
   bulkPreviewItems = [],
   bulkProgress,
-  bulkElapsedSeconds,
-  formatDuration,
   setBulkPreviewOpen,
   handleCreateBulkInvoices,
 }) => {
@@ -64,9 +62,6 @@ const BulkPreviewDialog = ({
                 <span className="font-medium">
                   Saving: {bulkProgress.processed}/{bulkProgress.total}
                 </span>
-                <span className="text-muted-foreground">
-                  Time: {formatDuration(bulkElapsedSeconds)}
-                </span>
               </div>
               <div className="h-2 w-full rounded bg-muted overflow-hidden">
                 <div
@@ -90,14 +85,16 @@ const BulkPreviewDialog = ({
             >
               {bulkCreating ? 'Saving...' : `Proceed All (${proceedAllCount})`}
             </Button>
-            <Button
-              variant="secondary"
-              onClick={() => handleCreateBulkInvoices('without_duplicate')}
-              disabled={bulkCreating || proceedWithoutDuplicateCount === 0}
-              data-testid="bulk-proceed-without-duplicate-btn"
-            >
-              Proceed Without Duplicate ({proceedWithoutDuplicateCount})
-            </Button>
+            {duplicateCount > 0 && (
+              <Button
+                variant="secondary"
+                onClick={() => handleCreateBulkInvoices('without_duplicate')}
+                disabled={bulkCreating || proceedWithoutDuplicateCount === 0}
+                data-testid="bulk-proceed-without-duplicate-btn"
+              >
+                Proceed Without Duplicate ({proceedWithoutDuplicateCount})
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={() => setBulkPreviewOpen(false)}
