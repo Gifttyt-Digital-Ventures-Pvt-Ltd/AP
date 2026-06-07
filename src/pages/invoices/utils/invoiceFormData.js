@@ -7,6 +7,7 @@ import {
   LINE_ITEM_LEVEL,
   mapExtractedLineItemToForm,
 } from "./invoiceTax";
+import { buildTdsValue } from "./tds";
 
 export const resolveVendorGstin = (vendor = {}) =>
   String(vendor?.gstin ?? vendor?.gstIn ?? "").trim();
@@ -80,6 +81,9 @@ export const buildInvoiceEditFormData = (
   const invoiceDate = formatInvoiceDateInput(invoice.invoiceDate ?? invoice.invoiceDate);
   const dueDate = formatInvoiceDateInput(invoice.dueDate ?? invoice.dueDate);
   const gstAmount = Number(invoice.gstAmount ?? invoice.gstAmount);
+  const tdsSectionId = invoice.tdsSectionId ?? invoice.tds_section_id ?? null;
+  const tdsSectionCode = invoice.tdsSectionCode ?? invoice.tds_section_code ?? null;
+  const tdsRate = invoice.tdsRate ?? invoice.tds_rate ?? null;
 
   return {
     vendorName: invoice.vendorName || invoice.vendorName || "",
@@ -125,7 +129,17 @@ export const buildInvoiceEditFormData = (
         ? invoiceLineItems.map((item) => mapInvoiceLineItemToForm(item, { useInrTax }))
         : [createDefaultLineItem(editCurrency)],
     description: invoice.memo || invoice.description || "",
-    tds: invoice.tds || "",
+    tds:
+      invoice.tds ||
+      buildTdsValue({
+        tdsSectionId,
+        tdsSectionCode,
+        tdsRate,
+      }),
+    tdsAmount: invoice.tdsAmount ?? invoice.tds_amount ?? null,
+    tdsSectionId,
+    tdsSectionCode,
+    tdsRate,
     amount: invoice.amount ?? invoice.netAmount ?? 0,
     currency: editCurrency,
     departmentId: invoice.departmentId || invoice.departmentId || "",
