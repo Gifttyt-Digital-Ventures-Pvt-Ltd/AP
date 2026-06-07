@@ -12,6 +12,7 @@ import {
   resolveLineItemSubtotal,
 } from "../utils/invoiceTax";
 import { parseNumericInput } from "../utils/numericInput";
+import { formatTdsLabel, parseTdsRate } from "../utils/tds";
 
 const formatDisplayDate = (value) => {
   if (!value) return "-";
@@ -30,7 +31,7 @@ const DetailField = ({ label, value, mono = false, className = "" }) => (
 );
 
 const computeTdsAmount = (lineItems = [], tdsValue = "", subTotalOverride) => {
-  const tdsRate = Number.parseFloat(String(tdsValue || "").replace("%", "")) || 0;
+  const tdsRate = parseTdsRate(tdsValue);
   if (!tdsRate) return 0;
   const subTotal =
     subTotalOverride ??
@@ -122,6 +123,9 @@ const InvoiceReadOnlyDetails = ({
   const netPayable =
     Number(invoice.netAmount) ||
     Math.max(Math.round((totals.total - tdsAmount) * 100) / 100, 0);
+  const tdsLabel =
+    formatTdsLabel(formData.tdsSectionCode, formData.tdsRate) ||
+    (formData.tds ? String(formData.tds).split("::").pop() : "");
 
   const showCategory =
     showCategoryField &&
@@ -346,7 +350,7 @@ const InvoiceReadOnlyDetails = ({
           <span className="font-medium">{formatAmount(totalTax)}</span>
         </div>
         <div className="flex justify-between items-center pt-1.5 border-t text-xs">
-          <span>TDS{formData.tds ? ` (${formData.tds})` : ""}</span>
+          <span>TDS{tdsLabel ? ` (${tdsLabel})` : ""}</span>
           <span className=" ">{formatAmount(tdsAmount)}</span>
         </div>
         <div className="flex justify-between text-sm pt-1.5 border-t">

@@ -13,6 +13,26 @@ const normalizeDepartmentId = (value) => {
   return Number.isNaN(numeric) ? value : numeric;
 };
 
+const resolveTdsSelection = (value) => {
+  if (!value || value === "__NO_TDS__") {
+    return {
+      tdsSectionId: null,
+      tdsSectionCode: null,
+      tdsRate: null,
+    };
+  }
+
+  const [rawId, rawLabel = rawId] = String(value).split("::");
+  const label = rawLabel.trim();
+  const match = label.match(/^(.+)-(\d+(?:\.\d+)?)%$/);
+
+  return {
+    tdsSectionId: rawId || null,
+    tdsSectionCode: match?.[1] || null,
+    tdsRate: match ? Number(match[2]) : null,
+  };
+};
+
 /** Mirrors invoice form TAX_RATES — used to map UI tax labels to API gstRate */
 const INVOICE_TAX_RATE_OPTIONS = [
   { value: "CGST + SGST 5%", cgst: 2.5, sgst: 2.5 },
@@ -214,6 +234,9 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
     grossAmount: pickInvoiceField(invoice, "grossAmount", "gross_amount"),
     gstAmount: pickInvoiceField(invoice, "gstAmount", "gst_amount"),
     tdsAmount: pickInvoiceField(invoice, "tdsAmount", "tds_amount"),
+    tdsSectionId: pickInvoiceField(invoice, "tdsSectionId", "tds_section_id"),
+    tdsSectionCode: pickInvoiceField(invoice, "tdsSectionCode", "tds_section_code"),
+    tdsRate: pickInvoiceField(invoice, "tdsRate", "tds_rate"),
     netAmount: pickInvoiceField(invoice, "netAmount", "net_amount"),
     approvalWorkflowName:
       pickInvoiceField(invoice, "approvalWorkflowName", "approval_workflow_name") ??
@@ -281,9 +304,25 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
       ? Number(totals.total)
       : Number(invoice.amount ?? subTotalFromLines + gstAmount) || 0;
   const resolvedTdsAmount =
-    tdsAmount != null
-      ? Number(tdsAmount)
+    tdsAmount !== undefined
+      ? tdsAmount === null
+        ? null
+        : Number(tdsAmount)
       : Number(pickInvoiceField(invoice, "tdsAmount", "tds_amount", 0));
+  const parsedTdsSelection = resolveTdsSelection(
+    pickInvoiceField(invoice, "tds", "tds", ""),
+  );
+  const tdsSelection = {
+    tdsSectionId:
+      pickInvoiceField(invoice, "tdsSectionId", "tds_section_id") ??
+      parsedTdsSelection.tdsSectionId,
+    tdsSectionCode:
+      pickInvoiceField(invoice, "tdsSectionCode", "tds_section_code") ??
+      parsedTdsSelection.tdsSectionCode,
+    tdsRate:
+      pickInvoiceField(invoice, "tdsRate", "tds_rate") ??
+      parsedTdsSelection.tdsRate,
+  };
 
   const source = invoice.source || "Upload";
   const originalFileName =
@@ -311,6 +350,9 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
     amount,
     gstAmount,
     tdsAmount: resolvedTdsAmount,
+    tdsSectionId: tdsSelection.tdsSectionId,
+    tdsSectionCode: tdsSelection.tdsSectionCode,
+    tdsRate: tdsSelection.tdsRate,
     currency:
       normalizeCurrencyCode(
         pickInvoiceField(invoice, "currency", "currency_code", ""),

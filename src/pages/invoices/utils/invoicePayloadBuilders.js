@@ -13,10 +13,11 @@ import {
   resolveLineItemSubtotal,
 } from "./invoiceTax";
 import { parseNumericInput } from "./numericInput";
+import { parseTdsRate } from "./tds";
 
 export const computeTdsAmount = (lineItems = [], tdsValue = "", calculateLineItemSubtotal) => {
-  const tdsRate = Number.parseFloat(String(tdsValue || "").replace("%", "")) || 0;
-  if (!tdsRate) return 0;
+  const tdsRate = parseTdsRate(tdsValue);
+  if (!tdsRate) return null;
   const subTotal = (lineItems || []).reduce(
     (sum, item) => sum + calculateLineItemSubtotal(item),
     0,

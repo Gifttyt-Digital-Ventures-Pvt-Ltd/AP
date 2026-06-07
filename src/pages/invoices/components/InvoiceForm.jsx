@@ -33,6 +33,13 @@ import {
 } from "../utils/numericInput";
 import InvoiceChecklist from "./InvoiceFormChecklist";
 import InvoiceCampaignFields from "./InvoiceCampaignFields";
+import { useGetTdsSectionsQuery } from "../../../Services/apis/taxApi";
+import {
+  buildTdsOptions,
+  NO_TDS_VALUE,
+  parseTdsRate,
+  parseTdsSelection,
+} from "../utils/tds";
 
 const lineItemTableHeader = [
   {
@@ -140,6 +147,7 @@ export const InvoiceForm = ({
   LEDGER_OPTIONS,
   TAX_RATES,
 }) => {
+  const { data: tdsSectionsData = [] } = useGetTdsSectionsQuery();
   const [vendorPickerOpen, setVendorPickerOpen] = useState(false);
   const [vendorQuery, setVendorQuery] = useState("");
   const vendorAnchorRef = useRef(null);
@@ -210,6 +218,11 @@ export const InvoiceForm = ({
     setCurrencyQuery(formData?.currency || DEFAULT_CURRENCY);
   }, [formData?.currency]);
 
+  const tdsOptions = useMemo(
+    () => buildTdsOptions(tdsSectionsData, formData?.tds),
+    [tdsSectionsData, formData?.tds],
+  );
+
   if (!formData) return null;
   const invoiceCurrency = formData.currency || DEFAULT_CURRENCY;
   const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
@@ -243,8 +256,7 @@ export const InvoiceForm = ({
         (sum, entry) => sum + (Number(entry.amount) || 0),
         0,
       );
-  const tdsRate =
-    Number.parseFloat(String(formData.tds || "").replace("%", "")) || 0;
+  const tdsRate = parseTdsRate(formData.tds);
   const tdsAmount = Math.round(((totals.subTotal * tdsRate) / 100) * 100) / 100;
   const netPayable = Math.max(
     Math.round((totals.total - tdsAmount) * 100) / 100,
@@ -1224,13 +1236,19 @@ export const InvoiceForm = ({
               <div className="flex items-center gap-1.5">
                 <span>TDS</span>
                 <AppSelect
-                  value={formData.tds}
-                  onChange={(e) =>
-                    setFormData({ ...formData, tds: e.target.value })
-                  }
+                  value={formData.tds || NO_TDS_VALUE}
+                  onChange={(e) => {
+                    const nextValue = e.target.value;
+                    const tdsSelection = parseTdsSelection(nextValue);
+                    setFormData({
+                      ...formData,
+                      tds: nextValue === NO_TDS_VALUE ? "" : nextValue,
+                      ...tdsSelection,
+                    });
+                  }}
                   placeholder="TDS"
-                  options={["1%", "2%", "10%"]}
-                  className="h-6 w-20 rounded border pl-1 pr-6 text-xs"
+                  options={tdsOptions}
+                  className="h-6 w-36 rounded border pl-1 pr-6 text-xs"
                 />
               </div>
               <span>{formatAmount(tdsAmount)}</span>
