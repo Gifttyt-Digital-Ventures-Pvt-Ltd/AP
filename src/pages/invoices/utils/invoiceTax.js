@@ -183,8 +183,45 @@ export const resolveScannedInvoiceTaxSummary = (scanResponse = {}, taxesRaw = []
 };
 
 const parseTaxRateFromScanLabel = (label = "") => {
-  const match = String(label).match(/(\d+(?:\.\d+)?)\s*%/);
+  const text = String(label);
+  const splitCgstSgstMatch = text.match(
+    /CGST\s*@?\s*(\d+(?:\.\d+)?)\s*%\s*\+\s*SGST\s*@?\s*(\d+(?:\.\d+)?)\s*%/i,
+  );
+  if (splitCgstSgstMatch) {
+    return (
+      (Number(splitCgstSgstMatch[1]) || 0) +
+      (Number(splitCgstSgstMatch[2]) || 0)
+    );
+  }
+
+  const match = text.match(/(\d+(?:\.\d+)?)\s*%/);
   return match ? Number(match[1]) || 0 : 0;
+};
+
+const resolveInrTaxLabelFromStructuredTaxes = (taxesRaw = []) => {
+  const normalizedTaxes = taxesRaw.map((entry) => ({
+    name: String(entry?.name ?? entry?.tax_name ?? "").trim(),
+    rate: Number(entry?.taxRate ?? entry?.tax_rate ?? 0) || 0,
+    amount: Number(entry?.amount ?? 0) || 0,
+  }));
+
+  const igstEntries = normalizedTaxes.filter((entry) => /IGST/i.test(entry.name));
+  const cgstEntries = normalizedTaxes.filter((entry) => /CGST/i.test(entry.name));
+  const sgstEntries = normalizedTaxes.filter((entry) => /SGST/i.test(entry.name));
+
+  const igstRate = igstEntries.reduce((sum, entry) => sum + entry.rate, 0);
+  const cgstRate = cgstEntries.reduce((sum, entry) => sum + entry.rate, 0);
+  const sgstRate = sgstEntries.reduce((sum, entry) => sum + entry.rate, 0);
+
+  if (igstRate > 0 && cgstRate === 0 && sgstRate === 0) {
+    return `IGST ${igstRate}%`;
+  }
+
+  if (cgstRate > 0 || sgstRate > 0) {
+    return `CGST + SGST ${cgstRate + sgstRate}%`;
+  }
+
+  return "";
 };
 
 export const resolveInrInvoiceTaxLabelFromScan = (
@@ -192,6 +229,7 @@ export const resolveInrInvoiceTaxLabelFromScan = (
   taxesRaw = [],
 ) => {
   const explicitLabel = scanResponse?.invoiceTax ?? scanResponse?.invoice_tax;
+  const structuredTaxLabel = resolveInrTaxLabelFromStructuredTaxes(taxesRaw);
   const taxRate =
     Number(
       scanResponse?.invoiceTaxRate ??
@@ -204,6 +242,8 @@ export const resolveInrInvoiceTaxLabelFromScan = (
   const explicitTaxRate = parseTaxRateFromScanLabel(explicitLabel);
   const resolvedTaxRate = explicitTaxRate || taxRate;
 
+  if (structuredTaxLabel) return structuredTaxLabel;
+
   if (explicitLabel) {
     const normalizedLabel = String(explicitLabel).trim();
     if (/^IGST\s+\d+(?:\.\d+)?%$/i.test(normalizedLabel) && resolvedTaxRate > 0) {
@@ -213,6 +253,9 @@ export const resolveInrInvoiceTaxLabelFromScan = (
       return resolvedTaxRate > 0
         ? `CGST + SGST ${resolvedTaxRate}%`
         : normalizedLabel.replace(/\s*\+\s*/g, " + ");
+    }
+    if (/^CGST\s*@?\s*\d+(?:\.\d+)?%\s*\+\s*SGST\s*@?\s*\d+(?:\.\d+)?%$/i.test(normalizedLabel)) {
+      return `CGST + SGST ${resolvedTaxRate}%`;
     }
     if (/igst|integrated tax/i.test(normalizedLabel) && resolvedTaxRate > 0) {
       return `IGST ${resolvedTaxRate}%`;
