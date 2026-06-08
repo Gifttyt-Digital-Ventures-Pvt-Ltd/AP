@@ -320,6 +320,8 @@ const InvoiceSingleUploadLayer = ({
       discountsLevel: formData?.discountsLevel,
       invoiceDiscount: formData?.invoiceDiscount,
       invoiceDiscountType: formData?.invoiceDiscountType,
+      roundOff: formData?.roundOff ?? formData?.round_off ?? formData?.roundoff,
+      invoiceTotal: formData?.scannedTotal ?? formData?.invoiceTotal,
     });
 
   const clearScannedTaxSummary = (data = {}) => ({

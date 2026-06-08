@@ -1,8 +1,8 @@
-import React from 'react';
-import { Eye, Search } from 'lucide-react';
-import AppDataTable from '../../../components/common/AppDataTable';
-import { Button } from '../../../components/ui/button';
-import { Input } from '../../../components/ui/input';
+import React from "react";
+import { Eye, Search } from "lucide-react";
+import AppDataTable from "../../../components/common/AppDataTable";
+import { Button } from "../../../components/ui/button";
+import { Input } from "../../../components/ui/input";
 import {
   Pagination,
   PaginationContent,
@@ -10,20 +10,33 @@ import {
   PaginationLink,
   PaginationNext,
   PaginationPrevious,
-} from '../../../components/ui/pagination';
-import { TableCell, TableRow } from '../../../components/ui/table';
-import { formatCurrency } from '../../../utils/currency';
+} from "../../../components/ui/pagination";
+import { TableCell, TableRow } from "../../../components/ui/table";
+import { formatCurrency } from "../../../utils/currency";
 
 const allInvoicesTableHeader = [
-  { key: 'srNo', title: 'Sr. No', cellClassName: 'text-sm font-medium' },
-  { key: 'invoiceNumber', title: 'Invoice #', cellClassName: 'font-medium' },
-  { key: 'vendorName', title: 'Vendor' },
-  { key: 'approval', title: 'Approval' },
-  { key: 'amount', title: 'Amount', cellClassName: 'font-semibold' },
-  { key: 'status', title: 'Status' },
-  { key: 'createdByName', title: 'Created By', cellClassName: 'text-sm text-muted-foreground' },
-  { key: 'paymentDate', title: 'Payment date', cellClassName: 'text-sm text-muted-foreground' },
-  { key: 'actions', title: 'Actions', headerClassName: 'text-left', cellClassName: 'text-left' },
+  { key: "srNo", title: "Sr. No", cellClassName: "text-sm font-medium" },
+  { key: "invoiceNumber", title: "Invoice #", cellClassName: "font-medium" },
+  { key: "vendorName", title: "Vendor" },
+  { key: "approval", title: "Approval" },
+  { key: "amount", title: "Amount", cellClassName: "font-semibold" },
+  { key: "status", title: "Status" },
+  {
+    key: "createdByName",
+    title: "Created By",
+    cellClassName: "text-sm text-muted-foreground",
+  },
+  {
+    key: "paymentDate",
+    title: "Payment date",
+    cellClassName: "text-sm text-muted-foreground",
+  },
+  {
+    key: "actions",
+    title: "Actions",
+    headerClassName: "text-left",
+    cellClassName: "text-left",
+  },
 ];
 
 const AllInvoicesTable = ({
@@ -60,13 +73,20 @@ const AllInvoicesTable = ({
           let value;
 
           switch (header.key) {
-            case 'srNo':
+            case "srNo":
               value = offset + rowIndex + 1;
               break;
-            case 'amount':
+            case "amount":
               value = formatCurrency(invoice.amount, invoice.currency);
               break;
-            case 'approval':
+            case "vendorName":
+              value = (
+                <div className="whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]">
+                  {invoice.vendorName}
+                </div>
+              );
+              break;
+            case "approval":
               value = (
                 <Button
                   variant="ghost"
@@ -79,17 +99,21 @@ const AllInvoicesTable = ({
                 </Button>
               );
               break;
-            case 'status':
+            case "status":
               value = (
-                <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStatusBadgeClass(invoice.status)}`}>
+                <span
+                  className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStatusBadgeClass(invoice.status)}`}
+                >
                   {formatStatus(invoice.status)}
                 </span>
               );
               break;
-            case 'paymentDate':
-              value = safeFormatDate(invoice.paymentDate || invoice.paymentDate);
+            case "paymentDate":
+              value = safeFormatDate(
+                invoice.paymentDate || invoice.paymentDate,
+              );
               break;
-            case 'actions':
+            case "actions":
               value = (
                 <div
                   className="flex justify-start gap-1"
@@ -109,7 +133,7 @@ const AllInvoicesTable = ({
               );
               break;
             default:
-              value = invoice?.[header.key] || '-';
+              value = invoice?.[header.key] || "-";
           }
 
           return (
@@ -155,7 +179,8 @@ const AllInvoicesTable = ({
                 className="text-sm text-muted-foreground"
                 data-testid="approvals-all-pagination-summary"
               >
-                Showing {startRecord}-{endRecord} of {total.toLocaleString('en-IN')}
+                Showing {startRecord}-{endRecord} of{" "}
+                {total.toLocaleString("en-IN")}
               </p>
               <Pagination className="mx-0 w-auto justify-start sm:justify-end">
                 <PaginationContent>
@@ -166,7 +191,11 @@ const AllInvoicesTable = ({
                         event.preventDefault();
                         onPageChange?.(currentPage - 1);
                       }}
-                      className={currentPage === 0 ? 'pointer-events-none opacity-50' : undefined}
+                      className={
+                        currentPage === 0
+                          ? "pointer-events-none opacity-50"
+                          : undefined
+                      }
                       data-testid="approvals-all-pagination-previous"
                     />
                   </PaginationItem>
@@ -194,7 +223,7 @@ const AllInvoicesTable = ({
                       }}
                       className={
                         !hasMore && currentPage >= totalPages - 1
-                          ? 'pointer-events-none opacity-50'
+                          ? "pointer-events-none opacity-50"
                           : undefined
                       }
                       data-testid="approvals-all-pagination-next"

@@ -58,6 +58,13 @@ const PendingInvoicesTable = ({
                 </Button>
               );
               break;
+            case "vendorName":
+              value = (
+                <div className="whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]">
+                  {invoice.vendorName}
+                </div>
+              );
+              break;
             case "status":
               value = (
                 <span

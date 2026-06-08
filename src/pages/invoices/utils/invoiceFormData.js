@@ -142,6 +142,11 @@ export const buildInvoiceEditFormData = (
     tdsRate,
     amount: invoice.amount ?? invoice.netAmount ?? 0,
     currency: editCurrency,
+    roundOff:
+      invoice.roundOff ??
+      invoice.round_off ??
+      invoice.roundoff ??
+      undefined,
     departmentId: invoice.departmentId || invoice.departmentId || "",
     departmentName: invoice.departmentName || invoice.departmentName || "",
     ...(!useInrTax && Number.isFinite(gstAmount) && gstAmount > 0

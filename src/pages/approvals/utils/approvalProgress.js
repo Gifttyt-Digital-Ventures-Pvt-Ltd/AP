@@ -4,6 +4,7 @@ const APPROVAL_PIPELINE_STATUSES = new Set([
   'Pending Checker',
   'Pending Approver',
   'Pending Approval',
+  'Approved',
   'Pending Payment',
   PAID_STATUS,
 ]);
@@ -11,11 +12,11 @@ const APPROVAL_PIPELINE_STATUSES = new Set([
 const getApproverLevels = (invoice) =>
   Math.max(
     1,
-    Number(invoice.requiredApprovalLevels ?? invoice.requiredApprovalLevels ?? 1) || 1,
+    Number(invoice.requiredApprovalLevels ?? invoice.required_approval_levels ?? 1) || 1,
   );
 
 const getApprovalRecords = (invoice) => {
-  const records = invoice.approvalRecords ?? invoice.approvalRecords;
+  const records = invoice.approvalRecords ?? invoice.approval_records;
   return Array.isArray(records) ? records : [];
 };
 
@@ -75,7 +76,7 @@ export const getApprovalProgress = (invoice = {}) => {
     } else {
       completed += countParallelApproverCompletions(invoice, approverLevels);
     }
-  } else if (status === 'Pending Payment' || status === PAID_STATUS) {
+  } else if (status === 'Approved' || status === 'Pending Payment' || status === PAID_STATUS) {
     completed += approverLevels;
   }
 

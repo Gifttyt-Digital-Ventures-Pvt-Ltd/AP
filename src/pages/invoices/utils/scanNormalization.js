@@ -142,6 +142,11 @@ export const normalizeScannedInvoice = (scanResponse = {}) => {
     lineItems: lineItems,
     amount: Number(scanResponse?.total ?? scanResponse?.amount ?? computedAmount) || 0,
     currency: normalizeCurrencyCode(scanResponse?.currency) || DEFAULT_CURRENCY,
+    roundOff:
+      scanResponse?.roundOff ??
+      scanResponse?.round_off ??
+      scanResponse?.roundoff ??
+      undefined,
     ...taxSummary,
     fileId: scanResponse?.fileId ?? scanResponse?.fileId ?? null,
     fileHash: scanResponse?.fileHash ?? scanResponse?.fileHash ?? null,

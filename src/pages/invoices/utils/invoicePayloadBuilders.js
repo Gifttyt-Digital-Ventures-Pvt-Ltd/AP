@@ -69,6 +69,8 @@ export const calculateInvoiceDataTotals = (
     discountsLevel: invoiceData.discountsLevel,
     invoiceDiscount: invoiceData.invoiceDiscount,
     invoiceDiscountType: invoiceData.invoiceDiscountType,
+    roundOff: invoiceData.roundOff ?? invoiceData.round_off ?? invoiceData.roundoff,
+    invoiceTotal: invoiceData.scannedTotal ?? invoiceData.invoiceTotal,
   });
 
 export const mapBulkLineItemToEditForm = (line = {}, currency = DEFAULT_CURRENCY) => ({
@@ -228,6 +230,11 @@ export const initializeInvoiceFormData = (
     tds: "",
     amount: extractedData?.amount || 0,
     currency: normalizeCurrencyCode(extractedData?.currency) || DEFAULT_CURRENCY,
+    roundOff:
+      extractedData?.roundOff ??
+      extractedData?.round_off ??
+      extractedData?.roundoff ??
+      undefined,
     scannedTaxAmount:
       extractedData?.invoiceTaxAmount ??
       extractedData?.totalTaxAmount ??

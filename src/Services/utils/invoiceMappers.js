@@ -233,6 +233,9 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
     approvalRecords: invoice.approvalRecords ?? invoice.approval_records,
     grossAmount: pickInvoiceField(invoice, "grossAmount", "gross_amount"),
     gstAmount: pickInvoiceField(invoice, "gstAmount", "gst_amount"),
+    roundOff:
+      pickInvoiceField(invoice, "roundOff", "round_off") ??
+      invoice.roundoff,
     tdsAmount: pickInvoiceField(invoice, "tdsAmount", "tds_amount"),
     tdsSectionId: pickInvoiceField(invoice, "tdsSectionId", "tds_section_id"),
     tdsSectionCode: pickInvoiceField(invoice, "tdsSectionCode", "tds_section_code"),
@@ -261,6 +264,7 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
       invoice.currentApprovalLevel ?? invoice.current_approval_level,
     isSequentialApproval:
       invoice.isSequentialApproval ?? invoice.is_sequential_approval,
+    isDuplicate: invoice.isDuplicate ?? invoice.is_duplicate ?? invoice.duplicate ?? false,
     invoiceDiscount: pickInvoiceField(invoice, "invoiceDiscount", "invoice_discount"),
     invoiceDiscountType:
       pickInvoiceField(invoice, "invoiceDiscountType", "invoice_discount_type"),
@@ -410,6 +414,7 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
     invoiceTax: pickInvoiceField(invoice, "invoiceTax", "invoice_tax", ""),
     invoiceTaxName: pickInvoiceField(invoice, "invoiceTaxName", "invoice_tax_name", ""),
     invoiceTaxRate: pickInvoiceField(invoice, "invoiceTaxRate", "invoice_tax_rate", ""),
+    roundOff: pickInvoiceField(invoice, "roundOff", "round_off") ?? invoice.roundoff,
     ...(invoice.status != null && invoice.status !== ""
       ? { status: invoice.status }
       : {}),

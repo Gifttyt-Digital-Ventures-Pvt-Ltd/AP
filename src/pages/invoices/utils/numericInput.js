@@ -1,4 +1,7 @@
-export const sanitizeNumericInput = (value = "", { allowDecimal = true } = {}) => {
+export const sanitizeNumericInput = (
+  value = "",
+  { allowDecimal = true, maxDecimalPlaces } = {},
+) => {
   let next = String(value ?? "");
 
   if (!allowDecimal) {
@@ -11,7 +14,11 @@ export const sanitizeNumericInput = (value = "", { allowDecimal = true } = {}) =
 
   const head = next.slice(0, firstDot + 1);
   const tail = next.slice(firstDot + 1).replace(/\./g, "");
-  return head + tail;
+  const normalizedTail =
+    Number.isInteger(maxDecimalPlaces) && maxDecimalPlaces >= 0
+      ? tail.slice(0, maxDecimalPlaces)
+      : tail;
+  return head + normalizedTail;
 };
 
 export const parseNumericInput = (value, fallback = 0) => {
