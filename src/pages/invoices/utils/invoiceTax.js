@@ -385,6 +385,8 @@ export const calculateInvoiceTotals = ({
   discountsLevel = LINE_ITEM_LEVEL,
   invoiceDiscount = 0,
   invoiceDiscountType = "%",
+  roundOff = 0,
+  invoiceTotal,
 }) => {
   let subTotal = 0;
   let cgst = 0;
@@ -495,9 +497,15 @@ export const calculateInvoiceTotals = ({
     }
   }
 
-  const total = isInrInvoiceCurrency(currency)
+  const parsedRoundOff = Number(roundOff);
+  const normalizedRoundOff = Number.isFinite(parsedRoundOff) ? parsedRoundOff : 0;
+  const parsedInvoiceTotal = Number(invoiceTotal);
+  const calculatedTotal = (isInrInvoiceCurrency(currency)
     ? subTotal + cgst + sgst + igst
-    : subTotal + foreignTax;
+    : subTotal + foreignTax) + normalizedRoundOff;
+  const total = Number.isFinite(parsedInvoiceTotal) && parsedInvoiceTotal > 0
+    ? parsedInvoiceTotal
+    : calculatedTotal;
 
   return {
     subTotal,
@@ -508,6 +516,7 @@ export const calculateInvoiceTotals = ({
     foreignTax,
     foreignTaxes,
     invoiceDiscountAmount: boundedInvoiceDiscountAmount,
+    roundOff: normalizedRoundOff,
     total,
     isInr: isInrInvoiceCurrency(currency),
   };

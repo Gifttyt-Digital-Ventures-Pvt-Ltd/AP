@@ -64,8 +64,8 @@ const lineItemTableHeader = [
   {
     key: "unitRate",
     title: "Rate",
-    headerClassName: "w-[80px] text-left",
-    cellClassName: "w-[80px] align-top min-w-[80px]",
+    headerClassName: "w-[100px] text-left",
+    cellClassName: "w-[100px] align-top min-w-[100px]",
   },
   {
     key: "discount",
@@ -108,6 +108,9 @@ const RequiredLabel = ({ children, required = false, className = "" }) => (
     {children}
   </Label>
 );
+
+const resolveRoundOff = (data = {}) =>
+  data.roundOff ?? data.round_off ?? data.roundoff;
 
 export const InvoiceForm = ({
   formData,
@@ -250,12 +253,18 @@ export const InvoiceForm = ({
     });
   const formatAmount = (amount) => formatCurrency(amount, invoiceCurrency);
   const totals = calculateTotals(formData.lineItems, invoiceCurrency);
+  const roundOffValue = resolveRoundOff(formData);
   const totalTax = useInrTax
     ? (Number(totals.cgst) || 0) + (Number(totals.sgst) || 0) + (Number(totals.igst) || 0)
     : (totals.foreignTaxes || []).reduce(
         (sum, entry) => sum + (Number(entry.amount) || 0),
         0,
       );
+  const hasRoundOff =
+    roundOffValue !== undefined &&
+    roundOffValue !== null &&
+    roundOffValue !== "" &&
+    Number.isFinite(Number(roundOffValue));
   const tdsRate = parseTdsRate(formData.tds);
   const tdsAmount = Math.round(((totals.subTotal * tdsRate) / 100) * 100) / 100;
   const netPayable = Math.max(
@@ -408,7 +417,9 @@ export const InvoiceForm = ({
                   updateLineItem(
                     index,
                     "unitRate",
-                    sanitizeNumericInput(e.target.value),
+                    sanitizeNumericInput(e.target.value, {
+                      maxDecimalPlaces: 2,
+                    }),
                   )
                 }
                 className="h-7 text-xs text-right px-1"
@@ -1238,6 +1249,12 @@ export const InvoiceForm = ({
               <span>Total Tax</span>
               <span className="font-medium">{formatAmount(totalTax)}</span>
             </div>
+            {hasRoundOff && (
+              <div className="flex justify-between text-xs">
+                <span>Round Off</span>
+                <span>{formatAmount(Number(roundOffValue))}</span>
+              </div>
+            )}
             <div className="flex justify-between items-center pt-1.5 border-t text-xs">
               <div className="flex items-center gap-1.5">
                 <span>TDS</span>

@@ -1166,6 +1166,8 @@ const InvoicesPage = () => {
       discountsLevel: formData?.discountsLevel,
       invoiceDiscount: formData?.invoiceDiscount,
       invoiceDiscountType: formData?.invoiceDiscountType,
+      roundOff: formData?.roundOff ?? formData?.round_off ?? formData?.roundoff,
+      invoiceTotal: formData?.scannedTotal ?? formData?.invoiceTotal,
     });
 
   // Add line item
@@ -1981,6 +1983,8 @@ const InvoicesPage = () => {
           discountsLevel: bulkEditForm?.discountsLevel,
           invoiceDiscount: bulkEditForm?.invoiceDiscount,
           invoiceDiscountType: bulkEditForm?.invoiceDiscountType,
+          roundOff: bulkEditForm?.roundOff ?? bulkEditForm?.round_off ?? bulkEditForm?.roundoff,
+          invoiceTotal: bulkEditForm?.scannedTotal ?? bulkEditForm?.invoiceTotal,
         })
       }
       findVendorByName={findVendorByName}

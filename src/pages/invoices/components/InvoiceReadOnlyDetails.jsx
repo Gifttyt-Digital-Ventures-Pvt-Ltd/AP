@@ -103,6 +103,14 @@ const InvoiceReadOnlyDetails = ({
     discountsLevel: formData.discountsLevel,
     invoiceDiscount: formData.invoiceDiscount,
     invoiceDiscountType: formData.invoiceDiscountType,
+    roundOff:
+      formData.roundOff ??
+      formData.round_off ??
+      formData.roundoff ??
+      invoice.roundOff ??
+      invoice.round_off ??
+      invoice.roundoff,
+    invoiceTotal: formData.scannedTotal ?? formData.invoiceTotal ?? invoice.amount,
   });
 
   const tdsAmountFromRate = computeTdsAmount(
@@ -120,6 +128,18 @@ const InvoiceReadOnlyDetails = ({
         (sum, entry) => sum + (Number(entry.amount) || 0),
         0,
       );
+  const roundOffValue =
+    formData.roundOff ??
+    formData.round_off ??
+    formData.roundoff ??
+    invoice.roundOff ??
+    invoice.round_off ??
+    invoice.roundoff;
+  const hasRoundOff =
+    roundOffValue !== undefined &&
+    roundOffValue !== null &&
+    roundOffValue !== "" &&
+    Number.isFinite(Number(roundOffValue));
   const netPayable =
     Number(invoice.netAmount) ||
     Math.max(Math.round((totals.total - tdsAmount) * 100) / 100, 0);
@@ -349,6 +369,12 @@ const InvoiceReadOnlyDetails = ({
           <span>Total Tax</span>
           <span className="font-medium">{formatAmount(totalTax)}</span>
         </div>
+        {hasRoundOff && (
+          <div className="flex justify-between text-xs">
+            <span>Round Off</span>
+            <span className=" ">{formatAmount(Number(roundOffValue))}</span>
+          </div>
+        )}
         <div className="flex justify-between items-center pt-1.5 border-t text-xs">
           <span>TDS{tdsLabel ? ` (${tdsLabel})` : ""}</span>
           <span className=" ">{formatAmount(tdsAmount)}</span>
