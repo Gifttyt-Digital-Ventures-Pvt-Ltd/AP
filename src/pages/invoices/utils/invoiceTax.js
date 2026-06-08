@@ -80,7 +80,7 @@ export const resolveInrTaxLabel = (item, taxesRaw = []) => {
     0,
   );
 
-  if (!hasLineRate && totalTaxAmount <= 0) return "Exempt";
+  if (!hasLineRate) return "Exempt";
 
   const normalizedTaxes = taxesRaw.map((entry) => ({
     name: String(entry?.name ?? entry?.tax_name ?? "").trim(),
