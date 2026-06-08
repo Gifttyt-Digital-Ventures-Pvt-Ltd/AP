@@ -317,7 +317,7 @@ export const InvoiceChecklist = ({
           {/* Header */}
           <div className="p-3 border-b border-border flex items-center justify-between bg-muted/30">
             <span className="text-xs font-semibold text-foreground">
-              Form Checklist
+              Invoice Checklist
             </span>
             <span
               className={`text-[10px] font-medium ${allDone ? "text-green-600" : "text-muted-foreground"}`}

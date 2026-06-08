@@ -78,15 +78,18 @@ const NeedsApprovalTable = ({
                     onClick={() => handleOpenInvoiceHistory?.(invoice)}
                     data-testid={`approval-history-${invoice.id}`}
                   >
-                    {progress.approved}/{progress.total} steps
+                    {isChecker
+                      ? "History"
+                      : `${progress.approved}/${progress.total} steps`}
                   </Button>
                   <div className="flex gap-1">
-                    {Array.from({ length: progress.total }).map((_, i) => (
-                      <div
-                        key={i}
-                        className={`h-2 w-2 rounded-full ${i < progress.approved ? "bg-emerald-500" : "bg-gray-300"}`}
-                      />
-                    ))}
+                    {!isChecker &&
+                      Array.from({ length: progress.total }).map((_, i) => (
+                        <div
+                          key={i}
+                          className={`h-2 w-2 rounded-full ${i < progress.approved ? "bg-emerald-500" : "bg-gray-300"}`}
+                        />
+                      ))}
                   </div>
                 </div>
               );

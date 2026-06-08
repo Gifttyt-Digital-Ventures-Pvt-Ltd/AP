@@ -46,56 +46,56 @@ const lineItemTableHeader = [
     key: "description",
     title: "Item Description",
     headerClassName: "min-w-[190px]",
-    cellClassName: "min-w-[190px]",
+    cellClassName: "min-w-[190px] align-top",
   },
   // { key: "ledger", title: "Ledger", headerClassName: "w-[160px]", cellClassName: "w-[200px]" },
   {
     key: "tax",
     title: "Tax",
     headerClassName: "w-[150px]",
-    cellClassName: "w-[200px]",
+    cellClassName: "w-[200px] align-top",
   },
   {
     key: "quantity",
     title: "Qty",
     headerClassName: "w-[60px] text-left",
-    cellClassName: "w-[60px]",
+    cellClassName: "w-[60px] align-top",
   },
   {
     key: "unitRate",
     title: "Rate",
     headerClassName: "w-[80px] text-left",
-    cellClassName: "w-[80px]",
+    cellClassName: "w-[80px] align-top",
   },
   {
     key: "discount",
     title: "Discount",
     headerClassName: "w-[120px] text-left",
-    cellClassName: "w-[120px]",
+    cellClassName: "w-[120px] align-top",
   },
   {
     key: "subtotal",
     title: "Taxable Amount",
     headerClassName: "w-[100px] text-left",
-    cellClassName: "w-[100px] text-left",
+    cellClassName: "w-[100px] text-left align-top pt-3.5",
   },
   {
     key: "taxAmount",
     title: "Tax Amount",
     headerClassName: "w-[100px] text-left",
-    cellClassName: "w-[100px] text-left",
+    cellClassName: "w-[100px] text-left align-top pt-3.5",
   },
   {
     key: "netAmount",
     title: "Net Amount",
     headerClassName: "w-[100px] text-left",
-    cellClassName: "w-[100px] text-left",
+    cellClassName: "w-[100px] text-left align-top pt-3.5",
   },
   {
     key: "actions",
     title: "",
     headerClassName: "w-[32px]",
-    cellClassName: "w-[32px] text-center",
+    cellClassName: "w-[32px] text-center pt-3.5 align-top",
   },
 ];
 
@@ -492,7 +492,7 @@ export const InvoiceForm = ({
         return (
           <TableCell
             key={header.key}
-            className={`px-2 py-1.5 align-middle text-xs ${header.cellClassName || ""}`}
+            className={`px-2 py-1.5 align-start text-xs ${header.cellClassName || ""}`}
           >
             {value}
           </TableCell>
@@ -620,7 +620,7 @@ export const InvoiceForm = ({
                     </div>
                   </PopoverAnchor>
                   <PopoverContent
-                    className="z-[120] min-w-[260px] w-[var(--radix-popover-trigger-width)] p-0"
+                    className="z-[120] min-w-[260px] overflow-y-auto w-[var(--radix-popover-trigger-width)] p-0"
                     align="start"
                     onOpenAutoFocus={(event) => event.preventDefault()}
                     onInteractOutside={(event) => {
@@ -629,7 +629,13 @@ export const InvoiceForm = ({
                       }
                     }}
                   >
-                    <div className="max-h-56 overflow-y-auto py-1">
+                    <div
+                      className="max-h-56 overflow-y-auto overscroll-contain py-1"
+                      onWheel={(event) => {
+                        event.currentTarget.scrollTop += event.deltaY;
+                        event.stopPropagation();
+                      }}
+                    >
                       {filteredVendorOptions.length === 0 ? (
                         <p className="px-3 py-2 text-xs text-muted-foreground">
                           {vendorOptions.length === 0
@@ -667,7 +673,7 @@ export const InvoiceForm = ({
                 </Popover>
               </div>
                 <div>
-                  <RequiredLabel required>Bill Number</RequiredLabel>
+                  <RequiredLabel required>Inovoice/Bill Number</RequiredLabel>
                   <Input
                     value={formData.invoiceNumber}
                     onChange={(e) =>
@@ -914,7 +920,7 @@ export const InvoiceForm = ({
               </div>
               <div>
                 <RequiredLabel required={isGstinRequired}>
-                  {isGstinRequired ? "GSTIN" : "GSTIN / Tax ID"}
+                  {isGstinRequired ? "Vendor GSTIN" : "Vendor GSTIN / Tax ID"}
                 </RequiredLabel>
                 <Input
                   value={formData.gstin}
