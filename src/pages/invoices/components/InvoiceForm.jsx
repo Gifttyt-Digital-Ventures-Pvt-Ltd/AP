@@ -59,13 +59,13 @@ const lineItemTableHeader = [
     key: "quantity",
     title: "Qty",
     headerClassName: "w-[60px] text-left",
-    cellClassName: "w-[60px] align-top",
+    cellClassName: "w-[60px] align-top min-w-[60px]",
   },
   {
     key: "unitRate",
     title: "Rate",
     headerClassName: "w-[80px] text-left",
-    cellClassName: "w-[80px] align-top",
+    cellClassName: "w-[80px] align-top min-w-[80px]",
   },
   {
     key: "discount",

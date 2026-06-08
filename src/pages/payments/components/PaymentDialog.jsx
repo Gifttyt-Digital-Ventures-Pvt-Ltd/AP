@@ -3,6 +3,13 @@ import { Button } from '../../../components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../../components/ui/dialog';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../../components/ui/select';
 import { Plus } from 'lucide-react';
 
 // Dialog used to record a single payment against a pending invoice.
@@ -41,21 +48,21 @@ const PaymentDialog = ({
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <Label htmlFor="invoice_id">Invoice *</Label>
-          <select
-            id="invoice_id"
-            value={formData.invoice_id}
-            onChange={(e) => setFormData({ ...formData, invoice_id: e.target.value })}
-            className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            required
-            data-testid="payment-invoice-select"
+          <Select
+            value={formData.invoice_id || ""}
+            onValueChange={(value) => setFormData({ ...formData, invoice_id: value })}
           >
-            <option value="">Select invoice</option>
+            <SelectTrigger id="invoice_id" data-testid="payment-invoice-select">
+              <SelectValue placeholder="Select invoice" />
+            </SelectTrigger>
+            <SelectContent>
             {invoices.map((invoice) => (
-              <option key={invoice.id} value={invoice.id}>
+              <SelectItem key={invoice.id} value={invoice.id}>
                 {invoice.invoiceNumber} - {invoice.vendorName} - {'\u20B9'}{invoice.amount.toLocaleString('en-IN')}
-              </option>
+              </SelectItem>
             ))}
-          </select>
+            </SelectContent>
+          </Select>
         </div>
 
         <div>
@@ -72,38 +79,40 @@ const PaymentDialog = ({
 
         <div>
           <Label htmlFor="payment_method">Payment Method *</Label>
-          <select
-            id="payment_method"
-            value={formData.payment_method}
-            onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
-            className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            data-testid="payment-method-select"
+          <Select
+            value={formData.payment_method || "Bank Transfer"}
+            onValueChange={(value) => setFormData({ ...formData, payment_method: value })}
           >
-            <option value="Bank Transfer">Bank Transfer</option>
-            <option value="Cheque">Cheque</option>
-            <option value="Cash">Cash</option>
-            <option value="Credit Card">Credit Card</option>
-          </select>
+            <SelectTrigger id="payment_method" data-testid="payment-method-select">
+              <SelectValue placeholder="Select payment method" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+              <SelectItem value="Cheque">Cheque</SelectItem>
+              <SelectItem value="Cash">Cash</SelectItem>
+              <SelectItem value="Credit Card">Credit Card</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
 
         {showBankAccountField && (
           <div>
             <Label htmlFor="bank_account_id">Bank Account *</Label>
-            <select
-              id="bank_account_id"
-              value={formData.bank_account_id}
-              onChange={(e) => setFormData({ ...formData, bank_account_id: e.target.value })}
-              className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              required
-              data-testid="payment-bank-select"
+            <Select
+              value={formData.bank_account_id || ""}
+              onValueChange={(value) => setFormData({ ...formData, bank_account_id: value })}
             >
-              <option value="">Select bank account</option>
+              <SelectTrigger id="bank_account_id" data-testid="payment-bank-select">
+                <SelectValue placeholder="Select bank account" />
+              </SelectTrigger>
+              <SelectContent>
               {bankAccounts.map((account) => (
-                <option key={account.id} value={account.id}>
+                <SelectItem key={account.id} value={account.id}>
                   {account.account_name || account.bank_name} - {account.account_number || account.bank_name}
-                </option>
+                </SelectItem>
               ))}
-            </select>
+              </SelectContent>
+            </Select>
           </div>
         )}
 

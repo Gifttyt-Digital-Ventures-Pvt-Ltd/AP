@@ -68,6 +68,13 @@ const NeedsApprovalTable = ({
             case "amount":
               value = formatCurrency(invoice.amount, invoice.currency);
               break;
+            case "vendorName":
+              value = (
+                <div className="whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]">
+                  {invoice.vendorName}
+                </div>
+              );
+              break;
             case "approval":
               value = (
                 <div className="flex items-center gap-2">

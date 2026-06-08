@@ -8,6 +8,13 @@ import {
 } from '../../../components/ui/dialog';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../../components/ui/select';
 
 // Confirm record-payment for invoices selected on the pending list.
 const RecordPaymentDialog = ({
@@ -74,22 +81,24 @@ const RecordPaymentDialog = ({
 
           <div>
             <Label htmlFor="record-payment-method">Payment Method *</Label>
-            <select
-              id="record-payment-method"
-              value={formData.payment_method}
-              onChange={(e) => setFormData((prev) => ({ ...prev, payment_method: e.target.value }))}
-              className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-              data-testid="record-payment-method-select"
+            <Select
+              value={formData.payment_method || 'Bank Transfer'}
+              onValueChange={(value) => setFormData((prev) => ({ ...prev, payment_method: value }))}
             >
-              <option value="Bank Transfer">Bank Transfer</option>
-              <option value="Cheque">Cheque</option>
-              <option value="Cash">Cash</option>
-              <option value="Credit Card">Credit Card</option>
-              <option value="NEFT">NEFT</option>
-              <option value="RTGS">RTGS</option>
-              <option value="IMPS">IMPS</option>
-              <option value="UPI">UPI</option>
-            </select>
+              <SelectTrigger id="record-payment-method" data-testid="record-payment-method-select">
+                <SelectValue placeholder="Select payment method" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Bank Transfer">Bank Transfer</SelectItem>
+                <SelectItem value="Cheque">Cheque</SelectItem>
+                <SelectItem value="Cash">Cash</SelectItem>
+                <SelectItem value="Credit Card">Credit Card</SelectItem>
+                <SelectItem value="NEFT">NEFT</SelectItem>
+                <SelectItem value="RTGS">RTGS</SelectItem>
+                <SelectItem value="IMPS">IMPS</SelectItem>
+                <SelectItem value="UPI">UPI</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           <div>

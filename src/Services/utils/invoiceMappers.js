@@ -261,6 +261,7 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
       invoice.currentApprovalLevel ?? invoice.current_approval_level,
     isSequentialApproval:
       invoice.isSequentialApproval ?? invoice.is_sequential_approval,
+    isDuplicate: invoice.isDuplicate ?? invoice.is_duplicate ?? invoice.duplicate ?? false,
     invoiceDiscount: pickInvoiceField(invoice, "invoiceDiscount", "invoice_discount"),
     invoiceDiscountType:
       pickInvoiceField(invoice, "invoiceDiscountType", "invoice_discount_type"),

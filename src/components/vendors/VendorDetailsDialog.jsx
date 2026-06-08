@@ -10,6 +10,13 @@ import { Button } from "../ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 
 const CATEGORY_OPTIONS = [
@@ -263,37 +270,40 @@ const VendorDetailsDialog = ({
 
                 <div>
                   <Label>Category</Label>
-                  <select
-                    value={formData.category}
-                    onChange={(event) =>
-                      updateField("category", event.target.value)
-                    }
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  <Select
+                    value={formData.category || ""}
+                    onValueChange={(value) => updateField("category", value)}
                   >
-                    <option value="">Select Category</option>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Category" />
+                    </SelectTrigger>
+                    <SelectContent>
                     {CATEGORY_OPTIONS.map((option) => (
-                      <option key={option} value={option}>
+                      <SelectItem key={option} value={option}>
                         {option}
-                      </option>
+                      </SelectItem>
                     ))}
-                  </select>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div>
                   <Label>Currency</Label>
-                  <select
-                    value={formData.currency}
-                    onChange={(event) =>
-                      updateField("currency", event.target.value)
-                    }
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  <Select
+                    value={formData.currency || ""}
+                    onValueChange={(value) => updateField("currency", value)}
                   >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Currency" />
+                    </SelectTrigger>
+                    <SelectContent>
                     {currencyOptions.map((option) => (
-                      <option key={option} value={option}>
+                      <SelectItem key={option} value={option}>
                         {option}
-                      </option>
+                      </SelectItem>
                     ))}
-                  </select>
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 {addressFields.map(renderInputField)}

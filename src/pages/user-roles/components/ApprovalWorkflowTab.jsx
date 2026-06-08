@@ -28,6 +28,13 @@ import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { Checkbox } from "../../../components/ui/checkbox";
 import { Switch } from "../../../components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../components/ui/select";
 import { toast } from "sonner";
 import {
   AlertCircle,
@@ -757,6 +764,17 @@ const ApprovalWorkflowTab = ({
 
   const updateApprover = (index, userId) => {
     setFormState((prev) => {
+      if (
+        userId &&
+        prev.approvers.some(
+          (approver, approverIndex) =>
+            approverIndex !== index && approver.userId === userId,
+        )
+      ) {
+        toast.error("This approver is already selected for another level");
+        return prev;
+      }
+
       const selectedUser = workflowUsers.find((user) => user.id === userId);
       const nextApprovers = [...prev.approvers];
       nextApprovers[index] = {
@@ -1135,69 +1153,78 @@ const ApprovalWorkflowTab = ({
           >
             <div>
               <Label>Vendor</Label>
-              <select
-                value={tester.vendorId}
-                onChange={(event) =>
+              <Select
+                value={tester.vendorId || ""}
+                onValueChange={(value) =>
                   setTester((prev) => ({
                     ...prev,
-                    vendorId: event.target.value,
+                    vendorId: value,
                     tested: false,
                   }))
                 }
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
-                <option value="">Select vendor</option>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select vendor" />
+                </SelectTrigger>
+                <SelectContent>
                 {workflowVendors.map((vendor) => (
-                  <option key={vendor.id} value={vendor.id}>
+                  <SelectItem key={vendor.id} value={vendor.id}>
                     {vendor.name}
-                  </option>
+                  </SelectItem>
                 ))}
-              </select>
+                </SelectContent>
+              </Select>
             </div>
 
             <div>
               <Label>Department</Label>
-              <select
-                value={tester.departmentId}
-                onChange={(event) =>
+              <Select
+                value={tester.departmentId || ""}
+                onValueChange={(value) =>
                   setTester((prev) => ({
                     ...prev,
-                    departmentId: event.target.value,
+                    departmentId: value,
                     tested: false,
                   }))
                 }
-                className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               >
-                <option value="">Select department</option>
+                <SelectTrigger className="mt-1">
+                  <SelectValue placeholder="Select department" />
+                </SelectTrigger>
+                <SelectContent>
                 {workflowDepartments.map((department) => (
-                  <option key={department.id} value={department.id}>
+                  <SelectItem key={department.id} value={department.id}>
                     {department.name}
-                  </option>
+                  </SelectItem>
                 ))}
-              </select>
+                </SelectContent>
+              </Select>
             </div>
 
             {categoryEnabled && (
               <div>
                 <Label>Category</Label>
-                <select
-                  value={tester.categoryId}
-                  onChange={(event) =>
+                <Select
+                  value={tester.categoryId || ""}
+                  onValueChange={(value) =>
                     setTester((prev) => ({
                       ...prev,
-                      categoryId: event.target.value,
+                      categoryId: value,
                       tested: false,
                     }))
                   }
-                  className="mt-1 h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                 >
-                  <option value="">Select category</option>
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select category" />
+                  </SelectTrigger>
+                  <SelectContent>
                   {workflowCategories.map((category) => (
-                    <option key={category.id} value={category.id}>
+                    <SelectItem key={category.id} value={category.id}>
                       {category.name}
-                    </option>
+                    </SelectItem>
                   ))}
-                </select>
+                  </SelectContent>
+                </Select>
               </div>
             )}
 
@@ -1697,7 +1724,11 @@ const ApprovalWorkflowTab = ({
                   variant="outline"
                   size="sm"
                   onClick={addApprover}
-                  disabled={workflowActionLoading}
+                  disabled={
+                    workflowActionLoading ||
+                    formState.approvers.filter((approver) => approver.userId)
+                      .length >= workflowUsers.length
+                  }
                 >
                   <Plus className="h-4 w-4 mr-1" />
                   Add Approver
@@ -1713,21 +1744,35 @@ const ApprovalWorkflowTab = ({
                     <span className="text-sm text-muted-foreground w-6">
                       {index + 1}.
                     </span>
-                    <select
+                    <Select
                       value={approver.userId}
-                      onChange={(event) =>
-                        updateApprover(index, event.target.value)
-                      }
-                      className="h-10 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      onValueChange={(value) => updateApprover(index, value)}
                       disabled={workflowActionLoading}
                     >
-                      <option value="">Select approver</option>
-                      {workflowUsers.map((user) => (
-                        <option key={user.id} value={user.id}>
-                          {user.name} {user.role ? `(${user.role})` : ""}
-                        </option>
-                      ))}
-                    </select>
+                      <SelectTrigger className="h-10 flex-1">
+                        <SelectValue placeholder="Select approver" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {workflowUsers.map((user) => {
+                          const alreadySelected = formState.approvers.some(
+                            (selectedApprover, selectedIndex) =>
+                              selectedIndex !== index &&
+                              selectedApprover.userId === user.id,
+                          );
+
+                          return (
+                            <SelectItem
+                              key={user.id}
+                              value={user.id}
+                              disabled={alreadySelected}
+                            >
+                              {user.name} {user.role ? `(${user.role})` : ""}
+                              {alreadySelected ? " - Already selected" : ""}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
                     {formState.approvers.length > 1 && (
                       <Button
                         type="button"
