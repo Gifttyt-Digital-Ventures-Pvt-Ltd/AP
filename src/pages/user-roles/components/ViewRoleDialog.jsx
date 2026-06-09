@@ -252,7 +252,7 @@ const ViewRoleDialog = ({
                           <label htmlFor="edit-master-admin" className="cursor-pointer">
                             <span className="block text-sm font-medium">Master Admin</span>
                             <span className="block text-xs text-muted-foreground">
-                              Full corporate Portal access. Selecting this enables all permissions.
+                              Full corporate portal access. Selecting this enables all permissions.
                             </span>
                           </label>
                         </div>
