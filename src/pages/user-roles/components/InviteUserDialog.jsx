@@ -22,8 +22,7 @@ const InviteUserDialog = ({
   const isSubmitDisabled =
     !inviteForm.name?.trim() ||
     !inviteForm.email?.trim() ||
-    !inviteForm.mobile?.trim() ||
-    !inviteForm.department?.trim();
+    !inviteForm.mobile?.trim();
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -104,10 +103,9 @@ const InviteUserDialog = ({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="department">Department*</Label>
+              <Label htmlFor="department">Department</Label>
               <Input
                 id="department"
-                required
                 value={inviteForm.department || ""}
                 onChange={(e) =>
                   setInviteForm({ ...inviteForm, department: e.target.value })
