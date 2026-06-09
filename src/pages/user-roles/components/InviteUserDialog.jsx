@@ -118,14 +118,14 @@ const InviteUserDialog = ({
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="role">Role</Label>
+            <Label htmlFor="designation">Designation</Label>
             <Input
-              id="role"
+              id="designation"
               value={inviteForm.role || ""}
               onChange={(e) =>
                 setInviteForm({ ...inviteForm, role: e.target.value })
               }
-              placeholder="Enter role"
+              placeholder="Enter designation"
             />
           </div>
 

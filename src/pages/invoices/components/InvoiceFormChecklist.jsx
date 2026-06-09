@@ -82,7 +82,7 @@ export const buildInvoiceFormChecklist = (
         optional: true,
       }),
       item({
-        label: "Reference number",
+        label: "UAC/Reference No./Coupon Code",
         done: !!String(formData.referenceNumber ?? "").trim(),
         optional: true,
       }),

@@ -132,7 +132,7 @@ const MarkInvoicePaidModal = ({
             <FieldError>{errors.mode}</FieldError>
           </div>
           <div className="space-y-2">
-            <Label>Reference No.</Label>
+            <Label>UAC/Reference No./Coupon Code</Label>
             <Input
               value={form.referenceNo}
               onChange={(event) =>

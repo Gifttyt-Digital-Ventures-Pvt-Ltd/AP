@@ -79,7 +79,10 @@ const normalizeVendorCost = (vendor = {}) => ({
   vendorId: String(vendor.vendorId ?? vendor.vendor_id ?? vendor.id ?? ""),
   vendorName:
     vendor.vendorName ?? vendor.vendor_name ?? vendor.name ?? vendor.companyName ?? "",
-  cost: toNumber(vendor.cost ?? vendor.amount),
+  cost: toNumber(vendor.cost ?? vendor.netCost ?? vendor.net_cost ?? vendor.amount),
+  netCost: toNumber(vendor.netCost ?? vendor.net_cost ?? vendor.cost ?? vendor.amount),
+  grossCost: toNumber(vendor.grossCost ?? vendor.gross_cost),
+  gstOption: vendor.gstOption ?? vendor.gst_option ?? "",
 });
 
 export const normalizeCampaign = (campaign = {}) => {
@@ -123,6 +126,24 @@ export const normalizeCampaign = (campaign = {}) => {
       campaign.includeGst ?? campaign.include_gst ?? campaign.gstIncluded ?? false,
     ),
     gstOption: campaign.gstOption ?? campaign.gst_option ?? "",
+    budgetGstOption:
+      campaign.budgetGstOption ??
+      campaign.budget_gst_option ??
+      campaign.gstOption ??
+      campaign.gst_option ??
+      "",
+    totalCostGstOption:
+      campaign.totalCostGstOption ??
+      campaign.total_cost_gst_option ??
+      campaign.gstOption ??
+      campaign.gst_option ??
+      "",
+    budgetGrossAmount: toNumber(
+      campaign.budgetGrossAmount ?? campaign.budget_gross_amount,
+    ),
+    budgetNetAmount: toNumber(
+      campaign.budgetNetAmount ?? campaign.budget_net_amount ?? campaign.budget,
+    ),
     grossAmount: toNumber(
       campaign.grossAmount ?? campaign.gross_amount ?? totalCost,
     ),

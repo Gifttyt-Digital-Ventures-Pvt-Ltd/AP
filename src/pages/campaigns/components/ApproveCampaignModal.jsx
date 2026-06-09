@@ -110,7 +110,7 @@ const ApproveCampaignModal = ({
           </div>
 
           <div className="space-y-2">
-            <Label>Reference Code *</Label>
+            <Label>UAC/Reference No./Coupon Code *</Label>
             <div className="flex gap-2">
               <Input
                 value={referenceCode}

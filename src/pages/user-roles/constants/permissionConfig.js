@@ -1,4 +1,7 @@
 // Exact permission catalog ported from AP_User Roles source dialogs.
+export const MASTER_ADMIN_PERMISSION_ID = "master-admin";
+export const AP_MASTER_ADMIN_BACKEND_SCREEN = "AP_MASTER_ADMIN";
+
 export const PERMISSION_GROUPS = [
   {
     title: "Dashboard",
@@ -95,7 +98,8 @@ export const PERMISSION_GROUPS = [
   {
     title: "Manage Role",
     permissions: [
-      { id: "roles-manage", label: "Manage" },
+      { id: "roles-manage", label: "Manage Roles (Create, Edit, Delete)" },
+      { id: "roles-manage-users", label: "Manage Users (Create, Edit, Delete)" },
       { id: "roles-view", label: "View Only" },
     ],
   },
@@ -125,6 +129,7 @@ export const PERMISSION_GROUPS = [
 
 // Human-readable permission labels ported from AP_User Roles ViewRoleDialog.
 export const PERMISSION_LABELS = {
+  [MASTER_ADMIN_PERMISSION_ID]: "Master Admin - Full Access",
   "dashboard-view": "Dashboard - View Only",
   "vendors-view": "Vendors - View Only",
   "vendors-manage": "Vendors - Manage (Add, Delete, Edit)",
@@ -159,7 +164,8 @@ export const PERMISSION_LABELS = {
   "banking-view": "Banking - View Only",
   "banking-full": "Banking - Full Access",
   "roles-view": "Manage Roles - View Only",
-  "roles-manage": "Manage Roles - Manage",
+  "roles-manage": "Manage Roles - Manage Roles",
+  "roles-manage-users": "Manage Roles - Manage Users",
   "vendor-workflow-view": "Vendor Approval Workflow - View Only",
   "vendor-workflow-manage": "Vendor Approval Workflow - Manage",
   "settings-org": "Settings - Manage Organisation",

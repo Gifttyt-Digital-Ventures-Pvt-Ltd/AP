@@ -1,6 +1,14 @@
 import { mapScreenPermissionToCanonical } from "../../../utils/rbacPermissions";
+import {
+  AP_MASTER_ADMIN_BACKEND_SCREEN,
+  MASTER_ADMIN_PERMISSION_ID,
+} from "../constants/permissionConfig";
 
 export const CUSTOM_ROLE_PERMISSION_MAP = {
+  [MASTER_ADMIN_PERMISSION_ID]: {
+    screen: AP_MASTER_ADMIN_BACKEND_SCREEN,
+    permissionType: "FULL_ACCESS",
+  },
   "dashboard-view": { screen: "DASHBOARD", permissionType: "VIEW" },
   "vendors-view": { screen: "VENDORS", permissionType: "VIEW" },
   "vendors-manage": { screen: "VENDORS", permissionType: "MANAGE" },
@@ -36,6 +44,7 @@ export const CUSTOM_ROLE_PERMISSION_MAP = {
   "banking-full": { screen: "BANKING", permissionType: "FULL" },
   "roles-view": { screen: "MANAGE_ROLE", permissionType: "VIEW" },
   "roles-manage": { screen: "MANAGE_ROLE", permissionType: "MANAGE" },
+  "roles-manage-users": { screen: "MANAGE_ROLE", permissionType: "USERS" },
   "vendor-workflow-view": { screen: "VENDOR_APPROVAL_WORKFLOW", permissionType: "VIEW" },
   "vendor-workflow-manage": { screen: "VENDOR_APPROVAL_WORKFLOW", permissionType: "MANAGE" },
   "settings-org": { screen: "SETTINGS", permissionType: "ORG" },

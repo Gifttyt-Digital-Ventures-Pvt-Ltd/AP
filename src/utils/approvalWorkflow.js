@@ -287,15 +287,29 @@ const INVOICE_DELETABLE_STATUSES = new Set([
   "Rejected",
 ]);
 
+export const shouldCheckerSubmitOnUpdate = (invoice, identity = {}) => {
+  const status = normalizeWorkflowStatus(invoice?.status);
+  return status === PENDING_CHECKER_STATUS && Boolean(identity.canCheckInvoices);
+};
+
 export const canEditInvoice = (invoice, identity = {}) => {
-  const { canUpdateInvoices, canManageInvoices, isCorporateAdmin } = identity;
-  const canMutateInvoice = canUpdateInvoices || canManageInvoices;
-  if (!canMutateInvoice) return false;
+  const {
+    canUpdateInvoices,
+    canManageInvoices,
+    canCheckInvoices,
+    isCorporateAdmin,
+  } = identity;
 
   const status = normalizeWorkflowStatus(invoice?.status);
   if (!INVOICE_MUTABLE_STATUSES.has(status)) return false;
 
   if (isCorporateAdmin) return true;
+
+  if (status === PENDING_CHECKER_STATUS && canCheckInvoices) return true;
+
+  const canMutateInvoice = canUpdateInvoices || canManageInvoices;
+  if (!canMutateInvoice) return false;
+
   if (status === NEEDS_CORRECTION_STATUS) return matchesCreator(invoice, identity);
   return true;
 };

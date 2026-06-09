@@ -361,10 +361,11 @@ export const RBACProvider = ({ children }) => {
     const normalizedPath = normalizeRoutePath(path);
     if (normalizedPath === "/user-roles" || normalizedPath.startsWith("/user-roles/")) {
       const canViewRoles = hasAnyPermission(["roles-view", "roles-manage"]);
+      const canViewRoleUsers = hasAnyPermission(["roles-view", "roles-manage", "roles-manage-users"]);
       const canViewWorkflow = hasAnyPermission(["vendor-workflow-view", "vendor-workflow-manage"]);
       const canViewCategories = hasAnyPermission(["category-view", "category-manage"]);
       return (
-        (canViewRoles && isCorporateSectionEnabled("MANAGE_ROLE_USERS")) ||
+        (canViewRoleUsers && isCorporateSectionEnabled("MANAGE_ROLE_USERS")) ||
         (canViewRoles && isCorporateSectionEnabled("MANAGE_ROLE_ROLES_PERMISSIONS")) ||
         (canViewWorkflow && isCorporateSectionEnabled("MANAGE_ROLE_APPROVAL_WORKFLOW")) ||
         (canViewCategories && isCategoryFeatureEnabled)

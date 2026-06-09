@@ -195,7 +195,7 @@ const InvoiceReadOnlyDetails = ({
             <>
               <DetailField label="Campaign" value={formData.campaignName} />
               <DetailField
-                label="Reference Number"
+                label="UAC/Reference No./Coupon Code"
                 value={formData.referenceNumber}
                 mono
               />

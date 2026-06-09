@@ -39,6 +39,8 @@ import { GitBranch, Shield, ShieldAlert, UserPlus, Users } from "lucide-react";
 import {
   CAMPAIGN_BACKEND_PERMISSION_TYPES,
   CAMPAIGN_PERMISSION_IDS,
+  AP_MASTER_ADMIN_BACKEND_SCREEN,
+  MASTER_ADMIN_PERMISSION_ID,
   PERMISSION_GROUPS,
   PERMISSION_LABELS,
 } from "./constants/permissionConfig";
@@ -94,6 +96,7 @@ const UserRoles = () => {
     employeeCode: "",
     grade: "",
     department: "",
+    role: "",
   });
 
   const { user: currentUser } = useAuth();
@@ -106,25 +109,29 @@ const UserRoles = () => {
   } = useRBAC();
   const { guardAction } = useActionGuard();
   const navigate = useNavigate();
-  const canViewRoles =
+  const canViewRoleRecords =
     hasPermission("roles-view") || hasPermission("roles-manage");
+  const canManageRoleUsers = hasPermission("roles-manage-users");
+  const canViewUserRecords =
+    canViewRoleRecords || canManageRoleUsers;
   const canManageRoles = hasPermission("roles-manage");
-  const canManageUserRecords = hasPermission(FULL_ACCESS_PERMISSION);
-  const canAssignRoleSets = canManageRoles || canManageUserRecords;
+  const canManageUserRecords = canManageRoleUsers || hasPermission(FULL_ACCESS_PERMISSION);
+  const canAssignRoleSets = canManageUserRecords;
   const canViewWorkflow =
     hasPermission("vendor-workflow-view") ||
     hasPermission("vendor-workflow-manage");
   const canManageWorkflow = hasPermission("vendor-workflow-manage");
   const canViewCategories =
     hasPermission("category-view") || hasPermission("category-manage");
+  const canUseManageRoleCategories = isCorporateSectionEnabled("CATEGORY_ALL");
   const canViewUsersTab =
-    canViewRoles && isCorporateSectionEnabled("MANAGE_ROLE_USERS");
+    canViewUserRecords && isCorporateSectionEnabled("MANAGE_ROLE_USERS");
   const canViewRolesTab =
-    canViewRoles && isCorporateSectionEnabled("MANAGE_ROLE_ROLES_PERMISSIONS");
+    canViewRoleRecords && isCorporateSectionEnabled("MANAGE_ROLE_ROLES_PERMISSIONS");
   const canViewWorkflowTab =
     canViewWorkflow &&
     isCorporateSectionEnabled("MANAGE_ROLE_APPROVAL_WORKFLOW");
-  const canViewCategoriesTab = canViewCategories && isCategoryFeatureEnabled;
+  const canViewCategoriesTab = canViewCategories && canUseManageRoleCategories;
   const canViewUserRolesModule =
     canViewUsersTab ||
     canViewRolesTab ||
@@ -249,6 +256,12 @@ const UserRoles = () => {
       empId: item.empId || "",
       name: item.name || "",
       email: item.email || "",
+      mobile:
+        item.phoneNumber ||
+        item?.raw?.phoneNumber ||
+        item?.raw?.mobile ||
+        item?.raw?.phone ||
+        "",
       role: item.role || "",
       department:
         item?.raw?.department?.name ||
@@ -280,12 +293,26 @@ const UserRoles = () => {
             isCorporateSectionEnabled("CAMPAIGN_ALL"))
         );
       }
-      if (backendEntry.screen === "CATEGORY") return isCategoryFeatureEnabled;
+      if (backendEntry.screen === "CATEGORY") return canUseManageRoleCategories;
       if (backendEntry.screen === "VENDOR_APPROVAL_WORKFLOW") {
         return (
           isCorporateSectionEnabled("MANAGE_ROLE_APPROVAL_WORKFLOW") ||
           isCorporateSectionEnabled("VENDOR_APPROVAL_WORKFLOW_ALL")
         );
+      }
+      if (backendEntry.screen === "MANAGE_ROLE") {
+        if (backendEntry.permissionType === "USERS") {
+          return isCorporateSectionEnabled("MANAGE_ROLE_USERS");
+        }
+        if (
+          backendEntry.permissionType === "VIEW" ||
+          backendEntry.permissionType === "MANAGE"
+        ) {
+          return (
+            isCorporateSectionEnabled("MANAGE_ROLE_USERS") ||
+            isCorporateSectionEnabled("MANAGE_ROLE_ROLES_PERMISSIONS")
+          );
+        }
       }
       if (backendEntry.screen === "SETTINGS") {
         if (backendEntry.permissionType === "ORG")
@@ -314,7 +341,7 @@ const UserRoles = () => {
     },
     [
       isCampaignFeatureEnabled,
-      isCategoryFeatureEnabled,
+      canUseManageRoleCategories,
       isCorporateScreenAllowed,
       isCorporateSectionEnabled,
     ],
@@ -329,6 +356,7 @@ const UserRoles = () => {
     }
 
     const keys = new Set();
+    keys.add(`${AP_MASTER_ADMIN_BACKEND_SCREEN}:FULL_ACCESS`);
     availableCustomRoleScreens.forEach((screen) => {
       const screenName = String(screen?.screen || "").trim().toUpperCase();
       const permissionTypes = Array.isArray(screen?.permissionTypes)
@@ -361,8 +389,22 @@ const UserRoles = () => {
       });
     }
 
+    if (isCorporateSectionEnabled("MANAGE_ROLE_USERS")) {
+      keys.add("MANAGE_ROLE:USERS");
+    }
+
+    if (canUseManageRoleCategories) {
+      keys.add("CATEGORY:VIEW");
+      keys.add("CATEGORY:MANAGE");
+    }
+
     return keys;
-  }, [availableCustomRoleScreens, isCampaignFeatureEnabled]);
+  }, [
+    availableCustomRoleScreens,
+    isCampaignFeatureEnabled,
+    isCorporateSectionEnabled,
+    canUseManageRoleCategories,
+  ]);
 
   const availablePermissionKeys = useMemo(() => {
     if (
@@ -398,8 +440,22 @@ const UserRoles = () => {
       CAMPAIGN_PERMISSION_IDS.forEach((permissionId) => keys.add(permissionId));
     }
 
+    if (isCorporateSectionEnabled("MANAGE_ROLE_USERS")) {
+      keys.add("roles-manage-users");
+    }
+
+    if (canUseManageRoleCategories) {
+      keys.add("category-view");
+      keys.add("category-manage");
+    }
+
     return keys;
-  }, [availableCustomRoleScreens, isCampaignFeatureEnabled]);
+  }, [
+    availableCustomRoleScreens,
+    isCampaignFeatureEnabled,
+    isCorporateSectionEnabled,
+    canUseManageRoleCategories,
+  ]);
 
   const filteredPermissionGroups = useMemo(() => {
     const groups = PERMISSION_GROUPS.map((group) => ({
@@ -428,7 +484,7 @@ const UserRoles = () => {
   ]);
 
   const visiblePermissionIds = useMemo(() => {
-    const ids = new Set();
+    const ids = new Set([MASTER_ADMIN_PERMISSION_ID]);
     filteredPermissionGroups.forEach((group) => {
       group.permissions.forEach((permission) => {
         if (permission?.id) ids.add(permission.id);
@@ -437,20 +493,46 @@ const UserRoles = () => {
     return ids;
   }, [filteredPermissionGroups]);
 
+  const isMasterAdminCanonicalPermission = useCallback((permissionId) => {
+    const normalizedPermissionId = String(permissionId || "").trim();
+    return (
+      normalizedPermissionId === MASTER_ADMIN_PERMISSION_ID ||
+      normalizedPermissionId === FULL_ACCESS_PERMISSION
+    );
+  }, []);
+
+  const isMasterAdminPermissionEntry = useCallback((entry) => {
+    const screen = String(entry?.screen || "").trim().toUpperCase();
+    return (
+      screen === AP_MASTER_ADMIN_BACKEND_SCREEN ||
+      screen === "MASTER_ADMIN" ||
+      isMasterAdminCanonicalPermission(entry?.canonicalId)
+    );
+  }, [isMasterAdminCanonicalPermission]);
+
   const filterRoleForVisiblePermissions = useCallback(
     (role) => {
-      const visiblePermissions = (Array.isArray(role?.permissions)
-        ? role.permissions
-        : []
-      ).filter((permissionId) => visiblePermissionIds.has(permissionId));
-      const visiblePermissionSet = new Set(visiblePermissions);
-      const visiblePermissionEntries = (Array.isArray(role?.permissionEntries)
+      const rawPermissions = Array.isArray(role?.permissions) ? role.permissions : [];
+      const rawPermissionEntries = Array.isArray(role?.permissionEntries)
         ? role.permissionEntries
-        : []
-      ).filter(
-        (entry) =>
-          entry?.canonicalId && visiblePermissionSet.has(entry.canonicalId),
-      );
+        : [];
+      const hasMasterAdmin =
+        rawPermissions.some(isMasterAdminCanonicalPermission) ||
+        rawPermissionEntries.some(isMasterAdminPermissionEntry);
+
+      const visiblePermissions = hasMasterAdmin
+        ? [MASTER_ADMIN_PERMISSION_ID]
+        : rawPermissions.filter((permissionId) =>
+            visiblePermissionIds.has(permissionId),
+          );
+
+      const visiblePermissionSet = new Set(visiblePermissions);
+      const visiblePermissionEntries = hasMasterAdmin
+        ? rawPermissionEntries.filter(isMasterAdminPermissionEntry)
+        : rawPermissionEntries.filter(
+            (entry) =>
+              entry?.canonicalId && visiblePermissionSet.has(entry.canonicalId),
+          );
 
       return {
         ...role,
@@ -459,7 +541,11 @@ const UserRoles = () => {
         permissionsCount: visiblePermissions.length,
       };
     },
-    [visiblePermissionIds],
+    [
+      isMasterAdminCanonicalPermission,
+      isMasterAdminPermissionEntry,
+      visiblePermissionIds,
+    ],
   );
 
   const allRoles = useMemo(
@@ -477,9 +563,13 @@ const UserRoles = () => {
         .trim()
         .toUpperCase();
       const permissionKey = `${screen}:${permissionType}`;
+      const isMasterAdminPermission =
+        (screen === AP_MASTER_ADMIN_BACKEND_SCREEN || screen === "MASTER_ADMIN") &&
+        permissionType === "FULL_ACCESS";
       const isCampaignPermission =
         (screen === "CAMPAIGN" || screen === "CAMPAIGNS") && isCampaignFeatureEnabled;
       const isSupported =
+        isMasterAdminPermission ||
         isCampaignPermission ||
         !supportedCustomRolePermissionKeys ||
         supportedCustomRolePermissionKeys.has(permissionKey);
@@ -488,7 +578,7 @@ const UserRoles = () => {
         permissionType,
       });
 
-      if (screen && permissionType && isSupported && isEntitled) {
+      if (screen && permissionType && isSupported && (isEntitled || isMasterAdminPermission)) {
         enabledPermissions.push({ screen, permissionType });
       } else {
         removedPermissions.push({ screen, permissionType });
@@ -524,6 +614,7 @@ const UserRoles = () => {
       employeeCode: "",
       grade: "",
       department: "",
+      role: "",
     });
     setEditingUser(null);
   };
@@ -549,6 +640,7 @@ const UserRoles = () => {
         user?.raw?.department ||
         user?.department ||
         "",
+      role: user?.role || user?.raw?.role || "",
       id: user?.id,
     });
     setInviteDialogOpen(true);
@@ -575,7 +667,7 @@ const UserRoles = () => {
           empId: String(inviteForm.employeeCode || "").trim() || undefined,
           name: inviteForm.name.trim(),
           department: String(inviteForm.department || "").trim(),
-          role: String(editingUser?.role || "").trim(),
+          role: String(inviteForm.role || "").trim(),
         }).unwrap();
         toast.success("User updated successfully");
         setInviteDialogOpen(false);
@@ -594,7 +686,7 @@ const UserRoles = () => {
             id: String(inviteForm.employeeCode || "").trim(),
             grade: String(inviteForm.grade || "").trim() || "",
             department: String(inviteForm.department || "").trim() || "",
-            role: "",
+            role: String(inviteForm.role || "").trim(),
             programType: "VENDOR_PAYMENTS",
           },
         ],
@@ -696,7 +788,7 @@ const UserRoles = () => {
       );
       toast.success(`Role "${createdRole.name}" created successfully`);
       setSelectedRole(createdRole);
-      setRoleDialogMode("assignUsers");
+      setRoleDialogMode("view");
       setViewRoleDialogOpen(true);
       return true;
     } catch (error) {
@@ -728,9 +820,21 @@ const UserRoles = () => {
   };
 
   const handleSaveRoleChanges = async (roleDraft) => {
-    if (!guardAction("roles.manageCustomRoles")) return false;
     if (!roleDraft?.id) {
       toast.error("Invalid role payload");
+      return false;
+    }
+
+    if (roleDraft.editSection === "role" && !guardAction("roles.manageCustomRoles")) {
+      return false;
+    }
+
+    if (roleDraft.editSection === "users" && !guardAction("roles.assignRoleSets")) {
+      return false;
+    }
+
+    if (!roleDraft.editSection) {
+      toast.error("Nothing to save");
       return false;
     }
 
@@ -838,7 +942,7 @@ const UserRoles = () => {
     previousRoleIds,
     selectedRoleIds,
   }) => {
-    if (!guardAction("roles.manageCustomRoles")) return false;
+    if (!guardAction("roles.assignRoleSets")) return false;
     if (!user?.id) {
       toast.error("Invalid user selected");
       return false;
@@ -1092,6 +1196,7 @@ const UserRoles = () => {
         onSave={handleSaveRoleChanges}
         saving={updateCustomRoleLoading || deleteCustomRoleLoading}
         canManageRoles={canManageRoles}
+        canManageAssignedUsers={canAssignRoleSets}
       />
 
       <UserDetailsDialog

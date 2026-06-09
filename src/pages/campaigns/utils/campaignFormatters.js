@@ -1,3 +1,5 @@
+import { TAX_RATES } from "../../invoices/constants";
+
 export const CAMPAIGN_STATUS_LABELS = {
   pending_approval: "Pending Approval",
   approved: "Approved",
@@ -87,6 +89,50 @@ export const invoiceStatusBadgeClass = (status) => {
     default:
       return "bg-slate-100 text-slate-600 border-slate-200";
   }
+};
+
+const getTaxRateValue = (taxRate = {}) => {
+  if (taxRate.igst != null) return Number(taxRate.igst) || 0;
+  const splitTaxRate = Number(taxRate.cgst || 0) + Number(taxRate.sgst || 0);
+  if (splitTaxRate > 0) return splitTaxRate;
+  const labelRate = String(taxRate.value || taxRate.label || "").match(
+    /(\d+(?:\.\d+)?)%/,
+  );
+  return labelRate ? Number(labelRate[1]) : 0;
+};
+
+const CAMPAIGN_GST_OPTIONS = TAX_RATES.map((taxRate) => ({
+  value: taxRate.value,
+  label: taxRate.label,
+  rate: getTaxRateValue(taxRate),
+}));
+
+const getCampaignGstRate = (gstOption) =>
+  CAMPAIGN_GST_OPTIONS.find((option) => option.value === gstOption)?.rate ?? 0;
+
+/** Net = amount before tax. Gross = net + tax. */
+export const calculateCampaignGrossFromNet = ({ netAmount, gstOption }) => {
+  const net = Number(netAmount || 0);
+  const gstRate = getCampaignGstRate(gstOption);
+  if (!net) return 0;
+  if (!gstRate) return net;
+  return Math.round((net + (net * gstRate) / 100) * 100) / 100;
+};
+
+export const calculateCampaignNetFromGross = ({ grossAmount, gstOption }) => {
+  const gross = Number(grossAmount || 0);
+  const gstRate = getCampaignGstRate(gstOption);
+  if (!gross) return 0;
+  if (!gstRate) return gross;
+  return Math.round((gross / (1 + gstRate / 100)) * 100) / 100;
+};
+
+export const calculateCampaignGstAmounts = ({ netAmount, gstOption }) => {
+  const net = Number(netAmount || 0);
+  return {
+    netAmount: net,
+    grossAmount: calculateCampaignGrossFromNet({ netAmount: net, gstOption }),
+  };
 };
 
 export const getApiErrorMessage = (error, fallback = "Something went wrong") =>
