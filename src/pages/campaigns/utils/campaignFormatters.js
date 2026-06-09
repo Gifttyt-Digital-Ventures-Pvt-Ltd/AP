@@ -110,6 +110,13 @@ const CAMPAIGN_GST_OPTIONS = TAX_RATES.map((taxRate) => ({
 const getCampaignGstRate = (gstOption) =>
   CAMPAIGN_GST_OPTIONS.find((option) => option.value === gstOption)?.rate ?? 0;
 
+export const formatCampaignGstOption = (gstOption) => {
+  const option = CAMPAIGN_GST_OPTIONS.find(
+    (entry) => entry.value === gstOption,
+  );
+  return option?.label || gstOption || "-";
+};
+
 /** Net = amount before tax. Gross = net + tax. */
 export const calculateCampaignGrossFromNet = ({ netAmount, gstOption }) => {
   const net = Number(netAmount || 0);

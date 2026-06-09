@@ -110,7 +110,7 @@ const AddRoleDialog = ({ open, onOpenChange, permissionGroups, onSave, saving = 
                   <label htmlFor="create-master-admin" className="cursor-pointer">
                     <span className="block text-sm font-medium">Master Admin</span>
                     <span className="block text-xs text-muted-foreground">
-                      Full corporate admin access. Selecting this disables all other permissions.
+                      Full corporate Portal access. Selecting this enables all permissions.
                     </span>
                   </label>
                 </div>
