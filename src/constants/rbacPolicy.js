@@ -40,6 +40,7 @@ export const ROUTE_PERMISSION_RULES = {
     anyOf: [
       "roles-view",
       "roles-manage",
+      "roles-manage-users",
       "vendor-workflow-view",
       "vendor-workflow-manage",
       "category-view",
@@ -102,7 +103,7 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
       "MANAGE_ROLE_USERS",
       "MANAGE_ROLE_ROLES_PERMISSIONS",
       "MANAGE_ROLE_APPROVAL_WORKFLOW",
-      "MANAGE_ROLE_CATEGORIES",
+      "CATEGORY_ALL",
     ],
   },
   "/settings": {
@@ -151,7 +152,7 @@ export const ACTION_PERMISSION_RULES = {
   "invoices.bulkUpload": { anyOf: ["invoice-maker", "pi-manage"] },
   "invoices.addVendor": { anyOf: ["vendors-manage", "invoice-maker"] },
   "invoices.create": { anyOf: ["invoice-maker"] },
-  "invoices.update": { anyOf: ["invoice-maker"] },
+  "invoices.update": { anyOf: ["invoice-maker", "invoice-checker"] },
   "invoices.delete": { anyOf: ["invoice-maker"] },
   "invoices.check": { anyOf: ["invoice-checker"] },
   "invoices.approve": { anyOf: ["invoice-approver"] },
@@ -202,10 +203,11 @@ export const ACTION_PERMISSION_RULES = {
   "transactions.uploadVoucher": { anyOf: ["banking-full"] },
   "transactions.linkInvoice": { anyOf: ["banking-full"] },
 
-  "roles.invite": { anyOf: [FULL_ACCESS_PERMISSION] },
-  "roles.updateUserRole": { anyOf: [FULL_ACCESS_PERMISSION] },
-  "roles.updateUserStatus": { anyOf: [FULL_ACCESS_PERMISSION] },
-  "roles.deleteUser": { anyOf: [FULL_ACCESS_PERMISSION] },
+  "roles.invite": { anyOf: ["roles-manage-users"] },
+  "roles.updateUserRole": { anyOf: ["roles-manage-users"] },
+  "roles.updateUserStatus": { anyOf: ["roles-manage-users"] },
+  "roles.deleteUser": { anyOf: ["roles-manage-users"] },
+  "roles.assignRoleSets": { anyOf: ["roles-manage-users"] },
   "roles.manageCustomRoles": { anyOf: ["roles-manage"] },
 
   "workflow.create": { anyOf: ["vendor-workflow-manage"] },

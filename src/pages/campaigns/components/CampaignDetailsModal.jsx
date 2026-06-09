@@ -25,6 +25,7 @@ import {
   SummaryTile,
 } from "./CampaignShared";
 import {
+  calculateCampaignGstAmounts,
   formatCurrency,
   formatDate,
   invoiceStatusBadgeClass,
@@ -382,7 +383,7 @@ const CampaignDetailsModal = ({
           <div className="rounded-lg border border-border p-4 space-y-4">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm text-muted-foreground">
-                Reference No.
+                UAC/Reference No./Coupon Code
               </span>
               <span className="font-medium">
                 {campaign.referenceCode || "-"}
@@ -412,30 +413,52 @@ const CampaignDetailsModal = ({
                 {formatDate(campaign.endDate)}
               </p>
               <p>
-                <span className="text-muted-foreground">Budget:</span>{" "}
-                {formatCurrency(campaign.budget)}
+                <span className="text-muted-foreground">Budget Net Amount:</span>{" "}
+                {formatCurrency(campaign.budgetNetAmount ?? campaign.budget)}
               </p>
               <p>
-                <span className="text-muted-foreground">Total Cost:</span>{" "}
-                {formatCurrency(campaign.totalCost)}
+                <span className="text-muted-foreground">Budget Tax:</span>{" "}
+                {campaign.budgetGstOption ??
+                  campaign.budget_gst_option ??
+                  campaign.gstOption ??
+                  "-"}
               </p>
               <p>
-                <span className="text-muted-foreground">Include GST:</span>{" "}
-                {campaign.includeGst ? "Yes" : "No"}
+                <span className="text-muted-foreground">Budget Gross Amount:</span>{" "}
+                {formatCurrency(
+                  campaign.budgetGrossAmount ??
+                    calculateCampaignGstAmounts({
+                      netAmount: campaign.budgetNetAmount ?? campaign.budget,
+                      gstOption:
+                        campaign.budgetGstOption ??
+                        campaign.budget_gst_option ??
+                        campaign.gstOption,
+                    }).grossAmount,
+                )}
               </p>
-              {campaign.includeGst && (
-                <p>
-                  <span className="text-muted-foreground">GST:</span>{" "}
-                  {campaign.gstOption || "-"}
-                </p>
-              )}
               <p>
-                <span className="text-muted-foreground">Gross Amount:</span>{" "}
-                {formatCurrency(campaign.grossAmount)}
+                <span className="text-muted-foreground">Total Cost Net Amount:</span>{" "}
+                {formatCurrency(campaign.netAmount ?? campaign.totalCost)}
               </p>
               <p>
-                <span className="text-muted-foreground">Net Amount:</span>{" "}
-                {formatCurrency(campaign.netAmount)}
+                <span className="text-muted-foreground">Total Cost Tax:</span>{" "}
+                {campaign.totalCostGstOption ??
+                  campaign.total_cost_gst_option ??
+                  campaign.gstOption ??
+                  "-"}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Total Cost Gross Amount:</span>{" "}
+                {formatCurrency(
+                  campaign.grossAmount ??
+                    calculateCampaignGstAmounts({
+                      netAmount: campaign.netAmount ?? campaign.totalCost,
+                      gstOption:
+                        campaign.totalCostGstOption ??
+                        campaign.total_cost_gst_option ??
+                        campaign.gstOption,
+                    }).grossAmount,
+                )}
               </p>
             </div>
           </div>

@@ -10,7 +10,10 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../../../components/ui/dialog';
-import { PERMISSION_GROUPS } from '../constants/permissionConfig';
+import {
+  MASTER_ADMIN_PERMISSION_ID,
+  PERMISSION_GROUPS,
+} from '../constants/permissionConfig';
 
 const permissionModuleMap = PERMISSION_GROUPS.reduce((acc, group) => {
   group.permissions.forEach((permission) => {
@@ -18,11 +21,15 @@ const permissionModuleMap = PERMISSION_GROUPS.reduce((acc, group) => {
   });
   return acc;
 }, {});
+permissionModuleMap[MASTER_ADMIN_PERMISSION_ID] = 'Master Admin';
 
-const permissionAccessRank = (permissionId = '') =>
-  String(permissionId).endsWith('-view') ? 1 : 2;
+const permissionAccessRank = (permissionId = '') => {
+  if (permissionId === MASTER_ADMIN_PERMISSION_ID) return 3;
+  return String(permissionId).endsWith('-view') ? 1 : 2;
+};
 
 const accessLabel = (rank) => {
+  if (rank >= 3) return 'Full Access';
   if (rank >= 2) return 'Manage';
   if (rank === 1) return 'View Only';
   return 'No Access';

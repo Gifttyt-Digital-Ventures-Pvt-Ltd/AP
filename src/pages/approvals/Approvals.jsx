@@ -38,6 +38,7 @@ import {
   normalizeWorkflowStatus,
 } from '../../utils/approvalWorkflow';
 import { getApprovalProgress } from './utils/approvalProgress';
+import { useApprovalsInvoiceEdit } from './hooks/useApprovalsInvoiceEdit';
 
 const safeFormatDate = (value, pattern = 'dd MMM yy') => {
   if (!value) return '-';
@@ -244,6 +245,25 @@ const Approvals = () => {
       getInvoiceFileUrl={getInvoiceFileUrl}
     />
   );
+
+  const refreshApprovalLists = useCallback(async () => {
+    await Promise.all([
+      refetchPendingApprovals(),
+      refetchPendingChecker(),
+      refetchInvoices(),
+    ]);
+  }, [refetchPendingApprovals, refetchPendingChecker, refetchInvoices]);
+
+  const { canEdit, handleEditInvoice, findVendorByName, findVendorById, editDialogs } =
+    useApprovalsInvoiceEdit({
+      currencies,
+      currencyParam,
+      onRefresh: refreshApprovalLists,
+      renderPdfPreview,
+      pdfZoom,
+      viewPreviewError,
+      setViewPreviewError,
+    });
 
   const submitApproval = async () => {
     try {
@@ -460,13 +480,17 @@ const Approvals = () => {
         setViewTab={setViewTab}
         invoiceHistory={invoiceHistory}
         loadingHistory={loadingHistory}
-        canEdit={() => false}
-        handleEditInvoice={() => {}}
+        canEdit={canEdit}
+        handleEditInvoice={handleEditInvoice}
         showCategoryField={isCategoryFeatureEnabled}
         isCategoryFeatureEnabled={isCategoryFeatureEnabled}
         showCampaignField={isCampaignFeatureEnabled}
         isCampaignFeatureEnabled={isCampaignFeatureEnabled}
+        findVendorByName={findVendorByName}
+        findVendorById={findVendorById}
       />
+
+      {editDialogs}
     </div>
   );
 };

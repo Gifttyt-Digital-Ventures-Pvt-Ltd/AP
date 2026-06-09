@@ -1,3 +1,5 @@
+import { FULL_ACCESS_PERMISSION } from "../constants/rbacPolicy";
+
 const normalizeToken = (value = "") =>
   String(value)
     .trim()
@@ -114,6 +116,7 @@ const mapBankingPermission = (permissionType) => {
 const mapRolesPermission = (permissionType) => {
   if (permissionType === "VIEW") return "roles-view";
   if (permissionType === "MANAGE") return "roles-manage";
+  if (permissionType === "USERS" || permissionType === "MANAGE_USERS") return "roles-manage-users";
   return null;
 };
 
@@ -141,6 +144,22 @@ const mapVendorWorkflowPermission = (permissionType) => {
 export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput) => {
   const screen = normalizeToken(screenInput);
   const permissionType = normalizeToken(permissionTypeInput);
+
+  if (
+    screen === "AP_MASTER_ADMIN" ||
+    screen === "MASTER_ADMIN" ||
+    screen === "CORP_ADMIN"
+  ) {
+    if (
+      screen === "CORP_ADMIN" ||
+      !permissionType ||
+      permissionType === "FULL_ACCESS" ||
+      permissionType === "FULL"
+    ) {
+      return [FULL_ACCESS_PERMISSION, "master-admin"];
+    }
+    return null;
+  }
 
   if (screen === "DASHBOARD") {
     return permissionType === "VIEW" ? "dashboard-view" : null;

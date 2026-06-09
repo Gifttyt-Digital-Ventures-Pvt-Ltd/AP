@@ -48,6 +48,17 @@ const UserDetailsDialog = ({ open, onOpenChange, user }) => {
             <p className="text-sm font-medium break-all">{user.email || "-"}</p>
           </div>
           <div>
+            <p className="text-xs text-muted-foreground">Mobile Number</p>
+            <p className="text-sm font-medium">
+              {user.mobile ||
+                user.phoneNumber ||
+                user.raw?.phoneNumber ||
+                user.raw?.mobile ||
+                user.raw?.phone ||
+                "-"}
+            </p>
+          </div>
+          <div>
             <p className="text-xs text-muted-foreground">Department</p>
             <p className="text-sm font-medium">{user.department || "-"}</p>
           </div>
