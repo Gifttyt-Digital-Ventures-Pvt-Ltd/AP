@@ -33,6 +33,11 @@ import {
 } from "../utils/numericInput";
 import InvoiceChecklist from "./InvoiceFormChecklist";
 import InvoiceCampaignFields from "./InvoiceCampaignFields";
+import LineItemsSummary, { LineItemsSectionHeader } from "./LineItemsSummary";
+import {
+  computeLineItemsSummary,
+  resolveLineItemsExpanded,
+} from "../utils/lineItemsSummary";
 import { useGetTdsSectionsQuery } from "../../../Services/apis/taxApi";
 import {
   buildTdsOptions,
@@ -227,6 +232,7 @@ export const InvoiceForm = ({
   );
 
   if (!formData) return null;
+  const showLineItems = resolveLineItemsExpanded(formData);
   const invoiceCurrency = formData.currency || DEFAULT_CURRENCY;
   const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
   const isGstinRequired = useInrTax && formData.gstTreatment !== "N/A";
@@ -271,6 +277,12 @@ export const InvoiceForm = ({
     Math.round((totals.total - tdsAmount) * 100) / 100,
     0,
   );
+  const lineItemsSummary = computeLineItemsSummary({
+    lineItems: formData.lineItems,
+    calculateLineItemSubtotal,
+    isInvoiceLevelTax,
+    useInrTax,
+  });
 
   const applyVendorNameChange = (newName) => {
     const matched = findVendorByName(newName);
@@ -1077,31 +1089,50 @@ export const InvoiceForm = ({
           </div>
 
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-gray-800">Line Items</h3>
-            <div className="border rounded-lg overflow-hidden">
-              <div className="overflow-x-auto scrollbar-thin-muted">
-                <AppDataTable
-                  tableHeader={lineItemHeaders}
-                  tableData={formData.lineItems}
-                  renderRow={renderLineItemRow}
-                  tableClassName="min-w-[890px] border-separate border-spacing-0"
-                  headClassName="bg-gray-50 border-b"
-                  stickyHeader={false}
-                  striped={false}
-                  emptyMessage="No line items found"
-                />
-              </div>
-            </div>
-            <div className="h-0.5 bg-gradient-to-r from-blue-500 via-blue-400 to-yellow-400 rounded" />
-            <Button
-              variant="outline"
-              onClick={addLineItem}
-              className="text-blue-600 h-7 text-xs"
-              size="sm"
-            >
-              <Plus className="h-3 w-3 mr-1" />
-              Add Line Item
-            </Button>
+            <LineItemsSectionHeader
+              showLineItems={showLineItems}
+              onToggle={() =>
+                setFormData({
+                  ...formData,
+                  lineItemsExpanded: !showLineItems,
+                })
+              }
+              itemCount={formData.lineItems?.length || 0}
+            />
+            {showLineItems ? (
+              <>
+                <div className="border rounded-lg overflow-hidden">
+                  <div className="overflow-x-auto scrollbar-thin-muted">
+                    <AppDataTable
+                      tableHeader={lineItemHeaders}
+                      tableData={formData.lineItems}
+                      renderRow={renderLineItemRow}
+                      tableClassName="min-w-[890px] border-separate border-spacing-0"
+                      headClassName="bg-gray-50 border-b"
+                      stickyHeader={false}
+                      striped={false}
+                      emptyMessage="No line items found"
+                    />
+                  </div>
+                </div>
+                <div className="h-0.5 bg-gradient-to-r from-blue-500 via-blue-400 to-yellow-400 rounded" />
+                <Button
+                  variant="outline"
+                  onClick={addLineItem}
+                  className="text-blue-600 h-7 text-xs"
+                  size="sm"
+                >
+                  <Plus className="h-3 w-3 mr-1" />
+                  Add Line Item
+                </Button>
+              </>
+            ) : (
+              <LineItemsSummary
+                summary={lineItemsSummary}
+                formatAmount={formatAmount}
+                isInvoiceLevelTax={isInvoiceLevelTax}
+              />
+            )}
           </div>
 
           <div>

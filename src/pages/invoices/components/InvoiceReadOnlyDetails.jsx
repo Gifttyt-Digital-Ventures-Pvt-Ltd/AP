@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { Label } from "../../../components/ui/label";
 import { formatCurrency, normalizeCurrencyCode } from "../../../utils/currency";
@@ -13,6 +13,11 @@ import {
 } from "../utils/invoiceTax";
 import { parseNumericInput } from "../utils/numericInput";
 import { formatTdsLabel, parseTdsRate } from "../utils/tds";
+import LineItemsSummary, { LineItemsSectionHeader } from "./LineItemsSummary";
+import {
+  computeLineItemsSummary,
+  resolveLineItemsExpanded,
+} from "../utils/lineItemsSummary";
 
 const formatDisplayDate = (value) => {
   if (!value) return "-";
@@ -64,6 +69,13 @@ const InvoiceReadOnlyDetails = ({
       findVendorById,
     ],
   );
+
+  const persistedShowLineItems = resolveLineItemsExpanded(formData ?? invoice ?? {});
+  const [showLineItems, setShowLineItems] = useState(persistedShowLineItems);
+
+  useEffect(() => {
+    setShowLineItems(resolveLineItemsExpanded(formData ?? {}));
+  }, [invoice?.id, formData?.lineItemsExpanded]);
 
   if (!formData) return null;
 
@@ -177,6 +189,13 @@ const InvoiceReadOnlyDetails = ({
       : formatAmount(discount);
   };
 
+  const lineItemsSummary = computeLineItemsSummary({
+    lineItems: formData.lineItems,
+    calculateLineItemSubtotal,
+    isInvoiceLevelTax,
+    useInrTax,
+  });
+
   return (
     <div className="space-y-4">
       <div className="space-y-3">
@@ -229,85 +248,97 @@ const InvoiceReadOnlyDetails = ({
 
       {formData.lineItems?.length > 0 && (
         <div className="space-y-3">
-          <h3 className="text-sm font-semibold text-gray-800">Line Items</h3>
-          <div className="border rounded-lg overflow-hidden">
-            <div className="overflow-x-auto scrollbar-thin-muted">
-              <table className="min-w-[760px] w-full text-xs">
-                <thead className="bg-gray-50 border-b">
-                  <tr>
-                    <th className="p-2 text-left font-medium min-w-[180px]">Item Description</th>
-                    {!isInvoiceLevelTax && (
-                      <th className="p-2 text-left font-medium w-[130px]">Tax</th>
-                    )}
-                    <th className="p-2 text-left font-medium w-[50px]">Qty</th>
-                    <th className="p-2 text-left font-medium w-[80px]">Rate</th>
-                    {!isInvoiceLevelDiscount && (
-                      <th className="p-2 text-left font-medium w-[80px]">Discount</th>
-                    )}
-                    <th className="p-2 text-left font-medium w-[90px]">
-                      {isInvoiceLevelTax ? "Net Amount" : "Taxable Amount"}
-                    </th>
-                    {!isInvoiceLevelTax && (
-                      <>
-                        <th className="p-2 text-left font-medium w-[90px]">Tax Amount</th>
-                        <th className="p-2 text-left font-medium w-[90px]">Net Amount</th>
-                      </>
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {formData.lineItems.map((item, index) => (
-                    <tr key={index} className="border-b last:border-b-0 align-top">
-                      <td className="p-2">
-                        <p>{item.description || "-"}</p>
-                        {item.hsnSac && (
-                          <p className="text-[10px] text-muted-foreground mt-0.5">
-                            HSN: {item.hsnSac}
-                          </p>
-                        )}
-                      </td>
+          <LineItemsSectionHeader
+            showLineItems={showLineItems}
+            onToggle={() => setShowLineItems((prev) => !prev)}
+            itemCount={formData.lineItems.length}
+          />
+          {showLineItems ? (
+            <div className="border rounded-lg overflow-hidden">
+              <div className="overflow-x-auto scrollbar-thin-muted">
+                <table className="min-w-[760px] w-full text-xs">
+                  <thead className="bg-gray-50 border-b">
+                    <tr>
+                      <th className="p-2 text-left font-medium min-w-[180px]">Item Description</th>
                       {!isInvoiceLevelTax && (
-                        <td className="p-2">{formatLineItemTax(item)}</td>
+                        <th className="p-2 text-left font-medium w-[130px]">Tax</th>
                       )}
-                      <td className="p-2  ">{item.quantity ?? "-"}</td>
-                      <td className="p-2  ">
-                        {formatAmount(item.unitRate ?? item.unitPrice ?? 0)}
-                      </td>
+                      <th className="p-2 text-left font-medium w-[50px]">Qty</th>
+                      <th className="p-2 text-left font-medium w-[80px]">Rate</th>
                       {!isInvoiceLevelDiscount && (
-                        <td className="p-2">{formatLineItemDiscount(item)}</td>
+                        <th className="p-2 text-left font-medium w-[80px]">Discount</th>
                       )}
-                      <td className="p-2 font-semibold">
-                        {formatAmount(calculateLineItemSubtotal(item))}
-                      </td>
+                      <th className="p-2 text-left font-medium w-[90px]">
+                        {isInvoiceLevelTax ? "Net Amount" : "Taxable Amount"}
+                      </th>
                       {!isInvoiceLevelTax && (
                         <>
-                          <td className="p-2">
-                            {(() => {
-                              const taxableAmount = calculateLineItemSubtotal(item);
-                              const rate = useInrTax
-                                ? parseTaxRateFromLabel(item.tax)
-                                : (Number(item.taxRate) || parseTaxRateFromLabel(item.tax) || 0);
-                              return formatAmount((taxableAmount * rate) / 100);
-                            })()}
-                          </td>
-                          <td className="p-2">
-                            {(() => {
-                              const taxableAmount = calculateLineItemSubtotal(item);
-                              const rate = useInrTax
-                                ? parseTaxRateFromLabel(item.tax)
-                                : (Number(item.taxRate) || parseTaxRateFromLabel(item.tax) || 0);
-                              const taxAmount = (taxableAmount * rate) / 100;
-                              return formatAmount(taxableAmount + taxAmount);
-                            })()}
-                          </td>
+                          <th className="p-2 text-left font-medium w-[90px]">Tax Amount</th>
+                          <th className="p-2 text-left font-medium w-[90px]">Net Amount</th>
                         </>
                       )}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {formData.lineItems.map((item, index) => (
+                      <tr key={index} className="border-b last:border-b-0 align-top">
+                        <td className="p-2">
+                          <p>{item.description || "-"}</p>
+                          {item.hsnSac && (
+                            <p className="text-[10px] text-muted-foreground mt-0.5">
+                              HSN: {item.hsnSac}
+                            </p>
+                          )}
+                        </td>
+                        {!isInvoiceLevelTax && (
+                          <td className="p-2">{formatLineItemTax(item)}</td>
+                        )}
+                        <td className="p-2  ">{item.quantity ?? "-"}</td>
+                        <td className="p-2  ">
+                          {formatAmount(item.unitRate ?? item.unitPrice ?? 0)}
+                        </td>
+                        {!isInvoiceLevelDiscount && (
+                          <td className="p-2">{formatLineItemDiscount(item)}</td>
+                        )}
+                        <td className="p-2 font-semibold">
+                          {formatAmount(calculateLineItemSubtotal(item))}
+                        </td>
+                        {!isInvoiceLevelTax && (
+                          <>
+                            <td className="p-2">
+                              {(() => {
+                                const taxableAmount = calculateLineItemSubtotal(item);
+                                const rate = useInrTax
+                                  ? parseTaxRateFromLabel(item.tax)
+                                  : (Number(item.taxRate) || parseTaxRateFromLabel(item.tax) || 0);
+                                return formatAmount((taxableAmount * rate) / 100);
+                              })()}
+                            </td>
+                            <td className="p-2">
+                              {(() => {
+                                const taxableAmount = calculateLineItemSubtotal(item);
+                                const rate = useInrTax
+                                  ? parseTaxRateFromLabel(item.tax)
+                                  : (Number(item.taxRate) || parseTaxRateFromLabel(item.tax) || 0);
+                                const taxAmount = (taxableAmount * rate) / 100;
+                                return formatAmount(taxableAmount + taxAmount);
+                              })()}
+                            </td>
+                          </>
+                        )}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+          ) : (
+            <LineItemsSummary
+              summary={lineItemsSummary}
+              formatAmount={formatAmount}
+              isInvoiceLevelTax={isInvoiceLevelTax}
+            />
+          )}
         </div>
       )}
 

@@ -1,8 +1,11 @@
+import { parseMsmeValue } from '../../utils/vendorValidation';
+
 export const toVendorApiPayload = (vendor = {}) => {
   const {
     name,
     vendor_type,
     vendorType,
+    msme,
     email,
     phone,
     mobile,
@@ -35,9 +38,13 @@ export const toVendorApiPayload = (vendor = {}) => {
     notes,
   } = vendor;
 
+  const resolvedMsme = parseMsmeValue(msme);
+  const msmeBoolean = resolvedMsme === null ? false : resolvedMsme;
+
   return {
     name,
     vendorType: vendorType ?? vendor_type,
+    msme: msmeBoolean,
     email,
     phone,
     mobile,
@@ -66,6 +73,7 @@ export const toVendorApiPayload = (vendor = {}) => {
 export const toVendorUiPayload = (vendor = {}) => ({
   ...vendor,
   vendor_type: vendor.vendor_type ?? vendor.vendorType,
+  msme: parseMsmeValue(vendor.msme ?? vendor.is_msme) === true,
   address_line1: vendor.address_line1 ?? vendor.addressLine1,
   address_line2: vendor.address_line2 ?? vendor.addressLine2,
   bank_name: vendor.bank_name ?? vendor.bankName,

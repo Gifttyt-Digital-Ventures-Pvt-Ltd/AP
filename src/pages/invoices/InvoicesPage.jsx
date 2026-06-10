@@ -123,15 +123,19 @@ import {
   normalizeCurrencyCode,
 } from "../../utils/currency";
 import {
+  isCheckerEditEnabled as isCheckerEditEnabledForCorporate,
+  isCheckerEditForbiddenError,
+} from "../../utils/invoiceConfiguration";
+import {
   buildCurrentUserIdentity,
   canDeleteInvoice,
   canEditInvoice,
   extractApiErrorDetail,
   formatWorkflowStatus,
+  getInvoiceEditBlockedMessage,
   getInvoiceStatusBadgeClass,
   isSavedInvoiceStatus,
   canForwardSavedInvoice,
-  NEEDS_CORRECTION_STATUS,
   resolveBulkCreateInvoiceStatus,
   resolveInitialInvoiceStatus,
 } from "../../utils/approvalWorkflow";
@@ -232,6 +236,7 @@ const invoiceTableHeader = [
 const InvoicesPage = () => {
   const { user } = useAuth();
   const {
+    corporateScreens,
     isCategoryFeatureEnabled,
     isCampaignFeatureEnabled,
     isCorporateAdmin,
@@ -388,20 +393,32 @@ const InvoicesPage = () => {
   const canManageInvoices = canPerformAction("invoices.create");
   const canUpdateInvoices = canPerformAction("invoices.update");
   const canDeleteInvoices = canPerformAction("invoices.delete");
+  const canCheckInvoices = canPerformAction("invoices.check");
   const canAddVendors = canPerformAction("invoices.addVendor");
+  const isCheckerEditEnabled = useMemo(
+    () =>
+      isCheckerEditEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
   const invoiceEditContext = useMemo(
     () => ({
       ...buildCurrentUserIdentity({ user, corporateUserContext }),
       canUpdateInvoices,
       canManageInvoices,
+      canCheckInvoices,
       isCorporateAdmin,
+      isCheckerEditEnabled,
     }),
     [
       user,
       corporateUserContext,
       canUpdateInvoices,
       canManageInvoices,
+      canCheckInvoices,
       isCorporateAdmin,
+      isCheckerEditEnabled,
     ],
   );
 
@@ -1599,16 +1616,7 @@ const InvoicesPage = () => {
 
   const handleEditInvoice = (invoice) => {
     if (!canEditInvoice(invoice, invoiceEditContext)) {
-      const status = formatWorkflowStatus(invoice?.status);
-      if (!canUpdateInvoices && !canManageInvoices) {
-        toast.error("You do not have permission to edit this invoice");
-      } else if (status === NEEDS_CORRECTION_STATUS) {
-        toast.error(
-          "Only the creator can edit an invoice in Needs Correction status",
-        );
-      } else {
-        toast.error(`Invoices in ${status || "this"} status cannot be edited`);
-      }
+      toast.error(getInvoiceEditBlockedMessage(invoice, invoiceEditContext));
       return;
     }
 
@@ -1650,6 +1658,15 @@ const InvoicesPage = () => {
       setSelectedInvoice(null);
       setFormData(null);
     } catch (error) {
+      if (isCheckerEditForbiddenError(error)) {
+        toast.error(
+          "Invoice editing during checker review is not enabled for your organization",
+        );
+        setEditDialogOpen(false);
+        setSelectedInvoice(null);
+        setFormData(null);
+        return;
+      }
       toast.error(extractApiErrorDetail(error) || "Failed to update invoice");
     }
   };

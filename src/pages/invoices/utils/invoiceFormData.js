@@ -8,6 +8,7 @@ import {
   mapExtractedLineItemToForm,
 } from "./invoiceTax";
 import { buildTdsValue } from "./tds";
+import { resolveLineItemsExpanded } from "./lineItemsSummary";
 
 export const resolveVendorGstin = (vendor = {}) =>
   String(vendor?.gstin ?? vendor?.gstIn ?? "").trim();
@@ -124,6 +125,7 @@ export const buildInvoiceEditFormData = (
       "",
     source: invoice.source || "Upload",
     sourceEmail: invoice.sourceEmail || invoice.sourceEmail || "",
+    lineItemsExpanded: resolveLineItemsExpanded(invoice),
     lineItems:
       invoiceLineItems.length > 0
         ? invoiceLineItems.map((item) => mapInvoiceLineItemToForm(item, { useInrTax }))

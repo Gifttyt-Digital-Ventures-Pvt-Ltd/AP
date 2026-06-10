@@ -273,6 +273,10 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
     referenceNumber:
       pickInvoiceField(invoice, "referenceNumber", "reference_number") ||
       pickInvoiceField(invoice, "referenceCode", "reference_code", ""),
+    lineItemsExpanded:
+      invoice.lineItemsExpanded ??
+      invoice.line_items_expanded ??
+      true,
   };
 };
 
@@ -430,6 +434,10 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
             pickInvoiceField(invoice, "referenceCode", "reference_code", ""),
         }
       : {}),
+    lineItemsExpanded:
+      invoice.lineItemsExpanded ??
+      invoice.line_items_expanded ??
+      true,
   };
 };
 

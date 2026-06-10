@@ -221,6 +221,7 @@ export const initializeInvoiceFormData = (
       "",
     source: extractedData?.source || "Upload",
     sourceEmail: "",
+    lineItemsExpanded: true,
     lineItems: extractedData?.lineItems?.length > 0
       ? extractedData.lineItems.map((item) =>
           mapExtractedLineItemToForm(item, { useInrTax }),

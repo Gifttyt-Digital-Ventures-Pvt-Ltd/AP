@@ -1,5 +1,15 @@
 import { serviceApi } from "../serviceApi";
 import { normalizeCustomRolePermissionsResponse } from "../../utils/rbacPermissions";
+import {
+  DEFAULT_INVOICE_CONFIGURATION,
+  normalizeActiveInvoiceConfiguration,
+  normalizeInvoiceConfigurationCatalog,
+} from "../../utils/invoiceConfiguration";
+import {
+  DEFAULT_VENDOR_FIELD_CATALOG,
+  normalizeActiveVendorFields,
+  normalizeVendorFieldCatalog,
+} from "../../utils/vendorFieldConfig";
 
 const toBoolean = (value) => value === true;
 
@@ -133,6 +143,17 @@ const normalizeCorporateScreensResponse = (response = {}) => {
   });
 
   const enabledSectionList = Array.from(enabledSections);
+  const vendorFieldConfiguration = normalizeVendorFieldCatalog(
+    toArray(response?.vendorFieldConfiguration),
+  );
+  const activeVendorFields = normalizeActiveVendorFields(response?.activeVendorFields);
+  const invoiceConfiguration = normalizeInvoiceConfigurationCatalog(
+    toArray(response?.invoiceConfiguration),
+  );
+  const activeInvoiceConfiguration = normalizeActiveInvoiceConfiguration(
+    response?.activeInvoiceConfiguration,
+  );
+
   return {
     raw: response ?? null,
     allowedScreens: Array.from(allowedScreens),
@@ -141,6 +162,16 @@ const normalizeCorporateScreensResponse = (response = {}) => {
     sectionScreens: Object.fromEntries(sectionScreens),
     isCategoryFeatureEnabled: enabledSections.has("CATEGORY_ALL"),
     isCampaignFeatureEnabled: enabledSections.has("CAMPAIGN_ALL"),
+    vendorFieldConfiguration:
+      vendorFieldConfiguration.length > 0
+        ? vendorFieldConfiguration
+        : DEFAULT_VENDOR_FIELD_CATALOG,
+    activeVendorFields,
+    invoiceConfiguration:
+      invoiceConfiguration.length > 0
+        ? invoiceConfiguration
+        : DEFAULT_INVOICE_CONFIGURATION,
+    activeInvoiceConfiguration,
   };
 };
 
