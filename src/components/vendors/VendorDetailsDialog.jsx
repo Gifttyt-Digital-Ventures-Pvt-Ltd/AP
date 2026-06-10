@@ -1,12 +1,19 @@
 import React from "react";
 import { Building2, User } from "lucide-react";
 import { useGetAvailableCurrenciesQuery } from "../../Services/apis/corporateApi";
+import { useRBAC } from "../../contexts/RBACContext";
 import { CURRENCY_SCREENS, FALLBACK_CURRENCIES } from "../../utils/currency";
+import {
+  getVendorFieldDisplayName,
+  isVendorFieldRequired,
+  VENDOR_FIELD_SECTIONS,
+} from "../../utils/vendorFieldConfig";
 import {
   isIndiaCountry,
   normalizePincodeInput,
 } from "../../utils/vendorValidation";
 import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
@@ -40,12 +47,18 @@ const VendorDetailsDialog = ({
   description = "Add contact details and payment info of your vendor in OptiFii",
   submitLabel = "Save Vendor",
   submitting = false,
-  requireEmail = true,
-  requireFullMandatory = false,
+  activeVendorFields: activeVendorFieldsProp,
+  vendorFieldConfiguration: vendorFieldConfigurationProp,
   /** Invoice upload vendor request: only name + type are mandatory */
   invoiceVendorRequest = false,
   testId = "vendor-dialog",
 }) => {
+  const { corporateScreens } = useRBAC();
+  const activeVendorFields =
+    activeVendorFieldsProp ?? corporateScreens?.activeVendorFields ?? [];
+  const vendorFieldConfiguration =
+    vendorFieldConfigurationProp ?? corporateScreens?.vendorFieldConfiguration ?? [];
+
   const { data: availableCurrencies = [] } = useGetAvailableCurrenciesQuery(
     CURRENCY_SCREENS.INVOICE,
     { skip: invoiceVendorRequest },
@@ -53,10 +66,13 @@ const VendorDetailsDialog = ({
 
   if (!formData) return null;
 
-  const isEmailRequired = requireEmail || requireFullMandatory;
+  const isRequired = (sectionId) =>
+    !invoiceVendorRequest && isVendorFieldRequired(sectionId, activeVendorFields);
+
+  const labelFor = (sectionId, fallback = "") =>
+    getVendorFieldDisplayName(sectionId, vendorFieldConfiguration) || fallback;
+
   const isIndia = isIndiaCountry(formData.country);
-  const isGstinRequired = isIndia && !invoiceVendorRequest;
-  const isPanRequired = isIndia && !invoiceVendorRequest;
   const currencyOptions =
     Array.isArray(availableCurrencies) && availableCurrencies.length > 0
       ? availableCurrencies.filter((currency) => currency !== "ALL")
@@ -67,127 +83,138 @@ const VendorDetailsDialog = ({
   const basicInfoFields = [
     {
       key: "email",
-      label: "Email",
+      section: VENDOR_FIELD_SECTIONS.EMAIL_ID,
       type: "email",
       placeholder: "vendor@example.com",
-      required: isEmailRequired,
       testId: "vendor-email-input",
     },
     {
       key: "mobile",
-      label: "Mobile Number",
+      section: VENDOR_FIELD_SECTIONS.MOBILE_NO,
       placeholder: "+91 98765 43210",
-      required: !invoiceVendorRequest,
       testId: "vendor-mobile-input",
     },
     {
       key: "phone",
-      label: "Phone Number",
+      section: VENDOR_FIELD_SECTIONS.PHONE_NO,
       placeholder: "+91 22 1234 5678",
-      required: false,
       testId: "vendor-phone-input",
     },
     {
       key: "contact_person",
-      label: "Contact Person",
+      section: VENDOR_FIELD_SECTIONS.CONTACT_PERSON,
       placeholder: "e.g., Rahul Sharma",
-      required: requireFullMandatory,
     },
-    { key: "website", label: "Website", placeholder: "https://example.com" },
+    {
+      key: "website",
+      section: VENDOR_FIELD_SECTIONS.WEBSITE,
+      placeholder: "https://example.com",
+    },
   ];
 
   const addressFields = [
     {
       key: "address_line1",
-      label: "Address Line 1",
+      section: VENDOR_FIELD_SECTIONS.ADDRESS_LINE_1,
       placeholder: "Building/Street address",
-      required: requireFullMandatory,
       colSpan: "col-span-2",
     },
     {
       key: "address_line2",
-      label: "Address Line 2",
+      section: VENDOR_FIELD_SECTIONS.ADDRESS_LINE_2,
       placeholder: "Apartment, suite, etc.",
-      required: false,
       colSpan: "col-span-2",
     },
     {
       key: "city",
-      label: "City",
+      section: VENDOR_FIELD_SECTIONS.CITY,
       placeholder: "e.g., Mumbai",
-      required: requireFullMandatory,
     },
     {
       key: "state",
-      label: "State",
+      section: VENDOR_FIELD_SECTIONS.STATE,
       placeholder: "e.g., Maharashtra",
-      required: requireFullMandatory,
     },
     {
       key: "country",
-      label: "Country",
+      section: VENDOR_FIELD_SECTIONS.COUNTRY,
       placeholder: "India",
-      required: requireFullMandatory,
     },
   ];
 
   const bankFields = [
     {
       key: "account_holder_name",
-      label: "Account Holder Name",
+      section: VENDOR_FIELD_SECTIONS.ACCOUNT_NAME,
       placeholder: "As per bank records",
       colSpan: "col-span-2",
     },
     {
       key: "account_number",
-      label: "Account Number",
+      section: VENDOR_FIELD_SECTIONS.ACCOUNT_NUMBER,
       placeholder: "1234567890",
     },
     {
       key: "ifsc_code",
-      label: "IFSC Code",
+      section: VENDOR_FIELD_SECTIONS.IFSC_CODE,
       placeholder: "ICIC0001234",
       transform: (value) => value.toUpperCase(),
       className: "uppercase",
     },
-    { key: "bank_name", label: "Bank Name", placeholder: "e.g., ICICI Bank" },
-    { key: "branch", label: "Branch", placeholder: "e.g., Andheri West" },
+    {
+      key: "bank_name",
+      section: VENDOR_FIELD_SECTIONS.BANK_NAME,
+      placeholder: "e.g., ICICI Bank",
+    },
+    {
+      key: "branch",
+      section: VENDOR_FIELD_SECTIONS.BRANCH,
+      placeholder: "e.g., Andheri West",
+    },
   ];
 
   const renderInputField = ({
     key,
-    label,
+    section,
     placeholder,
-    required = false,
     type = "text",
     transform,
     className = "",
     colSpan = "",
     maxLength,
     testId,
-  }) => (
-    <div key={key} className={colSpan}>
-      <Label>
-        {label}
-        {required ? " *" : ""}
-      </Label>
-      <Input
-        type={type}
-        value={formData[key] || ""}
-        onChange={(event) =>
-          updateField(
-            key,
-            transform ? transform(event.target.value) : event.target.value,
-          )
-        }
-        placeholder={placeholder}
-        required={required}
-        className={className}
-        maxLength={maxLength}
-        data-testid={testId}
-      />
-    </div>
-  );
+  }) => {
+    const required = isRequired(section);
+    const label = labelFor(section);
+    return (
+      <div key={key} className={colSpan}>
+        <Label>
+          {label}
+          {required ? " *" : ""}
+        </Label>
+        <Input
+          type={type}
+          value={formData[key] || ""}
+          onChange={(event) =>
+            updateField(
+              key,
+              transform ? transform(event.target.value) : event.target.value,
+            )
+          }
+          placeholder={placeholder}
+          required={required}
+          className={className}
+          maxLength={maxLength}
+          data-testid={testId}
+        />
+      </div>
+    );
+  };
+
+  const nameLabel =
+    formData.vendor_type === "Company"
+      ? labelFor(VENDOR_FIELD_SECTIONS.COMPANY_NAME, "Company Name")
+      : "Full Name";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -215,7 +242,12 @@ const VendorDetailsDialog = ({
             <TabsContent value="basic" className="space-y-4 mt-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <Label>Vendor Type *</Label>
+                  <Label>
+                    {labelFor(VENDOR_FIELD_SECTIONS.VENDOR_TYPE, "Vendor Type")}
+                    {invoiceVendorRequest || isRequired(VENDOR_FIELD_SECTIONS.VENDOR_TYPE)
+                      ? " *"
+                      : ""}
+                  </Label>
                   <div className="flex gap-4 mt-2">
                     {["Company", "Individual"].map((type) => (
                       <button
@@ -246,10 +278,10 @@ const VendorDetailsDialog = ({
 
                 <div className="col-span-2">
                   <Label>
-                    {formData.vendor_type === "Company"
-                      ? "Company Name"
-                      : "Full Name"}{" "}
-                    *
+                    {nameLabel}
+                    {invoiceVendorRequest || isRequired(VENDOR_FIELD_SECTIONS.COMPANY_NAME)
+                      ? " *"
+                      : ""}
                   </Label>
                   <Input
                     value={formData.name}
@@ -262,46 +294,57 @@ const VendorDetailsDialog = ({
                         : "e.g., John Doe"
                     }
                     data-testid="vendor-name-input"
-                    required
+                    required={
+                      invoiceVendorRequest ||
+                      isRequired(VENDOR_FIELD_SECTIONS.COMPANY_NAME)
+                    }
                   />
                 </div>
 
                 {basicInfoFields.map(renderInputField)}
 
                 <div>
-                  <Label>Category</Label>
+                  <Label>
+                    {labelFor(VENDOR_FIELD_SECTIONS.CATEGORY, "Category")}
+                    {isRequired(VENDOR_FIELD_SECTIONS.CATEGORY) ? " *" : ""}
+                  </Label>
                   <Select
                     value={formData.category || ""}
                     onValueChange={(value) => updateField("category", value)}
+                    required={isRequired(VENDOR_FIELD_SECTIONS.CATEGORY)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select Category" />
                     </SelectTrigger>
                     <SelectContent>
-                    {CATEGORY_OPTIONS.map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {option}
-                      </SelectItem>
-                    ))}
+                      {CATEGORY_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
 
                 <div>
-                  <Label>Currency</Label>
+                  <Label>
+                    {labelFor(VENDOR_FIELD_SECTIONS.CURRENCY, "Currency")}
+                    {isRequired(VENDOR_FIELD_SECTIONS.CURRENCY) ? " *" : ""}
+                  </Label>
                   <Select
                     value={formData.currency || ""}
                     onValueChange={(value) => updateField("currency", value)}
+                    required={isRequired(VENDOR_FIELD_SECTIONS.CURRENCY)}
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select Currency" />
                     </SelectTrigger>
                     <SelectContent>
-                    {currencyOptions.map((option) => (
-                      <SelectItem key={option} value={option}>
-                        {option}
-                      </SelectItem>
-                    ))}
+                      {currencyOptions.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -310,8 +353,10 @@ const VendorDetailsDialog = ({
 
                 <div>
                   <Label>
-                    {isIndia ? "Pincode" : "Postal Code"}
-                    {requireFullMandatory ? " *" : ""}
+                    {isIndia
+                      ? labelFor(VENDOR_FIELD_SECTIONS.PINCODE, "Pincode")
+                      : "Postal Code"}
+                    {isRequired(VENDOR_FIELD_SECTIONS.PINCODE) ? " *" : ""}
                   </Label>
                   <Input
                     type="text"
@@ -329,7 +374,7 @@ const VendorDetailsDialog = ({
                     placeholder={
                       isIndia ? "e.g., 400001" : "e.g., 10001 or SW1A 1AA"
                     }
-                    required={requireFullMandatory}
+                    required={isRequired(VENDOR_FIELD_SECTIONS.PINCODE)}
                     maxLength={isIndia ? 6 : undefined}
                     data-testid="vendor-pincode-input"
                   />
@@ -345,7 +390,10 @@ const VendorDetailsDialog = ({
             <TabsContent value="tax" className="space-y-4 mt-4">
               <div className="grid grid-cols-2 gap-4">
                 <div key="pan">
-                  <Label>PAN Number{isPanRequired ? " *" : ""}</Label>
+                  <Label>
+                    {labelFor(VENDOR_FIELD_SECTIONS.PAN_NO, "PAN Number")}
+                    {isRequired(VENDOR_FIELD_SECTIONS.PAN_NO) ? " *" : ""}
+                  </Label>
                   <Input
                     value={formData.pan}
                     onChange={(event) =>
@@ -354,7 +402,7 @@ const VendorDetailsDialog = ({
                     placeholder="ABCDE1234F"
                     maxLength={10}
                     className="uppercase"
-                    required={isPanRequired}
+                    required={isRequired(VENDOR_FIELD_SECTIONS.PAN_NO)}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     10-digit alphanumeric PAN number
@@ -362,7 +410,10 @@ const VendorDetailsDialog = ({
                 </div>
 
                 <div>
-                  <Label>GSTIN/TAX ID{isGstinRequired ? " *" : ""}</Label>
+                  <Label>
+                    {labelFor(VENDOR_FIELD_SECTIONS.GST_NO, "GSTIN/TAX ID")}
+                    {isRequired(VENDOR_FIELD_SECTIONS.GST_NO) ? " *" : ""}
+                  </Label>
                   <Input
                     value={formData.gstin}
                     onChange={(event) =>
@@ -373,7 +424,7 @@ const VendorDetailsDialog = ({
                     }
                     maxLength={isIndia ? 15 : undefined}
                     className="uppercase"
-                    required={isGstinRequired}
+                    required={isRequired(VENDOR_FIELD_SECTIONS.GST_NO)}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     {isIndia
@@ -381,6 +432,23 @@ const VendorDetailsDialog = ({
                       : "Optional tax identifier for the vendor country"}
                   </p>
                 </div>
+
+                {!invoiceVendorRequest && (
+                  <div className="col-span-2 flex items-center gap-2 pt-1">
+                    <Checkbox
+                      id="vendor-msme"
+                      checked={Boolean(formData.msme)}
+                      onCheckedChange={(checked) =>
+                        updateField("msme", checked === true)
+                      }
+                      data-testid="vendor-msme-checkbox"
+                    />
+                    <Label htmlFor="vendor-msme" className="cursor-pointer font-normal">
+                      {labelFor(VENDOR_FIELD_SECTIONS.MSME, "MSME registered vendor")}
+                      {isRequired(VENDOR_FIELD_SECTIONS.MSME) ? " *" : ""}
+                    </Label>
+                  </div>
+                )}
               </div>
             </TabsContent>
 
@@ -403,12 +471,16 @@ const VendorDetailsDialog = ({
 
             <TabsContent value="additional" className="space-y-4 mt-4">
               <div>
-                <Label>Notes</Label>
+                <Label>
+                  {labelFor(VENDOR_FIELD_SECTIONS.REMARKS, "Notes")}
+                  {isRequired(VENDOR_FIELD_SECTIONS.REMARKS) ? " *" : ""}
+                </Label>
                 <textarea
                   value={formData.notes}
                   onChange={(event) => updateField("notes", event.target.value)}
                   className="w-full min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm"
                   placeholder="Add any additional notes or special instructions..."
+                  required={isRequired(VENDOR_FIELD_SECTIONS.REMARKS)}
                 />
               </div>
             </TabsContent>

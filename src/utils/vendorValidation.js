@@ -1,3 +1,33 @@
+import {
+  getVendorFieldDisplayName,
+  hasVendorFieldValue,
+  normalizeActiveVendorFields,
+} from './vendorFieldConfig';
+
+const MSME_TRUE_VALUES = new Set(['yes', 'y', 'true', '1']);
+const MSME_FALSE_VALUES = new Set(['no', 'n', 'false', '0']);
+
+/** Parses MSME from checkbox (boolean) or bulk upload Yes/No. Returns null if invalid text. */
+export const parseMsmeValue = (value) => {
+  if (value === undefined || value === null || value === '') return false;
+  if (typeof value === 'boolean') return value;
+  const normalized = String(value).trim().toLowerCase();
+  if (!normalized) return false;
+  if (MSME_TRUE_VALUES.has(normalized)) return true;
+  if (MSME_FALSE_VALUES.has(normalized)) return false;
+  return null;
+};
+
+export const formatMsmeLabel = (value) => (parseMsmeValue(value) === true ? 'Yes' : 'No');
+
+export const getMsmeValidationError = (value, { prefix = '' } = {}) => {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value === 'boolean') return null;
+  const raw = String(value).trim();
+  if (!raw) return null;
+  return parseMsmeValue(value) === null ? `${prefix}MSME must be Yes or No` : null;
+};
+
 export const isIndiaCountry = (country) => {
   const normalized = String(country || '')
     .trim()
@@ -19,90 +49,109 @@ export const getPincodeValidationError = (
   { required = false, prefix = '' } = {},
 ) => {
   const value = String(pincode || '').trim();
+  const effectiveCountry = String(country || '').trim() || 'India';
 
   if (!value) {
     return required ? `${prefix}Pincode is required` : null;
   }
 
-  if (isIndiaCountry(country) && !/^\d{6}$/.test(value)) {
+  if (isIndiaCountry(effectiveCountry) && !/^\d{6}$/.test(value)) {
     return `${prefix}Pincode must be a 6-digit number for vendors in India`;
   }
 
   return null;
 };
 
-export const getVendorValidationErrors = (
-  vendor = {},
-  {
-    rowIndex = null,
-    requireEmail = false,
-    requireName = true,
-    requireVendorType = false,
-    requirePincode = false,
-  } = {},
-) => {
-  const prefix = rowIndex !== null && rowIndex !== undefined ? `Row ${rowIndex + 2}: ` : '';
-  const errors = [];
+const getDigitsOnly = (value) => String(value || '').replace(/\D/g, '');
 
-  const name = String(vendor.name || '').trim();
-  const vendorType = String(vendor.vendor_type || vendor.vendorType || '').trim();
+const getVendorFormatValidationErrors = (vendor = {}, { prefix = '' } = {}) => {
+  const errors = [];
   const email = String(vendor.email || '').trim();
   const mobile = String(vendor.mobile || '').trim();
-  const country = String(vendor.country || '').trim();
+  const phone = String(vendor.phone || '').trim();
+  const country = String(vendor.country || '').trim() || 'India';
   const pincode = String(vendor.pincode || '').trim();
   const pan = String(vendor.pan || '').trim().toUpperCase();
   const gstin = String(vendor.gstin || '').trim().toUpperCase();
+  const vendorType = String(vendor.vendor_type || vendor.vendorType || '').trim();
 
-  if (requireName && !name) {
-    errors.push(`${prefix}Vendor name is required`);
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors.push(`${prefix}Email is invalid`);
   }
 
-  if (requireVendorType && !vendorType) {
-    errors.push(`${prefix}Vendor type is required`);
-  } else if (
+  if (mobile) {
+    const mobileDigits = getDigitsOnly(mobile);
+    if (mobileDigits.length !== 10) {
+      errors.push(`${prefix}Mobile must be 10 digits`);
+    }
+  }
+
+  if (phone) {
+    const phoneDigits = getDigitsOnly(phone);
+    if (phoneDigits.length < 6 || phoneDigits.length > 15) {
+      errors.push(`${prefix}Phone must be 6–15 digits`);
+    }
+  }
+
+  const pincodeError = getPincodeValidationError(pincode, country, { prefix });
+  if (pincodeError) {
+    errors.push(pincodeError);
+  }
+
+  if (
     vendorType &&
     !['company', 'individual'].includes(vendorType.toLowerCase())
   ) {
     errors.push(`${prefix}Vendor type must be Company or Individual`);
   }
 
-  if (requireEmail && !email) {
-    errors.push(`${prefix}Email is required`);
-  } else if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    errors.push(`${prefix}Email is invalid`);
-  }
-
-  if (!mobile) {
-    errors.push(`${prefix}Mobile number is required`);
-  }
-
-  const pincodeError = getPincodeValidationError(pincode, country, {
-    required: requirePincode,
-    prefix,
-  });
-  if (pincodeError) {
-    errors.push(pincodeError);
-  }
-
-  if (isIndiaCountry(country)) {
-    if (!pan) {
-      errors.push(`${prefix}PAN is required for vendors in India`);
+  if (pan) {
+    if (isIndiaCountry(country)) {
+      if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(pan)) {
+        errors.push(`${prefix}PAN format is invalid`);
+      }
     } else if (pan.length !== 10) {
       errors.push(`${prefix}PAN must be 10 characters`);
     }
+  }
 
-    if (!gstin) {
-      errors.push(`${prefix}GSTIN/TAX ID is required for vendors in India`);
-    } else if (gstin.length !== 15) {
-      errors.push(`${prefix}GSTIN must be 15 characters for vendors in India`);
-    }
-  } else {
-    if (pan && pan.length !== 10) {
-      errors.push(`${prefix}PAN must be 10 characters`);
-    }
+  if (gstin && isIndiaCountry(country) && gstin.length !== 15) {
+    errors.push(`${prefix}GSTIN must be 15 characters for vendors in India`);
+  }
+
+  const msmeError = getMsmeValidationError(vendor.msme, { prefix });
+  if (msmeError) {
+    errors.push(msmeError);
   }
 
   return errors;
+};
+
+export const getVendorValidationErrors = (
+  vendor = {},
+  {
+    rowIndex = null,
+    activeVendorFields = [],
+    vendorFieldConfiguration = [],
+    invoiceVendorRequest = false,
+  } = {},
+) => {
+  if (invoiceVendorRequest) {
+    return getInvoiceVendorRequestValidationErrors(vendor);
+  }
+
+  const prefix = rowIndex !== null && rowIndex !== undefined ? `Row ${rowIndex + 2}: ` : '';
+  const errors = [];
+  const requiredSections = normalizeActiveVendorFields(activeVendorFields);
+
+  requiredSections.forEach((section) => {
+    if (!hasVendorFieldValue(section, vendor)) {
+      const label = getVendorFieldDisplayName(section, vendorFieldConfiguration);
+      errors.push(`${prefix}${label} is required`);
+    }
+  });
+
+  return [...errors, ...getVendorFormatValidationErrors(vendor, { prefix })];
 };
 
 /**

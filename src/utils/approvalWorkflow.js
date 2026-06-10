@@ -289,7 +289,11 @@ const INVOICE_DELETABLE_STATUSES = new Set([
 
 export const shouldCheckerSubmitOnUpdate = (invoice, identity = {}) => {
   const status = normalizeWorkflowStatus(invoice?.status);
-  return status === PENDING_CHECKER_STATUS && Boolean(identity.canCheckInvoices);
+  return (
+    status === PENDING_CHECKER_STATUS &&
+    Boolean(identity.isCheckerEditEnabled) &&
+    Boolean(identity.canCheckInvoices)
+  );
 };
 
 export const canEditInvoice = (invoice, identity = {}) => {
@@ -298,20 +302,54 @@ export const canEditInvoice = (invoice, identity = {}) => {
     canManageInvoices,
     canCheckInvoices,
     isCorporateAdmin,
+    isCheckerEditEnabled = false,
   } = identity;
 
   const status = normalizeWorkflowStatus(invoice?.status);
   if (!INVOICE_MUTABLE_STATUSES.has(status)) return false;
 
-  if (isCorporateAdmin) return true;
+  if (status === PENDING_CHECKER_STATUS) {
+    if (!isCheckerEditEnabled) return false;
+    if (isCorporateAdmin) return true;
+    if (canCheckInvoices) return true;
+    return Boolean(canUpdateInvoices || canManageInvoices);
+  }
 
-  if (status === PENDING_CHECKER_STATUS && canCheckInvoices) return true;
+  if (isCorporateAdmin) return true;
 
   const canMutateInvoice = canUpdateInvoices || canManageInvoices;
   if (!canMutateInvoice) return false;
 
   if (status === NEEDS_CORRECTION_STATUS) return matchesCreator(invoice, identity);
   return true;
+};
+
+export const getInvoiceEditBlockedMessage = (invoice, identity = {}) => {
+  const status = normalizeWorkflowStatus(invoice?.status);
+  const {
+    canUpdateInvoices,
+    canManageInvoices,
+    canCheckInvoices,
+    isCheckerEditEnabled = false,
+  } = identity;
+
+  if (
+    status === PENDING_CHECKER_STATUS &&
+    !isCheckerEditEnabled &&
+    (canCheckInvoices || canUpdateInvoices || canManageInvoices)
+  ) {
+    return 'Invoice editing during checker review is not enabled for your organization';
+  }
+
+  if (!canUpdateInvoices && !canManageInvoices && !canCheckInvoices) {
+    return 'You do not have permission to edit this invoice';
+  }
+
+  if (status === NEEDS_CORRECTION_STATUS) {
+    return 'Only the creator can edit an invoice in Needs Correction status';
+  }
+
+  return `Invoices in ${status || 'this'} status cannot be edited`;
 };
 
 export const canDeleteInvoice = (status, canDeleteInvoices) => {

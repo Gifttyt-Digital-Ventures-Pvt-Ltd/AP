@@ -64,7 +64,7 @@ export const buildInvoiceFormChecklist = (
   const useInrTax = isInrInvoiceCurrency(formData.currency);
   const isGstinRequired = useInrTax && formData.gstTreatment !== "N/A";
   const isInvoiceLevelTax = formData.taxesLevel === INVOICE_LEVEL;
-  const isSourceEmailRequired = formData.source === "Email";
+  const isSourceEmailRequired = formData.source === "Email"; 
 
   const vendorChecklistItems = [
     item({

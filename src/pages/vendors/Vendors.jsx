@@ -31,7 +31,12 @@ import AppDataTable from '../../components/common/AppDataTable';
 import RefreshButton from '../../components/common/RefreshButton';
 import { TableCell, TableRow } from '../../components/ui/table';
 import MultipleVendorUploadDialog from './components/MultipleVendorUploadDialog';
-import { getVendorValidationErrors } from '../../utils/vendorValidation';
+import {
+  getVendorUploadMandatoryFieldKeys,
+  isVendorFieldRequired,
+  VENDOR_FORM_KEY_TO_SECTION,
+} from '../../utils/vendorFieldConfig';
+import { getVendorValidationErrors, parseMsmeValue } from '../../utils/vendorValidation';
 import BulkUploadReviewDialog from './components/BulkUploadReviewDialog';
 import DeleteVendorDialog from './components/DeleteVendorDialog';
 import ViewVendorDialog from './components/ViewVendorDialog';
@@ -46,6 +51,7 @@ const VENDOR_UPLOAD_FIELDS = [
   'contact_person',
   'pan',
   'gstin',
+  'msme',
   'category',
   'website',
   'currency',
@@ -61,19 +67,6 @@ const VENDOR_UPLOAD_FIELDS = [
   'bank_name',
   'branch',
   'notes',
-];
-
-const VENDOR_UPLOAD_MANDATORY_FIELDS = [
-  'name',
-  'vendor_type',
-  'email',
-  'mobile',
-  'contact_person',
-  'address_line1',
-  'city',
-  'state',
-  'pincode',
-  'country',
 ];
 
 const VENDOR_UPLOAD_HEADER_MAP = {
@@ -94,6 +87,7 @@ const VENDOR_UPLOAD_HEADER_MAP = {
   country: 'Country',
   pan: 'PAN No',
   gstin: 'GST no',
+  msme: 'MSME',
   account_holder_name: 'Account Name',
   account_number: 'Account Number',
   ifsc_code: 'IFSC Code',
@@ -101,10 +95,6 @@ const VENDOR_UPLOAD_HEADER_MAP = {
   branch: 'Branch',
   notes: 'Remarks',
 };
-
-const VENDOR_UPLOAD_OPTIONAL_FIELDS = VENDOR_UPLOAD_FIELDS.filter(
-  (field) => !VENDOR_UPLOAD_MANDATORY_FIELDS.includes(field),
-);
 
 const toBulkVendorPayload = (row) => {
   const name = String(row.name || '').trim();
@@ -135,6 +125,7 @@ const toBulkVendorPayload = (row) => {
     contact_person: String(row.contact_person || '').trim(),
     website: String(row.website || '').trim(),
     notes: String(row.notes || '').trim(),
+    msme: parseMsmeValue(row.msme) === true,
   };
 };
 
@@ -166,7 +157,17 @@ const Vendors = () => {
   const { user } = useAuth();
   const { data: corporateUserContext = null } = useGetCorporateUserDetailsQuery();
   const { guardAction, canPerformAction } = useActionGuard();
-  const { isCorporateAdmin } = useRBAC();
+  const { corporateScreens, isCorporateAdmin } = useRBAC();
+  const activeVendorFields = corporateScreens?.activeVendorFields ?? [];
+  const vendorFieldConfiguration = corporateScreens?.vendorFieldConfiguration ?? [];
+  const vendorUploadMandatoryFields = useMemo(
+    () => getVendorUploadMandatoryFieldKeys(activeVendorFields),
+    [activeVendorFields],
+  );
+  const vendorUploadOptionalFields = useMemo(
+    () => VENDOR_UPLOAD_FIELDS.filter((field) => !vendorUploadMandatoryFields.includes(field)),
+    [vendorUploadMandatoryFields],
+  );
   const canUpdateVendorPermission = canPerformAction('vendors.update');
   const canRequestVendorPermission = canPerformAction('invoices.addVendor');
   const vendorEditContext = useMemo(
@@ -206,6 +207,7 @@ const Vendors = () => {
     // Tax Information
     pan: '',
     gstin: '',
+    msme: false,
     
     // Address
     address_line1: '',
@@ -257,8 +259,8 @@ const Vendors = () => {
     }
 
     const validationErrors = getVendorValidationErrors(formData, {
-      requireEmail: true,
-      requirePincode: true,
+      activeVendorFields,
+      vendorFieldConfiguration,
     });
     if (validationErrors.length > 0) {
       toast.error(validationErrors[0]);
@@ -348,10 +350,17 @@ const Vendors = () => {
   const validateVendorUploadRow = (row, rowIndex) =>
     getVendorValidationErrors(row, {
       rowIndex,
-      requireEmail: true,
-      requireVendorType: true,
-      requirePincode: true,
+      activeVendorFields,
+      vendorFieldConfiguration,
     });
+
+  const getUploadGuideType = (fieldKey, optionalText) => {
+    const section = VENDOR_FORM_KEY_TO_SECTION[fieldKey];
+    if (section && isVendorFieldRequired(section, activeVendorFields)) {
+      return 'Mandatory';
+    }
+    return optionalText;
+  };
 
   const downloadVendorTemplate = () => {
     const headerRow = [
@@ -372,6 +381,7 @@ const Vendors = () => {
       'Country',
       'PAN No',
       'GST no',
+      'MSME',
       'Account Name',
       'Account Number',
       'IFSC Code',
@@ -382,29 +392,36 @@ const Vendors = () => {
 
     const guideRows = [
       ['Parameter', 'Type'],
-      ['Company Name', 'Mandatory'],
-      ['Vendor Type', 'Mandatory (Company/Individual)'],
-      ['Email ID', 'Mandatory'],
-      ['Mobile No', 'Mandatory'],
-      ['Phone No', 'Optional'],
-      ['Contact person', 'Mandatory'],
-      ['Category', 'Optional'],
-      ['Website', 'Optional'],
-      ['Currency', 'Optional'],
-      ['Address Line 1', 'Mandatory'],
-      ['Address Line 2', 'Optional'],
-      ['City', 'Mandatory'],
-      ['State', 'Mandatory'],
-      ['Pincode', 'Mandatory. Must be 6 digits when Country is India, otherwise any postal code text'],
-      ['Country', 'Mandatory'],
-      ['PAN No', 'Mandatory when Country is India, otherwise Optional'],
-      ['GST no', 'Mandatory when Country is India, otherwise Optional'],
-      ['Account Name', 'Optional'],
-      ['Account Number', 'Optional'],
-      ['IFSC Code', 'Optional'],
-      ['Bank Name', 'Optional'],
-      ['Branch', 'Optional'],
-      ['Remarks', 'Optional'],
+      ['Company Name', getUploadGuideType('name', 'Optional')],
+      ['Vendor Type', getUploadGuideType('vendor_type', 'Optional (Company/Individual)')],
+      ['Email ID', getUploadGuideType('email', 'Optional')],
+      ['Mobile No', getUploadGuideType('mobile', 'Optional')],
+      ['Phone No', getUploadGuideType('phone', 'Optional')],
+      ['Contact person', getUploadGuideType('contact_person', 'Optional')],
+      ['Category', getUploadGuideType('category', 'Optional')],
+      ['Website', getUploadGuideType('website', 'Optional')],
+      ['Currency', getUploadGuideType('currency', 'Optional')],
+      ['Address Line 1', getUploadGuideType('address_line1', 'Optional')],
+      ['Address Line 2', getUploadGuideType('address_line2', 'Optional')],
+      ['City', getUploadGuideType('city', 'Optional')],
+      ['State', getUploadGuideType('state', 'Optional')],
+      [
+        'Pincode',
+        getUploadGuideType(
+          'pincode',
+          'Optional. Must be 6 digits when Country is India, otherwise any postal code text',
+        ),
+      ],
+      ['Country', getUploadGuideType('country', 'Optional')],
+      ['PAN No', getUploadGuideType('pan', 'Optional')],
+      ['GST no', getUploadGuideType('gstin', 'Optional')],
+      ['MSME', getUploadGuideType('msme', 'Optional (Yes/No)')],
+      ['Account Name', getUploadGuideType('account_holder_name', 'Optional')],
+      ['Account Number', getUploadGuideType('account_number', 'Optional')],
+      ['IFSC Code', getUploadGuideType('ifsc_code', 'Optional')],
+      ['Bank Name', getUploadGuideType('bank_name', 'Optional')],
+      ['Branch', getUploadGuideType('branch', 'Optional')],
+      ['Remarks', getUploadGuideType('notes', 'Optional')],
     ];
 
     const workbook = XLSX.utils.book_new();
@@ -443,6 +460,7 @@ const Vendors = () => {
       mobile: vendor.mobile || '',
       pan: vendor.pan || '',
       gstin: vendor.gstin || '',
+      msme: parseMsmeValue(vendor.msme) === true,
       address_line1: vendor.address_line1 || '',
       address_line2: vendor.address_line2 || '',
       city: vendor.city || '',
@@ -525,6 +543,7 @@ const Vendors = () => {
       mobile: '',
       pan: '',
       gstin: '',
+      msme: false,
       address_line1: '',
       address_line2: '',
       city: '',
@@ -802,7 +821,7 @@ const Vendors = () => {
         disabled={createVendorLoading}
         expectedHeaders={VENDOR_UPLOAD_FIELDS}
         uploadHeaderMap={VENDOR_UPLOAD_HEADER_MAP}
-        nonMandatoryFields={VENDOR_UPLOAD_OPTIONAL_FIELDS}
+        nonMandatoryFields={vendorUploadOptionalFields}
         customValidation={validateVendorUploadRow}
       />
 
@@ -824,8 +843,8 @@ const Vendors = () => {
         title={editingVendor ? 'Edit Vendor' : 'Create Vendor'}
         description="Add contact details and payment info of your vendor in OptiFii"
         submitLabel={editingVendor ? 'Update Vendor' : 'Create Vendor'}
-        requireEmail
-        requireFullMandatory
+        activeVendorFields={activeVendorFields}
+        vendorFieldConfiguration={vendorFieldConfiguration}
         testId="vendor-dialog"
       />
 

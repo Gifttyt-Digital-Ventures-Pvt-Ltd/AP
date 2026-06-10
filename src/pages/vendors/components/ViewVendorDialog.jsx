@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { FileText, History } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatWorkflowStatus } from '../../../utils/approvalWorkflow';
+import { formatMsmeLabel } from '../../../utils/vendorValidation';
 import { useLazyGetVendorHistoryQuery } from '../../../Services/apis/invoicesVendorsApi';
 import ApprovalHistoryTimeline from '../../../components/common/ApprovalHistoryTimeline';
 import { Button } from '../../../components/ui/button';
@@ -43,6 +44,7 @@ const VendorDetailsTab = ({ vendor }) => (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div><p className="text-muted-foreground">PAN</p><p className="font-medium  ">{vendor.pan || '-'}</p></div>
         <div><p className="text-muted-foreground">GSTIN</p><p className="font-medium  ">{vendor.gstin || '-'}</p></div>
+        <div><p className="text-muted-foreground">MSME</p><p className="font-medium">{formatMsmeLabel(vendor.msme)}</p></div>
       </div>
     </div>
 
