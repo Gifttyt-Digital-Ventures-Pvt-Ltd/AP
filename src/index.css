@@ -30,14 +30,19 @@ code {
     --card-foreground: 164 78% 9%;
     --popover: 0 0% 100%;
     --popover-foreground: 164 78% 9%;
-    --primary: 164 78% 9%;
+    --primary: 250 0% 0%;
     --primary-foreground: 0 0% 98%;
+    --button-primary: 259 87% 38%;
+    --button-primary-foreground: 0 0% 98%;
+    /* --button-primary-hover: 0 0% 75%; */
+    --button-primary-hover: 265 39% 57%;
     --secondary: 40 5% 96%;
     --secondary-foreground: 164 78% 9%;
     --muted: 40 5% 96%;
     --muted-foreground: 240 3.8% 46.1%;
-    --accent: 199 89% 48%;
-    --accent-foreground: 0 0% 98%;
+    /* --accent: 199 89% 48%; */
+    --accent: 259 53% 91%;
+    --accent-foreground: 250 0% 0%;
     --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 0 0% 98%;
     --border: 240 5.9% 90%;
@@ -54,6 +59,10 @@ code {
     --popover-foreground: 0 0% 98%;
     --primary: 0 0% 98%;
     --primary-foreground: 240 5.9% 10%;
+    --button-primary: 259 87% 38%;
+    --button-primary-foreground: 0 0% 98%;
+    /* --button-primary-hover: 0 0% 75%; */
+    --button-primary-hover: 265 39% 57%;
     --secondary: 240 3.7% 15.9%;
     --secondary-foreground: 0 0% 98%;
     --muted: 240 3.7% 15.9%;
@@ -72,6 +81,30 @@ code {
   * {
     @apply border-border;
   }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+  }
+
+  *::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.35);
+    border-radius: 9999px;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+
   body {
     @apply bg-background text-foreground;
   }
@@ -95,6 +128,12 @@ code {
 }
 
 @layer base {
+  /* Full-screen dialogs: avoid right-side gap when Radix locks body scroll */
+  body[data-scroll-locked] {
+    padding-right: 0 !important;
+    margin-right: 0 !important;
+  }
+
   [data-debug-wrapper="true"] {
     display: contents !important;
   }
@@ -123,5 +162,41 @@ code {
     border-right-color: inherit;
     border-top-color: inherit;
     border-bottom-color: inherit;
+  }
+}
+
+@layer utilities {
+  /* Compact scrollbar variant used in dense dialogs/panels. */
+  .scrollbar-thin-muted {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
+  }
+
+  .scrollbar-thin-muted::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-thin-muted::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .scrollbar-thin-muted::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.35);
+    border-radius: 9999px;
+  }
+
+  .scrollbar-thin-muted::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+
+  /* Hides scrollbar while preserving scroll behavior. */
+  .scrollbar-none {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-none::-webkit-scrollbar {
+    display: none;
   }
 }

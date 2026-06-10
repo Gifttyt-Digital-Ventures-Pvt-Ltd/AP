@@ -1,0 +1,146 @@
+import { useCallback, useEffect, useRef, useState } from "react";
+import { toast } from "sonner";
+import { useLazyRefreshSessionQuery } from "../Services/serviceApi";
+import { useAuth } from "../contexts/AuthContext";
+import { redirectToOriginLogin } from "../utils/authRedirect";
+
+const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
+const PING_INTERVAL_MS = 5 * 60 * 1000;
+
+const SessionTimeout = ({ children }) => {
+  const { token, logout } = useAuth();
+  const [isInitializing, setIsInitializing] = useState(true);
+  const lastActivityRef = useRef(Date.now());
+  const lastPingRef = useRef(Date.now());
+  const sessionVersionRef = useRef(0);
+  const initializedTokenRef = useRef(null);
+  const handleLogoutRef = useRef(() => {});
+  const [triggerPing] = useLazyRefreshSessionQuery();
+  const logoutInProgressRef = useRef(false);
+
+  const handleLogout = useCallback(() => {
+    if (logoutInProgressRef.current) return;
+    logoutInProgressRef.current = true;
+
+    logout();
+
+    toast.error("Session Expired", {
+      description: "You have been logged out due to inactivity.",
+      duration: 5000,
+    });
+    redirectToOriginLogin();
+  }, [logout]);
+
+  useEffect(() => {
+    handleLogoutRef.current = handleLogout;
+  }, [handleLogout]);
+
+  const pingSession = useCallback(async (versionAtCall = sessionVersionRef.current, tokenAtCall = token) => {
+    if (!tokenAtCall) return;
+
+    try {
+      await triggerPing(tokenAtCall).unwrap();
+    } catch (error) {
+      // Ignore stale responses from previous sessions.
+      if (versionAtCall !== sessionVersionRef.current) return;
+
+      // Only auth failures should force logout.
+      if ([401, 403].includes(error?.status)) {
+        handleLogoutRef.current();
+      } else {
+        console.error("Session ping failed:", error);
+      }
+    }
+  }, [triggerPing, token]);
+
+  const updateActivity = useCallback(() => {
+    const now = Date.now();
+    lastActivityRef.current = now;
+
+    if (now - lastPingRef.current > PING_INTERVAL_MS) {
+      lastPingRef.current = now;
+      pingSession(sessionVersionRef.current, token);
+    }
+  }, [pingSession, token]);
+
+  useEffect(() => {
+    if (!token) {
+      logoutInProgressRef.current = false;
+      initializedTokenRef.current = null;
+      setIsInitializing(false);
+      return;
+    }
+
+    // Only block UI for the first validation of a new token.
+    // Route changes should never blank the entire app shell.
+    if (initializedTokenRef.current === token) {
+      setIsInitializing(false);
+      return;
+    }
+
+    initializedTokenRef.current = token;
+    setIsInitializing(true);
+    logoutInProgressRef.current = false;
+    sessionVersionRef.current += 1;
+    lastActivityRef.current = Date.now();
+    lastPingRef.current = Date.now();
+
+    const activeVersion = sessionVersionRef.current;
+    pingSession(activeVersion, token).finally(() => {
+      // Ignore stale completion from older sessions.
+      if (activeVersion !== sessionVersionRef.current) return;
+      lastPingRef.current = Date.now();
+      setIsInitializing(false);
+    });
+  }, [token, pingSession]);
+
+  useEffect(() => {
+    if (!token) return;
+
+    const events = [
+      "mousemove",
+      "mousedown",
+      "click",
+      "scroll",
+      "keypress",
+      "touchstart",
+    ];
+
+    let timeout;
+    const activityHandler = () => {
+      if (!timeout) {
+        timeout = setTimeout(() => {
+          updateActivity();
+          timeout = null;
+        }, 1000);
+      }
+    };
+
+    events.forEach((event) => {
+      window.addEventListener(event, activityHandler);
+    });
+
+    const intervalId = setInterval(() => {
+      const now = Date.now();
+      if (now - lastActivityRef.current > IDLE_TIMEOUT_MS) {
+        handleLogout();
+      }
+    }, 60 * 1000);
+
+    return () => {
+      events.forEach((event) => {
+        window.removeEventListener(event, activityHandler);
+      });
+      clearInterval(intervalId);
+      if (timeout) clearTimeout(timeout);
+    };
+  }, [token, handleLogout, updateActivity]);
+
+  if (isInitializing) {
+    return null;
+  }
+
+  return <>{children}</>;
+};
+
+export default SessionTimeout;
