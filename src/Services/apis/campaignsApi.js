@@ -106,6 +106,10 @@ export const normalizeCampaign = (campaign = {}) => {
       invoices: rowInvoices.length ? rowInvoices : invoice ? [invoice] : [],
       advancesTotal: toNumber(row.advancesTotal ?? row.advances_total),
       settledTotal: toNumber(row.settledTotal ?? row.settled_total),
+      variance:
+        row.variance != null || row.varience != null
+          ? toNumber(row.variance ?? row.varience)
+          : null,
       outstanding: toNumber(row.outstanding),
       advances,
       payments,
@@ -149,6 +153,7 @@ export const normalizeCampaign = (campaign = {}) => {
     ),
     netAmount: toNumber(campaign.netAmount ?? campaign.net_amount ?? totalCost),
     pendingAmount: toNumber(campaign.pendingAmount ?? campaign.pending_amount),
+    variance: toNumber(campaign.variance),
     startDate: campaign.startDate ?? campaign.start_date ?? "",
     endDate: campaign.endDate ?? campaign.end_date ?? "",
     vendors,

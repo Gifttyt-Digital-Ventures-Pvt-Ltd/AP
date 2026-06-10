@@ -102,6 +102,7 @@ const UserRoles = () => {
   const { user: currentUser } = useAuth();
   const {
     hasPermission,
+    canAssignRoleSets,
     isCorporateScreenAllowed,
     isCorporateSectionEnabled,
     isCategoryFeatureEnabled,
@@ -116,7 +117,6 @@ const UserRoles = () => {
     canViewRoleRecords || canManageRoleUsers;
   const canManageRoles = hasPermission("roles-manage");
   const canManageUserRecords = canManageRoleUsers || hasPermission(FULL_ACCESS_PERMISSION);
-  const canAssignRoleSets = canManageUserRecords;
   const canViewWorkflow =
     hasPermission("vendor-workflow-view") ||
     hasPermission("vendor-workflow-manage");
@@ -646,7 +646,16 @@ const UserRoles = () => {
     setInviteDialogOpen(true);
   };
 
+  const getAssignedRoleNamesForUser = (user) => {
+    const roleIds = new Set(getAssignedRoleIdsForUser(user));
+    return allRoles
+      .filter((role) => roleIds.has(String(role.id)))
+      .map((role) => role.name)
+      .filter(Boolean);
+  };
+
   const openAssignRoleSetsDialog = (user) => {
+    if (!canAssignRoleSets || !guardAction("roles.assignRoleSets")) return;
     setSelectedUserForRoleSets(user || null);
     setSelectedUserInitialRoleIds(getAssignedRoleIdsForUser(user));
     setAssignRoleSetsDialogOpen(true);
@@ -942,7 +951,7 @@ const UserRoles = () => {
     previousRoleIds,
     selectedRoleIds,
   }) => {
-    if (!guardAction("roles.assignRoleSets")) return false;
+    if (!canAssignRoleSets || !guardAction("roles.assignRoleSets")) return false;
     if (!user?.id) {
       toast.error("Invalid user selected");
       return false;
@@ -1156,21 +1165,23 @@ const UserRoles = () => {
         saving={createCustomRoleLoading}
       />
 
-      <AssignRoleSetsDialog
-        open={assignRoleSetsDialogOpen}
-        onOpenChange={(open) => {
-          setAssignRoleSetsDialogOpen(open);
-          if (!open) {
-            setSelectedUserForRoleSets(null);
-            setSelectedUserInitialRoleIds([]);
-          }
-        }}
-        user={selectedUserForRoleSets}
-        roles={allRoles}
-        initialRoleIds={selectedUserInitialRoleIds}
-        onSave={handleAssignRoleSets}
-        saving={assigningRoleSets}
-      />
+      {canAssignRoleSets && (
+        <AssignRoleSetsDialog
+          open={assignRoleSetsDialogOpen}
+          onOpenChange={(open) => {
+            setAssignRoleSetsDialogOpen(open);
+            if (!open) {
+              setSelectedUserForRoleSets(null);
+              setSelectedUserInitialRoleIds([]);
+            }
+          }}
+          user={selectedUserForRoleSets}
+          roles={allRoles}
+          initialRoleIds={selectedUserInitialRoleIds}
+          onSave={handleAssignRoleSets}
+          saving={assigningRoleSets}
+        />
+      )}
 
       <ViewRoleDialog
         open={viewRoleDialogOpen}
@@ -1206,6 +1217,11 @@ const UserRoles = () => {
           if (!open) setSelectedUserDetails(null);
         }}
         user={selectedUserDetails}
+        assignedRoleSets={
+          selectedUserDetails
+            ? getAssignedRoleNamesForUser(selectedUserDetails)
+            : []
+        }
       />
 
       <AlertDialog

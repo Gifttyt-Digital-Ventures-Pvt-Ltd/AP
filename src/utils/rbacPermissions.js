@@ -273,6 +273,61 @@ const getPermissionsArrayFromResponse = (response) => {
   return [];
 };
 
+export const hasBackendScreenPermission = (
+  permissionsRaw = [],
+  screen,
+  permissionType,
+) => {
+  const normalizedScreen = normalizeToken(screen);
+  const normalizedType = normalizeToken(permissionType);
+  if (!normalizedScreen || !normalizedType) return false;
+
+  return toArray(permissionsRaw).some(
+    (entry) =>
+      normalizeToken(entry?.screen) === normalizedScreen &&
+      normalizeToken(entry?.permissionType) === normalizedType,
+  );
+};
+
+export const canAssignRoleSetsPermission = ({
+  isCorporateAdmin = false,
+  hasPermission = () => false,
+  backendPermissionsRaw = [],
+} = {}) => {
+  if (isCorporateAdmin) return true;
+  if (
+    hasPermission(FULL_ACCESS_PERMISSION) ||
+    hasPermission("master-admin")
+  ) {
+    return true;
+  }
+
+  if (backendPermissionsRaw.length > 0) {
+    const hasManageRoleManage = hasBackendScreenPermission(
+      backendPermissionsRaw,
+      "MANAGE_ROLE",
+      "MANAGE",
+    );
+    const hasManageRoleUsers = hasBackendScreenPermission(
+      backendPermissionsRaw,
+      "MANAGE_ROLE",
+      "USERS",
+    );
+
+    if (hasManageRoleUsers && !hasManageRoleManage) {
+      return false;
+    }
+
+    return hasManageRoleManage;
+  }
+
+  if (hasPermission("roles-manage-users") && !hasPermission("roles-manage")) {
+    return false;
+  }
+
+  return hasPermission("roles-manage");
+};
+
 export const normalizeCustomRolePermissionsResponse = (response) => {
   const permissionsRaw = getPermissionsArrayFromResponse(response);
   const canonicalSet = new Set();

@@ -1,6 +1,7 @@
 import React from "react";
 import { Eye, Search } from "lucide-react";
 import AppDataTable from "../../../components/common/AppDataTable";
+import ClippedTextWithTooltip from "../../../components/common/ClippedTextWithTooltip";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import {
@@ -80,11 +81,7 @@ const AllInvoicesTable = ({
               value = formatCurrency(invoice.amount, invoice.currency);
               break;
             case "vendorName":
-              value = (
-                <div className="whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]">
-                  {invoice.vendorName}
-                </div>
-              );
+              value = <ClippedTextWithTooltip text={invoice.vendorName} />;
               break;
             case "approval":
               value = (

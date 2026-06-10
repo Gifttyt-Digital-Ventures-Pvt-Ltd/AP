@@ -12,6 +12,7 @@ import {
   resolveRouteCorporateEntitlementRule,
   resolveRoutePermissionRule,
 } from "../constants/rbacPolicy";
+import { canAssignRoleSetsPermission } from "../utils/rbacPermissions";
 
 const RBACContext = createContext({
   isLoaded: false,
@@ -30,6 +31,9 @@ const RBACContext = createContext({
   isCampaignFeatureEnabled: false,
   isPaymentBatchesFeatureEnabled: false,
   isConnectedBankingEnabled: false,
+  isCorporateAdmin: false,
+  backendPermissionsRaw: [],
+  canAssignRoleSets: false,
 });
 
 const normalizeRoleToken = (value = "") =>
@@ -288,6 +292,19 @@ export const RBACProvider = ({ children }) => {
   const permissions = computedPermissions.permissions;
   const permissionsSet = useMemo(() => new Set(permissions), [permissions]);
   const hasPermission = useMemo(() => makeHasPermissionChecker(permissionsSet), [permissionsSet]);
+  const backendPermissionsRaw = useMemo(
+    () => toArray(customRolesContext?.permissionsRaw),
+    [customRolesContext?.permissionsRaw],
+  );
+  const canAssignRoleSets = useMemo(
+    () =>
+      canAssignRoleSetsPermission({
+        isCorporateAdmin,
+        hasPermission,
+        backendPermissionsRaw,
+      }),
+    [isCorporateAdmin, hasPermission, backendPermissionsRaw],
+  );
   const allowedScreensSet = useMemo(
     () => new Set(toArray(corporateScreens?.allowedScreens).map(normalizeEntitlementToken)),
     [corporateScreens?.allowedScreens],
@@ -441,6 +458,8 @@ export const RBACProvider = ({ children }) => {
     permissions,
     permissionSource: computedPermissions.source,
     unmappedPermissions: computedPermissions.unmappedPermissions,
+    backendPermissionsRaw,
+    canAssignRoleSets,
     hasPermission,
     hasAnyPermission,
     hasAllPermissions,

@@ -98,7 +98,7 @@ export const PERMISSION_GROUPS = [
   {
     title: "Manage Role",
     permissions: [
-      { id: "roles-manage", label: "Manage Roles (Create, Edit, Delete)" },
+      { id: "roles-manage", label: "Manage Roles (Create, Edit, Delete, Assign)" },
       { id: "roles-manage-users", label: "Manage Users (Create, Edit, Delete)" },
       { id: "roles-view", label: "View Only" },
     ],
@@ -164,8 +164,8 @@ export const PERMISSION_LABELS = {
   "banking-view": "Banking - View Only",
   "banking-full": "Banking - Full Access",
   "roles-view": "Manage Roles - View Only",
-  "roles-manage": "Manage Roles - Manage Roles",
-  "roles-manage-users": "Manage Roles - Manage Users",
+  "roles-manage": "Manage Roles - Manage Roles & Assign Role Sets",
+  "roles-manage-users": "Manage Roles - Manage Users (no role assignment)",
   "vendor-workflow-view": "Vendor Approval Workflow - View Only",
   "vendor-workflow-manage": "Vendor Approval Workflow - Manage",
   "settings-org": "Settings - Manage Organisation",

@@ -7,6 +7,7 @@ import {
   normalizeWorkflowStatus,
 } from "../../../utils/approvalWorkflow";
 import AppDataTable from "../../../components/common/AppDataTable";
+import ClippedTextWithTooltip from "../../../components/common/ClippedTextWithTooltip";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import { formatCurrency } from "../../../utils/currency";
 
@@ -69,11 +70,7 @@ const NeedsApprovalTable = ({
               value = formatCurrency(invoice.amount, invoice.currency);
               break;
             case "vendorName":
-              value = (
-                <div className="whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]">
-                  {invoice.vendorName}
-                </div>
-              );
+              value = <ClippedTextWithTooltip text={invoice.vendorName} />;
               break;
             case "approval":
               value = (

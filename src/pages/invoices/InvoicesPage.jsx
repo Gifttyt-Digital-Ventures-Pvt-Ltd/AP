@@ -105,6 +105,7 @@ import {
 import { TableCell, TableRow } from "../../components/ui/table";
 import { cn } from "../../lib/utils";
 import AppDataTable from "../../components/common/AppDataTable";
+import ClippedTextWithTooltip from "../../components/common/ClippedTextWithTooltip";
 import CurrencySelector from "../../components/common/CurrencySelector";
 import RefreshButton from "../../components/common/RefreshButton";
 import { InvoicePdfPreview } from "./components/InvoicePdfPreview";
@@ -1939,11 +1940,7 @@ const InvoicesPage = () => {
             );
             break;
           case "vendorName":
-            value = (
-              <div className="whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]">
-                {invoice.vendorName}
-              </div>
-            );
+            value = <ClippedTextWithTooltip text={invoice.vendorName} />;
             break;
           default:
             value = invoice?.[header.key] || "-";

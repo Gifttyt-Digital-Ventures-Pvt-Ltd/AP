@@ -207,7 +207,7 @@ export const ACTION_PERMISSION_RULES = {
   "roles.updateUserRole": { anyOf: ["roles-manage-users"] },
   "roles.updateUserStatus": { anyOf: ["roles-manage-users"] },
   "roles.deleteUser": { anyOf: ["roles-manage-users"] },
-  "roles.assignRoleSets": { anyOf: ["roles-manage-users"] },
+  "roles.assignRoleSets": { anyOf: ["roles-manage"] },
   "roles.manageCustomRoles": { anyOf: ["roles-manage"] },
 
   "workflow.create": { anyOf: ["vendor-workflow-manage"] },
