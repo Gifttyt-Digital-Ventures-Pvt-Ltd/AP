@@ -372,7 +372,7 @@ const ViewRoleDialog = ({
                 )}
               </div>
 
-              {isUserEditMode ? (
+              {isUserEditMode && canManageAssignedUsers ? (
                 <div className="space-y-3">
                   <Input
                     value={userSearch}
@@ -380,7 +380,7 @@ const ViewRoleDialog = ({
                     placeholder="Search users by name, email, or employee ID"
                     data-testid="assign-role-user-search"
                   />
-                  <div className="max-h-60 overflow-y-auto border border-border rounded-lg p-3 space-y-3">
+                    <div className="max-h-60 overflow-y-auto border border-border rounded-lg p-3 space-y-3">
                     {filteredUsers.length > 0 ? (
                       filteredUsers.map((user) => (
                         <div key={user.id} className="flex items-start space-x-3">

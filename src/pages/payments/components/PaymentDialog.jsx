@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Button } from '../../../components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../../components/ui/dialog';
 import { Input } from '../../../components/ui/input';
@@ -11,6 +11,11 @@ import {
   SelectValue,
 } from '../../../components/ui/select';
 import { Plus } from 'lucide-react';
+
+const getInvoiceOptionLabel = (invoice) =>
+  `${invoice?.invoiceNumber || '-'} - ${invoice?.vendorName || '-'} - ₹${Number(
+    invoice?.amount || 0,
+  ).toLocaleString('en-IN')}`;
 
 // Dialog used to record a single payment against a pending invoice.
 const PaymentDialog = ({
@@ -25,6 +30,14 @@ const PaymentDialog = ({
   handleSubmit,
   canCreatePayment,
 }) => {
+  const selectedInvoice = useMemo(
+    () => invoices.find((invoice) => String(invoice.id) === String(formData.invoice_id)),
+    [formData.invoice_id, invoices],
+  );
+  const selectedInvoiceLabel = selectedInvoice
+    ? getInvoiceOptionLabel(selectedInvoice)
+    : '';
+
   if (!canCreatePayment) return null;
 
   return (
@@ -41,26 +54,41 @@ const PaymentDialog = ({
         Single Payment
       </Button>
     </DialogTrigger>
-    <DialogContent data-testid="payment-dialog">
+    <DialogContent className="max-w-lg overflow-hidden" data-testid="payment-dialog">
       <DialogHeader>
         <DialogTitle>Record Payment</DialogTitle>
       </DialogHeader>
       <form onSubmit={handleSubmit} className="space-y-4">
-        <div>
+        <div className="min-w-0">
           <Label htmlFor="invoice_id">Invoice *</Label>
           <Select
             value={formData.invoice_id || ""}
             onValueChange={(value) => setFormData({ ...formData, invoice_id: value })}
           >
-            <SelectTrigger id="invoice_id" data-testid="payment-invoice-select">
+            <SelectTrigger
+              id="invoice_id"
+              data-testid="payment-invoice-select"
+              title={selectedInvoiceLabel || undefined}
+              className="min-w-0 overflow-hidden [&>span]:min-w-0 [&>span]:max-w-[calc(100%-1.25rem)] [&>span]:truncate"
+            >
               <SelectValue placeholder="Select invoice" />
             </SelectTrigger>
-            <SelectContent>
-            {invoices.map((invoice) => (
-              <SelectItem key={invoice.id} value={invoice.id}>
-                {invoice.invoiceNumber} - {invoice.vendorName} - {'\u20B9'}{invoice.amount.toLocaleString('en-IN')}
-              </SelectItem>
-            ))}
+            <SelectContent className="max-w-[var(--radix-select-trigger-width)]">
+              {invoices.map((invoice) => {
+                const label = getInvoiceOptionLabel(invoice);
+                return (
+                  <SelectItem
+                    key={invoice.id}
+                    value={invoice.id}
+                    className="items-start py-2"
+                    title={label}
+                  >
+                    <span className="block whitespace-normal break-words pr-6">
+                      {label}
+                    </span>
+                  </SelectItem>
+                );
+              })}
             </SelectContent>
           </Select>
         </div>

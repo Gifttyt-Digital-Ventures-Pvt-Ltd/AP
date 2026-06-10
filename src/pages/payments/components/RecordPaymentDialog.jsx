@@ -15,6 +15,32 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../../components/ui/select';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '../../../components/ui/tooltip';
+
+const ClippedInvoiceLabel = ({ invoice }) => {
+  const invoiceNumber = String(invoice?.invoiceNumber || '').trim() || '-';
+  const vendorName = String(invoice?.vendorName || '').trim();
+  const label = vendorName
+    ? `${invoiceNumber} · ${vendorName}`
+    : invoiceNumber;
+
+  if (label === '-') return label;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="block min-w-0 truncate font-medium">{label}</span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs break-words">
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  );
+};
 
 // Confirm record-payment for invoices selected on the pending list.
 const RecordPaymentDialog = ({
@@ -45,13 +71,18 @@ const RecordPaymentDialog = ({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <Label>Selected Invoices ({selectedInvoices.length})</Label>
-            <div className="mt-2 max-h-32 overflow-y-auto rounded-md border border-input bg-muted/30 px-3 py-2 text-sm">
+            <div className="mt-2 max-h-32 overflow-x-hidden overflow-y-auto rounded-md border border-input bg-muted/30 px-3 py-2 text-sm">
               {selectedInvoices.length > 0 ? (
                 <ul className="space-y-1">
                   {selectedInvoices.map((invoice) => (
-                    <li key={invoice.id} className="flex justify-between gap-2">
-                      <span className="font-medium">{invoice.invoiceNumber || '-'}</span>
-                      <span className="text-muted-foreground shrink-0">
+                    <li
+                      key={invoice.id}
+                      className="flex min-w-0 items-center justify-between gap-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <ClippedInvoiceLabel invoice={invoice} />
+                      </div>
+                      <span className="shrink-0 text-muted-foreground">
                         ₹{Number(invoice.amount || 0).toLocaleString('en-IN')}
                       </span>
                     </li>

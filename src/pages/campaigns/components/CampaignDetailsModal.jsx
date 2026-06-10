@@ -17,6 +17,11 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../../components/ui/tabs";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "../../../components/ui/tooltip";
 import ViewDialog from "../../invoices/components/ViewDialog";
 import InvoicePdfPreview from "../../invoices/components/InvoicePdfPreview";
 import {
@@ -29,6 +34,7 @@ import {
   formatCampaignGstOption,
   formatCurrency,
   formatDate,
+  resolveVendorBreakdownVariance,
   invoiceStatusBadgeClass,
   PAYMENT_MODE_LABELS,
 } from "../utils/campaignFormatters";
@@ -40,10 +46,30 @@ const getPaymentModeLabel = (mode) =>
   mode ||
   "-";
 
+const ClippedVendorName = ({ name, className = "" }) => {
+  const value = String(name || "").trim() || "-";
+  if (value === "-") return value;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className={`block max-w-[200px] truncate ${className}`.trim()}>
+          {value}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" className="max-w-xs break-words">
+        {value}
+      </TooltipContent>
+    </Tooltip>
+  );
+};
+
 const CampaignAmountField = ({ label, value }) => (
   <div className="flex min-w-0 items-center justify-between gap-1.5 text-xs">
     <span className="shrink-0 text-muted-foreground">{label}</span>
-    <span className="truncate text-right font-medium tabular-nums">{value}</span>
+    <span className="truncate text-right font-medium tabular-nums">
+      {value}
+    </span>
   </div>
 );
 
@@ -56,10 +82,7 @@ const CampaignTaxAmountSummary = ({
   <div className="rounded-lg border border-border p-2.5">
     <p className="mb-1.5 text-xs font-medium">{sectionLabel}</p>
     <div className="grid grid-cols-3 gap-2">
-      <CampaignAmountField
-        label="Net (₹)"
-        value={formatCurrency(netAmount)}
-      />
+      <CampaignAmountField label="Net (₹)" value={formatCurrency(netAmount)} />
       <CampaignAmountField
         label="Tax"
         value={formatCampaignGstOption(gstOption)}
@@ -74,11 +97,17 @@ const CampaignTaxAmountSummary = ({
 
 const vendorBreakdownHeader = [
   { key: "expand", title: "", cellClassName: "w-8" },
-  { key: "vendor", title: "Vendor", cellClassName: "font-medium" },
+  {
+    key: "vendor",
+    title: "Vendor",
+    cellClassName: "font-medium max-w-[200px]",
+  },
+
   { key: "campaignCost", title: "Campaign Cost" },
   { key: "invoiceNo", title: "Invoice No." },
   { key: "invoiceAmount", title: "Invoice Amount" },
   { key: "advances", title: "Advances" },
+  { key: "variance", title: "Variance" },
   { key: "outstanding", title: "Outstanding" },
   { key: "status", title: "Status" },
   {
@@ -91,7 +120,11 @@ const vendorBreakdownHeader = [
 
 const invoiceListHeader = [
   { key: "invoiceNumber", title: "Invoice No." },
-  { key: "vendorName", title: "Vendor" },
+  {
+    key: "vendorName",
+    title: "Vendor",
+    cellClassName: "max-w-[200px]",
+  },
   { key: "submittedDate", title: "Submitted Date" },
   { key: "amount", title: "Amount" },
   { key: "status", title: "Status" },
@@ -231,6 +264,9 @@ const CampaignDetailsModal = ({
             case "status":
               value = <InvoiceStatusBadge status={invoiceItem.status} />;
               break;
+            case "vendorName":
+              value = <ClippedVendorName name={invoiceItem.vendorName} />;
+              break;
             case "actions":
               value = (
                 <Button
@@ -282,7 +318,7 @@ const CampaignDetailsModal = ({
                 );
                 break;
               case "vendor":
-                value = row.vendorName;
+                value = <ClippedVendorName name={row.vendorName} />;
                 break;
               case "campaignCost":
                 value = formatCurrency(row.cost);
@@ -298,6 +334,9 @@ const CampaignDetailsModal = ({
                 break;
               case "advances":
                 value = formatCurrency(row.advancesTotal);
+                break;
+              case "variance":
+                value = formatCurrency(resolveVendorBreakdownVariance(row));
                 break;
               case "outstanding":
                 value = formatCurrency(row.outstanding);
@@ -505,7 +544,7 @@ const CampaignDetailsModal = ({
             </div>
           )}
 
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-6">
             <SummaryTile
               inline
               label="Total Vendors"
@@ -532,6 +571,11 @@ const CampaignDetailsModal = ({
               inline
               label="Rejected"
               value={summary.rejected || 0}
+            />
+            <SummaryTile
+              inline
+              label="Variance"
+              value={formatCurrency(campaign.variance)}
             />
           </div>
 

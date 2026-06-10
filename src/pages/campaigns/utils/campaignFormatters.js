@@ -48,6 +48,20 @@ export const formatCurrency = (value) =>
     maximumFractionDigits: 2,
   })}`;
 
+/**
+ * Per-vendor variance: campaign cost minus invoiced amount.
+ * Vendor rows may omit `variance`; compute as cost - invoiceCost.
+ */
+export const resolveVendorBreakdownVariance = (row = {}) => {
+  if (row.variance != null) {
+    return Number(row.variance);
+  }
+
+  const campaignCost = Number(row.cost || 0);
+  const invoiceAmount = Number(row.invoiceCost ?? row.invoice?.amount ?? 0);
+  return campaignCost - invoiceAmount;
+};
+
 export const formatDate = (value) => {
   if (!value) return "-";
   const date = new Date(value);
