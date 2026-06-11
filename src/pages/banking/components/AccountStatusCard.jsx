@@ -20,6 +20,9 @@ const AccountRow = ({ account }) => {
         </p>
         <p className="text-sm text-muted-foreground">
           A/c {account.accountNumber || "—"}
+          {(account.ifsc || account.ifscCode) && (
+            <> · IFSC {account.ifsc || account.ifscCode}</>
+          )}
         </p>
         <p className="text-xs mt-1 capitalize">
           Status: {String(account.status || "unknown").toLowerCase().replace(/_/g, " ")}

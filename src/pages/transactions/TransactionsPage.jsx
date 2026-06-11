@@ -36,7 +36,11 @@ import {
   CheckCircle2, Clock, AlertCircle, Plus, X, Eye, Link2
 } from 'lucide-react';
 import { toast } from 'sonner';
-import { BANK_OPTIONS, TRANSACTION_TYPES } from './constants';
+import {
+  BANK_OPTIONS,
+  TRANSACTION_TYPES,
+  isValidStatementUploadFile,
+} from './constants';
 import { ActiveFilters } from './components/ActiveFilters';
 import TransactionsToolbar from './components/TransactionsToolbar';
 import StatementsTab from './components/StatementsTab';
@@ -180,6 +184,12 @@ const TransactionsPage = () => {
   const handleStatementUpload = async (file) => {
     if (!guardAction('transactions.uploadStatement')) return;
     if (!file) return;
+
+    if (!isValidStatementUploadFile(file)) {
+      toast.error('Please upload a PDF or Excel file (.pdf, .xls, .xlsx)');
+      if (fileInputRef.current) fileInputRef.current.value = '';
+      return;
+    }
 
     if (!periodStart || !periodEnd) {
       toast.error('Please select period date range first');

@@ -35,6 +35,7 @@ const AccountLinkWizard = ({
 }) => {
   const [accountType, setAccountType] = useState("CURRENT");
   const [accountNumber, setAccountNumber] = useState("");
+  const [ifsc, setIfsc] = useState("");
 
   const currentStep =
     gateState === GATE_STATE.ACCOUNT_PENDING
@@ -47,7 +48,11 @@ const AccountLinkWizard = ({
 
   const handleLink = (event) => {
     event.preventDefault();
-    onLinkAccount?.({ accountType, accountNumber: accountNumber.trim() });
+    onLinkAccount?.({
+      accountType,
+      accountNumber: accountNumber.trim(),
+      ifsc: ifsc.trim().toUpperCase(),
+    });
   };
 
   return (
@@ -100,14 +105,26 @@ const AccountLinkWizard = ({
                   </SelectContent>
                 </Select>
               </div>
-              <div className="md:col-span-2">
-                <Label htmlFor="sender-account">Sender Account Number *</Label>
+              <div>
+                <Label htmlFor="sender-account">Account Number *</Label>
                 <Input
                   id="sender-account"
                   value={accountNumber}
                   onChange={(e) => setAccountNumber(e.target.value)}
-                  placeholder="Enter ICICI current account number"
+                  placeholder="Enter ICICI account number"
                   disabled={!canManage}
+                  required
+                />
+              </div>
+              <div>
+                <Label htmlFor="sender-ifsc">IFSC *</Label>
+                <Input
+                  id="sender-ifsc"
+                  value={ifsc}
+                  onChange={(e) => setIfsc(e.target.value.toUpperCase())}
+                  placeholder="e.g. ICIC0001234"
+                  disabled={!canManage}
+                  maxLength={11}
                   required
                 />
               </div>
@@ -120,9 +137,6 @@ const AccountLinkWizard = ({
                 </div>
               )}
             </form>
-            <p className="text-xs text-muted-foreground mt-3">
-              API credentials are provisioned backend-side. This step verifies connectivity and IP whitelisting.
-            </p>
           </CardContent>
         </Card>
       )}

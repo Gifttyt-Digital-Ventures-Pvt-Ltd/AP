@@ -4,6 +4,7 @@ import { format } from "date-fns";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { TabsContent } from "../../../components/ui/tabs";
+import { STATEMENT_UPLOAD_ACCEPT } from "../constants";
 
 const StatementsTab = ({
   selectedBank,
@@ -56,7 +57,7 @@ const StatementsTab = ({
             <Input type="date" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} className="h-9" data-testid="period-end" />
           </div>
           <div className="flex items-end">
-            <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept=".pdf,.csv,.xlsx" className="hidden" data-testid="file-input" />
+            <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept={STATEMENT_UPLOAD_ACCEPT} className="hidden" data-testid="file-input" />
             <Button
               onClick={() => fileInputRef.current?.click()}
               disabled={uploading || !periodStart || !periodEnd || !canUploadStatements}
@@ -97,7 +98,7 @@ const StatementsTab = ({
           <p className="text-sm text-gray-600">
             Drop your files or <span className="text-blue-600 font-medium">browse</span>
           </p>
-          <p className="text-xs text-gray-400 mt-1">Supported format: pdf, csv, xlsx</p>
+          <p className="text-xs text-gray-400 mt-1">Supported formats: PDF, Excel (.xls, .xlsx). Processing is handled by the backend.</p>
         </div>
       </div>
 

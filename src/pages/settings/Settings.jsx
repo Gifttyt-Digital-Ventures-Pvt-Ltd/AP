@@ -12,13 +12,18 @@ import { Plug, PlugZap, Settings as SettingsIcon, RefreshCw, Check, XCircle, Loa
 import { toast } from 'sonner';
 import ZohoConfigDialog from './components/ZohoConfigDialog';
 import TallyConfigDialog from './components/TallyConfigDialog';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useRBAC } from '../../contexts/RBACContext';
 import useBankingSetup from '../banking/hooks/useBankingSetup';
 import AccountStatusCard from '../banking/components/AccountStatusCard';
+import AccountLinkCard from '../banking/components/AccountLinkCard';
+import BankingSetupSteps from '../banking/components/BankingSetupSteps';
 import CibRegistrationCard from '../banking/components/CibRegistrationCard';
-import { useRegisterCibMutation } from '../../Services/apis/connectedBankingApi';
+import {
+  useLinkBankingAccountMutation,
+  useRegisterCibMutation,
+} from '../../Services/apis/connectedBankingApi';
 
 // Zoho Logo Component - Four interlocking rounded squares
 const ZohoLogo = () => (
@@ -55,6 +60,7 @@ const SYNC_DATA_ITEMS = [
 
 const Settings = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { hasAnyPermission, isCorporateSectionEnabled, isBankingEnabled } = useRBAC();
   const canViewBankingSettings =
     hasAnyPermission(['settings-banking', 'banking-full', 'banking-manage', 'banking-view']) &&
@@ -84,11 +90,16 @@ const Settings = () => {
   const [updateOrganisation] = useUpdateOrganisationMutation();
   const { guardAction, canPerformAction } = useActionGuard();
   const {
+    linkedAccount,
+    isAccountLinked,
     accounts,
     cibStatus,
+    gateState,
     isSetupReady,
+    refetchAll,
     refetchCib,
   } = useBankingSetup({ skip: !canViewBankingSettings || !isBankingEnabled });
+  const [linkAccount, { isLoading: linkingAccount }] = useLinkBankingAccountMutation();
   const [registerCib, { isLoading: registeringCib }] = useRegisterCibMutation();
   const canManageIcici = canPerformAction('banking.link');
 
@@ -138,6 +149,13 @@ const Settings = () => {
       setActiveSettingsTab(availableSettingsTabs[0]);
     }
   }, [activeSettingsTab, availableSettingsTabs]);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && availableSettingsTabs.includes(tab)) {
+      setActiveSettingsTab(tab);
+    }
+  }, [searchParams, availableSettingsTabs]);
 
   useEffect(() => {
     if (organisationData) {
@@ -661,26 +679,50 @@ const Settings = () => {
                 <div>
                   <h3 className="text-xl font-semibold font-['Manrope'] mb-1">ICICI Connected Banking</h3>
                   <p className="text-sm text-muted-foreground">
-                    Account linking, CIB registration, and payout readiness
+                    Link your ICICI account and complete CIB registration here. Manage beneficiaries from Banking.
                   </p>
                 </div>
                 <Button variant="outline" onClick={() => navigate('/banking')}>
-                  Open Connected Banking
+                  Manage Beneficiaries
                 </Button>
               </div>
               {isSetupReady ? (
                 <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
-                  ICICI setup is complete. Release payouts from the Payments page.
+                  ICICI setup is complete. Add beneficiaries in Banking, then release payouts from Payments.
                 </p>
               ) : (
                 <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-                  Complete ICICI setup before releasing bank payouts.
+                  Complete account linking and CIB registration before adding beneficiaries or releasing payouts.
                 </p>
               )}
+              <BankingSetupSteps gateState={gateState} />
               <div className="grid gap-4 md:grid-cols-2">
-                <AccountStatusCard accounts={accounts} />
+                {isAccountLinked ? (
+                  <AccountStatusCard accounts={accounts} />
+                ) : (
+                  <AccountLinkCard
+                    linkedAccount={linkedAccount}
+                    canManage={canManageIcici}
+                    linking={linkingAccount}
+                    onLinkAccount={async ({ accountType, accountNumber, ifsc }) => {
+                      if (!guardAction('banking.link')) return;
+                      try {
+                        const result = await linkAccount({ accountType, accountNumber, ifsc }).unwrap();
+                        if (result.status === 'ERROR') {
+                          toast.error(result.healthDetail || 'Failed to verify ICICI connection');
+                        } else {
+                          toast.success('ICICI account connected successfully');
+                          await refetchAll();
+                        }
+                      } catch (error) {
+                        toast.error(error?.data?.message || error?.data?.detail || 'Failed to link account');
+                      }
+                    }}
+                  />
+                )}
                 <CibRegistrationCard
                   cibStatus={cibStatus}
+                  locked={!isAccountLinked}
                   onRegister={async () => {
                     if (!guardAction('banking.cibRegister')) return;
                     try {

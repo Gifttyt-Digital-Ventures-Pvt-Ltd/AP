@@ -39,6 +39,13 @@ export const useBankingSetup = ({ skip = false } = {}) => {
     [accounts],
   );
 
+  const isAccountLinked = useMemo(
+    () =>
+      Boolean(capabilities?.accountLinked) ||
+      accounts.some((account) => account.status === ACCOUNT_LINK_STATUS.LINKED),
+    [capabilities?.accountLinked, accounts],
+  );
+
   const activeBeneficiaries = useMemo(
     () =>
       beneficiaries.filter((bene) => {
@@ -54,10 +61,7 @@ export const useBankingSetup = ({ skip = false } = {}) => {
   const gateState = useMemo(() => {
     if (capabilities?.setupReady) return GATE_STATE.READY;
 
-    const accountLinked =
-      capabilities?.accountLinked ||
-      linkedAccount?.status === ACCOUNT_LINK_STATUS.LINKED;
-    if (!accountLinked) return GATE_STATE.ACCOUNT_PENDING;
+    if (!isAccountLinked) return GATE_STATE.ACCOUNT_PENDING;
 
     const cibRegistered =
       capabilities?.cibRegistered ||
@@ -69,7 +73,7 @@ export const useBankingSetup = ({ skip = false } = {}) => {
     if (!hasBeneficiary) return GATE_STATE.BENEFICIARY_PENDING;
 
     return GATE_STATE.READY;
-  }, [capabilities, linkedAccount, cibStatus, activeBeneficiaries]);
+  }, [capabilities, isAccountLinked, cibStatus, activeBeneficiaries]);
 
   const isSetupReady = gateState === GATE_STATE.READY;
 
@@ -85,6 +89,7 @@ export const useBankingSetup = ({ skip = false } = {}) => {
   return {
     capabilities,
     linkedAccount,
+    isAccountLinked,
     accounts,
     cibStatus,
     beneficiaries,
