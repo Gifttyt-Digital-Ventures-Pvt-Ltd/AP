@@ -606,10 +606,8 @@ const Vendors = () => {
         [
           { key: 'vendor', title: 'Vendor' },
           { key: 'createdAt', title: 'Created Date', cellClassName: 'text-xs text-muted-foreground whitespace-nowrap' },
-          { key: 'type', title: 'Type' },
           { key: 'status', title: 'Status' },
           { key: 'contact', title: 'Contact' },
-          { key: 'pan', title: 'PAN' },
           { key: 'gstin', title: 'GSTIN' },
           { key: 'actions', title: 'Actions', headerClassName: 'text-left' },
         ],
@@ -632,7 +630,6 @@ const Vendors = () => {
             value = (
               <div>
                 <div className="font-medium">{vendor.name}</div>
-                <div className="text-sm text-muted-foreground">{vendor.category || 'Uncategorized'}</div>
               </div>
             );
             break;
@@ -666,7 +663,7 @@ const Vendors = () => {
             value = vendor.pan || '-';
             break;
           case 'gstin':
-            value = vendor.gstin ? `${vendor.gstin.substring(0, 4)}...${vendor.gstin.slice(-4)}` : '-';
+            value = vendor.gstin || '-';
             break;
           case 'integration':
             value = <IntegrationSourceBadge record={vendor} />;
