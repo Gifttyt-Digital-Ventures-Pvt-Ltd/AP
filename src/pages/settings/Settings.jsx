@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   useGetBankAccountsQuery,
   useCreateBankAccountMutation,
@@ -18,6 +18,7 @@ import BankAccountDialog from './components/BankAccountDialog';
 import ZohoConfigDialog from './components/ZohoConfigDialog';
 import TallyConfigDialog from './components/TallyConfigDialog';
 import { useActionGuard } from '../../hooks/useActionGuard';
+import { useRBAC } from '../../contexts/RBACContext';
 
 // Zoho Logo Component - Four interlocking rounded squares
 const ZohoLogo = () => (
@@ -53,18 +54,36 @@ const SYNC_DATA_ITEMS = [
 ];
 
 const Settings = () => {
+  const { hasAnyPermission, isCorporateSectionEnabled } = useRBAC();
+  const canViewBankingSettings =
+    hasAnyPermission(['settings-banking', 'banking-full']) &&
+    isCorporateSectionEnabled('SETTINGS_CONNECTED_BANKING');
+  const canViewOrganisationSettings =
+    hasAnyPermission(['settings-org']) &&
+    isCorporateSectionEnabled('SETTINGS_ORG_DETAILS');
+  const canViewIntegrationsSettings =
+    hasAnyPermission(['settings-interaction']) &&
+    isCorporateSectionEnabled('SETTINGS_INTEGRATIONS');
+  const availableSettingsTabs = useMemo(() => {
+    const tabs = [];
+    if (canViewOrganisationSettings) tabs.push('organisation');
+    if (canViewBankingSettings) tabs.push('banking');
+    if (canViewIntegrationsSettings) tabs.push('integrations');
+    return tabs;
+  }, [canViewBankingSettings, canViewIntegrationsSettings, canViewOrganisationSettings]);
+  const [activeSettingsTab, setActiveSettingsTab] = useState('');
   const {
     data: bankAccountsData = [],
     isError: bankAccountsError,
     refetch: refetchBankAccounts,
-  } = useGetBankAccountsQuery();
+  } = useGetBankAccountsQuery(undefined, { skip: !canViewBankingSettings });
   const {
     data: organisationData,
     isLoading: organisationLoading,
     isFetching: organisationFetching,
     error: organisationError,
     refetch: refetchOrganisation,
-  } = useGetOrganisationQuery();
+  } = useGetOrganisationQuery(undefined, { skip: !canViewOrganisationSettings });
   const [createBankAccount] = useCreateBankAccountMutation();
   const [createOrganisation] = useCreateOrganisationMutation();
   const [updateOrganisation] = useUpdateOrganisationMutation();
@@ -119,6 +138,13 @@ const Settings = () => {
   const canCreateOrganisationDetails = canPerformAction('settings.createOrganisation');
   const canUpdateOrganisationDetails = canPerformAction('settings.updateOrganisation');
   const canSaveOrganisation = orgDetails ? canUpdateOrganisationDetails : canCreateOrganisationDetails;
+
+  useEffect(() => {
+    if (availableSettingsTabs.length === 0) return;
+    if (!availableSettingsTabs.includes(activeSettingsTab)) {
+      setActiveSettingsTab(availableSettingsTabs[0]);
+    }
+  }, [activeSettingsTab, availableSettingsTabs]);
 
   useEffect(() => {
     if (organisationData) {
@@ -350,14 +376,20 @@ const Settings = () => {
         <p className="text-muted-foreground">Manage your account settings and integrations</p>
       </div>
 
-      <Tabs defaultValue="banking" className="space-y-6" data-testid="settings-tabs">
+      <Tabs value={activeSettingsTab} onValueChange={setActiveSettingsTab} className="space-y-6" data-testid="settings-tabs">
         <TabsList>
-          <TabsTrigger value="organisation" data-testid="tab-organisation">Organisation Details</TabsTrigger>
-          <TabsTrigger value="banking" data-testid="tab-banking">Connected Banking</TabsTrigger>
-          <TabsTrigger value="integrations" data-testid="tab-integrations">Integrations</TabsTrigger>
+          {canViewOrganisationSettings && (
+            <TabsTrigger value="organisation" data-testid="tab-organisation">Organisation Details</TabsTrigger>
+          )}
+          {canViewBankingSettings && (
+            <TabsTrigger value="banking" data-testid="tab-banking">Connected Banking</TabsTrigger>
+          )}
+          {canViewIntegrationsSettings && (
+            <TabsTrigger value="integrations" data-testid="tab-integrations">Integrations</TabsTrigger>
+          )}
         </TabsList>
 
-        <TabsContent value="organisation">
+        {canViewOrganisationSettings && <TabsContent value="organisation">
           <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
             <div className="mb-6">
               <h3 className="text-xl font-semibold font-['Manrope'] mb-1 flex items-center gap-2">
@@ -385,7 +417,7 @@ const Settings = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <code className="bg-blue-100 text-blue-800 px-3 py-1.5 rounded-md font-['JetBrains_Mono'] text-sm">
+                        <code className="bg-blue-100 text-blue-800 px-3 py-1.5 rounded-md   text-sm">
                           {orgDetails.platform_email}
                         </code>
                         <Button 
@@ -657,9 +689,9 @@ const Settings = () => {
               </form>
             )}
           </div>
-        </TabsContent>
+        </TabsContent>}
 
-        <TabsContent value="banking">
+        {canViewBankingSettings && <TabsContent value="banking">
           <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
             <div className="flex justify-between items-center mb-6">
               <div>
@@ -689,12 +721,12 @@ const Settings = () => {
                     <p className="text-sm text-muted-foreground">
                       {account.bank_name} - {account.account_type}
                     </p>
-                    <p className="text-xs font-['JetBrains_Mono'] text-muted-foreground mt-1">
+                    <p className="text-xs   text-muted-foreground mt-1">
                       **** {account.account_number.slice(-4)}
                     </p>
                   </div>
                   <div className="flex items-center gap-4">
-                    <span className="text-sm font-['JetBrains_Mono'] font-semibold">{account.currency}</span>
+                    <span className="text-sm   font-semibold">{account.currency}</span>
                     <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
                       account.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-800'
                     }`}>
@@ -710,9 +742,9 @@ const Settings = () => {
               )}
             </div>
           </div>
-        </TabsContent>
+        </TabsContent>}
 
-        <TabsContent value="integrations">
+        {canViewIntegrationsSettings && <TabsContent value="integrations">
           <div className="space-y-6">
             {/* Header */}
             <p className="text-muted-foreground">
@@ -927,7 +959,8 @@ const Settings = () => {
               </p>
             </div>
           </div>
-        </TabsContent>
+        </TabsContent>}
+
       </Tabs>
 
             <ZohoConfigDialog

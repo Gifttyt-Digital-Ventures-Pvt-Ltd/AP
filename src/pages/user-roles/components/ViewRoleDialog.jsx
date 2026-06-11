@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../../../components/ui/accordion';
 import { Button } from '../../../components/ui/button';
 import { Checkbox } from '../../../components/ui/checkbox';
@@ -12,51 +12,86 @@ import {
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import { Separator } from '../../../components/ui/separator';
+import { Textarea } from '../../../components/ui/textarea';
 import { CheckCircle2, Edit2, Shield, Users } from 'lucide-react';
 import {
   isPermissionChecked,
+  isPermissionDisabledByMasterAdmin,
+  isMasterAdminSelected,
   isViewOnlyImplied,
   togglePermissionSelection,
 } from '../utils/permissionSelection';
+import { MASTER_ADMIN_PERMISSION_ID } from '../constants/permissionConfig';
+
+const resolveInitialEditSection = (dialogMode) => {
+  if (dialogMode === 'assignUsers') return 'users';
+  if (dialogMode === 'edit') return 'role';
+  return null;
+};
 
 // Role detail dialog for backend roles.
 const ViewRoleDialog = ({
   open,
   onOpenChange,
   role,
-  startInEditMode = false,
+  dialogMode = 'view',
   permissionGroups,
   permissionLabels,
   onSave,
   saving = false,
   availableUsers = [],
   canManageRoles = false,
+  canManageAssignedUsers = false,
+  hiddenPermissionIds = [],
 }) => {
+  const isAssignUsersFlow = dialogMode === 'assignUsers';
   const [editSection, setEditSection] = useState(null);
+  const [roleName, setRoleName] = useState('');
+  const [roleDescription, setRoleDescription] = useState('');
   const [selectedPermissions, setSelectedPermissions] = useState([]);
   const [selectedEmployeeIds, setSelectedEmployeeIds] = useState([]);
   const [userSearch, setUserSearch] = useState('');
+  const hiddenPermissionSet = useMemo(
+    () => new Set(hiddenPermissionIds.map((permissionId) => String(permissionId || '').trim()).filter(Boolean)),
+    [hiddenPermissionIds],
+  );
+  const filterHiddenPermissions = useCallback(
+    (permissions = []) => permissions.filter((permissionId) => !hiddenPermissionSet.has(permissionId)),
+    [hiddenPermissionSet],
+  );
 
   useEffect(() => {
     if (!role) return;
-    setSelectedPermissions(Array.isArray(role.permissions) ? role.permissions : []);
+    setRoleName(role.name || '');
+    setRoleDescription(role.description || '');
+    setSelectedPermissions(filterHiddenPermissions(Array.isArray(role.permissions) ? role.permissions : []));
     setSelectedEmployeeIds(Array.isArray(role.assignedEmployeeIds) ? role.assignedEmployeeIds : []);
     setUserSearch('');
-    setEditSection(startInEditMode && canManageRoles ? 'permissions' : null);
-  }, [role, open, startInEditMode, canManageRoles]);
+    setEditSection(resolveInitialEditSection(dialogMode));
+  }, [role, open, dialogMode, filterHiddenPermissions]);
 
-  const isPermissionEditMode = editSection === 'permissions';
+  const isRoleEditMode = editSection === 'role';
   const isUserEditMode = editSection === 'users';
+  const isEditing = Boolean(editSection);
 
   const handlePermissionToggle = (group, permissionId) => {
     setSelectedPermissions((prev) => togglePermissionSelection(group, permissionId, prev));
   };
 
+  const handleMasterAdminToggle = () => {
+    setSelectedPermissions((prev) =>
+      togglePermissionSelection({}, MASTER_ADMIN_PERMISSION_ID, prev),
+    );
+  };
+
   const handleCancel = () => {
-    setSelectedPermissions(Array.isArray(role.permissions) ? role.permissions : []);
+    if (!role) return;
+    setRoleName(role.name || '');
+    setRoleDescription(role.description || '');
+    setSelectedPermissions(filterHiddenPermissions(Array.isArray(role.permissions) ? role.permissions : []));
     setSelectedEmployeeIds(Array.isArray(role.assignedEmployeeIds) ? role.assignedEmployeeIds : []);
     setUserSearch('');
-    setEditSection(null);
+    setEditSection(resolveInitialEditSection(dialogMode));
   };
 
   const handleEmployeeToggle = (employeeId) => {
@@ -82,34 +117,38 @@ const ViewRoleDialog = ({
   const displayedPermissions = useMemo(() => {
     const backendEntries = Array.isArray(role?.permissionEntries) ? role.permissionEntries : [];
     if (backendEntries.length > 0) {
-      return backendEntries.map((entry, index) => {
-        const screenLabel =
-          String(entry?.screenDisplayName || '').trim() ||
-          String(entry?.screen || '').trim();
-        const permissionTypeLabel =
-          String(entry?.permissionTypeDisplayName || '').trim() ||
-          String(entry?.permissionType || '').trim();
-        const fallbackLabel = entry?.canonicalId ? permissionLabels[entry.canonicalId] : '';
-        const label = screenLabel && permissionTypeLabel
-          ? `${screenLabel} - ${permissionTypeLabel}`
-          : fallbackLabel || screenLabel || permissionTypeLabel || 'Unknown Permission';
-        const key = entry?.id || `${entry?.screen || 'screen'}-${entry?.permissionType || 'type'}-${index}`;
-        return { key, label };
-      });
+      return backendEntries
+        .filter((entry) => !entry?.canonicalId || !hiddenPermissionSet.has(entry.canonicalId))
+        .map((entry, index) => {
+          const screenLabel =
+            String(entry?.screenDisplayName || '').trim() ||
+            String(entry?.screen || '').trim();
+          const permissionTypeLabel =
+            String(entry?.permissionTypeDisplayName || '').trim() ||
+            String(entry?.permissionType || '').trim();
+          const fallbackLabel = entry?.canonicalId ? permissionLabels[entry.canonicalId] : '';
+          const label = screenLabel && permissionTypeLabel
+            ? `${screenLabel} - ${permissionTypeLabel}`
+            : fallbackLabel || screenLabel || permissionTypeLabel || 'Unknown Permission';
+          const key = entry?.id || `${entry?.screen || 'screen'}-${entry?.permissionType || 'type'}-${index}`;
+          return { key, label };
+        });
     }
     const canonicalPermissions = Array.isArray(role?.permissions) ? role.permissions : [];
-    return canonicalPermissions.map((permissionId) => ({
-      key: permissionId,
-      label: permissionLabels[permissionId] || permissionId,
-    }));
-  }, [permissionLabels, role?.permissionEntries, role?.permissions]);
+    return canonicalPermissions
+      .filter((permissionId) => !hiddenPermissionSet.has(permissionId))
+      .map((permissionId) => ({
+        key: permissionId,
+        label: permissionLabels[permissionId] || permissionId,
+      }));
+  }, [hiddenPermissionSet, permissionLabels, role?.permissionEntries, role?.permissions]);
 
   const handleSave = async () => {
     const didSave = await onSave({
       ...role,
       editSection,
-      name: role.name?.trim() || '',
-      description: role.description?.trim() || '',
+      name: roleName.trim(),
+      description: roleDescription.trim(),
       permissions: selectedPermissions,
       assignedEmployeeIds: selectedEmployeeIds,
       previousAssignedEmployeeIds: Array.isArray(role.assignedEmployeeIds) ? role.assignedEmployeeIds : [],
@@ -119,6 +158,43 @@ const ViewRoleDialog = ({
     onOpenChange(false);
   };
 
+  const renderRoleDetailsFields = (readOnly = false) => (
+    <div className="space-y-3 rounded-lg border border-border p-4 bg-muted/20">
+      <div className="space-y-2">
+        <Label htmlFor="view-role-name">Role Name</Label>
+        {readOnly ? (
+          <p className="text-sm font-medium">{roleName || '-'}</p>
+        ) : (
+          <Input
+            id="view-role-name"
+            value={roleName}
+            onChange={(e) => setRoleName(e.target.value)}
+            placeholder="Role name"
+            data-testid="edit-role-name-input"
+          />
+        )}
+      </div>
+      <div className="space-y-2">
+        <Label htmlFor="view-role-description">Description</Label>
+        {readOnly ? (
+          <p className="text-sm text-muted-foreground">{roleDescription || 'No description'}</p>
+        ) : (
+          <Textarea
+            id="view-role-description"
+            value={roleDescription}
+            onChange={(e) => setRoleDescription(e.target.value)}
+            placeholder="Optional description"
+            rows={2}
+            data-testid="edit-role-description-input"
+          />
+        )}
+      </div>
+      {/* {role?.roleCode && (
+        <p className="text-xs text-muted-foreground">Role code: {role.roleCode}</p>
+      )} */}
+    </div>
+  );
+
   if (!role) return null;
 
   return (
@@ -126,112 +202,156 @@ const ViewRoleDialog = ({
       <DialogContent className="max-w-2xl max-h-[90vh] p-0 gap-0 flex flex-col overflow-hidden">
         <div className="p-6 pb-4 shrink-0">
           <DialogHeader>
-            <DialogTitle className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Shield className="w-5 h-5" />
-                {role.name}
+            <div className="flex items-start justify-between gap-3">
+              <div className="space-y-1.5">
+                <DialogTitle className="flex items-center gap-2">
+                  <Shield className="w-5 h-5" />
+                  {isAssignUsersFlow ? `Assign Users — ${role.name}` : role.name}
+                </DialogTitle>
+                <DialogDescription>
+                  {isAssignUsersFlow
+                    ? 'Your role was created successfully. Select users to assign to this role now, or skip and assign later.'
+                    : 'Review and update role details, permissions, and assigned users.'}
+                </DialogDescription>
               </div>
-            </DialogTitle>
-            <DialogDescription>Review and update role details.</DialogDescription>
+              {canManageRoles && !isAssignUsersFlow && !isEditing && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditSection('role')}
+                  disabled={saving}
+                  data-testid="edit-role-btn"
+                >
+                  <Edit2 className="w-4 h-4 mr-2" />
+                  Edit Role
+                </Button>
+              )}
+            </div>
           </DialogHeader>
         </div>
 
         <div className="flex-1 overflow-y-auto px-6">
           <div className="space-y-6 pb-4">
-            <div>
-              <div className="flex items-center justify-between gap-3 mb-3">
-                <div className="flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
-                  <h3 className="font-medium">
-                    Permissions ({isPermissionEditMode ? selectedPermissions.length : role.permissionsCount})
-                  </h3>
-                </div>
-                {canManageRoles && !isPermissionEditMode && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setEditSection('permissions')}
-                    disabled={isUserEditMode || saving}
-                  >
-                    <Edit2 className="w-4 h-4 mr-2" />
-                    Edit Permissions
-                  </Button>
+            {!isAssignUsersFlow && (
+              <div className="space-y-4">
+                {isRoleEditMode ? (
+                  <>
+                    {renderRoleDetailsFields(false)}
+                    <div>
+                      <Label className="mb-3 block">
+                        Permissions ({selectedPermissions.length})
+                      </Label>
+                      <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
+                        <div className="flex items-start space-x-3">
+                          <Checkbox
+                            id="edit-master-admin"
+                            checked={isMasterAdminSelected(selectedPermissions)}
+                            onCheckedChange={handleMasterAdminToggle}
+                            data-testid="edit-master-admin-checkbox"
+                          />
+                          <label htmlFor="edit-master-admin" className="cursor-pointer">
+                            <span className="block text-sm font-medium">Master Admin</span>
+                            <span className="block text-xs text-muted-foreground">
+                              Full corporate portal access. Selecting this enables all permissions.
+                            </span>
+                          </label>
+                        </div>
+                      </div>
+                      <Accordion
+                        type="multiple"
+                        className={`space-y-2 ${isMasterAdminSelected(selectedPermissions) ? 'pointer-events-none opacity-60' : ''}`}
+                      >
+                        {permissionGroups.map((group, index) => (
+                          <AccordionItem
+                            key={group.title}
+                            value={`item-${index}`}
+                            className="border border-border rounded-lg px-4"
+                          >
+                            <AccordionTrigger className="hover:no-underline py-4">
+                              <span className="font-medium text-sm">{group.title}</span>
+                            </AccordionTrigger>
+                            <AccordionContent className="pb-4">
+                              <div className="space-y-3 pt-2">
+                                {group.permissions.map((permission) => {
+                                  const impliedViewOnly = isViewOnlyImplied(
+                                    group,
+                                    permission.id,
+                                    selectedPermissions,
+                                  );
+                                  const disabledByMasterAdmin = isPermissionDisabledByMasterAdmin(
+                                    permission.id,
+                                    selectedPermissions,
+                                  );
+                                  return (
+                                    <div
+                                      key={permission.id}
+                                      className={`flex items-center space-x-3 ${
+                                        impliedViewOnly || disabledByMasterAdmin ? 'opacity-50' : ''
+                                      }`}
+                                    >
+                                      <Checkbox
+                                        id={`edit-${permission.id}`}
+                                        checked={isPermissionChecked(group, permission.id, selectedPermissions)}
+                                        disabled={impliedViewOnly || disabledByMasterAdmin}
+                                        onCheckedChange={() => handlePermissionToggle(group, permission.id)}
+                                      />
+                                      <label
+                                        htmlFor={`edit-${permission.id}`}
+                                        className={`text-sm ${
+                                          impliedViewOnly || disabledByMasterAdmin
+                                            ? 'text-muted-foreground cursor-not-allowed'
+                                            : 'text-foreground cursor-pointer'
+                                        }`}
+                                      >
+                                        {permission.label}
+                                        {(impliedViewOnly || disabledByMasterAdmin) && (
+                                          <span className="ml-2 text-xs text-muted-foreground">
+                                            {disabledByMasterAdmin
+                                              ? 'Disabled by Master Admin'
+                                              : 'Included with higher access'}
+                                          </span>
+                                        )}
+                                      </label>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </AccordionContent>
+                          </AccordionItem>
+                        ))}
+                      </Accordion>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {renderRoleDetailsFields(true)}
+                    <div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <CheckCircle2 className="w-4 h-4 text-muted-foreground" />
+                        <h3 className="font-medium text-sm">
+                          Permissions ({role.permissionsCount})
+                        </h3>
+                      </div>
+                      <div className="space-y-2">
+                        {displayedPermissions.length > 0 ? (
+                          displayedPermissions.map((permission) => (
+                            <div key={permission.key} className="flex items-center gap-2 p-3 bg-accent/50 rounded-lg">
+                              <CheckCircle2 className="w-4 h-4 text-primary" />
+                              <span className="text-sm">{permission.label}</span>
+                            </div>
+                          ))
+                        ) : (
+                          <p className="text-sm text-muted-foreground">No permissions assigned</p>
+                        )}
+                      </div>
+                    </div>
+                  </>
                 )}
               </div>
-
-              {isPermissionEditMode ? (
-                <Accordion type="multiple" className="space-y-2">
-                  {permissionGroups.map((group, index) => (
-                    <AccordionItem
-                      key={group.title}
-                      value={`item-${index}`}
-                      className="border border-border rounded-lg px-4"
-                    >
-                      <AccordionTrigger className="hover:no-underline py-4">
-                        <span className="font-medium text-sm">{group.title}</span>
-                      </AccordionTrigger>
-                      <AccordionContent className="pb-4">
-                        <div className="space-y-3 pt-2">
-                          {group.permissions.map((permission) => {
-                            const impliedViewOnly = isViewOnlyImplied(
-                              group,
-                              permission.id,
-                              selectedPermissions,
-                            );
-                            return (
-                            <div
-                              key={permission.id}
-                              className={`flex items-center space-x-3 ${
-                                impliedViewOnly ? 'opacity-50' : ''
-                              }`}
-                            >
-                              <Checkbox
-                                id={`edit-${permission.id}`}
-                                checked={isPermissionChecked(group, permission.id, selectedPermissions)}
-                                disabled={impliedViewOnly}
-                                onCheckedChange={() => handlePermissionToggle(group, permission.id)}
-                              />
-                              <label
-                                htmlFor={`edit-${permission.id}`}
-                                className={`text-sm ${
-                                  impliedViewOnly
-                                    ? 'text-muted-foreground cursor-not-allowed'
-                                    : 'text-foreground cursor-pointer'
-                                }`}
-                              >
-                                {permission.label}
-                                {impliedViewOnly && (
-                                  <span className="ml-2 text-xs text-muted-foreground">
-                                    Included with higher access
-                                  </span>
-                                )}
-                              </label>
-                            </div>
-                            );
-                          })}
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
-              ) : (
-                <div className="space-y-2">
-                  {displayedPermissions.length > 0 ? (
-                    displayedPermissions.map((permission) => (
-                      <div key={permission.key} className="flex items-center gap-2 p-3 bg-accent/50 rounded-lg">
-                        <CheckCircle2 className="w-4 h-4 text-primary" />
-                        <span className="text-sm">{permission.label}</span>
-                      </div>
-                    ))
-                  ) : (
-                    <p className="text-sm text-muted-foreground">No permissions assigned</p>
-                  )}
-                </div>
-              )}
-            </div>
+            )}
 
             <div>
-              <Separator className="mb-4" />
+              {!isAssignUsersFlow && <Separator className="mb-4" />}
               <div className="flex items-center justify-between gap-3 mb-3">
                 <div className="flex items-center gap-2">
                   <Users className="w-4 h-4 text-muted-foreground" />
@@ -239,12 +359,12 @@ const ViewRoleDialog = ({
                     Assigned Users ({isUserEditMode ? selectedEmployeeIds.length : role.users.length})
                   </h3>
                 </div>
-                {canManageRoles && !isUserEditMode && (
+                {canManageAssignedUsers && !isUserEditMode && !isAssignUsersFlow && (
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setEditSection('users')}
-                    disabled={isPermissionEditMode || saving}
+                    disabled={isRoleEditMode || saving}
                   >
                     <Edit2 className="w-4 h-4 mr-2" />
                     Edit Users
@@ -252,14 +372,15 @@ const ViewRoleDialog = ({
                 )}
               </div>
 
-              {isUserEditMode ? (
+              {isUserEditMode && canManageAssignedUsers ? (
                 <div className="space-y-3">
                   <Input
                     value={userSearch}
                     onChange={(e) => setUserSearch(e.target.value)}
                     placeholder="Search users by name, email, or employee ID"
+                    data-testid="assign-role-user-search"
                   />
-                  <div className="max-h-60 overflow-y-auto border border-border rounded-lg p-3 space-y-3">
+                    <div className="max-h-60 overflow-y-auto border border-border rounded-lg p-3 space-y-3">
                     {filteredUsers.length > 0 ? (
                       filteredUsers.map((user) => (
                         <div key={user.id} className="flex items-start space-x-3">
@@ -303,13 +424,33 @@ const ViewRoleDialog = ({
         </div>
 
         <div className="flex justify-end gap-3 p-6 pt-4 border-t shrink-0">
-          {isPermissionEditMode || isUserEditMode ? (
+          {isEditing ? (
             <>
               <Button variant="outline" onClick={handleCancel} disabled={saving}>
                 Cancel
               </Button>
-              <Button onClick={handleSave} disabled={saving} data-testid="save-role-local-changes-btn">
-                {saving ? 'Saving...' : 'Save Changes'}
+              {isAssignUsersFlow && (
+                <Button
+                  variant="ghost"
+                  onClick={() => onOpenChange(false)}
+                  disabled={saving}
+                  data-testid="skip-assign-users-btn"
+                >
+                  Skip for now
+                </Button>
+              )}
+              <Button
+                onClick={handleSave}
+                disabled={saving || (isRoleEditMode && !roleName.trim())}
+                data-testid="save-role-local-changes-btn"
+              >
+                {saving
+                  ? 'Saving...'
+                  : isAssignUsersFlow
+                    ? 'Assign Users'
+                    : isUserEditMode
+                      ? 'Save Users'
+                      : 'Save Role'}
               </Button>
             </>
           ) : (

@@ -1,6 +1,14 @@
 import { mapScreenPermissionToCanonical } from "../../../utils/rbacPermissions";
+import {
+  AP_MASTER_ADMIN_BACKEND_SCREEN,
+  MASTER_ADMIN_PERMISSION_ID,
+} from "../constants/permissionConfig";
 
-const CUSTOM_ROLE_PERMISSION_MAP = {
+export const CUSTOM_ROLE_PERMISSION_MAP = {
+  [MASTER_ADMIN_PERMISSION_ID]: {
+    screen: AP_MASTER_ADMIN_BACKEND_SCREEN,
+    permissionType: "FULL_ACCESS",
+  },
   "dashboard-view": { screen: "DASHBOARD", permissionType: "VIEW" },
   "vendors-view": { screen: "VENDORS", permissionType: "VIEW" },
   "vendors-manage": { screen: "VENDORS", permissionType: "MANAGE" },
@@ -18,23 +26,32 @@ const CUSTOM_ROLE_PERMISSION_MAP = {
   "invoice-maker": { screen: "INVOICE", permissionType: "MAKER" },
   "invoice-checker": { screen: "INVOICE", permissionType: "CHECKER" },
   "invoice-approver": { screen: "INVOICE", permissionType: "APPROVER" },
+  "campaign-view": { screen: "CAMPAIGN", permissionType: "VIEW" },
+  "campaign-manage": { screen: "CAMPAIGN", permissionType: "MANAGE" },
+  "campaign-approve": { screen: "CAMPAIGN", permissionType: "APPROVE" },
   "matching-view": { screen: "INVOICE_MATCHING", permissionType: "VIEW" },
   "matching-manage": { screen: "INVOICE_MATCHING", permissionType: "MANAGE" },
   "payments-view": { screen: "PAYMENTS", permissionType: "VIEW" },
   "payments-manage": { screen: "PAYMENTS", permissionType: "MANAGE" },
+  "payment-batches-view": { screen: "PAYMENT_BATCHES", permissionType: "VIEW" },
+  "payment-batches-manage": { screen: "PAYMENT_BATCHES", permissionType: "MANAGE" },
   "tax-view": { screen: "TAX_MANAGEMENT", permissionType: "VIEW" },
   "tax-manage": { screen: "TAX_MANAGEMENT", permissionType: "MANAGE" },
   "reports-view": { screen: "REPORTS", permissionType: "VIEW" },
   "reports-full": { screen: "REPORTS", permissionType: "FULL" },
+  "audit-trail-view": { screen: "AUDIT_TRAIL", permissionType: "VIEW" },
   "banking-view": { screen: "BANKING", permissionType: "VIEW" },
   "banking-full": { screen: "BANKING", permissionType: "FULL" },
   "roles-view": { screen: "MANAGE_ROLE", permissionType: "VIEW" },
   "roles-manage": { screen: "MANAGE_ROLE", permissionType: "MANAGE" },
+  "roles-manage-users": { screen: "MANAGE_ROLE", permissionType: "USERS" },
   "vendor-workflow-view": { screen: "VENDOR_APPROVAL_WORKFLOW", permissionType: "VIEW" },
   "vendor-workflow-manage": { screen: "VENDOR_APPROVAL_WORKFLOW", permissionType: "MANAGE" },
   "settings-org": { screen: "SETTINGS", permissionType: "ORG" },
   "settings-banking": { screen: "SETTINGS", permissionType: "BANKING" },
   "settings-interaction": { screen: "SETTINGS", permissionType: "INTERACTION" },
+  "category-view": { screen: "CATEGORY", permissionType: "VIEW" },
+  "category-manage": { screen: "CATEGORY", permissionType: "MANAGE" },
 };
 
 const HIDDEN_ROLE_ACCESS_PERMISSIONS = new Set(["approval-view", "approval-full"]);

@@ -1,5 +1,15 @@
 import { serviceApi } from "../serviceApi";
 import { normalizeCustomRolePermissionsResponse } from "../../utils/rbacPermissions";
+import {
+  DEFAULT_INVOICE_CONFIGURATION,
+  normalizeActiveInvoiceConfiguration,
+  normalizeInvoiceConfigurationCatalog,
+} from "../../utils/invoiceConfiguration";
+import {
+  DEFAULT_VENDOR_FIELD_CATALOG,
+  normalizeActiveVendorFields,
+  normalizeVendorFieldCatalog,
+} from "../../utils/vendorFieldConfig";
 
 const toBoolean = (value) => value === true;
 
@@ -66,6 +76,117 @@ const extractFirstEmployeeRole = (employeeDetails = null) => {
   return null;
 };
 
+const normalizeToken = (value = "") =>
+  String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+
+const toArray = (value) => {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+};
+
+const normalizeCorporateScreensResponse = (response = {}) => {
+  const rawScreenSections =
+    response?.screenSections && typeof response.screenSections === "object"
+      ? response.screenSections
+      : {};
+  const explicitSectionEnabled = new Map();
+  const sectionScreens = new Map();
+  const screenSectionsByScreen = {};
+
+  Object.entries(rawScreenSections).forEach(([screenName, sections]) => {
+    const screen = normalizeToken(screenName);
+    if (!screen) return;
+    const normalizedSections = toArray(sections)
+      .map((section) => {
+        const sectionId = normalizeToken(section?.section);
+        if (!sectionId) return null;
+        explicitSectionEnabled.set(sectionId, section?.isEnabled === true);
+        sectionScreens.set(sectionId, screen);
+        return {
+          section: sectionId,
+          displayName: String(section?.displayName || sectionId).trim(),
+          screen,
+          isBasic: section?.isBasic === true,
+          isEnabled: section?.isEnabled === true,
+        };
+      })
+      .filter(Boolean);
+    screenSectionsByScreen[screen] = normalizedSections;
+  });
+
+  const enabledSections = new Set();
+  const addEnabledSection = (sectionEntry = {}) => {
+    const section = normalizeToken(sectionEntry?.section);
+    if (!section) return;
+    const explicitEnabled = explicitSectionEnabled.get(section);
+    if (explicitEnabled === false) return;
+    enabledSections.add(section);
+    const screen = normalizeToken(sectionEntry?.screen);
+    if (screen) sectionScreens.set(section, screen);
+  };
+
+  toArray(response?.basicSections).forEach(addEnabledSection);
+  toArray(response?.additionalSections).forEach(addEnabledSection);
+  explicitSectionEnabled.forEach((isEnabled, section) => {
+    if (isEnabled) enabledSections.add(section);
+    if (!isEnabled) enabledSections.delete(section);
+  });
+
+  const allowedScreens = new Set(toArray(response?.allowedScreens).map(normalizeToken).filter(Boolean));
+  enabledSections.forEach((section) => {
+    const screen = sectionScreens.get(section);
+    if (screen) allowedScreens.add(screen);
+  });
+
+  const enabledSectionList = Array.from(enabledSections);
+  const vendorFieldConfiguration = normalizeVendorFieldCatalog(
+    toArray(response?.vendorFieldConfiguration),
+  );
+  const activeVendorFields = normalizeActiveVendorFields(response?.activeVendorFields);
+  const invoiceConfiguration = normalizeInvoiceConfigurationCatalog(
+    toArray(response?.invoiceConfiguration),
+  );
+  const activeInvoiceConfiguration = normalizeActiveInvoiceConfiguration(
+    response?.activeInvoiceConfiguration,
+  );
+
+  return {
+    raw: response ?? null,
+    allowedScreens: Array.from(allowedScreens),
+    enabledSections: enabledSectionList,
+    screenSectionsByScreen,
+    sectionScreens: Object.fromEntries(sectionScreens),
+    isCategoryFeatureEnabled: enabledSections.has("CATEGORY_ALL"),
+    isCampaignFeatureEnabled: enabledSections.has("CAMPAIGN_ALL"),
+    vendorFieldConfiguration:
+      vendorFieldConfiguration.length > 0
+        ? vendorFieldConfiguration
+        : DEFAULT_VENDOR_FIELD_CATALOG,
+    activeVendorFields,
+    invoiceConfiguration:
+      invoiceConfiguration.length > 0
+        ? invoiceConfiguration
+        : DEFAULT_INVOICE_CONFIGURATION,
+    activeInvoiceConfiguration,
+  };
+};
+
+const normalizeCustomRoleScreen = (screen = {}) => ({
+  ...screen,
+  screen: normalizeToken(screen?.screen),
+  displayName: String(screen?.displayName || screen?.screen || "").trim(),
+  permissionTypes: toArray(screen?.permissionTypes).map((permission) => ({
+    ...permission,
+    permissionType: normalizeToken(permission?.permissionType ?? permission?.type),
+    type: normalizeToken(permission?.type ?? permission?.permissionType),
+    displayName: String(permission?.displayName || permission?.permissionType || permission?.type || "").trim(),
+  })).filter((permission) => permission.permissionType),
+});
+
 export const corporateApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getCorporateDetails: builder.query({
@@ -112,8 +233,30 @@ export const corporateApi = serviceApi.injectEndpoints({
         url: "/corporate/custom-roles/screens",
         method: "GET",
       }),
-      transformResponse: (response) =>
-        Array.isArray(response) ? response : [],
+      transformResponse: (response) => {
+        const screens = Array.isArray(response)
+          ? response
+          : Array.isArray(response?.screens)
+            ? response.screens
+            : [];
+        return screens.map(normalizeCustomRoleScreen).filter((screen) => screen.screen);
+      },
+      providesTags: ["Users"],
+    }),
+    getCorporateScreens: builder.query({
+      query: () => ({
+        url: "/corporate/custom-roles/corporate-screens",
+        method: "GET",
+      }),
+      transformResponse: normalizeCorporateScreensResponse,
+      providesTags: ["Users"],
+    }),
+    getSubscriptionModules: builder.query({
+      query: () => ({
+        url: "/corporate/custom-roles/subscription-modules",
+        method: "GET",
+      }),
+      transformResponse: (response) => (Array.isArray(response) ? response : []),
       providesTags: ["Users"],
     }),
     getCustomRoles: builder.query({
@@ -144,7 +287,7 @@ export const corporateApi = serviceApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Users"],
+      invalidatesTags: ["Users", "Categories"],
     }),
     updateCustomRole: builder.mutation({
       query: ({ roleId, body }) => ({
@@ -152,14 +295,14 @@ export const corporateApi = serviceApi.injectEndpoints({
         method: "PUT",
         body,
       }),
-      invalidatesTags: ["Users"],
+      invalidatesTags: ["Users", "Categories"],
     }),
     deleteCustomRole: builder.mutation({
       query: (roleId) => ({
         url: `/corporate/custom-roles/${roleId}`,
         method: "DELETE",
       }),
-      invalidatesTags: ["Users"],
+      invalidatesTags: ["Users", "Categories"],
     }),
     assignPermissionsToCustomRole: builder.mutation({
       query: ({ roleId, permissions }) => ({
@@ -167,7 +310,7 @@ export const corporateApi = serviceApi.injectEndpoints({
         method: "POST",
         body: { permissions },
       }),
-      invalidatesTags: ["Users"],
+      invalidatesTags: ["Users", "Categories"],
     }),
     removePermissionsFromCustomRole: builder.mutation({
       query: ({ roleId, permissions }) => ({
@@ -175,7 +318,7 @@ export const corporateApi = serviceApi.injectEndpoints({
         method: "DELETE",
         body: { permissions },
       }),
-      invalidatesTags: ["Users"],
+      invalidatesTags: ["Users", "Categories"],
     }),
     assignCustomRoleToEmployees: builder.mutation({
       query: ({ roleId, employeeIds }) => ({
@@ -183,7 +326,7 @@ export const corporateApi = serviceApi.injectEndpoints({
         method: "POST",
         body: { employeeIds },
       }),
-      invalidatesTags: ["Users"],
+      invalidatesTags: ["Users", "Categories"],
     }),
     removeCustomRoleFromEmployees: builder.mutation({
       query: ({ roleId, employeeIds }) => ({
@@ -191,7 +334,7 @@ export const corporateApi = serviceApi.injectEndpoints({
         method: "DELETE",
         body: { employeeIds },
       }),
-      invalidatesTags: ["Users"],
+      invalidatesTags: ["Users", "Categories"],
     }),
     getCorporateEmployees: builder.query({
       query: ({
@@ -218,7 +361,12 @@ export const corporateApi = serviceApi.injectEndpoints({
         const rows = Array.isArray(response?.data) ? response.data : [];
         const data = rows.map((item) => ({
           id: item?.id ?? null,
-          empId: item?.empId ?? item?.id ?? "",
+          empId:
+            item?.empId ??
+            item?.employeeId ??
+            item?.employeeCode ??
+            item?.empCode ??
+            "",
           name: item?.name ?? "",
           email: item?.email ?? "",
           phoneNumber: item?.phoneNumber ?? item?.mobile ?? "",
@@ -263,7 +411,7 @@ export const corporateApi = serviceApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Users"],
+      invalidatesTags: ["Users", "Categories"],
     }),
     updateCorporateEmployee: builder.mutation({
       query: (body) => ({
@@ -271,7 +419,7 @@ export const corporateApi = serviceApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Users"],
+      invalidatesTags: ["Users", "Categories"],
     }),
     deleteCorporateEmployee: builder.mutation({
       query: ({ id }) => ({
@@ -280,7 +428,24 @@ export const corporateApi = serviceApi.injectEndpoints({
         params: { employeeId: id },
         body: {},
       }),
-      invalidatesTags: ["Users"],
+      invalidatesTags: ["Users", "Categories"],
+    }),
+    getAvailableCurrencies: builder.query({
+      query: (screen) => ({
+        url: "/corporate/ap/getAvailableCurrencies",
+        method: "GET",
+        params: { screen },
+      }),
+      transformResponse: (response) => {
+        const currencies = Array.isArray(response?.currencies)
+          ? response.currencies
+          : Array.isArray(response)
+            ? response
+            : [];
+        return currencies
+          .map((currency) => String(currency || "").trim().toUpperCase())
+          .filter(Boolean);
+      },
     }),
   }),
 });
@@ -290,6 +455,8 @@ export const {
   useGetCorporateUserDetailsQuery,
   useGetEmployeeCustomRolesQuery,
   useGetCustomRoleScreensQuery,
+  useGetCorporateScreensQuery,
+  useGetSubscriptionModulesQuery,
   useGetCustomRolesQuery,
   useGetCustomRoleByIdQuery,
   useCreateCustomRoleMutation,
@@ -304,4 +471,5 @@ export const {
   useAddCorporateUsersMutation,
   useUpdateCorporateEmployeeMutation,
   useDeleteCorporateEmployeeMutation,
+  useGetAvailableCurrenciesQuery,
 } = corporateApi;

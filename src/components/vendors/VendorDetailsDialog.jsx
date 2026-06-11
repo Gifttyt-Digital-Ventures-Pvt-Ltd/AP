@@ -1,10 +1,41 @@
-import React from 'react';
-import { Building2, User } from 'lucide-react';
-import { Button } from '../ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../ui/dialog';
-import { Input } from '../ui/input';
-import { Label } from '../ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
+import React from "react";
+import { Building2, User } from "lucide-react";
+import { useGetAvailableCurrenciesQuery } from "../../Services/apis/corporateApi";
+import { useRBAC } from "../../contexts/RBACContext";
+import { CURRENCY_SCREENS, FALLBACK_CURRENCIES } from "../../utils/currency";
+import {
+  getVendorFieldDisplayName,
+  isVendorFieldRequired,
+  VENDOR_FIELD_SECTIONS,
+} from "../../utils/vendorFieldConfig";
+import {
+  isIndiaCountry,
+  normalizePincodeInput,
+} from "../../utils/vendorValidation";
+import { Button } from "../ui/button";
+import { Checkbox } from "../ui/checkbox";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
+import { Input } from "../ui/input";
+import { Label } from "../ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
+
+const CATEGORY_OPTIONS = [
+  "IT Services",
+  "Office Supplies",
+  "Consulting",
+  "Marketing",
+  "Legal",
+  "Maintenance",
+  "Utilities",
+  "Others",
+];
 
 const VendorDetailsDialog = ({
   open,
@@ -12,22 +43,191 @@ const VendorDetailsDialog = ({
   formData,
   setFormData,
   onSubmit,
-  title = 'Create Vendor',
-  description = 'Add contact details and payment info of your vendor in OptiFii',
-  submitLabel = 'Save Vendor',
+  title = "Create Vendor",
+  description = "Add contact details and payment info of your vendor in OptiFii",
+  submitLabel = "Save Vendor",
   submitting = false,
-  requireEmail = true,
-  requireGstin = false,
-  testId = 'vendor-dialog',
+  activeVendorFields: activeVendorFieldsProp,
+  vendorFieldConfiguration: vendorFieldConfigurationProp,
+  /** Invoice upload vendor request: only name + type are mandatory */
+  invoiceVendorRequest = false,
+  testId = "vendor-dialog",
 }) => {
+  const { corporateScreens } = useRBAC();
+  const activeVendorFields =
+    activeVendorFieldsProp ?? corporateScreens?.activeVendorFields ?? [];
+  const vendorFieldConfiguration =
+    vendorFieldConfigurationProp ?? corporateScreens?.vendorFieldConfiguration ?? [];
+
+  const { data: availableCurrencies = [] } = useGetAvailableCurrenciesQuery(
+    CURRENCY_SCREENS.INVOICE,
+    { skip: invoiceVendorRequest },
+  );
+
   if (!formData) return null;
+
+  const isRequired = (sectionId) =>
+    !invoiceVendorRequest && isVendorFieldRequired(sectionId, activeVendorFields);
+
+  const labelFor = (sectionId, fallback = "") =>
+    getVendorFieldDisplayName(sectionId, vendorFieldConfiguration) || fallback;
+
+  const isIndia = isIndiaCountry(formData.country);
+  const currencyOptions =
+    Array.isArray(availableCurrencies) && availableCurrencies.length > 0
+      ? availableCurrencies.filter((currency) => currency !== "ALL")
+      : FALLBACK_CURRENCIES;
+  const updateField = (field, value) =>
+    setFormData((prev) => ({ ...prev, [field]: value }));
+
+  const basicInfoFields = [
+    {
+      key: "email",
+      section: VENDOR_FIELD_SECTIONS.EMAIL_ID,
+      type: "email",
+      placeholder: "vendor@example.com",
+      testId: "vendor-email-input",
+    },
+    {
+      key: "mobile",
+      section: VENDOR_FIELD_SECTIONS.MOBILE_NO,
+      placeholder: "+91 98765 43210",
+      testId: "vendor-mobile-input",
+    },
+    {
+      key: "phone",
+      section: VENDOR_FIELD_SECTIONS.PHONE_NO,
+      placeholder: "+91 22 1234 5678",
+      testId: "vendor-phone-input",
+    },
+    {
+      key: "contact_person",
+      section: VENDOR_FIELD_SECTIONS.CONTACT_PERSON,
+      placeholder: "e.g., Rahul Sharma",
+    },
+    {
+      key: "website",
+      section: VENDOR_FIELD_SECTIONS.WEBSITE,
+      placeholder: "https://example.com",
+    },
+  ];
+
+  const addressFields = [
+    {
+      key: "address_line1",
+      section: VENDOR_FIELD_SECTIONS.ADDRESS_LINE_1,
+      placeholder: "Building/Street address",
+      colSpan: "col-span-2",
+    },
+    {
+      key: "address_line2",
+      section: VENDOR_FIELD_SECTIONS.ADDRESS_LINE_2,
+      placeholder: "Apartment, suite, etc.",
+      colSpan: "col-span-2",
+    },
+    {
+      key: "city",
+      section: VENDOR_FIELD_SECTIONS.CITY,
+      placeholder: "e.g., Mumbai",
+    },
+    {
+      key: "state",
+      section: VENDOR_FIELD_SECTIONS.STATE,
+      placeholder: "e.g., Maharashtra",
+    },
+    {
+      key: "country",
+      section: VENDOR_FIELD_SECTIONS.COUNTRY,
+      placeholder: "India",
+    },
+  ];
+
+  const bankFields = [
+    {
+      key: "account_holder_name",
+      section: VENDOR_FIELD_SECTIONS.ACCOUNT_NAME,
+      placeholder: "As per bank records",
+      colSpan: "col-span-2",
+    },
+    {
+      key: "account_number",
+      section: VENDOR_FIELD_SECTIONS.ACCOUNT_NUMBER,
+      placeholder: "1234567890",
+    },
+    {
+      key: "ifsc_code",
+      section: VENDOR_FIELD_SECTIONS.IFSC_CODE,
+      placeholder: "ICIC0001234",
+      transform: (value) => value.toUpperCase(),
+      className: "uppercase",
+    },
+    {
+      key: "bank_name",
+      section: VENDOR_FIELD_SECTIONS.BANK_NAME,
+      placeholder: "e.g., ICICI Bank",
+    },
+    {
+      key: "branch",
+      section: VENDOR_FIELD_SECTIONS.BRANCH,
+      placeholder: "e.g., Andheri West",
+    },
+  ];
+
+  const renderInputField = ({
+    key,
+    section,
+    placeholder,
+    type = "text",
+    transform,
+    className = "",
+    colSpan = "",
+    maxLength,
+    testId,
+  }) => {
+    const required = isRequired(section);
+    const label = labelFor(section);
+    return (
+      <div key={key} className={colSpan}>
+        <Label>
+          {label}
+          {required ? " *" : ""}
+        </Label>
+        <Input
+          type={type}
+          value={formData[key] || ""}
+          onChange={(event) =>
+            updateField(
+              key,
+              transform ? transform(event.target.value) : event.target.value,
+            )
+          }
+          placeholder={placeholder}
+          required={required}
+          className={className}
+          maxLength={maxLength}
+          data-testid={testId}
+        />
+      </div>
+    );
+  };
+
+  const nameLabel =
+    formData.vendor_type === "Company"
+      ? labelFor(VENDOR_FIELD_SECTIONS.COMPANY_NAME, "Company Name")
+      : "Full Name";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto" data-testid={testId}>
+      <DialogContent
+        className="max-w-4xl max-h-[90vh] overflow-y-auto"
+        data-testid={testId}
+        onInteractOutside={(event) => event.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold">{title}</DialogTitle>
-          {description && <p className="text-sm text-muted-foreground">{description}</p>}
+          {description && (
+            <p className="text-sm text-muted-foreground">{description}</p>
+          )}
         </DialogHeader>
 
         <form onSubmit={onSubmit} className="space-y-6">
@@ -42,20 +242,34 @@ const VendorDetailsDialog = ({
             <TabsContent value="basic" className="space-y-4 mt-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
-                  <Label>Vendor Type *</Label>
+                  <Label>
+                    {labelFor(VENDOR_FIELD_SECTIONS.VENDOR_TYPE, "Vendor Type")}
+                    {invoiceVendorRequest || isRequired(VENDOR_FIELD_SECTIONS.VENDOR_TYPE)
+                      ? " *"
+                      : ""}
+                  </Label>
                   <div className="flex gap-4 mt-2">
-                    {['Company', 'Individual'].map((type) => (
+                    {["Company", "Individual"].map((type) => (
                       <button
                         key={type}
                         type="button"
-                        onClick={() => setFormData((prev) => ({ ...prev, vendor_type: type }))}
+                        onClick={() =>
+                          setFormData((prev) => ({
+                            ...prev,
+                            vendor_type: type,
+                          }))
+                        }
                         className={`flex-1 p-4 border-2 rounded-lg flex items-center justify-center gap-2 transition-all ${
                           formData.vendor_type === type
-                            ? 'border-accent bg-accent/10'
-                            : 'border-border hover:border-accent/50'
+                            ? "border-accent bg-accent/10"
+                            : "border-border hover:border-accent/50"
                         }`}
                       >
-                        {type === 'Company' ? <Building2 className="h-5 w-5" /> : <User className="h-5 w-5" />}
+                        {type === "Company" ? (
+                          <Building2 className="h-5 w-5" />
+                        ) : (
+                          <User className="h-5 w-5" />
+                        )}
                         <span className="font-medium">{type}</span>
                       </button>
                     ))}
@@ -63,165 +277,132 @@ const VendorDetailsDialog = ({
                 </div>
 
                 <div className="col-span-2">
-                  <Label>{formData.vendor_type === 'Company' ? 'Company Name' : 'Full Name'} *</Label>
+                  <Label>
+                    {nameLabel}
+                    {invoiceVendorRequest || isRequired(VENDOR_FIELD_SECTIONS.COMPANY_NAME)
+                      ? " *"
+                      : ""}
+                  </Label>
                   <Input
                     value={formData.name}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, name: event.target.value }))}
-                    placeholder={formData.vendor_type === 'Company' ? 'e.g., Acme Corporation' : 'e.g., John Doe'}
+                    onChange={(event) =>
+                      updateField("name", event.target.value)
+                    }
+                    placeholder={
+                      formData.vendor_type === "Company"
+                        ? "e.g., Acme Corporation"
+                        : "e.g., John Doe"
+                    }
                     data-testid="vendor-name-input"
-                    required
+                    required={
+                      invoiceVendorRequest ||
+                      isRequired(VENDOR_FIELD_SECTIONS.COMPANY_NAME)
+                    }
                   />
                 </div>
 
-                <div>
-                  <Label>Email{requireEmail ? ' *' : ''}</Label>
-                  <Input
-                    type="email"
-                    value={formData.email}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, email: event.target.value }))}
-                    placeholder="vendor@example.com"
-                    data-testid="vendor-email-input"
-                    required={requireEmail}
-                  />
-                </div>
+                {basicInfoFields.map(renderInputField)}
 
                 <div>
-                  <Label>Mobile Number</Label>
-                  <Input
-                    value={formData.mobile}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, mobile: event.target.value }))}
-                    placeholder="+91 98765 43210"
-                    data-testid="vendor-mobile-input"
-                  />
-                </div>
-
-                <div>
-                  <Label>Phone Number</Label>
-                  <Input
-                    value={formData.phone}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, phone: event.target.value }))}
-                    placeholder="+91 22 1234 5678"
-                    data-testid="vendor-phone-input"
-                  />
-                </div>
-
-                <div>
-                  <Label>Contact Person</Label>
-                  <Input
-                    value={formData.contact_person}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, contact_person: event.target.value }))}
-                    placeholder="e.g., Rahul Sharma"
-                  />
-                </div>
-
-                <div>
-                  <Label>Category</Label>
-                  <select
-                    value={formData.category}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, category: event.target.value }))}
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  <Label>
+                    {labelFor(VENDOR_FIELD_SECTIONS.CATEGORY, "Category")}
+                    {isRequired(VENDOR_FIELD_SECTIONS.CATEGORY) ? " *" : ""}
+                  </Label>
+                  <Select
+                    value={formData.category || ""}
+                    onValueChange={(value) => updateField("category", value)}
+                    required={isRequired(VENDOR_FIELD_SECTIONS.CATEGORY)}
                   >
-                    <option value="">Select Category</option>
-                    <option value="IT Services">IT Services</option>
-                    <option value="Office Supplies">Office Supplies</option>
-                    <option value="Consulting">Consulting</option>
-                    <option value="Marketing">Marketing</option>
-                    <option value="Legal">Legal</option>
-                    <option value="Maintenance">Maintenance</option>
-                    <option value="Utilities">Utilities</option>
-                    <option value="Others">Others</option>
-                  </select>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {CATEGORY_OPTIONS.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
                 <div>
-                  <Label>Website</Label>
-                  <Input
-                    value={formData.website}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, website: event.target.value }))}
-                    placeholder="https://example.com"
-                  />
-                </div>
-
-                <div>
-                  <Label>Currency</Label>
-                  <select
-                    value={formData.currency}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, currency: event.target.value }))}
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  <Label>
+                    {labelFor(VENDOR_FIELD_SECTIONS.CURRENCY, "Currency")}
+                    {isRequired(VENDOR_FIELD_SECTIONS.CURRENCY) ? " *" : ""}
+                  </Label>
+                  <Select
+                    value={formData.currency || ""}
+                    onValueChange={(value) => updateField("currency", value)}
+                    required={isRequired(VENDOR_FIELD_SECTIONS.CURRENCY)}
                   >
-                    <option value="INR">INR - Indian Rupee</option>
-                    <option value="USD">USD - US Dollar</option>
-                    <option value="EUR">EUR - Euro</option>
-                    <option value="GBP">GBP - British Pound</option>
-                  </select>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Currency" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {currencyOptions.map((option) => (
+                        <SelectItem key={option} value={option}>
+                          {option}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
 
-                <div className="col-span-2">
-                  <Label>Address Line 1</Label>
-                  <Input
-                    value={formData.address_line1}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, address_line1: event.target.value }))}
-                    placeholder="Building/Street address"
-                  />
-                </div>
-
-                <div className="col-span-2">
-                  <Label>Address Line 2</Label>
-                  <Input
-                    value={formData.address_line2}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, address_line2: event.target.value }))}
-                    placeholder="Apartment, suite, etc."
-                  />
-                </div>
+                {addressFields.map(renderInputField)}
 
                 <div>
-                  <Label>City</Label>
+                  <Label>
+                    {isIndia
+                      ? labelFor(VENDOR_FIELD_SECTIONS.PINCODE, "Pincode")
+                      : "Postal Code"}
+                    {isRequired(VENDOR_FIELD_SECTIONS.PINCODE) ? " *" : ""}
+                  </Label>
                   <Input
-                    value={formData.city}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, city: event.target.value }))}
-                    placeholder="e.g., Mumbai"
+                    type="text"
+                    inputMode={isIndia ? "numeric" : "text"}
+                    value={formData.pincode || ""}
+                    onChange={(event) =>
+                      updateField(
+                        "pincode",
+                        normalizePincodeInput(
+                          event.target.value,
+                          formData.country,
+                        ),
+                      )
+                    }
+                    placeholder={
+                      isIndia ? "e.g., 400001" : "e.g., 10001 or SW1A 1AA"
+                    }
+                    required={isRequired(VENDOR_FIELD_SECTIONS.PINCODE)}
+                    maxLength={isIndia ? 6 : undefined}
+                    data-testid="vendor-pincode-input"
                   />
-                </div>
-
-                <div>
-                  <Label>State</Label>
-                  <Input
-                    value={formData.state}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, state: event.target.value }))}
-                    placeholder="e.g., Maharashtra"
-                  />
-                </div>
-
-                <div>
-                  <Label>Pincode</Label>
-                  <Input
-                    value={formData.pincode}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, pincode: event.target.value }))}
-                    placeholder="e.g., 400001"
-                  />
-                </div>
-
-                <div>
-                  <Label>Country</Label>
-                  <Input
-                    value={formData.country}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, country: event.target.value }))}
-                    placeholder="India"
-                  />
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {isIndia
+                      ? "Enter a 6-digit pincode for India"
+                      : "Enter the postal code for the selected country"}
+                  </p>
                 </div>
               </div>
             </TabsContent>
 
             <TabsContent value="tax" className="space-y-4 mt-4">
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label>PAN Number</Label>
+                <div key="pan">
+                  <Label>
+                    {labelFor(VENDOR_FIELD_SECTIONS.PAN_NO, "PAN Number")}
+                    {isRequired(VENDOR_FIELD_SECTIONS.PAN_NO) ? " *" : ""}
+                  </Label>
                   <Input
                     value={formData.pan}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, pan: event.target.value.toUpperCase() }))}
+                    onChange={(event) =>
+                      updateField("pan", event.target.value.toUpperCase())
+                    }
                     placeholder="ABCDE1234F"
                     maxLength={10}
                     className="uppercase"
+                    required={isRequired(VENDOR_FIELD_SECTIONS.PAN_NO)}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
                     10-digit alphanumeric PAN number
@@ -229,86 +410,51 @@ const VendorDetailsDialog = ({
                 </div>
 
                 <div>
-                  <Label>GSTIN{requireGstin ? ' *' : ''}</Label>
+                  <Label>
+                    {labelFor(VENDOR_FIELD_SECTIONS.GST_NO, "GSTIN/TAX ID")}
+                    {isRequired(VENDOR_FIELD_SECTIONS.GST_NO) ? " *" : ""}
+                  </Label>
                   <Input
                     value={formData.gstin}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, gstin: event.target.value.toUpperCase() }))}
-                    placeholder="29ABCDE1234F1Z5"
-                    maxLength={15}
+                    onChange={(event) =>
+                      updateField("gstin", event.target.value.toUpperCase())
+                    }
+                    placeholder={
+                      isIndia ? "29ABCDE1234F1Z5" : "Enter GSTIN or Tax ID"
+                    }
+                    maxLength={isIndia ? 15 : undefined}
                     className="uppercase"
-                    required={requireGstin}
+                    required={isRequired(VENDOR_FIELD_SECTIONS.GST_NO)}
                   />
                   <p className="text-xs text-muted-foreground mt-1">
-                    15-digit GST Identification Number
+                    {isIndia
+                      ? "15-character GST Identification Number"
+                      : "Optional tax identifier for the vendor country"}
                   </p>
                 </div>
 
-                <div>
-                  <Label>Payment Terms (Days)</Label>
-                  <select
-                    value={formData.payment_terms}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, payment_terms: event.target.value }))}
-                    className="h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                  >
-                    <option value="0">Immediate</option>
-                    <option value="7">Net 7</option>
-                    <option value="15">Net 15</option>
-                    <option value="30">Net 30</option>
-                    <option value="45">Net 45</option>
-                    <option value="60">Net 60</option>
-                    <option value="90">Net 90</option>
-                  </select>
-                </div>
+                {!invoiceVendorRequest && (
+                  <div className="col-span-2 flex items-center gap-2 pt-1">
+                    <Checkbox
+                      id="vendor-msme"
+                      checked={Boolean(formData.msme)}
+                      onCheckedChange={(checked) =>
+                        updateField("msme", checked === true)
+                      }
+                      data-testid="vendor-msme-checkbox"
+                    />
+                    <Label htmlFor="vendor-msme" className="cursor-pointer font-normal">
+                      {labelFor(VENDOR_FIELD_SECTIONS.MSME, "MSME registered vendor")}
+                      {isRequired(VENDOR_FIELD_SECTIONS.MSME) ? " *" : ""}
+                    </Label>
+                  </div>
+                )}
               </div>
             </TabsContent>
 
             <TabsContent value="bank" className="space-y-4 mt-4">
               <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <Label>Account Holder Name</Label>
-                  <Input
-                    value={formData.account_holder_name}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, account_holder_name: event.target.value }))}
-                    placeholder="As per bank records"
-                  />
-                </div>
-
-                <div>
-                  <Label>Account Number</Label>
-                  <Input
-                    value={formData.account_number}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, account_number: event.target.value }))}
-                    placeholder="1234567890"
-                  />
-                </div>
-
-                <div>
-                  <Label>IFSC Code</Label>
-                  <Input
-                    value={formData.ifsc_code}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, ifsc_code: event.target.value.toUpperCase() }))}
-                    placeholder="ICIC0001234"
-                    className="uppercase"
-                  />
-                </div>
-
-                <div>
-                  <Label>Bank Name</Label>
-                  <Input
-                    value={formData.bank_name}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, bank_name: event.target.value }))}
-                    placeholder="e.g., ICICI Bank"
-                  />
-                </div>
-
-                <div>
-                  <Label>Branch</Label>
-                  <Input
-                    value={formData.branch}
-                    onChange={(event) => setFormData((prev) => ({ ...prev, branch: event.target.value }))}
-                    placeholder="e.g., Andheri West"
-                  />
-                </div>
+                {bankFields.map(renderInputField)}
               </div>
 
               <div className="bg-amber-50 dark:bg-amber-950/20 rounded-lg p-4 border border-amber-200 dark:border-amber-900 mt-4">
@@ -316,30 +462,47 @@ const VendorDetailsDialog = ({
                   Warning: Bank Details Security
                 </h4>
                 <p className="text-sm text-amber-800 dark:text-amber-200">
-                  To modify vendor's bank details, you need to delete and re-enter the information. This ensures payment security and prevents unauthorized changes.
+                  To modify vendor's bank details, you need to delete and
+                  re-enter the information. This ensures payment security and
+                  prevents unauthorized changes.
                 </p>
               </div>
             </TabsContent>
 
             <TabsContent value="additional" className="space-y-4 mt-4">
               <div>
-                <Label>Notes</Label>
+                <Label>
+                  {labelFor(VENDOR_FIELD_SECTIONS.REMARKS, "Notes")}
+                  {isRequired(VENDOR_FIELD_SECTIONS.REMARKS) ? " *" : ""}
+                </Label>
                 <textarea
                   value={formData.notes}
-                  onChange={(event) => setFormData((prev) => ({ ...prev, notes: event.target.value }))}
+                  onChange={(event) => updateField("notes", event.target.value)}
                   className="w-full min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm"
                   placeholder="Add any additional notes or special instructions..."
+                  required={isRequired(VENDOR_FIELD_SECTIONS.REMARKS)}
                 />
               </div>
             </TabsContent>
           </Tabs>
 
           <div className="flex gap-3 pt-4 border-t">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="flex-1" disabled={submitting}>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="flex-1"
+              disabled={submitting}
+            >
               Cancel
             </Button>
-            <Button type="submit" className="flex-1" data-testid="vendor-submit-button" disabled={submitting}>
-              {submitting ? 'Saving...' : submitLabel}
+            <Button
+              type="submit"
+              className="flex-1"
+              data-testid="vendor-submit-button"
+              disabled={submitting}
+            >
+              {submitting ? "Saving..." : submitLabel}
             </Button>
           </div>
         </form>

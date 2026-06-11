@@ -1,6 +1,6 @@
 import React from 'react';
 import { Button } from '../../../components/ui/button';
-import { CheckCircle, Pencil, ShieldCheck, Trash2, X } from 'lucide-react';
+import { CheckCircle, Eye, Pencil, ShieldCheck, Trash2, X } from 'lucide-react';
 import { format } from 'date-fns';
 import AppDataTable from '../../../components/common/AppDataTable';
 import { TableCell, TableRow } from '../../../components/ui/table';
@@ -28,7 +28,7 @@ const usersTableHeader = [
   { key: 'department', title: 'Department' },
   { key: 'status', title: 'Status' },
   { key: 'created_at', title: 'Created', cellClassName: 'text-sm text-muted-foreground' },
-  { key: 'actions', title: 'Actions', headerClassName: 'text-right', cellClassName: 'text-right' },
+  { key: 'actions', title: 'Actions', headerClassName: 'text-left', cellClassName: 'text-left' },
 ];
 
 // Backend-driven users table with role/status/user lifecycle actions.
@@ -38,6 +38,7 @@ const UsersTable = ({
   handleDeleteUser,
   handleEditUser,
   handleAssignRoles,
+  handleViewUserDetails,
   canManageUserRecords,
   canAssignRoles,
 }) => {
@@ -95,7 +96,16 @@ const UsersTable = ({
             break;
           case 'actions':
             value = (
-              <div className="flex items-center justify-end gap-2">
+              <div className="flex items-center justify-start gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleViewUserDetails?.(user)}
+                  title="View Details"
+                  data-testid={`view-user-${user.id}`}
+                >
+                  <Eye className="h-4 w-4 text-slate-700" />
+                </Button>
                 {user.id !== currentUserId && (canManageUserRecords || canAssignRoles) ? (
                   <>
                     {canManageUserRecords && (

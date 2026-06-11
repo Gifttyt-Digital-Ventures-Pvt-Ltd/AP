@@ -28,6 +28,7 @@ const AppDataTable = ({
   getRowClassName,
   getRowProps,
   emptyTestId,
+  emptyCellClassName,
   isLoading = false,
   loadingRowCount,
   length = 5,
@@ -77,14 +78,18 @@ const AppDataTable = ({
                 column.headerClassName,
               )}
             >
-              {showCheckbox && index === 0 && (
-                <Checkbox
-                  checked={isChecked}
-                  onCheckedChange={selectAllHandler}
-                  className="mr-2 align-middle"
-                />
+              {showCheckbox && index === 0 ? (
+                <span className="inline-flex items-center gap-2">
+                  <Checkbox
+                    checked={isChecked}
+                    onCheckedChange={selectAllHandler}
+                    data-testid="table-select-all-checkbox"
+                  />
+                  {column.header}
+                </span>
+              ) : (
+                column.header
               )}
-              {column.header}
             </TableHead>
           ))}
         </TableRow>
@@ -113,7 +118,10 @@ const AppDataTable = ({
           <TableRow>
             <TableCell
               colSpan={resolvedEmptyColSpan}
-              className="px-4 py-8 text-center text-sm italic text-muted-foreground"
+              className={cn(
+                "px-4 py-8 text-center text-sm italic text-muted-foreground",
+                emptyCellClassName,
+              )}
               data-testid={emptyTestId}
             >
               {resolvedEmptyMessage}

@@ -1,5 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useGetInvoicesQuery } from '../../Services/apis/invoicesVendorsApi';
+import { EMPTY_INVOICE_LIST_RESPONSE, getInvoiceListItems } from '../../Services/utils/payloadMappers';
 import {
   useGetStatementsQuery,
   useGetTransactionsQuery,
@@ -49,17 +50,23 @@ const TransactionsPage = () => {
   const [transactionQueryParams, setTransactionQueryParams] = useState({});
   const {
     data: statementsData = [],
+    isFetching: statementsFetching,
     refetch: refetchStatements,
   } = useGetStatementsQuery();
   const {
     data: transactionsData = [],
+    isFetching: transactionsFetching,
     refetch: refetchTransactions,
   } = useGetTransactionsQuery(transactionQueryParams);
   const {
     data: ledgerOptionsData = [],
+    isFetching: ledgersFetching,
+    refetch: refetchLedgers,
   } = useGetLedgersQuery();
   const {
-    data: invoicesData = [],
+    data: invoicesListData = EMPTY_INVOICE_LIST_RESPONSE,
+    isFetching: invoicesFetching,
+    refetch: refetchInvoices,
   } = useGetInvoicesQuery();
   const [uploadStatement] = useUploadStatementMutation();
   const [deleteStatement] = useDeleteStatementMutation();
@@ -73,7 +80,7 @@ const TransactionsPage = () => {
 
   const statements = Array.isArray(statementsData) ? statementsData : [];
   const transactions = Array.isArray(transactionsData) ? transactionsData : [];
-  const invoices = Array.isArray(invoicesData) ? invoicesData : [];
+  const invoices = getInvoiceListItems(invoicesListData);
   const ledgerOptions =
     Array.isArray(ledgerOptionsData) && ledgerOptionsData.length > 0
       ? ledgerOptionsData
@@ -136,6 +143,22 @@ const TransactionsPage = () => {
   const canUpdateTransactions = canPerformAction('transactions.update');
   const canReviewTransactions = canPerformAction('transactions.review');
   const canUndoTransactions = canPerformAction('transactions.undo');
+  const transactionsRefreshing =
+    statementsFetching || transactionsFetching || ledgersFetching || invoicesFetching;
+
+  const handleRefreshTransactions = async () => {
+    try {
+      await Promise.all([
+        refetchStatements(),
+        refetchTransactions(),
+        refetchLedgers(),
+        refetchInvoices(),
+      ]);
+      toast.success('Transactions refreshed');
+    } catch {
+      toast.error('Failed to refresh transactions');
+    }
+  };
   const canUploadVouchers = canPerformAction('transactions.uploadVoucher');
   const canLinkInvoices = canPerformAction('transactions.linkInvoice');
 
@@ -534,6 +557,8 @@ const TransactionsPage = () => {
         <TransactionsToolbar
           needsReviewTransactions={needsReviewTransactions}
           accountingReadyTransactions={accountingReadyTransactions}
+          onRefresh={handleRefreshTransactions}
+          refreshing={transactionsRefreshing}
         />
 
         <StatementsTab
@@ -743,7 +768,7 @@ const TransactionsPage = () => {
                     </th>
                     
                     {/* Amount Column with Filter */}
-                    <th className="p-3 text-right font-medium text-gray-600 relative">
+                    <th className="p-3 text-left font-medium text-gray-600 relative">
                       <button 
                         onClick={() => toggleColumnFilter('amount')}
                         className={`flex items-center gap-1 hover:text-gray-900 justify-end w-full ${appliedAmountFilter.min || appliedAmountFilter.max ? 'text-blue-600' : ''}`}
@@ -836,7 +861,7 @@ const TransactionsPage = () => {
                             ))}
                           </select>
                         </td>
-                        <td className="p-3 text-right">
+                        <td className="p-3 text-left">
                           <div>
                             <span className="font-medium">₹{txn.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                             <span className={`block text-xs ${txn.is_credit ? 'text-green-600' : 'text-red-600'}`}>
@@ -1048,7 +1073,7 @@ const TransactionsPage = () => {
                     <th className="p-3 text-left font-medium text-gray-600">
                       Ledger <ChevronDown className="inline h-3 w-3" />
                     </th>
-                    <th className="p-3 text-right font-medium text-gray-600">
+                    <th className="p-3 text-left font-medium text-gray-600">
                       Amount <ChevronDown className="inline h-3 w-3" />
                     </th>
                     <th className="p-3 text-center font-medium text-gray-600">Undo</th>
@@ -1091,7 +1116,7 @@ const TransactionsPage = () => {
                             {txn.ledger || '-'}
                           </span>
                         </td>
-                        <td className="p-3 text-right">
+                        <td className="p-3 text-left">
                           <div>
                             <span className="font-medium">₹{txn.amount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span>
                             <span className={`block text-xs ${txn.is_credit ? 'text-green-600' : 'text-red-600'}`}>
@@ -1186,4 +1211,3 @@ const TransactionsPage = () => {
 };
 
 export default TransactionsPage;
-

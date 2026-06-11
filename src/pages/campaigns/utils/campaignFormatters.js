@@ -1,0 +1,164 @@
+import { TAX_RATES } from "../../invoices/constants";
+
+export const CAMPAIGN_STATUS_LABELS = {
+  pending_approval: "Pending Approval",
+  approved: "Approved",
+  rejected: "Rejected",
+  correction_needed: "Correction Needed",
+};
+
+export const INVOICE_STATUS_LABELS = {
+  no_invoice: "Pending Invoice",
+  pending_checker: "Pending Check",
+  pending_approval: "Pending Approval",
+  pending_payment: "Pending Payment",
+  pending: "Pending",
+  paid: "Paid",
+  rejected: "Rejected",
+};
+
+export const PAYMENT_MODE_LABELS = {
+  NEFT: "NEFT",
+  RTGS: "RTGS",
+  IMPS: "IMPS",
+  UPI: "UPI",
+  BANK_TRANSFER: "Bank Transfer",
+  CHEQUE: "Cheque",
+  CASH: "Cash",
+  CARD: "Card",
+  OTHER: "Other",
+};
+
+export const PAYMENT_MODES = Object.keys(PAYMENT_MODE_LABELS);
+
+export const normalizeStatus = (status = "") =>
+  String(status || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+
+export const formatCampaignStatus = (status) =>
+  CAMPAIGN_STATUS_LABELS[normalizeStatus(status)] || status || "-";
+
+export const formatInvoiceStatus = (status) =>
+  INVOICE_STATUS_LABELS[normalizeStatus(status)] || status || "-";
+
+export const formatCurrency = (value) =>
+  `₹${Number(value || 0).toLocaleString("en-IN", {
+    maximumFractionDigits: 2,
+  })}`;
+
+/**
+ * Per-vendor variance: campaign cost minus invoiced amount.
+ * Vendor rows may omit `variance`; compute as cost - invoiceCost.
+ */
+export const resolveVendorBreakdownVariance = (row = {}) => {
+  if (row.variance != null) {
+    return Number(row.variance);
+  }
+
+  const campaignCost = Number(row.cost || 0);
+  const invoiceAmount = Number(row.invoiceCost ?? row.invoice?.amount ?? 0);
+  return campaignCost - invoiceAmount;
+};
+
+export const formatDate = (value) => {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+export const campaignStatusBadgeClass = (status) => {
+  switch (normalizeStatus(status)) {
+    case "approved":
+      return "bg-green-100 text-green-700 border-green-200";
+    case "rejected":
+      return "bg-red-100 text-red-700 border-red-200";
+    case "correction_needed":
+      return "bg-orange-100 text-orange-700 border-orange-200";
+    case "pending_approval":
+    default:
+      return "bg-amber-100 text-amber-700 border-amber-200";
+  }
+};
+
+export const invoiceStatusBadgeClass = (status) => {
+  switch (normalizeStatus(status)) {
+    case "paid":
+      return "bg-green-100 text-green-700 border-green-200";
+    case "rejected":
+      return "bg-red-100 text-red-700 border-red-200";
+    case "pending_payment":
+      return "bg-blue-100 text-blue-700 border-blue-200";
+    case "pending_approval":
+      return "bg-yellow-100 text-yellow-800 border-yellow-200";
+    case "pending_checker":
+      return "bg-amber-100 text-amber-700 border-amber-200";
+    case "no_invoice":
+    default:
+      return "bg-slate-100 text-slate-600 border-slate-200";
+  }
+};
+
+const getTaxRateValue = (taxRate = {}) => {
+  if (taxRate.igst != null) return Number(taxRate.igst) || 0;
+  const splitTaxRate = Number(taxRate.cgst || 0) + Number(taxRate.sgst || 0);
+  if (splitTaxRate > 0) return splitTaxRate;
+  const labelRate = String(taxRate.value || taxRate.label || "").match(
+    /(\d+(?:\.\d+)?)%/,
+  );
+  return labelRate ? Number(labelRate[1]) : 0;
+};
+
+const CAMPAIGN_GST_OPTIONS = TAX_RATES.map((taxRate) => ({
+  value: taxRate.value,
+  label: taxRate.label,
+  rate: getTaxRateValue(taxRate),
+}));
+
+const getCampaignGstRate = (gstOption) =>
+  CAMPAIGN_GST_OPTIONS.find((option) => option.value === gstOption)?.rate ?? 0;
+
+export const formatCampaignGstOption = (gstOption) => {
+  const option = CAMPAIGN_GST_OPTIONS.find(
+    (entry) => entry.value === gstOption,
+  );
+  return option?.label || gstOption || "-";
+};
+
+/** Net = amount before tax. Gross = net + tax. */
+export const calculateCampaignGrossFromNet = ({ netAmount, gstOption }) => {
+  const net = Number(netAmount || 0);
+  const gstRate = getCampaignGstRate(gstOption);
+  if (!net) return 0;
+  if (!gstRate) return net;
+  return Math.round((net + (net * gstRate) / 100) * 100) / 100;
+};
+
+export const calculateCampaignNetFromGross = ({ grossAmount, gstOption }) => {
+  const gross = Number(grossAmount || 0);
+  const gstRate = getCampaignGstRate(gstOption);
+  if (!gross) return 0;
+  if (!gstRate) return gross;
+  return Math.round((gross / (1 + gstRate / 100)) * 100) / 100;
+};
+
+export const calculateCampaignGstAmounts = ({ netAmount, gstOption }) => {
+  const net = Number(netAmount || 0);
+  return {
+    netAmount: net,
+    grossAmount: calculateCampaignGrossFromNet({ netAmount: net, gstOption }),
+  };
+};
+
+export const getApiErrorMessage = (error, fallback = "Something went wrong") =>
+  error?.data?.message ||
+  error?.data?.detail ||
+  error?.data?.error ||
+  error?.error ||
+  fallback;

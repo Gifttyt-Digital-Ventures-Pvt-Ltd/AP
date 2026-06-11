@@ -2,25 +2,46 @@ import { createApi, fetchBaseQuery } from "@reduxjs/toolkit/query/react";
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "";
 
-const baseQuery = fetchBaseQuery({
-  baseUrl: BACKEND_URL,
-  timeout: 20000,
-  prepareHeaders: (headers) => {
-    const skipAuth = headers.get("x-skip-auth") === "true";
-    if (skipAuth) {
-      headers.delete("x-skip-auth");
-      return headers;
-    }
+const DEFAULT_TIMEOUT_MS = 20000;
+const SCAN_TIMEOUT_MS = 120000;
+const BULK_SCAN_TIMEOUT_MS = 300000;
 
-    const token = sessionStorage.getItem("token");
-    if (token && !headers.has("Authorization")) {
-      headers.set("Authorization", `Bearer ${token}`);
-      headers.set("authToken", token);
-    }
-
+const prepareHeaders = (headers) => {
+  const skipAuth = headers.get("x-skip-auth") === "true";
+  if (skipAuth) {
+    headers.delete("x-skip-auth");
     return headers;
-  },
-});
+  }
+
+  const token = sessionStorage.getItem("token");
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+    headers.set("authToken", token);
+  }
+
+  return headers;
+};
+
+const createTimedBaseQuery = (timeout) =>
+  fetchBaseQuery({
+    baseUrl: BACKEND_URL,
+    timeout,
+    prepareHeaders,
+  });
+
+const defaultBaseQuery = createTimedBaseQuery(DEFAULT_TIMEOUT_MS);
+const scanBaseQuery = createTimedBaseQuery(SCAN_TIMEOUT_MS);
+const bulkScanBaseQuery = createTimedBaseQuery(BULK_SCAN_TIMEOUT_MS);
+
+const baseQuery = (args, api, extraOptions) => {
+  if (api.endpoint === "bulkUploadInvoices") {
+    return bulkScanBaseQuery(args, api, extraOptions);
+  }
+  if (api.endpoint === "scanInvoice") {
+    return scanBaseQuery(args, api, extraOptions);
+  }
+  return defaultBaseQuery(args, api, extraOptions);
+};
 
 // Auth endpoints are intentionally kept in serviceApi as requested.
 export const serviceApi = createApi({
@@ -45,8 +66,12 @@ export const serviceApi = createApi({
     "Batches",
     "Notifications",
     "Reports",
+    "ReportExports",
     "MasterData",
     "Workflow",
+    "Categories",
+    "AuditLogs",
+    "Campaigns",
   ],
   endpoints: (builder) => ({
     login: builder.mutation({

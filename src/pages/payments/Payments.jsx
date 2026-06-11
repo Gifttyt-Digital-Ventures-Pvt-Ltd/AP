@@ -1,10 +1,15 @@
-import React, { useEffect, useState } from 'react';
-import { useGetInvoicesQuery } from '../../Services/apis/invoicesVendorsApi';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  useGetInvoicesQuery,
+  useLazyGetInvoiceHistoryQuery,
+} from '../../Services/apis/invoicesVendorsApi';
+import { toInvoiceUiPayload, EMPTY_INVOICE_LIST_RESPONSE, getInvoiceListItems } from '../../Services/utils/payloadMappers';
 import {
   useGetPaymentsQuery,
   useGetBankAccountsQuery,
   useBulkReleasePaymentsMutation,
   useCreatePaymentMutation,
+  useRecordPaymentsMutation,
 } from '../../Services/apis/approvalsPaymentsBankingApi';
 import { useCreatePaymentBatchMutation } from '../../Services/apis/paymentBatchesApi';
 import { Button } from '../../components/ui/button';
@@ -38,9 +43,18 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import PaymentsHeader from './components/PaymentsHeader';
 import PaymentDialog from './components/PaymentDialog';
+import RecordPaymentDialog from './components/RecordPaymentDialog';
 import PendingPaymentsTab from './components/PendingPaymentsTab';
 import ReleasedPaymentsTab from './components/ReleasedPaymentsTab';
+import ViewDialog from '../invoices/components/ViewDialog';
+import { InvoicePdfPreview } from '../invoices/components/InvoicePdfPreview';
+import { getInvoiceFileUrl, openInvoiceFileDownload } from '../invoices/utils/invoicePreview';
+import { normalizeInvoiceHistoryEntries } from '../invoices/utils/invoiceHistory';
+import { getInvoiceStatusBadgeClass } from '../../utils/approvalWorkflow';
 import { useActionGuard } from '../../hooks/useActionGuard';
+import { useRBAC } from '../../contexts/RBACContext';
+import { useCurrencyFilter } from '../../hooks/useCurrencyFilter';
+import { CURRENCY_SCREENS } from '../../utils/currency';
 
 const safeLower = (value) => String(value ?? '').toLowerCase();
 
@@ -51,45 +65,84 @@ const safeFormatDate = (value, pattern = 'dd MMM yy') => {
 };
 
 const batchInvoiceTableHeader = [
-  { key: 'select', title: '', headerClassName: 'w-[48px]' },
-  { key: 'invoice_number', title: 'Invoice', cellClassName: 'font-medium' },
-  { key: 'vendor_name', title: 'Vendor' },
+  { key: 'invoiceNumber', title: 'Invoice', cellClassName: 'font-medium' },
+  { key: 'vendorName', title: 'Vendor' },
   { key: 'amount', title: 'Amount' },
   { key: 'status', title: 'Status' },
 ];
 
 const Payments = () => {
   const {
+    isPaymentBatchesFeatureEnabled,
+    isConnectedBankingEnabled,
+    isCategoryFeatureEnabled,
+    isCampaignFeatureEnabled,
+  } = useRBAC();
+  const {
+    currencies,
+    selectedCurrency,
+    setSelectedCurrency,
+    queryArgs: paymentQueryArgs,
+  } = useCurrencyFilter(CURRENCY_SCREENS.PAYMENT, { excludeAll: true });
+  const invoiceQueryWithStatus = (status) => ({
+    ...paymentQueryArgs,
+    status,
+  });
+  const {
     data: paymentsData = [],
     isError: paymentsError,
-  } = useGetPaymentsQuery();
+    isFetching: paymentsFetching,
+    refetch: refetchPayments,
+  } = useGetPaymentsQuery(paymentQueryArgs);
   const {
-    data: invoicesData = [],
+    data: pendingPaymentInvoicesListData = EMPTY_INVOICE_LIST_RESPONSE,
     isError: invoicesError,
+    isFetching: pendingPaymentInvoicesFetching,
     refetch: refetchPendingPaymentInvoices,
-  } = useGetInvoicesQuery({ status: 'Pending Payment' });
+  } = useGetInvoicesQuery(invoiceQueryWithStatus('Pending Payment'));
   const {
-    data: pendingApproverInvoicesData = [],
+    data: allInvoicesListData = EMPTY_INVOICE_LIST_RESPONSE,
+    isFetching: allInvoicesFetching,
+    refetch: refetchAllInvoices,
+  } = useGetInvoicesQuery(paymentQueryArgs);
+  const {
+    data: pendingApproverInvoicesListData = EMPTY_INVOICE_LIST_RESPONSE,
     isError: pendingApproverInvoicesError,
+    isFetching: pendingApproverInvoicesFetching,
     refetch: refetchPendingApproverInvoices,
-  } = useGetInvoicesQuery({ status: 'Pending Approver' });
+  } = useGetInvoicesQuery(
+    invoiceQueryWithStatus('Pending Approver'),
+    { skip: !isPaymentBatchesFeatureEnabled },
+  );
   const {
     data: bankAccountsData = [],
     isError: bankAccountsError,
-  } = useGetBankAccountsQuery();
+    isFetching: bankAccountsFetching,
+    refetch: refetchBankAccounts,
+  } = useGetBankAccountsQuery(undefined, { skip: !isConnectedBankingEnabled });
 
   const [bulkReleasePayments] = useBulkReleasePaymentsMutation();
   const [createPayment] = useCreatePaymentMutation();
+  const [recordPayments] = useRecordPaymentsMutation();
   const [createPaymentBatch] = useCreatePaymentBatchMutation();
+  const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
   const { guardAction, canPerformAction } = useActionGuard();
   const [searchTerm, setSearchTerm] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [createBatchDialogOpen, setCreateBatchDialogOpen] = useState(false);
+  const [recordPaymentDialogOpen, setRecordPaymentDialogOpen] = useState(false);
   const [bulkReleaseConfirmOpen, setBulkReleaseConfirmOpen] = useState(false);
   const [creatingBatch, setCreatingBatch] = useState(false);
+  const [recordingPayments, setRecordingPayments] = useState(false);
+  const [recordPaymentInvoiceIds, setRecordPaymentInvoiceIds] = useState([]);
+  const [recordPaymentForm, setRecordPaymentForm] = useState({
+    paymentDate: '',
+    payment_method: 'Bank Transfer',
+    reference_number: '',
+  });
   const [formData, setFormData] = useState({
     invoice_id: '',
-    payment_date: '',
+    paymentDate: '',
     payment_method: 'Bank Transfer',
     bank_account_id: '',
     reference_number: '',
@@ -101,35 +154,75 @@ const Payments = () => {
     invoice_ids: [],
     notes: '',
   });
+  const [viewInvoice, setViewInvoice] = useState(null);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [viewTab, setViewTab] = useState('details');
+  const [invoiceHistory, setInvoiceHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [viewPreviewError, setViewPreviewError] = useState(false);
+  const [pdfZoom, setPdfZoom] = useState(100);
 
   const normalizePayment = (payment = {}) => ({
     ...payment,
-    invoice_number: payment.invoice_number ?? payment.invoiceNumber,
-    vendor_name: payment.vendor_name ?? payment.vendorName,
-    payment_date: payment.payment_date ?? payment.paymentDate,
+    invoice_id: payment.invoice_id ?? payment.invoiceId,
+    invoiceNumber: payment.invoiceNumber ?? payment.invoiceNumber,
+    vendorName: payment.vendorName ?? payment.vendorName,
+    paymentDate: payment.paymentDate ?? payment.paymentDate,
     payment_method: payment.payment_method ?? payment.paymentMethod,
     reference_number: payment.reference_number ?? payment.referenceNumber,
   });
 
   const normalizeInvoice = (invoice = {}) => ({
     ...invoice,
-    invoice_number: invoice.invoice_number ?? invoice.invoiceNumber,
-    vendor_name: invoice.vendor_name ?? invoice.vendorName,
-    invoice_date: invoice.invoice_date ?? invoice.invoiceDate,
-    due_date: invoice.due_date ?? invoice.dueDate,
+    invoiceNumber: invoice.invoiceNumber ?? invoice.invoiceNumber,
+    vendorName: invoice.vendorName ?? invoice.vendorName,
+    invoiceDate: invoice.invoiceDate ?? invoice.invoiceDate,
+    dueDate: invoice.dueDate ?? invoice.dueDate,
   });
 
   const payments = Array.isArray(paymentsData) ? paymentsData.map(normalizePayment) : [];
-  const pendingPaymentInvoices = Array.isArray(invoicesData) ? invoicesData.map(normalizeInvoice) : [];
-  const pendingApproverInvoices = Array.isArray(pendingApproverInvoicesData)
-    ? pendingApproverInvoicesData.map(normalizeInvoice)
-    : [];
+  const pendingPaymentInvoices = getInvoiceListItems(pendingPaymentInvoicesListData).map(normalizeInvoice);
+  const allInvoices = useMemo(
+    () => getInvoiceListItems(allInvoicesListData).map((invoice) => toInvoiceUiPayload(invoice)),
+    [allInvoicesListData],
+  );
+  const pendingApproverInvoices = getInvoiceListItems(pendingApproverInvoicesListData).map(normalizeInvoice);
   const invoices = pendingPaymentInvoices;
   const batchEligibleInvoices = [...pendingPaymentInvoices, ...pendingApproverInvoices];
   const bankAccounts = Array.isArray(bankAccountsData) ? bankAccountsData : [];
   const canManagePayments = canPerformAction('payments.create');
   const canBulkRelease = canPerformAction('payments.releaseBulk');
-  const canCreateBatch = canPerformAction('payments.createBatch');
+  const canCreateBatch =
+    isPaymentBatchesFeatureEnabled && canPerformAction('payments.createBatch');
+  const showBankingBatchPaymentActions =
+    isConnectedBankingEnabled || isPaymentBatchesFeatureEnabled;
+  const showRecordPaymentFlow = !showBankingBatchPaymentActions;
+  const canShowSinglePayment = showBankingBatchPaymentActions && canManagePayments;
+  const canShowBulkRelease = showBankingBatchPaymentActions && canBulkRelease;
+  const canShowRecordPayment = showRecordPaymentFlow && canManagePayments;
+  const paymentsRefreshing =
+    paymentsFetching ||
+    pendingPaymentInvoicesFetching ||
+    allInvoicesFetching ||
+    pendingApproverInvoicesFetching ||
+    bankAccountsFetching;
+
+  const handleRefreshPayments = async () => {
+    try {
+      await Promise.all([
+        refetchPayments(),
+        refetchPendingPaymentInvoices(),
+        refetchAllInvoices(),
+        isPaymentBatchesFeatureEnabled
+          ? refetchPendingApproverInvoices()
+          : Promise.resolve(),
+        isConnectedBankingEnabled ? refetchBankAccounts() : Promise.resolve(),
+      ]);
+      toast.success('Payments refreshed');
+    } catch {
+      toast.error('Failed to refresh payments');
+    }
+  };
 
   useEffect(() => {
     if (paymentsError) toast.error('Failed to load payments');
@@ -144,13 +237,15 @@ const Payments = () => {
   }, [pendingApproverInvoicesError]);
 
   useEffect(() => {
-    if (bankAccountsError) toast.error('Failed to load bank accounts');
-  }, [bankAccountsError]);
+    if (isConnectedBankingEnabled && bankAccountsError) {
+      toast.error('Failed to load bank accounts');
+    }
+  }, [bankAccountsError, isConnectedBankingEnabled]);
 
   const resetForm = () => {
     setFormData({
       invoice_id: '',
-      payment_date: '',
+      paymentDate: '',
       payment_method: 'Bank Transfer',
       bank_account_id: '',
       reference_number: '',
@@ -182,11 +277,19 @@ const Payments = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!guardAction('payments.create')) return;
+    if (isConnectedBankingEnabled && !formData.bank_account_id) {
+      toast.error('Please select a bank account');
+      return;
+    }
     try {
-      await createPayment({
+      const paymentPayload = {
         ...formData,
-        payment_date: new Date(formData.payment_date).toISOString(),
-      }).unwrap();
+        paymentDate: new Date(formData.paymentDate).toISOString(),
+      };
+      if (!isConnectedBankingEnabled) {
+        delete paymentPayload.bank_account_id;
+      }
+      await createPayment(paymentPayload).unwrap();
       toast.success('Payment recorded successfully');
       setDialogOpen(false);
       resetForm();
@@ -225,10 +328,104 @@ const Payments = () => {
   const selectedBatchTotal = batchEligibleInvoices
     .filter((invoice) => createBatchForm.invoice_ids.includes(invoice.id))
     .reduce((sum, invoice) => sum + (invoice.amount || 0), 0);
+  const allBatchInvoicesSelected =
+    batchEligibleInvoices.length > 0 &&
+    createBatchForm.invoice_ids.length === batchEligibleInvoices.length;
+
+  const resetRecordPaymentForm = () => {
+    setRecordPaymentInvoiceIds([]);
+    setRecordPaymentForm({
+      paymentDate: '',
+      payment_method: 'Bank Transfer',
+      reference_number: '',
+    });
+  };
+
+  const selectedRecordPaymentInvoices = invoices.filter((invoice) =>
+    recordPaymentInvoiceIds.includes(invoice.id),
+  );
+
+  const openRecordPaymentDialog = () => {
+    if (recordPaymentInvoiceIds.length === 0) {
+      toast.error('Please select at least one invoice from the list');
+      return;
+    }
+    setRecordPaymentForm((prev) => ({
+      ...prev,
+      payment_method: prev.payment_method || 'Bank Transfer',
+      paymentDate: prev.paymentDate || new Date().toISOString().slice(0, 10),
+    }));
+    setRecordPaymentDialogOpen(true);
+  };
+
+  const toggleRecordPaymentInvoice = (invoiceId) => {
+    setRecordPaymentInvoiceIds((prev) =>
+      prev.includes(invoiceId)
+        ? prev.filter((id) => id !== invoiceId)
+        : [...prev, invoiceId],
+    );
+  };
+
+  const selectAllRecordPaymentInvoices = () => {
+    setRecordPaymentInvoiceIds((prev) =>
+      prev.length === invoices.length ? [] : invoices.map((invoice) => invoice.id),
+    );
+  };
+
+  const handleRecordPayments = async (event) => {
+    event.preventDefault();
+    if (!guardAction('payments.create')) return;
+
+    const invoiceNumbers = selectedRecordPaymentInvoices
+      .map((invoice) => String(invoice.invoiceNumber || '').trim())
+      .filter(Boolean);
+
+    if (invoiceNumbers.length === 0) {
+      toast.error('Please select at least one invoice');
+      return;
+    }
+
+    if (!recordPaymentForm.paymentDate) {
+      toast.error('Payment date is required');
+      return;
+    }
+
+    const now = new Date();
+    const maxPaymentDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+    if (recordPaymentForm.paymentDate > maxPaymentDate) {
+      toast.error('Payment date cannot be in the future');
+      return;
+    }
+
+    if (!recordPaymentForm.payment_method) {
+      toast.error('Payment method is required');
+      return;
+    }
+
+    const referenceNumber = String(recordPaymentForm.reference_number || '').trim();
+
+    setRecordingPayments(true);
+    try {
+      const response = await recordPayments({
+        invoiceNumbers,
+        paymentDate: new Date(recordPaymentForm.paymentDate).toISOString(),
+        paymentMethod: recordPaymentForm.payment_method,
+        ...(referenceNumber ? { referenceNumber } : {}),
+      }).unwrap();
+      toast.success(response?.message || 'Payments recorded successfully (PAID)');
+      await refetchPendingPaymentInvoices();
+      setRecordPaymentDialogOpen(false);
+      resetRecordPaymentForm();
+    } catch (error) {
+      toast.error(error?.data?.detail || error?.data?.message || 'Failed to record payments');
+    } finally {
+      setRecordingPayments(false);
+    }
+  };
 
   const handleCreateBatch = async () => {
     if (!guardAction('payments.createBatch')) return;
-    if (!createBatchForm.bank_account_id) {
+    if (isConnectedBankingEnabled && !createBatchForm.bank_account_id) {
       toast.error('Please select a bank account');
       return;
     }
@@ -239,7 +436,11 @@ const Payments = () => {
 
     setCreatingBatch(true);
     try {
-      const response = await createPaymentBatch(createBatchForm).unwrap();
+      const batchPayload = { ...createBatchForm };
+      if (!isConnectedBankingEnabled) {
+        delete batchPayload.bank_account_id;
+      }
+      const response = await createPaymentBatch(batchPayload).unwrap();
       toast.success(response?.message || 'Batch created');
       await Promise.all([refetchPendingPaymentInvoices(), refetchPendingApproverInvoices()]);
       setCreateBatchDialogOpen(false);
@@ -253,17 +454,99 @@ const Payments = () => {
 
   const filteredPayments = payments.filter(
     (payment) =>
-      safeLower(payment.vendor_name).includes(safeLower(searchTerm)) ||
-      safeLower(payment.invoice_number).includes(safeLower(searchTerm))
+      safeLower(payment.vendorName).includes(safeLower(searchTerm)) ||
+      safeLower(payment.invoiceNumber).includes(safeLower(searchTerm))
+  );
+
+  const resolvePaymentInvoice = (payment) => {
+    const normalizedPayment = normalizePayment(payment);
+    if (normalizedPayment.invoice_id) {
+      const matchById = allInvoices.find((invoice) => invoice.id === normalizedPayment.invoice_id);
+      if (matchById) return matchById;
+    }
+    if (normalizedPayment.invoiceNumber) {
+      return allInvoices.find(
+        (invoice) => invoice.invoiceNumber === normalizedPayment.invoiceNumber,
+      );
+    }
+    return null;
+  };
+
+  const handleViewInvoice = async (invoice, initialTab = 'details') => {
+    const preparedInvoice = toInvoiceUiPayload(invoice);
+    setViewInvoice(preparedInvoice);
+    setViewDialogOpen(true);
+    setViewTab(initialTab);
+    setViewPreviewError(false);
+    setInvoiceHistory([]);
+    setLoadingHistory(true);
+
+    try {
+      const response = await getInvoiceHistory(invoice.id).unwrap();
+      let historyEntries = Array.isArray(response)
+        ? response
+        : normalizeInvoiceHistoryEntries(response);
+
+      if (historyEntries.length === 0) {
+        const approvalRecords =
+          preparedInvoice.approvalRecords ||
+          preparedInvoice.approvalRecords ||
+          invoice.approvalRecords ||
+          invoice.approvalRecords;
+        if (Array.isArray(approvalRecords) && approvalRecords.length > 0) {
+          historyEntries = normalizeInvoiceHistoryEntries(approvalRecords);
+        }
+      }
+
+      setInvoiceHistory(historyEntries);
+    } catch (error) {
+      console.error('Failed to fetch invoice history:', error);
+      toast.error('Failed to load invoice history');
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  const handleViewPaymentInvoice = async (payment, initialTab = 'details') => {
+    const invoice = resolvePaymentInvoice(payment);
+    if (!invoice) {
+      toast.error('Invoice details are not available');
+      return;
+    }
+    await handleViewInvoice(invoice, initialTab);
+  };
+
+  const handleDownloadInvoice = (invoice) => {
+    const preparedInvoice = toInvoiceUiPayload(invoice);
+    if (!openInvoiceFileDownload(preparedInvoice)) {
+      toast.error('No invoice file available for download');
+    }
+  };
+
+  const handleDownloadPaymentInvoice = (payment) => {
+    const invoice = resolvePaymentInvoice(payment);
+    if (!invoice) {
+      toast.error('Invoice file is not available');
+      return;
+    }
+    handleDownloadInvoice(invoice);
+  };
+
+  const getStatusBadgeClass = (status) => getInvoiceStatusBadgeClass(status);
+
+  const renderPdfPreview = (props = {}) => (
+    <InvoicePdfPreview
+      {...props}
+      setPdfZoom={setPdfZoom}
+      getInvoiceFileUrl={getInvoiceFileUrl}
+    />
   );
 
   const filteredPendingInvoices = invoices.filter(
     (invoice) =>
-      safeLower(invoice.vendor_name).includes(safeLower(searchTerm)) ||
-      safeLower(invoice.invoice_number).includes(safeLower(searchTerm))
+      safeLower(invoice.vendorName).includes(safeLower(searchTerm)) ||
+      safeLower(invoice.invoiceNumber).includes(safeLower(searchTerm))
   );
-
-  const totalPendingAmount = invoices.reduce((sum, inv) => sum + inv.amount, 0);
 
   const renderBatchInvoiceRow = (invoice, rowIndex, headers) => (
     <TableRow
@@ -275,14 +558,17 @@ const Payments = () => {
         let value;
 
         switch (header.key) {
-          case 'select':
+          case 'invoiceNumber':
             value = (
-              <div onClick={(e) => e.stopPropagation()}>
-                <Checkbox
-                  checked={createBatchForm.invoice_ids.includes(invoice.id)}
-                  onCheckedChange={() => toggleInvoiceSelection(invoice.id)}
-                  disabled={!canCreateBatch}
-                />
+              <div className="flex items-center gap-2">
+                <div onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    checked={createBatchForm.invoice_ids.includes(invoice.id)}
+                    onCheckedChange={() => toggleInvoiceSelection(invoice.id)}
+                    disabled={!canCreateBatch}
+                  />
+                </div>
+                <span>{invoice.invoiceNumber || '-'}</span>
               </div>
             );
             break;
@@ -307,7 +593,12 @@ const Payments = () => {
       <PaymentsHeader
         invoicesCount={invoices.length}
         handleBulkRelease={handleBulkRelease}
-        canBulkRelease={canBulkRelease}
+        canBulkRelease={canShowBulkRelease}
+        currencies={currencies}
+        selectedCurrency={selectedCurrency}
+        onCurrencyChange={setSelectedCurrency}
+        onRefresh={handleRefreshPayments}
+        refreshing={paymentsRefreshing}
         batchDialogTrigger={canCreateBatch ? (
           <Button
             variant="default"
@@ -318,117 +609,129 @@ const Payments = () => {
             Create Batch
           </Button>
         ) : null}
-        paymentDialog={(
-          <PaymentDialog
-            dialogOpen={dialogOpen}
-            setDialogOpen={setDialogOpen}
-            resetForm={resetForm}
-            formData={formData}
-            setFormData={setFormData}
-            invoices={invoices}
-            bankAccounts={bankAccounts}
-            handleSubmit={handleSubmit}
-            canCreatePayment={canManagePayments}
-          />
-        )}
+        paymentDialog={
+          canShowSinglePayment ? (
+            <PaymentDialog
+              dialogOpen={dialogOpen}
+              setDialogOpen={setDialogOpen}
+              resetForm={resetForm}
+              formData={formData}
+              setFormData={setFormData}
+              invoices={invoices}
+              bankAccounts={bankAccounts}
+              showBankAccountField={isConnectedBankingEnabled}
+              handleSubmit={handleSubmit}
+              canCreatePayment={canManagePayments}
+            />
+          ) : null
+        }
       />
 
-      <Dialog
-        open={createBatchDialogOpen}
-        onOpenChange={(open) => {
-          if (!open) resetCreateBatchForm();
-          setCreateBatchDialogOpen(open);
-        }}
-      >
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Create Payment Batch</DialogTitle>
-          </DialogHeader>
+      {isPaymentBatchesFeatureEnabled && (
+        <Dialog
+          open={createBatchDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) resetCreateBatchForm();
+            setCreateBatchDialogOpen(open);
+          }}
+        >
+          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Create Payment Batch</DialogTitle>
+            </DialogHeader>
 
-          <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label>Payment Method *</Label>
-                <Select
-                  value={createBatchForm.payment_method}
-                  onValueChange={(value) => setCreateBatchForm((prev) => ({ ...prev, payment_method: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="NEFT">NEFT</SelectItem>
-                    <SelectItem value="RTGS">RTGS</SelectItem>
-                    <SelectItem value="IMPS">IMPS</SelectItem>
-                    <SelectItem value="UPI">UPI</SelectItem>
-                    <SelectItem value="Cheque">Cheque</SelectItem>
-                  </SelectContent>
-                </Select>
+            <div className="space-y-6">
+              <div
+                className={`grid grid-cols-1 gap-4 ${
+                  isConnectedBankingEnabled ? 'md:grid-cols-2' : ''
+                }`}
+              >
+                <div className="space-y-2">
+                  <Label>Payment Method *</Label>
+                  <Select
+                    value={createBatchForm.payment_method}
+                    onValueChange={(value) => setCreateBatchForm((prev) => ({ ...prev, payment_method: value }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="NEFT">NEFT</SelectItem>
+                      <SelectItem value="RTGS">RTGS</SelectItem>
+                      <SelectItem value="IMPS">IMPS</SelectItem>
+                      <SelectItem value="UPI">UPI</SelectItem>
+                      <SelectItem value="Cheque">Cheque</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                {isConnectedBankingEnabled && (
+                  <div className="space-y-2">
+                    <Label>Bank Account *</Label>
+                    <Select
+                      value={createBatchForm.bank_account_id}
+                      onValueChange={(value) =>
+                        setCreateBatchForm((prev) => ({ ...prev, bank_account_id: value }))
+                      }
+                    >
+                      <SelectTrigger data-testid="create-batch-bank-select">
+                        <SelectValue placeholder="Select bank account" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {bankAccounts.map((bank) => (
+                          <SelectItem key={bank.id} value={String(bank.id)}>
+                            {bank.bank_name} - {bank.account_number}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
-              <div className="space-y-2">
-                <Label>Bank Account *</Label>
-                <Select
-                  value={createBatchForm.bank_account_id}
-                  onValueChange={(value) => setCreateBatchForm((prev) => ({ ...prev, bank_account_id: value }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select bank account" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {bankAccounts.map((bank) => (
-                      <SelectItem key={bank.id} value={bank.id}>
-                        {bank.bank_name} - {bank.account_number}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
 
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-base">Select Invoices</Label>
-                <div className="flex items-center gap-4 text-sm">
-                  <Button variant="outline" size="sm" onClick={selectAllInvoices} disabled={!canCreateBatch}>
-                    {createBatchForm.invoice_ids.length === batchEligibleInvoices.length ? 'Deselect All' : 'Select All'}
-                  </Button>
-                  <span>
-                    Selected: <strong>{createBatchForm.invoice_ids.length}</strong> | Total: <strong>{'\u20B9'}{selectedBatchTotal.toLocaleString('en-IN')}</strong>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-base">Select Invoices</Label>
+                  <span className="text-sm">
+                    Selected: <strong>{createBatchForm.invoice_ids.length}</strong> | Total:{' '}
+                    <strong>{'\u20B9'}{selectedBatchTotal.toLocaleString('en-IN')}</strong>
                   </span>
+                </div>
+
+                <div className="border rounded-lg max-h-80 overflow-y-auto">
+                  <AppDataTable
+                    tableHeader={batchInvoiceTableHeader}
+                    tableData={batchEligibleInvoices}
+                    renderRow={renderBatchInvoiceRow}
+                    showCheckbox
+                    isChecked={allBatchInvoicesSelected}
+                    onSelectAllChange={selectAllInvoices}
+                    emptyMessage="No invoices available for batch creation"
+                  />
                 </div>
               </div>
 
-              <div className="border rounded-lg max-h-80 overflow-y-auto">
-                <AppDataTable
-                  tableHeader={batchInvoiceTableHeader}
-                  tableData={batchEligibleInvoices}
-                  renderRow={renderBatchInvoiceRow}
-                  emptyMessage="No invoices available for batch creation"
+              <div className="space-y-2">
+                <Label>Notes</Label>
+                <Textarea
+                  value={createBatchForm.notes}
+                  placeholder="Additional notes..."
+                  onChange={(e) => setCreateBatchForm((prev) => ({ ...prev, notes: e.target.value }))}
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label>Notes</Label>
-              <Textarea
-                value={createBatchForm.notes}
-                placeholder="Additional notes..."
-                onChange={(e) => setCreateBatchForm((prev) => ({ ...prev, notes: e.target.value }))}
-              />
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreateBatchDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleCreateBatch} disabled={creatingBatch || !canCreateBatch}>
-              {creatingBatch && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Create Batch
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setCreateBatchDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button onClick={handleCreateBatch} disabled={creatingBatch || !canCreateBatch}>
+                {creatingBatch && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                Create Batch
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
 
       <div className="mb-6">
         <div className="relative">
@@ -458,16 +761,46 @@ const Payments = () => {
           <PendingPaymentsTab
             invoices={invoices}
             filteredPendingInvoices={filteredPendingInvoices}
-            totalPendingAmount={totalPendingAmount}
             handleBulkRelease={handleBulkRelease}
+            canBulkRelease={canShowBulkRelease}
+            showRecordPaymentSelection={canShowRecordPayment}
+            selectedInvoiceIds={recordPaymentInvoiceIds}
+            onToggleInvoice={toggleRecordPaymentInvoice}
+            onSelectAllInvoices={selectAllRecordPaymentInvoices}
+            onOpenRecordPayment={openRecordPaymentDialog}
+            canRecordPayment={canShowRecordPayment}
             safeFormatDate={safeFormatDate}
+            handleViewInvoice={handleViewInvoice}
+            handleDownloadInvoice={handleDownloadInvoice}
           />
         </TabsContent>
 
         <TabsContent value="released">
-          <ReleasedPaymentsTab filteredPayments={filteredPayments} safeFormatDate={safeFormatDate} />
+          <ReleasedPaymentsTab
+            filteredPayments={filteredPayments}
+            safeFormatDate={safeFormatDate}
+            resolvePaymentInvoice={resolvePaymentInvoice}
+            handleViewPaymentInvoice={handleViewPaymentInvoice}
+            handleDownloadPaymentInvoice={handleDownloadPaymentInvoice}
+          />
         </TabsContent>
       </Tabs>
+
+      {canShowRecordPayment && (
+        <RecordPaymentDialog
+          open={recordPaymentDialogOpen}
+          onOpenChange={(open) => {
+            if (!open) {
+              setRecordPaymentDialogOpen(false);
+            }
+          }}
+          formData={recordPaymentForm}
+          setFormData={setRecordPaymentForm}
+          selectedInvoices={selectedRecordPaymentInvoices}
+          handleSubmit={handleRecordPayments}
+          submitting={recordingPayments}
+        />
+      )}
 
       <AlertDialog open={bulkReleaseConfirmOpen} onOpenChange={setBulkReleaseConfirmOpen}>
         <AlertDialogContent>
@@ -483,6 +816,27 @@ const Payments = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <ViewDialog
+        viewDialogOpen={viewDialogOpen}
+        setViewDialogOpen={setViewDialogOpen}
+        selectedInvoice={viewInvoice}
+        renderPdfPreview={renderPdfPreview}
+        pdfZoom={pdfZoom}
+        viewPreviewError={viewPreviewError}
+        setViewPreviewError={setViewPreviewError}
+        getStatusBadgeClass={getStatusBadgeClass}
+        viewTab={viewTab}
+        setViewTab={setViewTab}
+        invoiceHistory={invoiceHistory}
+        loadingHistory={loadingHistory}
+        canEdit={() => false}
+        handleEditInvoice={() => {}}
+        showCategoryField={isCategoryFeatureEnabled}
+        isCategoryFeatureEnabled={isCategoryFeatureEnabled}
+        showCampaignField={isCampaignFeatureEnabled}
+        isCampaignFeatureEnabled={isCampaignFeatureEnabled}
+      />
     </div>
   );
 };

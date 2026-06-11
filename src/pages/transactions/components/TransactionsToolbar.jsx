@@ -1,14 +1,20 @@
 import React from "react";
 import { TabsList, TabsTrigger } from "../../../components/ui/tabs";
+import RefreshButton from "../../../components/common/RefreshButton";
 
 const TransactionsToolbar = ({
   needsReviewTransactions,
   accountingReadyTransactions,
+  onRefresh,
+  refreshing = false,
 }) => {
   return (
     <>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold font-['Manrope']">Transactions</h1>
+        <RefreshButton onClick={onRefresh} refreshing={refreshing}>
+          Refresh
+        </RefreshButton>
       </div>
 
       <TabsList className="bg-gray-100 p-1">

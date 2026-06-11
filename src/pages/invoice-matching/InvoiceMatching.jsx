@@ -35,6 +35,7 @@ import {
   TableRow,
 } from "../../components/ui/table";
 import AppDataTable from "../../components/common/AppDataTable";
+import RefreshButton from "../../components/common/RefreshButton";
 import { Textarea } from "../../components/ui/textarea";
 import { toast } from "sonner";
 import {
@@ -642,10 +643,9 @@ const InvoiceMatching = () => {
           <p className="text-muted-foreground">2-way and 3-way invoice matching with POs and GRNs</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={refreshData}>
-            <RefreshCw className="h-4 w-4 mr-2" />
+          <RefreshButton onClick={refreshData} refreshing={loading}>
             Refresh
-          </Button>
+          </RefreshButton>
           <Button onClick={openNewMatchDialog} disabled={!canPerform} data-testid="new-match-btn">
             <Link2 className="h-4 w-4 mr-2" />
             New Match

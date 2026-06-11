@@ -1,36 +1,25 @@
 import { serviceApi } from "../serviceApi";
+import { DEFAULT_CURRENCY } from "../../utils/currency";
 
 const normalizeWorkflowTypeMap = (value) => {
   if (!value || typeof value !== "object") {
-    return {
-      VENDOR_DEPARTMENT_AMOUNT: [],
-      VENDOR_DEPARTMENT: [],
-      DEPARTMENT_AMOUNT: [],
-      VENDOR_AMOUNT: [],
-      DEPARTMENT: [],
-      VENDOR: [],
-      AMOUNT: [],
-      GENERIC: [],
-    };
+    return { GENERIC: [] };
   }
 
-  return {
-    VENDOR_DEPARTMENT_AMOUNT: Array.isArray(value.VENDOR_DEPARTMENT_AMOUNT)
-      ? value.VENDOR_DEPARTMENT_AMOUNT
-      : [],
-    VENDOR_DEPARTMENT: Array.isArray(value.VENDOR_DEPARTMENT) ? value.VENDOR_DEPARTMENT : [],
-    DEPARTMENT_AMOUNT: Array.isArray(value.DEPARTMENT_AMOUNT) ? value.DEPARTMENT_AMOUNT : [],
-    VENDOR_AMOUNT: Array.isArray(value.VENDOR_AMOUNT) ? value.VENDOR_AMOUNT : [],
-    DEPARTMENT: Array.isArray(value.DEPARTMENT) ? value.DEPARTMENT : [],
-    VENDOR: Array.isArray(value.VENDOR) ? value.VENDOR : [],
-    AMOUNT: Array.isArray(value.AMOUNT) ? value.AMOUNT : [],
-    GENERIC: Array.isArray(value.GENERIC) ? value.GENERIC : [],
-  };
+  return Object.entries(value).reduce((acc, [type, items]) => {
+    acc[String(type || "").trim().toUpperCase()] = Array.isArray(items) ? items : [];
+    return acc;
+  }, {});
 };
 
 const normalizeWorkflowResponse = (workflow = {}) => {
   const vendors = Array.isArray(workflow.vendor) ? workflow.vendor : [];
   const departments = Array.isArray(workflow.department) ? workflow.department : [];
+  const categories = Array.isArray(workflow.category)
+    ? workflow.category
+    : Array.isArray(workflow.categories)
+      ? workflow.categories
+      : [];
   const approvers = Array.isArray(workflow.approvers) ? workflow.approvers : [];
 
   return {
@@ -38,12 +27,15 @@ const normalizeWorkflowResponse = (workflow = {}) => {
     name: workflow.name ?? "",
     vendor: vendors,
     department: departments,
+    category: categories,
     minAmount: workflow.minAmount ?? null,
     maxAmount: workflow.maxAmount ?? null,
+    currency: workflow.currency ?? DEFAULT_CURRENCY,
     isSequential: workflow.isSequential === true,
     isActive: workflow.isActive === true,
     approvers,
     workflowType: workflow.workflowType ?? null,
+    currencies: Array.isArray(workflow.currencies) ? workflow.currencies : [],
   };
 };
 
@@ -60,7 +52,7 @@ export const workflowApi = serviceApi.injectEndpoints({
       transformResponse: (response) => (Array.isArray(response) ? response : []),
     }),
     getWorkflows: builder.query({
-      query: () => ({ url: "/workflow/list", method: "GET" }),
+      query: (params) => ({ url: "/workflow/list", method: "GET", params }),
       providesTags: ["Workflow"],
       transformResponse: (response) => {
         const workflowTypeId = normalizeWorkflowTypeMap(response?.workflowTypeId);

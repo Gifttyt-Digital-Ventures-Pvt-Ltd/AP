@@ -1,57 +1,121 @@
-import React from 'react';
-import AppDataTable from '../../../components/common/AppDataTable';
-import { TableCell, TableRow } from '../../../components/ui/table';
+import React from "react";
+import { Eye } from "lucide-react";
+import AppDataTable from "../../../components/common/AppDataTable";
+import ClippedTextWithTooltip from "../../../components/common/ClippedTextWithTooltip";
+import { Button } from "../../../components/ui/button";
+import { TableCell, TableRow } from "../../../components/ui/table";
+import { formatCurrency } from "../../../utils/currency";
 
 const pendingInvoicesTableHeader = [
-  { key: 'vendor_name', title: 'Vendor' },
-  { key: 'amount', title: 'Amount', cellClassName: "font-['JetBrains_Mono'] font-semibold" },
-  { key: 'status', title: 'Status' },
-  { key: 'due_date', title: 'Due date', cellClassName: 'text-sm text-muted-foreground' },
+  { key: "vendorName", title: "Vendor" },
+  { key: "amount", title: "Amount", cellClassName: "  font-semibold" },
+  { key: "approval", title: "Approval" },
+  { key: "status", title: "Status" },
+  {
+    key: "dueDate",
+    title: "Due date",
+    cellClassName: "text-sm text-muted-foreground",
+  },
+  {
+    key: "actions",
+    title: "Actions",
+    headerClassName: "text-center",
+    cellClassName: "text-left",
+  },
 ];
 
 // Table for pending approvals currently owned by other roles.
-const PendingInvoicesTable = ({ otherPendingInvoices, getStatusBadgeClass, formatStatus, safeFormatDate }) => {
-  const renderPendingInvoiceRow = (invoice, rowIndex, headers) => (
-    <TableRow key={invoice.id ?? rowIndex}>
-      {headers.map((header) => {
-        let value;
+const PendingInvoicesTable = ({
+  otherPendingInvoices,
+  getStatusBadgeClass,
+  formatStatus,
+  getApprovalProgress,
+  safeFormatDate,
+  handleViewInvoice,
+  handleOpenInvoiceHistory,
+}) => {
+  const renderPendingInvoiceRow = (invoice, rowIndex, headers) => {
+    const progress = getApprovalProgress(invoice);
 
-        switch (header.key) {
-          case 'amount':
-            value = `${invoice.amount.toLocaleString()} ${invoice.currency}`;
-            break;
-          case 'status':
-            value = (
-              <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStatusBadgeClass(invoice.status)}`}>
-                {formatStatus(invoice.status)}
-              </span>
-            );
-            break;
-          case 'due_date':
-            value = safeFormatDate(invoice.due_date || invoice.dueDate);
-            break;
-          default:
-            value = invoice?.[header.key] || '-';
-        }
+    return (
+      <TableRow key={invoice.id ?? rowIndex}>
+        {headers.map((header) => {
+          let value;
 
-        return (
-          <TableCell key={header.key} className={header.cellClassName}>
-            {value}
-          </TableCell>
-        );
-      })}
-    </TableRow>
-  );
+          switch (header.key) {
+            case "amount":
+              value = formatCurrency(invoice.amount, invoice.currency);
+              break;
+            case "approval":
+              value = (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-auto p-0 text-sm text-muted-foreground underline underline-offset-4"
+                  onClick={() => handleOpenInvoiceHistory?.(invoice)}
+                  data-testid={`pending-approval-history-${invoice.id}`}
+                >
+                  {progress.approved}/{progress.total} steps
+                </Button>
+              );
+              break;
+            case "vendorName":
+              value = <ClippedTextWithTooltip text={invoice.vendorName} />;
+              break;
+            case "status":
+              value = (
+                <span
+                  className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStatusBadgeClass(invoice.status)}`}
+                >
+                  {formatStatus(invoice.status)}
+                </span>
+              );
+              break;
+            case "dueDate":
+              value = safeFormatDate(invoice.dueDate || invoice.dueDate);
+              break;
+            case "actions":
+              value = (
+                <div
+                  className="flex justify-start gap-1"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleViewInvoice?.(invoice)}
+                    data-testid={`view-pending-invoice-${invoice.id}`}
+                    title="View Invoice"
+                    className="h-8 w-8 p-0"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
+                </div>
+              );
+              break;
+            default:
+              value = invoice?.[header.key] || "-";
+          }
+
+          return (
+            <TableCell key={header.key} className={header.cellClassName}>
+              {value}
+            </TableCell>
+          );
+        })}
+      </TableRow>
+    );
+  };
 
   return (
-  <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
-    <AppDataTable
-      tableHeader={pendingInvoicesTableHeader}
-      tableData={otherPendingInvoices}
-      renderRow={renderPendingInvoiceRow}
-      emptyMessage="No pending invoices"
-    />
-  </div>
+    <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
+      <AppDataTable
+        tableHeader={pendingInvoicesTableHeader}
+        tableData={otherPendingInvoices}
+        renderRow={renderPendingInvoiceRow}
+        emptyMessage="No pending invoices"
+      />
+    </div>
   );
 };
 

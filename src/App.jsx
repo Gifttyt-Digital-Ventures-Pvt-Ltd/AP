@@ -27,19 +27,23 @@ import Approvals from "./pages/approvals/Approvals";
 import Payments from "./pages/payments/Payments";
 import Banking from "./pages/banking/Banking";
 import UserRoles from "./pages/user-roles/UserRoles";
+import Profile from "./pages/profile/Profile";
 import TransactionsPage from "./pages/transactions/TransactionsPage";
 import PurchaseOrdersPage from "./pages/purchase-orders/PurchaseOrdersPage";
 import GoodsReceipt from "./pages/goods-receipt/GoodsReceipt";
 import InvoiceMatching from "./pages/invoice-matching/InvoiceMatching";
 import PaymentBatches from "./pages/payment-batches/PaymentBatches";
 import Notifications from "./pages/notifications/Notifications";
+import CampaignsPage from "./pages/campaigns/CampaignsPage";
 const loadSettingsPage = () => import("./pages/settings/Settings");
 const loadTaxManagementPage = () => import("./pages/tax-management/TaxManagement");
 const loadReportsPage = () => import("./pages/reports/Reports");
+const loadAuditTrailPage = () => import("./pages/audit-trail/AuditTrail");
 
 const Settings = lazy(loadSettingsPage);
 const TaxManagement = lazy(loadTaxManagementPage);
 const Reports = lazy(loadReportsPage);
+const AuditTrail = lazy(loadAuditTrailPage);
 
 const PageFallback = () => (
   <div className="min-h-[60vh] rounded-xl border border-border bg-card/50 flex items-center justify-center">
@@ -192,6 +196,7 @@ function AppContent() {
       loadSettingsPage();
       loadTaxManagementPage();
       loadReportsPage();
+      loadAuditTrailPage();
     };
 
     if (typeof window !== "undefined" && "requestIdleCallback" in window) {
@@ -215,6 +220,7 @@ function AppContent() {
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/vendors" element={<Vendors />} />
+          <Route path="/campaigns" element={<CampaignsPage />} />
           <Route path="/invoices" element={<InvoicesPage />} />
           <Route path="/approvals" element={<Approvals />} />
           <Route path="/payments" element={<Payments />} />
@@ -228,6 +234,7 @@ function AppContent() {
             }
           />
           <Route path="/user-roles" element={<UserRoles />} />
+          <Route path="/profile" element={<Profile />} />
           <Route path="/transactions" element={<TransactionsPage />} />
           <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
           <Route path="/goods-receipt" element={<GoodsReceipt />} />
@@ -247,6 +254,14 @@ function AppContent() {
             element={
               <Suspense fallback={<PageFallback />}>
                 <Reports />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/audit-trail"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <AuditTrail />
               </Suspense>
             }
           />

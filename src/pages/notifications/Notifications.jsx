@@ -5,6 +5,7 @@ import {
 } from '../../Services/apis/notificationsApi';
 import { Button } from '../../components/ui/button';
 import AppDataTable from '../../components/common/AppDataTable';
+import RefreshButton from '../../components/common/RefreshButton';
 import { TableCell, TableRow } from '../../components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
@@ -16,7 +17,6 @@ import {
   CheckCircle,
   Clock,
   Loader2,
-  RefreshCw,
   AlertCircle,
   ShoppingCart,
   FileText,
@@ -236,10 +236,9 @@ const Notifications = () => {
           <h1 className="text-2xl font-bold">Email Notifications</h1>
           <p className="text-muted-foreground">System notification queue and history</p>
         </div>
-        <Button variant="outline" onClick={fetchData} disabled={refreshing}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+        <RefreshButton onClick={fetchData} refreshing={refreshing}>
           Refresh
-        </Button>
+        </RefreshButton>
       </div>
 
       {/* Stats Cards */}
