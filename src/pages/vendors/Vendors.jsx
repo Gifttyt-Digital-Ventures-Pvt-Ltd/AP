@@ -108,6 +108,12 @@ import VendorApprovalDialog from './components/VendorApprovalDialog';
 import IntegrationSourceBadge from '../../components/integrations/IntegrationSourceBadge';
 import useZohoIntegrationActive from '../../hooks/useZohoIntegrationActive';
 import { withIntegrationTableHeader } from '../../utils/integrationProvenance';
+import BeneficiaryStatusBadge from '../banking/components/BeneficiaryStatusBadge';
+import AddBeneficiaryDialog from '../banking/components/AddBeneficiaryDialog';
+import {
+  useGetBeneficiariesQuery,
+  useRegisterBeneficiaryMutation,
+} from '../../Services/apis/connectedBankingApi';
 
 const VENDOR_UPLOAD_FIELDS = [
   'name',
@@ -236,8 +242,15 @@ const Vendors = () => {
   const { data: corporateUserContext = null } = useGetCorporateUserDetailsQuery();
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
-  const { corporateScreens, isCorporateAdmin } = useRBAC();
+  const { corporateScreens, isCorporateAdmin, isConnectedBankingEnabled } = useRBAC();
   const { showIntegrationColumn } = useZohoIntegrationActive();
+  const { data: beneficiariesData = [] } = useGetBeneficiariesQuery(undefined, {
+    skip: !isConnectedBankingEnabled,
+  });
+  const [registerBeneficiary, { isLoading: registeringBeneficiary }] =
+    useRegisterBeneficiaryMutation();
+  const [beneficiaryVendor, setBeneficiaryVendor] = useState(null);
+  const [beneficiaryDialogOpen, setBeneficiaryDialogOpen] = useState(false);
   const activeVendorFields = corporateScreens?.activeVendorFields ?? [];
   const portalVerificationEnabled = isVendorPortalFetchEnabled(corporateScreens?.activeVendorVerification);
   const vendorFieldConfiguration = corporateScreens?.vendorFieldConfiguration ?? [];
@@ -346,6 +359,17 @@ const Vendors = () => {
   });
 
   const vendors = Array.isArray(vendorsData) ? vendorsData : [];
+  const beneficiaries = Array.isArray(beneficiariesData) ? beneficiariesData : [];
+  const beneficiaryByVendorId = useMemo(() => {
+    const map = new Map();
+    beneficiaries.forEach((bene) => {
+      if (bene.vendorId != null) {
+        map.set(String(bene.vendorId), bene);
+      }
+    });
+    return map;
+  }, [beneficiaries]);
+  const canManageBeneficiaries = canPerformAction('banking.addBeneficiary');
 
   useEffect(() => {
     if (vendorsError) {
@@ -918,6 +942,9 @@ const Vendors = () => {
           { key: 'vendor', title: 'Vendor', headerClassName: 'bg-muted text-foreground' },
           { key: 'createdAt', title: 'Created Date', headerClassName: 'bg-muted text-foreground', cellClassName: 'text-xs text-muted-foreground whitespace-nowrap' },
           { key: 'status', title: 'Status', headerClassName: 'bg-muted text-foreground' },
+          ...(isConnectedBankingEnabled
+            ? [{ key: 'beneficiary', title: 'Beneficiary', headerClassName: 'bg-muted text-foreground' }]
+            : []),
           { key: 'contact', title: 'Contact', headerClassName: 'bg-muted text-foreground' },
           { key: 'gstRegistrations', title: 'GSTINs', headerClassName: 'bg-muted text-foreground' },
           { key: 'actions', title: 'Actions', headerClassName: 'bg-muted text-foreground text-left' },
@@ -928,8 +955,25 @@ const Vendors = () => {
           ? { ...column, headerClassName: 'bg-muted text-foreground' }
           : column,
       ),
-    [showIntegrationColumn],
+    [isConnectedBankingEnabled, showIntegrationColumn],
   );
+
+  const openBeneficiaryDialog = (vendor) => {
+    setBeneficiaryVendor(vendor);
+    setBeneficiaryDialogOpen(true);
+  };
+
+  const handleRegisterVendorBeneficiary = async (payload) => {
+    if (!guardAction('banking.addBeneficiary')) return;
+    try {
+      await registerBeneficiary(payload).unwrap();
+      toast.success('Beneficiary registered. Payable in ~30 minutes.');
+      setBeneficiaryDialogOpen(false);
+      setBeneficiaryVendor(null);
+    } catch (error) {
+      toast.error(error?.data?.message || error?.data?.detail || 'Failed to register beneficiary');
+    }
+  };
 
   const renderVendorRow = (vendor, rowIndex, headers) => {
     const vendorId = vendor.id ?? rowIndex;
@@ -977,6 +1021,28 @@ const Vendors = () => {
               </span>
             );
             break;
+          case 'beneficiary': {
+            const bene = beneficiaryByVendorId.get(String(vendor.id));
+            value = (
+              <div className="flex flex-col gap-1 items-start">
+                <BeneficiaryStatusBadge
+                  status={bene?.status || 'NOT_REGISTERED'}
+                  availableAt={bene?.availableAt}
+                />
+                {(!bene || bene.status === 'FAILED') && canManageBeneficiaries && (
+                  <Button
+                    size="sm"
+                    variant="link"
+                    className="h-auto p-0 text-xs"
+                    onClick={() => openBeneficiaryDialog(vendor)}
+                  >
+                    Register beneficiary
+                  </Button>
+                )}
+              </div>
+            );
+            break;
+          }
           case 'contact':
             value = (
               <div className="text-sm">
@@ -1394,6 +1460,19 @@ const Vendors = () => {
         onConfirm={confirmVendorApprovalAction}
         confirming={approveVendorLoading}
       />
+
+      {isConnectedBankingEnabled && (
+        <AddBeneficiaryDialog
+          open={beneficiaryDialogOpen}
+          onOpenChange={(open) => {
+            setBeneficiaryDialogOpen(open);
+            if (!open) setBeneficiaryVendor(null);
+          }}
+          vendor={beneficiaryVendor}
+          onSubmit={handleRegisterVendorBeneficiary}
+          submitting={registeringBeneficiary}
+        />
+      )}
     </div>
   );
 };

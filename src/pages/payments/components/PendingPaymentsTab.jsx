@@ -64,6 +64,7 @@ const PendingPaymentsTab = ({
   onOpenInvoiceReport,
   canRecordPayment = false,
   canDownloadInvoiceReport = false,
+  paymentActionLabel = 'Record Payment',
   safeFormatDate,
   handleViewInvoice,
   handleDownloadInvoice,
@@ -257,7 +258,7 @@ const PendingPaymentsTab = ({
                 disabled={selectedInvoiceIds.length === 0}
                 data-testid="open-record-payment-dialog"
               >
-                Record Payment
+                {paymentActionLabel}
               </Button>
             )}
           </div>

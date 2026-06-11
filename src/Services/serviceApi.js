@@ -60,6 +60,7 @@ export const serviceApi = createApi({
     "Approvals",
     "Payments",
     "Banking",
+    "ConnectedBanking",
     "Settings",
     "Users",
     "Transactions",

@@ -1,5 +1,11 @@
 export const FULL_ACCESS_PERMISSION = "FULL_ACCESS";
 
+// Connected Banking is a SETTINGS section in corporate-screens (not a separate BANKING screen).
+export const CONNECTED_BANKING_SECTION = "SETTINGS_CONNECTED_BANKING";
+
+export const isBankingCorporateEntitlementEnabled = (isCorporateSectionEnabled) =>
+  isCorporateSectionEnabled(CONNECTED_BANKING_SECTION);
+
 export const ROUTE_PERMISSION_RULES = {
   "/dashboard": { anyOf: ["dashboard-view"] },
   "/vendors": { anyOf: ["vendors-view", "vendors-manage", "vendors-approve"] },
@@ -17,7 +23,9 @@ export const ROUTE_PERMISSION_RULES = {
     ],
   },
   "/invoice-matching": { anyOf: ["matching-view", "matching-manage"] },
-  "/transactions": { anyOf: ["banking-view", "banking-full"] },
+  "/transactions": {
+    anyOf: ["banking-view", "banking-manage", "banking-full", "payments-view"],
+  },
   "/approvals": {
     anyOf: [
       "invoice-checker",
@@ -49,7 +57,7 @@ export const ROUTE_PERMISSION_RULES = {
   "/integrations/connect": {
     anyOf: ["integrations-manage"],
   },
-  "/banking": { anyOf: ["banking-view", "banking-full"] },
+  "/banking": { anyOf: ["banking-view", "banking-manage", "banking-full"] },
   "/notifications": {},
   "/user-roles": {
     anyOf: [
@@ -95,7 +103,10 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
     screen: "INVOICE_MATCHING",
     anySections: ["INVOICE_MATCHING_ALL"],
   },
-  "/transactions": { screen: "BANKING", anySections: ["BANKING_ALL"] },
+  "/transactions": {
+    screen: "SETTINGS",
+    anySections: [CONNECTED_BANKING_SECTION],
+  },
   "/approvals": { screen: "APPROVAL", anySections: ["APPROVAL_ALL"] },
   "/payments": { screen: "PAYMENTS", anySections: ["PAYMENTS_ALL"] },
   "/payment-batches": {
@@ -129,7 +140,10 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
   "/integrations/erp": {
     anySections: ["SETTINGS_INTEGRATIONS"],
   },
-  "/banking": { anySections: ["SETTINGS_CONNECTED_BANKING"] },
+  "/banking": {
+    screen: "SETTINGS",
+    anySections: [CONNECTED_BANKING_SECTION],
+  },
   "/notifications": {
     screen: "SETTINGS",
     anySections: ["SETTINGS_NOTIFICATIONS"],
@@ -222,11 +236,17 @@ export const ACTION_PERMISSION_RULES = {
   "payments.create": { anyOf: ["payments-manage"] },
   "payments.createBatch": { anyOf: ["payment-batches-manage"] },
 
+  "banking.link": { anyOf: ["banking-manage", "banking-full", "settings-banking"] },
+  "banking.cibRegister": { anyOf: ["banking-manage", "banking-full", "settings-banking"] },
+  "banking.addBeneficiary": {
+    anyOf: ["beneficiary-manage", "banking-full", "banking-manage"],
+  },
+  "banking.releasePayout": { anyOf: ["payments-manage", "payouts-release"] },
+
   "paymentBatches.process": { anyOf: ["payment-batches-manage"] },
   "paymentBatches.markProcessed": { anyOf: ["payment-batches-manage"] },
   "paymentBatches.generateFile": { anyOf: ["payment-batches-manage"] },
 
-  "settings.createBankAccount": { anyOf: ["settings-banking", "banking-full"] },
   "settings.createOrganisation": { anyOf: ["settings-org"] },
   "settings.updateOrganisation": { anyOf: ["settings-org"] },
   "billing.requestTokens": { anyOf: ["credits-manage", "MANAGE_BILLING"] },

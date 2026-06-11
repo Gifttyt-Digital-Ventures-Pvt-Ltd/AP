@@ -22,10 +22,10 @@ const Vendors = lazy(() => import("./pages/vendors/Vendors"));
 const InvoicesPage = lazy(() => import("./pages/invoices/InvoicesPage"));
 const Approvals = lazy(() => import("./pages/approvals/Approvals"));
 const Payments = lazy(() => import("./pages/payments/Payments"));
-const Banking = lazy(() => import("./pages/banking/Banking"));
+const ConnectedBanking = lazy(() => import("./pages/banking/ConnectedBanking"));
 const UserRoles = lazy(() => import("./pages/user-roles/UserRoles"));
 const Profile = lazy(() => import("./pages/profile/Profile"));
-const TransactionsPage = lazy(() => import("./pages/transactions/TransactionsPage"));
+const TransactionsRoute = lazy(() => import("./pages/transactions/TransactionsRoute"));
 const PurchaseOrdersPage = lazy(() => import("./pages/purchase-orders/PurchaseOrdersPage"));
 const GoodsReceipt = lazy(() => import("./pages/goods-receipt/GoodsReceipt"));
 const InvoiceMatching = lazy(() => import("./pages/invoice-matching/InvoiceMatching"));
@@ -248,7 +248,7 @@ function AppContent() {
           <Route path="/invoices" element={withPageFallback(<InvoicesPage />)} />
           <Route path="/approvals" element={withPageFallback(<Approvals />)} />
           <Route path="/payments" element={withPageFallback(<Payments />)} />
-          <Route path="/banking" element={withPageFallback(<Banking />)} />
+          <Route path="/banking" element={withPageFallback(<ConnectedBanking />)} />
           <Route path="/settings" element={withPageFallback(<Settings />)} />
           <Route path="/settings/integrations" element={<Navigate to="/integrations" replace />} />
           <Route
@@ -260,7 +260,7 @@ function AppContent() {
           <Route path="/settings/integrations/tally" element={<Navigate to="/integrations/erp/tally" replace />} />
           <Route path="/user-roles" element={withPageFallback(<UserRoles />)} />
           <Route path="/profile" element={withPageFallback(<Profile />)} />
-          <Route path="/transactions" element={withPageFallback(<TransactionsPage />)} />
+          <Route path="/transactions" element={withPageFallback(<TransactionsRoute />)} />
           <Route path="/purchase-orders" element={withPageFallback(<PurchaseOrdersPage />)} />
           <Route path="/goods-receipt" element={withPageFallback(<GoodsReceipt />)} />
           <Route path="/tax-management" element={withPageFallback(<TaxManagement />)} />
