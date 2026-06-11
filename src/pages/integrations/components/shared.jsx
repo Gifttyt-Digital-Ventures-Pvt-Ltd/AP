@@ -4,17 +4,24 @@ import { Loader2, Plug } from "lucide-react";
 import { Badge } from "../../../components/ui/badge";
 import { statusBadgeClass, titleize } from "../utils";
 
+export const isVisibleDirection = (direction) =>
+  String(direction || "").trim().toUpperCase() !== "PULL_STATUS";
+
 export const StatusBadge = ({ status }) => (
   <Badge variant="outline" className={statusBadgeClass(status)}>
     {titleize(status || "unknown")}
   </Badge>
 );
 
-export const DirectionBadge = ({ direction }) => (
-  <Badge variant="outline" className="border-slate-200 bg-white text-slate-700">
-    {titleize(direction)}
-  </Badge>
-);
+export const DirectionBadge = ({ direction }) => {
+  if (!isVisibleDirection(direction)) return null;
+
+  return (
+    <Badge variant="outline" className="border-slate-200 bg-white text-slate-700">
+      {titleize(direction)}
+    </Badge>
+  );
+};
 
 export const PageShell = ({ title, description, backAction, actions, children }) => (
   <div className="flex h-full min-h-0 flex-col overflow-y-auto bg-background p-6">

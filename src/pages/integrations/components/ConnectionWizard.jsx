@@ -57,7 +57,7 @@ import {
   toArray,
   titleize,
 } from "../utils";
-import { DirectionBadge, PageShell, StatusBadge } from "./shared";
+import { PageShell, StatusBadge } from "./shared";
 
 const ConnectionWizard = () => {
   const { provider = "ZOHO_BOOKS" } = useParams();
@@ -333,11 +333,6 @@ const ConnectionWizard = () => {
                   <div className="flex items-center justify-between gap-3">
                     <span className="font-medium">{OBJECT_LABELS[objectKey] || titleize(objectKey)}</span>
                     {enabledObjects.has(objectKey) && <CheckCircle2 className="h-4 w-4 text-primary" />}
-                  </div>
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {toArray(config.directions).map((direction) => (
-                      <DirectionBadge key={direction} direction={direction} />
-                    ))}
                   </div>
                 </button>
               ))}

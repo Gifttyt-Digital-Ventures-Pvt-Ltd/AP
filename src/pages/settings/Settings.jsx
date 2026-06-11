@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
 import {
   useGetBankAccountsQuery,
   useCreateBankAccountMutation,
@@ -13,10 +12,11 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { ArrowRight, Building2, Check, CheckCircle, Copy, Globe, Loader2, Mail, MapPin, Phone, Plug, PlugZap, RefreshCw, Save, Settings as SettingsIcon, XCircle } from 'lucide-react';
+import { Building2, Check, CheckCircle, Copy, Globe, Loader2, Mail, MapPin, Phone, Plug, PlugZap, RefreshCw, Save, Settings as SettingsIcon, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import BankAccountDialog from './components/BankAccountDialog';
 import TallyConfigDialog from './components/TallyConfigDialog';
+import ZohoIntegrationCard from './components/ZohoIntegrationCard';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useRBAC } from '../../contexts/RBACContext';
 
@@ -688,36 +688,8 @@ const Settings = () => {
 
         {canViewIntegrationsSettings && <TabsContent value="integrations">
           <div className="space-y-6" data-testid="settings-integrations-gateway">
-            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-              <div className="rounded-lg border border-border bg-card p-6 shadow-sm" data-testid="zoho-integration-card">
-                <div className="flex h-full flex-col justify-between gap-5">
-                  <div className="flex items-start gap-4">
-                    <div className="rounded-md border bg-muted p-3">
-                      <Plug className="h-6 w-6 text-primary" />
-                    </div>
-                    <div>
-                      <h3 className="text-xl font-semibold font-['Manrope']">Zoho Books</h3>
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        Zoho connection, organization binding, mappings, sync status, review queues, and logs are managed in the Integrations module.
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button asChild>
-                      <Link to="/integrations">
-                        <ArrowRight className="mr-2 h-4 w-4" />
-                        Open Integrations
-                      </Link>
-                    </Button>
-                    <Button asChild variant="outline">
-                      <Link to="/integrations/connect/ZOHO_BOOKS">
-                        <Plug className="mr-2 h-4 w-4" />
-                        Connect Zoho
-                      </Link>
-                    </Button>
-                  </div>
-                </div>
-              </div>
+            <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+              <ZohoIntegrationCard />
 
               <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden" data-testid="tally-integration-card">
                 <div className={`px-6 py-4 flex items-center justify-between border-b ${tallyConnected ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-border'}`}>

@@ -25,7 +25,7 @@ import {
   shouldPollSyncStatus,
   titleize,
 } from "../utils";
-import { DirectionBadge, PageShell, StatusBadge } from "./shared";
+import { PageShell, StatusBadge } from "./shared";
 
 const ObjectSyncCard = ({ row, connectionId, canTrigger, onSync }) => {
   const dependencyBlocked =
@@ -34,7 +34,7 @@ const ObjectSyncCard = ({ row, connectionId, canTrigger, onSync }) => {
   const syncDisabled = !canTrigger || dependencyBlocked || throttled || row.status === "BLOCKED";
 
   return (
-    <Card className="rounded-md">
+    <Card className="flex h-full flex-col rounded-md">
       <CardHeader className="pb-3">
         <div className="flex items-start justify-between gap-3">
           <div>
@@ -44,12 +44,7 @@ const ObjectSyncCard = ({ row, connectionId, canTrigger, onSync }) => {
           <StatusBadge status={row.status} />
         </div>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-wrap gap-1.5">
-          {row.directions.map((direction) => (
-            <DirectionBadge key={direction} direction={direction} />
-          ))}
-        </div>
+      <CardContent className="flex flex-1 flex-col gap-4">
         <div className="grid grid-cols-3 gap-2 text-center text-sm">
           <div className="rounded-md border p-2">
             <p className="font-semibold">{row.synced}</p>
@@ -80,17 +75,18 @@ const ObjectSyncCard = ({ row, connectionId, canTrigger, onSync }) => {
           </p>
         )}
         {row.message && <p className="text-xs text-muted-foreground">{row.message}</p>}
-        <div className="flex gap-2">
+        <div className="mt-auto flex flex-nowrap items-center gap-2 pt-2">
           <Button
             variant="outline"
             size="sm"
+            className="shrink-0"
             disabled={syncDisabled}
             onClick={() => onSync(row.object)}
           >
             <RefreshCw className="mr-2 h-4 w-4" />
             Sync now
           </Button>
-          <Button asChild variant="ghost" size="sm">
+          <Button asChild variant="ghost" size="sm" className="shrink-0">
             <Link to={`/integrations/${connectionId}/objects/${row.object}`}>
               <Search className="mr-2 h-4 w-4" />
               Review
@@ -187,7 +183,7 @@ const SyncDashboard = () => {
         </Card>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <div className="grid auto-rows-fr gap-4 md:grid-cols-2 xl:grid-cols-3">
         {rows.map((row) => (
           <ObjectSyncCard
             key={row.object}
