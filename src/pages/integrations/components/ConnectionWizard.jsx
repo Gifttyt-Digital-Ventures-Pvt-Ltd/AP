@@ -214,8 +214,8 @@ const ConnectionWizard = () => {
     <PageShell
       title={`Connect ${getProviderName(providerManifest)}`}
       description="Model A uses Optifii's shared OAuth app. Model B lets enterprise clients bring their own Zoho app credentials."
-      actions={
-        <Button asChild variant="outline">
+      backAction={
+        <Button asChild variant="outline" size="sm">
           <Link to="/integrations">
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back

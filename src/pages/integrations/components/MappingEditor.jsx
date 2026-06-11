@@ -43,19 +43,19 @@ const MappingEditor = () => {
     <PageShell
       title="Field & Account Mapping"
       description="Versioned connection mappings for categories, payment modes, vendors, and Zoho accounts."
+      backAction={
+        <Button asChild variant="outline" size="sm">
+          <Link to={`/integrations/${connectionId}`}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Dashboard
+          </Link>
+        </Button>
+      }
       actions={
-        <>
-          <Button asChild variant="outline">
-            <Link to={`/integrations/${connectionId}`}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Dashboard
-            </Link>
-          </Button>
-          <Button onClick={handleSave} disabled={!canPerformAction("integrations.mapping.edit") || saving}>
+        <Button onClick={handleSave} disabled={!canPerformAction("integrations.mapping.edit") || saving}>
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Settings2 className="mr-2 h-4 w-4" />}
             Save mappings
           </Button>
-        </>
       }
     >
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">

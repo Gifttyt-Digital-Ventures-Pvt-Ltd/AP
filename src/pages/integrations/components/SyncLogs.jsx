@@ -37,6 +37,14 @@ const SyncLogs = () => {
     <PageShell
       title="Sync Logs"
       description="Backend sync history, throttling, partial failures, and resolved events."
+      backAction={
+        <Button asChild variant="outline" size="sm">
+          <Link to={`/integrations/${connectionId}`}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Dashboard
+          </Link>
+        </Button>
+      }
       actions={
         <>
           <Select value={object} onValueChange={setObject}>
@@ -53,12 +61,6 @@ const SyncLogs = () => {
           <Button variant="outline" onClick={() => refetch()}>
             <RefreshCw className="mr-2 h-4 w-4" />
             Refresh
-          </Button>
-          <Button asChild variant="outline">
-            <Link to={`/integrations/${connectionId}`}>
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Dashboard
-            </Link>
           </Button>
         </>
       }

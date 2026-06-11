@@ -140,14 +140,16 @@ const SyncDashboard = () => {
     <PageShell
       title="Integration Dashboard"
       description={`${titleize(getConnectionProvider(connection || {}))} sync status, controls, and health.`}
+      backAction={
+        <Button asChild variant="outline" size="sm">
+          <Link to="/integrations">
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Integrations
+          </Link>
+        </Button>
+      }
       actions={
         <>
-          <Button asChild variant="outline">
-            <Link to="/integrations">
-              <ArrowLeft className="mr-2 h-4 w-4" />
-              Integrations
-            </Link>
-          </Button>
           <Button asChild variant="outline">
             <Link to={`/integrations/${connectionId}/mapping`}>
               <Settings2 className="mr-2 h-4 w-4" />

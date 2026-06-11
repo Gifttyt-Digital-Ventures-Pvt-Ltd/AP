@@ -46,8 +46,8 @@ const ConnectionSettings = () => {
     <PageShell
       title="Connection Settings"
       description="Disconnecting revokes the backend-brokered ERP connection and frees the tenant to connect another ERP."
-      actions={
-        <Button asChild variant="outline">
+      backAction={
+        <Button asChild variant="outline" size="sm">
           <Link to={`/integrations/${connectionId}`}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Dashboard

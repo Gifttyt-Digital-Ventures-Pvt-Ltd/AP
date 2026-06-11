@@ -50,8 +50,8 @@ const ObjectReview = () => {
     <PageShell
       title={`${OBJECT_LABELS[object] || titleize(object)} Review Queue`}
       description="Resolve ambiguous ERP matches, conflicts, and partial sync failures."
-      actions={
-        <Button asChild variant="outline">
+      backAction={
+        <Button asChild variant="outline" size="sm">
           <Link to={`/integrations/${connectionId}`}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Dashboard
