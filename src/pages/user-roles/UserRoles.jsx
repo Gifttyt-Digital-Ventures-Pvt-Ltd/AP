@@ -337,6 +337,9 @@ const UserRoles = () => {
       if (backendEntry.screen === "BANKING") {
         return isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING");
       }
+      if (backendEntry.screen === "INTEGRATIONS" || backendEntry.screen === "ERP_INTEGRATIONS") {
+        return isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
+      }
       return isCorporateScreenAllowed(backendEntry.screen);
     },
     [

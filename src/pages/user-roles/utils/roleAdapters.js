@@ -50,6 +50,12 @@ export const CUSTOM_ROLE_PERMISSION_MAP = {
   "settings-org": { screen: "SETTINGS", permissionType: "ORG" },
   "settings-banking": { screen: "SETTINGS", permissionType: "BANKING" },
   "settings-interaction": { screen: "SETTINGS", permissionType: "INTERACTION" },
+  "integrations.view": { screen: "INTEGRATIONS", permissionType: "VIEW" },
+  "integrations.connect": { screen: "INTEGRATIONS", permissionType: "CONNECT" },
+  "integrations.disconnect": { screen: "INTEGRATIONS", permissionType: "DISCONNECT" },
+  "integrations.mapping.edit": { screen: "INTEGRATIONS", permissionType: "MAPPING_EDIT" },
+  "integrations.sync.trigger": { screen: "INTEGRATIONS", permissionType: "SYNC_TRIGGER" },
+  "integrations.review.resolve": { screen: "INTEGRATIONS", permissionType: "REVIEW_RESOLVE" },
   "category-view": { screen: "CATEGORY", permissionType: "VIEW" },
   "category-manage": { screen: "CATEGORY", permissionType: "MANAGE" },
 };

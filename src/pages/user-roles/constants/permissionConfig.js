@@ -119,6 +119,17 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    title: "Integrations",
+    permissions: [
+      { id: "integrations.view", label: "View Only" },
+      { id: "integrations.connect", label: "Connect ERP" },
+      { id: "integrations.disconnect", label: "Disconnect ERP" },
+      { id: "integrations.mapping.edit", label: "Edit Mappings" },
+      { id: "integrations.sync.trigger", label: "Trigger Sync" },
+      { id: "integrations.review.resolve", label: "Resolve Review Queue" },
+    ],
+  },
+  {
     title: "Category",
     permissions: [
       { id: "category-view", label: "View Only" },
@@ -171,6 +182,12 @@ export const PERMISSION_LABELS = {
   "settings-org": "Settings - Manage Organisation",
   "settings-banking": "Settings - Manage Banking",
   "settings-interaction": "Settings - Integrations",
+  "integrations.view": "Integrations - View Only",
+  "integrations.connect": "Integrations - Connect ERP",
+  "integrations.disconnect": "Integrations - Disconnect ERP",
+  "integrations.mapping.edit": "Integrations - Edit Mappings",
+  "integrations.sync.trigger": "Integrations - Trigger Sync",
+  "integrations.review.resolve": "Integrations - Resolve Review Queue",
   "category-view": "Category - View Only",
   "category-manage": "Category - Manage (Add, Delete, Edit)",
 };
