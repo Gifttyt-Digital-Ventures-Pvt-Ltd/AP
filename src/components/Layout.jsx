@@ -126,8 +126,17 @@ export const Layout = ({ children }) => {
     unreadNotifications?.count ?? unreadNotifications?.unreadCount ?? 0,
   );
 
-  const showConnectedBankingNav =
-    isBankingEnabled && canAccessRoute("/banking");
+  const hasConnectedBankingFeature = isBankingEnabled;
+  const showConnectedBankingGroup = hasConnectedBankingFeature;
+
+  const connectedBankingItems = [
+    ...(hasConnectedBankingFeature
+      ? [{ icon: Landmark, label: "Banking", path: "/banking" }]
+      : []),
+    ...(showConnectedBankingGroup
+      ? [{ icon: ArrowLeftRight, label: "Transactions", path: "/transactions" }]
+      : []),
+  ];
 
   const menuSections = [
     {
@@ -141,7 +150,7 @@ export const Layout = ({ children }) => {
         { icon: Package, label: "Goods Receipt", path: "/goods-receipt" },
         { icon: FileText, label: "Invoices", path: "/invoices" },
         { icon: Link2, label: "Invoice Matching", path: "/invoice-matching" },
-        ...(!showConnectedBankingNav
+        ...(!showConnectedBankingGroup
           ? [
               {
                 icon: ArrowLeftRight,
@@ -153,11 +162,9 @@ export const Layout = ({ children }) => {
         { icon: CheckCircle, label: "Approvals", path: "/approvals" },
         { icon: CreditCard, label: "Payments", path: "/payments" },
         { icon: Layers, label: "Payment Batches", path: "/payment-batches" },
+        ...(showConnectedBankingGroup ? connectedBankingItems : []),
       ],
     },
-    ...(showConnectedBankingNav
-      ? [{ items: [{ icon: Landmark, label: "Banking", path: "/banking" }] }]
-      : []),
     {
       items: [
         { icon: Users, label: "Vendors", path: "/vendors" },
@@ -166,7 +173,7 @@ export const Layout = ({ children }) => {
         { icon: BookOpen, label: "Accounting", path: "/accounting" },
         { icon: BarChart3, label: "Reports", path: "/reports" },
         { icon: Plug, label: "Integrations", path: "/integrations" },
-        ...(!showConnectedBankingNav
+        ...(!hasConnectedBankingFeature
           ? [{ icon: Building2, label: "Banking", path: "/banking" }]
           : []),
         ...(canUseNotifications ? [{ icon: Bell, label: "Notifications", path: "/notifications" }] : []),

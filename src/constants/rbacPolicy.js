@@ -103,10 +103,6 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
     screen: "INVOICE_MATCHING",
     anySections: ["INVOICE_MATCHING_ALL"],
   },
-  "/transactions": {
-    screen: "SETTINGS",
-    anySections: [CONNECTED_BANKING_SECTION],
-  },
   "/approvals": { screen: "APPROVAL", anySections: ["APPROVAL_ALL"] },
   "/payments": { screen: "PAYMENTS", anySections: ["PAYMENTS_ALL"] },
   "/payment-batches": {
@@ -258,13 +254,15 @@ export const ACTION_PERMISSION_RULES = {
   "tax.calculateTds": { anyOf: ["tax-manage"] },
   "tax.generateForm16a": { anyOf: ["tax-manage"] },
 
-  "transactions.uploadStatement": { anyOf: ["banking-full"] },
-  "transactions.deleteStatement": { anyOf: ["banking-full"] },
-  "transactions.update": { anyOf: ["banking-full"] },
-  "transactions.review": { anyOf: ["banking-full"] },
-  "transactions.undo": { anyOf: ["banking-full"] },
-  "transactions.uploadVoucher": { anyOf: ["banking-full"] },
-  "transactions.linkInvoice": { anyOf: ["banking-full"] },
+  "transactions.uploadStatement": {
+    anyOf: ["banking-view", "banking-manage", "banking-full", "payments-view"],
+  },
+  "transactions.deleteStatement": { anyOf: ["banking-manage", "banking-full"] },
+  "transactions.update": { anyOf: ["banking-manage", "banking-full"] },
+  "transactions.review": { anyOf: ["banking-manage", "banking-full"] },
+  "transactions.undo": { anyOf: ["banking-manage", "banking-full"] },
+  "transactions.uploadVoucher": { anyOf: ["banking-manage", "banking-full"] },
+  "transactions.linkInvoice": { anyOf: ["banking-manage", "banking-full"] },
 
   "integrations.connect": { anyOf: ["integrations-manage"] },
   "integrations.disconnect": { anyOf: ["integrations-manage"] },
