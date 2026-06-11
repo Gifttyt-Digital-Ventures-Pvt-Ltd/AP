@@ -129,6 +129,26 @@ const mapSettingsPermission = (permissionType) => {
   return null;
 };
 
+const mapIntegrationsPermission = (permissionType) => {
+  if (permissionType === "VIEW") return "integrations.view";
+  if (permissionType === "CONNECT") return "integrations.connect";
+  if (permissionType === "DISCONNECT") return "integrations.disconnect";
+  if (permissionType === "MAPPING_EDIT" || permissionType === "MAPPING") return "integrations.mapping.edit";
+  if (permissionType === "SYNC_TRIGGER" || permissionType === "SYNC") return "integrations.sync.trigger";
+  if (permissionType === "REVIEW_RESOLVE" || permissionType === "REVIEW") return "integrations.review.resolve";
+  if (permissionType === "MANAGE" || permissionType === "FULL") {
+    return [
+      "integrations.view",
+      "integrations.connect",
+      "integrations.disconnect",
+      "integrations.mapping.edit",
+      "integrations.sync.trigger",
+      "integrations.review.resolve",
+    ];
+  }
+  return null;
+};
+
 const mapCategoryPermission = (permissionType) => {
   if (permissionType === "VIEW") return "category-view";
   if (permissionType === "MANAGE") return "category-manage";
@@ -227,6 +247,10 @@ export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput)
 
   if (screen === "SETTINGS") {
     return mapSettingsPermission(permissionType);
+  }
+
+  if (screen === "INTEGRATIONS" || screen === "ERP_INTEGRATIONS") {
+    return mapIntegrationsPermission(permissionType);
   }
 
   if (screen === "CATEGORY" || screen === "CATEGORIES") {

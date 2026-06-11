@@ -42,6 +42,7 @@ import {
   BarChart3,
   History,
   Megaphone,
+  Plug,
   User,
 } from "lucide-react";
 
@@ -85,6 +86,7 @@ export const Layout = ({ children }) => {
     { icon: Megaphone, label: "Campaigns", path: "/campaigns" },
     { icon: Calculator, label: "Tax Management", path: "/tax-management" },
     { icon: BarChart3, label: "Reports", path: "/reports" },
+    { icon: Plug, label: "Integrations", path: "/integrations" },
     { icon: Building2, label: "Banking", path: "/banking" },
     { icon: Bell, label: "Notifications", path: "/notifications" },
     { icon: Shield, label: "User Roles", path: "/user-roles" },

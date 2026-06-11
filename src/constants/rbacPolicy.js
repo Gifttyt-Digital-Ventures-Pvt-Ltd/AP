@@ -34,6 +34,16 @@ export const ROUTE_PERMISSION_RULES = {
   "/tax-management": { anyOf: ["tax-view", "tax-manage"] },
   "/reports": { anyOf: ["reports-view", "reports-full"] },
   "/audit-trail": { anyOf: ["audit-trail-view"] },
+  "/integrations": {
+    anyOf: [
+      "integrations.view",
+      "integrations.connect",
+      "integrations.disconnect",
+      "integrations.mapping.edit",
+      "integrations.sync.trigger",
+      "integrations.review.resolve",
+    ],
+  },
   "/banking": { anyOf: ["banking-view", "banking-full"] },
   "/notifications": { anyOf: ["settings-interaction"] },
   "/user-roles": {
@@ -92,6 +102,10 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
     ],
   },
   "/audit-trail": { screen: "AUDIT_TRAIL", anySections: ["AUDIT_TRAIL_ALL"] },
+  "/integrations": {
+    screen: "SETTINGS",
+    anySections: ["SETTINGS_INTEGRATIONS"],
+  },
   "/banking": { anySections: ["SETTINGS_CONNECTED_BANKING"] },
   "/notifications": {
     screen: "SETTINGS",
@@ -131,6 +145,7 @@ export const DEFAULT_ROUTE_PRIORITY = [
   "/tax-management",
   "/reports",
   "/audit-trail",
+  "/integrations",
   "/banking",
   "/notifications",
   "/user-roles",
@@ -202,6 +217,12 @@ export const ACTION_PERMISSION_RULES = {
   "transactions.undo": { anyOf: ["banking-full"] },
   "transactions.uploadVoucher": { anyOf: ["banking-full"] },
   "transactions.linkInvoice": { anyOf: ["banking-full"] },
+
+  "integrations.connect": { anyOf: ["integrations.connect"] },
+  "integrations.disconnect": { anyOf: ["integrations.disconnect"] },
+  "integrations.mapping.edit": { anyOf: ["integrations.mapping.edit"] },
+  "integrations.sync.trigger": { anyOf: ["integrations.sync.trigger"] },
+  "integrations.review.resolve": { anyOf: ["integrations.review.resolve"] },
 
   "roles.invite": { anyOf: ["roles-manage-users"] },
   "roles.updateUserRole": { anyOf: ["roles-manage-users"] },

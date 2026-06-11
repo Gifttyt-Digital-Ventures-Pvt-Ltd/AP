@@ -449,6 +449,10 @@ export const RBACProvider = ({ children }) => {
       return isPaymentBatchesFeatureEnabled;
     }
 
+    if (actionKey.startsWith("integrations.")) {
+      return isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
+    }
+
     return true;
   };
 
