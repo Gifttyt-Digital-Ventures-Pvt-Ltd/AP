@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from '../../../components/ui/select';
 import { Plus } from 'lucide-react';
+import { formatBankingAccountLabel } from '../../banking/utils/accountFormatters';
 
 const getInvoiceOptionLabel = (invoice) =>
   `${invoice?.invoiceNumber || '-'} - ${invoice?.vendorName || '-'} - ₹${Number(
@@ -135,8 +136,8 @@ const PaymentDialog = ({
               </SelectTrigger>
               <SelectContent>
               {bankAccounts.map((account) => (
-                <SelectItem key={account.id} value={account.id}>
-                  {account.account_name || account.bank_name} - {account.account_number || account.bank_name}
+                <SelectItem key={account.id} value={String(account.id)}>
+                  {formatBankingAccountLabel(account)}
                 </SelectItem>
               ))}
               </SelectContent>

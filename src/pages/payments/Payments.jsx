@@ -6,7 +6,6 @@ import {
 import { toInvoiceUiPayload, EMPTY_INVOICE_LIST_RESPONSE, getInvoiceListItems } from '../../Services/utils/payloadMappers';
 import {
   useGetPaymentsQuery,
-  useGetBankAccountsQuery,
   useBulkReleasePaymentsMutation,
   useCreatePaymentMutation,
   useRecordPaymentsMutation,
@@ -44,6 +43,15 @@ import { format } from 'date-fns';
 import PaymentsHeader from './components/PaymentsHeader';
 import PaymentDialog from './components/PaymentDialog';
 import RecordPaymentDialog from './components/RecordPaymentDialog';
+import IciciPayoutDialog from './components/IciciPayoutDialog';
+import useBankingSetup from '../banking/hooks/useBankingSetup';
+import { getLinkedAccounts } from '../banking/utils/accountFormatters';
+import {
+  useCreateBankingPayoutMutation,
+  useCreateBulkBankingPayoutsMutation,
+  useRegisterBeneficiaryMutation,
+} from '../../Services/apis/connectedBankingApi';
+import { PAYOUT_STATUS } from '../banking/constants';
 import PendingPaymentsTab from './components/PendingPaymentsTab';
 import ReleasedPaymentsTab from './components/ReleasedPaymentsTab';
 import ViewDialog from '../invoices/components/ViewDialog';
@@ -114,23 +122,31 @@ const Payments = () => {
     invoiceQueryWithStatus('Pending Approver'),
     { skip: !isPaymentBatchesFeatureEnabled },
   );
-  const {
-    data: bankAccountsData = [],
-    isError: bankAccountsError,
-    isFetching: bankAccountsFetching,
-    refetch: refetchBankAccounts,
-  } = useGetBankAccountsQuery(undefined, { skip: !isConnectedBankingEnabled });
-
   const [bulkReleasePayments] = useBulkReleasePaymentsMutation();
   const [createPayment] = useCreatePaymentMutation();
   const [recordPayments] = useRecordPaymentsMutation();
   const [createPaymentBatch] = useCreatePaymentBatchMutation();
   const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
+  const [createBankingPayout] = useCreateBankingPayoutMutation();
+  const [createBulkBankingPayouts] = useCreateBulkBankingPayoutsMutation();
+  const [registerBeneficiary] = useRegisterBeneficiaryMutation();
   const { guardAction, canPerformAction } = useActionGuard();
+  const {
+    isSetupReady,
+    linkedAccount,
+    accounts,
+    accountsFetching,
+    beneficiaries,
+    capabilities,
+    refetchAccounts,
+    refetchBeneficiaries,
+  } = useBankingSetup({ skip: !isConnectedBankingEnabled });
   const [searchTerm, setSearchTerm] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [createBatchDialogOpen, setCreateBatchDialogOpen] = useState(false);
   const [recordPaymentDialogOpen, setRecordPaymentDialogOpen] = useState(false);
+  const [iciciPayoutDialogOpen, setIciciPayoutDialogOpen] = useState(false);
+  const [releasingIciciPayout, setReleasingIciciPayout] = useState(false);
   const [bulkReleaseConfirmOpen, setBulkReleaseConfirmOpen] = useState(false);
   const [creatingBatch, setCreatingBatch] = useState(false);
   const [recordingPayments, setRecordingPayments] = useState(false);
@@ -189,23 +205,30 @@ const Payments = () => {
   const pendingApproverInvoices = getInvoiceListItems(pendingApproverInvoicesListData).map(normalizeInvoice);
   const invoices = pendingPaymentInvoices;
   const batchEligibleInvoices = [...pendingPaymentInvoices, ...pendingApproverInvoices];
-  const bankAccounts = Array.isArray(bankAccountsData) ? bankAccountsData : [];
+  const bankAccounts = useMemo(
+    () => getLinkedAccounts(accounts),
+    [accounts],
+  );
   const canManagePayments = canPerformAction('payments.create');
   const canBulkRelease = canPerformAction('payments.releaseBulk');
   const canCreateBatch =
     isPaymentBatchesFeatureEnabled && canPerformAction('payments.createBatch');
+  const showIciciPayoutFlow = isConnectedBankingEnabled && isSetupReady;
   const showBankingBatchPaymentActions =
-    isConnectedBankingEnabled || isPaymentBatchesFeatureEnabled;
-  const showRecordPaymentFlow = !showBankingBatchPaymentActions;
+    isPaymentBatchesFeatureEnabled ||
+    (isConnectedBankingEnabled && !isSetupReady);
+  const showRecordPaymentFlow = !showIciciPayoutFlow && !showBankingBatchPaymentActions;
   const canShowSinglePayment = showBankingBatchPaymentActions && canManagePayments;
   const canShowBulkRelease = showBankingBatchPaymentActions && canBulkRelease;
   const canShowRecordPayment = showRecordPaymentFlow && canManagePayments;
+  const canShowIciciRelease =
+    showIciciPayoutFlow && canPerformAction('banking.releasePayout');
   const paymentsRefreshing =
     paymentsFetching ||
     pendingPaymentInvoicesFetching ||
     allInvoicesFetching ||
     pendingApproverInvoicesFetching ||
-    bankAccountsFetching;
+    (isConnectedBankingEnabled && accountsFetching);
 
   const handleRefreshPayments = async () => {
     try {
@@ -216,7 +239,7 @@ const Payments = () => {
         isPaymentBatchesFeatureEnabled
           ? refetchPendingApproverInvoices()
           : Promise.resolve(),
-        isConnectedBankingEnabled ? refetchBankAccounts() : Promise.resolve(),
+        isConnectedBankingEnabled ? refetchAccounts() : Promise.resolve(),
       ]);
       toast.success('Payments refreshed');
     } catch {
@@ -235,12 +258,6 @@ const Payments = () => {
   useEffect(() => {
     if (pendingApproverInvoicesError) toast.error('Failed to load pending approver invoices');
   }, [pendingApproverInvoicesError]);
-
-  useEffect(() => {
-    if (isConnectedBankingEnabled && bankAccountsError) {
-      toast.error('Failed to load bank accounts');
-    }
-  }, [bankAccountsError, isConnectedBankingEnabled]);
 
   const resetForm = () => {
     setFormData({
@@ -350,12 +367,77 @@ const Payments = () => {
       toast.error('Please select at least one invoice from the list');
       return;
     }
+    if (showIciciPayoutFlow) {
+      if (!guardAction('banking.releasePayout')) return;
+      setIciciPayoutDialogOpen(true);
+      return;
+    }
     setRecordPaymentForm((prev) => ({
       ...prev,
       payment_method: prev.payment_method || 'Bank Transfer',
       paymentDate: prev.paymentDate || new Date().toISOString().slice(0, 10),
     }));
     setRecordPaymentDialogOpen(true);
+  };
+
+  const handleIciciPayout = async (payload) => {
+    if (!guardAction('banking.releasePayout')) return null;
+    setReleasingIciciPayout(true);
+    try {
+      const result = await createBankingPayout(payload).unwrap();
+      await refetchPendingPaymentInvoices();
+      setRecordPaymentInvoiceIds([]);
+      return result;
+    } catch (error) {
+      toast.error(error?.data?.message || error?.data?.detail || 'Failed to release payment');
+      throw error;
+    } finally {
+      setReleasingIciciPayout(false);
+    }
+  };
+
+  const handleIciciBulkPayouts = async ({ items }) => {
+    if (!guardAction('banking.releasePayout')) return null;
+    setReleasingIciciPayout(true);
+    try {
+      const response = await createBulkBankingPayouts({ items }).unwrap();
+      const payouts = response?.payouts || [];
+      const failed = payouts.filter(
+        (p) => String(p.normalizedStatus).toUpperCase() === PAYOUT_STATUS.FAILED,
+      );
+      if (failed.length > 0) {
+        toast.error(`${failed.length} payout(s) failed`);
+      } else {
+        toast.success(`${payouts.length} payout(s) initiated`);
+      }
+      await refetchPendingPaymentInvoices();
+      setRecordPaymentInvoiceIds([]);
+      return payouts[0] || { normalizedStatus: PAYOUT_STATUS.PENDING };
+    } catch (error) {
+      toast.error(error?.data?.message || error?.data?.detail || 'Failed to release payments');
+      throw error;
+    } finally {
+      setReleasingIciciPayout(false);
+    }
+  };
+
+  const handleRegisterBeneficiaryFromPayout = async (invoice) => {
+    if (!guardAction('banking.addBeneficiary')) return;
+    const vendorId = invoice?.vendorId ?? invoice?.vendor_id;
+    const vendor = allInvoices.find((inv) => (inv.vendorId ?? inv.vendor_id) === vendorId);
+    try {
+      await registerBeneficiary({
+        vendorId,
+        name: invoice?.vendorName || vendor?.vendorName || '',
+        accountNumber: vendor?.account_number || vendor?.accountNumber || '',
+        ifsc: vendor?.ifsc_code || vendor?.ifscCode || '',
+        payeeType: 'ACCOUNT',
+      }).unwrap();
+      toast.success('Beneficiary registered. Payable in ~30 minutes.');
+      await refetchBeneficiaries();
+    } catch (error) {
+      toast.error(error?.data?.message || error?.data?.detail || 'Failed to register beneficiary');
+    }
   };
 
   const toggleRecordPaymentInvoice = (invoiceId) => {
@@ -679,7 +761,7 @@ const Payments = () => {
                       <SelectContent>
                         {bankAccounts.map((bank) => (
                           <SelectItem key={bank.id} value={String(bank.id)}>
-                            {bank.bank_name} - {bank.account_number}
+                            {[bank.bank, bank.accountType].filter(Boolean).join(' · ')} - {bank.accountNumber}
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -763,12 +845,13 @@ const Payments = () => {
             filteredPendingInvoices={filteredPendingInvoices}
             handleBulkRelease={handleBulkRelease}
             canBulkRelease={canShowBulkRelease}
-            showRecordPaymentSelection={canShowRecordPayment}
+            showRecordPaymentSelection={canShowRecordPayment || canShowIciciRelease}
             selectedInvoiceIds={recordPaymentInvoiceIds}
             onToggleInvoice={toggleRecordPaymentInvoice}
             onSelectAllInvoices={selectAllRecordPaymentInvoices}
             onOpenRecordPayment={openRecordPaymentDialog}
-            canRecordPayment={canShowRecordPayment}
+            canRecordPayment={canShowRecordPayment || canShowIciciRelease}
+            paymentActionLabel={showIciciPayoutFlow ? 'Release Payment' : 'Record Payment'}
             safeFormatDate={safeFormatDate}
             handleViewInvoice={handleViewInvoice}
             handleDownloadInvoice={handleDownloadInvoice}
@@ -785,6 +868,21 @@ const Payments = () => {
           />
         </TabsContent>
       </Tabs>
+
+      {canShowIciciRelease && (
+        <IciciPayoutDialog
+          open={iciciPayoutDialogOpen}
+          onOpenChange={setIciciPayoutDialogOpen}
+          selectedInvoices={selectedRecordPaymentInvoices}
+          linkedAccount={linkedAccount}
+          beneficiaries={beneficiaries}
+          enabledModes={capabilities?.enabledModes}
+          onSubmitPayout={handleIciciPayout}
+          onSubmitBulkPayouts={handleIciciBulkPayouts}
+          onRegisterBeneficiary={handleRegisterBeneficiaryFromPayout}
+          submitting={releasingIciciPayout}
+        />
+      )}
 
       {canShowRecordPayment && (
         <RecordPaymentDialog

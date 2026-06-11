@@ -1,9 +1,5 @@
 import { serviceApi } from "../serviceApi";
-import {
-  toBankAccountApiPayload,
-  toBankAccountUiPayload,
-  toInvoiceUiPayload,
-} from "../utils/payloadMappers";
+import { toInvoiceUiPayload } from "../utils/payloadMappers";
 
 export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -33,22 +29,6 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
       }),
       invalidatesTags: ["Payments", "Invoices", "Dashboard", "Reports"],
     }),
-    getBankAccounts: builder.query({
-      query: () => ({ url: "/bank-accounts", method: "GET" }),
-      transformResponse: (response) =>
-        Array.isArray(response)
-          ? response.map(toBankAccountUiPayload)
-          : toBankAccountUiPayload(response),
-      providesTags: ["Banking"],
-    }),
-    createBankAccount: builder.mutation({
-      query: (body) => ({
-        url: "/bank-accounts",
-        method: "POST",
-        body: toBankAccountApiPayload(body),
-      }),
-      invalidatesTags: ["Banking"],
-    }),
   }),
 });
 
@@ -58,6 +38,4 @@ export const {
   useCreatePaymentMutation,
   useBulkReleasePaymentsMutation,
   useRecordPaymentsMutation,
-  useGetBankAccountsQuery,
-  useCreateBankAccountMutation,
 } = approvalsPaymentsBankingApi;

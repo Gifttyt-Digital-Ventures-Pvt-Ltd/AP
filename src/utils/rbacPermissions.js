@@ -109,7 +109,13 @@ const mapAuditTrailPermission = (permissionType) => {
 
 const mapBankingPermission = (permissionType) => {
   if (permissionType === "VIEW") return "banking-view";
-  if (["FULL", "MANAGE"].includes(permissionType)) return "banking-full";
+  if (permissionType === "MANAGE") return "banking-manage";
+  if (permissionType === "BENEFICIARY" || permissionType === "BENEFICIARIES") {
+    return "beneficiary-manage";
+  }
+  if (["FULL", "ADMIN"].includes(permissionType)) {
+    return ["banking-view", "banking-manage", "beneficiary-manage", "banking-full"];
+  }
   return null;
 };
 
@@ -217,7 +223,11 @@ export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput)
     return mapAuditTrailPermission(permissionType);
   }
 
-  if (screen === "BANKING" || screen === "BANK") {
+  if (
+    screen === "BANKING" ||
+    screen === "BANK" ||
+    screen === "CONNECTED_BANKING"
+  ) {
     return mapBankingPermission(permissionType);
   }
 

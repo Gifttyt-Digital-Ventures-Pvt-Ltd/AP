@@ -1,9 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
-  useGetBankAccountsQuery,
-  useCreateBankAccountMutation,
-} from '../../Services/apis/approvalsPaymentsBankingApi';
-import {
   useGetOrganisationQuery,
   useCreateOrganisationMutation,
   useUpdateOrganisationMutation,
@@ -14,11 +10,15 @@ import { Label } from '../../components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Plug, PlugZap, Settings as SettingsIcon, RefreshCw, Check, XCircle, Loader2, Building2, Mail, Phone, Globe, MapPin, Save, Copy, CheckCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import BankAccountDialog from './components/BankAccountDialog';
 import ZohoConfigDialog from './components/ZohoConfigDialog';
 import TallyConfigDialog from './components/TallyConfigDialog';
+import { useNavigate } from 'react-router-dom';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useRBAC } from '../../contexts/RBACContext';
+import useBankingSetup from '../banking/hooks/useBankingSetup';
+import AccountStatusCard from '../banking/components/AccountStatusCard';
+import CibRegistrationCard from '../banking/components/CibRegistrationCard';
+import { useRegisterCibMutation } from '../../Services/apis/connectedBankingApi';
 
 // Zoho Logo Component - Four interlocking rounded squares
 const ZohoLogo = () => (
@@ -54,10 +54,11 @@ const SYNC_DATA_ITEMS = [
 ];
 
 const Settings = () => {
-  const { hasAnyPermission, isCorporateSectionEnabled } = useRBAC();
+  const navigate = useNavigate();
+  const { hasAnyPermission, isCorporateSectionEnabled, isBankingEnabled } = useRBAC();
   const canViewBankingSettings =
-    hasAnyPermission(['settings-banking', 'banking-full']) &&
-    isCorporateSectionEnabled('SETTINGS_CONNECTED_BANKING');
+    hasAnyPermission(['settings-banking', 'banking-full', 'banking-manage', 'banking-view']) &&
+    isBankingEnabled;
   const canViewOrganisationSettings =
     hasAnyPermission(['settings-org']) &&
     isCorporateSectionEnabled('SETTINGS_ORG_DETAILS');
@@ -73,30 +74,23 @@ const Settings = () => {
   }, [canViewBankingSettings, canViewIntegrationsSettings, canViewOrganisationSettings]);
   const [activeSettingsTab, setActiveSettingsTab] = useState('');
   const {
-    data: bankAccountsData = [],
-    isError: bankAccountsError,
-    refetch: refetchBankAccounts,
-  } = useGetBankAccountsQuery(undefined, { skip: !canViewBankingSettings });
-  const {
     data: organisationData,
     isLoading: organisationLoading,
     isFetching: organisationFetching,
     error: organisationError,
     refetch: refetchOrganisation,
   } = useGetOrganisationQuery(undefined, { skip: !canViewOrganisationSettings });
-  const [createBankAccount] = useCreateBankAccountMutation();
   const [createOrganisation] = useCreateOrganisationMutation();
   const [updateOrganisation] = useUpdateOrganisationMutation();
   const { guardAction, canPerformAction } = useActionGuard();
-  const bankAccounts = Array.isArray(bankAccountsData) ? bankAccountsData : [];
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    account_name: '',
-    account_number: '',
-    bank_name: '',
-    account_type: 'Checking',
-    currency: 'INR'
-  });
+  const {
+    accounts,
+    cibStatus,
+    isSetupReady,
+    refetchCib,
+  } = useBankingSetup({ skip: !canViewBankingSettings || !isBankingEnabled });
+  const [registerCib, { isLoading: registeringCib }] = useRegisterCibMutation();
+  const canManageIcici = canPerformAction('banking.link');
 
   // Integration states
   const [zohoConnected, setZohoConnected] = useState(false);
@@ -134,7 +128,6 @@ const Settings = () => {
     account_holder_name: ''
   });
   const [emailCopied, setEmailCopied] = useState(false);
-  const canCreateBankAccount = canPerformAction('settings.createBankAccount');
   const canCreateOrganisationDetails = canPerformAction('settings.createOrganisation');
   const canUpdateOrganisationDetails = canPerformAction('settings.updateOrganisation');
   const canSaveOrganisation = orgDetails ? canUpdateOrganisationDetails : canCreateOrganisationDetails;
@@ -182,12 +175,6 @@ const Settings = () => {
       setOrgDetails(null);
     }
   }, [organisationData, orgDetails]);
-
-  useEffect(() => {
-    if (bankAccountsError) {
-      toast.error('Failed to load bank accounts');
-    }
-  }, [bankAccountsError]);
 
   useEffect(() => {
     if (organisationError?.status && organisationError.status !== 404) {
@@ -261,30 +248,6 @@ const Settings = () => {
       toast.success('Platform email copied to clipboard!');
       setTimeout(() => setEmailCopied(false), 2000);
     }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!guardAction('settings.createBankAccount')) return;
-    try {
-      await createBankAccount(formData).unwrap();
-      toast.success('Bank account added successfully');
-      setDialogOpen(false);
-      resetForm();
-      refetchBankAccounts();
-    } catch (error) {
-      toast.error('Failed to add bank account');
-    }
-  };
-
-  const resetForm = () => {
-    setFormData({
-      account_name: '',
-      account_number: '',
-      bank_name: '',
-      account_type: 'Checking',
-      currency: 'INR'
-    });
   };
 
   // Zoho Integration Handlers
@@ -692,56 +655,52 @@ const Settings = () => {
         </TabsContent>}
 
         {canViewBankingSettings && <TabsContent value="banking">
-          <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
-            <div className="flex justify-between items-center mb-6">
-              <div>
-                <h3 className="text-xl font-semibold font-['Manrope'] mb-1">Bank Accounts</h3>
-                <p className="text-sm text-muted-foreground">Connect your bank accounts for seamless payments</p>
+          {isBankingEnabled && (
+            <div className="bg-card border border-border rounded-lg p-6 shadow-sm mb-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-xl font-semibold font-['Manrope'] mb-1">ICICI Connected Banking</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Account linking, CIB registration, and payout readiness
+                  </p>
+                </div>
+                <Button variant="outline" onClick={() => navigate('/banking')}>
+                  Open Connected Banking
+                </Button>
               </div>
-                            <BankAccountDialog
-                dialogOpen={dialogOpen}
-                setDialogOpen={setDialogOpen}
-                resetForm={resetForm}
-                formData={formData}
-                setFormData={setFormData}
-                handleSubmit={handleSubmit}
-                canCreateBankAccount={canCreateBankAccount}
-              />
-            </div>
-
-            <div className="space-y-4">
-              {bankAccounts.map((account) => (
-                <div
-                  key={account.id}
-                  className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
-                  data-testid={`bank-account-${account.id}`}
-                >
-                  <div>
-                    <h4 className="font-medium">{account.account_name}</h4>
-                    <p className="text-sm text-muted-foreground">
-                      {account.bank_name} - {account.account_type}
-                    </p>
-                    <p className="text-xs   text-muted-foreground mt-1">
-                      **** {account.account_number.slice(-4)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm   font-semibold">{account.currency}</span>
-                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                      account.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      {account.is_active ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-                </div>
-              ))}
-              {bankAccounts.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground" data-testid="no-bank-accounts">
-                  No bank accounts connected. Add one to get started.
-                </div>
+              {isSetupReady ? (
+                <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
+                  ICICI setup is complete. Release payouts from the Payments page.
+                </p>
+              ) : (
+                <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                  Complete ICICI setup before releasing bank payouts.
+                </p>
               )}
+              <div className="grid gap-4 md:grid-cols-2">
+                <AccountStatusCard accounts={accounts} />
+                <CibRegistrationCard
+                  cibStatus={cibStatus}
+                  onRegister={async () => {
+                    if (!guardAction('banking.cibRegister')) return;
+                    try {
+                      await registerCib().unwrap();
+                      toast.success('CIB registration initiated');
+                      await refetchCib();
+                    } catch (error) {
+                      toast.error(error?.data?.message || 'CIB registration failed');
+                    }
+                  }}
+                  onRecheck={async () => {
+                    await refetchCib();
+                    toast.success('CIB status refreshed');
+                  }}
+                  registering={registeringCib}
+                  canManage={canManageIcici}
+                />
+              </div>
             </div>
-          </div>
+          )}
         </TabsContent>}
 
         {canViewIntegrationsSettings && <TabsContent value="integrations">

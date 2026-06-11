@@ -107,6 +107,7 @@ const UserRoles = () => {
     isCorporateSectionEnabled,
     isCategoryFeatureEnabled,
     isCampaignFeatureEnabled,
+    isConnectedBankingEnabled,
   } = useRBAC();
   const { guardAction } = useActionGuard();
   const navigate = useNavigate();
@@ -318,7 +319,7 @@ const UserRoles = () => {
         if (backendEntry.permissionType === "ORG")
           return isCorporateSectionEnabled("SETTINGS_ORG_DETAILS");
         if (backendEntry.permissionType === "BANKING")
-          return isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING");
+          return isConnectedBankingEnabled;
         if (backendEntry.permissionType === "INTERACTION")
           return isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
       }
@@ -334,13 +335,18 @@ const UserRoles = () => {
           isCorporateSectionEnabled("PAYMENT_BATCHES_ALL")
         );
       }
-      if (backendEntry.screen === "BANKING") {
-        return isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING");
+      if (
+        backendEntry.screen === "BANKING" ||
+        backendEntry.screen === "CONNECTED_BANKING" ||
+        (backendEntry.screen === "SETTINGS" && backendEntry.permissionType === "BANKING")
+      ) {
+        return isConnectedBankingEnabled;
       }
       return isCorporateScreenAllowed(backendEntry.screen);
     },
     [
       isCampaignFeatureEnabled,
+      isConnectedBankingEnabled,
       canUseManageRoleCategories,
       isCorporateScreenAllowed,
       isCorporateSectionEnabled,

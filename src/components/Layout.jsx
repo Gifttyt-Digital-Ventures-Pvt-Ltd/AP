@@ -43,6 +43,7 @@ import {
   History,
   Megaphone,
   User,
+  Landmark,
 } from "lucide-react";
 
 // Context to control sidebar visibility from child components
@@ -55,7 +56,7 @@ export const useSidebar = () => useContext(SidebarContext);
 
 export const Layout = ({ children }) => {
   const { user, logout } = useAuth();
-  const { canAccessRoute, isLoaded: rbacLoaded } = useRBAC();
+  const { canAccessRoute, isLoaded: rbacLoaded, isBankingEnabled } = useRBAC();
   const { data: corporateContext = null } = useGetCorporateDetailsQuery();
   const { data: corporateUserContext = null } =
     useGetCorporateUserDetailsQuery();
@@ -71,25 +72,53 @@ export const Layout = ({ children }) => {
   const sidebarPrimaryName = corporateName || userName || "User";
   const sidebarSecondaryLabel = userName;
 
-  const menuItems = [
-    { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
-    { icon: ShoppingCart, label: "Purchase Orders", path: "/purchase-orders" },
-    { icon: Package, label: "Goods Receipt", path: "/goods-receipt" },
-    { icon: FileText, label: "Invoices", path: "/invoices" },
-    { icon: Link2, label: "Invoice Matching", path: "/invoice-matching" },
-    { icon: ArrowLeftRight, label: "Transactions", path: "/transactions" },
-    { icon: CheckCircle, label: "Approvals", path: "/approvals" },
-    { icon: CreditCard, label: "Payments", path: "/payments" },
-    { icon: Layers, label: "Payment Batches", path: "/payment-batches" },
-    { icon: Users, label: "Vendors", path: "/vendors" },
-    { icon: Megaphone, label: "Campaigns", path: "/campaigns" },
-    { icon: Calculator, label: "Tax Management", path: "/tax-management" },
-    { icon: BarChart3, label: "Reports", path: "/reports" },
-    { icon: Building2, label: "Banking", path: "/banking" },
-    { icon: Bell, label: "Notifications", path: "/notifications" },
-    { icon: Shield, label: "User Roles", path: "/user-roles" },
-    { icon: Settings, label: "Settings", path: "/settings" },
-    { icon: History, label: "Audit Trail", path: "/audit-trail" },
+  const showConnectedBankingNav =
+    isBankingEnabled && canAccessRoute("/banking");
+
+  const menuSections = [
+    {
+      items: [
+        { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
+        {
+          icon: ShoppingCart,
+          label: "Purchase Orders",
+          path: "/purchase-orders",
+        },
+        { icon: Package, label: "Goods Receipt", path: "/goods-receipt" },
+        { icon: FileText, label: "Invoices", path: "/invoices" },
+        { icon: Link2, label: "Invoice Matching", path: "/invoice-matching" },
+        ...(!showConnectedBankingNav
+          ? [
+              {
+                icon: ArrowLeftRight,
+                label: "Transactions",
+                path: "/transactions",
+              },
+            ]
+          : []),
+        { icon: CheckCircle, label: "Approvals", path: "/approvals" },
+        { icon: CreditCard, label: "Payments", path: "/payments" },
+        { icon: Layers, label: "Payment Batches", path: "/payment-batches" },
+      ],
+    },
+    ...(showConnectedBankingNav
+      ? [{ items: [{ icon: Landmark, label: "Banking", path: "/banking" }] }]
+      : []),
+    {
+      items: [
+        { icon: Users, label: "Vendors", path: "/vendors" },
+        { icon: Megaphone, label: "Campaigns", path: "/campaigns" },
+        { icon: Calculator, label: "Tax Management", path: "/tax-management" },
+        { icon: BarChart3, label: "Reports", path: "/reports" },
+        ...(!showConnectedBankingNav
+          ? [{ icon: Building2, label: "Banking", path: "/banking" }]
+          : []),
+        { icon: Bell, label: "Notifications", path: "/notifications" },
+        { icon: Shield, label: "User Roles", path: "/user-roles" },
+        { icon: Settings, label: "Settings", path: "/settings" },
+        { icon: History, label: "Audit Trail", path: "/audit-trail" },
+      ],
+    },
   ];
 
   const handleLogout = () => {
@@ -152,42 +181,61 @@ export const Layout = ({ children }) => {
                 className="flex-1 min-h-0 overflow-y-auto scrollbar-none p-4 space-y-2"
                 data-testid="sidebar-nav"
               >
-                {menuItems.map((item) => {
-                  if (!canShowNavItem(item.path)) return null;
+                {menuSections.map((section, sectionIndex) => (
+                  <React.Fragment
+                    key={section.type || `section-${sectionIndex}`}
+                  >
+                    {section.type === "payments" && sidebarOpen && (
+                      <div className="pt-2">
+                        <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Payments
+                        </p>
+                      </div>
+                    )}
 
-                  const Icon = item.icon;
-                  const buttonElement = (
-                    <button
-                      onClick={() => handleNavigate(item.path)}
-                      className={`w-full flex items-center gap-3 px-2 py-2 rounded-md transition-all ${
-                        isActive(item.path)
-                          ? "bg-button-primary text-button-primary-foreground"
-                          : "hover:bg-button-primary-hover hover:text-primary-foreground"
-                      }`}
-                      data-testid={`nav-${item.label.toLowerCase()}`}
-                    >
-                      <Icon className="h-6 w-6" />
-                      {sidebarOpen && (
-                        <span className="text-sm font-medium">
-                          {item.label}
-                        </span>
-                      )}
-                    </button>
-                  );
+                    {section.items.map((item) => {
+                      if (!canShowNavItem(item.path)) return null;
 
-                  if (!sidebarOpen) {
-                    return (
-                      <Tooltip key={item.path}>
-                        <TooltipTrigger asChild>{buttonElement}</TooltipTrigger>
-                        <TooltipContent side="right">
-                          {item.label}
-                        </TooltipContent>
-                      </Tooltip>
-                    );
-                  }
+                      const Icon = item.icon;
+                      const navLabel = item.label;
+                      const buttonElement = (
+                        <button
+                          onClick={() => handleNavigate(item.path)}
+                          className={`w-full flex items-center gap-3 px-2 py-2 rounded-md transition-all ${
+                            isActive(item.path)
+                              ? "bg-button-primary text-button-primary-foreground"
+                              : "hover:bg-button-primary-hover hover:text-primary-foreground"
+                          }`}
+                          data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
+                        >
+                          <Icon className="h-6 w-6" />
+                          {sidebarOpen && (
+                            <span className="text-sm font-medium">
+                              {item.label}
+                            </span>
+                          )}
+                        </button>
+                      );
 
-                  return React.cloneElement(buttonElement, { key: item.path });
-                })}
+                      if (!sidebarOpen) {
+                        return (
+                          <Tooltip key={item.path}>
+                            <TooltipTrigger asChild>
+                              {buttonElement}
+                            </TooltipTrigger>
+                            <TooltipContent side="right">
+                              {navLabel}
+                            </TooltipContent>
+                          </Tooltip>
+                        );
+                      }
+
+                      return React.cloneElement(buttonElement, {
+                        key: item.path,
+                      });
+                    })}
+                  </React.Fragment>
+                ))}
               </nav>
 
               <div className="p-4 border-t border-border">

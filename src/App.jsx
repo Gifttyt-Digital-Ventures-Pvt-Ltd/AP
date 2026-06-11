@@ -25,10 +25,10 @@ import Vendors from "./pages/vendors/Vendors";
 import InvoicesPage from "./pages/invoices/InvoicesPage";
 import Approvals from "./pages/approvals/Approvals";
 import Payments from "./pages/payments/Payments";
-import Banking from "./pages/banking/Banking";
+import ConnectedBanking from "./pages/banking/ConnectedBanking";
 import UserRoles from "./pages/user-roles/UserRoles";
 import Profile from "./pages/profile/Profile";
-import TransactionsPage from "./pages/transactions/TransactionsPage";
+import TransactionsRoute from "./pages/transactions/TransactionsRoute";
 import PurchaseOrdersPage from "./pages/purchase-orders/PurchaseOrdersPage";
 import GoodsReceipt from "./pages/goods-receipt/GoodsReceipt";
 import InvoiceMatching from "./pages/invoice-matching/InvoiceMatching";
@@ -224,7 +224,7 @@ function AppContent() {
           <Route path="/invoices" element={<InvoicesPage />} />
           <Route path="/approvals" element={<Approvals />} />
           <Route path="/payments" element={<Payments />} />
-          <Route path="/banking" element={<Banking />} />
+          <Route path="/banking" element={<ConnectedBanking />} />
           <Route
             path="/settings"
             element={
@@ -235,7 +235,7 @@ function AppContent() {
           />
           <Route path="/user-roles" element={<UserRoles />} />
           <Route path="/profile" element={<Profile />} />
-          <Route path="/transactions" element={<TransactionsPage />} />
+          <Route path="/transactions" element={<TransactionsRoute />} />
           <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
           <Route path="/goods-receipt" element={<GoodsReceipt />} />
           <Route

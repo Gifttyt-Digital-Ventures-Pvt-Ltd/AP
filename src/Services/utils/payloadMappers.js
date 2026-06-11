@@ -104,38 +104,6 @@ export const extractVendorIdFromResponse = (response) => {
   return id !== undefined && id !== null ? String(id) : "";
 };
 
-export const toBankAccountApiPayload = (account = {}) => {
-  const {
-    account_name,
-    account_number,
-    bank_name,
-    account_type,
-    ifsc_code,
-    is_active,
-    ...rest
-  } = account;
-
-  return {
-    ...rest,
-    accountName: rest.accountName ?? account_name,
-    accountNumber: rest.accountNumber ?? account_number,
-    bankName: rest.bankName ?? bank_name,
-    accountType: rest.accountType ?? account_type,
-    ifscCode: rest.ifscCode ?? ifsc_code,
-    isActive: rest.isActive ?? is_active,
-  };
-};
-
-export const toBankAccountUiPayload = (account = {}) => ({
-  ...account,
-  account_name: account.account_name ?? account.accountName,
-  account_number: account.account_number ?? account.accountNumber,
-  bank_name: account.bank_name ?? account.bankName,
-  account_type: account.account_type ?? account.accountType,
-  ifsc_code: account.ifsc_code ?? account.ifscCode,
-  is_active: account.is_active ?? account.isActive,
-});
-
 export {
   buildCreateInvoiceRequestBody,
   buildInvoiceApiPayload,
