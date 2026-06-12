@@ -1,4 +1,5 @@
 import { serviceApi } from "../serviceApi";
+import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
 
 export const paymentBatchesApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -23,7 +24,7 @@ export const paymentBatchesApi = serviceApi.injectEndpoints({
         url: `/payment-batches/${id}/process`,
         method: "POST",
       }),
-      invalidatesTags: ["Batches", "Payments", "Invoices", "Dashboard", "Reports"],
+      invalidatesTags: ["Batches", "Payments", "Invoices", "Dashboard", "Reports", ...CREDIT_INVALIDATION_TAGS],
     }),
     markProcessedPaymentBatch: builder.mutation({
       query: (body) => ({
@@ -31,7 +32,7 @@ export const paymentBatchesApi = serviceApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Batches", "Payments", "Invoices", "Dashboard", "Reports"],
+      invalidatesTags: ["Batches", "Payments", "Invoices", "Dashboard", "Reports", ...CREDIT_INVALIDATION_TAGS],
     }),
     generatePaymentBatchFile: builder.mutation({
       query: (id) => ({

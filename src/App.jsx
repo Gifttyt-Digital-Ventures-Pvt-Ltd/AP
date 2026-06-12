@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { CreditErrorProvider } from "./contexts/CreditErrorContext";
 import { RBACProvider, useRBAC } from "./contexts/RBACContext";
 import SessionTimeout from "./components/SessionTimeout";
 import { Toaster } from "./components/ui/sonner";
@@ -335,7 +336,9 @@ function App() {
         <AuthProvider>
           <SessionTimeout>
             <RBACProvider>
-              <AppContent />
+              <CreditErrorProvider>
+                <AppContent />
+              </CreditErrorProvider>
             </RBACProvider>
           </SessionTimeout>
         </AuthProvider>
