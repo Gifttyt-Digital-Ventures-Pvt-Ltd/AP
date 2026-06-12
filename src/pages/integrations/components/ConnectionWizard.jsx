@@ -59,6 +59,13 @@ import {
 } from "../utils";
 import { PageShell, StatusBadge } from "./shared";
 
+const getZohoOrganizationId = (organization = {}) =>
+  organization.externalId ||
+  organization.external_id ||
+  organization.organizationId ||
+  organization.organization_id ||
+  organization.id;
+
 const ConnectionWizard = () => {
   const { provider = "ZOHO_BOOKS" } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -399,11 +406,12 @@ const ConnectionWizard = () => {
                     </SelectTrigger>
                     <SelectContent>
                       {organizations.map((org) => {
-                        const id = org.organizationId || org.organization_id || org.id;
+                        const id = getZohoOrganizationId(org);
+                        if (!id) return null;
                         return (
                           <SelectItem key={id} value={String(id)}>
                             {org.name || org.organizationName || id}
-                            {org.currency ? ` (${org.currency})` : ""}
+                            {org.currencyCode || org.currency ? ` (${org.currencyCode || org.currency})` : ""}
                           </SelectItem>
                         );
                       })}
