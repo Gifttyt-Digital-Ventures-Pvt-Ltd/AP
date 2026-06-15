@@ -48,6 +48,7 @@ const InvoiceReadOnlyDetails = ({
   invoice,
   showCategoryField = true,
   showCampaignField = false,
+  showRefNoField = false,
   findVendorByName,
   findVendorById,
   isCategoryFeatureEnabled = true,
@@ -203,6 +204,9 @@ const InvoiceReadOnlyDetails = ({
         <div className="grid grid-cols-2 gap-3">
           <DetailField label="Vendor Name" value={formData.vendorName} />
           <DetailField label="Bill Number" value={formData.invoiceNumber} mono />
+          {showRefNoField && (
+            <DetailField label="Ref No" value={invoice?.refNo} mono />
+          )}
           <DetailField label="Billing Date" value={formatDisplayDate(formData.invoiceDate)} />
           <DetailField label="Due Date" value={formatDisplayDate(formData.dueDate)} />
           <DetailField label="Currency" value={invoiceCurrency} mono />

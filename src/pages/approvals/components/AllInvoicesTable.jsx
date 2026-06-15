@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Eye, Search } from "lucide-react";
 import AppDataTable from "../../../components/common/AppDataTable";
 import ClippedTextWithTooltip from "../../../components/common/ClippedTextWithTooltip";
@@ -15,9 +15,10 @@ import {
 import { TableCell, TableRow } from "../../../components/ui/table";
 import { formatCurrency } from "../../../utils/currency";
 
-const allInvoicesTableHeader = [
+const baseAllInvoicesTableHeader = [
   { key: "srNo", title: "Sr. No", cellClassName: "text-sm font-medium" },
   { key: "invoiceNumber", title: "Invoice #", cellClassName: "font-medium" },
+  { key: "refNo", title: "Ref No", cellClassName: "font-mono text-sm" },
   { key: "vendorName", title: "Vendor" },
   { key: "approval", title: "Approval" },
   { key: "amount", title: "Amount", cellClassName: "font-semibold" },
@@ -48,6 +49,7 @@ const AllInvoicesTable = ({
   visiblePageNumbers = [],
   onPageChange,
   isLoading = false,
+  showRefNoField = false,
   getStatusBadgeClass,
   formatStatus,
   getApprovalProgress,
@@ -64,6 +66,14 @@ const AllInvoicesTable = ({
     endRecord = 0,
     hasMore = false,
   } = pagination ?? {};
+
+  const tableHeader = useMemo(
+    () =>
+      showRefNoField
+        ? baseAllInvoicesTableHeader
+        : baseAllInvoicesTableHeader.filter((column) => column.key !== "refNo"),
+    [showRefNoField],
+  );
 
   const renderAllInvoiceRow = (invoice, rowIndex, headers) => {
     const progress = getApprovalProgress(invoice);
@@ -110,6 +120,9 @@ const AllInvoicesTable = ({
                 invoice.paymentDate || invoice.paymentDate,
               );
               break;
+            case "refNo":
+              value = invoice.refNo || "-";
+              break;
             case "actions":
               value = (
                 <div
@@ -148,7 +161,7 @@ const AllInvoicesTable = ({
       <div className="relative w-full shrink-0 sm:w-64 sm:max-w-xs">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
-          placeholder="Search invoices..."
+          placeholder="Search vendor, invoice #, ref no, amount..."
           value={searchTerm}
           onChange={(event) => setSearchTerm(event.target.value)}
           className="pl-10"
@@ -159,7 +172,7 @@ const AllInvoicesTable = ({
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
         <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-thin-muted">
           <AppDataTable
-            tableHeader={allInvoicesTableHeader}
+            tableHeader={tableHeader}
             tableData={allInvoices}
             renderRow={renderAllInvoiceRow}
             isLoading={isLoading}
