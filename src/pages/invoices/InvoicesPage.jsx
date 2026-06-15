@@ -126,6 +126,7 @@ import {
 import {
   isCheckerEditEnabled as isCheckerEditEnabledForCorporate,
   isCheckerEditForbiddenError,
+  isRefNoEnabled as isRefNoEnabledForCorporate,
 } from "../../utils/invoiceConfiguration";
 import {
   buildCurrentUserIdentity,
@@ -147,7 +148,7 @@ const getApprovalWorkflowName = (invoice) =>
   invoice.approvalWorkflow?.name ??
   "-";
 
-const invoiceTableHeader = [
+const baseInvoiceTableHeader = [
   {
     key: "srNo",
     title: "Sr. No",
@@ -165,6 +166,12 @@ const invoiceTableHeader = [
     title: "Invoice #",
     headerClassName: "p-3 text-left text-xs font-medium",
     cellClassName: "p-3   text-sm font-medium",
+  },
+  {
+    key: "refNo",
+    title: "Ref No",
+    headerClassName: "p-3 text-left text-xs font-medium",
+    cellClassName: "p-3 text-sm font-mono",
   },
   {
     key: "vendorName",
@@ -402,6 +409,20 @@ const InvoicesPage = () => {
         corporateScreens?.activeInvoiceConfiguration ?? [],
       ),
     [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const isRefNoEnabled = useMemo(
+    () =>
+      isRefNoEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const invoiceTableHeader = useMemo(
+    () =>
+      isRefNoEnabled
+        ? baseInvoiceTableHeader
+        : baseInvoiceTableHeader.filter((column) => column.key !== "refNo"),
+    [isRefNoEnabled],
   );
   const invoiceEditContext = useMemo(
     () => ({
@@ -1862,6 +1883,9 @@ const InvoicesPage = () => {
           case "originalFileName":
             value = invoice.originalFileName || "-";
             break;
+          case "refNo":
+            value = invoice.refNo || "-";
+            break;
           case "grossAmount":
             value = formatInvoiceAmount(
               invoice,
@@ -2134,7 +2158,7 @@ const InvoicesPage = () => {
         <div className="relative w-full sm:w-64 sm:max-w-xs">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search invoices..."
+            placeholder="Search vendor, invoice #, ref no, amount..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
@@ -2263,6 +2287,7 @@ const InvoicesPage = () => {
         getCategoryNameById={getCategoryNameById}
         isCategoryFeatureEnabled={isCategoryFeatureEnabled}
         isCampaignFeatureEnabled={isCampaignFeatureEnabled}
+        showRefNoField={isRefNoEnabled}
         invoiceMandatoryFields={invoiceMandatoryFields}
         bulkEditOpen={bulkEditOpen}
         setBulkEditOpen={setBulkEditOpen}

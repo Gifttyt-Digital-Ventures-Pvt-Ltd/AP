@@ -1,5 +1,6 @@
 export const INVOICE_CONFIG_SECTIONS = {
   CHECKER: 'CHECKER',
+  REF_NO: 'REF_NO',
 };
 
 export const CHECKER_EDIT_DISABLED_MESSAGE =
@@ -10,6 +11,11 @@ export const DEFAULT_INVOICE_CONFIGURATION = [
     displayName: 'Edit Invoice',
     screen: 'APPROVAL',
     section: INVOICE_CONFIG_SECTIONS.CHECKER,
+  },
+  {
+    displayName: 'Ref No',
+    screen: 'INVOICE',
+    section: INVOICE_CONFIG_SECTIONS.REF_NO,
   },
 ];
 
@@ -52,6 +58,12 @@ export const isInvoiceConfigurationEnabled = (
 export const isCheckerEditEnabled = (activeInvoiceConfiguration = []) =>
   isInvoiceConfigurationEnabled(
     INVOICE_CONFIG_SECTIONS.CHECKER,
+    activeInvoiceConfiguration,
+  );
+
+export const isRefNoEnabled = (activeInvoiceConfiguration = []) =>
+  isInvoiceConfigurationEnabled(
+    INVOICE_CONFIG_SECTIONS.REF_NO,
     activeInvoiceConfiguration,
   );
 
