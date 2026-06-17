@@ -117,6 +117,9 @@ import { getInvoiceVendorRequestValidationErrors } from "../../utils/vendorValid
 import { useActionGuard } from "../../hooks/useActionGuard";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { useRBAC } from "../../contexts/RBACContext";
+import IntegrationSourceBadge from "../../components/integrations/IntegrationSourceBadge";
+import useZohoIntegrationActive from "../../hooks/useZohoIntegrationActive";
+import { withIntegrationTableHeader } from "../../utils/integrationProvenance";
 import { useCurrencyFilter } from "../../hooks/useCurrencyFilter";
 import {
   CURRENCY_SCREENS,
@@ -249,6 +252,11 @@ const InvoicesPage = () => {
     isCampaignFeatureEnabled,
     isCorporateAdmin,
   } = useRBAC();
+  const { showIntegrationColumn } = useZohoIntegrationActive();
+  const invoiceTableHeader = useMemo(
+    () => withIntegrationTableHeader(baseInvoiceTableHeader, showIntegrationColumn),
+    [showIntegrationColumn],
+  );
   const { data: corporateUserContext = null } =
     useGetCorporateUserDetailsQuery();
   const invoiceUserEmail =
@@ -1879,6 +1887,9 @@ const InvoicesPage = () => {
                 {invoice.source || "Upload"}
               </span>
             );
+            break;
+          case "integration":
+            value = <IntegrationSourceBadge record={invoice} />;
             break;
           case "originalFileName":
             value = invoice.originalFileName || "-";
