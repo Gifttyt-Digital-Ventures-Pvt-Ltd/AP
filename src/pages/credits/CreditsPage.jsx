@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AlertTriangle, ChevronDown, ChevronUp, History, RefreshCcw } from "lucide-react";
+import { AlertTriangle, ChevronDown, ChevronUp, Coins, History, RefreshCcw } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -27,7 +27,9 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import ActionRateList from "@/components/credits/ActionRateList";
 import CreditAmount, { formatCredits } from "@/components/credits/CreditAmount";
+import CreditSettingsPanel from "@/components/credits/CreditSettingsPanel";
 import LedgerTable from "@/components/credits/LedgerTable";
+import TokenTopUpRequestDialog from "@/components/credits/TokenTopUpRequestDialog";
 import { useRBAC } from "@/contexts/RBACContext";
 import { parseCreditAmount } from "@/utils/creditMath";
 import {
@@ -143,9 +145,12 @@ const LedgerPagination = ({ ledger, onPageChange, testIdPrefix = "credits-ledger
 };
 
 const CreditsPage = () => {
-  const { hasAnyPermission } = useRBAC();
+  const { hasAnyPermission, canPerformAction } = useRBAC();
   const canViewLedger = hasAnyPermission(LEDGER_VIEW_PERMISSIONS);
+  const canManageBillingSettings = canPerformAction("billing.updateSettings");
+  const canRequestTokens = canPerformAction("billing.requestTokens");
   const [activeTab, setActiveTab] = useState("overview");
+  const [topUpDialogOpen, setTopUpDialogOpen] = useState(false);
   const [ledgerType, setLedgerType] = useState("ALL");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
@@ -165,9 +170,9 @@ const CreditsPage = () => {
 
   const ledgerParams = useMemo(
     () => ({
-      type: ledgerType,
-      from: fromDate,
-      to: toDate,
+      ...(ledgerType !== "ALL" ? { type: ledgerType } : {}),
+      from: fromDate || undefined,
+      to: toDate || undefined,
       page: ledgerPage,
       pageSize: HISTORY_LEDGER_PAGE_SIZE,
     }),
@@ -187,7 +192,7 @@ const CreditsPage = () => {
   }, [ledgerType, fromDate, toDate]);
 
   useEffect(() => {
-    if (canViewLedger || activeTab === "overview") return;
+    if (canViewLedger || activeTab === "overview" || activeTab === "settings") return;
     setActiveTab("overview");
   }, [activeTab, canViewLedger]);
 
@@ -221,7 +226,13 @@ const CreditsPage = () => {
 
   return (
     <div className="space-y-6" data-testid="credits-page">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap justify-end gap-2">
+        {canRequestTokens && (
+          <Button onClick={() => setTopUpDialogOpen(true)}>
+            <Coins className="mr-2 h-4 w-4" />
+            Request tokens
+          </Button>
+        )}
         <Button variant="outline" onClick={refreshAll}>
           <RefreshCcw className="mr-2 h-4 w-4" />
           Refresh
@@ -243,6 +254,7 @@ const CreditsPage = () => {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           {canViewLedger && <TabsTrigger value="history">History</TabsTrigger>}
+          <TabsTrigger value="settings">Settings</TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
@@ -364,7 +376,21 @@ const CreditsPage = () => {
             </Card>
           </TabsContent>
         )}
+
+        <TabsContent value="settings" className="space-y-4">
+          <CreditSettingsPanel
+            wallet={wallet}
+            canManage={canManageBillingSettings}
+            onSaved={refetchWallet}
+          />
+        </TabsContent>
       </Tabs>
+
+      <TokenTopUpRequestDialog
+        open={topUpDialogOpen}
+        onOpenChange={setTopUpDialogOpen}
+        onRequested={refreshAll}
+      />
     </div>
   );
 };

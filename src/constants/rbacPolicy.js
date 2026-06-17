@@ -215,6 +215,8 @@ export const ACTION_PERMISSION_RULES = {
   "settings.createBankAccount": { anyOf: ["settings-banking", "banking-full"] },
   "settings.createOrganisation": { anyOf: ["settings-org"] },
   "settings.updateOrganisation": { anyOf: ["settings-org"] },
+  "billing.requestTokens": { anyOf: ["credits-manage", "MANAGE_BILLING"] },
+  "billing.updateSettings": { anyOf: ["credits-manage", "MANAGE_BILLING"] },
   "categories.create": { anyOf: ["category-manage"] },
   "categories.update": { anyOf: ["category-manage"] },
   "categories.delete": { anyOf: ["category-manage"] },

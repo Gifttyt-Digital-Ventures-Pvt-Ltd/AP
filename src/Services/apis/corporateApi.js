@@ -88,11 +88,6 @@ const toArray = (value) => {
   return Array.isArray(value) ? value : [value];
 };
 
-const toArray = (value) => {
-  if (!value) return [];
-  return Array.isArray(value) ? value : [value];
-};
-
 const DEFAULT_BASIC_SUBSCRIPTION_SECTIONS = [
   { displayName: "Organisation Details", screen: "SETTINGS", section: "SETTINGS_ORG_DETAILS" },
   { displayName: "Billing", screen: "SETTINGS", section: "SETTINGS_BILLING" },

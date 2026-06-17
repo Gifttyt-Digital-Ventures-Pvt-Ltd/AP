@@ -26,3 +26,14 @@ export const subtractCreditBalance = (balance, cost) =>
 
 export const canAffordCreditCost = (balance, cost) =>
   parseCreditAmount(balance) >= parseCreditAmount(cost);
+
+/** Decimal string for API payloads (NUMERIC(18,2)). */
+export const toCreditDecimalString = (value) =>
+  roundCreditAmount(value).toFixed(2);
+
+export const asCreditItems = (response) => {
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response?.items)) return response.items;
+  if (Array.isArray(response?.data)) return response.data;
+  return [];
+};

@@ -1,4 +1,5 @@
 import { serviceApi } from "../serviceApi";
+import { asCreditItems, toCreditDecimalString } from "../../utils/creditMath";
 
 const CLIENT_CREDITS_BASE = "/client";
 const USE_DUMMY_CREDITS =
@@ -10,6 +11,8 @@ const dummyWallet = {
   organizationId: "org_demo_india",
   balance: "6840.50",
   lowBalanceThreshold: "2500.00",
+  lowBalanceAlertEmails: "finance@example.com",
+  lowBalanceAlertRecipientIds: [],
   totalPaidIn: "10000.00",
   totalBonus: "500.00",
   totalSpent: "4160.00",
@@ -227,6 +230,8 @@ const dummyLedgerEntries = [
   },
 ];
 
+const dummyTopUpRequests = [];
+
 const wait = (data) =>
   new Promise((resolve) => {
     window.setTimeout(() => resolve({ data }), 250);
@@ -267,6 +272,21 @@ const withParams = (params = {}) =>
     Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ""),
   );
 
+const normalizeLedgerResponse = (response = {}) => ({
+  items: asCreditItems(response),
+  page: Number(response?.page) || 1,
+  pageSize: Number(response?.pageSize) || asCreditItems(response).length || 25,
+  total: Number.isFinite(response?.total) ? response.total : asCreditItems(response).length,
+});
+
+const normalizeActionTypesResponse = (response = {}) => {
+  const items = asCreditItems(response);
+  return {
+    items,
+    total: Number.isFinite(response?.total) ? response.total : items.length,
+  };
+};
+
 export const creditsApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getClientWallet: builder.query({
@@ -296,8 +316,15 @@ export const creditsApi = serviceApi.injectEndpoints({
         : (params = {}) => ({
             url: `${CLIENT_CREDITS_BASE}/ledger`,
             method: "GET",
-            params: withParams(params),
+            params: withParams({
+              ...params,
+              type:
+                params?.type && String(params.type).toUpperCase() !== "ALL"
+                  ? params.type
+                  : undefined,
+            }),
           }),
+      transformResponse: USE_DUMMY_CREDITS ? undefined : normalizeLedgerResponse,
       providesTags: ["Credits"],
     }),
     getClientActionTypes: builder.query({
@@ -310,7 +337,77 @@ export const creditsApi = serviceApi.injectEndpoints({
             url: `${CLIENT_CREDITS_BASE}/action-types`,
             method: "GET",
           }),
+      transformResponse: USE_DUMMY_CREDITS ? undefined : normalizeActionTypesResponse,
       providesTags: ["Credits"],
+    }),
+    updateClientWalletSettings: builder.mutation({
+      queryFn: USE_DUMMY_CREDITS
+        ? async (body) => {
+            Object.assign(dummyWallet, {
+              lowBalanceThreshold:
+                body?.lowBalanceThreshold != null
+                  ? toCreditDecimalString(body.lowBalanceThreshold)
+                  : dummyWallet.lowBalanceThreshold,
+              lowBalanceAlertEmails:
+                body?.lowBalanceAlertEmails ?? dummyWallet.lowBalanceAlertEmails,
+              lowBalanceAlertRecipientIds:
+                body?.lowBalanceAlertRecipientIds ?? dummyWallet.lowBalanceAlertRecipientIds,
+              lowBalanceAlertRecipients:
+                body?.lowBalanceAlertRecipients ?? dummyWallet.lowBalanceAlertRecipients,
+              updatedAt: new Date().toISOString(),
+            });
+            Object.assign(dummyWalletSummary, {
+              lowBalanceThreshold: dummyWallet.lowBalanceThreshold,
+              updatedAt: dummyWallet.updatedAt,
+            });
+            return wait(dummyWallet);
+          }
+        : undefined,
+      query: USE_DUMMY_CREDITS
+        ? undefined
+        : (body) => ({
+            url: `${CLIENT_CREDITS_BASE}/wallet/settings`,
+            method: "PATCH",
+            body: {
+              lowBalanceThreshold: toCreditDecimalString(body?.lowBalanceThreshold),
+              lowBalanceAlertEmails: String(body?.lowBalanceAlertEmails || "").trim(),
+              lowBalanceAlertRecipientIds: Array.isArray(body?.lowBalanceAlertRecipientIds)
+                ? body.lowBalanceAlertRecipientIds
+                : [],
+              lowBalanceAlertRecipients: Array.isArray(body?.lowBalanceAlertRecipients)
+                ? body.lowBalanceAlertRecipients
+                : [],
+            },
+          }),
+      invalidatesTags: ["Credits"],
+    }),
+    requestClientTokenTopUp: builder.mutation({
+      queryFn: USE_DUMMY_CREDITS
+        ? async (body) => {
+            const request = {
+              id: `topup_req_${Date.now()}`,
+              status: "PENDING",
+              amount: toCreditDecimalString(body?.amount),
+              utr: body?.utr,
+              accountNumber: body?.accountNumber,
+              createdAt: new Date().toISOString(),
+            };
+            dummyTopUpRequests.unshift(request);
+            return wait(request);
+          }
+        : undefined,
+      query: USE_DUMMY_CREDITS
+        ? undefined
+        : (body) => ({
+            url: `${CLIENT_CREDITS_BASE}/ap/token-requests`,
+            method: "POST",
+            body: {
+              amount: toCreditDecimalString(body?.amount),
+              utr: String(body?.utr || "").trim(),
+              accountNumber: String(body?.accountNumber || "").trim(),
+            },
+          }),
+      invalidatesTags: ["Credits"],
     }),
   }),
 });
@@ -320,4 +417,6 @@ export const {
   useGetClientWalletSummaryQuery,
   useGetClientLedgerQuery,
   useGetClientActionTypesQuery,
+  useUpdateClientWalletSettingsMutation,
+  useRequestClientTokenTopUpMutation,
 } = creditsApi;
