@@ -10,8 +10,21 @@ import {
   normalizeActiveVendorFields,
   normalizeVendorFieldCatalog,
 } from "../../utils/vendorFieldConfig";
+import {
+  isTokenBasedSubscription,
+  normalizeSubscriptionModel,
+} from "../../utils/subscriptionModel";
 
-const toBoolean = (value) => value === true;
+const BILLING_SECTION_IDS = new Set([
+  "SETTINGS_BILLING",
+  "CREDITS_ALL",
+  "WALLET_ALL",
+]);
+
+const withoutBillingSections = (sections = []) =>
+  sections.filter(
+    (sectionEntry) => !BILLING_SECTION_IDS.has(normalizeToken(sectionEntry?.section)),
+  );
 
 const resolveCorporatePayload = (response) => {
   return (
@@ -34,6 +47,7 @@ const normalizeCorporateSubscription = (corporate) => {
       combined: false,
       liveTracking: false,
       voucherEnabled: false,
+      subscriptionModel: normalizeSubscriptionModel(),
     };
   }
 
@@ -51,6 +65,11 @@ const normalizeCorporateSubscription = (corporate) => {
     ),
     liveTracking: toBoolean(corporate.liveTracking),
     voucherEnabled: toBoolean(corporate.voucherEnabled),
+    subscriptionModel: normalizeSubscriptionModel(
+      corporate.subscriptionModel ??
+        corporate.apSubscriptionModel ??
+        corporate.billingModel,
+    ),
   };
 };
 
@@ -196,6 +215,16 @@ const filterAssignableCreditsPermissions = (screens = []) =>
     });
 
 const normalizeCorporateScreensResponse = (response = {}) => {
+  const subscriptionModel = normalizeSubscriptionModel(
+    response?.subscriptionModel ??
+      response?.apSubscriptionModel ??
+      response?.billingModel,
+  );
+  const isTokenBased = isTokenBasedSubscription(subscriptionModel);
+  const defaultBasicSections = isTokenBased
+    ? DEFAULT_BASIC_SUBSCRIPTION_SECTIONS
+    : withoutBillingSections(DEFAULT_BASIC_SUBSCRIPTION_SECTIONS);
+
   const hasEntitlementPayload =
     Object.keys(response || {}).length > 0 &&
     (toArray(response?.basicSections).length > 0 ||
@@ -203,8 +232,10 @@ const normalizeCorporateScreensResponse = (response = {}) => {
       toArray(response?.allowedScreens).length > 0 ||
       Object.keys(response?.screenSections || {}).length > 0);
   const basicSections = hasEntitlementPayload
-    ? toArray(response?.basicSections)
-    : DEFAULT_BASIC_SUBSCRIPTION_SECTIONS;
+    ? (isTokenBased
+        ? toArray(response?.basicSections)
+        : withoutBillingSections(toArray(response?.basicSections)))
+    : defaultBasicSections;
   const rawScreenSections =
     response?.screenSections && typeof response.screenSections === "object"
       ? response.screenSections
@@ -253,24 +284,28 @@ const normalizeCorporateScreensResponse = (response = {}) => {
   });
 
   // Billing is a basic subscription section under SETTINGS, not listed in /custom-roles/screens.
-  Object.values(screenSectionsByScreen)
-    .flat()
-    .forEach((sectionEntry) => {
-      const section = normalizeToken(sectionEntry?.section);
-      if (section !== "SETTINGS_BILLING") return;
-      if (sectionEntry?.isBasic !== true) return;
-      if (explicitSectionEnabled.get(section) === false) return;
-      addEnabledSection(sectionEntry);
-    });
-  const billingBasicSection = DEFAULT_BASIC_SUBSCRIPTION_SECTIONS.find(
-    (sectionEntry) => normalizeToken(sectionEntry?.section) === "SETTINGS_BILLING",
-  );
-  if (
-    billingBasicSection &&
-    explicitSectionEnabled.get("SETTINGS_BILLING") !== false &&
-    !enabledSections.has("SETTINGS_BILLING")
-  ) {
-    addEnabledSection(billingBasicSection);
+  if (isTokenBased) {
+    Object.values(screenSectionsByScreen)
+      .flat()
+      .forEach((sectionEntry) => {
+        const section = normalizeToken(sectionEntry?.section);
+        if (section !== "SETTINGS_BILLING") return;
+        if (sectionEntry?.isBasic !== true) return;
+        if (explicitSectionEnabled.get(section) === false) return;
+        addEnabledSection(sectionEntry);
+      });
+    const billingBasicSection = DEFAULT_BASIC_SUBSCRIPTION_SECTIONS.find(
+      (sectionEntry) => normalizeToken(sectionEntry?.section) === "SETTINGS_BILLING",
+    );
+    if (
+      billingBasicSection &&
+      explicitSectionEnabled.get("SETTINGS_BILLING") !== false &&
+      !enabledSections.has("SETTINGS_BILLING")
+    ) {
+      addEnabledSection(billingBasicSection);
+    }
+  } else {
+    BILLING_SECTION_IDS.forEach((sectionId) => enabledSections.delete(sectionId));
   }
 
   const allowedScreens = new Set(
@@ -297,6 +332,8 @@ const normalizeCorporateScreensResponse = (response = {}) => {
 
   return {
     raw: response ?? null,
+    subscriptionModel,
+    isTokenBasedSubscription: isTokenBased,
     allowedScreens: Array.from(allowedScreens),
     enabledSections: enabledSectionList,
     screenSectionsByScreen,

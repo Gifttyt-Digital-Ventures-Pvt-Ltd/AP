@@ -4,6 +4,7 @@ import {
   useGetClientActionTypesQuery,
   useGetClientWalletQuery,
 } from "../Services/apis/creditsApi";
+import { useRBAC } from "../contexts/RBACContext";
 import {
   canAffordCreditCost,
   multiplyCreditCost,
@@ -19,12 +20,35 @@ const asActionList = (response) => {
 };
 
 export const useMeteredActionEstimate = (actionCode, unitCount = 1) => {
+  const { isBillingFeatureEnabled } = useRBAC();
   const normalizedUnitCount = Math.max(Number(unitCount) || 0, 0);
-  const { data: wallet, isLoading: walletLoading } = useGetClientWalletQuery();
+  const { data: wallet, isLoading: walletLoading } = useGetClientWalletQuery(undefined, {
+    skip: !isBillingFeatureEnabled,
+  });
   const { data: actionTypes, isLoading: actionTypesLoading } =
-    useGetClientActionTypesQuery();
+    useGetClientActionTypesQuery(undefined, {
+      skip: !isBillingFeatureEnabled,
+    });
 
   return useMemo(() => {
+    if (!isBillingFeatureEnabled) {
+      return {
+        loading: false,
+        action: null,
+        actionCode,
+        unitCount: normalizedUnitCount,
+        rate: 0,
+        isEnabled: true,
+        isFree: true,
+        isDisabled: false,
+        estimatedCost: 0,
+        balance: 0,
+        balanceAfter: 0,
+        canAfford: true,
+        actionName: actionCode,
+      };
+    }
+
     const actions = asActionList(actionTypes);
     const action =
       actions.find((item) => String(item.code || "").toUpperCase() === String(actionCode || "").toUpperCase()) ||
@@ -58,6 +82,7 @@ export const useMeteredActionEstimate = (actionCode, unitCount = 1) => {
     actionCode,
     actionTypes,
     actionTypesLoading,
+    isBillingFeatureEnabled,
     normalizedUnitCount,
     wallet,
     walletLoading,

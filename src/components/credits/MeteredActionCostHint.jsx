@@ -3,13 +3,19 @@ import { AlertTriangle, Coins, Loader2 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import CreditAmount, { formatCredits } from "./CreditAmount";
 import { useMeteredActionEstimate } from "../../hooks/useMeteredActionEstimate";
+import { useRBAC } from "../../contexts/RBACContext";
 
 const MeteredActionCostHint = ({
   actionCode,
   unitCount = 1,
   className = "",
 }) => {
+  const { isBillingFeatureEnabled } = useRBAC();
   const estimate = useMeteredActionEstimate(actionCode, unitCount);
+
+  if (!isBillingFeatureEnabled) {
+    return null;
+  }
 
   if (estimate.loading) {
     return (

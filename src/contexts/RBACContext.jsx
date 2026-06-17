@@ -32,6 +32,8 @@ const RBACContext = createContext({
   isPaymentBatchesFeatureEnabled: false,
   isConnectedBankingEnabled: false,
   isBillingFeatureEnabled: false,
+  isTokenBasedSubscription: false,
+  subscriptionModel: "MONTHLY",
   isCorporateAdmin: false,
   backendPermissionsRaw: [],
   canAssignRoleSets: false,
@@ -358,12 +360,18 @@ export const RBACProvider = ({ children }) => {
     [enabledSectionsSet],
   );
 
+  const isTokenBasedSubscriptionEnabled = useMemo(
+    () => Boolean(corporateScreens?.isTokenBasedSubscription),
+    [corporateScreens?.isTokenBasedSubscription],
+  );
+
   const isBillingFeatureEnabled = useMemo(
     () =>
-      isCorporateSectionEnabled("SETTINGS_BILLING") ||
-      isCorporateSectionEnabled("CREDITS_ALL") ||
-      isCorporateSectionEnabled("WALLET_ALL"),
-    [enabledSectionsSet],
+      isTokenBasedSubscriptionEnabled &&
+      (isCorporateSectionEnabled("SETTINGS_BILLING") ||
+        isCorporateSectionEnabled("CREDITS_ALL") ||
+        isCorporateSectionEnabled("WALLET_ALL")),
+    [enabledSectionsSet, isTokenBasedSubscriptionEnabled],
   );
 
   const hasAnyPermission = (permissionIds = []) => {
@@ -493,6 +501,8 @@ export const RBACProvider = ({ children }) => {
     isPaymentBatchesFeatureEnabled,
     isConnectedBankingEnabled,
     isBillingFeatureEnabled,
+    isTokenBasedSubscription: isTokenBasedSubscriptionEnabled,
+    subscriptionModel: corporateScreens?.subscriptionModel || "MONTHLY",
     permissionLabels: PERMISSION_LABELS,
   };
 

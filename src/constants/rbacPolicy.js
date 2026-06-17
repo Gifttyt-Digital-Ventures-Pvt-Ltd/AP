@@ -239,9 +239,6 @@ export const ACTION_PERMISSION_RULES = {
   "integrations.sync.trigger": { anyOf: ["integrations.sync.trigger"] },
   "integrations.review.resolve": { anyOf: ["integrations.review.resolve"] },
 
-  "billing.requestTokens": { anyOf: ["credits-manage", "MANAGE_BILLING"] },
-  "billing.updateSettings": { anyOf: ["credits-manage", "MANAGE_BILLING"] },
-
   "roles.invite": { anyOf: ["roles-manage-users"] },
   "roles.updateUserRole": { anyOf: ["roles-manage-users"] },
   "roles.updateUserStatus": { anyOf: ["roles-manage-users"] },
