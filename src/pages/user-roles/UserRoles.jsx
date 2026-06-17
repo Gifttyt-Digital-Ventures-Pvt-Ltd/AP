@@ -334,9 +334,6 @@ const UserRoles = () => {
       if (backendEntry.screen === "CREDITS") {
         return canUseBillingSettings;
       }
-      if (backendEntry.screen === "CREDITS") {
-        return canUseBillingSettings;
-      }
       if (backendEntry.screen === "PAYMENTS") {
         return (
           isCorporateScreenAllowed("PAYMENTS") &&

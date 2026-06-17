@@ -48,7 +48,12 @@ const LEDGER_TYPES = [
   "ADJUSTMENT",
 ];
 
-const LEDGER_VIEW_PERMISSIONS = ["credits-ledger", "VIEW_LEDGER"];
+const LEDGER_VIEW_PERMISSIONS = [
+  "credits-ledger",
+  "credits-manage",
+  "VIEW_LEDGER",
+  "MANAGE_BILLING",
+];
 const HISTORY_LEDGER_PAGE_SIZE = 25;
 
 const formatWalletUpdatedAt = (value) => {

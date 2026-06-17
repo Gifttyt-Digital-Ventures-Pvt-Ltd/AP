@@ -89,8 +89,7 @@ const FALLBACK_DIRECT_ROLE_PERMISSIONS = {
   APPROVER: ["invoice-approver", "campaign-approve"],
   FINANCE: ["campaign-manage"],
   ACCOUNTANT: [
-    "credits-view",
-    "credits-ledger",
+    "credits-manage",
     "payments-manage",
     "payments-view",
     "payment-batches-manage",

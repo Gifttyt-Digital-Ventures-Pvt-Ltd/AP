@@ -252,6 +252,7 @@ const normalizeCorporateScreensResponse = (response = {}) => {
     if (!isEnabled) enabledSections.delete(section);
   });
 
+  // Billing is a basic subscription section under SETTINGS, not listed in /custom-roles/screens.
   Object.values(screenSectionsByScreen)
     .flat()
     .forEach((sectionEntry) => {
