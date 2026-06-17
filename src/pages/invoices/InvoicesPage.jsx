@@ -115,8 +115,12 @@ import InvoicesDialogs from "./components/InvoicesDialogs";
 import InvoiceUploadDialog from "./components/InvoiceUploadDialog";
 import { getInvoiceVendorRequestValidationErrors } from "../../utils/vendorValidation";
 import { useActionGuard } from "../../hooks/useActionGuard";
+import { useCreditErrorHandler } from "../../contexts/CreditErrorContext";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { useRBAC } from "../../contexts/RBACContext";
+import IntegrationSourceBadge from "../../components/integrations/IntegrationSourceBadge";
+import useZohoIntegrationActive from "../../hooks/useZohoIntegrationActive";
+import { withIntegrationTableHeader } from "../../utils/integrationProvenance";
 import { useCurrencyFilter } from "../../hooks/useCurrencyFilter";
 import {
   CURRENCY_SCREENS,
@@ -249,6 +253,7 @@ const InvoicesPage = () => {
     isCampaignFeatureEnabled,
     isCorporateAdmin,
   } = useRBAC();
+  const { showIntegrationColumn } = useZohoIntegrationActive();
   const { data: corporateUserContext = null } =
     useGetCorporateUserDetailsQuery();
   const invoiceUserEmail =
@@ -348,6 +353,7 @@ const InvoicesPage = () => {
     useForwardInvoiceMutation();
   const [deleteInvoice] = useDeleteInvoiceMutation();
   const { guardAction, canPerformAction } = useActionGuard();
+  const { handleCreditError } = useCreditErrorHandler();
   const invoices = getInvoiceListItems(invoicesListData);
   const invoicePagination = useMemo(() => {
     const total = Number(invoicesListData.total ?? 0) || 0;
@@ -417,13 +423,12 @@ const InvoicesPage = () => {
       ),
     [corporateScreens?.activeInvoiceConfiguration],
   );
-  const invoiceTableHeader = useMemo(
-    () =>
-      isRefNoEnabled
-        ? baseInvoiceTableHeader
-        : baseInvoiceTableHeader.filter((column) => column.key !== "refNo"),
-    [isRefNoEnabled],
-  );
+  const invoiceTableHeader = useMemo(() => {
+    const headers = isRefNoEnabled
+      ? baseInvoiceTableHeader
+      : baseInvoiceTableHeader.filter((column) => column.key !== "refNo");
+    return withIntegrationTableHeader(headers, showIntegrationColumn);
+  }, [isRefNoEnabled, showIntegrationColumn]);
   const invoiceEditContext = useMemo(
     () => ({
       ...buildCurrentUserIdentity({ user, corporateUserContext }),
@@ -722,7 +727,7 @@ const InvoicesPage = () => {
       setFormData(initializeFormData(extractedInvoice));
       toast.success("Invoice scanned successfully!");
     } catch (error) {
-      console.error("Scan error:", error);
+      if (handleCreditError(error)) return;
 
       const errorMessage =
         extractApiErrorDetail(error) ||
@@ -873,6 +878,8 @@ const InvoicesPage = () => {
         { duration: 4000 },
       );
     } catch (error) {
+      if (handleCreditError(error)) return true;
+
       const errorMessage = error?.data?.detail || "Bulk upload failed";
       toast.error(errorMessage, { duration: 6000 });
     } finally {
@@ -1879,6 +1886,9 @@ const InvoicesPage = () => {
                 {invoice.source || "Upload"}
               </span>
             );
+            break;
+          case "integration":
+            value = <IntegrationSourceBadge record={invoice} />;
             break;
           case "originalFileName":
             value = invoice.originalFileName || "-";

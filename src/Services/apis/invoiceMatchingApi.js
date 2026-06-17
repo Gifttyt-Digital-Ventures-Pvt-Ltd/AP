@@ -1,4 +1,5 @@
 import { serviceApi } from "../serviceApi";
+import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
 
 export const invoiceMatchingApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -48,7 +49,7 @@ export const invoiceMatchingApi = serviceApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Matching", "Invoices"],
+      invalidatesTags: ["Matching", "Invoices", ...CREDIT_INVALIDATION_TAGS],
     }),
     editInvoiceMatch: builder.mutation({
       query: ({ id, body }) => ({

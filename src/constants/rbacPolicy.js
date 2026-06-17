@@ -34,6 +34,16 @@ export const ROUTE_PERMISSION_RULES = {
   "/tax-management": { anyOf: ["tax-view", "tax-manage"] },
   "/reports": { anyOf: ["reports-view", "reports-full"] },
   "/audit-trail": { anyOf: ["audit-trail-view"] },
+  "/integrations": {
+    anyOf: [
+      "integrations.view",
+      "integrations.connect",
+      "integrations.disconnect",
+      "integrations.mapping.edit",
+      "integrations.sync.trigger",
+      "integrations.review.resolve",
+    ],
+  },
   "/banking": { anyOf: ["banking-view", "banking-full"] },
   "/notifications": { anyOf: ["settings-interaction"] },
   "/user-roles": {
@@ -48,7 +58,17 @@ export const ROUTE_PERMISSION_RULES = {
     ],
   },
   "/settings": {
-    anyOf: ["settings-org", "settings-banking", "settings-interaction"],
+    anyOf: [
+      "settings-org",
+      "settings-banking",
+      "settings-interaction",
+      "credits-view",
+      "credits-ledger",
+      "credits-manage",
+      "VIEW_WALLET",
+      "VIEW_LEDGER",
+      "MANAGE_BILLING",
+    ],
   },
 };
 
@@ -92,6 +112,10 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
     ],
   },
   "/audit-trail": { screen: "AUDIT_TRAIL", anySections: ["AUDIT_TRAIL_ALL"] },
+  "/integrations": {
+    screen: "SETTINGS",
+    anySections: ["SETTINGS_INTEGRATIONS"],
+  },
   "/banking": { anySections: ["SETTINGS_CONNECTED_BANKING"] },
   "/notifications": {
     screen: "SETTINGS",
@@ -112,6 +136,9 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
       "SETTINGS_ORG_DETAILS",
       "SETTINGS_CONNECTED_BANKING",
       "SETTINGS_INTEGRATIONS",
+      "SETTINGS_BILLING",
+      "CREDITS_ALL",
+      "WALLET_ALL",
     ],
   },
 };
@@ -131,6 +158,7 @@ export const DEFAULT_ROUTE_PRIORITY = [
   "/tax-management",
   "/reports",
   "/audit-trail",
+  "/integrations",
   "/banking",
   "/notifications",
   "/user-roles",
@@ -187,6 +215,8 @@ export const ACTION_PERMISSION_RULES = {
   "settings.createBankAccount": { anyOf: ["settings-banking", "banking-full"] },
   "settings.createOrganisation": { anyOf: ["settings-org"] },
   "settings.updateOrganisation": { anyOf: ["settings-org"] },
+  "billing.requestTokens": { anyOf: ["credits-manage", "MANAGE_BILLING"] },
+  "billing.updateSettings": { anyOf: ["credits-manage", "MANAGE_BILLING"] },
   "categories.create": { anyOf: ["category-manage"] },
   "categories.update": { anyOf: ["category-manage"] },
   "categories.delete": { anyOf: ["category-manage"] },
@@ -202,6 +232,12 @@ export const ACTION_PERMISSION_RULES = {
   "transactions.undo": { anyOf: ["banking-full"] },
   "transactions.uploadVoucher": { anyOf: ["banking-full"] },
   "transactions.linkInvoice": { anyOf: ["banking-full"] },
+
+  "integrations.connect": { anyOf: ["integrations.connect"] },
+  "integrations.disconnect": { anyOf: ["integrations.disconnect"] },
+  "integrations.mapping.edit": { anyOf: ["integrations.mapping.edit"] },
+  "integrations.sync.trigger": { anyOf: ["integrations.sync.trigger"] },
+  "integrations.review.resolve": { anyOf: ["integrations.review.resolve"] },
 
   "roles.invite": { anyOf: ["roles-manage-users"] },
   "roles.updateUserRole": { anyOf: ["roles-manage-users"] },

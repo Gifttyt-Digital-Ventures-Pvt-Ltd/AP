@@ -13,6 +13,7 @@ import { Search, Plus, Pencil, Trash2, Eye, X, Check, RotateCcw } from 'lucide-r
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { useActionGuard } from '../../hooks/useActionGuard';
+import { useCreditErrorHandler } from '../../contexts/CreditErrorContext';
 import { useRBAC } from '../../contexts/RBACContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useGetCorporateUserDetailsQuery } from '../../Services/apis/corporateApi';
@@ -41,6 +42,9 @@ import BulkUploadReviewDialog from './components/BulkUploadReviewDialog';
 import DeleteVendorDialog from './components/DeleteVendorDialog';
 import ViewVendorDialog from './components/ViewVendorDialog';
 import VendorApprovalDialog from './components/VendorApprovalDialog';
+import IntegrationSourceBadge from '../../components/integrations/IntegrationSourceBadge';
+import useZohoIntegrationActive from '../../hooks/useZohoIntegrationActive';
+import { withIntegrationTableHeader } from '../../utils/integrationProvenance';
 
 const VENDOR_UPLOAD_FIELDS = [
   'name',
@@ -157,7 +161,9 @@ const Vendors = () => {
   const { user } = useAuth();
   const { data: corporateUserContext = null } = useGetCorporateUserDetailsQuery();
   const { guardAction, canPerformAction } = useActionGuard();
+  const { handleCreditError } = useCreditErrorHandler();
   const { corporateScreens, isCorporateAdmin } = useRBAC();
+  const { showIntegrationColumn } = useZohoIntegrationActive();
   const activeVendorFields = corporateScreens?.activeVendorFields ?? [];
   const vendorFieldConfiguration = corporateScreens?.vendorFieldConfiguration ?? [];
   const vendorUploadMandatoryFields = useMemo(
@@ -291,6 +297,7 @@ const Vendors = () => {
       setDialogOpen(false);
       resetForm();
     } catch (error) {
+      if (handleCreditError(error)) return;
       toast.error(extractApiErrorDetail(error) || 'Failed to save vendor');
     }
   };
@@ -342,7 +349,10 @@ const Vendors = () => {
       }
       setMultipleVendorUploadOpen(false);
       return { errors: [] };
-    } catch (_error) {
+    } catch (error) {
+      if (handleCreditError(error)) {
+        return { errors: ['Insufficient tokens or action unavailable'] };
+      }
       return { errors: ['Failed to parse or upload vendor file'] };
     }
   };
@@ -596,16 +606,21 @@ const Vendors = () => {
     return vendorId ? filteredPendingVendorIds.has(vendorId) : false;
   };
 
-  const vendorsTableHeader = [
-    { key: 'vendor', title: 'Vendor' },
-    { key: 'createdAt', title: 'Created Date', cellClassName: 'text-xs text-muted-foreground whitespace-nowrap' },
-    { key: 'type', title: 'Type' },
-    { key: 'status', title: 'Status' },
-    { key: 'contact', title: 'Contact' },
-    { key: 'pan', title: 'PAN' },
-    { key: 'gstin', title: 'GSTIN' },
-    { key: 'actions', title: 'Actions', headerClassName: 'text-left' },
-  ];
+  const vendorsTableHeader = useMemo(
+    () =>
+      withIntegrationTableHeader(
+        [
+          { key: 'vendor', title: 'Vendor' },
+          { key: 'createdAt', title: 'Created Date', cellClassName: 'text-xs text-muted-foreground whitespace-nowrap' },
+          { key: 'status', title: 'Status' },
+          { key: 'contact', title: 'Contact' },
+          { key: 'gstin', title: 'GSTIN' },
+          { key: 'actions', title: 'Actions', headerClassName: 'text-left' },
+        ],
+        showIntegrationColumn,
+      ),
+    [showIntegrationColumn],
+  );
 
   const renderVendorRow = (vendor, rowIndex, headers) => (
     <TableRow
@@ -621,7 +636,6 @@ const Vendors = () => {
             value = (
               <div>
                 <div className="font-medium">{vendor.name}</div>
-                <div className="text-sm text-muted-foreground">{vendor.category || 'Uncategorized'}</div>
               </div>
             );
             break;
@@ -655,7 +669,10 @@ const Vendors = () => {
             value = vendor.pan || '-';
             break;
           case 'gstin':
-            value = vendor.gstin ? `${vendor.gstin.substring(0, 4)}...${vendor.gstin.slice(-4)}` : '-';
+            value = vendor.gstin || '-';
+            break;
+          case 'integration':
+            value = <IntegrationSourceBadge record={vendor} />;
             break;
           case 'createdAt': {
             const createdAt = vendor.createdAt || vendor.created_at;

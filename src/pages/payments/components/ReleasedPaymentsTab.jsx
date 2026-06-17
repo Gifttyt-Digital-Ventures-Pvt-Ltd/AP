@@ -1,12 +1,15 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Download, Eye } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import AppDataTable from '../../../components/common/AppDataTable';
 import { TableCell, TableRow } from '../../../components/ui/table';
+import IntegrationSourceBadge from '../../../components/integrations/IntegrationSourceBadge';
+import useZohoIntegrationActive from '../../../hooks/useZohoIntegrationActive';
 import { formatCurrency } from '../../../utils/currency';
+import { withIntegrationTableHeader } from '../../../utils/integrationProvenance';
 import { formatInvoiceAmount } from '../../invoices/utils/invoiceAmounts';
 
-const releasedPaymentTableHeader = [
+const baseReleasedPaymentTableHeader = [
   { key: 'invoiceNumber', title: 'Invoice #', cellClassName: "  font-medium" },
   { key: 'vendorName', title: 'Vendor' },
   { key: 'amount', title: 'Amount', cellClassName: "  font-semibold" },
@@ -24,6 +27,12 @@ const ReleasedPaymentsTab = ({
   handleViewPaymentInvoice,
   handleDownloadPaymentInvoice,
 }) => {
+  const { showIntegrationColumn } = useZohoIntegrationActive();
+  const releasedPaymentTableHeader = useMemo(
+    () => withIntegrationTableHeader(baseReleasedPaymentTableHeader, showIntegrationColumn),
+    [showIntegrationColumn],
+  );
+
   const renderReleasedPaymentRow = (payment, rowIndex, headers) => (
     <TableRow key={payment.id ?? rowIndex} data-testid={`payment-row-${payment.id}`}>
       {headers.map((header) => {
@@ -42,6 +51,9 @@ const ReleasedPaymentsTab = ({
             break;
           case 'reference_number':
             value = payment.reference_number || '-';
+            break;
+          case 'integration':
+            value = <IntegrationSourceBadge record={payment} />;
             break;
           case 'actions':
             value = (

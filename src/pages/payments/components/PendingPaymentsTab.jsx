@@ -4,7 +4,10 @@ import { Button } from '../../../components/ui/button';
 import { Checkbox } from '../../../components/ui/checkbox';
 import AppDataTable from '../../../components/common/AppDataTable';
 import { TableCell, TableRow } from '../../../components/ui/table';
+import IntegrationSourceBadge from '../../../components/integrations/IntegrationSourceBadge';
+import useZohoIntegrationActive from '../../../hooks/useZohoIntegrationActive';
 import { formatCurrency } from '../../../utils/currency';
+import { withIntegrationTableHeader } from '../../../utils/integrationProvenance';
 import {
   formatInvoiceAmount,
   sumInvoiceAmountsByCurrency,
@@ -60,6 +63,11 @@ const PendingPaymentsTab = ({
   handleViewInvoice,
   handleDownloadInvoice,
 }) => {
+  const { showIntegrationColumn } = useZohoIntegrationActive();
+  const pendingPaymentTableHeader = useMemo(
+    () => withIntegrationTableHeader(basePendingPaymentTableHeader, showIntegrationColumn),
+    [showIntegrationColumn],
+  );
   const selectedInvoices = invoices.filter((invoice) => selectedInvoiceIds.includes(invoice.id));
   const totalPendingByCurrency = useMemo(
     () => sumInvoiceAmountsByCurrency(invoices),
@@ -117,6 +125,9 @@ const PendingPaymentsTab = ({
                 Pending Payment
               </span>
             );
+            break;
+          case 'integration':
+            value = <IntegrationSourceBadge record={invoice} />;
             break;
           case 'actions':
             value = (
@@ -222,7 +233,7 @@ const PendingPaymentsTab = ({
         data-testid="pending-invoices-table"
       >
         <AppDataTable
-          tableHeader={basePendingPaymentTableHeader}
+          tableHeader={pendingPaymentTableHeader}
           tableData={filteredPendingInvoices}
           renderRow={renderPendingPaymentRow}
           showCheckbox={showRecordPaymentSelection}

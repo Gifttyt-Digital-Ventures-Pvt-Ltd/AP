@@ -12,27 +12,14 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { Plug, PlugZap, Settings as SettingsIcon, RefreshCw, Check, XCircle, Loader2, Building2, Mail, Phone, Globe, MapPin, Save, Copy, CheckCircle } from 'lucide-react';
+import { Building2, Check, CheckCircle, Copy, Globe, Loader2, Mail, MapPin, Phone, Plug, PlugZap, RefreshCw, Save, Settings as SettingsIcon, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import BankAccountDialog from './components/BankAccountDialog';
-import ZohoConfigDialog from './components/ZohoConfigDialog';
 import TallyConfigDialog from './components/TallyConfigDialog';
+import ZohoIntegrationCard from './components/ZohoIntegrationCard';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useRBAC } from '../../contexts/RBACContext';
-
-// Zoho Logo Component - Four interlocking rounded squares
-const ZohoLogo = () => (
-  <svg width="56" height="36" viewBox="0 0 120 80" fill="none" xmlns="http://www.w3.org/2000/svg">
-    {/* Red square - leftmost */}
-    <rect x="0" y="20" width="35" height="35" rx="8" fill="none" stroke="#E42527" strokeWidth="6" transform="rotate(-5 17.5 37.5)"/>
-    {/* Green square - second */}
-    <rect x="25" y="15" width="35" height="35" rx="8" fill="none" stroke="#00A650" strokeWidth="6" transform="rotate(5 42.5 32.5)"/>
-    {/* Blue square - third */}
-    <rect x="52" y="18" width="35" height="35" rx="8" fill="none" stroke="#0078D4" strokeWidth="6" transform="rotate(-3 69.5 35.5)"/>
-    {/* Orange square - rightmost */}
-    <rect x="78" y="22" width="35" height="35" rx="8" fill="none" stroke="#F5A623" strokeWidth="6" transform="rotate(3 95.5 39.5)"/>
-  </svg>
-);
+import CreditsPage from '../credits/CreditsPage';
 
 // Tally Logo Component
 const TallyLogo = () => (
@@ -54,7 +41,7 @@ const SYNC_DATA_ITEMS = [
 ];
 
 const Settings = () => {
-  const { hasAnyPermission, isCorporateSectionEnabled } = useRBAC();
+  const { hasAnyPermission, isCorporateSectionEnabled, isBillingFeatureEnabled } = useRBAC();
   const canViewBankingSettings =
     hasAnyPermission(['settings-banking', 'banking-full']) &&
     isCorporateSectionEnabled('SETTINGS_CONNECTED_BANKING');
@@ -64,13 +51,22 @@ const Settings = () => {
   const canViewIntegrationsSettings =
     hasAnyPermission(['settings-interaction']) &&
     isCorporateSectionEnabled('SETTINGS_INTEGRATIONS');
+  const canViewBillingSettings = hasAnyPermission([
+    'credits-view',
+    'credits-ledger',
+    'credits-manage',
+    'VIEW_WALLET',
+    'VIEW_LEDGER',
+    'MANAGE_BILLING',
+  ]) && isBillingFeatureEnabled;
   const availableSettingsTabs = useMemo(() => {
     const tabs = [];
     if (canViewOrganisationSettings) tabs.push('organisation');
     if (canViewBankingSettings) tabs.push('banking');
+    if (canViewBillingSettings) tabs.push('billing');
     if (canViewIntegrationsSettings) tabs.push('integrations');
     return tabs;
-  }, [canViewBankingSettings, canViewIntegrationsSettings, canViewOrganisationSettings]);
+  }, [canViewBankingSettings, canViewBillingSettings, canViewIntegrationsSettings, canViewOrganisationSettings]);
   const [activeSettingsTab, setActiveSettingsTab] = useState('');
   const {
     data: bankAccountsData = [],
@@ -97,17 +93,9 @@ const Settings = () => {
     account_type: 'Checking',
     currency: 'INR'
   });
-
-  // Integration states
-  const [zohoConnected, setZohoConnected] = useState(false);
-  const [tallyConnected, setTallyConnected] = useState(true); // Shown as connected in the image
-  const [zohoConnecting, setZohoConnecting] = useState(false);
+  const [tallyConnected, setTallyConnected] = useState(true);
   const [tallySyncing, setTallySyncing] = useState(false);
-
-  // Configuration dialogs
-  const [zohoConfigOpen, setZohoConfigOpen] = useState(false);
   const [tallyConfigOpen, setTallyConfigOpen] = useState(false);
-  const [zohoConfig, setZohoConfig] = useState({ client_id: '', client_secret: '', organization_id: '' });
   const [tallyConfig, setTallyConfig] = useState({ server_url: 'http://localhost:9000', company_name: '' });
 
   // Organisation Details state
@@ -287,42 +275,6 @@ const Settings = () => {
     });
   };
 
-  // Zoho Integration Handlers
-  const handleZohoConnect = async () => {
-    if (!zohoConfig.client_id || !zohoConfig.client_secret) {
-      toast.error('Please configure Zoho credentials first');
-      setZohoConfigOpen(true);
-      return;
-    }
-    setZohoConnecting(true);
-    try {
-      // Simulating connection - in real implementation, this would call Zoho OAuth
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      setZohoConnected(true);
-      toast.success('Successfully connected to Zoho Books!');
-    } catch (error) {
-      toast.error('Failed to connect to Zoho Books');
-    } finally {
-      setZohoConnecting(false);
-    }
-  };
-
-  const handleZohoDisconnect = () => {
-    setZohoConnected(false);
-    setZohoConfig({ client_id: '', client_secret: '', organization_id: '' });
-    toast.success('Disconnected from Zoho Books');
-  };
-
-  const handleZohoConfigSave = () => {
-    if (!zohoConfig.client_id || !zohoConfig.client_secret) {
-      toast.error('Client ID and Client Secret are required');
-      return;
-    }
-    toast.success('Zoho configuration saved');
-    setZohoConfigOpen(false);
-  };
-
-  // Tally Integration Handlers
   const handleTallyConnect = async () => {
     if (!tallyConfig.server_url) {
       toast.error('Please configure Tally server URL first');
@@ -383,6 +335,9 @@ const Settings = () => {
           )}
           {canViewBankingSettings && (
             <TabsTrigger value="banking" data-testid="tab-banking">Connected Banking</TabsTrigger>
+          )}
+          {canViewBillingSettings && (
+            <TabsTrigger value="billing" data-testid="tab-billing">Billing</TabsTrigger>
           )}
           {canViewIntegrationsSettings && (
             <TabsTrigger value="integrations" data-testid="tab-integrations">Integrations</TabsTrigger>
@@ -744,119 +699,23 @@ const Settings = () => {
           </div>
         </TabsContent>}
 
+        {canViewBillingSettings && <TabsContent value="billing">
+          <CreditsPage />
+        </TabsContent>}
+
         {canViewIntegrationsSettings && <TabsContent value="integrations">
-          <div className="space-y-6">
-            {/* Header */}
-            <p className="text-muted-foreground">
-              Integrate AI Accountant with either Zoho or Tally for seamless financial data synchronization.
-            </p>
+          <div className="space-y-6" data-testid="settings-integrations-gateway">
+            <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+              <ZohoIntegrationCard />
 
-            {/* Integration Cards Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              
-              {/* Zoho Card */}
-              <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden" data-testid="zoho-integration-card">
-                {/* Card Header */}
-                <div className={`px-6 py-4 flex items-center justify-between border-b ${zohoConnected ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-border'}`}>
-                  <div className="flex items-center gap-3">
-                    <ZohoLogo />
-                    <span className="text-xl font-bold">Zoho</span>
-                  </div>
-                  <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${
-                    zohoConnected 
-                      ? 'bg-emerald-100 text-emerald-700' 
-                      : 'bg-gray-100 text-gray-500'
-                  }`}>
-                    {zohoConnected ? (
-                      <>
-                        <Check className="h-4 w-4" />
-                        Connected
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="h-4 w-4" />
-                        Not Connected
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                {/* Card Body */}
-                <div className="p-6">
-                  <h4 className="font-semibold text-gray-800 mb-3">We'll fetch your:</h4>
-                  <ul className="space-y-2 mb-6">
-                    {SYNC_DATA_ITEMS.map((item) => (
-                      <li key={item} className="flex items-center gap-2 text-sm text-gray-600">
-                        <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-
-                  {/* Action Buttons */}
-                  {!zohoConnected ? (
-                    <Button 
-                      className="w-full bg-violet-500 hover:bg-violet-600 text-white"
-                      onClick={handleZohoConnect}
-                      disabled={zohoConnecting}
-                      data-testid="zoho-connect-button"
-                    >
-                      {zohoConnecting ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Connecting...
-                        </>
-                      ) : (
-                        <>
-                          <Plug className="h-4 w-4 mr-2" />
-                          Connect
-                        </>
-                      )}
-                    </Button>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="flex gap-3">
-                        <Button 
-                          variant="outline" 
-                          className="flex-1"
-                          onClick={handleZohoDisconnect}
-                          data-testid="zoho-disconnect-button"
-                        >
-                          <PlugZap className="h-4 w-4 mr-2" />
-                          Disconnect
-                        </Button>
-                        <Button 
-                          variant="outline" 
-                          className="flex-1"
-                          onClick={() => setZohoConfigOpen(true)}
-                          data-testid="zoho-configure-button"
-                        >
-                          <SettingsIcon className="h-4 w-4 mr-2" />
-                          Configure
-                        </Button>
-                      </div>
-                      <Button 
-                        className="w-full bg-violet-500 hover:bg-violet-600 text-white"
-                        data-testid="zoho-sync-button"
-                      >
-                        <RefreshCw className="h-4 w-4 mr-2" />
-                        Sync Masters
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Tally Card */}
               <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden" data-testid="tally-integration-card">
-                {/* Card Header */}
                 <div className={`px-6 py-4 flex items-center justify-between border-b ${tallyConnected ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-border'}`}>
                   <div className="flex items-center gap-3">
                     <TallyLogo />
                   </div>
                   <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${
-                    tallyConnected 
-                      ? 'bg-emerald-100 text-emerald-700' 
+                    tallyConnected
+                      ? 'bg-emerald-100 text-emerald-700'
                       : 'bg-gray-100 text-gray-500'
                   }`}>
                     {tallyConnected ? (
@@ -873,7 +732,6 @@ const Settings = () => {
                   </div>
                 </div>
 
-                {/* Card Body */}
                 <div className="p-6">
                   <h4 className="font-semibold text-gray-800 mb-3">We'll fetch your:</h4>
                   <ul className="space-y-2 mb-6">
@@ -885,9 +743,8 @@ const Settings = () => {
                     ))}
                   </ul>
 
-                  {/* Action Buttons */}
                   {!tallyConnected ? (
-                    <Button 
+                    <Button
                       className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                       onClick={handleTallyConnect}
                       disabled={tallySyncing}
@@ -908,8 +765,8 @@ const Settings = () => {
                   ) : (
                     <div className="space-y-3">
                       <div className="flex gap-3">
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           className="flex-1"
                           onClick={handleTallyDisconnect}
                           data-testid="tally-disconnect-button"
@@ -917,8 +774,8 @@ const Settings = () => {
                           <PlugZap className="h-4 w-4 mr-2" />
                           Disconnect
                         </Button>
-                        <Button 
-                          variant="outline" 
+                        <Button
+                          variant="outline"
                           className="flex-1"
                           onClick={() => setTallyConfigOpen(true)}
                           data-testid="tally-configure-button"
@@ -927,7 +784,7 @@ const Settings = () => {
                           Configure
                         </Button>
                       </div>
-                      <Button 
+                      <Button
                         className="w-full bg-blue-600 hover:bg-blue-700 text-white"
                         onClick={handleTallySyncMasters}
                         disabled={tallySyncing}
@@ -951,11 +808,9 @@ const Settings = () => {
               </div>
             </div>
 
-            {/* Info Note */}
             <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
               <p className="text-sm text-blue-800">
-                <strong>Note:</strong> These integrations allow you to sync financial data between OptiFii and your accounting software. 
-                Real-time integration requires API credentials from Zoho Books or a running Tally instance.
+                <strong>Note:</strong> Connect your accounting system to keep vendors, invoices, ledgers, and master data aligned with AP workflows.
               </p>
             </div>
           </div>
@@ -963,16 +818,7 @@ const Settings = () => {
 
       </Tabs>
 
-            <ZohoConfigDialog
-        open={zohoConfigOpen}
-        setOpen={setZohoConfigOpen}
-        ZohoLogo={ZohoLogo}
-        zohoConfig={zohoConfig}
-        setZohoConfig={setZohoConfig}
-        handleZohoConfigSave={handleZohoConfigSave}
-      />
-
-            <TallyConfigDialog
+      <TallyConfigDialog
         open={tallyConfigOpen}
         setOpen={setTallyConfigOpen}
         TallyLogo={TallyLogo}

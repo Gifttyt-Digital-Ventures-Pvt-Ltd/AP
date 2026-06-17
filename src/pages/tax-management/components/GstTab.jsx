@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import GstCalculationDialog from './GstCalculationDialog';
 import { useActionGuard } from '../../../hooks/useActionGuard';
+import { useCreditErrorHandler } from '../../../contexts/CreditErrorContext';
 import { formatCurrency, INDIAN_STATES } from '../utils/taxFormatting';
 
 const GST_ENTRIES_TABLE_HEADER = [
@@ -119,6 +120,7 @@ const renderGstEntryRow = (entry, rowIndex, headers) => (
 
 const GstTab = forwardRef(({ enabled = true }, ref) => {
   const { guardAction, canPerformAction } = useActionGuard();
+  const { handleCreditError } = useCreditErrorHandler();
   const [showGstCalcDialog, setShowGstCalcDialog] = useState(false);
   const [calculating, setCalculating] = useState(false);
   const [gstForm, setGstForm] = useState(DEFAULT_GST_FORM);
@@ -173,6 +175,7 @@ const GstTab = forwardRef(({ enabled = true }, ref) => {
       setGstForm(DEFAULT_GST_FORM);
       await refetch();
     } catch (error) {
+      if (handleCreditError(error)) return;
       toast.error(error?.data?.detail || 'Failed to calculate GST');
     } finally {
       setCalculating(false);

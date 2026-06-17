@@ -1,4 +1,5 @@
 import { serviceApi } from "../serviceApi";
+import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
 
 export const goodsReceiptApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -8,11 +9,11 @@ export const goodsReceiptApi = serviceApi.injectEndpoints({
     }),
     createGrn: builder.mutation({
       query: (body) => ({ url: "/grn", method: "POST", body }),
-      invalidatesTags: ["GoodsReceipt", "PurchaseOrders"],
+      invalidatesTags: ["GoodsReceipt", "PurchaseOrders", ...CREDIT_INVALIDATION_TAGS],
     }),
     postGrn: builder.mutation({
       query: (id) => ({ url: `/grn/${id}/post`, method: "POST" }),
-      invalidatesTags: ["GoodsReceipt"],
+      invalidatesTags: ["GoodsReceipt", ...CREDIT_INVALIDATION_TAGS],
     }),
   }),
 });
