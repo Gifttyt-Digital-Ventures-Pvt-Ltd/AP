@@ -253,10 +253,6 @@ const InvoicesPage = () => {
     isCorporateAdmin,
   } = useRBAC();
   const { showIntegrationColumn } = useZohoIntegrationActive();
-  const invoiceTableHeader = useMemo(
-    () => withIntegrationTableHeader(baseInvoiceTableHeader, showIntegrationColumn),
-    [showIntegrationColumn],
-  );
   const { data: corporateUserContext = null } =
     useGetCorporateUserDetailsQuery();
   const invoiceUserEmail =
@@ -425,13 +421,12 @@ const InvoicesPage = () => {
       ),
     [corporateScreens?.activeInvoiceConfiguration],
   );
-  const invoiceTableHeader = useMemo(
-    () =>
-      isRefNoEnabled
-        ? baseInvoiceTableHeader
-        : baseInvoiceTableHeader.filter((column) => column.key !== "refNo"),
-    [isRefNoEnabled],
-  );
+  const invoiceTableHeader = useMemo(() => {
+    const headers = isRefNoEnabled
+      ? baseInvoiceTableHeader
+      : baseInvoiceTableHeader.filter((column) => column.key !== "refNo");
+    return withIntegrationTableHeader(headers, showIntegrationColumn);
+  }, [isRefNoEnabled, showIntegrationColumn]);
   const invoiceEditContext = useMemo(
     () => ({
       ...buildCurrentUserIdentity({ user, corporateUserContext }),
