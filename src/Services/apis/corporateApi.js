@@ -136,7 +136,9 @@ const normalizeCorporateScreensResponse = (response = {}) => {
     if (!isEnabled) enabledSections.delete(section);
   });
 
-  const allowedScreens = new Set(toArray(response?.allowedScreens).map(normalizeToken).filter(Boolean));
+  const allowedScreens = new Set(
+    toArray(response?.allowedScreens).map(normalizeToken).filter(Boolean),
+  );
   enabledSections.forEach((section) => {
     const screen = sectionScreens.get(section);
     if (screen) allowedScreens.add(screen);
@@ -146,7 +148,9 @@ const normalizeCorporateScreensResponse = (response = {}) => {
   const vendorFieldConfiguration = normalizeVendorFieldCatalog(
     toArray(response?.vendorFieldConfiguration),
   );
-  const activeVendorFields = normalizeActiveVendorFields(response?.activeVendorFields);
+  const activeVendorFields = normalizeActiveVendorFields(
+    response?.activeVendorFields,
+  );
   const invoiceConfiguration = normalizeInvoiceConfigurationCatalog(
     toArray(response?.invoiceConfiguration),
   );
@@ -179,12 +183,21 @@ const normalizeCustomRoleScreen = (screen = {}) => ({
   ...screen,
   screen: normalizeToken(screen?.screen),
   displayName: String(screen?.displayName || screen?.screen || "").trim(),
-  permissionTypes: toArray(screen?.permissionTypes).map((permission) => ({
-    ...permission,
-    permissionType: normalizeToken(permission?.permissionType ?? permission?.type),
-    type: normalizeToken(permission?.type ?? permission?.permissionType),
-    displayName: String(permission?.displayName || permission?.permissionType || permission?.type || "").trim(),
-  })).filter((permission) => permission.permissionType),
+  permissionTypes: toArray(screen?.permissionTypes)
+    .map((permission) => ({
+      ...permission,
+      permissionType: normalizeToken(
+        permission?.permissionType ?? permission?.type,
+      ),
+      type: normalizeToken(permission?.type ?? permission?.permissionType),
+      displayName: String(
+        permission?.displayName ||
+          permission?.permissionType ||
+          permission?.type ||
+          "",
+      ).trim(),
+    }))
+    .filter((permission) => permission.permissionType),
 });
 
 export const corporateApi = serviceApi.injectEndpoints({
@@ -239,7 +252,9 @@ export const corporateApi = serviceApi.injectEndpoints({
           : Array.isArray(response?.screens)
             ? response.screens
             : [];
-        return screens.map(normalizeCustomRoleScreen).filter((screen) => screen.screen);
+        return screens
+          .map(normalizeCustomRoleScreen)
+          .filter((screen) => screen.screen);
       },
       providesTags: ["Users"],
     }),
@@ -256,7 +271,8 @@ export const corporateApi = serviceApi.injectEndpoints({
         url: "/corporate/custom-roles/subscription-modules",
         method: "GET",
       }),
-      transformResponse: (response) => (Array.isArray(response) ? response : []),
+      transformResponse: (response) =>
+        Array.isArray(response) ? response : [],
       providesTags: ["Users"],
     }),
     getCustomRoles: builder.query({
@@ -417,7 +433,10 @@ export const corporateApi = serviceApi.injectEndpoints({
       query: (body) => ({
         url: "/corporate/employee/update",
         method: "POST",
-        body,
+        body: {
+          ...body,
+          programType: "VENDOR_PAYMENTS",
+        },
       }),
       invalidatesTags: ["Users", "Categories"],
     }),
@@ -443,7 +462,11 @@ export const corporateApi = serviceApi.injectEndpoints({
             ? response
             : [];
         return currencies
-          .map((currency) => String(currency || "").trim().toUpperCase())
+          .map((currency) =>
+            String(currency || "")
+              .trim()
+              .toUpperCase(),
+          )
           .filter(Boolean);
       },
     }),
