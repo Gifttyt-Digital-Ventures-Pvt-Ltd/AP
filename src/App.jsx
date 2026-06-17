@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { CreditErrorProvider } from "./contexts/CreditErrorContext";
 import { RBACProvider, useRBAC } from "./contexts/RBACContext";
 import SessionTimeout from "./components/SessionTimeout";
 import { Toaster } from "./components/ui/sonner";
@@ -34,15 +35,18 @@ import GoodsReceipt from "./pages/goods-receipt/GoodsReceipt";
 import InvoiceMatching from "./pages/invoice-matching/InvoiceMatching";
 import PaymentBatches from "./pages/payment-batches/PaymentBatches";
 import Notifications from "./pages/notifications/Notifications";
+import CampaignsPage from "./pages/campaigns/CampaignsPage";
 const loadSettingsPage = () => import("./pages/settings/Settings");
 const loadTaxManagementPage = () => import("./pages/tax-management/TaxManagement");
 const loadReportsPage = () => import("./pages/reports/Reports");
 const loadAuditTrailPage = () => import("./pages/audit-trail/AuditTrail");
+const loadIntegrationsPage = () => import("./pages/integrations/IntegrationsPage");
 
 const Settings = lazy(loadSettingsPage);
 const TaxManagement = lazy(loadTaxManagementPage);
 const Reports = lazy(loadReportsPage);
 const AuditTrail = lazy(loadAuditTrailPage);
+const IntegrationsPage = lazy(loadIntegrationsPage);
 
 const PageFallback = () => (
   <div className="min-h-[60vh] rounded-xl border border-border bg-card/50 flex items-center justify-center">
@@ -196,6 +200,7 @@ function AppContent() {
       loadTaxManagementPage();
       loadReportsPage();
       loadAuditTrailPage();
+      loadIntegrationsPage();
     };
 
     if (typeof window !== "undefined" && "requestIdleCallback" in window) {
@@ -219,6 +224,7 @@ function AppContent() {
         <Route element={<ProtectedRoute />}>
           <Route path="/dashboard" element={<Dashboard />} />
           <Route path="/vendors" element={<Vendors />} />
+          <Route path="/campaigns" element={<CampaignsPage />} />
           <Route path="/invoices" element={<InvoicesPage />} />
           <Route path="/approvals" element={<Approvals />} />
           <Route path="/payments" element={<Payments />} />
@@ -263,6 +269,54 @@ function AppContent() {
               </Suspense>
             }
           />
+          <Route
+            path="/integrations"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <IntegrationsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/integrations/connect/:provider"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <IntegrationsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/integrations/:connectionId"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <IntegrationsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/integrations/:connectionId/mapping"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <IntegrationsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/integrations/:connectionId/objects/:object"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <IntegrationsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/integrations/:connectionId/logs"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <IntegrationsPage />
+              </Suspense>
+            }
+          />
           <Route path="/" element={<DefaultProtectedRoute />} />
         </Route>
       </Routes>
@@ -282,7 +336,9 @@ function App() {
         <AuthProvider>
           <SessionTimeout>
             <RBACProvider>
-              <AppContent />
+              <CreditErrorProvider>
+                <AppContent />
+              </CreditErrorProvider>
             </RBACProvider>
           </SessionTimeout>
         </AuthProvider>

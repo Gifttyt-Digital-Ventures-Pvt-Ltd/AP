@@ -14,12 +14,12 @@ export const getInvoiceMandatoryFieldValidationMessage = (
 ) => {
   if (!payload) return null;
 
-  if (department && !payload.department_id) {
+  if (department && !payload.departmentId) {
     return 'Please select a department before creating invoice';
   }
 
   if (showCategoryField && category) {
-    const categoryId = payload.category_id || payload.category?.id;
+    const categoryId = payload.categoryId || payload.category?.id;
     if (!categoryId) {
       return 'Please select a category before creating invoice';
     }

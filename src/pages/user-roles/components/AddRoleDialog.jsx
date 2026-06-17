@@ -13,9 +13,12 @@ import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import {
   isPermissionChecked,
+  isPermissionDisabledByMasterAdmin,
+  isMasterAdminSelected,
   isViewOnlyImplied,
   togglePermissionSelection,
 } from '../utils/permissionSelection';
+import { MASTER_ADMIN_PERMISSION_ID } from '../constants/permissionConfig';
 
 // Dialog for backend custom role creation.
 const AddRoleDialog = ({ open, onOpenChange, permissionGroups, onSave, saving = false }) => {
@@ -27,6 +30,12 @@ const AddRoleDialog = ({ open, onOpenChange, permissionGroups, onSave, saving = 
 
   const handlePermissionToggle = (group, permissionId) => {
     setSelectedPermissions((prev) => togglePermissionSelection(group, permissionId, prev));
+  };
+
+  const handleMasterAdminToggle = () => {
+    setSelectedPermissions((prev) =>
+      togglePermissionSelection({}, MASTER_ADMIN_PERMISSION_ID, prev),
+    );
   };
 
   const reset = () => {
@@ -90,7 +99,26 @@ const AddRoleDialog = ({ open, onOpenChange, permissionGroups, onSave, saving = 
 
             <div>
               <Label className="mb-3 block">Permissions</Label>
-              <Accordion type="multiple" className="space-y-2">
+              <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
+                <div className="flex items-start space-x-3">
+                  <Checkbox
+                    id="create-master-admin"
+                    checked={isMasterAdminSelected(selectedPermissions)}
+                    onCheckedChange={handleMasterAdminToggle}
+                    data-testid="create-master-admin-checkbox"
+                  />
+                  <label htmlFor="create-master-admin" className="cursor-pointer">
+                    <span className="block text-sm font-medium">Master Admin</span>
+                    <span className="block text-xs text-muted-foreground">
+                      Full corporate portal access. Selecting this enables all permissions.
+                    </span>
+                  </label>
+                </div>
+              </div>
+              <Accordion
+                type="multiple"
+                className={`space-y-2 ${isMasterAdminSelected(selectedPermissions) ? 'pointer-events-none opacity-60' : ''}`}
+              >
                 {permissionGroups.map((group, index) => (
                   <AccordionItem
                     key={group.title}
@@ -108,31 +136,37 @@ const AddRoleDialog = ({ open, onOpenChange, permissionGroups, onSave, saving = 
                             permission.id,
                             selectedPermissions,
                           );
+                          const disabledByMasterAdmin = isPermissionDisabledByMasterAdmin(
+                            permission.id,
+                            selectedPermissions,
+                          );
                           return (
                           <div
                             key={permission.id}
                             className={`flex items-center space-x-3 ${
-                              impliedViewOnly ? 'opacity-50' : ''
+                              impliedViewOnly || disabledByMasterAdmin ? 'opacity-50' : ''
                             }`}
                           >
                             <Checkbox
                               id={`create-${permission.id}`}
                               checked={isPermissionChecked(group, permission.id, selectedPermissions)}
-                              disabled={impliedViewOnly}
+                              disabled={impliedViewOnly || disabledByMasterAdmin}
                               onCheckedChange={() => handlePermissionToggle(group, permission.id)}
                             />
                             <label
                               htmlFor={`create-${permission.id}`}
                               className={`text-sm ${
-                                impliedViewOnly
+                                impliedViewOnly || disabledByMasterAdmin
                                   ? 'text-muted-foreground cursor-not-allowed'
                                   : 'text-foreground cursor-pointer'
                               }`}
                             >
                               {permission.label}
-                              {impliedViewOnly && (
+                              {(impliedViewOnly || disabledByMasterAdmin) && (
                                 <span className="ml-2 text-xs text-muted-foreground">
-                                  Included with higher access
+                                  {disabledByMasterAdmin
+                                    ? 'Disabled by Master Admin'
+                                    : 'Included with higher access'}
                                 </span>
                               )}
                             </label>

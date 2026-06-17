@@ -16,9 +16,12 @@ import { Textarea } from '../../../components/ui/textarea';
 import { CheckCircle2, Edit2, Shield, Users } from 'lucide-react';
 import {
   isPermissionChecked,
+  isPermissionDisabledByMasterAdmin,
+  isMasterAdminSelected,
   isViewOnlyImplied,
   togglePermissionSelection,
 } from '../utils/permissionSelection';
+import { MASTER_ADMIN_PERMISSION_ID } from '../constants/permissionConfig';
 
 const resolveInitialEditSection = (dialogMode) => {
   if (dialogMode === 'assignUsers') return 'users';
@@ -38,6 +41,7 @@ const ViewRoleDialog = ({
   saving = false,
   availableUsers = [],
   canManageRoles = false,
+  canManageAssignedUsers = false,
   hiddenPermissionIds = [],
 }) => {
   const isAssignUsersFlow = dialogMode === 'assignUsers';
@@ -72,6 +76,12 @@ const ViewRoleDialog = ({
 
   const handlePermissionToggle = (group, permissionId) => {
     setSelectedPermissions((prev) => togglePermissionSelection(group, permissionId, prev));
+  };
+
+  const handleMasterAdminToggle = () => {
+    setSelectedPermissions((prev) =>
+      togglePermissionSelection({}, MASTER_ADMIN_PERMISSION_ID, prev),
+    );
   };
 
   const handleCancel = () => {
@@ -231,7 +241,26 @@ const ViewRoleDialog = ({
                       <Label className="mb-3 block">
                         Permissions ({selectedPermissions.length})
                       </Label>
-                      <Accordion type="multiple" className="space-y-2">
+                      <div className="mb-4 rounded-lg border border-primary/20 bg-primary/5 p-4">
+                        <div className="flex items-start space-x-3">
+                          <Checkbox
+                            id="edit-master-admin"
+                            checked={isMasterAdminSelected(selectedPermissions)}
+                            onCheckedChange={handleMasterAdminToggle}
+                            data-testid="edit-master-admin-checkbox"
+                          />
+                          <label htmlFor="edit-master-admin" className="cursor-pointer">
+                            <span className="block text-sm font-medium">Master Admin</span>
+                            <span className="block text-xs text-muted-foreground">
+                              Full corporate portal access. Selecting this enables all permissions.
+                            </span>
+                          </label>
+                        </div>
+                      </div>
+                      <Accordion
+                        type="multiple"
+                        className={`space-y-2 ${isMasterAdminSelected(selectedPermissions) ? 'pointer-events-none opacity-60' : ''}`}
+                      >
                         {permissionGroups.map((group, index) => (
                           <AccordionItem
                             key={group.title}
@@ -249,31 +278,37 @@ const ViewRoleDialog = ({
                                     permission.id,
                                     selectedPermissions,
                                   );
+                                  const disabledByMasterAdmin = isPermissionDisabledByMasterAdmin(
+                                    permission.id,
+                                    selectedPermissions,
+                                  );
                                   return (
                                     <div
                                       key={permission.id}
                                       className={`flex items-center space-x-3 ${
-                                        impliedViewOnly ? 'opacity-50' : ''
+                                        impliedViewOnly || disabledByMasterAdmin ? 'opacity-50' : ''
                                       }`}
                                     >
                                       <Checkbox
                                         id={`edit-${permission.id}`}
                                         checked={isPermissionChecked(group, permission.id, selectedPermissions)}
-                                        disabled={impliedViewOnly}
+                                        disabled={impliedViewOnly || disabledByMasterAdmin}
                                         onCheckedChange={() => handlePermissionToggle(group, permission.id)}
                                       />
                                       <label
                                         htmlFor={`edit-${permission.id}`}
                                         className={`text-sm ${
-                                          impliedViewOnly
+                                          impliedViewOnly || disabledByMasterAdmin
                                             ? 'text-muted-foreground cursor-not-allowed'
                                             : 'text-foreground cursor-pointer'
                                         }`}
                                       >
                                         {permission.label}
-                                        {impliedViewOnly && (
+                                        {(impliedViewOnly || disabledByMasterAdmin) && (
                                           <span className="ml-2 text-xs text-muted-foreground">
-                                            Included with higher access
+                                            {disabledByMasterAdmin
+                                              ? 'Disabled by Master Admin'
+                                              : 'Included with higher access'}
                                           </span>
                                         )}
                                       </label>
@@ -324,7 +359,7 @@ const ViewRoleDialog = ({
                     Assigned Users ({isUserEditMode ? selectedEmployeeIds.length : role.users.length})
                   </h3>
                 </div>
-                {canManageRoles && !isUserEditMode && !isAssignUsersFlow && (
+                {canManageAssignedUsers && !isUserEditMode && !isAssignUsersFlow && (
                   <Button
                     variant="outline"
                     size="sm"
@@ -337,7 +372,7 @@ const ViewRoleDialog = ({
                 )}
               </div>
 
-              {isUserEditMode ? (
+              {isUserEditMode && canManageAssignedUsers ? (
                 <div className="space-y-3">
                   <Input
                     value={userSearch}
@@ -345,7 +380,7 @@ const ViewRoleDialog = ({
                     placeholder="Search users by name, email, or employee ID"
                     data-testid="assign-role-user-search"
                   />
-                  <div className="max-h-60 overflow-y-auto border border-border rounded-lg p-3 space-y-3">
+                    <div className="max-h-60 overflow-y-auto border border-border rounded-lg p-3 space-y-3">
                     {filteredUsers.length > 0 ? (
                       filteredUsers.map((user) => (
                         <div key={user.id} className="flex items-start space-x-3">

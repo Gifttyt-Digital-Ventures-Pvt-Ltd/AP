@@ -1,7 +1,30 @@
 import { serviceApi } from "../serviceApi";
 import { normalizeCustomRolePermissionsResponse } from "../../utils/rbacPermissions";
+import {
+  DEFAULT_INVOICE_CONFIGURATION,
+  normalizeActiveInvoiceConfiguration,
+  normalizeInvoiceConfigurationCatalog,
+} from "../../utils/invoiceConfiguration";
+import {
+  DEFAULT_VENDOR_FIELD_CATALOG,
+  normalizeActiveVendorFields,
+  normalizeVendorFieldCatalog,
+} from "../../utils/vendorFieldConfig";
+import {
+  isTokenBasedSubscription,
+  normalizeSubscriptionModel,
+} from "../../utils/subscriptionModel";
 
-const toBoolean = (value) => value === true;
+const BILLING_SECTION_IDS = new Set([
+  "SETTINGS_BILLING",
+  "CREDITS_ALL",
+  "WALLET_ALL",
+]);
+
+const withoutBillingSections = (sections = []) =>
+  sections.filter(
+    (sectionEntry) => !BILLING_SECTION_IDS.has(normalizeToken(sectionEntry?.section)),
+  );
 
 const resolveCorporatePayload = (response) => {
   return (
@@ -24,6 +47,7 @@ const normalizeCorporateSubscription = (corporate) => {
       combined: false,
       liveTracking: false,
       voucherEnabled: false,
+      subscriptionModel: normalizeSubscriptionModel(),
     };
   }
 
@@ -41,6 +65,11 @@ const normalizeCorporateSubscription = (corporate) => {
     ),
     liveTracking: toBoolean(corporate.liveTracking),
     voucherEnabled: toBoolean(corporate.voucherEnabled),
+    subscriptionModel: normalizeSubscriptionModel(
+      corporate.subscriptionModel ??
+        corporate.apSubscriptionModel ??
+        corporate.billingModel,
+    ),
   };
 };
 
@@ -78,7 +107,135 @@ const toArray = (value) => {
   return Array.isArray(value) ? value : [value];
 };
 
+const DEFAULT_BASIC_SUBSCRIPTION_SECTIONS = [
+  { displayName: "Organisation Details", screen: "SETTINGS", section: "SETTINGS_ORG_DETAILS" },
+  { displayName: "Billing", screen: "SETTINGS", section: "SETTINGS_BILLING" },
+  { displayName: "Users", screen: "MANAGE_ROLE", section: "MANAGE_ROLE_USERS" },
+  {
+    displayName: "Roles & Permissions",
+    screen: "MANAGE_ROLE",
+    section: "MANAGE_ROLE_ROLES_PERMISSIONS",
+  },
+];
+
+const DEFAULT_CUSTOM_ROLE_SCREENS = [
+  {
+    screen: "SETTINGS",
+    displayName: "Settings",
+    permissionTypes: [
+      { permissionType: "ORG", displayName: "Organisation Details" },
+    ],
+  },
+  {
+    screen: "CREDITS",
+    displayName: "Billing",
+    permissionTypes: [
+      { permissionType: "MANAGE_BILLING", displayName: "Manage Billing" },
+    ],
+  },
+  {
+    screen: "MANAGE_ROLE",
+    displayName: "Manage Role",
+    permissionTypes: [
+      { permissionType: "USERS", displayName: "Users" },
+      { permissionType: "VIEW", displayName: "Roles & Permissions" },
+      { permissionType: "MANAGE", displayName: "Manage Roles" },
+    ],
+  },
+];
+
+const ensureDefaultCustomRoleScreens = (screens = []) => {
+  const existing = new Map(
+    screens
+      .filter((screen) => screen?.screen)
+      .map((screen) => [normalizeToken(screen.screen), screen]),
+  );
+
+  DEFAULT_CUSTOM_ROLE_SCREENS.forEach((fallbackScreen) => {
+    const screenKey = normalizeToken(fallbackScreen.screen);
+    if (!screenKey) return;
+    if (!existing.has(screenKey)) {
+      existing.set(screenKey, fallbackScreen);
+      return;
+    }
+
+    const current = existing.get(screenKey);
+    const currentTypes = new Set(
+      toArray(current.permissionTypes).map((permission) =>
+        normalizeToken(permission?.permissionType ?? permission?.type),
+      ),
+    );
+    const mergedTypes = [
+      ...toArray(current.permissionTypes),
+      ...fallbackScreen.permissionTypes.filter(
+        (permission) => !currentTypes.has(normalizeToken(permission.permissionType)),
+      ),
+    ];
+    existing.set(screenKey, { ...current, permissionTypes: mergedTypes });
+  });
+
+  return Array.from(existing.values());
+};
+
+const ASSIGNABLE_CREDITS_PERMISSION_TYPES = new Set(["MANAGE_BILLING", "MANAGE"]);
+
+const filterAssignableCreditsPermissions = (screens = []) =>
+  screens
+    .map((screen) => {
+      if (normalizeToken(screen?.screen) !== "CREDITS") return screen;
+
+      const seenTypes = new Set();
+      const permissionTypes = toArray(screen.permissionTypes)
+        .map((permission) => {
+          const rawType = normalizeToken(permission?.permissionType ?? permission?.type);
+          const permissionType = rawType === "MANAGE" ? "MANAGE_BILLING" : rawType;
+          return {
+            ...permission,
+            permissionType,
+            type: permissionType,
+          };
+        })
+        .filter((permission) => {
+          const permissionType = normalizeToken(permission?.permissionType);
+          if (!ASSIGNABLE_CREDITS_PERMISSION_TYPES.has(permissionType)) return false;
+          if (seenTypes.has(permissionType)) return false;
+          seenTypes.add(permissionType);
+          return true;
+        });
+
+      return { ...screen, permissionTypes };
+    })
+    .map((screen) => {
+      if (normalizeToken(screen?.screen) !== "CREDITS") return screen;
+      if (toArray(screen.permissionTypes).length > 0) return screen;
+      return {
+        ...screen,
+        permissionTypes: [{ permissionType: "MANAGE_BILLING", displayName: "Manage Billing" }],
+      };
+    });
+
 const normalizeCorporateScreensResponse = (response = {}) => {
+  const subscriptionModel = normalizeSubscriptionModel(
+    response?.subscriptionModel ??
+      response?.apSubscriptionModel ??
+      response?.billingModel,
+  );
+  const isTokenBased = isTokenBasedSubscription(subscriptionModel);
+  const defaultBasicSections = isTokenBased
+    ? DEFAULT_BASIC_SUBSCRIPTION_SECTIONS
+    : withoutBillingSections(DEFAULT_BASIC_SUBSCRIPTION_SECTIONS);
+
+  const hasEntitlementPayload =
+    Object.keys(response || {}).length > 0 &&
+    (toArray(response?.basicSections).length > 0 ||
+      toArray(response?.additionalSections).length > 0 ||
+      toArray(response?.allowedScreens).length > 0 ||
+      Object.keys(response?.screenSections || {}).length > 0);
+  const basicSections = hasEntitlementPayload
+    ? (isTokenBased
+        ? toArray(response?.basicSections)
+        : withoutBillingSections(toArray(response?.basicSections)))
+    : defaultBasicSections;
   const rawScreenSections =
     response?.screenSections && typeof response.screenSections === "object"
       ? response.screenSections
@@ -119,27 +276,80 @@ const normalizeCorporateScreensResponse = (response = {}) => {
     if (screen) sectionScreens.set(section, screen);
   };
 
-  toArray(response?.basicSections).forEach(addEnabledSection);
+  basicSections.forEach(addEnabledSection);
   toArray(response?.additionalSections).forEach(addEnabledSection);
   explicitSectionEnabled.forEach((isEnabled, section) => {
     if (isEnabled) enabledSections.add(section);
     if (!isEnabled) enabledSections.delete(section);
   });
 
-  const allowedScreens = new Set(toArray(response?.allowedScreens).map(normalizeToken).filter(Boolean));
+  // Billing is a basic subscription section under SETTINGS, not listed in /custom-roles/screens.
+  if (isTokenBased) {
+    Object.values(screenSectionsByScreen)
+      .flat()
+      .forEach((sectionEntry) => {
+        const section = normalizeToken(sectionEntry?.section);
+        if (section !== "SETTINGS_BILLING") return;
+        if (sectionEntry?.isBasic !== true) return;
+        if (explicitSectionEnabled.get(section) === false) return;
+        addEnabledSection(sectionEntry);
+      });
+    const billingBasicSection = DEFAULT_BASIC_SUBSCRIPTION_SECTIONS.find(
+      (sectionEntry) => normalizeToken(sectionEntry?.section) === "SETTINGS_BILLING",
+    );
+    if (
+      billingBasicSection &&
+      explicitSectionEnabled.get("SETTINGS_BILLING") !== false &&
+      !enabledSections.has("SETTINGS_BILLING")
+    ) {
+      addEnabledSection(billingBasicSection);
+    }
+  } else {
+    BILLING_SECTION_IDS.forEach((sectionId) => enabledSections.delete(sectionId));
+  }
+
+  const allowedScreens = new Set(
+    toArray(response?.allowedScreens).map(normalizeToken).filter(Boolean),
+  );
   enabledSections.forEach((section) => {
     const screen = sectionScreens.get(section);
     if (screen) allowedScreens.add(screen);
   });
 
   const enabledSectionList = Array.from(enabledSections);
+  const vendorFieldConfiguration = normalizeVendorFieldCatalog(
+    toArray(response?.vendorFieldConfiguration),
+  );
+  const activeVendorFields = normalizeActiveVendorFields(
+    response?.activeVendorFields,
+  );
+  const invoiceConfiguration = normalizeInvoiceConfigurationCatalog(
+    toArray(response?.invoiceConfiguration),
+  );
+  const activeInvoiceConfiguration = normalizeActiveInvoiceConfiguration(
+    response?.activeInvoiceConfiguration,
+  );
+
   return {
     raw: response ?? null,
+    subscriptionModel,
+    isTokenBasedSubscription: isTokenBased,
     allowedScreens: Array.from(allowedScreens),
     enabledSections: enabledSectionList,
     screenSectionsByScreen,
     sectionScreens: Object.fromEntries(sectionScreens),
-    isCategoryFeatureEnabled: enabledSections.has("MANAGE_ROLE_CATEGORIES"),
+    isCategoryFeatureEnabled: enabledSections.has("CATEGORY_ALL"),
+    isCampaignFeatureEnabled: enabledSections.has("CAMPAIGN_ALL"),
+    vendorFieldConfiguration:
+      vendorFieldConfiguration.length > 0
+        ? vendorFieldConfiguration
+        : DEFAULT_VENDOR_FIELD_CATALOG,
+    activeVendorFields,
+    invoiceConfiguration:
+      invoiceConfiguration.length > 0
+        ? invoiceConfiguration
+        : DEFAULT_INVOICE_CONFIGURATION,
+    activeInvoiceConfiguration,
   };
 };
 
@@ -147,12 +357,21 @@ const normalizeCustomRoleScreen = (screen = {}) => ({
   ...screen,
   screen: normalizeToken(screen?.screen),
   displayName: String(screen?.displayName || screen?.screen || "").trim(),
-  permissionTypes: toArray(screen?.permissionTypes).map((permission) => ({
-    ...permission,
-    permissionType: normalizeToken(permission?.permissionType ?? permission?.type),
-    type: normalizeToken(permission?.type ?? permission?.permissionType),
-    displayName: String(permission?.displayName || permission?.permissionType || permission?.type || "").trim(),
-  })).filter((permission) => permission.permissionType),
+  permissionTypes: toArray(screen?.permissionTypes)
+    .map((permission) => ({
+      ...permission,
+      permissionType: normalizeToken(
+        permission?.permissionType ?? permission?.type,
+      ),
+      type: normalizeToken(permission?.type ?? permission?.permissionType),
+      displayName: String(
+        permission?.displayName ||
+          permission?.permissionType ||
+          permission?.type ||
+          "",
+      ).trim(),
+    }))
+    .filter((permission) => permission.permissionType),
 });
 
 export const corporateApi = serviceApi.injectEndpoints({
@@ -207,7 +426,11 @@ export const corporateApi = serviceApi.injectEndpoints({
           : Array.isArray(response?.screens)
             ? response.screens
             : [];
-        return screens.map(normalizeCustomRoleScreen).filter((screen) => screen.screen);
+        return filterAssignableCreditsPermissions(
+          ensureDefaultCustomRoleScreens(
+            screens.map(normalizeCustomRoleScreen).filter((screen) => screen.screen),
+          ),
+        );
       },
       providesTags: ["Users"],
     }),
@@ -224,7 +447,8 @@ export const corporateApi = serviceApi.injectEndpoints({
         url: "/corporate/custom-roles/subscription-modules",
         method: "GET",
       }),
-      transformResponse: (response) => (Array.isArray(response) ? response : []),
+      transformResponse: (response) =>
+        Array.isArray(response) ? response : [],
       providesTags: ["Users"],
     }),
     getCustomRoles: builder.query({
@@ -385,7 +609,10 @@ export const corporateApi = serviceApi.injectEndpoints({
       query: (body) => ({
         url: "/corporate/employee/update",
         method: "POST",
-        body,
+        body: {
+          ...body,
+          programType: "VENDOR_PAYMENTS",
+        },
       }),
       invalidatesTags: ["Users", "Categories"],
     }),
@@ -411,7 +638,11 @@ export const corporateApi = serviceApi.injectEndpoints({
             ? response
             : [];
         return currencies
-          .map((currency) => String(currency || "").trim().toUpperCase())
+          .map((currency) =>
+            String(currency || "")
+              .trim()
+              .toUpperCase(),
+          )
           .filter(Boolean);
       },
     }),

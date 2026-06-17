@@ -11,14 +11,14 @@ export const extractRawHistory = (response) => {
     response?.history,
     response?.records,
     response?.approvalRecords,
-    response?.approval_records,
+    response?.approvalRecords,
     response?.data,
     response?.results,
     response?.content,
     response?.data?.history,
     response?.data?.records,
     response?.data?.approvalRecords,
-    response?.data?.approval_records,
+    response?.data?.approvalRecords,
   ];
 
   const populated = candidates.find((entry) => Array.isArray(entry) && entry.length > 0);
@@ -155,7 +155,7 @@ export const normalizeApprovalHistoryEntries = (response) => {
       timestamp:
         entry.timestamp ||
         entry.createdAt ||
-        entry.created_at ||
+        entry.createdAt ||
         new Date().toISOString(),
       user_name,
       user_role:

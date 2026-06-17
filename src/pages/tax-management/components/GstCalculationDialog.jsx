@@ -5,6 +5,8 @@ import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import { Loader2 } from 'lucide-react';
+import MeteredActionCostHint from '../../../components/credits/MeteredActionCostHint';
+import { CREDIT_ACTION_CODES } from '../../../constants/creditActions';
 
 // Dialog to calculate GST on a selected invoice.
 const GstCalculationDialog = ({
@@ -109,6 +111,8 @@ const GstCalculationDialog = ({
           <Label htmlFor="reverse-charge">Reverse Charge Applicable</Label>
         </div>
       </div>
+
+      <MeteredActionCostHint actionCode={CREDIT_ACTION_CODES.GST_INVOICE_API} />
 
       <DialogFooter>
         <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>

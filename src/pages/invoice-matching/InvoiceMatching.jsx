@@ -35,6 +35,7 @@ import {
   TableRow,
 } from "../../components/ui/table";
 import AppDataTable from "../../components/common/AppDataTable";
+import RefreshButton from "../../components/common/RefreshButton";
 import { Textarea } from "../../components/ui/textarea";
 import { toast } from "sonner";
 import {
@@ -53,6 +54,10 @@ import {
   XCircle,
 } from "lucide-react";
 import { useActionGuard } from "../../hooks/useActionGuard";
+import { useCreditErrorHandler } from "../../contexts/CreditErrorContext";
+import MeteredActionCostHint from "../../components/credits/MeteredActionCostHint";
+import { useMeteredActionEstimate } from "../../hooks/useMeteredActionEstimate";
+import { CREDIT_ACTION_CODES } from "../../constants/creditActions";
 
 const STATUS_OPTIONS = [
   { value: "ALL", label: "All Statuses" },
@@ -224,6 +229,7 @@ const emptyMatchForm = {
 
 const InvoiceMatching = () => {
   const { guardAction, canPerformAction } = useActionGuard();
+  const { handleCreditError } = useCreditErrorHandler();
   const canPerform = canPerformAction("matching.perform");
   const canEdit = canPerformAction("matching.edit");
   const canMarkException = canPerformAction("matching.exception");
@@ -309,6 +315,10 @@ const InvoiceMatching = () => {
   const totalElements = Number(listData?.totalElements ?? matchings.length) || 0;
   const loading = summaryLoading || listLoading;
   const isEditMode = Boolean(editingMatching);
+  const matchCostEstimate = useMeteredActionEstimate(
+    CREDIT_ACTION_CODES.INVOICE_MATCHING,
+    isEditMode ? 0 : 1,
+  );
   const selectedInvoice = invoices.find((invoice) => invoice.id === matchForm.invoiceId);
   const selectedPo = purchaseOrders.find((po) => po.id === matchForm.purchaseOrderId);
   const selectedGrn = grns.find((grn) => grn.id === matchForm.grnId);
@@ -402,6 +412,7 @@ const InvoiceMatching = () => {
       setMatchForm(emptyMatchForm);
       refreshData();
     } catch (error) {
+      if (handleCreditError(error)) return;
       toast.error(getErrorMessage(error, isEditMode ? "Failed to edit match" : "Failed to perform match"));
     }
   };
@@ -642,10 +653,9 @@ const InvoiceMatching = () => {
           <p className="text-muted-foreground">2-way and 3-way invoice matching with POs and GRNs</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={refreshData}>
-            <RefreshCw className="h-4 w-4 mr-2" />
+          <RefreshButton onClick={refreshData} refreshing={loading}>
             Refresh
-          </Button>
+          </RefreshButton>
           <Button onClick={openNewMatchDialog} disabled={!canPerform} data-testid="new-match-btn">
             <Link2 className="h-4 w-4 mr-2" />
             New Match
@@ -948,13 +958,24 @@ const InvoiceMatching = () => {
             )}
           </div>
 
+          {!isEditMode ? (
+            <MeteredActionCostHint
+              actionCode={CREDIT_ACTION_CODES.INVOICE_MATCHING}
+              unitCount={1}
+              className="mt-4"
+            />
+          ) : null}
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowMatchDialog(false)}>
               Cancel
             </Button>
             <Button
               onClick={handleMatchSubmit}
-              disabled={Boolean(getSubmitDisabledReason()) || (isEditMode ? !canEdit : !canPerform)}
+              disabled={
+                Boolean(getSubmitDisabledReason()) ||
+                (isEditMode ? !canEdit : !canPerform || matchCostEstimate.isDisabled)
+              }
               data-testid="perform-match-btn"
             >
               {(performing || editing) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

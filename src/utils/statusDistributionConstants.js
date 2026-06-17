@@ -1,21 +1,21 @@
 export const STATUS_CHART_COLORS = [
-  '#6366f1',
-  '#22c55e',
-  '#f59e0b',
-  '#ef4444',
-  '#3b82f6',
-  '#8b5cf6',
-  '#f97316',
-  '#6b7280',
+  '#5b21b6', // Brand Deep Purple (primary-button hue)
+  '#7c3aed', // Brand Violet
+  '#8b5cf6', // Brand Light Violet
+  '#a78bfa', // Brand Soft Purple/Lavender
+  '#6366f1', // Brand Indigo
+  '#a855f7', // Purple Accent
+  '#818cf8', // Soft Indigo
+  '#94a3b8', // Muted Slate Gray
 ];
 
 export const STATUS_COLORS = {
-  'Pending Checker': '#f59e0b',
-  'Pending Approver': '#f97316',
-  'Pending Payment': '#3b82f6',
-  'Amount Released': '#22c55e',
-  Paid: '#22c55e',
-  Rejected: '#ef4444',
-  'Needs Correction': '#d97706',
-  Draft: '#6b7280',
+  'Pending Checker': '#a78bfa',    // Soft Lavender
+  'Pending Approver': '#8b5cf6',   // Brand Light Violet
+  'Pending Payment': '#6366f1',    // Brand Indigo
+  'Amount Released': '#5b21b6',   // Brand Deep Purple
+  Paid: '#7c3aed',                // Brand Violet
+  Rejected: '#ef4444',            // Destructive red (standard utility)
+  'Needs Correction': '#f59e0b',  // Amber warning (standard utility)
+  Draft: '#94a3b8',               // Muted Slate Gray
 };

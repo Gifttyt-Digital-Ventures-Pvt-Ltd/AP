@@ -9,14 +9,21 @@ export const withInvoiceFileBaseUrl = (url) => {
 
 export const getInvoiceFileUrl = (invoice) => {
   if (!invoice) return null;
-  if (invoice.invoice_file_url) {
-    return withInvoiceFileBaseUrl(invoice.invoice_file_url);
+  if (invoice.invoiceFileUrl) {
+    return withInvoiceFileBaseUrl(invoice.invoiceFileUrl);
   }
-  if (invoice.receipt_file_url) {
-    return withInvoiceFileBaseUrl(invoice.receipt_file_url);
+  if (invoice.receiptFileUrl) {
+    return withInvoiceFileBaseUrl(invoice.receiptFileUrl);
   }
-  if (invoice.file_id) {
-    return withInvoiceFileBaseUrl(`/files/${invoice.file_id}`);
+  if (invoice.fileId) {
+    return withInvoiceFileBaseUrl(`/files/${invoice.fileId}`);
   }
   return null;
+};
+
+export const openInvoiceFileDownload = (invoice) => {
+  const url = getInvoiceFileUrl(invoice);
+  if (!url) return false;
+  window.open(url, "_blank", "noopener,noreferrer");
+  return true;
 };

@@ -8,6 +8,7 @@ import ApTab from './components/Ap/ApTab';
 import VendorTab from './components/Vendor/VendorTab';
 import TaxTab from './components/Tax/TaxTab';
 import PaymentTab from './components/Payment/PaymentTab';
+import ExportsTab from './components/Exports/ExportsTab';
 import { useReportsData } from './hooks/useReportsData';
 
 const Reports = () => {
@@ -35,6 +36,7 @@ const Reports = () => {
     canViewVendorReports,
     canViewTaxReports,
     canViewPaymentReports,
+    canViewExportReports,
   } = useReportsData();
 
   if (loading && !executiveData) {
@@ -55,6 +57,7 @@ const Reports = () => {
         currencies={currencies}
         selectedCurrency={selectedCurrency}
         onCurrencyChange={setSelectedCurrency}
+        hideControls={activeTab === 'exports'}
       />
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -64,6 +67,7 @@ const Reports = () => {
           canViewVendorReports={canViewVendorReports}
           canViewTaxReports={canViewTaxReports}
           canViewPaymentReports={canViewPaymentReports}
+          canViewExportReports={canViewExportReports}
         />
 
         {canViewExecutiveReports && (
@@ -93,6 +97,12 @@ const Reports = () => {
         {canViewPaymentReports && (
           <TabsContent value="payment" className="space-y-6">
             <PaymentTab paymentData={paymentData} {...formatterProps} />
+          </TabsContent>
+        )}
+
+        {canViewExportReports && (
+          <TabsContent value="exports" className="space-y-6">
+            <ExportsTab currencies={currencies} />
           </TabsContent>
         )}
       </Tabs>

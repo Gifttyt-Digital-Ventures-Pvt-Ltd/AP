@@ -4,6 +4,7 @@ const APPROVAL_PIPELINE_STATUSES = new Set([
   'Pending Checker',
   'Pending Approver',
   'Pending Approval',
+  'Approved',
   'Pending Payment',
   PAID_STATUS,
 ]);
@@ -11,11 +12,11 @@ const APPROVAL_PIPELINE_STATUSES = new Set([
 const getApproverLevels = (invoice) =>
   Math.max(
     1,
-    Number(invoice.required_approval_levels ?? invoice.requiredApprovalLevels ?? 1) || 1,
+    Number(invoice.requiredApprovalLevels ?? invoice.required_approval_levels ?? 1) || 1,
   );
 
 const getApprovalRecords = (invoice) => {
-  const records = invoice.approval_records ?? invoice.approvalRecords;
+  const records = invoice.approvalRecords ?? invoice.approval_records;
   return Array.isArray(records) ? records : [];
 };
 
@@ -65,17 +66,17 @@ export const getApprovalProgress = (invoice = {}) => {
   let completed = 0;
 
   if (status === 'Pending Approver' || status === 'Pending Approval') {
-    const isSequential = invoice.is_sequential_approval ?? invoice.isSequentialApproval ?? true;
+    const isSequential = invoice.isSequentialApproval ?? invoice.isSequentialApproval ?? true;
 
     if (isSequential) {
       const currentLevel = Number(
-        invoice.current_approval_level ?? invoice.currentApprovalLevel ?? 1,
+        invoice.currentApprovalLevel ?? invoice.currentApprovalLevel ?? 1,
       );
       completed += Math.max(0, currentLevel - 1);
     } else {
       completed += countParallelApproverCompletions(invoice, approverLevels);
     }
-  } else if (status === 'Pending Payment' || status === PAID_STATUS) {
+  } else if (status === 'Approved' || status === 'Pending Payment' || status === PAID_STATUS) {
     completed += approverLevels;
   }
 

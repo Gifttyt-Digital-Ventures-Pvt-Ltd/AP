@@ -1,3 +1,5 @@
+import { FULL_ACCESS_PERMISSION } from "../constants/rbacPolicy";
+
 const normalizeToken = (value = "") =>
   String(value)
     .trim()
@@ -51,6 +53,25 @@ const mapInvoicePermission = (permissionType) => {
   return null;
 };
 
+const mapCampaignPermission = (permissionType) => {
+  if (permissionType === "VIEW") return "campaign-view";
+  if (
+    permissionType === "MANAGE" ||
+    permissionType === "CREATOR" ||
+    permissionType === "MAKER" ||
+    permissionType === "FINANCE"
+  ) {
+    return "campaign-manage";
+  }
+  if (permissionType === "APPROVER" || permissionType === "APPROVE") {
+    return "campaign-approve";
+  }
+  if (permissionType === "ADMIN" || permissionType === "FULL") {
+    return ["campaign-view", "campaign-manage", "campaign-approve"];
+  }
+  return null;
+};
+
 const mapInvoiceMatchingPermission = (permissionType) => {
   if (permissionType === "VIEW") return "matching-view";
   if (permissionType === "MANAGE") return "matching-manage";
@@ -66,6 +87,15 @@ const mapPaymentsPermission = (permissionType) => {
 const mapPaymentBatchesPermission = (permissionType) => {
   if (permissionType === "VIEW") return "payment-batches-view";
   if (permissionType === "MANAGE") return "payment-batches-manage";
+  return null;
+};
+
+const mapCreditsPermission = (permissionType) => {
+  if (permissionType === "VIEW" || permissionType === "VIEW_WALLET") return "credits-view";
+  if (permissionType === "LEDGER" || permissionType === "VIEW_LEDGER") return "credits-ledger";
+  if (permissionType === "MANAGE" || permissionType === "MANAGE_BILLING" || permissionType === "FULL") {
+    return ["credits-view", "credits-ledger", "credits-manage"];
+  }
   return null;
 };
 
@@ -95,6 +125,7 @@ const mapBankingPermission = (permissionType) => {
 const mapRolesPermission = (permissionType) => {
   if (permissionType === "VIEW") return "roles-view";
   if (permissionType === "MANAGE") return "roles-manage";
+  if (permissionType === "USERS" || permissionType === "MANAGE_USERS") return "roles-manage-users";
   return null;
 };
 
@@ -104,6 +135,29 @@ const mapSettingsPermission = (permissionType) => {
   }
   if (permissionType === "BANKING") return "settings-banking";
   if (permissionType === "INTERACTION") return "settings-interaction";
+  if (permissionType === "BILLING" || permissionType === "MANAGE_BILLING") {
+    return "credits-manage";
+  }
+  return null;
+};
+
+const mapIntegrationsPermission = (permissionType) => {
+  if (permissionType === "VIEW") return "integrations.view";
+  if (permissionType === "CONNECT") return "integrations.connect";
+  if (permissionType === "DISCONNECT") return "integrations.disconnect";
+  if (permissionType === "MAPPING_EDIT" || permissionType === "MAPPING") return "integrations.mapping.edit";
+  if (permissionType === "SYNC_TRIGGER" || permissionType === "SYNC") return "integrations.sync.trigger";
+  if (permissionType === "REVIEW_RESOLVE" || permissionType === "REVIEW") return "integrations.review.resolve";
+  if (permissionType === "MANAGE" || permissionType === "FULL") {
+    return [
+      "integrations.view",
+      "integrations.connect",
+      "integrations.disconnect",
+      "integrations.mapping.edit",
+      "integrations.sync.trigger",
+      "integrations.review.resolve",
+    ];
+  }
   return null;
 };
 
@@ -122,6 +176,22 @@ const mapVendorWorkflowPermission = (permissionType) => {
 export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput) => {
   const screen = normalizeToken(screenInput);
   const permissionType = normalizeToken(permissionTypeInput);
+
+  if (
+    screen === "AP_MASTER_ADMIN" ||
+    screen === "MASTER_ADMIN" ||
+    screen === "CORP_ADMIN"
+  ) {
+    if (
+      screen === "CORP_ADMIN" ||
+      !permissionType ||
+      permissionType === "FULL_ACCESS" ||
+      permissionType === "FULL"
+    ) {
+      return [FULL_ACCESS_PERMISSION, "master-admin"];
+    }
+    return null;
+  }
 
   if (screen === "DASHBOARD") {
     return permissionType === "VIEW" ? "dashboard-view" : null;
@@ -151,6 +221,10 @@ export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput)
     return mapInvoicePermission(permissionType);
   }
 
+  if (screen === "CAMPAIGN" || screen === "CAMPAIGNS") {
+    return mapCampaignPermission(permissionType);
+  }
+
   if (screen === "INVOICE_MATCHING" || screen === "MATCHING") {
     return mapInvoiceMatchingPermission(permissionType);
   }
@@ -161,6 +235,10 @@ export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput)
 
   if (screen === "PAYMENT_BATCHES" || screen === "PAYMENT_BATCH") {
     return mapPaymentBatchesPermission(permissionType);
+  }
+
+  if (screen === "CREDITS" || screen === "CREDIT" || screen === "WALLET") {
+    return mapCreditsPermission(permissionType);
   }
 
   if (screen === "TAX" || screen === "TAX_MANAGEMENT") {
@@ -185,6 +263,10 @@ export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput)
 
   if (screen === "SETTINGS") {
     return mapSettingsPermission(permissionType);
+  }
+
+  if (screen === "INTEGRATIONS" || screen === "ERP_INTEGRATIONS") {
+    return mapIntegrationsPermission(permissionType);
   }
 
   if (screen === "CATEGORY" || screen === "CATEGORIES") {
@@ -229,6 +311,61 @@ const getPermissionsArrayFromResponse = (response) => {
   if (Array.isArray(nestedPermissions)) return nestedPermissions;
 
   return [];
+};
+
+export const hasBackendScreenPermission = (
+  permissionsRaw = [],
+  screen,
+  permissionType,
+) => {
+  const normalizedScreen = normalizeToken(screen);
+  const normalizedType = normalizeToken(permissionType);
+  if (!normalizedScreen || !normalizedType) return false;
+
+  return toArray(permissionsRaw).some(
+    (entry) =>
+      normalizeToken(entry?.screen) === normalizedScreen &&
+      normalizeToken(entry?.permissionType) === normalizedType,
+  );
+};
+
+export const canAssignRoleSetsPermission = ({
+  isCorporateAdmin = false,
+  hasPermission = () => false,
+  backendPermissionsRaw = [],
+} = {}) => {
+  if (isCorporateAdmin) return true;
+  if (
+    hasPermission(FULL_ACCESS_PERMISSION) ||
+    hasPermission("master-admin")
+  ) {
+    return true;
+  }
+
+  if (backendPermissionsRaw.length > 0) {
+    const hasManageRoleManage = hasBackendScreenPermission(
+      backendPermissionsRaw,
+      "MANAGE_ROLE",
+      "MANAGE",
+    );
+    const hasManageRoleUsers = hasBackendScreenPermission(
+      backendPermissionsRaw,
+      "MANAGE_ROLE",
+      "USERS",
+    );
+
+    if (hasManageRoleUsers && !hasManageRoleManage) {
+      return false;
+    }
+
+    return hasManageRoleManage;
+  }
+
+  if (hasPermission("roles-manage-users") && !hasPermission("roles-manage")) {
+    return false;
+  }
+
+  return hasPermission("roles-manage");
 };
 
 export const normalizeCustomRolePermissionsResponse = (response) => {

@@ -74,7 +74,7 @@ const CategoryViewDialog = ({
                   {user.name || "Unnamed Approver"}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
-                  {user.role || "No role"}
+                  {user?.role}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
                   {user.email || "No email available"}

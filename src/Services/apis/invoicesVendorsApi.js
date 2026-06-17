@@ -1,6 +1,19 @@
 import { serviceApi } from "../serviceApi";
-import { toInvoiceApiPayload, toInvoiceUiPayload, toVendorApiPayload, toVendorUiPayload } from "../utils/payloadMappers";
+import { toInvoiceApiPayload, toInvoiceUiPayload, toVendorApiPayload, toVendorUiPayload, normalizeInvoiceListResponse } from "../utils/payloadMappers";
 import { normalizeApprovalHistoryEntries } from "../../pages/invoices/utils/invoiceHistory";
+import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
+
+const unwrapVendorList = (response) => {
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response?.data)) return response.data;
+  if (Array.isArray(response?.content)) return response.content;
+  if (Array.isArray(response?.items)) return response.items;
+  if (Array.isArray(response?.vendors)) return response.vendors;
+  if (response && (response.id || response.vendorId || response.vendor_id)) {
+    return [response];
+  }
+  return [];
+};
 
 export const invoicesVendorsApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -13,10 +26,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
     }),
     getInvoices: builder.query({
       query: (params) => ({ url: "/invoices", method: "GET", params }),
-      transformResponse: (response) =>
-        Array.isArray(response)
-          ? response.map(toInvoiceUiPayload)
-          : toInvoiceUiPayload(response),
+      transformResponse: normalizeInvoiceListResponse,
       providesTags: ["Invoices"],
     }),
     createInvoice: builder.mutation({
@@ -35,6 +45,14 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
       }),
       invalidatesTags: ["Invoices", "Dashboard", "Reports"],
     }),
+    forwardInvoice: builder.mutation({
+      query: (body) => ({
+        url: "/invoices/forward",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Invoices", "Approvals", "Dashboard", "Reports"],
+    }),
     deleteInvoice: builder.mutation({
       query: (id) => ({ url: `/invoices/${id}`, method: "DELETE" }),
       invalidatesTags: ["Invoices", "Dashboard", "Reports"],
@@ -45,7 +63,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Invoices", "Dashboard", "Reports"],
+      invalidatesTags: ["Invoices", "Dashboard", "Reports", ...CREDIT_INVALIDATION_TAGS],
     }),
     bulkUploadInvoices: builder.mutation({
       query: (body) => ({
@@ -53,7 +71,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Invoices", "Dashboard", "Reports"],
+      invalidatesTags: ["Invoices", "Dashboard", "Reports", ...CREDIT_INVALIDATION_TAGS],
     }),
     approveInvoice: builder.mutation({
       query: ({ id, body }) => ({
@@ -85,9 +103,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
     getVendors: builder.query({
       query: () => ({ url: "/vendors", method: "GET" }),
       transformResponse: (response) =>
-        Array.isArray(response)
-          ? response.map(toVendorUiPayload)
-          : toVendorUiPayload(response),
+        unwrapVendorList(response).map(toVendorUiPayload),
       providesTags: (result) => {
         if (Array.isArray(result)) {
           return [
@@ -120,6 +136,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
         { type: "Vendors", id: "LIST" },
         "Dashboard",
         "Reports",
+        ...CREDIT_INVALIDATION_TAGS,
       ],
     }),
     requestVendorAddition: builder.mutation({
@@ -159,7 +176,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
     getPendingVendorApprovals: builder.query({
       query: () => ({ url: "/vendors/approvals/pending", method: "GET" }),
       transformResponse: (response) =>
-        Array.isArray(response) ? response.map(toVendorUiPayload) : [],
+        unwrapVendorList(response).map(toVendorUiPayload),
       providesTags: [{ type: "Vendors", id: "PENDING" }],
     }),
     approveVendor: builder.mutation({
@@ -189,6 +206,7 @@ export const {
   useGetInvoicesQuery,
   useCreateInvoiceMutation,
   useUpdateInvoiceMutation,
+  useForwardInvoiceMutation,
   useDeleteInvoiceMutation,
   useScanInvoiceMutation,
   useBulkUploadInvoicesMutation,

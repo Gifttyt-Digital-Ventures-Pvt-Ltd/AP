@@ -4,6 +4,7 @@ import {
   toBankAccountUiPayload,
   toInvoiceUiPayload,
 } from "../utils/payloadMappers";
+import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
 
 export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -19,11 +20,11 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
     }),
     createPayment: builder.mutation({
       query: (body) => ({ url: "/payments", method: "POST", body }),
-      invalidatesTags: ["Payments", "Invoices", "Dashboard", "Reports"],
+      invalidatesTags: ["Payments", "Invoices", "Dashboard", "Reports", ...CREDIT_INVALIDATION_TAGS],
     }),
     bulkReleasePayments: builder.mutation({
       query: () => ({ url: "/payments/bulk-release", method: "POST" }),
-      invalidatesTags: ["Payments", "Invoices", "Dashboard", "Reports"],
+      invalidatesTags: ["Payments", "Invoices", "Dashboard", "Reports", ...CREDIT_INVALIDATION_TAGS],
     }),
     recordPayments: builder.mutation({
       query: (body) => ({
@@ -31,7 +32,7 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Payments", "Invoices", "Dashboard", "Reports"],
+      invalidatesTags: ["Payments", "Invoices", "Dashboard", "Reports", ...CREDIT_INVALIDATION_TAGS],
     }),
     getBankAccounts: builder.query({
       query: () => ({ url: "/bank-accounts", method: "GET" }),

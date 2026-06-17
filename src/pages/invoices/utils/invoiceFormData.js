@@ -2,16 +2,20 @@ import { format } from "date-fns";
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../../utils/currency";
 import {
   createDefaultLineItem,
+  DEFAULT_INR_TAX,
   isInrInvoiceCurrency,
+  LINE_ITEM_LEVEL,
   mapExtractedLineItemToForm,
 } from "./invoiceTax";
+import { buildTdsValue } from "./tds";
+import { resolveLineItemsExpanded } from "./lineItemsSummary";
 
 export const resolveVendorGstin = (vendor = {}) =>
   String(vendor?.gstin ?? vendor?.gstIn ?? "").trim();
 
 export const resolveInvoiceFormGstin = (invoice = {}, vendor = null) => {
   const fromInvoice = String(
-    invoice?.gstin ?? invoice?.vendor_gstin ?? invoice?.vendorGstin ?? "",
+    invoice?.gstin ?? invoice?.vendorGstin ?? invoice?.vendorGstin ?? "",
   ).trim();
   if (fromInvoice) return fromInvoice;
   return resolveVendorGstin(vendor);
@@ -28,9 +32,9 @@ export const mapInvoiceLineItemToForm = (item = {}, { useInrTax = true } = {}) =
   mapExtractedLineItemToForm(
     {
       ...item,
-      unit_price: item.unit_rate ?? item.unit_price ?? item.unitPrice,
-      line_total: item.line_total ?? item.amount ?? item.lineTotal,
-      amount: item.amount ?? item.line_total ?? item.lineTotal,
+      unitPrice: item.unitRate ?? item.unitPrice ?? item.unitPrice,
+      lineTotal: item.lineTotal ?? item.amount ?? item.lineTotal,
+      amount: item.amount ?? item.lineTotal ?? item.lineTotal,
     },
     { useInrTax },
   );
@@ -39,6 +43,7 @@ export const buildInvoiceEditFormData = (
   invoice = {},
   {
     isCategoryFeatureEnabled = false,
+    isCampaignFeatureEnabled = false,
     findVendorByName,
     findVendorById,
   } = {},
@@ -46,11 +51,11 @@ export const buildInvoiceEditFormData = (
   const editCurrency = normalizeCurrencyCode(invoice.currency) || DEFAULT_CURRENCY;
   const useInrTax = isInrInvoiceCurrency(editCurrency);
   const defaultGstTreatment = useInrTax ? "Regular" : "N/A";
-  const invoiceLineItems = Array.isArray(invoice.line_items) ? invoice.line_items : [];
-  const invoiceVendorId = invoice.vendor_id ?? invoice.vendorId ?? "";
+  const invoiceLineItems = Array.isArray(invoice.lineItems) ? invoice.lineItems : [];
+  const invoiceVendorId = invoice.vendorId ?? invoice.vendorId ?? "";
   const matchedVendorByName =
-    !invoiceVendorId && invoice.vendor_name && typeof findVendorByName === "function"
-      ? findVendorByName(invoice.vendor_name)
+    !invoiceVendorId && invoice.vendorName && typeof findVendorByName === "function"
+      ? findVendorByName(invoice.vendorName)
       : null;
   const matchedVendorById =
     invoiceVendorId && typeof findVendorById === "function"
@@ -60,81 +65,123 @@ export const buildInvoiceEditFormData = (
   const vendorId = invoiceVendorId || vendor?.id || "";
 
   const sourceOfSupply =
-    invoice.source_of_supply ||
     invoice.sourceOfSupply ||
-    invoice.place_of_supply ||
+    invoice.sourceOfSupply ||
+    invoice.placeOfSupply ||
     invoice.placeOfSupply ||
     "";
   const destinationOfSupply =
-    invoice.destination_of_supply ||
     invoice.destinationOfSupply ||
-    invoice.place_of_supply ||
+    invoice.destinationOfSupply ||
+    invoice.placeOfSupply ||
     invoice.placeOfSupply ||
     "";
   const locationValue =
-    invoice.location || invoice.place_of_supply || invoice.placeOfSupply || "";
+    invoice.location || invoice.placeOfSupply || invoice.placeOfSupply || "";
 
-  const invoiceDate = formatInvoiceDateInput(invoice.invoice_date ?? invoice.invoiceDate);
-  const dueDate = formatInvoiceDateInput(invoice.due_date ?? invoice.dueDate);
-  const gstAmount = Number(invoice.gst_amount ?? invoice.gstAmount);
+  const invoiceDate = formatInvoiceDateInput(invoice.invoiceDate ?? invoice.invoiceDate);
+  const dueDate = formatInvoiceDateInput(invoice.dueDate ?? invoice.dueDate);
+  const gstAmount = Number(invoice.gstAmount ?? invoice.gstAmount);
+  const tdsSectionId = invoice.tdsSectionId ?? invoice.tds_section_id ?? null;
+  const tdsSectionCode = invoice.tdsSectionCode ?? invoice.tds_section_code ?? null;
+  const tdsRate = invoice.tdsRate ?? invoice.tds_rate ?? null;
 
   return {
-    vendor_name: invoice.vendor_name || invoice.vendorName || "",
-    vendor_id: vendorId,
-    vendor_matched: Boolean(vendorId),
-    vendor_request_submitted: false,
-    vendor_request_pending: Boolean(vendor?.is_pending_approval),
-    invoice_number: invoice.invoice_number || invoice.invoiceNumber || "",
-    invoice_date: invoiceDate || format(new Date(), "yyyy-MM-dd"),
-    due_date: dueDate || format(new Date(), "yyyy-MM-dd"),
-    billing_address:
-      invoice.billing_address ||
+    vendorName: invoice.vendorName || invoice.vendorName || "",
+    vendorId: vendorId,
+    vendorMatched: Boolean(vendorId),
+    vendorRequestSubmitted: false,
+    vendorRequestPending: Boolean(vendor?.isPendingApproval),
+    invoiceNumber: invoice.invoiceNumber || invoice.invoiceNumber || "",
+    invoiceDate: invoiceDate || format(new Date(), "yyyy-MM-dd"),
+    dueDate: dueDate || "",
+    billingAddress:
       invoice.billingAddress ||
-      invoice.vendor_address ||
+      invoice.billingAddress ||
+      invoice.vendorAddress ||
       invoice.vendorAddress ||
       "",
-    gst_treatment: invoice.gst_treatment || invoice.gstTreatment || defaultGstTreatment,
+    gstTreatment: invoice.gstTreatment || invoice.gstTreatment || defaultGstTreatment,
     gstin: resolveInvoiceFormGstin(invoice, vendor),
-    source_of_supply: sourceOfSupply,
-    destination_of_supply: destinationOfSupply,
+    sourceOfSupply: sourceOfSupply,
+    destinationOfSupply: destinationOfSupply,
     location: locationValue,
-    reverse_charges: invoice.reverse_charges || invoice.reverseCharges || "Not Applicable",
-    discounts_level: invoice.discounts_level || invoice.discountsLevel || "At Line Item Level",
-    invoice_discount:
-      invoice.invoice_discount ??
+    reverseCharges: invoice.reverseCharges || invoice.reverseCharges || "Not Applicable",
+    discountsLevel: invoice.discountsLevel || invoice.discountsLevel || LINE_ITEM_LEVEL,
+    invoiceDiscount:
+      invoice.invoiceDiscount ??
       invoice.invoiceDiscount ??
       0,
-    invoice_discount_type:
-      invoice.invoice_discount_type ??
+    invoiceDiscountType:
+      invoice.invoiceDiscountType ??
       invoice.invoiceDiscountType ??
       "%",
+    taxesLevel: invoice.taxesLevel || invoice.taxesLevel || LINE_ITEM_LEVEL,
+    invoiceTax: invoice.invoiceTax || invoice.invoiceTax || DEFAULT_INR_TAX,
+    invoiceTaxName: invoice.invoiceTaxName || invoice.invoiceTaxName || "Tax",
+    invoiceTaxRate:
+      invoice.invoiceTaxRate ??
+      invoice.invoiceTaxRate ??
+      "",
     source: invoice.source || "Upload",
-    source_email: invoice.source_email || invoice.sourceEmail || "",
-    line_items:
+    sourceEmail: invoice.sourceEmail || invoice.sourceEmail || "",
+    lineItemsExpanded: resolveLineItemsExpanded(invoice),
+    lineItems:
       invoiceLineItems.length > 0
         ? invoiceLineItems.map((item) => mapInvoiceLineItemToForm(item, { useInrTax }))
         : [createDefaultLineItem(editCurrency)],
     description: invoice.memo || invoice.description || "",
-    tds: invoice.tds || "",
-    amount: invoice.amount ?? invoice.net_amount ?? invoice.netAmount ?? 0,
+    tds:
+      invoice.tds ||
+      buildTdsValue({
+        tdsSectionId,
+        tdsSectionCode,
+        tdsRate,
+      }),
+    tdsAmount: invoice.tdsAmount ?? invoice.tds_amount ?? null,
+    tdsSectionId,
+    tdsSectionCode,
+    tdsRate,
+    amount: invoice.amount ?? invoice.netAmount ?? 0,
     currency: editCurrency,
-    department_id: invoice.department_id || invoice.departmentId || "",
-    department_name: invoice.department_name || invoice.departmentName || "",
+    roundOff:
+      invoice.roundOff ??
+      invoice.round_off ??
+      invoice.roundoff ??
+      undefined,
+    departmentId: invoice.departmentId || invoice.departmentId || "",
+    departmentName: invoice.departmentName || invoice.departmentName || "",
     ...(!useInrTax && Number.isFinite(gstAmount) && gstAmount > 0
       ? {
-          scanned_tax_amount: gstAmount,
-          scanned_tax_name: "Tax",
-          scanned_tax_rate: "",
+          scannedTaxAmount: gstAmount,
+          scannedTaxName: "Tax",
+          scannedTaxRate: "",
         }
       : {}),
     ...(isCategoryFeatureEnabled
       ? {
           category: invoice.category || null,
-          category_id:
-            invoice.category_id || invoice.categoryId || invoice.category?.id || "",
-          category_name:
-            invoice.category_name || invoice.categoryName || invoice.category?.name || "",
+          categoryId:
+            invoice.categoryId || invoice.categoryId || invoice.category?.id || "",
+          categoryName:
+            invoice.categoryName || invoice.categoryName || invoice.category?.name || "",
         }
       : {}),
+    ...(isCampaignFeatureEnabled
+      ? {
+          campaignId: invoice.campaignId || invoice.campaign_id || "",
+          campaignName: invoice.campaignName || invoice.campaign_name || "",
+          referenceNumber:
+            invoice.referenceNumber ||
+            invoice.reference_number ||
+            invoice.referenceCode ||
+            invoice.reference_code ||
+            "",
+        }
+      : {
+          campaignId: "",
+          campaignName: "",
+          referenceNumber: "",
+        }),
   };
 };

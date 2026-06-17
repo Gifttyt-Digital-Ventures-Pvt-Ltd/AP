@@ -21,14 +21,11 @@ const InvoicesDialogs = (props) => {
     bulkExtracting,
     bulkExtractTotalFiles,
     bulkExtractProgress,
-    bulkExtractElapsedSeconds,
-    formatDuration,
     bulkPreviewOpen,
     bulkCreating,
     bulkAddingVendorItemId,
     bulkPreviewItems,
     bulkProgress,
-    bulkElapsedSeconds,
     formatBulkStatusLabel,
     getBulkStatusBadgeClass,
     setBulkPreviewOpen,
@@ -41,6 +38,8 @@ const InvoicesDialogs = (props) => {
     invoiceCategories,
     getCategoryNameById,
     isCategoryFeatureEnabled,
+    isCampaignFeatureEnabled,
+    showRefNoField = false,
     invoiceMandatoryFields,
     bulkEditOpen,
     setBulkEditOpen,
@@ -66,10 +65,15 @@ const InvoicesDialogs = (props) => {
     loadingHistory,
     canEdit,
     handleEditInvoice,
+    findVendorByName,
+    findVendorById,
     editDialogOpen,
     setEditDialogOpen,
     formData,
     handleUpdateInvoice,
+    handleForwardSavedInvoice,
+    canForwardSavedDraft,
+    forwardSavedInvoiceLoading,
     renderInvoiceForm,
     requestVendorOpen,
     handleRequestVendorOpenChange,
@@ -88,33 +92,15 @@ const InvoicesDialogs = (props) => {
         open={bulkExtracting}
         totalFiles={bulkExtractTotalFiles}
         progress={bulkExtractProgress}
-        elapsedSeconds={bulkExtractElapsedSeconds}
-        formatDuration={formatDuration}
       />
 
       <BulkPreviewDialog
         open={bulkPreviewOpen}
         bulkCreating={bulkCreating}
-        bulkExtracting={bulkExtracting}
-        bulkAddingVendorItemId={bulkAddingVendorItemId}
         bulkPreviewItems={bulkPreviewItems}
         bulkProgress={bulkProgress}
-        bulkElapsedSeconds={bulkElapsedSeconds}
-        formatDuration={formatDuration}
-        formatBulkStatusLabel={formatBulkStatusLabel}
-        getBulkStatusBadgeClass={getBulkStatusBadgeClass}
         setBulkPreviewOpen={setBulkPreviewOpen}
-        setBulkPreviewItems={setBulkPreviewItems}
-        handleAddVendorForBulkItem={handleAddVendorForBulkItem}
-        openBulkEditDialog={openBulkEditDialog}
         handleCreateBulkInvoices={handleCreateBulkInvoices}
-        departments={departments}
-        getDepartmentNameById={getDepartmentNameById}
-        invoiceCategories={invoiceCategories}
-        getCategoryNameById={getCategoryNameById}
-        showCategoryField={isCategoryFeatureEnabled}
-        departmentMandatory={invoiceMandatoryFields.department}
-        categoryMandatory={invoiceMandatoryFields.category}
       />
 
       <BulkEditDialog
@@ -149,6 +135,15 @@ const InvoicesDialogs = (props) => {
         loadingHistory={loadingHistory}
         canEdit={canEdit}
         handleEditInvoice={handleEditInvoice}
+        showCategoryField={isCategoryFeatureEnabled}
+        isCategoryFeatureEnabled={isCategoryFeatureEnabled}
+        showCampaignField={isCampaignFeatureEnabled}
+        isCampaignFeatureEnabled={isCampaignFeatureEnabled}
+        showRefNoField={showRefNoField}
+        findVendorByName={findVendorByName}
+        findVendorById={findVendorById}
+        departmentMandatory={invoiceMandatoryFields?.department}
+        categoryMandatory={invoiceMandatoryFields?.category}
       />
 
       <EditDialog
@@ -157,6 +152,9 @@ const InvoicesDialogs = (props) => {
         selectedInvoice={selectedInvoice}
         formData={formData}
         handleUpdateInvoice={handleUpdateInvoice}
+        handleForwardSavedInvoice={handleForwardSavedInvoice}
+        canForwardSavedDraft={canForwardSavedDraft}
+        forwardSavedInvoiceLoading={forwardSavedInvoiceLoading}
         renderPdfPreview={renderPdfPreview}
         pdfZoom={pdfZoom}
         viewPreviewError={viewPreviewError}
@@ -181,7 +179,7 @@ const InvoicesDialogs = (props) => {
           <AlertDialogHeader>
             <AlertDialogTitle>Delete Invoice?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete invoice {invoiceDeleteTarget?.invoice_number}?
+              Are you sure you want to delete invoice {invoiceDeleteTarget?.invoiceNumber}?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

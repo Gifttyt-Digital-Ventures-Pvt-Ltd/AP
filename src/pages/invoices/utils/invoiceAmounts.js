@@ -34,11 +34,9 @@ export const sumInvoiceAmountsByCurrency = (
 
 export const getInvoiceGrossAmount = (invoice) => {
   const explicitGross = toNumber(
-    invoice?.gross_amount ??
-      invoice?.grossAmount ??
+    invoice?.grossAmount ??
       invoice?.subtotal ??
       invoice?.subTotal ??
-      invoice?.taxable_amount ??
       invoice?.taxableAmount,
   );
 
@@ -55,21 +53,19 @@ export const getInvoiceGrossAmount = (invoice) => {
 
 export const getInvoiceTaxAmount = (invoice) =>
   toNumber(
-    invoice?.gst_amount ??
-      invoice?.gstAmount ??
-      invoice?.tax_amount ??
+    invoice?.gstAmount ??
       invoice?.taxAmount ??
-      toNumber(invoice?.cgst_amount ?? invoice?.cgstAmount) +
-        toNumber(invoice?.sgst_amount ?? invoice?.sgstAmount) +
-        toNumber(invoice?.igst_amount ?? invoice?.igstAmount),
+      toNumber(invoice?.cgstAmount) +
+        toNumber(invoice?.sgstAmount) +
+        toNumber(invoice?.igstAmount),
   );
 
 export const getInvoiceTdsAmount = (invoice) =>
-  toNumber(invoice?.tds_amount ?? invoice?.tdsAmount ?? invoice?.tds);
+  toNumber(invoice?.tdsAmount ?? invoice?.tdsAmount ?? invoice?.tds);
 
 export const getInvoiceNetAmount = (invoice) => {
   const explicitNetAmount =
-    invoice?.net_amount ?? invoice?.netAmount ?? invoice?.net_payable ?? invoice?.netPayable;
+    invoice?.netAmount ?? invoice?.netPayable;
 
   if (explicitNetAmount !== undefined && explicitNetAmount !== null && explicitNetAmount !== "") {
     return toNumber(explicitNetAmount);

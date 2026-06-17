@@ -38,6 +38,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Badge } from '../../components/ui/badge';
 import { Textarea } from '../../components/ui/textarea';
 import { toast } from 'sonner';
+import { useActionGuard } from '../../hooks/useActionGuard';
+import { useCreditErrorHandler } from '../../contexts/CreditErrorContext';
+import MeteredActionCostHint from '../../components/credits/MeteredActionCostHint';
+import { CREDIT_ACTION_CODES } from '../../constants/creditActions';
 import {
   Plus,
   Search,
@@ -50,7 +54,7 @@ import {
   Loader2,
   ClipboardCheck
 } from 'lucide-react';
-import { useActionGuard } from '../../hooks/useActionGuard';
+import RefreshButton from '../../components/common/RefreshButton';
 
 const statusColors = {
   'Draft': 'bg-gray-500',
@@ -106,6 +110,7 @@ const GoodsReceipt = () => {
   const [createGrn] = useCreateGrnMutation();
   const [postGrn] = usePostGrnMutation();
   const { guardAction, canPerformAction } = useActionGuard();
+  const { handleCreditError } = useCreditErrorHandler();
 
   const normalizePoLineItem = (item = {}) => ({
     ...item,
@@ -307,6 +312,7 @@ const GoodsReceipt = () => {
       resetForm();
       fetchData();
     } catch (error) {
+      if (handleCreditError(error)) return;
       toast.error(error?.data?.detail || 'Failed to create GRN');
     } finally {
       setCreating(false);
@@ -390,16 +396,21 @@ const GoodsReceipt = () => {
           <h1 className="text-2xl font-bold">Goods Receipt Notes</h1>
           <p className="text-muted-foreground">Record receipt of goods against purchase orders</p>
         </div>
-        {canCreateGrn && (
-          <Button 
-            onClick={() => setShowSelectPODialog(true)} 
-            disabled={purchaseOrders.length === 0}
-            data-testid="create-grn-btn"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Create GRN
-          </Button>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <RefreshButton onClick={fetchData} refreshing={loading}>
+            Refresh
+          </RefreshButton>
+          {canCreateGrn && (
+            <Button 
+              onClick={() => setShowSelectPODialog(true)} 
+              disabled={purchaseOrders.length === 0}
+              data-testid="create-grn-btn"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create GRN
+            </Button>
+          )}
+        </div>
       </div>
 
       {/* Stats Cards */}
@@ -749,6 +760,8 @@ const GoodsReceipt = () => {
               />
             </div>
           </div>
+
+          <MeteredActionCostHint actionCode={CREDIT_ACTION_CODES.GRN_UPLOAD} className="mt-4" />
 
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowCreateDialog(false); resetForm(); }}>

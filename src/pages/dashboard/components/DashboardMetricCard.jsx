@@ -1,5 +1,5 @@
-import React from 'react';
-import { Card, CardContent } from '../../../components/ui/card';
+import React from "react";
+import { Card, CardContent } from "../../../components/ui/card";
 
 const DashboardMetricCard = ({
   icon: Icon,
@@ -11,18 +11,21 @@ const DashboardMetricCard = ({
   valueClassName,
   testId,
 }) => (
-  <Card className={cardClassName}>
-    <CardContent className="pt-4 pb-4">
-      <div className="flex items-center gap-3">
-        <div className={`p-2 rounded-lg ${iconWrapperClassName}`}>
-          <Icon className={`h-5 w-5 ${iconClassName}`} />
+  <Card className={`${cardClassName} h-full`}>
+    <CardContent className="p-4 flex flex-col justify-between h-full">
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs text-muted-foreground font-medium leading-tight">{label}</p>
+        <div className={`p-1.5 rounded-lg shrink-0 ${iconWrapperClassName}`}>
+          <Icon className={`h-4 w-4 ${iconClassName}`} />
         </div>
-        <div>
-          <p className="text-xs text-muted-foreground">{label}</p>
-          <p className={`text-xl font-bold ${valueClassName}`} data-testid={testId}>
-            {value}
-          </p>
-        </div>
+      </div>
+      <div className="mt-3">
+        <p
+          className={`text-2xl font-bold tracking-tight ${valueClassName}`}
+          data-testid={testId}
+        >
+          {value}
+        </p>
       </div>
     </CardContent>
   </Card>

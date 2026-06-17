@@ -4,6 +4,9 @@ export const NEEDS_CORRECTION_ACTION = "Needs Correction";
 export const LEGACY_SENT_BACK_ACTION = "Sent Back";
 export const PAID_STATUS = "Paid";
 export const LEGACY_AMOUNT_RELEASED_STATUS = "Amount Released";
+export const SAVED_STATUS = "Saved";
+export const PENDING_CHECKER_STATUS = "Pending Checker";
+export const VENDOR_APPROVAL_PENDING_STATUS = "Vendor Approval Pending";
 
 const TITLE_CASE_STATUS_ALIASES = {
   PAID: PAID_STATUS,
@@ -15,6 +18,7 @@ const TITLE_CASE_STATUS_ALIASES = {
   VENDOR_APPROVAL_PENDING: "Vendor Approval Pending",
   NEEDS_CORRECTION: NEEDS_CORRECTION_STATUS,
   DRAFT: "Draft",
+  SAVED: "Saved",
   REJECTED: "Rejected",
 };
 
@@ -33,6 +37,7 @@ export const getInvoiceStatusBadgeClass = (status) => {
   const normalizedStatus = normalizeWorkflowStatus(status);
   const statusMap = {
     Draft: "bg-gray-100 text-gray-800 border-gray-200",
+    Saved: "bg-slate-100 text-slate-800 border-slate-200",
     "Pending Checker": "bg-yellow-100 text-yellow-800 border-yellow-200",
     "Pending Approver": "bg-yellow-100 text-yellow-800 border-yellow-200",
     "Pending Approval": "bg-[#FFF7CC] text-[#7A4A00] border-[#F2D675]",
@@ -72,6 +77,22 @@ export const normalizeApprovalAction = (action) => {
 
 export const formatWorkflowStatus = (status) => normalizeWorkflowStatus(status);
 
+export const resolveInitialInvoiceStatus = ({
+  vendorId,
+  vendorRequestSubmitted = false,
+  findVendorById,
+} = {}) => {
+  if (vendorRequestSubmitted) return VENDOR_APPROVAL_PENDING_STATUS;
+  if (!vendorId) return VENDOR_APPROVAL_PENDING_STATUS;
+
+  const vendor = findVendorById?.(vendorId);
+  if (vendor?.isPendingApproval) return VENDOR_APPROVAL_PENDING_STATUS;
+
+  return PENDING_CHECKER_STATUS;
+};
+
+export const resolveBulkCreateInvoiceStatus = () => SAVED_STATUS;
+
 export const emailsMatch = (left, right) => {
   if (!left || !right) return false;
   return String(left).trim().toLowerCase() === String(right).trim().toLowerCase();
@@ -93,13 +114,13 @@ const pickEmailLikeValue = (values = []) =>
 
 export const resolveCreatorEmail = (entity = {}) => {
   const emailLike = pickEmailLikeValue([
-    entity.created_by_email,
+    entity.createdByEmail,
     entity.createdByEmail,
     entity.requested_by_email,
     entity.requestedByEmail,
     entity.creator_email,
     entity.creatorEmail,
-    entity.created_by_name,
+    entity.createdByName,
     entity.createdByName,
     entity.requested_by_name,
     entity.requestedByName,
@@ -113,7 +134,7 @@ export const resolveCreatorEmail = (entity = {}) => {
 
 export const resolveCreatorUserId = (entity = {}) => {
   const idCandidates = [
-    entity.created_by_id,
+    entity.createdById,
     entity.createdById,
     entity.creator_id,
     entity.creatorId,
@@ -141,7 +162,7 @@ export const resolveCreatorUserId = (entity = {}) => {
 };
 
 export const resolveCreatorDisplayName = (entity = {}) =>
-  entity.created_by_name ??
+  entity.createdByName ??
   entity.createdByName ??
   entity.requested_by_name ??
   entity.requestedByName ??
@@ -248,25 +269,87 @@ export const extractApiErrorDetail = (error) => {
 
 const INVOICE_MUTABLE_STATUSES = new Set([
   NEEDS_CORRECTION_STATUS,
+  "Saved",
   "Pending Checker",
   "Vendor Approval Pending",
 ]);
+
+export const isSavedInvoiceStatus = (status) =>
+  normalizeWorkflowStatus(status) === "Saved";
+
+export const canForwardSavedInvoice = (invoice, identity = {}) => {
+  if (!isSavedInvoiceStatus(invoice?.status)) return false;
+  const { canUpdateInvoices, canManageInvoices } = identity;
+  return Boolean(canUpdateInvoices || canManageInvoices);
+};
 const INVOICE_DELETABLE_STATUSES = new Set([
   ...INVOICE_MUTABLE_STATUSES,
   "Rejected",
 ]);
 
+export const shouldCheckerSubmitOnUpdate = (invoice, identity = {}) => {
+  const status = normalizeWorkflowStatus(invoice?.status);
+  return (
+    status === PENDING_CHECKER_STATUS &&
+    Boolean(identity.isCheckerEditEnabled) &&
+    Boolean(identity.canCheckInvoices)
+  );
+};
+
 export const canEditInvoice = (invoice, identity = {}) => {
-  const { canUpdateInvoices, canManageInvoices, isCorporateAdmin } = identity;
-  const canMutateInvoice = canUpdateInvoices || canManageInvoices;
-  if (!canMutateInvoice) return false;
+  const {
+    canUpdateInvoices,
+    canManageInvoices,
+    canCheckInvoices,
+    isCorporateAdmin,
+    isCheckerEditEnabled = false,
+  } = identity;
 
   const status = normalizeWorkflowStatus(invoice?.status);
   if (!INVOICE_MUTABLE_STATUSES.has(status)) return false;
 
+  if (status === PENDING_CHECKER_STATUS) {
+    if (!isCheckerEditEnabled) return false;
+    if (isCorporateAdmin) return true;
+    if (canCheckInvoices) return true;
+    return Boolean(canUpdateInvoices || canManageInvoices);
+  }
+
   if (isCorporateAdmin) return true;
+
+  const canMutateInvoice = canUpdateInvoices || canManageInvoices;
+  if (!canMutateInvoice) return false;
+
   if (status === NEEDS_CORRECTION_STATUS) return matchesCreator(invoice, identity);
   return true;
+};
+
+export const getInvoiceEditBlockedMessage = (invoice, identity = {}) => {
+  const status = normalizeWorkflowStatus(invoice?.status);
+  const {
+    canUpdateInvoices,
+    canManageInvoices,
+    canCheckInvoices,
+    isCheckerEditEnabled = false,
+  } = identity;
+
+  if (
+    status === PENDING_CHECKER_STATUS &&
+    !isCheckerEditEnabled &&
+    (canCheckInvoices || canUpdateInvoices || canManageInvoices)
+  ) {
+    return 'Invoice editing during checker review is not enabled for your organization';
+  }
+
+  if (!canUpdateInvoices && !canManageInvoices && !canCheckInvoices) {
+    return 'You do not have permission to edit this invoice';
+  }
+
+  if (status === NEEDS_CORRECTION_STATUS) {
+    return 'Only the creator can edit an invoice in Needs Correction status';
+  }
+
+  return `Invoices in ${status || 'this'} status cannot be edited`;
 };
 
 export const canDeleteInvoice = (status, canDeleteInvoices) => {
@@ -275,7 +358,7 @@ export const canDeleteInvoice = (status, canDeleteInvoices) => {
 };
 
 const VENDOR_MAKER_EDITABLE_STATUSES = new Set([
-  "Request Create",
+  "Create Request",
   "Pending Approval",
   "Approved",
   "Draft",

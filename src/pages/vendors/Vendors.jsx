@@ -11,7 +11,9 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Search, Plus, Pencil, Trash2, Eye, X, Check, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
+import { format } from 'date-fns';
 import { useActionGuard } from '../../hooks/useActionGuard';
+import { useCreditErrorHandler } from '../../contexts/CreditErrorContext';
 import { useRBAC } from '../../contexts/RBACContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useGetCorporateUserDetailsQuery } from '../../Services/apis/corporateApi';
@@ -27,13 +29,22 @@ import {
 import VendorDetailsDialog from '../../components/vendors/VendorDetailsDialog';
 import * as XLSX from '@e965/xlsx';
 import AppDataTable from '../../components/common/AppDataTable';
+import RefreshButton from '../../components/common/RefreshButton';
 import { TableCell, TableRow } from '../../components/ui/table';
 import MultipleVendorUploadDialog from './components/MultipleVendorUploadDialog';
-import { getVendorValidationErrors } from '../../utils/vendorValidation';
+import {
+  getVendorUploadMandatoryFieldKeys,
+  isVendorFieldRequired,
+  VENDOR_FORM_KEY_TO_SECTION,
+} from '../../utils/vendorFieldConfig';
+import { getVendorValidationErrors, parseMsmeValue } from '../../utils/vendorValidation';
 import BulkUploadReviewDialog from './components/BulkUploadReviewDialog';
 import DeleteVendorDialog from './components/DeleteVendorDialog';
 import ViewVendorDialog from './components/ViewVendorDialog';
 import VendorApprovalDialog from './components/VendorApprovalDialog';
+import IntegrationSourceBadge from '../../components/integrations/IntegrationSourceBadge';
+import useZohoIntegrationActive from '../../hooks/useZohoIntegrationActive';
+import { withIntegrationTableHeader } from '../../utils/integrationProvenance';
 
 const VENDOR_UPLOAD_FIELDS = [
   'name',
@@ -44,6 +55,7 @@ const VENDOR_UPLOAD_FIELDS = [
   'contact_person',
   'pan',
   'gstin',
+  'msme',
   'category',
   'website',
   'currency',
@@ -59,20 +71,6 @@ const VENDOR_UPLOAD_FIELDS = [
   'bank_name',
   'branch',
   'notes',
-];
-
-const VENDOR_UPLOAD_MANDATORY_FIELDS = [
-  'name',
-  'vendor_type',
-  'email',
-  'mobile',
-  'contact_person',
-  'address_line1',
-  'address_line2',
-  'city',
-  'state',
-  'pincode',
-  'country',
 ];
 
 const VENDOR_UPLOAD_HEADER_MAP = {
@@ -93,6 +91,7 @@ const VENDOR_UPLOAD_HEADER_MAP = {
   country: 'Country',
   pan: 'PAN No',
   gstin: 'GST no',
+  msme: 'MSME',
   account_holder_name: 'Account Name',
   account_number: 'Account Number',
   ifsc_code: 'IFSC Code',
@@ -100,10 +99,6 @@ const VENDOR_UPLOAD_HEADER_MAP = {
   branch: 'Branch',
   notes: 'Remarks',
 };
-
-const VENDOR_UPLOAD_OPTIONAL_FIELDS = VENDOR_UPLOAD_FIELDS.filter(
-  (field) => !VENDOR_UPLOAD_MANDATORY_FIELDS.includes(field),
-);
 
 const toBulkVendorPayload = (row) => {
   const name = String(row.name || '').trim();
@@ -134,6 +129,7 @@ const toBulkVendorPayload = (row) => {
     contact_person: String(row.contact_person || '').trim(),
     website: String(row.website || '').trim(),
     notes: String(row.notes || '').trim(),
+    msme: parseMsmeValue(row.msme) === true,
   };
 };
 
@@ -148,10 +144,14 @@ const Vendors = () => {
   const {
     data: vendorsData = [],
     isError: vendorsError,
+    isFetching: vendorsFetching,
+    refetch: refetchVendors,
   } = useGetVendorsQuery();
   const {
     data: pendingApprovalsData = [],
     isError: pendingApprovalsError,
+    isFetching: pendingApprovalsFetching,
+    refetch: refetchPendingApprovals,
   } = useGetPendingVendorApprovalsQuery();
 
   const [createVendor, { isLoading: createVendorLoading }] = useCreateVendorMutation();
@@ -161,7 +161,19 @@ const Vendors = () => {
   const { user } = useAuth();
   const { data: corporateUserContext = null } = useGetCorporateUserDetailsQuery();
   const { guardAction, canPerformAction } = useActionGuard();
-  const { isCorporateAdmin } = useRBAC();
+  const { handleCreditError } = useCreditErrorHandler();
+  const { corporateScreens, isCorporateAdmin } = useRBAC();
+  const { showIntegrationColumn } = useZohoIntegrationActive();
+  const activeVendorFields = corporateScreens?.activeVendorFields ?? [];
+  const vendorFieldConfiguration = corporateScreens?.vendorFieldConfiguration ?? [];
+  const vendorUploadMandatoryFields = useMemo(
+    () => getVendorUploadMandatoryFieldKeys(activeVendorFields),
+    [activeVendorFields],
+  );
+  const vendorUploadOptionalFields = useMemo(
+    () => VENDOR_UPLOAD_FIELDS.filter((field) => !vendorUploadMandatoryFields.includes(field)),
+    [vendorUploadMandatoryFields],
+  );
   const canUpdateVendorPermission = canPerformAction('vendors.update');
   const canRequestVendorPermission = canPerformAction('invoices.addVendor');
   const vendorEditContext = useMemo(
@@ -201,6 +213,7 @@ const Vendors = () => {
     // Tax Information
     pan: '',
     gstin: '',
+    msme: false,
     
     // Address
     address_line1: '',
@@ -252,8 +265,8 @@ const Vendors = () => {
     }
 
     const validationErrors = getVendorValidationErrors(formData, {
-      requireEmail: true,
-      requirePincode: true,
+      activeVendorFields,
+      vendorFieldConfiguration,
     });
     if (validationErrors.length > 0) {
       toast.error(validationErrors[0]);
@@ -284,6 +297,7 @@ const Vendors = () => {
       setDialogOpen(false);
       resetForm();
     } catch (error) {
+      if (handleCreditError(error)) return;
       toast.error(extractApiErrorDetail(error) || 'Failed to save vendor');
     }
   };
@@ -335,7 +349,10 @@ const Vendors = () => {
       }
       setMultipleVendorUploadOpen(false);
       return { errors: [] };
-    } catch (_error) {
+    } catch (error) {
+      if (handleCreditError(error)) {
+        return { errors: ['Insufficient tokens or action unavailable'] };
+      }
       return { errors: ['Failed to parse or upload vendor file'] };
     }
   };
@@ -343,10 +360,17 @@ const Vendors = () => {
   const validateVendorUploadRow = (row, rowIndex) =>
     getVendorValidationErrors(row, {
       rowIndex,
-      requireEmail: true,
-      requireVendorType: true,
-      requirePincode: true,
+      activeVendorFields,
+      vendorFieldConfiguration,
     });
+
+  const getUploadGuideType = (fieldKey, optionalText) => {
+    const section = VENDOR_FORM_KEY_TO_SECTION[fieldKey];
+    if (section && isVendorFieldRequired(section, activeVendorFields)) {
+      return 'Mandatory';
+    }
+    return optionalText;
+  };
 
   const downloadVendorTemplate = () => {
     const headerRow = [
@@ -367,6 +391,7 @@ const Vendors = () => {
       'Country',
       'PAN No',
       'GST no',
+      'MSME',
       'Account Name',
       'Account Number',
       'IFSC Code',
@@ -377,29 +402,36 @@ const Vendors = () => {
 
     const guideRows = [
       ['Parameter', 'Type'],
-      ['Company Name', 'Mandatory'],
-      ['Vendor Type', 'Mandatory (Company/Individual)'],
-      ['Email ID', 'Mandatory'],
-      ['Mobile No', 'Mandatory'],
-      ['Phone No', 'Optional'],
-      ['Contact person', 'Mandatory'],
-      ['Category', 'Optional'],
-      ['Website', 'Optional'],
-      ['Currency', 'Optional'],
-      ['Address Line 1', 'Mandatory'],
-      ['Address Line 2', 'Mandatory'],
-      ['City', 'Mandatory'],
-      ['State', 'Mandatory'],
-      ['Pincode', 'Mandatory. Must be 6 digits when Country is India, otherwise any postal code text'],
-      ['Country', 'Mandatory'],
-      ['PAN No', 'Mandatory when Country is India, otherwise Optional'],
-      ['GST no', 'Mandatory when Country is India, otherwise Optional'],
-      ['Account Name', 'Optional'],
-      ['Account Number', 'Optional'],
-      ['IFSC Code', 'Optional'],
-      ['Bank Name', 'Optional'],
-      ['Branch', 'Optional'],
-      ['Remarks', 'Optional'],
+      ['Company Name', getUploadGuideType('name', 'Optional')],
+      ['Vendor Type', getUploadGuideType('vendor_type', 'Optional (Company/Individual)')],
+      ['Email ID', getUploadGuideType('email', 'Optional')],
+      ['Mobile No', getUploadGuideType('mobile', 'Optional')],
+      ['Phone No', getUploadGuideType('phone', 'Optional')],
+      ['Contact person', getUploadGuideType('contact_person', 'Optional')],
+      ['Category', getUploadGuideType('category', 'Optional')],
+      ['Website', getUploadGuideType('website', 'Optional')],
+      ['Currency', getUploadGuideType('currency', 'Optional')],
+      ['Address Line 1', getUploadGuideType('address_line1', 'Optional')],
+      ['Address Line 2', getUploadGuideType('address_line2', 'Optional')],
+      ['City', getUploadGuideType('city', 'Optional')],
+      ['State', getUploadGuideType('state', 'Optional')],
+      [
+        'Pincode',
+        getUploadGuideType(
+          'pincode',
+          'Optional. Must be 6 digits when Country is India, otherwise any postal code text',
+        ),
+      ],
+      ['Country', getUploadGuideType('country', 'Optional')],
+      ['PAN No', getUploadGuideType('pan', 'Optional')],
+      ['GST no', getUploadGuideType('gstin', 'Optional')],
+      ['MSME', getUploadGuideType('msme', 'Optional (Yes/No)')],
+      ['Account Name', getUploadGuideType('account_holder_name', 'Optional')],
+      ['Account Number', getUploadGuideType('account_number', 'Optional')],
+      ['IFSC Code', getUploadGuideType('ifsc_code', 'Optional')],
+      ['Bank Name', getUploadGuideType('bank_name', 'Optional')],
+      ['Branch', getUploadGuideType('branch', 'Optional')],
+      ['Remarks', getUploadGuideType('notes', 'Optional')],
     ];
 
     const workbook = XLSX.utils.book_new();
@@ -438,6 +470,7 @@ const Vendors = () => {
       mobile: vendor.mobile || '',
       pan: vendor.pan || '',
       gstin: vendor.gstin || '',
+      msme: parseMsmeValue(vendor.msme) === true,
       address_line1: vendor.address_line1 || '',
       address_line2: vendor.address_line2 || '',
       city: vendor.city || '',
@@ -520,6 +553,7 @@ const Vendors = () => {
       mobile: '',
       pan: '',
       gstin: '',
+      msme: false,
       address_line1: '',
       address_line2: '',
       city: '',
@@ -551,6 +585,16 @@ const Vendors = () => {
   const canEditVendorPermission = canUpdateVendorPermission;
   const canDeleteVendor = canPerformAction('vendors.delete');
   const canApproveVendor = canPerformAction('vendors.approve');
+  const vendorsRefreshing = vendorsFetching || pendingApprovalsFetching;
+
+  const handleRefreshVendors = async () => {
+    try {
+      await Promise.all([refetchVendors(), refetchPendingApprovals()]);
+      toast.success('Vendors refreshed');
+    } catch {
+      toast.error('Failed to refresh vendors');
+    }
+  };
 
   const isPendingApprovalVendor = (vendor) => {
     const normalizedStatus = String(vendor?.status || '')
@@ -562,15 +606,21 @@ const Vendors = () => {
     return vendorId ? filteredPendingVendorIds.has(vendorId) : false;
   };
 
-  const vendorsTableHeader = [
-    { key: 'vendor', title: 'Vendor' },
-    { key: 'type', title: 'Type' },
-    { key: 'status', title: 'Status' },
-    { key: 'contact', title: 'Contact' },
-    { key: 'pan', title: 'PAN' },
-    { key: 'gstin', title: 'GSTIN' },
-    { key: 'actions', title: 'Actions', headerClassName: 'text-left' },
-  ];
+  const vendorsTableHeader = useMemo(
+    () =>
+      withIntegrationTableHeader(
+        [
+          { key: 'vendor', title: 'Vendor' },
+          { key: 'createdAt', title: 'Created Date', cellClassName: 'text-xs text-muted-foreground whitespace-nowrap' },
+          { key: 'status', title: 'Status' },
+          { key: 'contact', title: 'Contact' },
+          { key: 'gstin', title: 'GSTIN' },
+          { key: 'actions', title: 'Actions', headerClassName: 'text-left' },
+        ],
+        showIntegrationColumn,
+      ),
+    [showIntegrationColumn],
+  );
 
   const renderVendorRow = (vendor, rowIndex, headers) => (
     <TableRow
@@ -586,7 +636,6 @@ const Vendors = () => {
             value = (
               <div>
                 <div className="font-medium">{vendor.name}</div>
-                <div className="text-sm text-muted-foreground">{vendor.category || 'Uncategorized'}</div>
               </div>
             );
             break;
@@ -620,11 +669,23 @@ const Vendors = () => {
             value = vendor.pan || '-';
             break;
           case 'gstin':
-            value = vendor.gstin ? `${vendor.gstin.substring(0, 4)}...${vendor.gstin.slice(-4)}` : '-';
+            value = vendor.gstin || '-';
             break;
+          case 'integration':
+            value = <IntegrationSourceBadge record={vendor} />;
+            break;
+          case 'createdAt': {
+            const createdAt = vendor.createdAt || vendor.created_at;
+            const createdDate = createdAt ? new Date(createdAt) : null;
+            value =
+              createdDate && !Number.isNaN(createdDate.getTime())
+                ? format(createdDate, 'dd MMM yy, hh:mm a')
+                : '-';
+            break;
+          }
           case 'actions':
             value = (
-              <div className="inline-flex justify-start items-center gap-1 pl-3">
+              <div className="inline-flex justify-start items-center gap-1">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -709,7 +770,7 @@ const Vendors = () => {
 
         const className = [
           header.cellClassName,
-          header.key === 'pan' || header.key === 'gstin' ? "font-['JetBrains_Mono'] text-sm" : '',
+          header.key === 'pan' || header.key === 'gstin' ? "  text-sm" : '',
           header.key === 'actions' ? 'text-left' : '',
         ]
           .filter(Boolean)
@@ -733,32 +794,40 @@ const Vendors = () => {
           </h1>
           <p className="text-muted-foreground">Manage your vendor relationships</p>
         </div>
-        {canCreateVendor && (
-          <div className="relative">
-            <Button data-testid="new-vendor-button" onClick={() => setVendorUploadOptionOpen((prev) => !prev)}>
-              <Plus className="h-4 w-4 mr-2" />
-              New Vendor
-            </Button>
-            {vendorUploadOptionOpen && (
-              <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-md border border-border bg-background p-2 shadow-md">
-                <button
-                  type="button"
-                  className="w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-muted"
-                  onClick={openSingleVendorDialog}
-                >
-                  Single Vendor
-                </button>
-                <button
-                  type="button"
-                  className="w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-muted"
-                  onClick={openMultipleVendorDialog}
-                >
-                  Multiple Vendors
-                </button>
-              </div>
-            )}
-          </div>
-        )}
+        <div className="flex flex-wrap items-center gap-2">
+          <RefreshButton
+            onClick={handleRefreshVendors}
+            refreshing={vendorsRefreshing}
+          >
+            Refresh
+          </RefreshButton>
+          {canCreateVendor && (
+            <div className="relative">
+              <Button data-testid="new-vendor-button" onClick={() => setVendorUploadOptionOpen((prev) => !prev)}>
+                <Plus className="h-4 w-4 mr-2" />
+                New Vendor
+              </Button>
+              {vendorUploadOptionOpen && (
+                <div className="absolute right-0 top-full z-50 mt-2 w-56 rounded-md border border-border bg-background p-2 shadow-md">
+                  <button
+                    type="button"
+                    className="w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-muted"
+                    onClick={openSingleVendorDialog}
+                  >
+                    Single Vendor
+                  </button>
+                  <button
+                    type="button"
+                    className="w-full rounded-sm px-3 py-2 text-left text-sm hover:bg-muted"
+                    onClick={openMultipleVendorDialog}
+                  >
+                    Multiple Vendors
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
       </div>
 
       <MultipleVendorUploadDialog
@@ -769,7 +838,7 @@ const Vendors = () => {
         disabled={createVendorLoading}
         expectedHeaders={VENDOR_UPLOAD_FIELDS}
         uploadHeaderMap={VENDOR_UPLOAD_HEADER_MAP}
-        nonMandatoryFields={VENDOR_UPLOAD_OPTIONAL_FIELDS}
+        nonMandatoryFields={vendorUploadOptionalFields}
         customValidation={validateVendorUploadRow}
       />
 
@@ -791,8 +860,8 @@ const Vendors = () => {
         title={editingVendor ? 'Edit Vendor' : 'Create Vendor'}
         description="Add contact details and payment info of your vendor in OptiFii"
         submitLabel={editingVendor ? 'Update Vendor' : 'Create Vendor'}
-        requireEmail
-        requireFullMandatory
+        activeVendorFields={activeVendorFields}
+        vendorFieldConfiguration={vendorFieldConfiguration}
         testId="vendor-dialog"
       />
 
@@ -831,6 +900,12 @@ const Vendors = () => {
         open={Boolean(viewingVendor)}
         onOpenChange={(open) => !open && setViewingVendor(null)}
         vendor={viewingVendor}
+        canApprove={canApproveVendor}
+        isPendingApproval={viewingVendor ? isPendingApprovalVendor(viewingVendor) : false}
+        onApproveAction={(vendor, action) => {
+          setViewingVendor(null);
+          openVendorApprovalDialog(vendor, action);
+        }}
       />
 
       <VendorApprovalDialog

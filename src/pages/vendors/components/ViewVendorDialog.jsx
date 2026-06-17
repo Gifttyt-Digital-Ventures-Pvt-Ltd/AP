@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { FileText, History } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatWorkflowStatus } from '../../../utils/approvalWorkflow';
+import { formatMsmeLabel } from '../../../utils/vendorValidation';
 import { useLazyGetVendorHistoryQuery } from '../../../Services/apis/invoicesVendorsApi';
 import ApprovalHistoryTimeline from '../../../components/common/ApprovalHistoryTimeline';
 import { Button } from '../../../components/ui/button';
@@ -41,8 +42,9 @@ const VendorDetailsTab = ({ vendor }) => (
     <div>
       <h3 className="font-semibold mb-3">Tax Information</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div><p className="text-muted-foreground">PAN</p><p className="font-medium font-['JetBrains_Mono']">{vendor.pan || '-'}</p></div>
-        <div><p className="text-muted-foreground">GSTIN</p><p className="font-medium font-['JetBrains_Mono']">{vendor.gstin || '-'}</p></div>
+        <div><p className="text-muted-foreground">PAN</p><p className="font-medium  ">{vendor.pan || '-'}</p></div>
+        <div><p className="text-muted-foreground">GSTIN</p><p className="font-medium  ">{vendor.gstin || '-'}</p></div>
+        <div><p className="text-muted-foreground">MSME</p><p className="font-medium">{formatMsmeLabel(vendor.msme)}</p></div>
       </div>
     </div>
 
@@ -63,8 +65,8 @@ const VendorDetailsTab = ({ vendor }) => (
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div><p className="text-muted-foreground">Bank Name</p><p className="font-medium">{vendor.bank_name || '-'}</p></div>
         <div><p className="text-muted-foreground">Account Holder Name</p><p className="font-medium">{vendor.account_holder_name || '-'}</p></div>
-        <div><p className="text-muted-foreground">Account Number</p><p className="font-medium font-['JetBrains_Mono']">{vendor.account_number || '-'}</p></div>
-        <div><p className="text-muted-foreground">IFSC</p><p className="font-medium font-['JetBrains_Mono']">{vendor.ifsc_code || '-'}</p></div>
+        <div><p className="text-muted-foreground">Account Number</p><p className="font-medium  ">{vendor.account_number || '-'}</p></div>
+        <div><p className="text-muted-foreground">IFSC</p><p className="font-medium  ">{vendor.ifsc_code || '-'}</p></div>
         <div><p className="text-muted-foreground">Branch</p><p className="font-medium">{vendor.branch || '-'}</p></div>
       </div>
     </div>
@@ -79,7 +81,7 @@ const VendorDetailsTab = ({ vendor }) => (
   </div>
 );
 
-const ViewVendorDialog = ({ open, onOpenChange, vendor }) => {
+const ViewVendorDialog = ({ open, onOpenChange, vendor, canApprove, isPendingApproval, onApproveAction }) => {
   const [viewTab, setViewTab] = useState('details');
   const [vendorHistory, setVendorHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
@@ -155,7 +157,33 @@ const ViewVendorDialog = ({ open, onOpenChange, vendor }) => {
           </Tabs>
         )}
 
-        <DialogFooter>
+        <DialogFooter className="flex justify-between items-center w-full gap-2 sm:justify-between">
+          <div className="flex gap-2">
+            {canApprove && isPendingApproval && vendor && (
+              <>
+                <Button
+                  variant="outline"
+                  className="border-amber-200 hover:bg-amber-50 text-amber-700 h-9"
+                  onClick={() => onApproveAction(vendor, 'Needs Correction')}
+                >
+                  Needs Correction
+                </Button>
+                <Button
+                  variant="destructive"
+                  className="h-9"
+                  onClick={() => onApproveAction(vendor, 'Rejected')}
+                >
+                  Reject
+                </Button>
+                <Button
+                  className="bg-button-primary hover:bg-button-primary-hover text-button-primary-foreground h-9 font-medium"
+                  onClick={() => onApproveAction(vendor, 'Approved')}
+                >
+                  Approve
+                </Button>
+              </>
+            )}
+          </div>
           <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
         </DialogFooter>
       </DialogContent>

@@ -1,7 +1,6 @@
 import React from 'react';
-import { Button } from '../../../components/ui/button';
-import { RefreshCw } from 'lucide-react';
 import CurrencySelector from '../../../components/common/CurrencySelector';
+import RefreshButton from '../../../components/common/RefreshButton';
 
 const DashboardHeader = ({
   headerName,
@@ -31,10 +30,9 @@ const DashboardHeader = ({
         variant="inline"
         id="dashboard-currency-filter"
       />
-      <Button variant="outline" onClick={onRefresh} disabled={refreshing} data-testid="refresh-btn">
-        <RefreshCw className={`h-4 w-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
+      <RefreshButton onClick={onRefresh} refreshing={refreshing} data-testid="refresh-btn">
         Refresh
-      </Button>
+      </RefreshButton>
     </div>
   </div>
 );

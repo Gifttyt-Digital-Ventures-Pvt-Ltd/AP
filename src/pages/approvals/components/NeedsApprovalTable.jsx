@@ -1,23 +1,36 @@
-import React from 'react';
-import { Button } from '../../../components/ui/button';
-import { CheckCircle, Eye, RotateCcw, XCircle } from 'lucide-react';
+import React from "react";
+import { Button } from "../../../components/ui/button";
+import { CheckCircle, Eye, RotateCcw, XCircle } from "lucide-react";
 import {
   isInvoiceAwaitingApproval,
   NEEDS_CORRECTION_ACTION,
   normalizeWorkflowStatus,
-} from '../../../utils/approvalWorkflow';
-import AppDataTable from '../../../components/common/AppDataTable';
-import { TableCell, TableRow } from '../../../components/ui/table';
-import { formatCurrency } from '../../../utils/currency';
+} from "../../../utils/approvalWorkflow";
+import AppDataTable from "../../../components/common/AppDataTable";
+import ClippedTextWithTooltip from "../../../components/common/ClippedTextWithTooltip";
+import { TableCell, TableRow } from "../../../components/ui/table";
+import { formatCurrency } from "../../../utils/currency";
 
 const needsApprovalTableHeader = [
-  { key: 'vendor_name', title: 'Vendor' },
-  { key: 'amount', title: 'Amount', cellClassName: "font-['JetBrains_Mono'] font-semibold" },
-  { key: 'approval', title: 'Approval' },
-  { key: 'payment_date', title: 'Payment date', cellClassName: 'text-sm text-muted-foreground' },
-  { key: 'due_date', title: 'Due date', cellClassName: 'text-sm text-muted-foreground' },
-  { key: 'invoice_date', title: 'Invoice date', cellClassName: 'text-sm text-muted-foreground' },
-  { key: 'action', title: 'Action', headerClassName: 'text-left', cellClassName: 'text-left' },
+  { key: "vendorName", title: "Vendor" },
+  { key: "amount", title: "Amount", cellClassName: "  font-semibold" },
+  { key: "approval", title: "Approval" },
+  {
+    key: "dueDate",
+    title: "Due date",
+    cellClassName: "text-sm text-muted-foreground",
+  },
+  {
+    key: "invoiceDate",
+    title: "Invoice date",
+    cellClassName: "text-sm text-muted-foreground",
+  },
+  {
+    key: "action",
+    title: "Action",
+    headerClassName: "text-center",
+    cellClassName: "text-left",
+  },
 ];
 
 // Table of invoices that require current user's approval action.
@@ -27,66 +40,75 @@ const NeedsApprovalTable = ({
   safeFormatDate,
   handleApprovalAction,
   handleViewInvoice,
+  handleOpenInvoiceHistory,
   canApproveInvoices,
   canCheckInvoices,
   showApprovalProgress = false,
 }) => {
   const tableHeaders = showApprovalProgress
     ? needsApprovalTableHeader
-    : needsApprovalTableHeader.filter((header) => header.key !== 'approval');
+    : needsApprovalTableHeader.filter((header) => header.key !== "approval");
 
   const renderNeedsApprovalRow = (invoice, rowIndex, headers) => {
     const progress = getApprovalProgress(invoice);
     const status = normalizeWorkflowStatus(invoice.status);
-    const isChecker = status === 'Pending Checker';
+    const isChecker = status === "Pending Checker";
     const canAct =
       isInvoiceAwaitingApproval(invoice.status) &&
       (isChecker ? canCheckInvoices : canApproveInvoices);
 
     return (
-      <TableRow key={invoice.id ?? rowIndex} data-testid={`approval-row-${invoice.id}`}>
+      <TableRow
+        key={invoice.id ?? rowIndex}
+        data-testid={`approval-row-${invoice.id}`}
+      >
         {headers.map((header) => {
           let value;
 
           switch (header.key) {
-            case 'amount':
+            case "amount":
               value = formatCurrency(invoice.amount, invoice.currency);
               break;
-            case 'approval':
+            case "vendorName":
+              value = <ClippedTextWithTooltip text={invoice.vendorName} />;
+              break;
+            case "approval":
               value = (
                 <div className="flex items-center gap-2">
                   <Button
                     variant="ghost"
                     size="sm"
                     className="h-auto p-0 text-sm text-muted-foreground underline underline-offset-4"
-                    onClick={() => handleViewInvoice?.(invoice, 'history')}
+                    onClick={() => handleOpenInvoiceHistory?.(invoice)}
                     data-testid={`approval-history-${invoice.id}`}
                   >
-                    {progress.approved}/{progress.total} steps
+                    {isChecker
+                      ? "History"
+                      : `${progress.approved}/${progress.total} steps`}
                   </Button>
                   <div className="flex gap-1">
-                    {Array.from({ length: progress.total }).map((_, i) => (
-                      <div
-                        key={i}
-                        className={`h-2 w-2 rounded-full ${i < progress.approved ? 'bg-emerald-500' : 'bg-gray-300'}`}
-                      />
-                    ))}
+                    {!isChecker &&
+                      Array.from({ length: progress.total }).map((_, i) => (
+                        <div
+                          key={i}
+                          className={`h-2 w-2 rounded-full ${i < progress.approved ? "bg-emerald-500" : "bg-gray-300"}`}
+                        />
+                      ))}
                   </div>
                 </div>
               );
               break;
-            case 'payment_date':
-              value = safeFormatDate(invoice.payment_date || invoice.paymentDate);
+            case "dueDate":
+              value = safeFormatDate(invoice.dueDate || invoice.dueDate);
               break;
-            case 'due_date':
-              value = safeFormatDate(invoice.due_date || invoice.dueDate);
+            case "invoiceDate":
+              value = safeFormatDate(
+                invoice.invoiceDate || invoice.invoiceDate,
+              );
               break;
-            case 'invoice_date':
-              value = safeFormatDate(invoice.invoice_date || invoice.invoiceDate);
-              break;
-            case 'action':
+            case "action":
               value = (
-                <div className="flex justify-end gap-2">
+                <div className="flex justify-start gap-2">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -99,17 +121,24 @@ const NeedsApprovalTable = ({
                   </Button>
                   <Button
                     size="sm"
-                    onClick={() => handleApprovalAction(invoice, isChecker ? 'Checked' : 'Approved')}
+                    onClick={() =>
+                      handleApprovalAction(
+                        invoice,
+                        isChecker ? "Checked" : "Approved",
+                      )
+                    }
                     data-testid={`approve-button-${invoice.id}`}
                     disabled={!canAct}
                   >
                     <CheckCircle className="h-4 w-4 mr-2" />
-                    {isChecker ? 'Verify' : 'Approve'}
+                    {isChecker ? "Verify" : "Approve"}
                   </Button>
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => handleApprovalAction(invoice, NEEDS_CORRECTION_ACTION)}
+                    onClick={() =>
+                      handleApprovalAction(invoice, NEEDS_CORRECTION_ACTION)
+                    }
                     data-testid={`needs-correction-button-${invoice.id}`}
                     disabled={!canAct}
                   >
@@ -119,7 +148,7 @@ const NeedsApprovalTable = ({
                   <Button
                     size="sm"
                     variant="destructive"
-                    onClick={() => handleApprovalAction(invoice, 'Rejected')}
+                    onClick={() => handleApprovalAction(invoice, "Rejected")}
                     data-testid={`reject-button-${invoice.id}`}
                     disabled={!canAct}
                   >
@@ -130,7 +159,7 @@ const NeedsApprovalTable = ({
               );
               break;
             default:
-              value = invoice?.[header.key] || '-';
+              value = invoice?.[header.key] || "-";
           }
 
           return (
@@ -144,15 +173,18 @@ const NeedsApprovalTable = ({
   };
 
   return (
-  <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden" data-testid="needs-approval-table">
-    <AppDataTable
-      tableHeader={tableHeaders}
-      tableData={myPendingInvoices}
-      renderRow={renderNeedsApprovalRow}
-      emptyMessage="No invoices need your approval"
-      emptyTestId="no-approvals"
-    />
-  </div>
+    <div
+      className="bg-card border border-border rounded-lg shadow-sm overflow-hidden"
+      data-testid="needs-approval-table"
+    >
+      <AppDataTable
+        tableHeader={tableHeaders}
+        tableData={myPendingInvoices}
+        renderRow={renderNeedsApprovalRow}
+        emptyMessage="No invoices need your approval"
+        emptyTestId="no-approvals"
+      />
+    </div>
   );
 };
 

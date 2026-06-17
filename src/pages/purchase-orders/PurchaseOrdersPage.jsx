@@ -34,6 +34,7 @@ import PoFormatBuilderDialog from './components/PoFormatBuilderDialog';
 import PoDetailsDialog from './components/PoDetailsDialog';
 import PoApprovalDialog from './components/PoApprovalDialog';
 import { useActionGuard } from '../../hooks/useActionGuard';
+import { useCreditErrorHandler } from '../../contexts/CreditErrorContext';
 
 const getListData = (response) => {
   if (Array.isArray(response)) return response;
@@ -144,6 +145,7 @@ const areFormatListsEquivalent = (left = [], right = []) => {
 
 const PurchaseOrdersPage = () => {
   const { guardAction, canPerformAction } = useActionGuard();
+  const { handleCreditError } = useCreditErrorHandler();
   const canManagePo = canPerformAction('po.create');
   const canApprovePo = canPerformAction('po.approve');
 
@@ -346,6 +348,7 @@ const PurchaseOrdersPage = () => {
       resetForm();
       fetchData();
     } catch (error) {
+      if (handleCreditError(error)) return;
       toast.error(error?.data?.detail || error?.data?.message || 'Failed to save purchase order');
     } finally {
       setCreateAction(null);
@@ -623,6 +626,8 @@ const PurchaseOrdersPage = () => {
         formatCurrency={formatCurrency}
         canManagePo={canManagePo}
         activeFormat={activeFormatConfig}
+        onRefresh={fetchData}
+        refreshing={loading}
       />
 
       <PoListTable

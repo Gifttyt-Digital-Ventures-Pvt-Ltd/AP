@@ -19,14 +19,15 @@ const formatDate = (value) => {
   });
 };
 
-const UserDetailsDialog = ({ open, onOpenChange, user }) => {
+const UserDetailsDialog = ({
+  open,
+  onOpenChange,
+  user,
+  assignedRoleSets = [],
+}) => {
   if (!user) return null;
 
-  const roleList = Array.isArray(user.raw?.roles)
-    ? user.raw.roles
-    : user.role
-      ? [user.role]
-      : [];
+  const designation = String(user.role || user.raw?.role || "").trim();
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -46,6 +47,17 @@ const UserDetailsDialog = ({ open, onOpenChange, user }) => {
           <div>
             <p className="text-xs text-muted-foreground">Email</p>
             <p className="text-sm font-medium break-all">{user.email || "-"}</p>
+          </div>
+          <div>
+            <p className="text-xs text-muted-foreground">Mobile Number</p>
+            <p className="text-sm font-medium">
+              {user.mobile ||
+                user.phoneNumber ||
+                user.raw?.phoneNumber ||
+                user.raw?.mobile ||
+                user.raw?.phone ||
+                "-"}
+            </p>
           </div>
           <div>
             <p className="text-xs text-muted-foreground">Department</p>
@@ -69,16 +81,20 @@ const UserDetailsDialog = ({ open, onOpenChange, user }) => {
             <p className="text-sm font-medium">{user.empId || "-"}</p>
           </div>
           <div>
+            <p className="text-xs text-muted-foreground">Designation</p>
+            <p className="text-sm font-medium">{designation || "-"}</p>
+          </div>
+          <div>
             <p className="text-xs text-muted-foreground">Created</p>
             <p className="text-sm font-medium">{formatDate(user.created_at)}</p>
           </div>
           <div className="sm:col-span-2">
-            <p className="text-xs text-muted-foreground mb-2">Roles</p>
-            {roleList.length > 0 ? (
+            <p className="text-xs text-muted-foreground mb-2">Assigned Role Sets</p>
+            {assignedRoleSets.length > 0 ? (
               <div className="flex flex-wrap gap-2">
-                {roleList.map((role) => (
-                  <Badge key={String(role)} variant="secondary">
-                    {String(role)}
+                {assignedRoleSets.map((roleName) => (
+                  <Badge key={String(roleName)} variant="secondary">
+                    {String(roleName)}
                   </Badge>
                 ))}
               </div>

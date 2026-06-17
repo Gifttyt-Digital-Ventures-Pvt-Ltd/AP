@@ -5,6 +5,7 @@ import { Label } from '../../../components/ui/label';
 import { CheckCircle, RotateCcw, XCircle } from 'lucide-react';
 import { NEEDS_CORRECTION_ACTION } from '../../../utils/approvalWorkflow';
 import { formatCurrency } from '../../../utils/currency';
+import ClippedTextWithTooltip from '../../../components/common/ClippedTextWithTooltip';
 
 // Confirmation dialog used for both approve and reject workflows.
 const ApprovalDialog = ({
@@ -32,19 +33,23 @@ const ApprovalDialog = ({
       <div className="space-y-4">
         {selectedInvoice && (
           <div className="bg-muted/50 rounded-lg p-4 space-y-2">
-            <div className="flex justify-between">
-              <span className="text-sm text-muted-foreground">Vendor:</span>
-              <span className="font-medium">{selectedInvoice.vendor_name}</span>
+            <div className="flex min-w-0 items-center justify-between gap-2">
+              <span className="shrink-0 text-sm text-muted-foreground">Vendor:</span>
+              <ClippedTextWithTooltip
+                text={selectedInvoice.vendorName}
+                className="font-medium text-right"
+                maxWidthClass="max-w-[220px]"
+              />
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-muted-foreground">Amount:</span>
-              <span className="font-['JetBrains_Mono'] font-semibold">
+              <span className="  font-semibold">
                 {formatCurrency(selectedInvoice.amount, selectedInvoice.currency)}
               </span>
             </div>
             <div className="flex justify-between">
               <span className="text-sm text-muted-foreground">Invoice #:</span>
-              <span className="font-['JetBrains_Mono']">{selectedInvoice.invoice_number}</span>
+              <span className=" ">{selectedInvoice.invoiceNumber}</span>
             </div>
           </div>
         )}

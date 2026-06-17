@@ -7,7 +7,6 @@ const RequestVendorDialog = (props) => (
     title="Request Vendor Addition"
     description="Enter vendor details for approval. Only vendor name and vendor type are required."
     submitLabel="Submit Request"
-    requireEmail={false}
     invoiceVendorRequest
     testId="request-vendor-dialog"
   />

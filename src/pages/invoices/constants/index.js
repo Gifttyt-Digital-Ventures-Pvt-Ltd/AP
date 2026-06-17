@@ -45,10 +45,10 @@ export const INDIAN_STATES = [
 ];
 
 export const TAX_RATES = [
-  { value: "CGST + SGST 5%", label: "CGST + SGST 5%", cgst: 2.5, sgst: 2.5 },
-  { value: "CGST + SGST 12%", label: "CGST + SGST 12%", cgst: 6, sgst: 6 },
-  { value: "CGST + SGST 18%", label: "CGST + SGST 18%", cgst: 9, sgst: 9 },
-  { value: "CGST + SGST 28%", label: "CGST + SGST 28%", cgst: 14, sgst: 14 },
+  { value: "CGST + SGST 5%", label: "CGST 2.5% + SGST 2.5%", cgst: 2.5, sgst: 2.5 },
+  { value: "CGST + SGST 12%", label: "CGST 6% + SGST 6%", cgst: 6, sgst: 6 },
+  { value: "CGST + SGST 18%", label: "CGST 9% + SGST 9%", cgst: 9, sgst: 9 },
+  { value: "CGST + SGST 28%", label: "CGST 14% + SGST 14%", cgst: 14, sgst: 14 },
   { value: "IGST 5%", label: "IGST 5%", igst: 5 },
   { value: "IGST 12%", label: "IGST 12%", igst: 12 },
   { value: "IGST 18%", label: "IGST 18%", igst: 18 },
@@ -72,3 +72,12 @@ export const LEDGER_OPTIONS = [
   "Legal & Professional",
   "Maintenance",
 ];
+
+export const INVOICE_LIST_FILTERS = [
+  { value: "all", label: "All" },
+  { value: "saved", label: "Saved" },
+  { value: "pending", label: "Pending" },
+  { value: "approved", label: "Approved" },
+];
+
+export const INVOICE_LIST_PAGE_SIZE = 20;

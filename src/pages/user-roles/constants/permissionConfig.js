@@ -1,4 +1,7 @@
 // Exact permission catalog ported from AP_User Roles source dialogs.
+export const MASTER_ADMIN_PERMISSION_ID = "master-admin";
+export const AP_MASTER_ADMIN_BACKEND_SCREEN = "AP_MASTER_ADMIN";
+
 export const PERMISSION_GROUPS = [
   {
     title: "Dashboard",
@@ -45,6 +48,14 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    title: "Campaigns",
+    permissions: [
+      { id: "campaign-manage", label: "Manage (Create Campaign, Invoices, Advances, Settlement)" },
+      { id: "campaign-approve", label: "Approve (Campaign Approval Only)" },
+      { id: "campaign-view", label: "View Only" },
+    ],
+  },
+  {
     title: "Invoice Matching",
     permissions: [
       { id: "matching-manage", label: "Manage" },
@@ -87,7 +98,8 @@ export const PERMISSION_GROUPS = [
   {
     title: "Manage Role",
     permissions: [
-      { id: "roles-manage", label: "Manage" },
+      { id: "roles-manage", label: "Manage Roles (Create, Edit, Delete, Assign)" },
+      { id: "roles-manage-users", label: "Manage Users (Create, Edit, Delete)" },
       { id: "roles-view", label: "View Only" },
     ],
   },
@@ -103,7 +115,19 @@ export const PERMISSION_GROUPS = [
     permissions: [
       { id: "settings-org", label: "Manage Organisation Details" },
       { id: "settings-banking", label: "Manage Connected Banking" },
-      { id: "settings-interaction", label: "Interaction Rules" },
+      { id: "credits-manage", label: "Manage Billing" },
+      { id: "settings-interaction", label: "Integrations" },
+    ],
+  },
+  {
+    title: "Integrations",
+    permissions: [
+      { id: "integrations.view", label: "View Only" },
+      { id: "integrations.connect", label: "Connect ERP" },
+      { id: "integrations.disconnect", label: "Disconnect ERP" },
+      { id: "integrations.mapping.edit", label: "Edit Mappings" },
+      { id: "integrations.sync.trigger", label: "Trigger Sync" },
+      { id: "integrations.review.resolve", label: "Resolve Review Queue" },
     ],
   },
   {
@@ -117,6 +141,7 @@ export const PERMISSION_GROUPS = [
 
 // Human-readable permission labels ported from AP_User Roles ViewRoleDialog.
 export const PERMISSION_LABELS = {
+  [MASTER_ADMIN_PERMISSION_ID]: "Master Admin - Full Access",
   "dashboard-view": "Dashboard - View Only",
   "vendors-view": "Vendors - View Only",
   "vendors-manage": "Vendors - Manage (Add, Delete, Edit)",
@@ -134,12 +159,18 @@ export const PERMISSION_LABELS = {
   "invoice-view": "Invoice - View Only",
   "invoice-checker": "Invoice - Checker",
   "invoice-approver": "Invoice - Approver",
+  "campaign-view": "Campaigns - View Only",
+  "campaign-manage": "Campaigns - Manage",
+  "campaign-approve": "Campaigns - Approve",
   "matching-manage": "Invoice Matching - Manage",
   "matching-view": "Invoice Matching - View Only",
   "payments-manage": "Payments - Manage",
   "payments-view": "Payments - View Only",
   "payment-batches-manage": "Payment Batches - Manage",
   "payment-batches-view": "Payment Batches - View Only",
+  "credits-view": "Billing - View",
+  "credits-ledger": "Billing - View Ledger",
+  "credits-manage": "Settings - Manage Billing",
   "tax-view": "Tax Management - View Only",
   "tax-manage": "Tax Management - Manage",
   "reports-view": "Reports - View Only",
@@ -148,12 +179,29 @@ export const PERMISSION_LABELS = {
   "banking-view": "Banking - View Only",
   "banking-full": "Banking - Full Access",
   "roles-view": "Manage Roles - View Only",
-  "roles-manage": "Manage Roles - Manage",
+  "roles-manage": "Manage Roles - Manage Roles & Assign Role Sets",
+  "roles-manage-users": "Manage Roles - Manage Users (no role assignment)",
   "vendor-workflow-view": "Vendor Approval Workflow - View Only",
   "vendor-workflow-manage": "Vendor Approval Workflow - Manage",
   "settings-org": "Settings - Manage Organisation",
   "settings-banking": "Settings - Manage Banking",
-  "settings-interaction": "Settings - Interaction Rules",
+  "settings-interaction": "Settings - Integrations",
+  "integrations.view": "Integrations - View Only",
+  "integrations.connect": "Integrations - Connect ERP",
+  "integrations.disconnect": "Integrations - Disconnect ERP",
+  "integrations.mapping.edit": "Integrations - Edit Mappings",
+  "integrations.sync.trigger": "Integrations - Trigger Sync",
+  "integrations.review.resolve": "Integrations - Resolve Review Queue",
   "category-view": "Category - View Only",
   "category-manage": "Category - Manage (Add, Delete, Edit)",
 };
+
+export const CAMPAIGN_PERMISSION_IDS = [
+  "campaign-view",
+  "campaign-manage",
+  "campaign-approve",
+];
+
+export const BILLING_PERMISSION_IDS = ["credits-manage"];
+
+export const CAMPAIGN_BACKEND_PERMISSION_TYPES = ["VIEW", "MANAGE", "APPROVE"];

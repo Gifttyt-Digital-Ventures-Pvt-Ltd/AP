@@ -18,17 +18,21 @@ import {
   DialogFooter,
 } from '../../components/ui/dialog';
 import AppDataTable from '../../components/common/AppDataTable';
+import RefreshButton from '../../components/common/RefreshButton';
 import { TableCell, TableRow } from '../../components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { toast } from 'sonner';
+import { useCreditErrorHandler } from '../../contexts/CreditErrorContext';
+import MeteredActionCostHint from '../../components/credits/MeteredActionCostHint';
+import { CREDIT_ACTION_CODES } from '../../constants/creditActions';
+import { useMeteredActionEstimate } from '../../hooks/useMeteredActionEstimate';
 import {
   Eye,
   CheckCircle,
   Clock,
   Loader2,
-  RefreshCw,
   Download,
   DollarSign,
   CreditCard,
@@ -128,6 +132,12 @@ const PaymentBatches = () => {
   const [generatePaymentBatchFile] = useGeneratePaymentBatchFileMutation();
   const [getPaymentBatch] = useLazyGetPaymentBatchQuery();
   const { guardAction, canPerformAction } = useActionGuard();
+  const { handleCreditError } = useCreditErrorHandler();
+  const processBatchItemCount = selectedBatch?.paymentItems?.length || 0;
+  const processBatchEstimate = useMeteredActionEstimate(
+    CREDIT_ACTION_CODES.PAYMENT_PROCESSING,
+    processBatchItemCount,
+  );
 
   const batches = Array.isArray(batchesData) ? batchesData.map(normalizeBatch) : [];
   const loading =
@@ -191,6 +201,7 @@ const PaymentBatches = () => {
       setShowViewDialog(false);
       fetchData();
     } catch (error) {
+      if (handleCreditError(error)) return;
       toast.error(error?.data?.detail || 'Failed to process batch');
     } finally {
       setProcessing(false);
@@ -369,10 +380,9 @@ const PaymentBatches = () => {
           <p className="text-muted-foreground">Create and process bulk vendor payments</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" onClick={fetchData}>
-            <RefreshCw className="h-4 w-4 mr-2" />
+          <RefreshButton onClick={fetchData} refreshing={loading}>
             Refresh
-          </Button>
+          </RefreshButton>
         </div>
       </div>
 
@@ -527,6 +537,14 @@ const PaymentBatches = () => {
             </div>
           )}
 
+          {selectedBatch?.status === 'Pending' && canProcessPaymentBatch && (
+            <MeteredActionCostHint
+              actionCode={CREDIT_ACTION_CODES.PAYMENT_PROCESSING}
+              unitCount={processBatchItemCount}
+              className="mx-6"
+            />
+          )}
+
           <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setShowViewDialog(false)}>
               Close
@@ -548,7 +566,10 @@ const PaymentBatches = () => {
                       </Button>
                     )}
                     {canProcessPaymentBatch && (
-                      <Button onClick={() => handleProcessBatch(selectedBatch.id)} disabled={processing}>
+                      <Button
+                        onClick={() => handleProcessBatch(selectedBatch.id)}
+                        disabled={processing || processBatchEstimate.isDisabled}
+                      >
                         {processing && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
                         <Play className="h-4 w-4 mr-2" />
                         Process Automatically

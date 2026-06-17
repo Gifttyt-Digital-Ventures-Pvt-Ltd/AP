@@ -8,7 +8,7 @@ import {
   ClipboardList,
 } from "lucide-react";
 import { DEFAULT_CURRENCY } from "../../../utils/currency";
-import { isInrInvoiceCurrency } from "../utils/invoiceTax";
+import { INVOICE_LEVEL, isInrInvoiceCurrency } from "../utils/invoiceTax";
 
 export const buildInvoiceFormChecklist = (
   formData,
@@ -16,6 +16,7 @@ export const buildInvoiceFormChecklist = (
     departmentMandatory = false,
     categoryMandatory = false,
     showCategoryField = true,
+    showCampaignField = false,
   } = {},
 ) => {
   if (!formData) return [];
@@ -23,60 +24,132 @@ export const buildInvoiceFormChecklist = (
   const item = ({
     label,
     done,
-    optional = false,
+    required = false,
+    optional,
     hint,
     hidden = false,
     warn,
-  }) => ({
-    label,
-    done,
-    optional,
-    hint,
-    hidden,
-    warn: warn !== undefined ? warn : !optional && !done,
-  });
+  }) => {
+    const isOptional = optional ?? !required;
+    const resolvedHint = hint ?? (isOptional ? "optional" : "required");
 
-  const validLineItems = (formData.line_items || []).filter(
-    (item) => item.description?.trim() && Number(item.unit_rate) > 0,
+    return {
+      label,
+      done,
+      required: !isOptional,
+      optional: isOptional,
+      hint: resolvedHint,
+      hidden,
+      warn: warn !== undefined ? warn : !isOptional && !done,
+    };
+  };
+
+  const validLineItems = (formData.lineItems || []).filter(
+    (item) => item.description?.trim() && Number(item.unitRate) > 0,
   );
   const allLineItemsValid =
-    (formData.line_items || []).length > 0 &&
-    (formData.line_items || []).every(
-      (item) => item.description?.trim() && Number(item.unit_rate) > 0,
+    (formData.lineItems || []).length > 0 &&
+    (formData.lineItems || []).every(
+      (item) => item.description?.trim() && Number(item.unitRate) > 0,
     );
 
-  const hasVendorName = !!formData.vendor_name?.trim();
+  const hasVendorName = !!formData.vendorName?.trim();
   const vendorUnmatched =
     hasVendorName &&
-    !formData.vendor_matched &&
-    !formData.vendor_request_submitted;
+    !formData.vendorMatched &&
+    !formData.vendorRequestSubmitted;
   const vendorResolved =
-    !!formData.vendor_matched || !!formData.vendor_request_submitted;
+    !!formData.vendorMatched || !!formData.vendorRequestSubmitted;
+
+  const useInrTax = isInrInvoiceCurrency(formData.currency);
+  const isGstinRequired = useInrTax && formData.gstTreatment !== "N/A";
+  const isInvoiceLevelTax = formData.taxesLevel === INVOICE_LEVEL;
+  const isSourceEmailRequired = formData.source === "Email"; 
 
   const vendorChecklistItems = [
     item({
       label: "Vendor name",
       done: hasVendorName,
+      required: true,
     }),
   ];
 
-  if (vendorUnmatched) {
+  if (showCampaignField) {
     vendorChecklistItems.push(
       item({
-        label: "Vendor does not match",
-        done: false,
-        warn: true,
-      }),
-    );
-  } else if (hasVendorName) {
-    vendorChecklistItems.push(
-      item({
-        label: "Vendor matched in system",
-        done: vendorResolved,
+        label: "Campaign",
+        done: !!(formData.campaignId || formData.campaignName?.trim()),
         optional: true,
-        hint: "warning",
+      }),
+      item({
+        label: "UAC/Reference No./Coupon Code",
+        done: !!String(formData.referenceNumber ?? "").trim(),
+        optional: true,
       }),
     );
+  }
+
+  if (hasVendorName) {
+    vendorChecklistItems.push(
+      item({
+        label: vendorUnmatched
+          ? "Vendor Name not matched"
+          : "Vendor matched in system",
+        done: vendorResolved,
+        required: true,
+        warn: vendorUnmatched,
+        hint: vendorUnmatched ? "action needed" : undefined,
+      }),
+    );
+  }
+
+  const taxComplianceItems = [
+    item({
+      label: "GST treatment",
+      done: !!formData.gstTreatment,
+      required: true,
+    }),
+    item({
+      label: useInrTax ? "GSTIN" : "GSTIN / Tax ID",
+      done: !!formData.gstin?.trim(),
+      required: isGstinRequired,
+    }),
+    item({
+      label: "Source of supply",
+      done: !!String(formData.sourceOfSupply ?? "").trim(),
+    }),
+    item({
+      label: "Destination",
+      done: !!String(formData.destinationOfSupply ?? "").trim(),
+    }),
+  ];
+
+  if (isInvoiceLevelTax) {
+    if (useInrTax) {
+      taxComplianceItems.push(
+        item({
+          label: "Invoice tax",
+          done: !!formData.invoiceTax?.trim(),
+          required: true,
+        }),
+      );
+    } else {
+      taxComplianceItems.push(
+        item({
+          label: "Tax name",
+          done: !!String(formData.invoiceTaxName ?? "").trim(),
+          required: true,
+        }),
+        item({
+          label: "Tax rate %",
+          done:
+            formData.invoiceTaxRate !== "" &&
+            formData.invoiceTaxRate !== null &&
+            formData.invoiceTaxRate !== undefined,
+          required: true,
+        }),
+      );
+    }
   }
 
   return [
@@ -87,56 +160,56 @@ export const buildInvoiceFormChecklist = (
     {
       group: "Invoice details",
       items: [
-        item({ label: "Bill number", done: !!formData.invoice_number?.trim() }),
-        item({ label: "Billing date", done: !!formData.invoice_date }),
-        item({ label: "Due date", done: !!formData.due_date }),
+        item({
+          label: "Bill number",
+          done: !!formData.invoiceNumber?.trim(),
+          required: true,
+        }),
+        item({
+          label: "Billing date",
+          done: !!formData.invoiceDate,
+          required: true,
+        }),
+        item({
+          label: "Due date",
+          done: true,
+          required: false,
+        }),
         item({
           label: "Currency",
           done: !!(formData.currency || DEFAULT_CURRENCY).trim(),
+          required: true,
         }),
         item({
           label: "Department",
-          done: !!formData.department_id,
-          optional: !departmentMandatory,
-          hint: departmentMandatory ? "required" : "optional",
+          done: !!formData.departmentId,
+          required: departmentMandatory,
         }),
         item({
           label: "Category",
-          done: !!(formData.category_id || formData.category?.id),
-          optional: !categoryMandatory,
-          hint: categoryMandatory ? "required" : "optional",
+          done: !!(formData.categoryId || formData.category?.id),
+          required: categoryMandatory,
           hidden: !showCategoryField,
         }),
       ],
     },
     {
       group: "Tax & compliance",
-      items: [
-        item({ label: "GST treatment", done: !!formData.gst_treatment }),
-        item({
-          label: isInrInvoiceCurrency(formData.currency) ? "GSTIN" : "GSTIN / Tax ID",
-          done: !!formData.gstin?.trim(),
-          optional:
-            !isInrInvoiceCurrency(formData.currency) ||
-            formData.gst_treatment === "N/A",
-          hint:
-            isInrInvoiceCurrency(formData.currency) &&
-            formData.gst_treatment !== "N/A"
-              ? "required"
-              : "optional",
-        }),
-        item({ label: "Source of supply", done: !!formData.source_of_supply }),
-        item({ label: "Destination", done: !!formData.destination_of_supply }),
-      ],
+      items: taxComplianceItems,
     },
     {
       group: "Source",
       items: [
-        item({ label: "Source", done: !!formData.source }),
+        item({
+          label: "Source",
+          done: !!formData.source,
+          required: true,
+        }),
         item({
           label: "Source email",
-          done: !!formData.source_email?.trim(),
-          hidden: formData.source !== "Email",
+          done: !!formData.sourceEmail?.trim(),
+          required: isSourceEmailRequired,
+          hidden: !isSourceEmailRequired,
         }),
       ],
     },
@@ -146,9 +219,10 @@ export const buildInvoiceFormChecklist = (
         item({
           label:
             validLineItems.length === 0
-              ? "At least one line item required"
-              : `${validLineItems.length} of ${formData.line_items.length} item${formData.line_items.length !== 1 ? "s" : ""} complete`,
+              ? "At least one line item"
+              : `${validLineItems.length} of ${formData.lineItems.length} item${formData.lineItems.length !== 1 ? "s" : ""} complete`,
           done: allLineItemsValid,
+          required: true,
         }),
       ],
     },
@@ -160,6 +234,7 @@ export const InvoiceChecklist = ({
   departmentMandatory = false,
   categoryMandatory = false,
   showCategoryField = true,
+  showCampaignField = false,
 }) => {
   const [open, setOpen] = useState(true);
 
@@ -169,8 +244,15 @@ export const InvoiceChecklist = ({
         departmentMandatory,
         categoryMandatory,
         showCategoryField,
+        showCampaignField,
       }),
-    [formData, departmentMandatory, categoryMandatory, showCategoryField],
+    [
+      formData,
+      departmentMandatory,
+      categoryMandatory,
+      showCategoryField,
+      showCampaignField,
+    ],
   );
 
   const allItems = groups.flatMap((group) =>
@@ -179,265 +261,129 @@ export const InvoiceChecklist = ({
   const doneCount = allItems.filter((item) => item.done).length;
   const totalCount = allItems.length;
   const allDone = totalCount > 0 && doneCount === totalCount;
-  const warnItems = groups
-    .flatMap((group) => group.items)
-    .filter((item) => item.warn && !item.hidden);
-  const hasWarnings = warnItems.length > 0;
   const pct = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
 
   return (
-    <>
-      <div
-        style={{
-          position: "sticky",
-          bottom: "0px",
-          zIndex: 40,
-          display: "flex",
-          justifyContent: "flex-end",
-          pointerEvents: "none",
-          marginRight: "-8px",
-        }}
+    <div
+      className={`shrink-0 sticky top-0 transition-all duration-300 ease-in-out border border-border bg-card rounded-lg relative flex flex-col h-full ${
+        open ? "w-[260px]" : "w-10 border-none bg-transparent"
+      }`}
+      style={{ minHeight: "200px" }}
+    >
+      {/* Collapse/Expand Toggle Button */}
+      <button
+        type="button"
+        onClick={() => setOpen((prev) => !prev)}
+        className={`absolute top-3 z-10 flex h-6 w-6 items-center justify-center rounded-md border border-border bg-white shadow-sm hover:bg-muted text-muted-foreground transition-all ${
+          open ? "-left-3" : "left-2"
+        }`}
+        title={open ? "Collapse checklist" : "Expand checklist"}
       >
-        <div
-          style={{ pointerEvents: "auto" }}
-          className="flex flex-col gap-1 justify-end items-end"
-        >
-          {open && (
-            <div
-              style={{
-                width: "272px",
-                background: "var(--color-background-primary, #fff)",
-                border: "0.5px solid var(--color-border-secondary, #e2e8f0)",
-                borderRadius: "12px",
-                boxShadow: "0 4px 24px rgba(0,0,0,0.10)",
-                marginBottom: "8px",
-                overflow: "hidden",
-                animation: "cl-slide-up 0.18s ease",
-              }}
-            >
-              <div
-                style={{
-                  padding: "10px 14px 8px",
-                  borderBottom:
-                    "0.5px solid var(--color-border-tertiary, #f0f0f0)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                }}
-              >
-                <span
-                  style={{
-                    fontSize: "12px",
-                    fontWeight: 500,
-                    color: "var(--color-text-primary)",
-                  }}
-                >
-                  Form checklist
-                </span>
-                <span
-                  style={{
-                    fontSize: "11px",
-                    color: allDone
-                      ? "var(--color-text-success, #16a34a)"
-                      : "var(--color-text-secondary)",
-                  }}
-                >
-                  {doneCount}/{totalCount} complete
-                </span>
-              </div>
-
-              <div
-                style={{
-                  height: "3px",
-                  background: "var(--color-background-tertiary, #f5f5f5)",
-                }}
-              >
-                <div
-                  style={{
-                    height: "100%",
-                    width: `${pct}%`,
-                    background: allDone
-                      ? "var(--color-background-success, #16a34a)"
-                      : "var(--color-background-info, #3b82f6)",
-                    transition: "width 0.3s ease",
-                  }}
-                />
-              </div>
-
-              <div
-                style={{
-                  maxHeight: "340px",
-                  overflowY: "auto",
-                  padding: "8px 0",
-                }}
-              >
-                {groups.map((group) => {
-                  const visibleItems = group.items.filter((item) => !item.hidden);
-                  if (visibleItems.length === 0) return null;
-                  return (
-                    <div key={group.group} style={{ marginBottom: "4px" }}>
-                      <div
-                        style={{
-                          fontSize: "10px",
-                          fontWeight: 500,
-                          letterSpacing: "0.06em",
-                          textTransform: "uppercase",
-                          color: "var(--color-text-tertiary)",
-                          padding: "4px 14px 2px",
-                        }}
-                      >
-                        {group.group}
-                      </div>
-                      {visibleItems.map((item) => (
-                        <div
-                          key={item.label}
-                          style={{
-                            display: "flex",
-                            alignItems: "center",
-                            gap: "8px",
-                            padding: "3px 14px",
-                          }}
-                        >
-                          {item.warn ? (
-                            <AlertCircle
-                              style={{
-                                width: "13px",
-                                height: "13px",
-                                flexShrink: 0,
-                                color: "#d97706",
-                              }}
-                            />
-                          ) : item.done ? (
-                            <CheckCircle2
-                              style={{
-                                width: "13px",
-                                height: "13px",
-                                flexShrink: 0,
-                                color: "var(--color-text-success, #16a34a)",
-                              }}
-                            />
-                          ) : (
-                            <Circle
-                              style={{
-                                width: "13px",
-                                height: "13px",
-                                flexShrink: 0,
-                                color: "var(--color-border-secondary, #cbd5e1)",
-                              }}
-                            />
-                          )}
-                          <span
-                            style={{
-                              fontSize: "12px",
-                              color: item.warn
-                                ? "#92400e"
-                                : item.done
-                                  ? "var(--color-text-primary)"
-                                  : "var(--color-text-secondary)",
-                            }}
-                          >
-                            {item.label}
-                            {item.hint ? (
-                              <span
-                                style={{
-                                  fontSize: "10px",
-                                  marginLeft: "4px",
-                                  color: "var(--color-text-tertiary)",
-                                }}
-                              >
-                                ({item.hint})
-                              </span>
-                            ) : null}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          <button
-            type="button"
-            onClick={() => setOpen((value) => !value)}
-            className="max-w-min"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "7px",
-              padding: "7px 12px",
-              borderRadius: "99px",
-              border: `1.5px solid ${
-                allDone
-                  ? "var(--color-border-success, #16a34a)"
-                  : hasWarnings
-                    ? "#d97706"
-                    : "var(--color-border-secondary, #e2e8f0)"
-              }`,
-              background: allDone
-                ? "var(--color-background-success, #f0fdf4)"
-                : "var(--color-background-primary, #fff)",
-              cursor: "pointer",
-              boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-              transition: "box-shadow 0.15s",
-            }}
-            aria-expanded={open}
-            aria-label="Toggle form checklist"
+        {open ? (
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={2.5}
+            stroke="currentColor"
+            className="h-3 w-3"
           >
-            <ClipboardList
-              style={{
-                width: "14px",
-                height: "14px",
-                color: allDone
-                  ? "var(--color-text-success, #16a34a)"
-                  : "var(--color-text-secondary)",
-              }}
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M8.25 4.5l7.5 7.5-7.5 7.5"
             />
+          </svg>
+        ) : (
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            strokeWidth={2.5}
+            stroke="currentColor"
+            className="h-3 w-3"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M15.75 19.5L8.25 12l7.5-7.5"
+            />
+          </svg>
+        )}
+      </button>
+
+      {open ? (
+        <div className="flex flex-col h-full min-h-0 overflow-hidden">
+          {/* Header */}
+          <div className="p-3 border-b border-border flex items-center justify-between bg-muted/30">
+            <span className="text-xs font-semibold text-foreground">
+              Invoice Checklist
+            </span>
             <span
-              style={{
-                fontSize: "12px",
-                fontWeight: 500,
-                color: allDone
-                  ? "var(--color-text-success, #16a34a)"
-                  : "var(--color-text-primary)",
-              }}
+              className={`text-[10px] font-medium ${allDone ? "text-green-600" : "text-muted-foreground"}`}
             >
               {doneCount}/{totalCount}
             </span>
-            {hasWarnings && !allDone && (
-              <AlertCircle
-                style={{ width: "13px", height: "13px", color: "#d97706" }}
-              />
-            )}
-            {open ? (
-              <ChevronDown
-                style={{
-                  width: "13px",
-                  height: "13px",
-                  color: "var(--color-text-secondary)",
-                }}
-              />
-            ) : (
-              <ChevronUp
-                style={{
-                  width: "13px",
-                  height: "13px",
-                  color: "var(--color-text-secondary)",
-                }}
-              />
-            )}
-          </button>
-        </div>
-      </div>
+          </div>
 
-      <style>{`
-        @keyframes cl-slide-up {
-          from { opacity: 0; transform: translateY(8px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
-    </>
+          {/* Progress Bar */}
+          <div className="h-1 w-full bg-muted">
+            <div
+              className={`h-full transition-all duration-300 ${allDone ? "bg-green-500" : "bg-blue-500"}`}
+              style={{ width: `${pct}%` }}
+            />
+          </div>
+
+          {/* Checklist Groups */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-3 scrollbar-thin-muted">
+            {groups.map((group) => {
+              const visibleItems = group.items.filter((item) => !item.hidden);
+              if (visibleItems.length === 0) return null;
+              return (
+                <div key={group.group} className="space-y-1">
+                  <span className="text-[9px] font-bold tracking-wider text-muted-foreground uppercase">
+                    {group.group}
+                  </span>
+                  <div className="space-y-1">
+                    {visibleItems.map((item) => (
+                      <div
+                        key={item.label}
+                        className="flex items-start gap-2 text-xs py-0.5"
+                      >
+                        {item.warn ? (
+                          <AlertCircle className="h-3.5 w-3.5 text-amber-500 shrink-0 mt-0.5" />
+                        ) : item.done ? (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-green-500 shrink-0 mt-0.5" />
+                        ) : (
+                          <Circle className="h-3.5 w-3.5 text-muted-foreground/30 shrink-0 mt-0.5" />
+                        )}
+                        <span
+                          className={`leading-tight ${item.warn ? "text-amber-800" : item.done ? "text-foreground" : "text-muted-foreground"}`}
+                        >
+                          {item.label}
+                          {item.hint && (
+                            <span className="text-[9px] ml-1 text-muted-foreground">
+                              ({item.hint})
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : (
+        <div className="flex flex-col items-center pt-12 gap-2 text-foreground select-none">
+          <ClipboardList className="h-4 w-4 text-primary animate-bounce" />
+          <span className="text-[10px] font-black uppercase tracking-widest [writing-mode:vertical-lr] rotate-180">
+            Checklist ({doneCount}/{totalCount})
+          </span>
+        </div>
+      )}
+    </div>
   );
 };
 

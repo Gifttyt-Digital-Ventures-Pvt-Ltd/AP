@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   useGetInvoicesQuery,
   useGetInvoiceMandatoryFieldsQuery,
@@ -10,144 +10,309 @@ import {
   useCreateInvoiceMutation,
   useLazyGetInvoiceHistoryQuery,
   useUpdateInvoiceMutation,
+  useForwardInvoiceMutation,
   useDeleteInvoiceMutation,
-} from '../../Services/apis/invoicesVendorsApi';
+} from "../../Services/apis/invoicesVendorsApi";
 import {
   getInvoiceMandatoryFieldValidationMessage,
   isInvoiceMandatoryFieldsSatisfied,
   normalizeInvoiceMandatoryFields,
-} from './utils/mandatoryFields';
+} from "./utils/mandatoryFields";
 import {
+  getBulkExtractResults,
+  getDuplicateInvoiceMessage,
   isDuplicateBulkExtractResult,
   isDuplicateBulkPreviewItem,
   isDuplicateInvoiceError,
-} from './utils/duplicateInvoice';
+  normalizeBulkExtractResult,
+} from "./utils/duplicateInvoice";
 import {
   applyForeignLineItemTax,
   applyInrLineItemTax,
   calculateInvoiceTotals,
   createDefaultLineItem,
   DEFAULT_INR_TAX,
+  INVOICE_LEVEL,
   isInrInvoiceCurrency,
-  mapExtractedLineItemToForm,
+  LINE_ITEM_LEVEL,
   remapLineItemsForCurrencyChange,
   resolveLineItemSubtotal,
-  resolveScannedInvoiceTaxSummary,
-  resolveScannedLineItemPricing,
-  resolveScannedLineItemTax,
   syncLineItemLineTotal,
-} from './utils/invoiceTax';
-import { parseNumericInput } from './utils/numericInput';
-import { buildInvoiceEditFormData } from './utils/invoiceFormData';
-import { normalizeInvoiceHistoryEntries } from './utils/invoiceHistory';
+} from "./utils/invoiceTax";
+import { parseNumericInput } from "./utils/numericInput";
+import { buildInvoiceEditFormData } from "./utils/invoiceFormData";
+import { normalizeInvoiceHistoryEntries } from "./utils/invoiceHistory";
 import {
-  buildCreateInvoiceRequestBody,
+  buildInvoiceCategoryPayload,
+  buildInvoiceMultipartPayload,
+  buildToCreateInvoicePayload,
+  computeTdsAmount,
+  initializeInvoiceFormData,
+  mapBulkLineItemToEditForm,
+  mapBulkLineItemToPayload,
+  normalizeLineItemsForTaxLevel,
+} from "./utils/invoicePayloadBuilders";
+import { normalizeScannedInvoice } from "./utils/scanNormalization";
+import {
+  createEmptyVendorRequestForm,
+  buildVendorRequestForm,
+  formatBulkStatusLabel,
+  getBulkStatusBadgeClass,
+} from "./utils/invoiceBulkUtils";
+import { getInvoiceFileUrl } from "./utils/invoicePreview";
+import {
+  EMPTY_INVOICE_LIST_RESPONSE,
   extractVendorIdFromResponse,
+  getInvoiceListItems,
   mergeInvoiceVendorOptions,
-  toInvoiceApiPayload,
-} from '../../Services/utils/payloadMappers';
+} from "../../Services/utils/payloadMappers";
 import {
   useGetCorporateDepartmentsQuery,
   useGetCorporateUserDetailsQuery,
-} from '../../Services/apis/corporateApi';
-import { useGetCategoriesForInvoiceQuery } from '../../Services/apis/categoriesApi';
-import { useAuth } from '../../contexts/AuthContext';
-import { toast } from 'sonner';
-import { format } from 'date-fns';
-import { useSidebar } from '../../components/Layout';
+} from "../../Services/apis/corporateApi";
+import { useGetCategoriesForInvoiceQuery } from "../../Services/apis/categoriesApi";
+import { useAuth } from "../../contexts/AuthContext";
+import { toast } from "sonner";
+import { format } from "date-fns";
+import { useSidebar } from "../../components/Layout";
 import {
   GST_TREATMENTS,
   INDIAN_STATES,
+  INVOICE_LIST_FILTERS,
+  INVOICE_LIST_PAGE_SIZE,
   INVOICE_SOURCES,
   LEDGER_OPTIONS,
   TAX_RATES,
-} from './constants';
-import { InvoicePdfPreview } from './components/InvoicePdfPreview';
-import { InvoiceForm } from './components/InvoiceForm';
-import InvoiceHeader from './components/InvoiceHeader';
-import InvoicesWorkspace from './components/InvoicesWorkspace';
-import InvoicesDialogs from './components/InvoicesDialogs';
-import { getInvoiceVendorRequestValidationErrors } from '../../utils/vendorValidation';
-import { useActionGuard } from '../../hooks/useActionGuard';
-import { useRBAC } from '../../contexts/RBACContext';
-import { useCurrencyFilter } from '../../hooks/useCurrencyFilter';
-import { CURRENCY_SCREENS, DEFAULT_CURRENCY, normalizeCurrencyCode } from '../../utils/currency';
+} from "./constants";
+import {
+  formatInvoiceAmount,
+  getInvoiceGrossAmount,
+  getInvoiceNetAmount,
+  getInvoiceTaxAmount,
+  getInvoiceTdsAmount,
+} from "./utils/invoiceAmounts";
+import { Sparkles, Eye, Mail, Pencil, Search, Trash2 } from "lucide-react";
+import { Button } from "../../components/ui/button";
+import { Input } from "../../components/ui/input";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "../../components/ui/pagination";
+import { TableCell, TableRow } from "../../components/ui/table";
+import { cn } from "../../lib/utils";
+import AppDataTable from "../../components/common/AppDataTable";
+import ClippedTextWithTooltip from "../../components/common/ClippedTextWithTooltip";
+import CurrencySelector from "../../components/common/CurrencySelector";
+import RefreshButton from "../../components/common/RefreshButton";
+import { InvoicePdfPreview } from "./components/InvoicePdfPreview";
+import { InvoiceForm } from "./components/InvoiceForm";
+import UploadSection from "./components/UploadSection";
+import InvoicesDialogs from "./components/InvoicesDialogs";
+import InvoiceUploadDialog from "./components/InvoiceUploadDialog";
+import { getInvoiceVendorRequestValidationErrors } from "../../utils/vendorValidation";
+import { useActionGuard } from "../../hooks/useActionGuard";
+import { useCreditErrorHandler } from "../../contexts/CreditErrorContext";
+import { useDebouncedValue } from "../../hooks/useDebouncedValue";
+import { useRBAC } from "../../contexts/RBACContext";
+import IntegrationSourceBadge from "../../components/integrations/IntegrationSourceBadge";
+import useZohoIntegrationActive from "../../hooks/useZohoIntegrationActive";
+import { withIntegrationTableHeader } from "../../utils/integrationProvenance";
+import { useCurrencyFilter } from "../../hooks/useCurrencyFilter";
+import {
+  CURRENCY_SCREENS,
+  DEFAULT_CURRENCY,
+  normalizeCurrencyCode,
+} from "../../utils/currency";
+import {
+  isCheckerEditEnabled as isCheckerEditEnabledForCorporate,
+  isCheckerEditForbiddenError,
+  isRefNoEnabled as isRefNoEnabledForCorporate,
+} from "../../utils/invoiceConfiguration";
 import {
   buildCurrentUserIdentity,
   canDeleteInvoice,
   canEditInvoice,
   extractApiErrorDetail,
   formatWorkflowStatus,
+  getInvoiceEditBlockedMessage,
   getInvoiceStatusBadgeClass,
-  NEEDS_CORRECTION_STATUS,
-} from '../../utils/approvalWorkflow';
+  isSavedInvoiceStatus,
+  canForwardSavedInvoice,
+  resolveBulkCreateInvoiceStatus,
+  resolveInitialInvoiceStatus,
+} from "../../utils/approvalWorkflow";
 
-const FILE_BASE_URL = import.meta.env.VITE_BACKEND_URL ?? '';
+const getApprovalWorkflowName = (invoice) =>
+  invoice.approvalWorkflowName ??
+  invoice.workflowName ??
+  invoice.approvalWorkflow?.name ??
+  "-";
 
-const createEmptyVendorRequestForm = () => ({
-  name: '',
-  vendor_type: 'Company',
-  email: '',
-  phone: '',
-  mobile: '',
-  pan: '',
-  gstin: '',
-  address_line1: '',
-  address_line2: '',
-  city: '',
-  state: '',
-  pincode: '',
-  country: '',
-  bank_name: '',
-  account_number: '',
-  ifsc_code: '',
-  branch: '',
-  account_holder_name: '',
-  category: '',
-  currency: 'INR',
-  payment_terms: '30',
-  contact_person: '',
-  website: '',
-  notes: '',
-});
+const baseInvoiceTableHeader = [
+  {
+    key: "srNo",
+    title: "Sr. No",
+    headerClassName: "p-3 text-left text-xs font-medium",
+    cellClassName: "p-3 text-sm font-medium",
+  },
+  {
+    key: "source",
+    title: "Source",
+    headerClassName: "p-3 text-left text-xs font-medium",
+    cellClassName: "p-3",
+  },
+  {
+    key: "invoiceNumber",
+    title: "Invoice #",
+    headerClassName: "p-3 text-left text-xs font-medium",
+    cellClassName: "p-3   text-sm font-medium",
+  },
+  {
+    key: "refNo",
+    title: "Ref No",
+    headerClassName: "p-3 text-left text-xs font-medium",
+    cellClassName: "p-3 text-sm font-mono",
+  },
+  {
+    key: "vendorName",
+    title: "Vendor",
+    headerClassName: "p-3 text-left text-xs font-medium",
+    cellClassName: "p-3 text-sm",
+  },
+  {
+    key: "originalFileName",
+    title: "Original File Name",
+    headerClassName: "p-3 text-left text-xs font-medium",
+    cellClassName: "p-3 text-xs   text-muted-foreground",
+  },
+  {
+    key: "grossAmount",
+    title: "Gross Amount",
+    headerClassName: "p-3 text-left text-xs font-medium",
+    cellClassName: "p-3   text-sm font-semibold text-left",
+  },
+  {
+    key: "taxAmount",
+    title: "GST / Tax",
+    headerClassName: "p-3 text-left text-xs font-medium",
+    cellClassName: "p-3   text-sm text-left",
+  },
+  {
+    key: "tdsAmount",
+    title: "TDS",
+    headerClassName: "p-3 text-left text-xs font-medium",
+    cellClassName: "p-3   text-sm text-left",
+  },
+  {
+    key: "netAmount",
+    title: "Net Amount",
+    headerClassName: "p-3 text-left text-xs font-medium",
+    cellClassName: "p-3   text-sm font-semibold text-left",
+  },
+  {
+    key: "approvalWorkflowName",
+    title: "Approval Workflow",
+    headerClassName: "p-3 text-left text-xs font-medium",
+    cellClassName: "p-3 text-sm whitespace-nowrap",
+  },
+  {
+    key: "invoiceDate",
+    title: "Invoice Date",
+    headerClassName: "p-3 text-left text-xs font-medium",
+    cellClassName: "p-3 text-xs text-muted-foreground whitespace-nowrap",
+  },
+  {
+    key: "status",
+    title: "Status",
+    headerClassName: "p-3 text-left text-xs font-medium",
+    cellClassName: "p-3",
+  },
+  {
+    key: "createdAt",
+    title: "Created At",
+    headerClassName: "p-3 text-left text-xs font-medium",
+    cellClassName: "p-3 text-xs text-muted-foreground whitespace-nowrap",
+  },
+  {
+    key: "actions",
+    title: "Actions",
+    headerClassName: "p-3 text-left text-xs font-medium",
+    cellClassName: "p-3 text-left",
+  },
+];
 
 const InvoicesPage = () => {
   const { user } = useAuth();
-  const { isCategoryFeatureEnabled, isCorporateAdmin } = useRBAC();
   const {
-    data: corporateUserContext = null,
-  } = useGetCorporateUserDetailsQuery();
+    corporateScreens,
+    isCategoryFeatureEnabled,
+    isCampaignFeatureEnabled,
+    isCorporateAdmin,
+  } = useRBAC();
+  const { showIntegrationColumn } = useZohoIntegrationActive();
+  const { data: corporateUserContext = null } =
+    useGetCorporateUserDetailsQuery();
   const invoiceUserEmail =
     corporateUserContext?.corporateUser?.email ||
     corporateUserContext?.employeeDetails?.email ||
     user?.email ||
     user?.identifier ||
-    '';
+    "";
   const {
     currencies,
     selectedCurrency,
     setSelectedCurrency,
     currencyParam,
-    queryArgs: invoiceQueryArgs,
+    queryArgs: currencyQueryArgs,
   } = useCurrencyFilter(CURRENCY_SCREENS.INVOICE);
   const invoiceCurrencyOptions = useMemo(
-    () => currencies.filter((currency) => currency !== 'ALL'),
+    () => currencies.filter((currency) => currency !== "ALL"),
     [currencies],
   );
+  const [invoiceStatusFilter, setInvoiceStatusFilter] = useState("all");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [invoicePageOffset, setInvoicePageOffset] = useState(0);
+  const debouncedSearchTerm = useDebouncedValue(searchTerm.trim(), 300);
+
+  useEffect(() => {
+    setInvoicePageOffset(0);
+  }, [invoiceStatusFilter, debouncedSearchTerm, currencyParam]);
+
+  const invoiceQueryArgs = useMemo(
+    () => ({
+      ...currencyQueryArgs,
+      limit: INVOICE_LIST_PAGE_SIZE,
+      offset: invoicePageOffset,
+      ...(invoiceStatusFilter !== "all" ? { filter: invoiceStatusFilter } : {}),
+      ...(debouncedSearchTerm ? { search: debouncedSearchTerm } : {}),
+    }),
+    [
+      currencyQueryArgs,
+      invoiceStatusFilter,
+      debouncedSearchTerm,
+      invoicePageOffset,
+    ],
+  );
   const {
-    data: invoicesData = [],
+    data: invoicesListData = EMPTY_INVOICE_LIST_RESPONSE,
+    isFetching: invoicesFetching,
+    refetch: refetchInvoices,
   } = useGetInvoicesQuery(invoiceQueryArgs);
   const {
     data: vendorsData = [],
+    isFetching: vendorsFetching,
     refetch: refetchVendors,
   } = useGetVendorsQuery();
   const {
     data: pendingVendorsData = [],
+    isFetching: pendingVendorsFetching,
     refetch: refetchPendingVendors,
   } = useGetPendingVendorApprovalsQuery();
-  const {
-    data: departmentsData = [],
-  } = useGetCorporateDepartmentsQuery();
+  const { data: departmentsData = [] } = useGetCorporateDepartmentsQuery();
   const {
     data: invoiceMandatoryFieldsData,
     isLoading: invoiceMandatoryFieldsLoading,
@@ -178,49 +343,112 @@ const InvoicesPage = () => {
   );
   const [scanInvoice] = useScanInvoiceMutation();
   const [bulkUploadInvoices] = useBulkUploadInvoicesMutation();
-  const [requestVendorAddition, { isLoading: requestVendorLoading }] = useRequestVendorAdditionMutation();
+  const [requestVendorAddition, { isLoading: requestVendorLoading }] =
+    useRequestVendorAdditionMutation();
   const [createInvoice] = useCreateInvoiceMutation();
   const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
-  const [updateInvoice] = useUpdateInvoiceMutation();
+  const [updateInvoice, { isLoading: updateInvoiceLoading }] =
+    useUpdateInvoiceMutation();
+  const [forwardInvoice, { isLoading: forwardInvoiceLoading }] =
+    useForwardInvoiceMutation();
   const [deleteInvoice] = useDeleteInvoiceMutation();
   const { guardAction, canPerformAction } = useActionGuard();
-  const invoices = Array.isArray(invoicesData) ? invoicesData : [];
+  const { handleCreditError } = useCreditErrorHandler();
+  const invoices = getInvoiceListItems(invoicesListData);
+  const invoicePagination = useMemo(() => {
+    const total = Number(invoicesListData.total ?? 0) || 0;
+    const offset = Number(invoicesListData.offset ?? invoicePageOffset) || 0;
+    const limit =
+      Number(invoicesListData.limit ?? INVOICE_LIST_PAGE_SIZE) ||
+      INVOICE_LIST_PAGE_SIZE;
+    const currentPage = limit > 0 ? Math.floor(offset / limit) : 0;
+    const totalPages = total > 0 ? Math.ceil(total / limit) : 0;
+
+    return {
+      total,
+      offset,
+      limit,
+      hasMore: Boolean(invoicesListData.hasMore),
+      currentPage,
+      totalPages,
+      startRecord: total === 0 ? 0 : offset + 1,
+      endRecord: total === 0 ? 0 : Math.min(offset + invoices.length, total),
+    };
+  }, [invoicesListData, invoicePageOffset, invoices.length]);
+
+  const goToInvoicePage = useCallback((pageIndex) => {
+    const safePage = Math.max(0, pageIndex);
+    setInvoicePageOffset(safePage * INVOICE_LIST_PAGE_SIZE);
+  }, []);
   const approvedVendors = Array.isArray(vendorsData) ? vendorsData : [];
-  const pendingVendors = Array.isArray(pendingVendorsData) ? pendingVendorsData : [];
+  const pendingVendors = Array.isArray(pendingVendorsData)
+    ? pendingVendorsData
+    : [];
   const invoiceVendorOptions = useMemo(
     () => mergeInvoiceVendorOptions(approvedVendors, pendingVendors),
     [approvedVendors, pendingVendors],
   );
   const departments = Array.isArray(departmentsData) ? departmentsData : [];
   const invoiceCategories =
-    isCategoryFeatureEnabled && Array.isArray(invoiceCategoriesData) ? invoiceCategoriesData : [];
-  const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState('list');
+    isCategoryFeatureEnabled && Array.isArray(invoiceCategoriesData)
+      ? invoiceCategoriesData
+      : [];
+  const [activeTab, setActiveTab] = useState("list");
   const { setHideSidebar } = useSidebar();
-  
+
   // Upload state
   const [uploadedFile, setUploadedFile] = useState(null);
   const [uploadedFileURL, setUploadedFileURL] = useState(null);
   const [extractedData, setExtractedData] = useState(null);
   const [scanning, setScanning] = useState(false);
-  const fileInputRef = useRef(null);
-  const bulkFileInputRef = useRef(null);
-  const canScanInvoices = canPerformAction('invoices.scan');
-  const canBulkUploadInvoices = canPerformAction('invoices.bulkUpload');
-  const canManageInvoices = canPerformAction('invoices.create');
-  const canUpdateInvoices = canPerformAction('invoices.update');
-  const canDeleteInvoices = canPerformAction('invoices.delete');
-  const canAddVendors = canPerformAction('invoices.addVendor');
+  const canScanInvoices = canPerformAction("invoices.scan");
+  const canBulkUploadInvoices = canPerformAction("invoices.bulkUpload");
+  const canUploadInvoices = canScanInvoices || canBulkUploadInvoices;
+  const canManageInvoices = canPerformAction("invoices.create");
+  const canUpdateInvoices = canPerformAction("invoices.update");
+  const canDeleteInvoices = canPerformAction("invoices.delete");
+  const canCheckInvoices = canPerformAction("invoices.check");
+  const canAddVendors = canPerformAction("invoices.addVendor");
+  const isCheckerEditEnabled = useMemo(
+    () =>
+      isCheckerEditEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const isRefNoEnabled = useMemo(
+    () =>
+      isRefNoEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const invoiceTableHeader = useMemo(() => {
+    const headers = isRefNoEnabled
+      ? baseInvoiceTableHeader
+      : baseInvoiceTableHeader.filter((column) => column.key !== "refNo");
+    return withIntegrationTableHeader(headers, showIntegrationColumn);
+  }, [isRefNoEnabled, showIntegrationColumn]);
   const invoiceEditContext = useMemo(
     () => ({
       ...buildCurrentUserIdentity({ user, corporateUserContext }),
       canUpdateInvoices,
       canManageInvoices,
+      canCheckInvoices,
       isCorporateAdmin,
+      isCheckerEditEnabled,
     }),
-    [user, corporateUserContext, canUpdateInvoices, canManageInvoices, isCorporateAdmin],
+    [
+      user,
+      corporateUserContext,
+      canUpdateInvoices,
+      canManageInvoices,
+      canCheckInvoices,
+      isCorporateAdmin,
+      isCheckerEditEnabled,
+    ],
   );
-  
+
   // PDF Zoom
   const [pdfZoom, setPdfZoom] = useState(100);
 
@@ -230,21 +458,20 @@ const InvoicesPage = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [uploadPreviewError, setUploadPreviewError] = useState(false);
   const [viewPreviewError, setViewPreviewError] = useState(false);
-  
+
   // Enhanced form data for both upload and edit
   const [formData, setFormData] = useState(null);
-  
+
   // History state
   const [invoiceHistory, setInvoiceHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
-  const [viewTab, setViewTab] = useState('details');
+  const [viewTab, setViewTab] = useState("details");
   const [bulkPreviewOpen, setBulkPreviewOpen] = useState(false);
   const [bulkPreviewItems, setBulkPreviewItems] = useState([]);
   const [bulkCreating, setBulkCreating] = useState(false);
   const [bulkExtracting, setBulkExtracting] = useState(false);
   const [bulkExtractTotalFiles, setBulkExtractTotalFiles] = useState(0);
   const [bulkExtractStartedAt, setBulkExtractStartedAt] = useState(null);
-  const [bulkExtractElapsedSeconds, setBulkExtractElapsedSeconds] = useState(0);
   const [bulkExtractProgress, setBulkExtractProgress] = useState(0);
   const [bulkProgress, setBulkProgress] = useState({
     total: 0,
@@ -253,43 +480,25 @@ const InvoicesPage = () => {
     failed: 0,
     startedAt: null,
   });
-  const [bulkElapsedSeconds, setBulkElapsedSeconds] = useState(0);
   const [bulkEditOpen, setBulkEditOpen] = useState(false);
-  const [bulkEditItemId, setBulkEditItemId] = useState('');
+  const [bulkEditItemId, setBulkEditItemId] = useState("");
   const [bulkEditForm, setBulkEditForm] = useState(null);
   const [bulkEditPreviewError, setBulkEditPreviewError] = useState(false);
   const [bulkEditFileURL, setBulkEditFileURL] = useState(null);
-  const [bulkAddingVendorItemId, setBulkAddingVendorItemId] = useState('');
+  const [bulkAddingVendorItemId, setBulkAddingVendorItemId] = useState("");
   const [invoiceDeleteTarget, setInvoiceDeleteTarget] = useState(null);
   const [requestVendorOpen, setRequestVendorOpen] = useState(false);
+  const [invoiceUploadDialogOpen, setInvoiceUploadDialogOpen] = useState(false);
   const [requestVendorContext, setRequestVendorContext] = useState(null);
-  const [requestVendorForm, setRequestVendorForm] = useState(createEmptyVendorRequestForm);
+  const [requestVendorForm, setRequestVendorForm] = useState(
+    createEmptyVendorRequestForm,
+  );
 
-  const openSingleFilePicker = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-      fileInputRef.current.click();
-    }
-  };
-
-  const openBulkFilePicker = () => {
-    if (bulkFileInputRef.current) {
-      bulkFileInputRef.current.value = '';
-      bulkFileInputRef.current.click();
-    }
-  };
-
-  // Hide/show sidebar based on mode
+  // Hide sidebar while upload or edit dialog is open
   useEffect(() => {
-    const shouldHide = activeTab === 'upload' && uploadedFile;
-    setHideSidebar(shouldHide);
+    setHideSidebar(Boolean(uploadedFile) || editDialogOpen);
     return () => setHideSidebar(false);
-  }, [activeTab, uploadedFile, setHideSidebar]);
-
-  // Also hide sidebar when edit dialog is open
-  useEffect(() => {
-    setHideSidebar(editDialogOpen);
-  }, [editDialogOpen, setHideSidebar]);
+  }, [uploadedFile, editDialogOpen, setHideSidebar]);
 
   useEffect(() => {
     setUploadPreviewError(false);
@@ -304,7 +513,9 @@ const InvoicesPage = () => {
       setBulkEditFileURL(null);
       return;
     }
-    const selected = bulkPreviewItems.find((item) => item.id === bulkEditItemId);
+    const selected = bulkPreviewItems.find(
+      (item) => item.id === bulkEditItemId,
+    );
     if (!selected?.file) {
       setBulkEditFileURL(null);
       return;
@@ -315,27 +526,15 @@ const InvoicesPage = () => {
   }, [bulkEditOpen, bulkEditItemId, bulkPreviewItems]);
 
   useEffect(() => {
-    if (!bulkCreating || !bulkProgress.startedAt) {
-      setBulkElapsedSeconds(0);
-      return;
-    }
-    const timerId = setInterval(() => {
-      const elapsed = Math.max(0, Math.floor((Date.now() - bulkProgress.startedAt) / 1000));
-      setBulkElapsedSeconds(elapsed);
-    }, 1000);
-
-    return () => clearInterval(timerId);
-  }, [bulkCreating, bulkProgress.startedAt]);
-
-  useEffect(() => {
     if (!bulkExtracting || !bulkExtractStartedAt) {
-      setBulkExtractElapsedSeconds(0);
       setBulkExtractProgress(0);
       return;
     }
     const timerId = setInterval(() => {
-      const elapsed = Math.max(0, Math.floor((Date.now() - bulkExtractStartedAt) / 1000));
-      setBulkExtractElapsedSeconds(elapsed);
+      const elapsed = Math.max(
+        0,
+        Math.floor((Date.now() - bulkExtractStartedAt) / 1000),
+      );
       // Simulated determinate progress until API returns (caps at 95%)
       setBulkExtractProgress((prev) => {
         const target = Math.min(95, 12 + elapsed * 8);
@@ -346,63 +545,62 @@ const InvoicesPage = () => {
   }, [bulkExtracting, bulkExtractStartedAt]);
 
   useEffect(() => {
-    if (!bulkPreviewOpen || bulkCreating || bulkPreviewItems.length === 0) return;
-    const creatableRows = bulkPreviewItems.filter(
-      (item) => item.invoicePayload && !isDuplicateBulkPreviewItem(item),
+    if (!bulkPreviewOpen || bulkCreating || bulkPreviewItems.length === 0)
+      return;
+    const pendingRows = bulkPreviewItems.filter(
+      (item) => item.status !== "uploaded",
     );
-    if (creatableRows.length === 0) return;
-    const allUploaded = creatableRows.every((item) => item.status === 'uploaded');
-    if (allUploaded) {
+    if (pendingRows.length === 0) {
       setBulkPreviewOpen(false);
+      setBulkPreviewItems([]);
     }
   }, [bulkPreviewOpen, bulkCreating, bulkPreviewItems]);
 
+  const findVendorByName = useCallback(
+    (vendorName) => {
+      if (!vendorName) return null;
+      const normalizedName = vendorName.toLowerCase().trim();
+      return (
+        invoiceVendorOptions.find(
+          (vendor) =>
+            String(vendor?.name || "")
+              .toLowerCase()
+              .trim() === normalizedName,
+        ) || null
+      );
+    },
+    [invoiceVendorOptions],
+  );
 
-  const findVendorByName = useCallback((vendorName) => {
-    if (!vendorName) return null;
-    const normalizedName = vendorName.toLowerCase().trim();
-    return (
-      invoiceVendorOptions.find(
-        (vendor) => String(vendor?.name || '').toLowerCase().trim() === normalizedName,
-      ) || null
+  const findVendorById = useCallback(
+    (vendorId) => {
+      if (vendorId === null || vendorId === undefined || vendorId === "")
+        return null;
+      return (
+        invoiceVendorOptions.find(
+          (vendor) => String(vendor?.id) === String(vendorId),
+        ) || null
+      );
+    },
+    [invoiceVendorOptions],
+  );
+
+  const getDepartmentNameById = (departmentId) => {
+    const selectedDepartment = departments.find(
+      (department) =>
+        String(
+          department?.id ??
+            department?.departmentId ??
+            department?.departmentId ??
+            "",
+        ) === String(departmentId ?? ""),
     );
-  }, [invoiceVendorOptions]);
-
-  const findVendorById = useCallback((vendorId) => {
-    if (vendorId === null || vendorId === undefined || vendorId === '') return null;
     return (
-      invoiceVendorOptions.find((vendor) => String(vendor?.id) === String(vendorId)) || null
+      selectedDepartment?.name ||
+      selectedDepartment?.departmentName ||
+      selectedDepartment?.departmentName ||
+      ""
     );
-  }, [invoiceVendorOptions]);
-
-  const buildVendorRequestForm = (source = {}) => {
-    const invoiceCurrency = normalizeCurrencyCode(source.currency) || DEFAULT_CURRENCY;
-    return {
-      ...createEmptyVendorRequestForm(),
-      name: source.vendor_name || source.name || '',
-      gstin:
-        source.vendor_gstin ||
-        source.vendorGstin ||
-        source.gstin ||
-        source.billing_gstin ||
-        source.billingGstin ||
-        '',
-      mobile:
-        source.mobile ||
-        source.vendor_mobile ||
-        source.vendorMobile ||
-        '',
-      phone: source.phone || source.vendor_phone || source.vendorPhone || '',
-      pan: source.pan || source.vendor_pan || source.vendorPan || '',
-      address_line1: '',
-      address_line2: '',
-      city: '',
-      state: '',
-      pincode: '',
-      notes: source.memo || source.description || '',
-      country: source.country || (isInrInvoiceCurrency(invoiceCurrency) ? 'India' : ''),
-      currency: invoiceCurrency,
-    };
   };
 
   const openRequestVendorDialog = ({ source = {}, context }) => {
@@ -419,261 +617,59 @@ const InvoicesPage = () => {
     }
   };
 
-  const getDepartmentNameById = (departmentId) => {
-    const selectedDepartment = departments.find(
-      (department) =>
-        String(department?.id ?? department?.departmentId ?? department?.department_id ?? '') ===
-        String(departmentId ?? ''),
-    );
-    return (
-      selectedDepartment?.name ||
-      selectedDepartment?.departmentName ||
-      selectedDepartment?.department_name ||
-      ''
-    );
-  };
-
   const getCategoryNameById = (categoryId) => {
-    if (!isCategoryFeatureEnabled) return '';
+    if (!isCategoryFeatureEnabled) return "";
     const selectedCategory = invoiceCategories.find(
-      (category) => String(category?.id ?? '') === String(categoryId ?? ''),
+      (category) => String(category?.id ?? "") === String(categoryId ?? ""),
     );
-    return selectedCategory?.name || '';
+    return selectedCategory?.name || "";
   };
 
-  const normalizeInvoiceCategoryId = (categoryId) => {
-    if (categoryId === null || categoryId === undefined || categoryId === '') return '';
-    const numericCategoryId = Number(categoryId);
-    return Number.isNaN(numericCategoryId) ? categoryId : numericCategoryId;
+  const payloadBuilderDeps = {
+    findVendorByName,
+    getDepartmentNameById,
+    getCategoryNameById,
+    isCategoryFeatureEnabled,
+    isCampaignFeatureEnabled,
   };
 
-  const buildInvoiceCategoryPayload = (source = {}) => {
-    if (!isCategoryFeatureEnabled) return null;
-    const rawCategoryId = source.category?.id ?? source.category_id ?? source.categoryId;
-    const categoryId = normalizeInvoiceCategoryId(rawCategoryId);
-    if (!categoryId) return null;
-    return {
-      id: categoryId,
-      name:
-        source.category?.name ||
-        source.category_name ||
-        source.categoryName ||
-        getCategoryNameById(categoryId),
-    };
-  };
+  const toCreateInvoicePayload = (invoiceData = {}, options = {}) =>
+    buildToCreateInvoicePayload(invoiceData, options, payloadBuilderDeps);
 
-  const normalizeScannedInvoice = (scanResponse = {}) => {
-    const toDateOnly = (value) => {
-      if (!value) return '';
-      const d = new Date(value);
-      return Number.isNaN(d.getTime()) ? '' : format(d, 'yyyy-MM-dd');
-    };
-
-    const lineItemsRaw = Array.isArray(scanResponse?.line_items)
-      ? scanResponse.line_items
-      : Array.isArray(scanResponse?.items)
-        ? scanResponse.items
-        : [];
-    const taxesRaw = Array.isArray(scanResponse?.taxes) ? scanResponse.taxes : [];
-    const invoiceCurrency = normalizeCurrencyCode(scanResponse?.currency) || DEFAULT_CURRENCY;
-
-    const lineItems = lineItemsRaw.map((item) => {
-      const pricing = resolveScannedLineItemPricing(item);
-      const taxFields = resolveScannedLineItemTax(item, taxesRaw, invoiceCurrency);
-
-      return {
-        description: item?.description ?? item?.name ?? '',
-        quantity: pricing.quantity,
-        unit_price: pricing.unit_price,
-        amount: pricing.amount,
-        line_total: pricing.line_total,
-        hsn_sac: item?.hsn_sac ?? item?.hsnSac ?? '',
-        ...taxFields,
-      };
+  const buildMultipartPayload = (invoicePayload, file = null, options = {}) =>
+    buildInvoiceMultipartPayload(invoicePayload, file, options, {
+      isCategoryFeatureEnabled,
     });
 
-    const computedAmount = lineItems.reduce((sum, item) => sum + (Number(item.amount) || 0), 0);
-    const taxSummary = resolveScannedInvoiceTaxSummary(scanResponse, taxesRaw);
+  const buildBulkProceedPayload = (normalizedInvoice, file, filename = "") => {
+    const formBase = normalizedInvoice
+      ? initializeFormData(normalizedInvoice)
+      : {
+          ...initializeFormData(null),
+          originalFileName: filename || file?.name || null,
+        };
 
-    const vendorAddress =
-      scanResponse?.vendor_address ??
-      scanResponse?.vendorAddress ??
-      scanResponse?.address ??
-      '';
-
-    return {
-      vendor_name: scanResponse?.vendor_name ?? scanResponse?.vendorName ?? scanResponse?.merchant ?? '',
-      vendor_gstin: scanResponse?.vendor_gstin ?? scanResponse?.vendorGstin ?? '',
-      billing_gstin: scanResponse?.billingGstin ?? scanResponse?.billing_gstin ?? '',
-      vendor_address: vendorAddress,
-      billing_address:
-        scanResponse?.billingAddress ??
-        scanResponse?.billing_address ??
-        vendorAddress,
-      shipping_address:
-        scanResponse?.shippingAddress ??
-        scanResponse?.shipping_address ??
-        '',
-      invoice_number: scanResponse?.invoice_number ?? scanResponse?.invoiceNumber ?? '',
-      invoice_date:
-        toDateOnly(scanResponse?.invoice_date ?? scanResponse?.invoiceDate ?? scanResponse?.datetime) ||
-        format(new Date(), 'yyyy-MM-dd'),
-      due_date:
-        toDateOnly(scanResponse?.due_date ?? scanResponse?.dueDate ?? scanResponse?.datetime) ||
-        format(new Date(), 'yyyy-MM-dd'),
-      line_items: lineItems,
-      amount: Number(scanResponse?.total ?? scanResponse?.amount ?? computedAmount) || 0,
-      currency: normalizeCurrencyCode(scanResponse?.currency) || DEFAULT_CURRENCY,
-      ...taxSummary,
-      file_id: scanResponse?.file_id ?? scanResponse?.fileId ?? null,
-      file_hash: scanResponse?.file_hash ?? scanResponse?.fileHash ?? null,
-      original_filename: scanResponse?.original_filename ?? scanResponse?.originalFileName ?? null,
-    };
+    return toCreateInvoicePayload({
+      ...formBase,
+      vendorName: formBase.vendorName?.trim() || "",
+      originalFileName:
+        formBase.originalFileName || filename || file?.name || null,
+      currentFileName: file?.name || filename || null,
+      status: resolveBulkCreateInvoiceStatus(),
+    });
   };
 
-  const computeTdsAmount = (lineItems = [], tdsValue = '') => {
-    const tdsRate = Number.parseFloat(String(tdsValue || '').replace('%', '')) || 0;
-    if (!tdsRate) return 0;
-    const subTotal = (lineItems || []).reduce(
-      (sum, item) => sum + calculateLineItemSubtotal(item),
-      0,
-    );
-    return Math.round(((subTotal * tdsRate) / 100) * 100) / 100;
-  };
+  const initializeFormData = (extractedData = null) =>
+    initializeInvoiceFormData(extractedData, {
+      findVendorByName,
+      isCategoryFeatureEnabled,
+    });
 
-  const toCreateInvoicePayload = (invoiceData = {}, options = {}) => {
-    const lineItems = invoiceData.line_items || [];
-    const totals =
-      options.totals ??
-      (lineItems.length > 0 ? calculateTotals(lineItems) : null);
-
-    return buildCreateInvoiceRequestBody(
-      {
-        ...invoiceData,
-        vendor_id: invoiceData.vendor_id || findVendorByName(invoiceData.vendor_name)?.id || '',
-        department_name:
-          invoiceData.department_name ||
-          invoiceData.departmentName ||
-          getDepartmentNameById(invoiceData.department_id || invoiceData.departmentId),
-        category: buildInvoiceCategoryPayload(invoiceData),
-        category_id: invoiceData.category_id || invoiceData.categoryId || invoiceData.category?.id || '',
-        category_name:
-          invoiceData.category_name ||
-          invoiceData.categoryName ||
-          invoiceData.category?.name ||
-          getCategoryNameById(invoiceData.category_id || invoiceData.categoryId || invoiceData.category?.id),
-        memo:
-          invoiceData.memo ||
-          invoiceData.description ||
-          (Array.isArray(invoiceData.notes) ? invoiceData.notes.join('\n') : ''),
-        original_file_name:
-          invoiceData.original_file_name ||
-          invoiceData.original_filename ||
-          null,
-        source: invoiceData.source || 'Upload',
-        source_email: invoiceData.source === 'Email' ? invoiceData.source_email : null,
-      },
-      {
-        ...options,
-        totals,
-        tdsAmount: options.tdsAmount ?? computeTdsAmount(lineItems, invoiceData.tds),
-        categoryEnabled: isCategoryFeatureEnabled,
-      },
-    );
-  };
-
-  const buildInvoiceMultipartPayload = (invoicePayload, file = null, options = {}) => {
-    const multipartPayload = new FormData();
-    if (file) {
-      multipartPayload.append('file', file);
-    }
-    const requestBody = toInvoiceApiPayload(
-      buildCreateInvoiceRequestBody(invoicePayload, {
-        ...options,
-        uploadedFileName: file?.name,
-        categoryEnabled: isCategoryFeatureEnabled,
-      }),
-    );
-    multipartPayload.append(
-      'invoice',
-      new Blob([JSON.stringify(requestBody)], { type: 'application/json' }),
-    );
-    return multipartPayload;
-  };
-
-  // Initialize form data for new invoice
-  const initializeFormData = (extractedData = null) => {
-    const matchedVendor = extractedData?.vendor_name ? findVendorByName(extractedData.vendor_name) : null;
-    const notesText = Array.isArray(extractedData?.notes) ? extractedData.notes.join('\n') : '';
-    const invoiceCurrency = normalizeCurrencyCode(extractedData?.currency) || DEFAULT_CURRENCY;
-    const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
-    const defaultGstTreatment = useInrTax ? 'Regular' : 'N/A';
-    const vendorAddress =
-      extractedData?.vendor_address ||
-      extractedData?.address ||
-      '';
-    const billingAddress =
-      extractedData?.billing_address ||
-      extractedData?.billingAddress ||
-      vendorAddress;
-    return {
-      vendor_name: extractedData?.vendor_name || '',
-      vendor_id: matchedVendor?.id || '',
-      vendor_matched: !!matchedVendor,
-      vendor_request_submitted: false,
-      vendor_request_pending: Boolean(matchedVendor?.is_pending_approval),
-      vendor_gstin: extractedData?.vendor_gstin || '',
-      vendor_address: vendorAddress,
-      invoice_number: extractedData?.invoice_number || '',
-      invoice_date: extractedData?.invoice_date || format(new Date(), 'yyyy-MM-dd'),
-      due_date: extractedData?.due_date || format(new Date(), 'yyyy-MM-dd'),
-      billing_address: billingAddress,
-      shipping_address: extractedData?.shipping_address || extractedData?.shippingAddress || '',
-      gst_treatment: extractedData?.gst_treatment || extractedData?.gstTreatment || defaultGstTreatment,
-      gstin:
-        extractedData?.vendor_gstin ||
-        extractedData?.vendorGstin ||
-        extractedData?.billing_gstin ||
-        extractedData?.billingGstin ||
-        extractedData?.gstin ||
-        matchedVendor?.gstin ||
-        '',
-      source_of_supply: extractedData?.source_of_supply || extractedData?.place_of_supply || '',
-      destination_of_supply: extractedData?.destination_of_supply || extractedData?.place_of_supply || '',
-      location: extractedData?.location || extractedData?.place_of_supply || '',
-      reverse_charges: extractedData?.reverse_charges || 'Not Applicable',
-      discounts_level: extractedData?.discounts_level || 'At Line Item Level',
-      invoice_discount: extractedData?.invoice_discount || 0,
-      invoice_discount_type: extractedData?.invoice_discount_type || '%',
-      source: extractedData?.source || 'Upload',
-      source_email: '',
-      line_items: extractedData?.line_items?.length > 0
-        ? extractedData.line_items.map((item) =>
-            mapExtractedLineItemToForm(item, { useInrTax }),
-          )
-        : [createDefaultLineItem(invoiceCurrency)],
-      description: extractedData?.description || notesText || '',
-      tds: '',
-      amount: extractedData?.amount || 0,
-      currency: normalizeCurrencyCode(extractedData?.currency) || DEFAULT_CURRENCY,
-      scanned_tax_amount: extractedData?.invoice_tax_amount,
-      scanned_tax_name: extractedData?.invoice_tax_name,
-      scanned_tax_rate: extractedData?.invoice_tax_rate,
-      scanned_total: extractedData?.invoice_total,
-      file_id: extractedData?.file_id || null,
-      file_hash: extractedData?.file_hash || null,
-      original_file_name: extractedData?.original_filename || null,
-      department_id: extractedData?.department_id || extractedData?.departmentId || '',
-      department_name: extractedData?.department_name || extractedData?.departmentName || '',
-      ...(isCategoryFeatureEnabled
-        ? {
-            category: extractedData?.category || null,
-            category_id: extractedData?.category_id || extractedData?.categoryId || extractedData?.category?.id || '',
-            category_name: extractedData?.category_name || extractedData?.categoryName || extractedData?.category?.name || '',
-          }
-        : {})
-    };
-  };
+  const buildCategoryPayload = (source = {}) =>
+    buildInvoiceCategoryPayload(source, {
+      isCategoryFeatureEnabled,
+      getCategoryNameById,
+    });
 
   const resetSingleUploadSession = () => {
     setUploadedFileURL((currentUrl) => {
@@ -684,25 +680,21 @@ const InvoicesPage = () => {
     setExtractedData(null);
     setFormData(null);
     setUploadPreviewError(false);
-    setActiveTab('list');
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    setActiveTab("list");
   };
 
-  const handleSingleFileUpload = async (e) => {
-    if (!guardAction('invoices.scan')) return;
-    const file = e.target.files[0];
-    if (!file) return;
+  const handleSingleInvoiceFile = async (file) => {
+    if (!guardAction("invoices.scan")) return false;
+    if (!file) return false;
 
     const fileURL = URL.createObjectURL(file);
     setUploadedFileURL(fileURL);
     setUploadedFile(file);
     setScanning(true);
-    setActiveTab('upload');
+    setActiveTab("upload");
 
     const formDataUpload = new FormData();
-    formDataUpload.append('file', file);
+    formDataUpload.append("file", file);
 
     try {
       const response = await scanInvoice(formDataUpload).unwrap();
@@ -712,8 +704,8 @@ const InvoicesPage = () => {
         response?.extracted_data ??
         response;
 
-      if (!normalizedResponse || typeof normalizedResponse !== 'object') {
-        throw new Error('Scan API returned empty response');
+      if (!normalizedResponse || typeof normalizedResponse !== "object") {
+        throw new Error("Scan API returned empty response");
       }
 
       if (isDuplicateBulkExtractResult(normalizedResponse)) {
@@ -722,9 +714,7 @@ const InvoicesPage = () => {
           <div className="space-y-2">
             <p className="font-bold text-base">Duplicate Invoice</p>
             <p className="text-sm whitespace-pre-line">
-              {normalizedResponse?.error ||
-                normalizedResponse?.message ||
-                'An invoice with the same invoice number and vendor already exists.'}
+              {getDuplicateInvoiceMessage(normalizedResponse)}
             </p>
           </div>,
           { duration: 8000 },
@@ -735,15 +725,15 @@ const InvoicesPage = () => {
       const extractedInvoice = normalizeScannedInvoice(normalizedResponse);
       setExtractedData(extractedInvoice);
       setFormData(initializeFormData(extractedInvoice));
-      toast.success('Invoice scanned successfully!');
+      toast.success("Invoice scanned successfully!");
     } catch (error) {
-      console.error('Scan error:', error);
+      if (handleCreditError(error)) return;
 
       const errorMessage =
         extractApiErrorDetail(error) ||
         error?.data?.message ||
         error?.message ||
-        'Failed to scan invoice';
+        "Failed to scan invoice";
 
       if (isDuplicateInvoiceError(error)) {
         resetSingleUploadSession();
@@ -760,37 +750,43 @@ const InvoicesPage = () => {
       setExtractedData(null);
       setFormData({
         ...initializeFormData(null),
-        original_file_name: file.name,
+        originalFileName: file.name,
       });
       toast.warning(
         <div className="space-y-2">
           <p className="font-bold text-base">Scan Failed</p>
-          <p className="text-sm whitespace-pre-line">
-            {errorMessage}
+          <p className="text-sm whitespace-pre-line">{errorMessage}</p>
+          <p className="text-sm">
+            Enter invoice details manually using the form.
           </p>
-          <p className="text-sm">Enter invoice details manually using the form.</p>
         </div>,
         { duration: 8000 },
       );
     } finally {
       setScanning(false);
     }
+    return true;
   };
 
-  const handleBulkFileUpload = async (e) => {
-    if (!guardAction('invoices.bulkUpload')) return;
-    const files = e.target.files;
-    if (!files || files.length === 0) return;
-    setBulkProgress({ total: 0, processed: 0, success: 0, failed: 0, startedAt: null });
-    setBulkElapsedSeconds(0);
+  const handleBulkInvoiceFiles = async (filesInput) => {
+    if (!guardAction("invoices.bulkUpload")) return false;
+    const files = Array.from(filesInput || []);
+    if (!files || files.length === 0) return false;
+    setBulkProgress({
+      total: 0,
+      processed: 0,
+      success: 0,
+      failed: 0,
+      startedAt: null,
+    });
     setBulkExtracting(true);
     setBulkExtractTotalFiles(files.length);
     setBulkExtractStartedAt(Date.now());
     setBulkExtractProgress(8);
 
     const formDataUpload = new FormData();
-    Array.from(files).forEach(file => {
-      formDataUpload.append('files', file);
+    files.forEach((file) => {
+      formDataUpload.append("files", file);
     });
 
     toast.info(`Uploading ${files.length} invoices...`, { duration: 3000 });
@@ -798,89 +794,131 @@ const InvoicesPage = () => {
     try {
       const response = await bulkUploadInvoices(formDataUpload).unwrap();
 
-      const total = Number(response?.total ?? 0);
-      const successful = Number(response?.successful ?? 0);
-      const results = Array.isArray(response?.results) ? response.results : [];
-
-      const normalizedResults = results.map((r) => ({
-        ...r,
-        status: (r?.status || '').toLowerCase(),
-        extracted: r?.extractedData ?? r?.extracted_data ?? null,
-      }));
-
-      const fileMap = new Map(
-        Array.from(files).map((file) => [String(file.name || '').toLowerCase(), file])
+      const normalizedResults = getBulkExtractResults(response).map(
+        normalizeBulkExtractResult,
       );
 
-      const previewItems = normalizedResults.map((result, index) => {
-        const isDuplicate = isDuplicateBulkExtractResult(result);
-        const isExtracted =
-          !isDuplicate &&
-          result.status === 'success' &&
+      const fileMap = new Map(
+        files.map((file) => [String(file.name || "").toLowerCase(), file]),
+      );
+
+      const previewItemsFromResults = normalizedResults.map((result, index) => {
+        const isDuplicate = result.isDuplicate;
+        const hasExtracted =
+          result.status === "success" &&
           result.extracted &&
-          typeof result.extracted === 'object';
-        const normalizedInvoice = isExtracted ? normalizeScannedInvoice(result.extracted) : null;
-        const invoicePayload = normalizedInvoice ? toCreateInvoicePayload(normalizedInvoice) : null;
-        const matchingFile = fileMap.get(String(result?.filename || '').toLowerCase()) || null;
-        const vendorMissing =
-          Boolean(invoicePayload) &&
-          !invoicePayload.vendor_id &&
-          !invoicePayload.vendor_request_submitted;
+          typeof result.extracted === "object";
+        const normalizedInvoice = hasExtracted
+          ? normalizeScannedInvoice(result.extracted)
+          : null;
+        const matchingFile =
+          fileMap.get(String(result?.filename || "").toLowerCase()) || null;
+        const filename =
+          result?.filename || matchingFile?.name || "Unknown file";
+        const invoicePayload = buildBulkProceedPayload(
+          normalizedInvoice,
+          matchingFile,
+          filename,
+        );
         return {
-          id: `${result?.filename || 'file'}-${index}`,
-          filename: result?.filename || 'Unknown file',
-          status: isDuplicate ? 'duplicate' : vendorMissing ? 'vendor_missing' : result.status,
+          id: `${filename}-${index}`,
+          filename,
+          status: isDuplicate ? "duplicate" : result.status || "failed",
           error: isDuplicate
-            ? result?.error ||
-              result?.message ||
-              'An invoice with the same invoice number and vendor already exists.'
-            : vendorMissing
-              ? `Vendor "${normalizedInvoice?.vendor_name || 'Unknown'}" not found in vendor master`
-              : (result?.error || result?.message || ''),
+            ? result.duplicateMessage || getDuplicateInvoiceMessage(result)
+            : result?.error || result?.message || "",
           isDuplicate,
-          selected: Boolean(invoicePayload && !vendorMissing && !isDuplicate),
-          invoicePayload: isDuplicate ? null : invoicePayload,
+          selected: false,
+          invoicePayload,
           file: matchingFile,
         };
       });
 
+      const resultFilenames = new Set(
+        normalizedResults.map((result) =>
+          String(result?.filename || "").toLowerCase(),
+        ),
+      );
+      const previewItemsFromMissingFiles = files
+        .filter(
+          (file) => !resultFilenames.has(String(file.name || "").toLowerCase()),
+        )
+        .map((file, index) => ({
+          id: `missing-${file.name}-${index}`,
+          filename: file.name,
+          status: "failed",
+          error: "No scan result returned for this file",
+          isDuplicate: false,
+          selected: false,
+          invoicePayload: buildBulkProceedPayload(null, file, file.name),
+          file,
+        }));
+
+      const previewItems = [
+        ...previewItemsFromResults,
+        ...previewItemsFromMissingFiles,
+      ];
+
       setBulkPreviewItems(previewItems);
       setBulkPreviewOpen(true);
-      toast.success(`Extracted ${successful} of ${total} files. Review and confirm to create invoices.`, {
-        duration: 5000,
-      });
+      const scannedCount = previewItems.length;
+      const duplicateCount = previewItems.filter(
+        (item) => item.isDuplicate,
+      ).length;
+      const successCount = Number(
+        response?.successful ??
+          normalizedResults.filter(
+            (r) => r.status === "success" && !r.isDuplicate,
+          ).length,
+      );
+      toast.success(
+        duplicateCount > 0
+          ? `${scannedCount} file${scannedCount === 1 ? "" : "s"} scanned (${successCount} ok, ${duplicateCount} duplicate${duplicateCount === 1 ? "" : "s"}).`
+          : `${scannedCount} invoice${scannedCount === 1 ? "" : "s"} scanned.`,
+        { duration: 4000 },
+      );
     } catch (error) {
-      const errorMessage = error?.data?.detail || 'Bulk upload failed';
+      if (handleCreditError(error)) return true;
+
+      const errorMessage = error?.data?.detail || "Bulk upload failed";
       toast.error(errorMessage, { duration: 6000 });
     } finally {
       setBulkExtractProgress(100);
       setBulkExtracting(false);
     }
+    return true;
   };
 
-  const handleCreateBulkInvoices = async () => {
-    if (!guardAction('invoices.create')) return;
-    const selectedItems = bulkPreviewItems.filter(
-      (item) => item.selected && item.invoicePayload && item.status !== 'uploaded'
-    );
-    if (selectedItems.length === 0) {
-      toast.error('No extracted invoices selected for creation');
-      return;
+  const handleInvoiceFilesUpload = async (filesInput) => {
+    const files = Array.from(filesInput || []).filter(Boolean);
+    if (files.length === 0) return false;
+
+    if (files.length === 1) {
+      return handleSingleInvoiceFile(files[0]);
     }
-    const missingMandatoryItem = selectedItems.find((item) =>
-      getInvoiceMandatoryFieldValidationMessage(
-        item.invoicePayload,
-        invoiceMandatoryFields,
-        mandatoryFieldOptions,
-      ),
+
+    return handleBulkInvoiceFiles(files);
+  };
+
+  const handleCreateBulkInvoices = async (mode = "all") => {
+    if (!guardAction("invoices.create")) return;
+
+    let selectedItems = bulkPreviewItems.filter(
+      (item) => item.status !== "uploaded",
     );
-    if (missingMandatoryItem) {
-      const validationMessage = getInvoiceMandatoryFieldValidationMessage(
-        missingMandatoryItem.invoicePayload,
-        invoiceMandatoryFields,
-        mandatoryFieldOptions,
+
+    if (mode === "without_duplicate") {
+      selectedItems = selectedItems.filter(
+        (item) => !isDuplicateBulkPreviewItem(item),
       );
-      toast.error(`${validationMessage} (${missingMandatoryItem.filename})`);
+    }
+
+    if (selectedItems.length === 0) {
+      toast.error(
+        mode === "without_duplicate"
+          ? "No non-duplicate invoices to save"
+          : "No scanned invoices to save",
+      );
       return;
     }
 
@@ -898,16 +936,21 @@ const InvoicesPage = () => {
 
       for (const [index, item] of selectedItems.entries()) {
         try {
+          const invoicePayload =
+            item.invoicePayload ||
+            buildBulkProceedPayload(null, item.file, item.filename);
           await createInvoice(
-            buildInvoiceMultipartPayload(item.invoicePayload, item.file, {
-              uploadedFileName: item.file?.name,
+            buildMultipartPayload(invoicePayload, item.file, {
+              uploadedFileName: item.file?.name || item.filename,
             }),
           ).unwrap();
           createdCount += 1;
           setBulkPreviewItems((prev) =>
             prev.map((row) =>
-              row.id === item.id ? { ...row, status: 'uploaded', selected: false, error: '' } : row
-            )
+              row.id === item.id
+                ? { ...row, status: "uploaded", selected: false, error: "" }
+                : row,
+            ),
           );
         } catch (error) {
           failedCount += 1;
@@ -917,18 +960,17 @@ const InvoicesPage = () => {
               row.id === item.id
                 ? {
                     ...row,
-                    status: duplicate ? 'duplicate' : 'upload_failed',
+                    status: duplicate ? "duplicate" : "upload_failed",
                     isDuplicate: duplicate || row.isDuplicate,
                     error:
                       error?.data?.detail ||
                       error?.data?.message ||
-                      'Upload failed',
+                      "Upload failed",
                     selected: false,
                   }
-                : row
-            )
+                : row,
+            ),
           );
-          toast.error(`Failed: ${item.filename}`);
         } finally {
           const processed = index + 1;
           setBulkProgress((prev) => ({
@@ -941,9 +983,14 @@ const InvoicesPage = () => {
       }
 
       toast.success(
-        `Created ${createdCount} invoice${createdCount === 1 ? '' : 's'}${failedCount ? `, ${failedCount} failed` : ''}.`,
-        { duration: 5000 }
+        `Saved ${createdCount} invoice${createdCount === 1 ? "" : "s"} as draft${failedCount ? `, ${failedCount} failed` : ""}.`,
+        { duration: 5000 },
       );
+
+      if (failedCount === 0) {
+        setBulkPreviewOpen(false);
+        setBulkPreviewItems([]);
+      }
     } finally {
       setBulkCreating(false);
     }
@@ -953,33 +1000,59 @@ const InvoicesPage = () => {
     if (!item?.invoicePayload) return;
     setBulkEditPreviewError(false);
     setBulkEditItemId(item.id);
+    const payloadVendorId = item.invoicePayload.vendorId || "";
+    const matchedVendor = findVendorByName(item.invoicePayload.vendorName);
+    const resolvedVendorId = payloadVendorId || matchedVendor?.id || "";
+
     setBulkEditForm({
-      vendor_name: item.invoicePayload.vendor_name || '',
-      invoice_number: item.invoicePayload.invoice_number || '',
-      invoice_date: item.invoicePayload.invoice_date || format(new Date(), 'yyyy-MM-dd'),
-      due_date: item.invoicePayload.due_date || format(new Date(), 'yyyy-MM-dd'),
+      vendorName: item.invoicePayload.vendorName || "",
+      vendorId: resolvedVendorId,
+      vendorMatched: Boolean(resolvedVendorId),
+      vendorRequestSubmitted: Boolean(
+        item.invoicePayload.vendorRequestSubmitted,
+      ),
+      vendorRequestPending: Boolean(matchedVendor?.isPendingApproval),
+      invoiceNumber: item.invoicePayload.invoiceNumber || "",
+      invoiceDate:
+        item.invoicePayload.invoiceDate || format(new Date(), "yyyy-MM-dd"),
+      dueDate: item.invoicePayload.dueDate || "",
       amount: Number(item.invoicePayload.amount || 0),
-      currency: normalizeCurrencyCode(item.invoicePayload.currency) || DEFAULT_CURRENCY,
-      department_id: item.invoicePayload.department_id || '',
-      department_name: item.invoicePayload.department_name || '',
+      currency:
+        normalizeCurrencyCode(item.invoicePayload.currency) || DEFAULT_CURRENCY,
+      departmentId: item.invoicePayload.departmentId || "",
+      departmentName: item.invoicePayload.departmentName || "",
       ...(isCategoryFeatureEnabled
         ? {
             category: item.invoicePayload.category || null,
-            category_id: item.invoicePayload.category_id || item.invoicePayload.category?.id || '',
-            category_name: item.invoicePayload.category_name || item.invoicePayload.category?.name || '',
+            categoryId:
+              item.invoicePayload.categoryId ||
+              item.invoicePayload.category?.id ||
+              "",
+            categoryName:
+              item.invoicePayload.categoryName ||
+              item.invoicePayload.category?.name ||
+              "",
           }
         : {}),
-      billing_address: item.invoicePayload.billing_address || '',
-      gstin: item.invoicePayload.gstin || '',
-      source_of_supply: item.invoicePayload.source_of_supply || '',
-      destination_of_supply: item.invoicePayload.destination_of_supply || '',
-      gst_treatment: item.invoicePayload.gst_treatment || (isInrInvoiceCurrency(item.invoicePayload.currency) ? 'Regular' : 'N/A'),
-      source: item.invoicePayload.source || 'Upload',
-      discounts_level: item.invoicePayload.discounts_level || 'At Line Item Level',
-      invoice_discount: item.invoicePayload.invoice_discount || 0,
-      invoice_discount_type: item.invoicePayload.invoice_discount_type || '%',
-      memo: item.invoicePayload.memo || '',
-      line_items: (item.invoicePayload.line_items || []).map((line) =>
+      billingAddress: item.invoicePayload.billingAddress || "",
+      gstin: item.invoicePayload.gstin || "",
+      sourceOfSupply: item.invoicePayload.sourceOfSupply || "",
+      destinationOfSupply: item.invoicePayload.destinationOfSupply || "",
+      gstTreatment:
+        item.invoicePayload.gstTreatment ||
+        (isInrInvoiceCurrency(item.invoicePayload.currency)
+          ? "Regular"
+          : "N/A"),
+      source: item.invoicePayload.source || "Upload",
+      discountsLevel: item.invoicePayload.discountsLevel || LINE_ITEM_LEVEL,
+      invoiceDiscount: item.invoicePayload.invoiceDiscount || 0,
+      invoiceDiscountType: item.invoicePayload.invoiceDiscountType || "%",
+      taxesLevel: item.invoicePayload.taxesLevel || LINE_ITEM_LEVEL,
+      invoiceTax: item.invoicePayload.invoiceTax || DEFAULT_INR_TAX,
+      invoiceTaxName: item.invoicePayload.invoiceTaxName || "Tax",
+      invoiceTaxRate: item.invoicePayload.invoiceTaxRate ?? "",
+      memo: item.invoicePayload.memo || "",
+      lineItems: (item.invoicePayload.lineItems || []).map((line) =>
         mapBulkLineItemToEditForm(line, item.invoicePayload.currency),
       ),
     });
@@ -989,27 +1062,27 @@ const InvoicesPage = () => {
   const updateBulkEditLineItem = (index, field, value) => {
     setBulkEditForm((prev) => {
       if (!prev) return prev;
-      const nextLines = prev.line_items.map((line, i) => {
+      const nextLines = prev.lineItems.map((line, i) => {
         if (i !== index) return line;
         let updated = { ...line, [field]: value };
-        if (field === 'quantity' || field === 'unit_rate') {
+        if (field === "quantity" || field === "unitRate") {
           updated = syncLineItemLineTotal(updated);
-          updated.amount = parseNumericInput(updated.line_total, 0);
+          updated.amount = parseNumericInput(updated.lineTotal, 0);
         }
         if (!isInrInvoiceCurrency(prev.currency)) {
-          if (field === 'tax_name' || field === 'tax_rate') {
+          if (field === "taxName" || field === "taxRate") {
             updated = applyForeignLineItemTax(
               updated,
-              field === 'tax_name' ? value : updated.tax_name,
-              field === 'tax_rate' ? value : updated.tax_rate,
+              field === "taxName" ? value : updated.taxName,
+              field === "taxRate" ? value : updated.taxRate,
             );
           }
-        } else if (field === 'tax') {
+        } else if (field === "tax") {
           updated = applyInrLineItemTax(updated, value);
         }
         return updated;
       });
-      return { ...prev, line_items: nextLines };
+      return { ...prev, lineItems: nextLines };
     });
   };
 
@@ -1018,49 +1091,56 @@ const InvoicesPage = () => {
 
     if (!validateMandatoryPayload(bulkEditForm)) return;
 
-    const matchedVendorId = findVendorByName(bulkEditForm.vendor_name)?.id || '';
+    const matchedVendorId = findVendorByName(bulkEditForm.vendorName)?.id || "";
+    const resolvedVendorId = bulkEditForm.vendorId || matchedVendorId;
+    const vendorRequestSubmitted = Boolean(bulkEditForm.vendorRequestSubmitted);
+    const vendorResolved = Boolean(resolvedVendorId) || vendorRequestSubmitted;
     setBulkPreviewItems((prev) =>
       prev.map((item) => {
         if (item.id !== bulkEditItemId) return item;
         const updatedPayload = {
           ...item.invoicePayload,
           ...bulkEditForm,
-          vendor_id: matchedVendorId,
+          vendorId: resolvedVendorId,
+          vendorRequestSubmitted,
           amount: parseNumericInput(bulkEditForm.amount, 0),
-          line_items: bulkEditForm.line_items.map((line) =>
-            mapBulkLineItemToPayload(line, bulkEditForm.currency),
-          ),
+          lineItems: normalizeLineItemsForTaxLevel({
+            ...bulkEditForm,
+            lineItems: bulkEditForm.lineItems.map((line) =>
+              mapBulkLineItemToPayload(line, bulkEditForm.currency),
+            ),
+          }),
         };
         if (!isCategoryFeatureEnabled) {
           delete updatedPayload.category;
-          delete updatedPayload.category_id;
-          delete updatedPayload.category_name;
+          delete updatedPayload.categoryId;
+          delete updatedPayload.categoryName;
         }
-        const vendorMissing = !matchedVendorId;
+        const vendorMissing = !vendorResolved;
         return {
           ...item,
           invoicePayload: updatedPayload,
           selected: !vendorMissing,
-          status: vendorMissing ? 'vendor_missing' : item.status,
+          status: vendorMissing ? "vendor_missing" : item.status,
           error: vendorMissing
-            ? `Vendor "${bulkEditForm.vendor_name || 'Unknown'}" not found in vendor master`
-            : '',
+            ? `Vendor "${bulkEditForm.vendorName || "Unknown"}" not found in vendor master`
+            : "",
         };
-      })
+      }),
     );
     setBulkEditOpen(false);
     setBulkEditForm(null);
-    setBulkEditItemId('');
+    setBulkEditItemId("");
   };
 
   const handleAddVendorForBulkItem = async (itemId) => {
-    if (!guardAction('invoices.addVendor')) return;
+    if (!guardAction("invoices.addVendor")) return;
     const row = bulkPreviewItems.find((item) => item.id === itemId);
     const payload = row?.invoicePayload;
-    const vendorName = payload?.vendor_name?.trim();
+    const vendorName = payload?.vendorName?.trim();
 
     if (!row || !payload || !vendorName) {
-      toast.error('Vendor name is required');
+      toast.error("Vendor name is required");
       return;
     }
 
@@ -1071,13 +1151,19 @@ const InvoicesPage = () => {
           item.id === itemId
             ? {
                 ...item,
-                invoicePayload: { ...item.invoicePayload, vendor_id: existingVendor.id },
-                selected: item.status !== 'uploaded',
-                error: '',
-                status: item.status === 'vendor_missing' || item.status === 'failed' ? 'success' : item.status,
+                invoicePayload: {
+                  ...item.invoicePayload,
+                  vendorId: existingVendor.id,
+                },
+                selected: item.status !== "uploaded",
+                error: "",
+                status:
+                  item.status === "vendor_missing" || item.status === "failed"
+                    ? "success"
+                    : item.status,
               }
-            : item
-        )
+            : item,
+        ),
       );
       toast.success(`Vendor "${vendorName}" matched`);
       return;
@@ -1085,85 +1171,107 @@ const InvoicesPage = () => {
 
     openRequestVendorDialog({
       source: payload,
-      context: { type: 'bulk', itemId },
+      context: { type: "bulk", itemId },
     });
   };
 
   // Calculate line item subtotal
   const calculateLineItemSubtotal = (item) => {
-    if (formData?.discounts_level === 'At Invoice Level') {
-      const lineTotal = parseNumericInput(item.line_total ?? item.amount, 0);
+    if (formData?.discountsLevel === INVOICE_LEVEL) {
+      const lineTotal = parseNumericInput(item.lineTotal ?? item.amount, 0);
       if (lineTotal > 0) return lineTotal;
-      return parseNumericInput(item.quantity, 0) * parseNumericInput(item.unit_rate, 0);
+      return (
+        parseNumericInput(item.quantity, 0) *
+        parseNumericInput(item.unitRate, 0)
+      );
     }
     return resolveLineItemSubtotal(item);
   };
 
   // Calculate totals
-  const calculateTotals = (lineItems, currency = formData?.currency ?? DEFAULT_CURRENCY) =>
+  const calculateTotals = (
+    lineItems,
+    currency = formData?.currency ?? DEFAULT_CURRENCY,
+  ) =>
     calculateInvoiceTotals({
       lineItems,
       currency,
       calculateLineItemSubtotal,
       taxRates: TAX_RATES,
-      invoiceTaxAmount: formData?.scanned_tax_amount,
-      invoiceTaxName: formData?.scanned_tax_name,
-      invoiceTaxRate: formData?.scanned_tax_rate,
-      discountsLevel: formData?.discounts_level,
-      invoiceDiscount: formData?.invoice_discount,
-      invoiceDiscountType: formData?.invoice_discount_type,
+      invoiceTaxAmount: formData?.scannedTaxAmount,
+      invoiceTaxName:
+        formData?.taxesLevel === INVOICE_LEVEL
+          ? formData?.invoiceTaxName
+          : formData?.scannedTaxName,
+      invoiceTaxRate:
+        formData?.taxesLevel === INVOICE_LEVEL
+          ? formData?.invoiceTaxRate
+          : formData?.scannedTaxRate,
+      invoiceTax: formData?.invoiceTax,
+      taxesLevel: formData?.taxesLevel,
+      discountsLevel: formData?.discountsLevel,
+      invoiceDiscount: formData?.invoiceDiscount,
+      invoiceDiscountType: formData?.invoiceDiscountType,
+      roundOff: formData?.roundOff ?? formData?.round_off ?? formData?.roundoff,
+      invoiceTotal: formData?.scannedTotal ?? formData?.invoiceTotal,
     });
 
   // Add line item
   const addLineItem = () => {
-    setFormData(prev => clearScannedTaxSummary({
-      ...prev,
-      line_items: [...prev.line_items, createDefaultLineItem(prev.currency)],
-    }));
+    setFormData((prev) =>
+      clearScannedTaxSummary({
+        ...prev,
+        lineItems: [...prev.lineItems, createDefaultLineItem(prev.currency)],
+      }),
+    );
   };
 
   // Remove line item
   const removeLineItem = (index) => {
-    setFormData(prev => clearScannedTaxSummary({
-      ...prev,
-      line_items: prev.line_items.filter((_, i) => i !== index),
-    }));
+    setFormData((prev) =>
+      clearScannedTaxSummary({
+        ...prev,
+        lineItems: prev.lineItems.filter((_, i) => i !== index),
+      }),
+    );
   };
 
   // Update line item
   const clearScannedTaxSummary = (data = {}) => ({
     ...data,
-    scanned_tax_amount: undefined,
-    scanned_tax_name: undefined,
-    scanned_tax_rate: undefined,
-    scanned_total: undefined,
+    scannedTaxAmount: undefined,
+    scannedTaxName: undefined,
+    scannedTaxRate: undefined,
+    scannedTotal: undefined,
   });
 
   const updateLineItem = (index, field, value) => {
-    setFormData(prev => clearScannedTaxSummary({
-      ...prev,
-      line_items: prev.line_items.map((item, i) => {
-        if (i !== index) return item;
+    setFormData((prev) =>
+      clearScannedTaxSummary({
+        ...prev,
+        lineItems: prev.lineItems.map((item, i) => {
+          if (i !== index) return item;
 
-        let updated = { ...item, [field]: value };
-        if (field === 'quantity' || field === 'unit_rate') {
-          updated = syncLineItemLineTotal(updated);
-        }
-        if (!isInrInvoiceCurrency(prev.currency)) {
-          if (field === 'tax_name' || field === 'tax_rate') {
-            updated = applyForeignLineItemTax(
-              updated,
-              field === 'tax_name' ? value : updated.tax_name,
-              field === 'tax_rate' ? value : updated.tax_rate,
-            );
+          let updated = { ...item, [field]: value };
+          if (field === "quantity" || field === "unitRate") {
+            updated = syncLineItemLineTotal(updated);
           }
-        } else if (field === 'tax') {
-          updated = applyInrLineItemTax(updated, value);
-        }
+          if (!isInrInvoiceCurrency(prev.currency)) {
+            if (field === "taxName" || field === "taxRate") {
+              updated = applyForeignLineItemTax(
+                updated,
+                field === "taxName" ? value : updated.taxName,
+                field === "taxRate" ? value : updated.taxRate,
+              );
+            }
+          } else if (field === "tax") {
+            updated = applyInrLineItemTax(updated, value);
+          }
 
-        return updated;
+          return updated;
+        }),
       }),
-    }));
+    );
   };
 
   const resetUploadWorkspace = () => {
@@ -1183,74 +1291,99 @@ const InvoicesPage = () => {
     return true;
   };
 
-  const mapBulkLineItemToEditForm = (line = {}, currency = DEFAULT_CURRENCY) => ({
-    description: line.description || '',
-    ledger: line.ledger || 'Cloud Services',
-    quantity: Number(line.quantity || 1),
-    unit_rate: Number(line.unit_rate ?? line.unit_price ?? 0),
-    amount: Number(
-      line.amount ||
-        Number(line.quantity || 1) * Number(line.unit_rate ?? line.unit_price ?? 0),
-    ),
-    line_total: Number(
-      line.line_total ??
-        line.amount ??
-        Number(line.quantity || 1) * Number(line.unit_rate ?? line.unit_price ?? 0),
-    ),
-    hsn_sac: line.hsn_sac || '',
-    tax: line.tax || (isInrInvoiceCurrency(currency) ? DEFAULT_INR_TAX : ''),
-    tax_name: line.tax_name || '',
-    tax_rate: line.tax_rate ?? '',
-    discount: line.discount || 0,
-    discount_type: line.discount_type || '%',
-    eligible_for_itc: line.eligible_for_itc ?? true,
-  });
+  const validateSavedInvoiceEdit = (payload) => {
+    if (!payload?.vendorName?.trim()) {
+      toast.error("Vendor name is required");
+      return false;
+    }
+    if (!payload.vendorId && !payload.vendorRequestSubmitted) {
+      toast.error("Please select or request a vendor before saving");
+      return false;
+    }
+    return validateMandatoryPayload(payload);
+  };
 
-  const mapBulkLineItemToPayload = (line = {}, currency = DEFAULT_CURRENCY) => ({
-    description: line.description,
-    quantity: parseNumericInput(line.quantity, 0),
-    unit_rate: parseNumericInput(line.unit_rate, 0),
-    unit_price: parseNumericInput(line.unit_rate, 0),
-    amount: parseNumericInput(line.amount ?? line.line_total, 0),
-    hsn_sac: line.hsn_sac || '',
-    tax: line.tax || (isInrInvoiceCurrency(currency) ? DEFAULT_INR_TAX : ''),
-    tax_name: line.tax_name || '',
-    tax_rate: line.tax_rate ?? '',
-    ledger: line.ledger || 'Cloud Services',
-    discount: parseNumericInput(line.discount, 0),
-    discount_type: line.discount_type || '%',
-    eligible_for_itc: line.eligible_for_itc ?? true,
-  });
+  const canSubmitSavedDraft = (payload) =>
+    Boolean(payload?.vendorName?.trim()) &&
+    (Boolean(payload?.vendorId) || Boolean(payload?.vendorRequestSubmitted)) &&
+    !invoiceMandatoryFieldsLoading &&
+    isInvoiceMandatoryFieldsSatisfied(
+      payload,
+      invoiceMandatoryFields,
+      mandatoryFieldOptions,
+    );
+
+  const buildUpdateInvoiceBody = (data, { keepSaved = false } = {}) => {
+    const totals = calculateTotals(data.lineItems, data.currency);
+    const resolvedVendorId =
+      data.vendorId || findVendorByName(data.vendorName)?.id || "";
+
+    return toCreateInvoicePayload(
+      {
+        ...data,
+        vendorId: resolvedVendorId,
+        vendorName: data.vendorName?.trim() || "",
+        lineItems: normalizeLineItemsForTaxLevel({
+          ...data,
+          lineItems: data.lineItems.map((item) => ({
+            description: item.description,
+            quantity: item.quantity,
+            unitPrice: item.unitRate,
+            amount: calculateLineItemSubtotal(item),
+            tax: item.tax,
+            taxName: item.taxName,
+            taxRate: item.taxRate,
+            hsnSac: item.hsnSac,
+          })),
+        }),
+        memo: data.description,
+        sourceEmail: data.source === "Email" ? data.sourceEmail : null,
+        departmentName:
+          data.departmentName || getDepartmentNameById(data.departmentId),
+        ...(keepSaved ? { action: "saved" } : {}),
+      },
+      {
+        totals,
+        tdsAmount: computeTdsAmount(
+          data.lineItems,
+          data.tds,
+          calculateLineItemSubtotal,
+        ),
+      },
+    );
+  };
 
   // Add vendor from scanned invoice data
   const handleAddVendorFromInvoice = async () => {
-    if (!guardAction('invoices.addVendor')) return;
-    if (!formData || !formData.vendor_name) {
-      toast.error('Vendor name is required');
+    if (!guardAction("invoices.addVendor")) return;
+    if (!formData || !formData.vendorName) {
+      toast.error("Vendor name is required");
       return;
     }
 
     openRequestVendorDialog({
       source: formData,
-      context: { type: 'single' },
+      context: { type: "single" },
     });
   };
 
   const handleSubmitVendorRequest = async (event) => {
     event.preventDefault();
-    if (!guardAction('invoices.addVendor')) return;
+    if (!guardAction("invoices.addVendor")) return;
 
     const vendorName = requestVendorForm.name.trim();
-    const vendorType = requestVendorForm.vendor_type || requestVendorForm.vendorType;
+    const vendorType =
+      requestVendorForm.vendor_type || requestVendorForm.vendorType;
     const gstin = requestVendorForm.gstin.trim();
 
-    const validationErrors = getInvoiceVendorRequestValidationErrors(requestVendorForm);
+    const validationErrors =
+      getInvoiceVendorRequestValidationErrors(requestVendorForm);
     if (validationErrors.length > 0) {
       toast.error(validationErrors[0]);
       return;
     }
 
-    if (requestVendorContext?.type === 'bulk') {
+    if (requestVendorContext?.type === "bulk") {
       setBulkAddingVendorItemId(requestVendorContext.itemId);
     }
 
@@ -1275,45 +1408,66 @@ const InvoicesPage = () => {
       const normalizedVendorName = vendorName.toLowerCase().trim();
       const matchedVendor =
         (requestedVendorId
-          ? freshVendorOptions.find((vendor) => String(vendor.id) === String(requestedVendorId))
+          ? freshVendorOptions.find(
+              (vendor) => String(vendor.id) === String(requestedVendorId),
+            )
           : null) ||
         freshVendorOptions.find(
-          (vendor) => String(vendor?.name || '').toLowerCase().trim() === normalizedVendorName,
+          (vendor) =>
+            String(vendor?.name || "")
+              .toLowerCase()
+              .trim() === normalizedVendorName,
         ) ||
         null;
-      const resolvedVendorId = matchedVendor?.id || requestedVendorId || '';
+      const resolvedVendorId = matchedVendor?.id || requestedVendorId || "";
 
-      if (requestVendorContext?.type === 'bulk') {
+      if (requestVendorContext?.type === "bulk") {
         setBulkPreviewItems((prev) =>
           prev.map((item) =>
             item.id === requestVendorContext.itemId
               ? {
                   ...item,
-                  selected: Boolean(resolvedVendorId),
+                  selected: true,
                   error: resolvedVendorId
-                    ? ''
+                    ? ""
                     : `Vendor "${vendorName}" requested. You can still create the invoice once the vendor is linked.`,
-                  status: resolvedVendorId ? 'success' : item.status,
+                  status: resolvedVendorId ? "success" : item.status,
                   invoicePayload: item.invoicePayload
                     ? {
                         ...item.invoicePayload,
-                        vendor_id: resolvedVendorId,
-                        vendor_name: vendorName,
-                        vendor_request_submitted: true,
+                        vendorId: resolvedVendorId,
+                        vendorName: vendorName,
+                        vendorRequestSubmitted: true,
                       }
                     : item.invoicePayload,
                 }
-              : item
-          )
+              : item,
+          ),
         );
+        if (bulkEditItemId === requestVendorContext.itemId) {
+          setBulkEditForm((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  vendorName,
+                  vendorId: resolvedVendorId,
+                  vendorMatched: Boolean(resolvedVendorId),
+                  vendorRequestSubmitted: true,
+                  vendorRequestPending: Boolean(
+                    matchedVendor?.isPendingApproval,
+                  ),
+                }
+              : prev,
+          );
+        }
       } else {
         setFormData((prev) => ({
           ...prev,
-          vendor_name: vendorName,
-          vendor_id: resolvedVendorId,
-          vendor_matched: Boolean(resolvedVendorId),
-          vendor_request_submitted: true,
-          vendor_request_pending: Boolean(matchedVendor?.is_pending_approval),
+          vendorName: vendorName,
+          vendorId: resolvedVendorId,
+          vendorMatched: Boolean(resolvedVendorId),
+          vendorRequestSubmitted: true,
+          vendorRequestPending: Boolean(matchedVendor?.isPendingApproval),
         }));
       }
 
@@ -1324,13 +1478,15 @@ const InvoicesPage = () => {
       );
       handleRequestVendorOpenChange(false);
     } catch (error) {
-      console.error('Vendor request error:', error);
-      let errorMessage = 'Failed to request vendor addition';
+      console.error("Vendor request error:", error);
+      let errorMessage = "Failed to request vendor addition";
       if (error?.data?.detail) {
         const detail = error.data.detail;
         if (Array.isArray(detail)) {
-          errorMessage = detail.map((item) => item.msg || JSON.stringify(item)).join(', ');
-        } else if (typeof detail === 'string') {
+          errorMessage = detail
+            .map((item) => item.msg || JSON.stringify(item))
+            .join(", ");
+        } else if (typeof detail === "string") {
           errorMessage = detail;
         } else {
           errorMessage = JSON.stringify(detail);
@@ -1340,59 +1496,98 @@ const InvoicesPage = () => {
       }
       toast.error(errorMessage);
     } finally {
-      setBulkAddingVendorItemId('');
+      setBulkAddingVendorItemId("");
+    }
+  };
+
+  const handleRefreshInvoices = async () => {
+    try {
+      await Promise.all([
+        refetchInvoices(),
+        refetchVendors(),
+        refetchPendingVendors(),
+      ]);
+      toast.success("Invoices refreshed");
+    } catch {
+      toast.error("Failed to refresh invoices");
     }
   };
 
   const handleAddInvoice = async () => {
-    if (!guardAction('invoices.create')) return;
+    if (!guardAction("invoices.create")) return;
     if (!formData) return;
 
-    const totals = calculateTotals(formData.line_items);
+    const totals = calculateTotals(formData.lineItems);
+    const createStatus = resolveInitialInvoiceStatus({
+      vendorId:
+        formData.vendorId || findVendorByName(formData.vendorName)?.id || "",
+      vendorRequestSubmitted: formData.vendorRequestSubmitted,
+      findVendorById,
+    });
     const invoicePayload = toCreateInvoicePayload(
       {
         ...formData,
-        vendor_name: formData.vendor_name?.trim() || '',
-        line_items: formData.line_items.map((item) => ({
-          ...item,
-          unit_price: item.unit_rate,
-          amount: calculateLineItemSubtotal(item),
-        })),
+        vendorName: formData.vendorName?.trim() || "",
+        status: createStatus,
+        lineItems: normalizeLineItemsForTaxLevel({
+          ...formData,
+          lineItems: formData.lineItems.map((item) => ({
+            ...item,
+            unitPrice: item.unitRate,
+            amount: calculateLineItemSubtotal(item),
+          })),
+        }),
         memo: formData.description,
-        original_file_name: formData.original_file_name || uploadedFile?.name || null,
-        current_file_name: uploadedFile?.name || formData.original_file_name || null,
+        originalFileName:
+          formData.originalFileName || uploadedFile?.name || null,
+        currentFileName:
+          uploadedFile?.name || formData.originalFileName || null,
       },
       {
+        status: createStatus,
         totals,
-        tdsAmount: computeTdsAmount(formData.line_items, formData.tds),
+        tdsAmount: computeTdsAmount(
+          formData.lineItems,
+          formData.tds,
+          calculateLineItemSubtotal,
+        ),
         uploadedFileName: uploadedFile?.name,
       },
     );
-    if (!invoicePayload.vendor_id && !formData.vendor_request_submitted) {
-      toast.error('Please select or request a vendor before creating invoice');
+    if (!invoicePayload.vendorId && !formData.vendorRequestSubmitted) {
+      toast.error("Please select or request a vendor before creating invoice");
       return;
     }
-    if (!invoicePayload.vendor_name) {
-      toast.error('Vendor name is required');
+    if (!invoicePayload.vendorName) {
+      toast.error("Vendor name is required");
       return;
     }
-    if (!validateMandatoryPayload(invoicePayload)) return;
+    if (!validateMandatoryPayload(formData)) return;
 
     try {
       if (uploadedFile) {
-        const multipartPayload = buildInvoiceMultipartPayload(invoicePayload, uploadedFile, {
-          totals,
-          tdsAmount: computeTdsAmount(formData.line_items, formData.tds),
-        });
+        const multipartPayload = buildMultipartPayload(
+          invoicePayload,
+          uploadedFile,
+          {
+            totals,
+            tdsAmount: computeTdsAmount(
+              formData.lineItems,
+              formData.tds,
+              calculateLineItemSubtotal,
+            ),
+          },
+        );
         await createInvoice(multipartPayload).unwrap();
       } else {
         await createInvoice(invoicePayload).unwrap();
       }
 
-      toast.success('Invoice added successfully');
+      toast.success("Invoice added successfully");
       resetUploadWorkspace();
     } catch (error) {
-      const errorMessage = extractApiErrorDetail(error) || 'Failed to add invoice';
+      const errorMessage =
+        extractApiErrorDetail(error) || "Failed to add invoice";
 
       if (isDuplicateInvoiceError(error)) {
         resetUploadWorkspace();
@@ -1419,9 +1614,9 @@ const InvoicesPage = () => {
   const handleViewInvoice = async (invoice) => {
     setSelectedInvoice(invoice);
     setViewDialogOpen(true);
-    setViewTab('details');
+    setViewTab("details");
     setInvoiceHistory([]);
-    
+
     setLoadingHistory(true);
     try {
       const response = await getInvoiceHistory(invoice.id).unwrap();
@@ -1431,17 +1626,18 @@ const InvoicesPage = () => {
 
       if (
         normalizedHistory.length === 0 &&
-        (Array.isArray(invoice.approval_records) || Array.isArray(invoice.approvalRecords))
+        (Array.isArray(invoice.approvalRecords) ||
+          Array.isArray(invoice.approvalRecords))
       ) {
         normalizedHistory = normalizeInvoiceHistoryEntries(
-          invoice.approval_records || invoice.approvalRecords,
+          invoice.approvalRecords || invoice.approvalRecords,
         );
       }
 
       setInvoiceHistory(normalizedHistory);
     } catch (error) {
-      console.error('Failed to fetch invoice history:', error);
-      toast.error('Failed to load invoice history');
+      console.error("Failed to fetch invoice history:", error);
+      toast.error("Failed to load invoice history");
     } finally {
       setLoadingHistory(false);
     }
@@ -1449,14 +1645,7 @@ const InvoicesPage = () => {
 
   const handleEditInvoice = (invoice) => {
     if (!canEditInvoice(invoice, invoiceEditContext)) {
-      const status = formatWorkflowStatus(invoice?.status);
-      if (!canUpdateInvoices && !canManageInvoices) {
-        toast.error('Only invoice makers can edit invoices in Needs Correction status');
-      } else if (status !== NEEDS_CORRECTION_STATUS) {
-        toast.error('Invoices can only be edited when status is Needs Correction');
-      } else {
-        toast.error('Only the creator can edit an invoice in Needs Correction status');
-      }
+      toast.error(getInvoiceEditBlockedMessage(invoice, invoiceEditContext));
       return;
     }
 
@@ -1464,6 +1653,7 @@ const InvoicesPage = () => {
     setFormData(
       buildInvoiceEditFormData(invoice, {
         isCategoryFeatureEnabled,
+        isCampaignFeatureEnabled,
         findVendorByName,
         findVendorById,
       }),
@@ -1472,55 +1662,78 @@ const InvoicesPage = () => {
   };
 
   const handleUpdateInvoice = async () => {
-    if (!guardAction('invoices.update')) return;
+    if (!guardAction("invoices.update")) return;
     if (!selectedInvoice || !formData) return;
 
-    if (!validateMandatoryPayload(formData)) return;
-
-    const totals = calculateTotals(formData.line_items);
+    const isSavedDraft = isSavedInvoiceStatus(selectedInvoice.status);
+    if (isSavedDraft) {
+      if (!validateSavedInvoiceEdit(formData)) return;
+    } else if (!validateMandatoryPayload(formData)) {
+      return;
+    }
 
     try {
       await updateInvoice({
         id: selectedInvoice.id,
-        body: {
-          invoice_number: formData.invoice_number,
-          invoice_date: new Date(formData.invoice_date).toISOString(),
-          due_date: new Date(formData.due_date).toISOString(),
-          amount: totals.total,
-          line_items: formData.line_items.map((item) => ({
-            description: item.description,
-            quantity: item.quantity,
-            unit_price: item.unit_rate,
-            amount: calculateLineItemSubtotal(item),
-            tax: item.tax,
-            hsn_sac: item.hsn_sac,
-          })),
-          memo: formData.description,
-          source: formData.source,
-          source_email: formData.source === 'Email' ? formData.source_email : null,
-          department_id: formData.department_id || '',
-          department_name: formData.department_name || getDepartmentNameById(formData.department_id),
-          ...(isCategoryFeatureEnabled
-            ? {
-                category: buildInvoiceCategoryPayload(formData),
-                category_id: formData.category_id || '',
-                category_name: formData.category_name || '',
-              }
-            : {}),
-        },
+        body: buildUpdateInvoiceBody(formData, { keepSaved: isSavedDraft }),
       }).unwrap();
 
-      toast.success('Invoice updated successfully');
+      toast.success(
+        isSavedDraft
+          ? "Draft saved successfully"
+          : "Invoice updated successfully",
+      );
       setEditDialogOpen(false);
       setSelectedInvoice(null);
       setFormData(null);
     } catch (error) {
-      toast.error(extractApiErrorDetail(error) || 'Failed to update invoice');
+      if (isCheckerEditForbiddenError(error)) {
+        toast.error(
+          "Invoice editing during checker review is not enabled for your organization",
+        );
+        setEditDialogOpen(false);
+        setSelectedInvoice(null);
+        setFormData(null);
+        return;
+      }
+      toast.error(extractApiErrorDetail(error) || "Failed to update invoice");
+    }
+  };
+
+  const handleForwardSavedInvoice = async () => {
+    if (!guardAction("invoices.update")) return;
+    if (!selectedInvoice || !formData) return;
+    if (!isSavedInvoiceStatus(selectedInvoice.status)) return;
+    if (!canForwardSavedInvoice(selectedInvoice, invoiceEditContext)) {
+      toast.error("You do not have permission to submit this invoice");
+      return;
+    }
+    if (!validateSavedInvoiceEdit(formData)) return;
+
+    try {
+      await updateInvoice({
+        id: selectedInvoice.id,
+        body: buildUpdateInvoiceBody(formData),
+      }).unwrap();
+
+      await forwardInvoice({
+        invoiceId: selectedInvoice.id,
+        action: "forward",
+      }).unwrap();
+
+      toast.success("Invoice submitted to checker");
+      setEditDialogOpen(false);
+      setSelectedInvoice(null);
+      setFormData(null);
+    } catch (error) {
+      toast.error(
+        extractApiErrorDetail(error) || "Failed to submit invoice to checker",
+      );
     }
   };
 
   const handleDeleteInvoice = async (invoice) => {
-    if (!guardAction('invoices.delete')) return;
+    if (!guardAction("invoices.delete")) return;
     setInvoiceDeleteTarget(invoice);
   };
 
@@ -1528,9 +1741,9 @@ const InvoicesPage = () => {
     if (!invoiceDeleteTarget) return;
     try {
       await deleteInvoice(invoiceDeleteTarget.id).unwrap();
-      toast.success('Invoice deleted successfully');
+      toast.success("Invoice deleted successfully");
     } catch (error) {
-      toast.error('Failed to delete invoice');
+      toast.error("Failed to delete invoice");
     } finally {
       setInvoiceDeleteTarget(null);
     }
@@ -1541,59 +1754,6 @@ const InvoicesPage = () => {
 
   const getStatusBadgeClass = (status) => getInvoiceStatusBadgeClass(status);
 
-  const formatDuration = (totalSeconds) => {
-    const mins = Math.floor(totalSeconds / 60);
-    const secs = totalSeconds % 60;
-    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
-
-  const formatBulkStatusLabel = (status) => {
-    const normalized = String(status || '').toLowerCase();
-    if (normalized === 'success' || normalized === 'extracted') return 'Extracted';
-    if (normalized === 'vendor_missing') return 'Vendor Not Matched';
-    if (normalized === 'uploaded') return 'Uploaded';
-    if (normalized === 'upload_failed') return 'Upload Failed';
-    if (normalized === 'duplicate') return 'Duplicate';
-    if (normalized === 'failed' || normalized === 'error') return 'Extraction Failed';
-    return 'Unknown';
-  };
-
-  const getBulkStatusBadgeClass = (status) => {
-    const normalized = String(status || '').toLowerCase();
-    if (normalized === 'uploaded') return 'bg-blue-100 text-blue-800 border-blue-200';
-    if (normalized === 'success' || normalized === 'extracted') return 'bg-emerald-100 text-emerald-800 border-emerald-200';
-    if (normalized === 'vendor_missing') return 'bg-amber-100 text-amber-800 border-amber-200';
-    if (normalized === 'duplicate') return 'bg-amber-100 text-amber-800 border-amber-200';
-    if (normalized === 'upload_failed' || normalized === 'failed' || normalized === 'error') return 'bg-red-100 text-red-800 border-red-200';
-    return 'bg-gray-100 text-gray-800 border-gray-200';
-  };
-
-  const filteredInvoices = invoices.filter(invoice =>
-    invoice.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    invoice.vendor_name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
-  // Get file URL for invoice preview - either from uploaded file or backend
-  const withBaseUrl = (url) => {
-    if (!url) return null;
-    if (typeof url !== 'string') return null;
-    if (url.startsWith('http://') || url.startsWith('https://')) return url;
-    return `${FILE_BASE_URL}${url.startsWith('/') ? url : `/${url}`}`;
-  };
-
-  const getInvoiceFileUrl = (invoice) => {
-    if (invoice?.invoice_file_url) {
-      return withBaseUrl(invoice.invoice_file_url);
-    }
-    if (invoice?.receipt_file_url) {
-      return withBaseUrl(invoice.receipt_file_url);
-    }
-    if (invoice?.file_id) {
-      return withBaseUrl(`/files/${invoice.file_id}`);
-    }
-    return null;
-  };
-
   const renderPdfPreview = (props = {}) => (
     <InvoicePdfPreview
       {...props}
@@ -1602,51 +1762,231 @@ const InvoicesPage = () => {
     />
   );
 
-  const renderInvoiceForm = ({ isEdit = false, hideActions = false } = {}) => (
-    <InvoiceForm
-      formData={formData}
-      setFormData={setFormData}
-      isEdit={isEdit}
-      hideActions={hideActions}
-      calculateTotals={calculateTotals}
-      findVendorByName={findVendorByName}
-      handleAddVendorFromInvoice={handleAddVendorFromInvoice}
-      updateLineItem={updateLineItem}
-      removeLineItem={removeLineItem}
-      addLineItem={addLineItem}
-      calculateLineItemSubtotal={calculateLineItemSubtotal}
-      setEditDialogOpen={setEditDialogOpen}
-      setUploadedFile={setUploadedFile}
-      setUploadedFileURL={setUploadedFileURL}
-      setActiveTab={setActiveTab}
-      handleUpdateInvoice={handleUpdateInvoice}
-      handleAddInvoice={handleAddInvoice}
-      canAddVendor={canAddVendors}
-      canSubmit={
-        isEdit
-          ? selectedInvoice &&
-            canEditInvoice(selectedInvoice, invoiceEditContext) &&
-            !invoiceMandatoryFieldsLoading &&
-            isInvoiceMandatoryFieldsSatisfied(formData, invoiceMandatoryFields, mandatoryFieldOptions)
-          : canManageInvoices &&
-            !invoiceMandatoryFieldsLoading &&
-            isInvoiceMandatoryFieldsSatisfied(formData, invoiceMandatoryFields, mandatoryFieldOptions) &&
-            (Boolean(formData?.vendor_id) || Boolean(formData?.vendor_request_submitted))
-      }
-      departmentMandatory={invoiceMandatoryFields.department}
-      categoryMandatory={invoiceMandatoryFields.category}
-      vendorOptions={invoiceVendorOptions}
-      departments={departments}
-      invoiceCategories={invoiceCategories}
-      invoiceCategoriesLoading={invoiceCategoriesLoading || invoiceCategoriesFetching}
-      showCategoryField={isCategoryFeatureEnabled}
-      currencyOptions={invoiceCurrencyOptions}
-      GST_TREATMENTS={GST_TREATMENTS}
-      INDIAN_STATES={INDIAN_STATES}
-      INVOICE_SOURCES={INVOICE_SOURCES}
-      LEDGER_OPTIONS={LEDGER_OPTIONS}
-      TAX_RATES={TAX_RATES}
-    />
+  const renderInvoiceForm = ({
+    isEdit = false,
+    hideActions = false,
+    isSavedDraft = false,
+  } = {}) => {
+    const savedDraftCanSubmit = canSubmitSavedDraft(formData);
+
+    return (
+      <InvoiceForm
+        formData={formData}
+        setFormData={setFormData}
+        isEdit={isEdit}
+        hideActions={hideActions}
+        isSavedDraft={isSavedDraft}
+        calculateTotals={calculateTotals}
+        findVendorByName={findVendorByName}
+        handleAddVendorFromInvoice={handleAddVendorFromInvoice}
+        updateLineItem={updateLineItem}
+        removeLineItem={removeLineItem}
+        addLineItem={addLineItem}
+        calculateLineItemSubtotal={calculateLineItemSubtotal}
+        setEditDialogOpen={setEditDialogOpen}
+        setUploadedFile={setUploadedFile}
+        setUploadedFileURL={setUploadedFileURL}
+        setActiveTab={setActiveTab}
+        handleUpdateInvoice={handleUpdateInvoice}
+        handleAddInvoice={handleAddInvoice}
+        canAddVendor={canAddVendors}
+        canSubmit={
+          isEdit
+            ? selectedInvoice &&
+              canEditInvoice(selectedInvoice, invoiceEditContext) &&
+              (isSavedDraft || isSavedInvoiceStatus(selectedInvoice?.status)
+                ? savedDraftCanSubmit
+                : !invoiceMandatoryFieldsLoading &&
+                  isInvoiceMandatoryFieldsSatisfied(
+                    formData,
+                    invoiceMandatoryFields,
+                    mandatoryFieldOptions,
+                  ))
+            : canManageInvoices &&
+              !invoiceMandatoryFieldsLoading &&
+              isInvoiceMandatoryFieldsSatisfied(
+                formData,
+                invoiceMandatoryFields,
+                mandatoryFieldOptions,
+              ) &&
+              (Boolean(formData?.vendorId) ||
+                Boolean(formData?.vendorRequestSubmitted))
+        }
+        departmentMandatory={invoiceMandatoryFields.department}
+        categoryMandatory={invoiceMandatoryFields.category}
+        vendorOptions={invoiceVendorOptions}
+        departments={departments}
+        invoiceCategories={invoiceCategories}
+        invoiceCategoriesLoading={
+          invoiceCategoriesLoading || invoiceCategoriesFetching
+        }
+        showCategoryField={isCategoryFeatureEnabled}
+        showCampaignField={isCampaignFeatureEnabled}
+        currencyOptions={invoiceCurrencyOptions}
+        GST_TREATMENTS={GST_TREATMENTS}
+        INDIAN_STATES={INDIAN_STATES}
+        INVOICE_SOURCES={INVOICE_SOURCES}
+        LEDGER_OPTIONS={LEDGER_OPTIONS}
+        TAX_RATES={TAX_RATES}
+      />
+    );
+  };
+
+  const canForwardSavedDraft =
+    Boolean(formData) &&
+    Boolean(selectedInvoice) &&
+    isSavedInvoiceStatus(selectedInvoice?.status) &&
+    canForwardSavedInvoice(selectedInvoice, invoiceEditContext) &&
+    canSubmitSavedDraft(formData);
+
+  const {
+    total: invoiceTotal = 0,
+    offset: invoiceOffset = 0,
+    currentPage: invoiceCurrentPage = 0,
+    totalPages: invoiceTotalPages = 0,
+    startRecord: invoiceStartRecord = 0,
+    endRecord: invoiceEndRecord = 0,
+    hasMore: invoiceHasMore = false,
+  } = invoicePagination ?? {};
+
+  const visibleInvoicePageNumbers = (() => {
+    if (invoiceTotalPages <= 5) {
+      return Array.from({ length: invoiceTotalPages }, (_, index) => index);
+    }
+    const start = Math.min(
+      Math.max(invoiceCurrentPage - 2, 0),
+      invoiceTotalPages - 5,
+    );
+    return Array.from({ length: 5 }, (_, index) => start + index);
+  })();
+
+  const renderInvoiceRow = (invoice, rowIndex, headers) => (
+    <TableRow
+      key={invoice.id ?? rowIndex}
+      className={cn(
+        rowIndex % 2 === 1 && "bg-muted/20",
+        "border-b border-border transition-colors hover:bg-muted/50",
+        invoice.isDuplicate && "bg-amber-100 hover:bg-amber-100",
+      )}
+      data-testid={`invoice-row-${invoice.id}`}
+    >
+      {headers.map((header) => {
+        let value;
+
+        switch (header.key) {
+          case "srNo":
+            value = invoiceOffset + rowIndex + 1;
+            break;
+          case "source":
+            value = (
+              <span
+                className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${invoice.source === "Email" ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-green-100 text-green-700 border border-green-200"}`}
+              >
+                {invoice.source === "Email" && <Mail className="h-3 w-3" />}
+                {invoice.source || "Upload"}
+              </span>
+            );
+            break;
+          case "integration":
+            value = <IntegrationSourceBadge record={invoice} />;
+            break;
+          case "originalFileName":
+            value = invoice.originalFileName || "-";
+            break;
+          case "refNo":
+            value = invoice.refNo || "-";
+            break;
+          case "grossAmount":
+            value = formatInvoiceAmount(
+              invoice,
+              getInvoiceGrossAmount(invoice),
+            );
+            break;
+          case "taxAmount":
+            value = formatInvoiceAmount(invoice, getInvoiceTaxAmount(invoice));
+            break;
+          case "tdsAmount":
+            value = formatInvoiceAmount(invoice, getInvoiceTdsAmount(invoice));
+            break;
+          case "netAmount":
+            value = formatInvoiceAmount(invoice, getInvoiceNetAmount(invoice));
+            break;
+          case "approvalWorkflowName":
+            value = getApprovalWorkflowName(invoice);
+            break;
+          case "invoiceDate":
+            value = invoice.invoiceDate
+              ? format(new Date(invoice.invoiceDate), "dd MMM yy")
+              : "-";
+            break;
+          case "status":
+            value = (
+              <span
+                className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border whitespace-nowrap ${getStatusBadgeClass(invoice.status)}`}
+              >
+                {formatWorkflowStatus(invoice.status)}
+              </span>
+            );
+            break;
+          case "createdAt":
+            value = invoice.createdAt
+              ? format(new Date(invoice.createdAt), "dd MMM yy, hh:mm a")
+              : "-";
+            break;
+          case "actions":
+            value = (
+              <div className="flex justify-start gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleViewInvoice(invoice)}
+                  data-testid={`view-invoice-${invoice.id}`}
+                  title="View Invoice"
+                  className="h-8 w-8 p-0"
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+                {canEdit(invoice) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleEditInvoice(invoice)}
+                    data-testid={`edit-invoice-${invoice.id}`}
+                    title="Edit Invoice"
+                    className="h-8 w-8 p-0"
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                )}
+                {canDelete(invoice.status) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleDeleteInvoice(invoice)}
+                    data-testid={`delete-invoice-${invoice.id}`}
+                    title="Delete Invoice"
+                    className="h-8 w-8 p-0"
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                )}
+              </div>
+            );
+            break;
+          case "vendorName":
+            value = <ClippedTextWithTooltip text={invoice.vendorName} />;
+            break;
+          default:
+            value = invoice?.[header.key] || "-";
+        }
+
+        return (
+          <TableCell key={header.key} className={header.cellClassName}>
+            {value}
+          </TableCell>
+        );
+      })}
+    </TableRow>
   );
 
   const renderBulkEditInvoiceForm = () => (
@@ -1655,26 +1995,46 @@ const InvoicesPage = () => {
       setFormData={setBulkEditForm}
       isEdit
       hideActions
-      calculateTotals={(lineItems, currency = bulkEditForm?.currency ?? DEFAULT_CURRENCY) =>
+      calculateTotals={(
+        lineItems,
+        currency = bulkEditForm?.currency ?? DEFAULT_CURRENCY,
+      ) =>
         calculateInvoiceTotals({
           lineItems,
           currency,
           calculateLineItemSubtotal: (item) => {
-            if (bulkEditForm?.discounts_level === 'At Invoice Level') {
-              const lineTotal = parseNumericInput(item.line_total ?? item.amount, 0);
+            if (bulkEditForm?.discountsLevel === INVOICE_LEVEL) {
+              const lineTotal = parseNumericInput(
+                item.lineTotal ?? item.amount,
+                0,
+              );
               if (lineTotal > 0) return lineTotal;
-              return parseNumericInput(item.quantity, 0) * parseNumericInput(item.unit_rate, 0);
+              return (
+                parseNumericInput(item.quantity, 0) *
+                parseNumericInput(item.unitRate, 0)
+              );
             }
             return resolveLineItemSubtotal(item);
           },
           taxRates: TAX_RATES,
-          invoiceTaxAmount: bulkEditForm?.scanned_tax_amount,
-          invoiceTaxName: bulkEditForm?.scanned_tax_name,
-          invoiceTaxRate: bulkEditForm?.scanned_tax_rate,
-          discountsLevel: bulkEditForm?.discounts_level,
-          invoiceDiscount: bulkEditForm?.invoice_discount,
-          invoiceDiscountType: bulkEditForm?.invoice_discount_type,
-        })}
+          invoiceTaxAmount: bulkEditForm?.scannedTaxAmount,
+          invoiceTaxName:
+            bulkEditForm?.taxesLevel === INVOICE_LEVEL
+              ? bulkEditForm?.invoiceTaxName
+              : bulkEditForm?.scannedTaxName,
+          invoiceTaxRate:
+            bulkEditForm?.taxesLevel === INVOICE_LEVEL
+              ? bulkEditForm?.invoiceTaxRate
+              : bulkEditForm?.scannedTaxRate,
+          invoiceTax: bulkEditForm?.invoiceTax,
+          taxesLevel: bulkEditForm?.taxesLevel,
+          discountsLevel: bulkEditForm?.discountsLevel,
+          invoiceDiscount: bulkEditForm?.invoiceDiscount,
+          invoiceDiscountType: bulkEditForm?.invoiceDiscountType,
+          roundOff: bulkEditForm?.roundOff ?? bulkEditForm?.round_off ?? bulkEditForm?.roundoff,
+          invoiceTotal: bulkEditForm?.scannedTotal ?? bulkEditForm?.invoiceTotal,
+        })
+      }
       findVendorByName={findVendorByName}
       handleAddVendorFromInvoice={() => {
         if (bulkEditItemId) handleAddVendorForBulkItem(bulkEditItemId);
@@ -1683,18 +2043,23 @@ const InvoicesPage = () => {
       removeLineItem={(index) =>
         setBulkEditForm((prev) => ({
           ...prev,
-          line_items: prev.line_items.filter((_, i) => i !== index),
-        }))}
+          lineItems: prev.lineItems.filter((_, i) => i !== index),
+        }))
+      }
       addLineItem={() =>
         setBulkEditForm((prev) => ({
           ...prev,
-          line_items: [...prev.line_items, createDefaultLineItem(prev.currency)],
-        }))}
+          lineItems: [...prev.lineItems, createDefaultLineItem(prev.currency)],
+        }))
+      }
       calculateLineItemSubtotal={(item) => {
-        if (bulkEditForm?.discounts_level === 'At Invoice Level') {
-          const lineTotal = parseNumericInput(item.line_total ?? item.amount, 0);
+        if (bulkEditForm?.discountsLevel === INVOICE_LEVEL) {
+          const lineTotal = parseNumericInput(item.lineTotal ?? item.amount, 0);
           if (lineTotal > 0) return lineTotal;
-          return parseNumericInput(item.quantity, 0) * parseNumericInput(item.unit_rate, 0);
+          return (
+            parseNumericInput(item.quantity, 0) *
+            parseNumericInput(item.unitRate, 0)
+          );
         }
         return resolveLineItemSubtotal(item);
       }}
@@ -1711,8 +2076,11 @@ const InvoicesPage = () => {
       vendorOptions={invoiceVendorOptions}
       departments={departments}
       invoiceCategories={invoiceCategories}
-      invoiceCategoriesLoading={invoiceCategoriesLoading || invoiceCategoriesFetching}
+      invoiceCategoriesLoading={
+        invoiceCategoriesLoading || invoiceCategoriesFetching
+      }
       showCategoryField={isCategoryFeatureEnabled}
+      showCampaignField={isCampaignFeatureEnabled}
       currencyOptions={invoiceCurrencyOptions}
       GST_TREATMENTS={GST_TREATMENTS}
       INDIAN_STATES={INDIAN_STATES}
@@ -1723,23 +2091,175 @@ const InvoicesPage = () => {
   );
 
   return (
-    <div data-testid="invoices-page">
-      <InvoiceHeader
-        scanning={scanning}
-        canScanInvoices={canScanInvoices}
-        canBulkUploadInvoices={canBulkUploadInvoices}
-        openBulkFilePicker={openBulkFilePicker}
-        bulkFileInputRef={bulkFileInputRef}
-        handleBulkFileUpload={handleBulkFileUpload}
-        openSingleFilePicker={openSingleFilePicker}
-        fileInputRef={fileInputRef}
-        handleSingleFileUpload={handleSingleFileUpload}
-        currencies={currencies}
-        selectedCurrency={selectedCurrency}
-        onCurrencyChange={setSelectedCurrency}
+    <div
+      className="flex min-h-0 flex-1 flex-col gap-6"
+      data-testid="invoices-page"
+    >
+      <div className="flex shrink-0 flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h1
+            className="text-4xl md:text-5xl font-bold font-['Manrope'] text-primary mb-2"
+            data-testid="invoices-title"
+          >
+            Invoices
+          </h1>
+          <p className="text-muted-foreground">
+            Upload and manage all invoices
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-3">
+          <CurrencySelector
+            currencies={currencies}
+            value={selectedCurrency}
+            onChange={setSelectedCurrency}
+            variant="inline"
+            id="invoice-currency-filter"
+          />
+          <RefreshButton
+            onClick={handleRefreshInvoices}
+            refreshing={
+              invoicesFetching || vendorsFetching || pendingVendorsFetching
+            }
+          >
+            Refresh
+          </RefreshButton>
+          <Button
+            onClick={() => setInvoiceUploadDialogOpen(true)}
+            data-testid="upload-invoice-button"
+            disabled={scanning || !canUploadInvoices}
+          >
+            {scanning ? (
+              <>
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                Extracting...
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4 mr-2" />
+                Upload Invoice
+              </>
+            )}
+          </Button>
+        </div>
+      </div>
+
+      <InvoiceUploadDialog
+        open={invoiceUploadDialogOpen}
+        onOpenChange={setInvoiceUploadDialogOpen}
+        onFilesSelected={handleInvoiceFilesUpload}
+        disabled={scanning || bulkExtracting || !canUploadInvoices}
       />
 
-      <InvoicesWorkspace
+      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="flex flex-wrap gap-2">
+          {INVOICE_LIST_FILTERS.map(({ value, label }) => (
+            <Button
+              key={value}
+              type="button"
+              size="sm"
+              variant={invoiceStatusFilter === value ? "default" : "outline"}
+              onClick={() => setInvoiceStatusFilter(value)}
+              data-testid={`invoice-filter-${value}`}
+            >
+              {label}
+            </Button>
+          ))}
+        </div>
+        <div className="relative w-full sm:w-64 sm:max-w-xs">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search vendor, invoice #, ref no, amount..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-10"
+            data-testid="invoice-search-input"
+          />
+        </div>
+      </div>
+
+      <div
+        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm"
+        data-testid="invoices-table"
+      >
+        <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-thin-muted">
+          <AppDataTable
+            tableHeader={invoiceTableHeader}
+            tableData={invoices}
+            renderRow={renderInvoiceRow}
+            isLoading={invoicesFetching}
+            loadingRowCount={8}
+            tableClassName="min-w-[1900px]"
+            headClassName="border-b border-border bg-muted/50"
+            emptyMessage="No invoices found. Upload your first invoice to get started!"
+            emptyTestId="no-invoices"
+          />
+        </div>
+        <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+          {invoiceTotalPages > 0 ? (
+            <>
+              <p
+                className="text-sm text-muted-foreground"
+                data-testid="invoice-pagination-summary"
+              >
+                Showing {invoiceStartRecord}-{invoiceEndRecord} of{" "}
+                {invoiceTotal.toLocaleString("en-IN")}
+              </p>
+              <Pagination className="mx-0 w-auto justify-start sm:justify-end">
+                <PaginationContent>
+                  <PaginationItem>
+                    <PaginationPrevious
+                      href="#"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        goToInvoicePage(invoiceCurrentPage - 1);
+                      }}
+                      className={
+                        invoiceCurrentPage === 0
+                          ? "pointer-events-none opacity-50"
+                          : undefined
+                      }
+                      data-testid="invoice-pagination-previous"
+                    />
+                  </PaginationItem>
+                  {visibleInvoicePageNumbers.map((pageNumber) => (
+                    <PaginationItem key={pageNumber}>
+                      <PaginationLink
+                        href="#"
+                        isActive={pageNumber === invoiceCurrentPage}
+                        onClick={(event) => {
+                          event.preventDefault();
+                          goToInvoicePage(pageNumber);
+                        }}
+                        data-testid={`invoice-pagination-page-${pageNumber + 1}`}
+                      >
+                        {pageNumber + 1}
+                      </PaginationLink>
+                    </PaginationItem>
+                  ))}
+                  <PaginationItem>
+                    <PaginationNext
+                      href="#"
+                      onClick={(event) => {
+                        event.preventDefault();
+                        goToInvoicePage(invoiceCurrentPage + 1);
+                      }}
+                      className={
+                        !invoiceHasMore &&
+                        invoiceCurrentPage >= invoiceTotalPages - 1
+                          ? "pointer-events-none opacity-50"
+                          : undefined
+                      }
+                      data-testid="invoice-pagination-next"
+                    />
+                  </PaginationItem>
+                </PaginationContent>
+              </Pagination>
+            </>
+          ) : null}
+        </div>
+      </div>
+
+      <UploadSection
         uploadedFile={uploadedFile}
         setUploadedFile={setUploadedFile}
         setUploadedFileURL={setUploadedFileURL}
@@ -1753,29 +2273,17 @@ const InvoicesPage = () => {
         scanning={scanning}
         renderInvoiceForm={renderInvoiceForm}
         handleAddInvoice={handleAddInvoice}
-        searchTerm={searchTerm}
-        setSearchTerm={setSearchTerm}
-        filteredInvoices={filteredInvoices}
-        getStatusBadgeClass={getStatusBadgeClass}
-        handleViewInvoice={handleViewInvoice}
-        canEdit={canEdit}
-        handleEditInvoice={handleEditInvoice}
-        canDelete={canDelete}
-        handleDeleteInvoice={handleDeleteInvoice}
       />
 
       <InvoicesDialogs
         bulkExtracting={bulkExtracting}
         bulkExtractTotalFiles={bulkExtractTotalFiles}
         bulkExtractProgress={bulkExtractProgress}
-        bulkExtractElapsedSeconds={bulkExtractElapsedSeconds}
-        formatDuration={formatDuration}
         bulkPreviewOpen={bulkPreviewOpen}
         bulkCreating={bulkCreating}
         bulkAddingVendorItemId={bulkAddingVendorItemId}
         bulkPreviewItems={bulkPreviewItems}
         bulkProgress={bulkProgress}
-        bulkElapsedSeconds={bulkElapsedSeconds}
         formatBulkStatusLabel={formatBulkStatusLabel}
         getBulkStatusBadgeClass={getBulkStatusBadgeClass}
         setBulkPreviewOpen={setBulkPreviewOpen}
@@ -1788,6 +2296,8 @@ const InvoicesPage = () => {
         invoiceCategories={invoiceCategories}
         getCategoryNameById={getCategoryNameById}
         isCategoryFeatureEnabled={isCategoryFeatureEnabled}
+        isCampaignFeatureEnabled={isCampaignFeatureEnabled}
+        showRefNoField={isRefNoEnabled}
         invoiceMandatoryFields={invoiceMandatoryFields}
         bulkEditOpen={bulkEditOpen}
         setBulkEditOpen={setBulkEditOpen}
@@ -1813,10 +2323,17 @@ const InvoicesPage = () => {
         loadingHistory={loadingHistory}
         canEdit={canEdit}
         handleEditInvoice={handleEditInvoice}
+        findVendorByName={findVendorByName}
+        findVendorById={findVendorById}
         editDialogOpen={editDialogOpen}
         setEditDialogOpen={setEditDialogOpen}
         formData={formData}
         handleUpdateInvoice={handleUpdateInvoice}
+        handleForwardSavedInvoice={handleForwardSavedInvoice}
+        canForwardSavedDraft={canForwardSavedDraft}
+        forwardSavedInvoiceLoading={
+          updateInvoiceLoading || forwardInvoiceLoading
+        }
         renderInvoiceForm={renderInvoiceForm}
         requestVendorOpen={requestVendorOpen}
         handleRequestVendorOpenChange={handleRequestVendorOpenChange}

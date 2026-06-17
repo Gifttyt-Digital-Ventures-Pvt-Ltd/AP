@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Eye, Loader2, Pencil, Plus, RefreshCw, Trash2, Users } from "lucide-react";
+import { Eye, Loader2, Pencil, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   useCreateCategoryMutation,
@@ -9,6 +9,7 @@ import {
   useUpdateCategoryMutation,
 } from "../../../Services/apis/categoriesApi";
 import AppDataTable from "../../../components/common/AppDataTable";
+import RefreshButton from "../../../components/common/RefreshButton";
 import { Button } from "../../../components/ui/button";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import { useActionGuard } from "../../../hooks/useActionGuard";
@@ -17,11 +18,33 @@ import CategoryViewDialog from "./CategoryViewDialog";
 
 const categoryTableHeader = [
   { key: "name", title: "Category Name", cellClassName: "font-medium" },
-  { key: "description", title: "Description", cellClassName: "max-w-md" },
-  { key: "assignedUsers", title: "Assigned Approvers" },
+  {
+    key: "assignedMakers",
+    title: "Assigned Maker",
+    cellClassName: "max-w-[180px] text-sm text-muted-foreground",
+  },
+  {
+    key: "assignedCheckers",
+    title: "Assigned Checker",
+    cellClassName: "max-w-[180px] text-sm text-muted-foreground",
+  },
+  {
+    key: "approvers",
+    title: "Approvers",
+    cellClassName: "max-w-[180px] text-sm text-muted-foreground",
+  },
   { key: "createdDate", title: "Created Date" },
   { key: "actions", title: "Actions", headerClassName: "text-left", cellClassName: "text-left" },
 ];
+
+const formatAssignedUserNames = (users = []) => {
+  const names = users
+    .map((user) => String(user?.name || user?.email || "").trim())
+    .filter(Boolean);
+
+  if (names.length === 0) return "-";
+  return names.join(", ");
+};
 
 const formatDate = (value) => {
   if (!value) return "-";
@@ -134,27 +157,21 @@ const CategoriesTab = () => {
           case "name":
             value = category.name;
             break;
-          case "description":
-            value = (
-              <span className="line-clamp-2 text-muted-foreground">
-                {category.description || "-"}
-              </span>
-            );
+          case "assignedMakers":
+            value = formatAssignedUserNames(category.makerAssignedUsers);
             break;
-          case "assignedUsers":
-            value = (
-              <span className="inline-flex items-center gap-1.5">
-                <Users className="h-4 w-4 text-muted-foreground" />
-                {category.assignedUsersCount}
-              </span>
-            );
+          case "assignedCheckers":
+            value = formatAssignedUserNames(category.checkerAssignedUsers);
+            break;
+          case "approvers":
+            value = formatAssignedUserNames(category.approverUsers);
             break;
           case "createdDate":
             value = <span className="text-muted-foreground">{formatDate(category.createdDate)}</span>;
             break;
           case "actions":
             value = (
-              <div className="flex items-center justify-end gap-1">
+              <div className="flex items-center justify-start gap-1">
                 <Button
                   type="button"
                   variant="ghost"
@@ -212,10 +229,9 @@ const CategoriesTab = () => {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {(categoriesError || approversError) && (
-            <Button type="button" variant="outline" onClick={retryCategoryData} className="gap-2">
-              <RefreshCw className="h-4 w-4" />
+            <RefreshButton type="button" onClick={retryCategoryData} className="gap-2">
               Retry
-            </Button>
+            </RefreshButton>
           )}
           <Button
             type="button"

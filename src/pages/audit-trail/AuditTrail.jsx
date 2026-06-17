@@ -6,12 +6,12 @@ import {
   Download,
   Filter,
   Loader2,
-  RefreshCw,
   Search,
   ShieldCheck,
   X,
 } from "lucide-react";
 import { toast } from "sonner";
+import RefreshButton from "../../components/common/RefreshButton";
 import {
   AUDIT_ACTIONS,
   AUDIT_STATUSES,
@@ -111,6 +111,9 @@ const getActionBadgeClass = (action = "") => {
   if (action.startsWith("INVOICE") || action.startsWith("PO")) {
     return "bg-purple-100 text-purple-800 hover:bg-purple-100";
   }
+  if (action.startsWith("CAMPAIGN")) {
+    return "bg-fuchsia-100 text-fuchsia-800 hover:bg-fuchsia-100";
+  }
   if (action.startsWith("PAYMENT")) return "bg-emerald-100 text-emerald-800 hover:bg-emerald-100";
   if (action.startsWith("USER") || action.startsWith("ROLE")) {
     return "bg-amber-100 text-amber-800 hover:bg-amber-100";
@@ -119,11 +122,19 @@ const getActionBadgeClass = (action = "") => {
 };
 
 const getStatusBadgeClass = (status = "") => {
-  if (["SUCCESS", "COMPLETED", "APPROVED"].includes(status)) {
-    return "bg-green-100 text-green-800 hover:bg-green-100";
+  const normalizedStatus = String(status || "").trim().toUpperCase();
+  if (["SUCCESS", "COMPLETED", "APPROVED"].includes(normalizedStatus)) {
+    return "bg-green-100 text-green-800 border-green-200 hover:bg-green-100";
   }
-  if (status === "PENDING") return "bg-yellow-100 text-yellow-800 hover:bg-yellow-100";
-  if (["REJECTED", "FAILED"].includes(status)) return "bg-red-100 text-red-800 hover:bg-red-100";
+  if (normalizedStatus === "PENDING") {
+    return "bg-yellow-100 text-yellow-800 border-yellow-200 hover:bg-yellow-100";
+  }
+  if (normalizedStatus === "NEEDS_CORRECTION") {
+    return "bg-orange-100 text-orange-800 border-orange-200 hover:bg-orange-100";
+  }
+  if (["REJECTED", "FAILED"].includes(normalizedStatus)) {
+    return "bg-red-100 text-red-800 border-red-200 hover:bg-red-100";
+  }
   return "bg-muted text-muted-foreground hover:bg-muted";
 };
 
@@ -138,6 +149,7 @@ const formatTimestamp = (value) => {
     hour: "2-digit",
     minute: "2-digit",
     second: "2-digit",
+    hour12: true,
   }).format(date);
 };
 
@@ -249,7 +261,7 @@ const AuditBadge = ({ type, value }) => (
 
 const AuditRow = memo(({ entry, highlighted }) => (
   <TableRow className={highlighted ? "bg-yellow-50 transition-colors" : undefined}>
-    <TableCell className="w-[180px]" title={getUtcTitle(entry.timestamp)}>
+    <TableCell className="w-[180px]">
       {formatTimestamp(entry.timestamp)}
     </TableCell>
     <TableCell className="w-[180px]">
@@ -698,10 +710,17 @@ const AuditTrail = () => {
               <X className="h-4 w-4" />
               Clear Filters
             </Button>
-            <Button type="button" variant="outline" onClick={() => { refetch(); refetchUsers(); }} className="gap-2">
-              <RefreshCw className="h-4 w-4" />
+            <RefreshButton
+              type="button"
+              onClick={() => {
+                refetch();
+                refetchUsers();
+              }}
+              refreshing={isFetching && !isLoading}
+              className="gap-2"
+            >
               Refresh
-            </Button>
+            </RefreshButton>
           </div>
         </div>
         {invalidDateRange && (
