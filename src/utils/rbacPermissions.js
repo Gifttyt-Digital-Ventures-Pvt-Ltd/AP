@@ -161,6 +161,15 @@ const mapIntegrationsPermission = (permissionType) => {
   return null;
 };
 
+const mapNotificationsPermission = (permissionType) => {
+  if (permissionType === "VIEW") return "notifications-view";
+  if (permissionType === "MANAGE") return "notifications-manage";
+  if (permissionType === "FULL") {
+    return ["notifications-view", "notifications-manage"];
+  }
+  return null;
+};
+
 const mapCategoryPermission = (permissionType) => {
   if (permissionType === "VIEW") return "category-view";
   if (permissionType === "MANAGE") return "category-manage";
@@ -267,6 +276,10 @@ export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput)
 
   if (screen === "INTEGRATIONS" || screen === "ERP_INTEGRATIONS") {
     return mapIntegrationsPermission(permissionType);
+  }
+
+  if (screen === "NOTIFICATIONS" || screen === "NOTIFICATION") {
+    return mapNotificationsPermission(permissionType);
   }
 
   if (screen === "CATEGORY" || screen === "CATEGORIES") {

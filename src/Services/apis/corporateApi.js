@@ -601,6 +601,9 @@ export const corporateApi = serviceApi.injectEndpoints({
       query: (body) => ({
         url: "/corporate/user/add",
         method: "POST",
+        headers: {
+          "X-Giftryt-Portal": "VENDOR_PAYMENTS",
+        },
         body,
       }),
       invalidatesTags: ["Users", "Categories"],

@@ -352,6 +352,12 @@ const UserRoles = () => {
       if (backendEntry.screen === "INTEGRATIONS" || backendEntry.screen === "ERP_INTEGRATIONS") {
         return isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
       }
+      if (backendEntry.screen === "NOTIFICATIONS") {
+        return (
+          isCorporateScreenAllowed("NOTIFICATIONS") &&
+          isCorporateSectionEnabled("NOTIFICATIONS")
+        );
+      }
       return isCorporateScreenAllowed(backendEntry.screen);
     },
     [
@@ -421,6 +427,14 @@ const UserRoles = () => {
       keys.add("SETTINGS:MANAGE_BILLING");
     }
 
+    if (
+      isCorporateScreenAllowed("NOTIFICATIONS") &&
+      isCorporateSectionEnabled("NOTIFICATIONS")
+    ) {
+      keys.add("NOTIFICATIONS:VIEW");
+      keys.add("NOTIFICATIONS:MANAGE");
+    }
+
     return keys;
   }, [
     availableCustomRoleScreens,
@@ -428,6 +442,7 @@ const UserRoles = () => {
     isCorporateSectionEnabled,
     canUseManageRoleCategories,
     canUseBillingSettings,
+    isCorporateScreenAllowed,
   ]);
 
   const availablePermissionKeys = useMemo(() => {
@@ -477,6 +492,14 @@ const UserRoles = () => {
       keys.add("credits-manage");
     }
 
+    if (
+      isCorporateScreenAllowed("NOTIFICATIONS") &&
+      isCorporateSectionEnabled("NOTIFICATIONS")
+    ) {
+      keys.add("notifications-view");
+      keys.add("notifications-manage");
+    }
+
     return keys;
   }, [
     availableCustomRoleScreens,
@@ -484,6 +507,7 @@ const UserRoles = () => {
     isCorporateSectionEnabled,
     canUseManageRoleCategories,
     canUseBillingSettings,
+    isCorporateScreenAllowed,
   ]);
 
   const filteredPermissionGroups = useMemo(() => {

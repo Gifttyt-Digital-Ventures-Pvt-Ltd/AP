@@ -53,6 +53,8 @@ export const CUSTOM_ROLE_PERMISSION_MAP = {
   "settings-org": { screen: "SETTINGS", permissionType: "ORG" },
   "settings-banking": { screen: "SETTINGS", permissionType: "BANKING" },
   "settings-interaction": { screen: "SETTINGS", permissionType: "INTERACTION" },
+  "notifications-view": { screen: "NOTIFICATIONS", permissionType: "VIEW" },
+  "notifications-manage": { screen: "NOTIFICATIONS", permissionType: "MANAGE" },
   "integrations.view": { screen: "INTEGRATIONS", permissionType: "VIEW" },
   "integrations.connect": { screen: "INTEGRATIONS", permissionType: "CONNECT" },
   "integrations.disconnect": { screen: "INTEGRATIONS", permissionType: "DISCONNECT" },

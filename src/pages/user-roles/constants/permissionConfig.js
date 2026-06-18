@@ -120,6 +120,13 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    title: "Notifications",
+    permissions: [
+      { id: "notifications-manage", label: "Manage Notifications" },
+      { id: "notifications-view", label: "View Only" },
+    ],
+  },
+  {
     title: "Integrations",
     permissions: [
       { id: "integrations.view", label: "View Only" },
@@ -186,6 +193,8 @@ export const PERMISSION_LABELS = {
   "settings-org": "Settings - Manage Organisation",
   "settings-banking": "Settings - Manage Banking",
   "settings-interaction": "Settings - Integrations",
+  "notifications-view": "Notifications - View Only",
+  "notifications-manage": "Notifications - Manage",
   "integrations.view": "Integrations - View Only",
   "integrations.connect": "Integrations - Connect ERP",
   "integrations.disconnect": "Integrations - Disconnect ERP",

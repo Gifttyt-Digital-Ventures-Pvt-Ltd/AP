@@ -45,7 +45,7 @@ export const ROUTE_PERMISSION_RULES = {
     ],
   },
   "/banking": { anyOf: ["banking-view", "banking-full"] },
-  "/notifications": { anyOf: ["settings-interaction"] },
+  "/notifications": { anyOf: ["notifications-view", "notifications-manage"] },
   "/user-roles": {
     anyOf: [
       "roles-view",
@@ -118,8 +118,8 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
   },
   "/banking": { anySections: ["SETTINGS_CONNECTED_BANKING"] },
   "/notifications": {
-    screen: "SETTINGS",
-    anySections: ["SETTINGS_INTEGRATIONS", "SETTINGS_ORG_DETAILS"],
+    screen: "NOTIFICATIONS",
+    anySections: ["NOTIFICATIONS"],
   },
   "/user-roles": {
     screen: "MANAGE_ROLE",
