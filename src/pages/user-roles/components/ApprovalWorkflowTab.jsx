@@ -64,7 +64,6 @@ import {
 import { useGetCorporateDepartmentsQuery } from "../../../Services/apis/corporateApi";
 import { useGetCategoriesQuery } from "../../../Services/apis/categoriesApi";
 import {
-  FALLBACK_USERS,
   WORKFLOW_SECTIONS,
   WORKFLOW_TYPE_BADGE_CLASSES,
   WORKFLOW_TYPE_LABELS,
@@ -565,7 +564,7 @@ const ApprovalWorkflowTab = ({
         .filter((user) => user.id && user.name);
     }
 
-    return FALLBACK_USERS;
+    return [];
   }, [workflowApproversData]);
 
   const workflowVendors = useMemo(() => {
@@ -1747,30 +1746,38 @@ const ApprovalWorkflowTab = ({
                     <Select
                       value={approver.userId}
                       onValueChange={(value) => updateApprover(index, value)}
-                      disabled={workflowActionLoading}
+                      disabled={
+                        workflowActionLoading || workflowUsers.length === 0
+                      }
                     >
                       <SelectTrigger className="h-10 flex-1">
                         <SelectValue placeholder="Select approver" />
                       </SelectTrigger>
                       <SelectContent>
-                        {workflowUsers.map((user) => {
-                          const alreadySelected = formState.approvers.some(
-                            (selectedApprover, selectedIndex) =>
-                              selectedIndex !== index &&
-                              selectedApprover.userId === user.id,
-                          );
+                        {workflowUsers.length === 0 ? (
+                          <div className="px-2 py-1.5 text-sm text-muted-foreground">
+                            No approvers available
+                          </div>
+                        ) : (
+                          workflowUsers.map((user) => {
+                            const alreadySelected = formState.approvers.some(
+                              (selectedApprover, selectedIndex) =>
+                                selectedIndex !== index &&
+                                selectedApprover.userId === user.id,
+                            );
 
-                          return (
-                            <SelectItem
-                              key={user.id}
-                              value={user.id}
-                              disabled={alreadySelected}
-                            >
-                              {user.name} {user.role ? `(${user.role})` : ""}
-                              {alreadySelected ? " - Already selected" : ""}
-                            </SelectItem>
-                          );
-                        })}
+                            return (
+                              <SelectItem
+                                key={user.id}
+                                value={user.id}
+                                disabled={alreadySelected}
+                              >
+                                {user.name} {user.role ? `(${user.role})` : ""}
+                                {alreadySelected ? " - Already selected" : ""}
+                              </SelectItem>
+                            );
+                          })
+                        )}
                       </SelectContent>
                     </Select>
                     {formState.approvers.length > 1 && (
