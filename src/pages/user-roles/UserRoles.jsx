@@ -37,6 +37,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useRBAC } from "../../contexts/RBACContext";
 import { GitBranch, Shield, ShieldAlert, UserPlus, Users } from "lucide-react";
 import {
+  BILLING_PERMISSION_IDS,
   CAMPAIGN_BACKEND_PERMISSION_TYPES,
   CAMPAIGN_PERMISSION_IDS,
   AP_MASTER_ADMIN_BACKEND_SCREEN,
@@ -107,6 +108,7 @@ const UserRoles = () => {
     isCorporateSectionEnabled,
     isCategoryFeatureEnabled,
     isCampaignFeatureEnabled,
+    isBillingFeatureEnabled,
   } = useRBAC();
   const { guardAction } = useActionGuard();
   const navigate = useNavigate();
@@ -124,6 +126,7 @@ const UserRoles = () => {
   const canViewCategories =
     hasPermission("category-view") || hasPermission("category-manage");
   const canUseManageRoleCategories = isCorporateSectionEnabled("CATEGORY_ALL");
+  const canUseBillingSettings = isBillingFeatureEnabled;
   const canViewUsersTab =
     canViewUserRecords && isCorporateSectionEnabled("MANAGE_ROLE_USERS");
   const canViewRolesTab =
@@ -321,6 +324,15 @@ const UserRoles = () => {
           return isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING");
         if (backendEntry.permissionType === "INTERACTION")
           return isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
+        if (
+          backendEntry.permissionType === "BILLING" ||
+          backendEntry.permissionType === "MANAGE_BILLING"
+        ) {
+          return canUseBillingSettings;
+        }
+      }
+      if (backendEntry.screen === "CREDITS") {
+        return canUseBillingSettings;
       }
       if (backendEntry.screen === "PAYMENTS") {
         return (
@@ -345,6 +357,7 @@ const UserRoles = () => {
     [
       isCampaignFeatureEnabled,
       canUseManageRoleCategories,
+      canUseBillingSettings,
       isCorporateScreenAllowed,
       isCorporateSectionEnabled,
     ],
@@ -401,12 +414,20 @@ const UserRoles = () => {
       keys.add("CATEGORY:MANAGE");
     }
 
+    if (canUseBillingSettings) {
+      keys.add("CREDITS:MANAGE");
+      keys.add("CREDITS:MANAGE_BILLING");
+      keys.add("SETTINGS:BILLING");
+      keys.add("SETTINGS:MANAGE_BILLING");
+    }
+
     return keys;
   }, [
     availableCustomRoleScreens,
     isCampaignFeatureEnabled,
     isCorporateSectionEnabled,
     canUseManageRoleCategories,
+    canUseBillingSettings,
   ]);
 
   const availablePermissionKeys = useMemo(() => {
@@ -452,12 +473,17 @@ const UserRoles = () => {
       keys.add("category-manage");
     }
 
+    if (canUseBillingSettings) {
+      keys.add("credits-manage");
+    }
+
     return keys;
   }, [
     availableCustomRoleScreens,
     isCampaignFeatureEnabled,
     isCorporateSectionEnabled,
     canUseManageRoleCategories,
+    canUseBillingSettings,
   ]);
 
   const filteredPermissionGroups = useMemo(() => {
@@ -468,10 +494,12 @@ const UserRoles = () => {
         if (!backendEntry) return false;
         if (!isMappedPermissionEntitled(backendEntry)) return false;
         const isCampaignPermission = CAMPAIGN_PERMISSION_IDS.includes(permission.id);
+        const isBillingPermission = BILLING_PERMISSION_IDS.includes(permission.id);
         if (
           availablePermissionKeys &&
           !availablePermissionKeys.has(permission.id) &&
-          !(isCampaignFeatureEnabled && isCampaignPermission)
+          !(isCampaignFeatureEnabled && isCampaignPermission) &&
+          !(canUseBillingSettings && isBillingPermission)
         ) {
           return false;
         }
@@ -482,6 +510,7 @@ const UserRoles = () => {
     return groups;
   }, [
     availablePermissionKeys,
+    canUseBillingSettings,
     isCampaignFeatureEnabled,
     isMappedPermissionEntitled,
   ]);

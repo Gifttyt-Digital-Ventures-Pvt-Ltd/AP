@@ -115,6 +115,7 @@ export const PERMISSION_GROUPS = [
     permissions: [
       { id: "settings-org", label: "Manage Organisation Details" },
       { id: "settings-banking", label: "Manage Connected Banking" },
+      { id: "credits-manage", label: "Manage Billing" },
       { id: "settings-interaction", label: "Integrations" },
     ],
   },
@@ -167,6 +168,9 @@ export const PERMISSION_LABELS = {
   "payments-view": "Payments - View Only",
   "payment-batches-manage": "Payment Batches - Manage",
   "payment-batches-view": "Payment Batches - View Only",
+  "credits-view": "Billing - View",
+  "credits-ledger": "Billing - View Ledger",
+  "credits-manage": "Settings - Manage Billing",
   "tax-view": "Tax Management - View Only",
   "tax-manage": "Tax Management - Manage",
   "reports-view": "Reports - View Only",
@@ -197,5 +201,7 @@ export const CAMPAIGN_PERMISSION_IDS = [
   "campaign-manage",
   "campaign-approve",
 ];
+
+export const BILLING_PERMISSION_IDS = ["credits-manage"];
 
 export const CAMPAIGN_BACKEND_PERMISSION_TYPES = ["VIEW", "MANAGE", "APPROVE"];

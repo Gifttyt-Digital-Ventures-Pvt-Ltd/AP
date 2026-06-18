@@ -12,7 +12,10 @@ import {
   useGetCorporateDetailsQuery,
   useGetCorporateUserDetailsQuery,
 } from "../Services/apis/corporateApi";
+import { useGetClientWalletSummaryQuery } from "../Services/apis/creditsApi";
 import { redirectToOriginLogin } from "../utils/authRedirect";
+import { formatCredits } from "./credits/CreditAmount";
+import CreditBalanceBadge from "./credits/CreditBalanceBadge";
 import { Button } from "./ui/button";
 import {
   Tooltip,
@@ -44,6 +47,7 @@ import {
   Megaphone,
   Plug,
   User,
+  WalletCards,
 } from "lucide-react";
 
 // Context to control sidebar visibility from child components
@@ -56,10 +60,18 @@ export const useSidebar = () => useContext(SidebarContext);
 
 export const Layout = ({ children }) => {
   const { user, logout } = useAuth();
-  const { canAccessRoute, isLoaded: rbacLoaded } = useRBAC();
+  const { canAccessRoute, isLoaded: rbacLoaded, isBillingFeatureEnabled } = useRBAC();
   const { data: corporateContext = null } = useGetCorporateDetailsQuery();
   const { data: corporateUserContext = null } =
     useGetCorporateUserDetailsQuery();
+  const {
+    data: walletSummary = null,
+    isLoading: walletLoading,
+    isError: walletError,
+  } = useGetClientWalletSummaryQuery(undefined, {
+    pollingInterval: 60000,
+    skip: !user || !rbacLoaded || !isBillingFeatureEnabled,
+  });
   const navigate = useNavigate();
   const location = useLocation();
   const mainContentRef = useRef(null);
@@ -71,6 +83,7 @@ export const Layout = ({ children }) => {
     String(user?.name || "").trim();
   const sidebarPrimaryName = corporateName || userName || "User";
   const sidebarSecondaryLabel = userName;
+  const tokenBalance = formatCredits(walletSummary?.balance || 0);
 
   const menuItems = [
     { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
@@ -99,7 +112,8 @@ export const Layout = ({ children }) => {
     redirectToOriginLogin();
   };
 
-  const isActive = (path) => location.pathname === path;
+  const isActive = (path) =>
+    location.pathname === path || location.pathname.startsWith(`${path}/`);
   const handleNavigate = (path) => {
     if (location.pathname === path) return;
     navigate(path);
@@ -200,7 +214,7 @@ export const Layout = ({ children }) => {
                         <button
                           type="button"
                           onClick={() => handleNavigate("/profile")}
-                          className="mb-4 w-full flex items-center justify-start px-2 py-2 rounded-md transition-all hover:bg-button-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          className="mb-4 w-full flex items-center justify-start px-2 py-2 rounded-md transition-colors hover:bg-button-primary-hover hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           data-testid="user-info-collapsed"
                         >
                           <User className="h-7 w-7" />
@@ -212,7 +226,7 @@ export const Layout = ({ children }) => {
                     <button
                       type="button"
                       onClick={() => handleNavigate("/profile")}
-                      className="mb-4 w-full flex items-center gap-3 px-2 py-2 rounded-md text-left transition-colors hover:bg-button-primary-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                      className="group mb-4 w-full flex items-center gap-3 px-2 py-2 rounded-md text-left transition-colors hover:bg-button-primary-hover hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                       data-testid="user-info"
                     >
                       <User className="h-5 w-5 shrink-0" />
@@ -220,11 +234,42 @@ export const Layout = ({ children }) => {
                         <p className="text-sm font-medium truncate">
                           {sidebarPrimaryName}
                         </p>
-                        <p className="text-xs text-muted-foreground truncate">
+                        <p className="text-xs text-muted-foreground truncate group-hover:text-primary-foreground/80">
                           {sidebarSecondaryLabel}
                         </p>
                       </div>
                     </button>
+                  ))}
+                {isBillingFeatureEnabled &&
+                  !walletError &&
+                  (!sidebarOpen ? (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button
+                          type="button"
+                          onClick={(event) => event.currentTarget.blur()}
+                          className="mb-2 w-full flex items-center justify-start px-2 py-2 rounded-md transition-colors hover:bg-button-primary-hover hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                          data-testid="token-balance-button-collapsed"
+                          aria-label={`Tokens ${walletLoading ? "loading" : tokenBalance}`}
+                        >
+                          <WalletCards className="h-6 w-6" />
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="right">
+                        {walletLoading ? "Tokens loading" : `${tokenBalance} tokens`}
+                      </TooltipContent>
+                    </Tooltip>
+                  ) : (
+                    <div className="mb-2 px-1" data-testid="token-balance-button">
+                      {walletLoading ? (
+                        <span className="px-2 text-xs text-muted-foreground">Loading tokens...</span>
+                      ) : (
+                        <CreditBalanceBadge
+                          wallet={walletSummary}
+                          className="w-full justify-center"
+                        />
+                      )}
+                    </div>
                   ))}
                 {!sidebarOpen ? (
                   <Tooltip>

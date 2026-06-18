@@ -5,6 +5,8 @@ import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../components/ui/select';
 import { Loader2 } from 'lucide-react';
+import MeteredActionCostHint from '../../../components/credits/MeteredActionCostHint';
+import { CREDIT_ACTION_CODES } from '../../../constants/creditActions';
 
 // Dialog to calculate TDS using selected section and invoice amount.
 const TdsCalculationDialog = ({
@@ -84,6 +86,8 @@ const TdsCalculationDialog = ({
           <Label htmlFor="is-company">Vendor is a Company (higher TDS rate)</Label>
         </div>
       </div>
+
+      <MeteredActionCostHint actionCode={CREDIT_ACTION_CODES.TDS_API} />
 
       <DialogFooter>
         <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>

@@ -38,6 +38,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '../../components/ui/ca
 import { Badge } from '../../components/ui/badge';
 import { Textarea } from '../../components/ui/textarea';
 import { toast } from 'sonner';
+import { useActionGuard } from '../../hooks/useActionGuard';
+import { useCreditErrorHandler } from '../../contexts/CreditErrorContext';
+import MeteredActionCostHint from '../../components/credits/MeteredActionCostHint';
+import { CREDIT_ACTION_CODES } from '../../constants/creditActions';
 import {
   Plus,
   Search,
@@ -50,7 +54,6 @@ import {
   Loader2,
   ClipboardCheck
 } from 'lucide-react';
-import { useActionGuard } from '../../hooks/useActionGuard';
 import RefreshButton from '../../components/common/RefreshButton';
 
 const statusColors = {
@@ -107,6 +110,7 @@ const GoodsReceipt = () => {
   const [createGrn] = useCreateGrnMutation();
   const [postGrn] = usePostGrnMutation();
   const { guardAction, canPerformAction } = useActionGuard();
+  const { handleCreditError } = useCreditErrorHandler();
 
   const normalizePoLineItem = (item = {}) => ({
     ...item,
@@ -308,6 +312,7 @@ const GoodsReceipt = () => {
       resetForm();
       fetchData();
     } catch (error) {
+      if (handleCreditError(error)) return;
       toast.error(error?.data?.detail || 'Failed to create GRN');
     } finally {
       setCreating(false);
@@ -755,6 +760,8 @@ const GoodsReceipt = () => {
               />
             </div>
           </div>
+
+          <MeteredActionCostHint actionCode={CREDIT_ACTION_CODES.GRN_UPLOAD} className="mt-4" />
 
           <DialogFooter>
             <Button variant="outline" onClick={() => { setShowCreateDialog(false); resetForm(); }}>

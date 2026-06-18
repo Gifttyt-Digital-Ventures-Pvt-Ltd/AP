@@ -52,6 +52,10 @@ import { getInvoiceFileUrl, openInvoiceFileDownload } from '../invoices/utils/in
 import { normalizeInvoiceHistoryEntries } from '../invoices/utils/invoiceHistory';
 import { getInvoiceStatusBadgeClass } from '../../utils/approvalWorkflow';
 import { useActionGuard } from '../../hooks/useActionGuard';
+import { useCreditErrorHandler } from '../../contexts/CreditErrorContext';
+import MeteredActionCostHint from '../../components/credits/MeteredActionCostHint';
+import { CREDIT_ACTION_CODES } from '../../constants/creditActions';
+import { useMeteredActionEstimate } from '../../hooks/useMeteredActionEstimate';
 import { useRBAC } from '../../contexts/RBACContext';
 import { useCurrencyFilter } from '../../hooks/useCurrencyFilter';
 import { CURRENCY_SCREENS } from '../../utils/currency';
@@ -127,6 +131,11 @@ const Payments = () => {
   const [createPaymentBatch] = useCreatePaymentBatchMutation();
   const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
   const { guardAction, canPerformAction } = useActionGuard();
+  const { handleCreditError } = useCreditErrorHandler();
+  const bulkPaymentEstimate = useMeteredActionEstimate(
+    CREDIT_ACTION_CODES.PAYMENT_PROCESSING,
+    invoices.length,
+  );
   const [searchTerm, setSearchTerm] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [createBatchDialogOpen, setCreateBatchDialogOpen] = useState(false);
@@ -269,7 +278,8 @@ const Payments = () => {
     try {
       const response = await bulkReleasePayments().unwrap();
       toast.success(response?.message || 'Bulk payments released');
-    } catch {
+    } catch (error) {
+      if (handleCreditError(error)) return;
       toast.error('Failed to release bulk payments');
     }
   };
@@ -294,6 +304,7 @@ const Payments = () => {
       setDialogOpen(false);
       resetForm();
     } catch (error) {
+      if (handleCreditError(error)) return;
       toast.error(error?.data?.detail || 'Failed to record payment');
     }
   };
@@ -810,9 +821,19 @@ const Payments = () => {
               Are you sure you want to release payments for {invoices.length} invoices?
             </AlertDialogDescription>
           </AlertDialogHeader>
+          <MeteredActionCostHint
+            actionCode={CREDIT_ACTION_CODES.PAYMENT_PROCESSING}
+            unitCount={invoices.length}
+            className="mx-6 mb-2"
+          />
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmBulkRelease}>Release Payments</AlertDialogAction>
+            <AlertDialogAction
+              onClick={confirmBulkRelease}
+              disabled={bulkPaymentEstimate.isDisabled}
+            >
+              Release Payments
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -58,7 +58,17 @@ export const ROUTE_PERMISSION_RULES = {
     ],
   },
   "/settings": {
-    anyOf: ["settings-org", "settings-banking", "settings-interaction"],
+    anyOf: [
+      "settings-org",
+      "settings-banking",
+      "settings-interaction",
+      "credits-view",
+      "credits-ledger",
+      "credits-manage",
+      "VIEW_WALLET",
+      "VIEW_LEDGER",
+      "MANAGE_BILLING",
+    ],
   },
 };
 
@@ -126,6 +136,9 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
       "SETTINGS_ORG_DETAILS",
       "SETTINGS_CONNECTED_BANKING",
       "SETTINGS_INTEGRATIONS",
+      "SETTINGS_BILLING",
+      "CREDITS_ALL",
+      "WALLET_ALL",
     ],
   },
 };
@@ -202,6 +215,8 @@ export const ACTION_PERMISSION_RULES = {
   "settings.createBankAccount": { anyOf: ["settings-banking", "banking-full"] },
   "settings.createOrganisation": { anyOf: ["settings-org"] },
   "settings.updateOrganisation": { anyOf: ["settings-org"] },
+  "billing.requestTokens": { anyOf: ["credits-manage", "MANAGE_BILLING"] },
+  "billing.updateSettings": { anyOf: ["credits-manage", "MANAGE_BILLING"] },
   "categories.create": { anyOf: ["category-manage"] },
   "categories.update": { anyOf: ["category-manage"] },
   "categories.delete": { anyOf: ["category-manage"] },

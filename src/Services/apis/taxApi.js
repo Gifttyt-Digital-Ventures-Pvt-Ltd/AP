@@ -1,4 +1,5 @@
 import { serviceApi } from "../serviceApi";
+import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
 
 export const taxApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -28,7 +29,7 @@ export const taxApi = serviceApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Tax"],
+      invalidatesTags: ["Tax", ...CREDIT_INVALIDATION_TAGS],
     }),
     calculateTds: builder.mutation({
       query: (body) => ({
@@ -36,11 +37,11 @@ export const taxApi = serviceApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Tax"],
+      invalidatesTags: ["Tax", ...CREDIT_INVALIDATION_TAGS],
     }),
     generateForm16a: builder.mutation({
       query: (body) => ({ url: "/tax/tds/form16a", method: "POST", body }),
-      invalidatesTags: ["Tax"],
+      invalidatesTags: ["Tax", ...CREDIT_INVALIDATION_TAGS],
     }),
   }),
 });

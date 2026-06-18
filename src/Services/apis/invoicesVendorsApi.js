@@ -1,6 +1,7 @@
 import { serviceApi } from "../serviceApi";
 import { toInvoiceApiPayload, toInvoiceUiPayload, toVendorApiPayload, toVendorUiPayload, normalizeInvoiceListResponse } from "../utils/payloadMappers";
 import { normalizeApprovalHistoryEntries } from "../../pages/invoices/utils/invoiceHistory";
+import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
 
 const unwrapVendorList = (response) => {
   if (Array.isArray(response)) return response;
@@ -62,7 +63,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Invoices", "Dashboard", "Reports"],
+      invalidatesTags: ["Invoices", "Dashboard", "Reports", ...CREDIT_INVALIDATION_TAGS],
     }),
     bulkUploadInvoices: builder.mutation({
       query: (body) => ({
@@ -70,7 +71,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Invoices", "Dashboard", "Reports"],
+      invalidatesTags: ["Invoices", "Dashboard", "Reports", ...CREDIT_INVALIDATION_TAGS],
     }),
     approveInvoice: builder.mutation({
       query: ({ id, body }) => ({
@@ -135,6 +136,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
         { type: "Vendors", id: "LIST" },
         "Dashboard",
         "Reports",
+        ...CREDIT_INVALIDATION_TAGS,
       ],
     }),
     requestVendorAddition: builder.mutation({

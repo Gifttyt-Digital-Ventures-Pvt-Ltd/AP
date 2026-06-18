@@ -25,6 +25,7 @@ import {
 } from 'lucide-react';
 import TdsCalculationDialog from './TdsCalculationDialog';
 import { useActionGuard } from '../../../hooks/useActionGuard';
+import { useCreditErrorHandler } from '../../../contexts/CreditErrorContext';
 import { formatCurrency } from '../utils/taxFormatting';
 
 const TDS_SECTIONS_TABLE_HEADER = [
@@ -143,6 +144,7 @@ const renderTdsEntryRow = (entry, rowIndex, headers) => (
 
 const TdsTab = forwardRef(({ enabled = true }, ref) => {
   const { guardAction, canPerformAction } = useActionGuard();
+  const { handleCreditError } = useCreditErrorHandler();
   const [showTdsCalcDialog, setShowTdsCalcDialog] = useState(false);
   const [calculating, setCalculating] = useState(false);
   const [tdsForm, setTdsForm] = useState(DEFAULT_TDS_FORM);
@@ -210,6 +212,7 @@ const TdsTab = forwardRef(({ enabled = true }, ref) => {
       setTdsForm(DEFAULT_TDS_FORM);
       await refetch();
     } catch (error) {
+      if (handleCreditError(error)) return;
       toast.error(error?.data?.detail || 'Failed to calculate TDS');
     } finally {
       setCalculating(false);

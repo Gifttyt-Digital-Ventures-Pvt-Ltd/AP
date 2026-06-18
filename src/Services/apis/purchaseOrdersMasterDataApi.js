@@ -1,4 +1,5 @@
 import { serviceApi } from "../serviceApi";
+import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
 
 const getListData = (response) => {
   if (Array.isArray(response)) return response;
@@ -150,7 +151,7 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
     // Saves a PO draft. Payload shape is the same as createPurchaseOrder.
     savePurchaseOrderDraft: builder.mutation({
       query: (body) => ({ url: "/purchase-orders/draft", method: "POST", body }),
-      invalidatesTags: [{ type: "PurchaseOrders", id: "LIST" }],
+      invalidatesTags: [{ type: "PurchaseOrders", id: "LIST" }, ...CREDIT_INVALIDATION_TAGS],
     }),
     // POST /purchase-orders
     // Creates/submits a PO for approval. Preferred backend behavior returns
@@ -160,6 +161,7 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
       invalidatesTags: [
         { type: "PurchaseOrders", id: "LIST" },
         { type: "Approvals", id: "LIST" },
+        ...CREDIT_INVALIDATION_TAGS,
       ],
     }),
     // POST /purchase-orders/{id}/submit
@@ -172,6 +174,7 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
       invalidatesTags: (result, error, id) => [
         ...invalidateEntityAndList("PurchaseOrders", id),
         { type: "Approvals", id: "LIST" },
+        ...CREDIT_INVALIDATION_TAGS,
       ],
     }),
     // POST /purchase-orders/{id}/approve
