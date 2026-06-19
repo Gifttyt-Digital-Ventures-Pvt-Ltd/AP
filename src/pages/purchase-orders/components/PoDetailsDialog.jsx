@@ -35,6 +35,7 @@ import {
   isFormatSectionEnabled,
   normalizePoTemplateCode,
 } from "../utils";
+import PoLogo from "./PoLogo";
 
 const poLineItemTableHeader = [
   { key: "lineNumber", title: "#" },
@@ -91,6 +92,17 @@ const PoDetailsDialog = ({
     selectedFormat
       ? isFormatFieldEnabled(selectedFormat, sectionKey, fieldKey)
       : true;
+  const poCompanyName =
+    selectedFormat?.companyName ||
+    selectedPO?.company_name ||
+    selectedPO?.companyName ||
+    "Company Name";
+  const poLogoUrl =
+    selectedFormat?.logoUrl ||
+    selectedFormat?.logo_url ||
+    selectedPO?.logoUrl ||
+    selectedPO?.logo_url ||
+    null;
 
   const renderLineItemRow = (item, rowIndex, headers) => {
     const lineItem = {
@@ -202,13 +214,11 @@ const PoDetailsDialog = ({
                       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_360px]">
                         <div className="flex items-start gap-3">
                           {fieldOn("HEADER", "h_logo") && (
-                            <div className="grid h-12 w-12 shrink-0 place-items-center rounded bg-emerald-700 text-lg font-semibold text-white">
-                              {(selectedPO?.company_name || "O").charAt(0)}
-                            </div>
+                            <PoLogo logoUrl={poLogoUrl} companyName={poCompanyName} />
                           )}
                           <div>
                             <h2 className="text-xl font-bold">
-                              {selectedPO?.company_name || "Company Name"}
+                              {poCompanyName}
                             </h2>
                             <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
                               Purchase Order

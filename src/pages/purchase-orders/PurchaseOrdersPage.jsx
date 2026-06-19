@@ -13,6 +13,7 @@ import {
   useSubmitPurchaseOrderMutation,
   useApprovePurchaseOrderMutation,
 } from '../../Services/apis/purchaseOrdersMasterDataApi';
+import { useGetOrganisationQuery } from '../../Services/apis/settingsApi';
 import { toast } from 'sonner';
 import { statusColors } from './constants';
 import {
@@ -92,11 +93,18 @@ const cloneFormatConfig = (config) => ({
   })),
 });
 
-const makeFormatConfig = (config, fallbackId = 'default-format', fallbackName = 'Standard GST Format') => ({
+const makeFormatConfig = (
+  config,
+  fallbackId = 'default-format',
+  fallbackName = 'Standard GST Format',
+  tenantBranding = {},
+) => ({
   ...cloneFormatConfig(config),
   templateCode: normalizePoTemplateCode(config.templateCode),
   id: config.id || fallbackId,
   name: config.name || fallbackName,
+  logoUrl: config.logoUrl || config.logo_url || tenantBranding.logoUrl || null,
+  logoS3Key: config.logoS3Key || config.logo_s3_key || tenantBranding.logoS3Key || null,
 });
 
 const buildFormatConfigPayload = (config) => ({
@@ -139,6 +147,8 @@ const areFormatListsEquivalent = (left = [], right = []) => {
     if (leftItem.name !== rightItem.name) return false;
     if (leftItem.defaultCurrency !== rightItem.defaultCurrency) return false;
     if (leftItem.templateCode !== rightItem.templateCode) return false;
+    if ((leftItem.logoUrl || '') !== (rightItem.logoUrl || '')) return false;
+    if ((leftItem.logoS3Key || '') !== (rightItem.logoS3Key || '')) return false;
   }
   return true;
 };
@@ -169,6 +179,12 @@ const PurchaseOrdersPage = () => {
     isLoading: vendorsLoading,
     refetch: refetchVendors,
   } = useGetVendorsQuery();
+  const { data: organisationData } = useGetOrganisationQuery();
+
+  const tenantBranding = {
+    logoUrl: organisationData?.logoUrl || organisationData?.logo_url || null,
+    logoS3Key: organisationData?.logoS3Key || organisationData?.logo_s3_key || null,
+  };
 
   const [getPurchaseOrderDownloadUrl] = useLazyGetPurchaseOrderDownloadUrlQuery();
   const [createPurchaseOrderFormatConfig] = useCreatePurchaseOrderFormatConfigMutation();
@@ -203,7 +219,7 @@ const PurchaseOrdersPage = () => {
   const activeFormatConfig =
     savedFormatConfigs.find((config) => config.id === activeFormatId) ||
     savedFormatConfigs[0] ||
-    makeFormatConfig(DEFAULT_PO_FORMAT_CONFIG);
+    makeFormatConfig(DEFAULT_PO_FORMAT_CONFIG, 'default-format', 'Standard GST Format', tenantBranding);
 
   const [poForm, setPoForm] = useState(() =>
     createDefaultPoForm(activeFormatConfig.defaultCurrency, activeFormatConfig.id),
@@ -211,12 +227,12 @@ const PurchaseOrdersPage = () => {
 
   useEffect(() => {
     const formatsFromApi = getListData(formatConfigsData).map((config, index) =>
-      makeFormatConfig(config, index === 0 ? 'default-format' : `format-${index + 1}`),
+      makeFormatConfig(config, index === 0 ? 'default-format' : `format-${index + 1}`, 'Standard GST Format', tenantBranding),
     );
     const nextFormats = formatsFromApi.length
       ? formatsFromApi
       : formatConfigData?.defaultCurrency
-        ? [makeFormatConfig(formatConfigData)]
+        ? [makeFormatConfig(formatConfigData, 'default-format', 'Standard GST Format', tenantBranding)]
         : [];
 
     if (!nextFormats.length) return;
@@ -233,12 +249,14 @@ const PurchaseOrdersPage = () => {
       prev === resolvedActiveFormat.id ? prev : resolvedActiveFormat.id
     ));
     setBuilderDraftConfig((prev) => {
-      const nextDraft = makeFormatConfig(resolvedActiveFormat);
+      const nextDraft = makeFormatConfig(resolvedActiveFormat, 'default-format', 'Standard GST Format', tenantBranding);
       if (
         prev?.id === nextDraft.id &&
         prev?.name === nextDraft.name &&
         prev?.defaultCurrency === nextDraft.defaultCurrency &&
-        prev?.templateCode === nextDraft.templateCode
+        prev?.templateCode === nextDraft.templateCode &&
+        (prev?.logoUrl || '') === (nextDraft.logoUrl || '') &&
+        (prev?.logoS3Key || '') === (nextDraft.logoS3Key || '')
       ) {
         return prev;
       }
@@ -260,7 +278,7 @@ const PurchaseOrdersPage = () => {
         line_items: prev.line_items.map((item) => sanitizeLineItemForCurrency(item, resolvedActiveFormat.defaultCurrency)),
       };
     });
-  }, [formatConfigData, formatConfigsData, activeFormatId]);
+  }, [formatConfigData, formatConfigsData, activeFormatId, tenantBranding.logoUrl, tenantBranding.logoS3Key]);
 
   const fetchData = async () => {
     try {
@@ -417,7 +435,7 @@ const PurchaseOrdersPage = () => {
   };
 
   const openBuilderDialog = (open) => {
-    if (open) setBuilderDraftConfig(makeFormatConfig(activeFormatConfig));
+    if (open) setBuilderDraftConfig(makeFormatConfig(activeFormatConfig, 'default-format', 'Standard GST Format', tenantBranding));
     setShowBuilderDialog(open);
   };
 
@@ -428,7 +446,7 @@ const PurchaseOrdersPage = () => {
     }
 
     const nextConfig = {
-      ...makeFormatConfig(builderDraftConfig),
+      ...makeFormatConfig(builderDraftConfig, 'default-format', 'Standard GST Format', tenantBranding),
       name: String(builderDraftConfig.name || '').trim(),
       configVersion: (builderDraftConfig.configVersion || 0) + 1,
     };
@@ -439,7 +457,7 @@ const PurchaseOrdersPage = () => {
       const data = isUnsavedFormat(nextConfig.id)
         ? await createPurchaseOrderFormatConfig(payload).unwrap()
         : await updatePurchaseOrderFormatConfig({ id: nextConfig.id, body: payload }).unwrap();
-      const savedConfig = makeFormatConfig(getCreatedPo(data) || nextConfig, nextConfig.id, nextConfig.name);
+      const savedConfig = makeFormatConfig(getCreatedPo(data) || nextConfig, nextConfig.id, nextConfig.name, tenantBranding);
 
       setSavedFormatConfigs((prev) => {
         const existingId = isUnsavedFormat(nextConfig.id) ? savedConfig.id : nextConfig.id;
@@ -467,7 +485,7 @@ const PurchaseOrdersPage = () => {
   const createNewBuilderFormat = () => {
     const id = `new-format-${Date.now()}`;
     setBuilderDraftConfig({
-      ...makeFormatConfig(activeFormatConfig, id, `Format ${savedFormatConfigs.length + 1}`),
+      ...makeFormatConfig(activeFormatConfig, id, `Format ${savedFormatConfigs.length + 1}`, tenantBranding),
       id,
       name: `Format ${savedFormatConfigs.length + 1}`,
       configVersion: 0,
@@ -477,7 +495,7 @@ const PurchaseOrdersPage = () => {
   const selectBuilderFormat = (formatId) => {
     const selectedFormat = savedFormatConfigs.find((config) => config.id === formatId);
     if (!selectedFormat) return;
-    setBuilderDraftConfig(makeFormatConfig(selectedFormat));
+    setBuilderDraftConfig(makeFormatConfig(selectedFormat, 'default-format', 'Standard GST Format', tenantBranding));
     setActiveFormatId(selectedFormat.id);
   };
 
@@ -501,7 +519,7 @@ const PurchaseOrdersPage = () => {
 
       setSavedFormatConfigs(remainingFormats);
       setActiveFormatId(nextActiveFormat.id);
-      setBuilderDraftConfig(makeFormatConfig(nextActiveFormat));
+      setBuilderDraftConfig(makeFormatConfig(nextActiveFormat, 'default-format', 'Standard GST Format', tenantBranding));
       setPoForm((prev) => {
         if (prev.po_format_id !== deletingFormatId) return prev;
         return {

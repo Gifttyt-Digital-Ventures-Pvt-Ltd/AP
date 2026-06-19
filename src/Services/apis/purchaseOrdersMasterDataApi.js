@@ -108,6 +108,7 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
       invalidatesTags: [
         { type: "PurchaseOrderFormatConfig", id: "LIST" },
         { type: "PurchaseOrderFormatConfig", id: "DEFAULT" },
+        "Settings",
       ],
     }),
     // PUT /po-format-configs/{id}
@@ -138,13 +139,14 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
       ],
     }),
     // POST /branding/logo
-    // Future logo upload. Pass FormData with `file`; backend returns logoUrl
-    // and logoS3Key, either tenant-wide or resolved into format snapshots.
+    // Tenant-wide logo upload. Pass FormData with `file`; backend returns
+    // logoUrl and optional logoS3Key for PO previews/snapshots.
     uploadPurchaseOrderTenantLogo: builder.mutation({
       query: (body) => ({ url: "/branding/logo", method: "POST", body }),
       invalidatesTags: [
         { type: "PurchaseOrderFormatConfig", id: "LIST" },
         { type: "PurchaseOrderFormatConfig", id: "DEFAULT" },
+        "Settings",
       ],
     }),
     // POST /purchase-orders/draft

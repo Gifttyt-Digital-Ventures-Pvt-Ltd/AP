@@ -12,6 +12,7 @@ import { isFormatFieldEnabled, isFormatSectionEnabled, normalizePoTemplateCode }
 import MeteredActionCostHint from "../../../components/credits/MeteredActionCostHint";
 import { CREDIT_ACTION_CODES } from "../../../constants/creditActions";
 import { useMeteredActionEstimate } from "../../../hooks/useMeteredActionEstimate";
+import PoLogo from "./PoLogo";
 
 const getPoFormLineItemTableHeader = ({ isInr, fieldOn }) => [
   ...(fieldOn("LINE_ITEM", "item_name") ? [{ key: "item_description", title: "Description *", headerClassName: "w-[220px]" }] : []),
@@ -268,9 +269,7 @@ const PoFormDialog = ({
                   <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_360px]">
                     <div className="flex items-start gap-3">
                       {fieldOn("HEADER", "h_logo") && (
-                        <div className="grid h-12 w-12 shrink-0 place-items-center rounded bg-emerald-700 text-lg font-semibold text-white">
-                          {(selectedFormat.companyName || "O").charAt(0)}
-                        </div>
+                        <PoLogo logoUrl={selectedFormat.logoUrl} companyName={selectedFormat.companyName} />
                       )}
                       <div>
                         <h2 className="text-xl font-bold">{selectedFormat.companyName || "Company Name"}</h2>
