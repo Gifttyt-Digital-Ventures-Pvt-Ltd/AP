@@ -35,6 +35,9 @@ const resolveCorporatePayload = (response) => {
   );
 };
 
+const toBoolean = (value) =>
+  value === true || value === "true" || value === 1 || value === "1";
+
 const normalizeCorporateSubscription = (corporate) => {
   if (!corporate || typeof corporate !== "object") {
     return {
