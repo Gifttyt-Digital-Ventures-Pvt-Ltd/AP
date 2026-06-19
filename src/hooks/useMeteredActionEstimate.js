@@ -20,18 +20,19 @@ const asActionList = (response) => {
 };
 
 export const useMeteredActionEstimate = (actionCode, unitCount = 1) => {
-  const { isBillingFeatureEnabled } = useRBAC();
+  const { isBillingFeatureEnabled, isTokenBasedSubscription } = useRBAC();
+  const isMeteredBillingEnabled = isBillingFeatureEnabled && isTokenBasedSubscription;
   const normalizedUnitCount = Math.max(Number(unitCount) || 0, 0);
   const { data: wallet, isLoading: walletLoading } = useGetClientWalletQuery(undefined, {
-    skip: !isBillingFeatureEnabled,
+    skip: !isMeteredBillingEnabled,
   });
   const { data: actionTypes, isLoading: actionTypesLoading } =
     useGetClientActionTypesQuery(undefined, {
-      skip: !isBillingFeatureEnabled,
+      skip: !isMeteredBillingEnabled,
     });
 
   return useMemo(() => {
-    if (!isBillingFeatureEnabled) {
+    if (!isMeteredBillingEnabled) {
       return {
         loading: false,
         action: null,
@@ -82,7 +83,7 @@ export const useMeteredActionEstimate = (actionCode, unitCount = 1) => {
     actionCode,
     actionTypes,
     actionTypesLoading,
-    isBillingFeatureEnabled,
+    isMeteredBillingEnabled,
     normalizedUnitCount,
     wallet,
     walletLoading,

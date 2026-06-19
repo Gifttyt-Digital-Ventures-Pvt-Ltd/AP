@@ -60,7 +60,11 @@ export const useSidebar = () => useContext(SidebarContext);
 
 export const Layout = ({ children }) => {
   const { user, logout } = useAuth();
-  const { canAccessRoute, isLoaded: rbacLoaded, isBillingFeatureEnabled } = useRBAC();
+  const {
+    canAccessRoute,
+    isLoaded: rbacLoaded,
+    isTokenBasedSubscription,
+  } = useRBAC();
   const { data: corporateContext = null } = useGetCorporateDetailsQuery();
   const { data: corporateUserContext = null } =
     useGetCorporateUserDetailsQuery();
@@ -70,7 +74,7 @@ export const Layout = ({ children }) => {
     isError: walletError,
   } = useGetClientWalletSummaryQuery(undefined, {
     pollingInterval: 60000,
-    skip: !user || !rbacLoaded || !isBillingFeatureEnabled,
+    skip: !user || !rbacLoaded || !isTokenBasedSubscription,
   });
   const navigate = useNavigate();
   const location = useLocation();
@@ -240,7 +244,7 @@ export const Layout = ({ children }) => {
                       </div>
                     </button>
                   ))}
-                {isBillingFeatureEnabled &&
+                {isTokenBasedSubscription &&
                   !walletError &&
                   (!sidebarOpen ? (
                     <Tooltip>

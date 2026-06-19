@@ -11,6 +11,7 @@ import {
 import { Button } from "../../../components/ui/button";
 import MeteredActionCostHint from "../../../components/credits/MeteredActionCostHint";
 import { CREDIT_ACTION_CODES } from "../../../constants/creditActions";
+import { useRBAC } from "../../../contexts/RBACContext";
 import { useMeteredActionEstimate } from "../../../hooks/useMeteredActionEstimate";
 
 const InvoiceUploadDialog = ({
@@ -22,6 +23,7 @@ const InvoiceUploadDialog = ({
   contentClassName,
   actionCode = CREDIT_ACTION_CODES.INVOICE_UPLOAD,
 }) => {
+  const { isTokenBasedSubscription } = useRBAC();
   const inputRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
   const [pendingFiles, setPendingFiles] = useState([]);
@@ -34,9 +36,21 @@ const InvoiceUploadDialog = ({
     }
   }, [open]);
 
-  const handleFiles = (fileList) => {
+  const uploadFiles = async (files) => {
+    const shouldClose = await onFilesSelected(files);
+    if (shouldClose !== false) {
+      setPendingFiles([]);
+      onOpenChange(false);
+    }
+  };
+
+  const handleFiles = async (fileList) => {
     const files = Array.from(fileList || []).filter(Boolean);
     if (disabled || files.length === 0) return;
+    if (!isTokenBasedSubscription) {
+      await uploadFiles(files);
+      return;
+    }
     setPendingFiles(files);
   };
 
@@ -44,11 +58,7 @@ const InvoiceUploadDialog = ({
     if (disabled || pendingFiles.length === 0) return;
     if (estimate.isDisabled) return;
 
-    const shouldClose = await onFilesSelected(pendingFiles);
-    if (shouldClose !== false) {
-      setPendingFiles([]);
-      onOpenChange(false);
-    }
+    await uploadFiles(pendingFiles);
   };
 
   const openFilePicker = () => {
