@@ -4,6 +4,7 @@ import {
   ArrowUpDown,
   BarChart2,
   CheckCircle2,
+  Eye,
   FileText,
   Loader2,
   Play,
@@ -370,7 +371,16 @@ const GstB2bTab = () => {
     return true;
   });
 
-  const b2bColumns = [
+  const openRecordDrawer = (row) => setSelected(row);
+
+  const b2bColumns = useMemo(() => [
+    {
+      key: 'row_num',
+      title: '#',
+      className: 'w-10',
+      cellClassName: 'text-xs text-muted-foreground',
+      render: (_row, index) => index + 1,
+    },
     {
       key: 'inv_num',
       title: 'Invoice Number',
@@ -379,20 +389,41 @@ const GstB2bTab = () => {
           <p className="font-mono text-xs font-semibold text-primary">{row.inv_num}</p>
           {row.amend !== 'No Amendment' ? (
             <p className="mt-0.5 text-[10px] font-semibold text-amber-600">
-              {row.amendments.length > 1 ? `${row.amendments.length} Amendments` : 'Amended'}
+              {(row.amendments?.length ?? 0) > 1 ? `${row.amendments.length} Amendments` : 'Amended'}
             </p>
           ) : null}
         </div>
       ),
     },
     { key: 'vendor', title: 'Vendor', render: () => selectedVendor?.name ?? '—' },
-    { key: 'inv_date', title: 'Invoice Date' },
-    { key: 'taxable', title: 'Taxable', render: (row) => formatCurrency(row.taxable), cellClassName: 'text-right font-medium' },
+    { key: 'inv_date', title: 'Invoice Date', cellClassName: 'text-muted-foreground' },
+    { key: 'taxable', title: 'Taxable Value', render: (row) => formatCurrency(row.taxable), cellClassName: 'text-right font-medium' },
     { key: 'gst', title: 'GST Amount', render: (row) => formatCurrency(docTotalGst(row)), cellClassName: 'text-right font-semibold text-primary' },
-    { key: 'itc', title: 'ITC', render: (row) => <TaxStatusBadge status={row.itc} /> },
-    { key: 'amend', title: 'Amendment', render: (row) => <TaxStatusBadge status={row.amend} /> },
-    { key: 'match', title: 'Match', render: (row) => <TaxStatusBadge status={row.match} /> },
-  ];
+    { key: 'itc', title: 'ITC Eligibility', render: (row) => <TaxStatusBadge status={row.itc} /> },
+    { key: 'amend', title: 'Amendment Status', render: (row) => <TaxStatusBadge status={row.amend} /> },
+    { key: 'match', title: 'Match Status', render: (row) => <TaxStatusBadge status={row.match} /> },
+    {
+      key: 'actions',
+      title: 'Actions',
+      className: 'text-right',
+      cellClassName: 'text-right',
+      render: (row) => (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="h-8 px-2.5"
+          onClick={(event) => {
+            event.stopPropagation();
+            openRecordDrawer(row);
+          }}
+        >
+          <Eye className="mr-1.5 h-4 w-4" />
+          View
+        </Button>
+      ),
+    },
+  ], [selectedVendor?.name]);
 
   return (
     <div className="space-y-4">
@@ -496,8 +527,9 @@ const GstB2bTab = () => {
           </TaxSectionCard>
 
           <TaxSectionCard
-            title="Supplier Invoices from GST Portal"
-            description="Click any row to view details and amendment history"
+            title="Fetched Records"
+            description={`GSTR-2A B2B invoices for ${selectedVendor?.name ?? 'vendor'} · ${month} FY ${fy}`}
+            meta={<TaxApiMeta synced="Just now" status="live" count={`${visibleRecords.length} shown`} />}
             actions={
               <div className="flex flex-wrap items-center gap-2">
                 <TaxViewFilterPills
@@ -505,27 +537,58 @@ const GstB2bTab = () => {
                   onChange={setViewFilter}
                   options={['All Invoices', 'Amended Only', 'Needs Review']}
                 />
-                <Button variant="outline" size="sm" onClick={handleFetch}><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button>
+                <Button variant="outline" size="sm" onClick={handleFetch}>
+                  <RefreshCw className="mr-2 h-4 w-4" />
+                  Refresh
+                </Button>
               </div>
             }
           >
-            <TaxCompactTable
-              rows={visibleRecords}
-              columns={b2bColumns}
-              getRowKey={(row) => row.inv_num}
-              getRowClassName={b2bRowClass}
-              onRowClick={setSelected}
-              emptyMessage={viewFilter === 'Amended Only' ? 'No amendments found for the selected period.' : 'No GSTR-2A records found for the selected vendor and period.'}
-            />
-            <p className="mt-2 text-xs text-muted-foreground">
-              Showing {visibleRecords.length} of {records.length} invoices · Taxable {formatCurrency(totalTaxable)} · GST {formatCurrency(totalGst)}
-            </p>
-            <TaxPagination />
+            {records.length === 0 ? (
+              <TaxEmptyState
+                icon={FileText}
+                title="No GSTR-2A records found for this vendor and period"
+                description="Try a different month, financial year, or vendor. Records appear here after a successful fetch."
+              />
+            ) : (
+              <>
+                <TaxCompactTable
+                  rows={visibleRecords}
+                  columns={b2bColumns}
+                  getRowKey={(row) => row.inv_num}
+                  getRowClassName={b2bRowClass}
+                  emptyMessage={
+                    viewFilter === 'Amended Only'
+                      ? 'No amended invoices match the current filter.'
+                      : viewFilter === 'Needs Review'
+                        ? 'No invoices require review under the current filter.'
+                        : 'No records to display.'
+                  }
+                />
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
+                  <span>
+                    Showing <strong className="text-foreground">{visibleRecords.length}</strong> of{' '}
+                    <strong className="text-foreground">{records.length}</strong> fetched invoice
+                    {records.length === 1 ? '' : 's'}
+                  </span>
+                  <span>
+                    Taxable <strong className="text-foreground">{formatCurrency(totalTaxable)}</strong>
+                    {' · '}
+                    GST <strong className="text-primary">{formatCurrency(totalGst)}</strong>
+                  </span>
+                </div>
+                <TaxPagination />
+              </>
+            )}
           </TaxSectionCard>
         </>
       ) : null}
 
-      <TaxDrawer open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)} title={`Invoice — ${selected?.inv_num ?? ''}`}>
+      <TaxDrawer
+        open={Boolean(selected)}
+        onOpenChange={(open) => !open && setSelected(null)}
+        title={selected ? `Invoice — ${selected.inv_num}` : 'Invoice Details'}
+      >
         {selected ? <B2bInvoiceDrawerContent record={selected} vendor={selectedVendor} /> : null}
       </TaxDrawer>
     </div>

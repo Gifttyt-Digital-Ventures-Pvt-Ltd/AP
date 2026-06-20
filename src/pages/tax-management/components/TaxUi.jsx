@@ -150,7 +150,7 @@ export const TaxCompactTable = ({ columns, rows, getRowKey, onRowClick, getRowCl
               >
                 {columns.map((column) => (
                   <TableCell key={column.key} className={cn('whitespace-nowrap text-sm', column.cellClassName)}>
-                    {column.render ? column.render(row) : row[column.key] ?? '-'}
+                    {column.render ? column.render(row, index) : row[column.key] ?? '-'}
                   </TableCell>
                 ))}
               </TableRow>
