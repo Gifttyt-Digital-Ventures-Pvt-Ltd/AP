@@ -1,4 +1,5 @@
 import { serviceApi } from "../serviceApi";
+import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
 
 const getListData = (response) => {
   if (Array.isArray(response)) return response;
@@ -107,6 +108,7 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
       invalidatesTags: [
         { type: "PurchaseOrderFormatConfig", id: "LIST" },
         { type: "PurchaseOrderFormatConfig", id: "DEFAULT" },
+        "Settings",
       ],
     }),
     // PUT /po-format-configs/{id}
@@ -137,20 +139,21 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
       ],
     }),
     // POST /branding/logo
-    // Future logo upload. Pass FormData with `file`; backend returns logoUrl
-    // and logoS3Key, either tenant-wide or resolved into format snapshots.
+    // Tenant-wide logo upload. Pass FormData with `file`; backend returns
+    // logoUrl and optional logoS3Key for PO previews/snapshots.
     uploadPurchaseOrderTenantLogo: builder.mutation({
       query: (body) => ({ url: "/branding/logo", method: "POST", body }),
       invalidatesTags: [
         { type: "PurchaseOrderFormatConfig", id: "LIST" },
         { type: "PurchaseOrderFormatConfig", id: "DEFAULT" },
+        "Settings",
       ],
     }),
     // POST /purchase-orders/draft
     // Saves a PO draft. Payload shape is the same as createPurchaseOrder.
     savePurchaseOrderDraft: builder.mutation({
       query: (body) => ({ url: "/purchase-orders/draft", method: "POST", body }),
-      invalidatesTags: [{ type: "PurchaseOrders", id: "LIST" }],
+      invalidatesTags: [{ type: "PurchaseOrders", id: "LIST" }, ...CREDIT_INVALIDATION_TAGS],
     }),
     // POST /purchase-orders
     // Creates/submits a PO for approval. Preferred backend behavior returns
@@ -160,6 +163,7 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
       invalidatesTags: [
         { type: "PurchaseOrders", id: "LIST" },
         { type: "Approvals", id: "LIST" },
+        ...CREDIT_INVALIDATION_TAGS,
       ],
     }),
     // POST /purchase-orders/{id}/submit
@@ -172,6 +176,7 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
       invalidatesTags: (result, error, id) => [
         ...invalidateEntityAndList("PurchaseOrders", id),
         { type: "Approvals", id: "LIST" },
+        ...CREDIT_INVALIDATION_TAGS,
       ],
     }),
     // POST /purchase-orders/{id}/approve

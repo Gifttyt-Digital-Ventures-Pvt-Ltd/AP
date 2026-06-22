@@ -3,6 +3,8 @@ import { AlertCircle, Upload, X } from 'lucide-react';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
 import { Separator } from '../../../components/ui/separator';
 import FileUploader from '../../../components/common/FileUploader';
+import MeteredActionCostHint from '../../../components/credits/MeteredActionCostHint';
+import { CREDIT_ACTION_CODES } from '../../../constants/creditActions';
 
 const UploadErrorsPanel = ({ errors = [] }) => {
   if (!errors.length) return null;
@@ -75,6 +77,7 @@ const MultipleVendorUploadDialog = ({
             Fill the required vendor fields in the template, then upload your spreadsheet below.
           </DialogDescription>
         </DialogHeader>
+        <MeteredActionCostHint actionCode={CREDIT_ACTION_CODES.VENDOR_UPLOAD} className="mb-4" />
         <div className="rounded-lg border border-border bg-muted/20 p-5">
           <div className="space-y-4">
             <FileUploader

@@ -39,6 +39,7 @@ const ViewDialog = ({
   isCategoryFeatureEnabled = true,
   showCampaignField = false,
   isCampaignFeatureEnabled = false,
+  showRefNoField = false,
   findVendorByName,
   findVendorById,
   departmentMandatory = false,
@@ -153,6 +154,7 @@ const ViewDialog = ({
                           isCategoryFeatureEnabled={isCategoryFeatureEnabled}
                           showCampaignField={showCampaignField}
                           isCampaignFeatureEnabled={isCampaignFeatureEnabled}
+                          showRefNoField={showRefNoField}
                           findVendorByName={findVendorByName}
                           findVendorById={findVendorById}
                         />

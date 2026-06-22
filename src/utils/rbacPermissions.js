@@ -90,6 +90,15 @@ const mapPaymentBatchesPermission = (permissionType) => {
   return null;
 };
 
+const mapCreditsPermission = (permissionType) => {
+  if (permissionType === "VIEW" || permissionType === "VIEW_WALLET") return "credits-view";
+  if (permissionType === "LEDGER" || permissionType === "VIEW_LEDGER") return "credits-ledger";
+  if (permissionType === "MANAGE" || permissionType === "MANAGE_BILLING" || permissionType === "FULL") {
+    return ["credits-view", "credits-ledger", "credits-manage"];
+  }
+  return null;
+};
+
 const mapTaxPermission = (permissionType) => {
   if (permissionType === "VIEW") return "tax-view";
   if (permissionType === "MANAGE") return "tax-manage";
@@ -126,6 +135,9 @@ const mapSettingsPermission = (permissionType) => {
   }
   if (permissionType === "BANKING") return "settings-banking";
   if (permissionType === "INTERACTION") return "settings-interaction";
+  if (permissionType === "BILLING" || permissionType === "MANAGE_BILLING") {
+    return "credits-manage";
+  }
   return null;
 };
 
@@ -145,6 +157,15 @@ const mapIntegrationsPermission = (permissionType) => {
       "integrations.sync.trigger",
       "integrations.review.resolve",
     ];
+  }
+  return null;
+};
+
+const mapNotificationsPermission = (permissionType) => {
+  if (permissionType === "VIEW") return "notifications-view";
+  if (permissionType === "MANAGE") return "notifications-manage";
+  if (permissionType === "FULL") {
+    return ["notifications-view", "notifications-manage"];
   }
   return null;
 };
@@ -225,6 +246,10 @@ export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput)
     return mapPaymentBatchesPermission(permissionType);
   }
 
+  if (screen === "CREDITS" || screen === "CREDIT" || screen === "WALLET") {
+    return mapCreditsPermission(permissionType);
+  }
+
   if (screen === "TAX" || screen === "TAX_MANAGEMENT") {
     return mapTaxPermission(permissionType);
   }
@@ -251,6 +276,10 @@ export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput)
 
   if (screen === "INTEGRATIONS" || screen === "ERP_INTEGRATIONS") {
     return mapIntegrationsPermission(permissionType);
+  }
+
+  if (screen === "NOTIFICATIONS" || screen === "NOTIFICATION") {
+    return mapNotificationsPermission(permissionType);
   }
 
   if (screen === "CATEGORY" || screen === "CATEGORIES") {

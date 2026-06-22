@@ -9,6 +9,10 @@ import AppDataTable from "../../../components/common/AppDataTable";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import { Textarea } from "../../../components/ui/textarea";
 import { isFormatFieldEnabled, isFormatSectionEnabled, normalizePoTemplateCode } from "../utils";
+import MeteredActionCostHint from "../../../components/credits/MeteredActionCostHint";
+import { CREDIT_ACTION_CODES } from "../../../constants/creditActions";
+import { useMeteredActionEstimate } from "../../../hooks/useMeteredActionEstimate";
+import PoLogo from "./PoLogo";
 
 const getPoFormLineItemTableHeader = ({ isInr, fieldOn }) => [
   ...(fieldOn("LINE_ITEM", "item_name") ? [{ key: "item_description", title: "Description *", headerClassName: "w-[220px]" }] : []),
@@ -64,6 +68,7 @@ const PoFormDialog = ({
   const isCreating = Boolean(createAction);
   const isPreviewing = Boolean(previewAction);
   const previewSubmitForApproval = previewAction === "submit";
+  const poUploadEstimate = useMeteredActionEstimate(CREDIT_ACTION_CODES.PO_UPLOAD, 1);
   const templateCode = normalizePoTemplateCode(selectedFormat.templateCode || "T1");
   const documentBorderClass = templateCode === "T3" ? "border-2 border-slate-900" : "border";
   const headerBorderClass = templateCode === "T4" ? "border-b-4 border-emerald-600" : "border-b";
@@ -237,6 +242,9 @@ const PoFormDialog = ({
                 Review this PO exactly as it will be saved with the selected format. Go back to edit if anything needs changing.
               </div>
             )}
+            {isPreviewing && (
+              <MeteredActionCostHint actionCode={CREDIT_ACTION_CODES.PO_UPLOAD} />
+            )}
             <div className="rounded-lg border bg-white p-4">
               <FieldBlock label="PO Format">
                 <Select value={poForm.po_format_id || activeFormatId} onValueChange={applyPoFormat} disabled={isPreviewing}>
@@ -261,9 +269,7 @@ const PoFormDialog = ({
                   <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_360px]">
                     <div className="flex items-start gap-3">
                       {fieldOn("HEADER", "h_logo") && (
-                        <div className="grid h-12 w-12 shrink-0 place-items-center rounded bg-emerald-700 text-lg font-semibold text-white">
-                          {(selectedFormat.companyName || "O").charAt(0)}
-                        </div>
+                        <PoLogo logoUrl={selectedFormat.logoUrl} companyName={selectedFormat.companyName} />
                       )}
                       <div>
                         <h2 className="text-xl font-bold">{selectedFormat.companyName || "Company Name"}</h2>
@@ -541,7 +547,7 @@ const PoFormDialog = ({
               </Button>
               <Button
                 onClick={() => handleCreatePO({ submitForApproval: previewSubmitForApproval })}
-                disabled={isCreating}
+                disabled={isCreating || poUploadEstimate.isDisabled}
                 data-testid={previewSubmitForApproval ? "confirm-submit-po-btn" : "confirm-save-draft-po-btn"}
               >
                 {(isSavingDraft || isSubmittingForApproval) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}

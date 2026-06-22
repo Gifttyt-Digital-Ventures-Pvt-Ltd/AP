@@ -20,6 +20,7 @@ import {
 import { useAuth } from "../../../contexts/AuthContext";
 import { useRBAC } from "../../../contexts/RBACContext";
 import { useActionGuard } from "../../../hooks/useActionGuard";
+import { useCreditErrorHandler } from "../../../contexts/CreditErrorContext";
 import { useSidebar } from "../../../components/Layout";
 import {
   getInvoiceMandatoryFieldValidationMessage,
@@ -122,6 +123,7 @@ const InvoiceSingleUploadLayer = ({
   const { user } = useAuth();
   const { isCategoryFeatureEnabled, isCampaignFeatureEnabled } = useRBAC();
   const { guardAction, canPerformAction } = useActionGuard();
+  const { handleCreditError } = useCreditErrorHandler();
   const { setHideSidebar } = useSidebar();
   const { data: corporateUserContext = null } = useGetCorporateUserDetailsQuery();
   const { currencyParam } = useCurrencyFilter(CURRENCY_SCREENS.INVOICE);
@@ -431,6 +433,11 @@ const InvoiceSingleUploadLayer = ({
       setFormData(initializeFormData(normalizeScannedInvoice(normalizedResponse)));
       toast.success("Invoice scanned successfully!");
     } catch (error) {
+      if (handleCreditError(error)) {
+        resetSession();
+        return false;
+      }
+
       const errorMessage =
         extractApiErrorDetail(error) ||
         error?.data?.message ||

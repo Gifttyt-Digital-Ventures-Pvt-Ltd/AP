@@ -45,7 +45,7 @@ export const ROUTE_PERMISSION_RULES = {
     ],
   },
   "/banking": { anyOf: ["banking-view", "banking-full"] },
-  "/notifications": { anyOf: ["settings-interaction"] },
+  "/notifications": { anyOf: ["notifications-view", "notifications-manage"] },
   "/user-roles": {
     anyOf: [
       "roles-view",
@@ -58,7 +58,17 @@ export const ROUTE_PERMISSION_RULES = {
     ],
   },
   "/settings": {
-    anyOf: ["settings-org", "settings-banking", "settings-interaction"],
+    anyOf: [
+      "settings-org",
+      "settings-banking",
+      "settings-interaction",
+      "credits-view",
+      "credits-ledger",
+      "credits-manage",
+      "VIEW_WALLET",
+      "VIEW_LEDGER",
+      "MANAGE_BILLING",
+    ],
   },
 };
 
@@ -108,8 +118,8 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
   },
   "/banking": { anySections: ["SETTINGS_CONNECTED_BANKING"] },
   "/notifications": {
-    screen: "SETTINGS",
-    anySections: ["SETTINGS_INTEGRATIONS", "SETTINGS_ORG_DETAILS"],
+    screen: "NOTIFICATIONS",
+    anySections: ["NOTIFICATIONS"],
   },
   "/user-roles": {
     screen: "MANAGE_ROLE",
@@ -126,6 +136,9 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
       "SETTINGS_ORG_DETAILS",
       "SETTINGS_CONNECTED_BANKING",
       "SETTINGS_INTEGRATIONS",
+      "SETTINGS_BILLING",
+      "CREDITS_ALL",
+      "WALLET_ALL",
     ],
   },
 };
@@ -202,6 +215,8 @@ export const ACTION_PERMISSION_RULES = {
   "settings.createBankAccount": { anyOf: ["settings-banking", "banking-full"] },
   "settings.createOrganisation": { anyOf: ["settings-org"] },
   "settings.updateOrganisation": { anyOf: ["settings-org"] },
+  "billing.requestTokens": { anyOf: ["credits-manage", "MANAGE_BILLING"] },
+  "billing.updateSettings": { anyOf: ["credits-manage", "MANAGE_BILLING"] },
   "categories.create": { anyOf: ["category-manage"] },
   "categories.update": { anyOf: ["category-manage"] },
   "categories.delete": { anyOf: ["category-manage"] },

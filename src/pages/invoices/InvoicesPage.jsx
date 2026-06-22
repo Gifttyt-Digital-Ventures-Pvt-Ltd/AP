@@ -115,6 +115,7 @@ import InvoicesDialogs from "./components/InvoicesDialogs";
 import InvoiceUploadDialog from "./components/InvoiceUploadDialog";
 import { getInvoiceVendorRequestValidationErrors } from "../../utils/vendorValidation";
 import { useActionGuard } from "../../hooks/useActionGuard";
+import { useCreditErrorHandler } from "../../contexts/CreditErrorContext";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { useRBAC } from "../../contexts/RBACContext";
 import IntegrationSourceBadge from "../../components/integrations/IntegrationSourceBadge";
@@ -129,6 +130,7 @@ import {
 import {
   isCheckerEditEnabled as isCheckerEditEnabledForCorporate,
   isCheckerEditForbiddenError,
+  isRefNoEnabled as isRefNoEnabledForCorporate,
 } from "../../utils/invoiceConfiguration";
 import {
   buildCurrentUserIdentity,
@@ -168,6 +170,12 @@ const baseInvoiceTableHeader = [
     title: "Invoice #",
     headerClassName: "p-3 text-left text-xs font-medium",
     cellClassName: "p-3   text-sm font-medium",
+  },
+  {
+    key: "refNo",
+    title: "Ref No",
+    headerClassName: "p-3 text-left text-xs font-medium",
+    cellClassName: "p-3 text-sm font-mono",
   },
   {
     key: "vendorName",
@@ -246,10 +254,6 @@ const InvoicesPage = () => {
     isCorporateAdmin,
   } = useRBAC();
   const { showIntegrationColumn } = useZohoIntegrationActive();
-  const invoiceTableHeader = useMemo(
-    () => withIntegrationTableHeader(baseInvoiceTableHeader, showIntegrationColumn),
-    [showIntegrationColumn],
-  );
   const { data: corporateUserContext = null } =
     useGetCorporateUserDetailsQuery();
   const invoiceUserEmail =
@@ -349,6 +353,7 @@ const InvoicesPage = () => {
     useForwardInvoiceMutation();
   const [deleteInvoice] = useDeleteInvoiceMutation();
   const { guardAction, canPerformAction } = useActionGuard();
+  const { handleCreditError } = useCreditErrorHandler();
   const invoices = getInvoiceListItems(invoicesListData);
   const invoicePagination = useMemo(() => {
     const total = Number(invoicesListData.total ?? 0) || 0;
@@ -411,6 +416,19 @@ const InvoicesPage = () => {
       ),
     [corporateScreens?.activeInvoiceConfiguration],
   );
+  const isRefNoEnabled = useMemo(
+    () =>
+      isRefNoEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const invoiceTableHeader = useMemo(() => {
+    const headers = isRefNoEnabled
+      ? baseInvoiceTableHeader
+      : baseInvoiceTableHeader.filter((column) => column.key !== "refNo");
+    return withIntegrationTableHeader(headers, showIntegrationColumn);
+  }, [isRefNoEnabled, showIntegrationColumn]);
   const invoiceEditContext = useMemo(
     () => ({
       ...buildCurrentUserIdentity({ user, corporateUserContext }),
@@ -709,7 +727,7 @@ const InvoicesPage = () => {
       setFormData(initializeFormData(extractedInvoice));
       toast.success("Invoice scanned successfully!");
     } catch (error) {
-      console.error("Scan error:", error);
+      if (handleCreditError(error)) return;
 
       const errorMessage =
         extractApiErrorDetail(error) ||
@@ -860,6 +878,8 @@ const InvoicesPage = () => {
         { duration: 4000 },
       );
     } catch (error) {
+      if (handleCreditError(error)) return true;
+
       const errorMessage = error?.data?.detail || "Bulk upload failed";
       toast.error(errorMessage, { duration: 6000 });
     } finally {
@@ -1873,6 +1893,9 @@ const InvoicesPage = () => {
           case "originalFileName":
             value = invoice.originalFileName || "-";
             break;
+          case "refNo":
+            value = invoice.refNo || "-";
+            break;
           case "grossAmount":
             value = formatInvoiceAmount(
               invoice,
@@ -2145,7 +2168,7 @@ const InvoicesPage = () => {
         <div className="relative w-full sm:w-64 sm:max-w-xs">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
-            placeholder="Search invoices..."
+            placeholder="Search vendor, invoice #, ref no, amount..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-10"
@@ -2274,6 +2297,7 @@ const InvoicesPage = () => {
         getCategoryNameById={getCategoryNameById}
         isCategoryFeatureEnabled={isCategoryFeatureEnabled}
         isCampaignFeatureEnabled={isCampaignFeatureEnabled}
+        showRefNoField={isRefNoEnabled}
         invoiceMandatoryFields={invoiceMandatoryFields}
         bulkEditOpen={bulkEditOpen}
         setBulkEditOpen={setBulkEditOpen}

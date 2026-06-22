@@ -31,6 +31,9 @@ const RBACContext = createContext({
   isCampaignFeatureEnabled: false,
   isPaymentBatchesFeatureEnabled: false,
   isConnectedBankingEnabled: false,
+  isBillingFeatureEnabled: false,
+  isTokenBasedSubscription: false,
+  subscriptionModel: "MONTHLY",
   isCorporateAdmin: false,
   backendPermissionsRaw: [],
   canAssignRoleSets: false,
@@ -88,6 +91,7 @@ const FALLBACK_DIRECT_ROLE_PERMISSIONS = {
   APPROVER: ["invoice-approver", "campaign-approve"],
   FINANCE: ["campaign-manage"],
   ACCOUNTANT: [
+    "credits-manage",
     "payments-manage",
     "payments-view",
     "payment-batches-manage",
@@ -356,6 +360,20 @@ export const RBACProvider = ({ children }) => {
     [enabledSectionsSet],
   );
 
+  const isTokenBasedSubscriptionEnabled = useMemo(
+    () => Boolean(corporateScreens?.isTokenBasedSubscription),
+    [corporateScreens?.isTokenBasedSubscription],
+  );
+
+  const isBillingFeatureEnabled = useMemo(
+    () =>
+      isTokenBasedSubscriptionEnabled &&
+      (isCorporateSectionEnabled("SETTINGS_BILLING") ||
+        isCorporateSectionEnabled("CREDITS_ALL") ||
+        isCorporateSectionEnabled("WALLET_ALL")),
+    [enabledSectionsSet, isTokenBasedSubscriptionEnabled],
+  );
+
   const hasAnyPermission = (permissionIds = []) => {
     if (!permissionIds || permissionIds.length === 0) return true;
     return permissionIds.some((permissionId) => hasPermission(permissionId));
@@ -393,7 +411,9 @@ export const RBACProvider = ({ children }) => {
       return (
         (hasPermission("settings-org") && isCorporateSectionEnabled("SETTINGS_ORG_DETAILS")) ||
         (hasAnyPermission(["settings-banking", "banking-full"]) && isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING")) ||
-        (hasPermission("settings-interaction") && isCorporateSectionEnabled("SETTINGS_INTEGRATIONS"))
+        (hasPermission("settings-interaction") && isCorporateSectionEnabled("SETTINGS_INTEGRATIONS")) ||
+        (hasAnyPermission(["credits-view", "credits-ledger", "credits-manage", "VIEW_WALLET", "VIEW_LEDGER", "MANAGE_BILLING"]) &&
+          isBillingFeatureEnabled)
       );
     }
 
@@ -434,6 +454,9 @@ export const RBACProvider = ({ children }) => {
     }
     if (actionKey === "settings.createOrganisation" || actionKey === "settings.updateOrganisation") {
       return isCorporateSectionEnabled("SETTINGS_ORG_DETAILS");
+    }
+    if (actionKey === "billing.requestTokens" || actionKey === "billing.updateSettings") {
+      return isBillingFeatureEnabled;
     }
     if (actionKey === "tax.calculateGst") {
       return isCorporateSectionEnabled("TAX_GST");
@@ -477,6 +500,9 @@ export const RBACProvider = ({ children }) => {
     isCampaignFeatureEnabled,
     isPaymentBatchesFeatureEnabled,
     isConnectedBankingEnabled,
+    isBillingFeatureEnabled,
+    isTokenBasedSubscription: isTokenBasedSubscriptionEnabled,
+    subscriptionModel: corporateScreens?.subscriptionModel || "MONTHLY",
     permissionLabels: PERMISSION_LABELS,
   };
 

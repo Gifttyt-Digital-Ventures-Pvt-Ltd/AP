@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useGetVendorsQuery } from "../../Services/apis/invoicesVendorsApi";
 import {
@@ -35,8 +35,9 @@ import {
 import { toast } from "sonner";
 import { useAuth } from "../../contexts/AuthContext";
 import { useRBAC } from "../../contexts/RBACContext";
-import { GitBranch, Shield, ShieldAlert, UserPlus, Users } from "lucide-react";
+import { GitBranch, Shield, ShieldAlert, Upload, UserPlus, Users } from "lucide-react";
 import {
+  BILLING_PERMISSION_IDS,
   CAMPAIGN_BACKEND_PERMISSION_TYPES,
   CAMPAIGN_PERMISSION_IDS,
   AP_MASTER_ADMIN_BACKEND_SCREEN,
@@ -60,6 +61,7 @@ import UsersTable from "./components/UsersTable";
 import ApprovalWorkflowTab from "./components/ApprovalWorkflowTab";
 import CategoriesTab from "./components/CategoriesTab";
 import UserDetailsDialog from "./components/UserDetailsDialog";
+import BulkUsersUploadDialog from "./components/BulkUsersUploadDialog";
 import { useActionGuard } from "../../hooks/useActionGuard";
 import { FULL_ACCESS_PERMISSION } from "../../constants/rbacPolicy";
 
@@ -68,6 +70,8 @@ const UserRoles = () => {
   const [accessDenied, setAccessDenied] = useState(false);
   const [roleDialogMode, setRoleDialogMode] = useState("view"); // view | edit | assignUsers
   const [inviteDialogOpen, setInviteDialogOpen] = useState(false);
+  const [bulkUsersUploadOpen, setBulkUsersUploadOpen] = useState(false);
+  const [userUploadOptionOpen, setUserUploadOptionOpen] = useState(false);
   const [addRoleDialogOpen, setAddRoleDialogOpen] = useState(false);
   const [viewRoleDialogOpen, setViewRoleDialogOpen] = useState(false);
   const [assignRoleSetsDialogOpen, setAssignRoleSetsDialogOpen] =
@@ -88,6 +92,7 @@ const UserRoles = () => {
     confirmLabel: "Confirm",
     onConfirm: null,
   });
+  const userUploadOptionRef = useRef(null);
 
   const [inviteForm, setInviteForm] = useState({
     name: "",
@@ -107,6 +112,7 @@ const UserRoles = () => {
     isCorporateSectionEnabled,
     isCategoryFeatureEnabled,
     isCampaignFeatureEnabled,
+    isBillingFeatureEnabled,
   } = useRBAC();
   const { guardAction } = useActionGuard();
   const navigate = useNavigate();
@@ -124,6 +130,7 @@ const UserRoles = () => {
   const canViewCategories =
     hasPermission("category-view") || hasPermission("category-manage");
   const canUseManageRoleCategories = isCorporateSectionEnabled("CATEGORY_ALL");
+  const canUseBillingSettings = isBillingFeatureEnabled;
   const canViewUsersTab =
     canViewUserRecords && isCorporateSectionEnabled("MANAGE_ROLE_USERS");
   const canViewRolesTab =
@@ -169,7 +176,8 @@ const UserRoles = () => {
     refetch: refetchVendors,
   } = useGetVendorsQuery(undefined, { skip: shouldSkipVendors });
 
-  const [addCorporateUsers] = useAddCorporateUsersMutation();
+  const [addCorporateUsers, { isLoading: addCorporateUsersLoading }] =
+    useAddCorporateUsersMutation();
   const [assignCustomRoleToEmployees] =
     useAssignCustomRoleToEmployeesMutation();
   const [removeCustomRoleFromEmployees] =
@@ -231,6 +239,27 @@ const UserRoles = () => {
     canViewWorkflowTab,
     canViewCategoriesTab,
   ]);
+
+  useEffect(() => {
+    if (!userUploadOptionOpen) return undefined;
+
+    const handlePointerDown = (event) => {
+      if (userUploadOptionRef.current?.contains(event.target)) return;
+      setUserUploadOptionOpen(false);
+    };
+
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") setUserUploadOptionOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [userUploadOptionOpen]);
 
   useEffect(() => {
     if (usersError) toast.error("Failed to load users");
@@ -321,6 +350,15 @@ const UserRoles = () => {
           return isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING");
         if (backendEntry.permissionType === "INTERACTION")
           return isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
+        if (
+          backendEntry.permissionType === "BILLING" ||
+          backendEntry.permissionType === "MANAGE_BILLING"
+        ) {
+          return canUseBillingSettings;
+        }
+      }
+      if (backendEntry.screen === "CREDITS") {
+        return canUseBillingSettings;
       }
       if (backendEntry.screen === "PAYMENTS") {
         return (
@@ -340,11 +378,18 @@ const UserRoles = () => {
       if (backendEntry.screen === "INTEGRATIONS" || backendEntry.screen === "ERP_INTEGRATIONS") {
         return isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
       }
+      if (backendEntry.screen === "NOTIFICATIONS") {
+        return (
+          isCorporateScreenAllowed("NOTIFICATIONS") &&
+          isCorporateSectionEnabled("NOTIFICATIONS")
+        );
+      }
       return isCorporateScreenAllowed(backendEntry.screen);
     },
     [
       isCampaignFeatureEnabled,
       canUseManageRoleCategories,
+      canUseBillingSettings,
       isCorporateScreenAllowed,
       isCorporateSectionEnabled,
     ],
@@ -401,12 +446,29 @@ const UserRoles = () => {
       keys.add("CATEGORY:MANAGE");
     }
 
+    if (canUseBillingSettings) {
+      keys.add("CREDITS:MANAGE");
+      keys.add("CREDITS:MANAGE_BILLING");
+      keys.add("SETTINGS:BILLING");
+      keys.add("SETTINGS:MANAGE_BILLING");
+    }
+
+    if (
+      isCorporateScreenAllowed("NOTIFICATIONS") &&
+      isCorporateSectionEnabled("NOTIFICATIONS")
+    ) {
+      keys.add("NOTIFICATIONS:VIEW");
+      keys.add("NOTIFICATIONS:MANAGE");
+    }
+
     return keys;
   }, [
     availableCustomRoleScreens,
     isCampaignFeatureEnabled,
     isCorporateSectionEnabled,
     canUseManageRoleCategories,
+    canUseBillingSettings,
+    isCorporateScreenAllowed,
   ]);
 
   const availablePermissionKeys = useMemo(() => {
@@ -452,12 +514,26 @@ const UserRoles = () => {
       keys.add("category-manage");
     }
 
+    if (canUseBillingSettings) {
+      keys.add("credits-manage");
+    }
+
+    if (
+      isCorporateScreenAllowed("NOTIFICATIONS") &&
+      isCorporateSectionEnabled("NOTIFICATIONS")
+    ) {
+      keys.add("notifications-view");
+      keys.add("notifications-manage");
+    }
+
     return keys;
   }, [
     availableCustomRoleScreens,
     isCampaignFeatureEnabled,
     isCorporateSectionEnabled,
     canUseManageRoleCategories,
+    canUseBillingSettings,
+    isCorporateScreenAllowed,
   ]);
 
   const filteredPermissionGroups = useMemo(() => {
@@ -468,10 +544,12 @@ const UserRoles = () => {
         if (!backendEntry) return false;
         if (!isMappedPermissionEntitled(backendEntry)) return false;
         const isCampaignPermission = CAMPAIGN_PERMISSION_IDS.includes(permission.id);
+        const isBillingPermission = BILLING_PERMISSION_IDS.includes(permission.id);
         if (
           availablePermissionKeys &&
           !availablePermissionKeys.has(permission.id) &&
-          !(isCampaignFeatureEnabled && isCampaignPermission)
+          !(isCampaignFeatureEnabled && isCampaignPermission) &&
+          !(canUseBillingSettings && isBillingPermission)
         ) {
           return false;
         }
@@ -482,6 +560,7 @@ const UserRoles = () => {
     return groups;
   }, [
     availablePermissionKeys,
+    canUseBillingSettings,
     isCampaignFeatureEnabled,
     isMappedPermissionEntitled,
   ]);
@@ -727,6 +806,77 @@ const UserRoles = () => {
             ? "Failed to update user"
             : "Failed to create user"),
       );
+    }
+  };
+
+  const handleBulkUsersParsed = async (rows = []) => {
+    if (!guardAction("roles.invite")) return false;
+
+    const normalizedRows = rows.map((row) => ({
+      name: String(row.name || "").trim(),
+      email: String(row.email || "").trim(),
+      mobile: String(row.mobile || "").trim(),
+      id: String(row.employeeCode || "").trim(),
+      grade: String(row.grade || "").trim(),
+      department: String(row.department || "").trim(),
+      role: String(row.role || "").trim(),
+      programType: "VENDOR_PAYMENTS",
+    }));
+
+    const seenEmails = new Set();
+    const duplicateEmails = new Set();
+    normalizedRows.forEach((row) => {
+      const email = row.email.toLowerCase();
+      if (!email) return;
+      if (seenEmails.has(email)) duplicateEmails.add(row.email);
+      seenEmails.add(email);
+    });
+
+    if (duplicateEmails.size > 0) {
+      return {
+        errors: [`Duplicate emails in file: ${Array.from(duplicateEmails).join(", ")}`],
+      };
+    }
+
+    try {
+      const response = await addCorporateUsers({
+        type: "EMPLOYEES",
+        employees: normalizedRows,
+      }).unwrap();
+
+      const failedTotal = Number(response?.failed?.total || 0);
+      const skippedTotal = Number(response?.skipped?.total || 0);
+      const totalRows = normalizedRows.length;
+      const createdTotal = Math.max(totalRows - failedTotal - skippedTotal, 0);
+
+      if (failedTotal > 0) {
+        const failedReasons =
+          response?.failed?.details?.map((detail) => detail?.reason).filter(Boolean) || [];
+        return {
+          errors: failedReasons.length
+            ? failedReasons
+            : [`${failedTotal} users failed to upload`],
+        };
+      }
+
+      if (skippedTotal > 0) {
+        toast.info(`${skippedTotal} users were skipped because they already exist`);
+      }
+
+      if (createdTotal > 0) {
+        toast.success(`${createdTotal} users uploaded successfully`);
+      }
+      setBulkUsersUploadOpen(false);
+      refetchUsers();
+      return { success: true };
+    } catch (error) {
+      return {
+        errors: [
+          error?.data?.detail ||
+            error?.data?.message ||
+            "Failed to upload users",
+        ],
+      };
     }
   };
 
@@ -1071,10 +1221,52 @@ const UserRoles = () => {
             Refresh
           </RefreshButton>
           {canManageUserRecords && canViewUsersTab && activeTab === "users" && (
-            <Button onClick={openAddUserDialog} data-testid="invite-user-btn">
-              <UserPlus className="h-4 w-4 mr-2" />
-              Add User
-            </Button>
+            <div className="relative" ref={userUploadOptionRef}>
+              <Button
+                onClick={() => setUserUploadOptionOpen((prev) => !prev)}
+                data-testid="invite-user-btn"
+              >
+                <UserPlus className="h-4 w-4 mr-2" />
+                Add User
+              </Button>
+              {userUploadOptionOpen && (
+                <div className="absolute right-0 top-full z-50 mt-2 w-72 rounded-md border border-border bg-background p-2 shadow-md">
+                  <button
+                    type="button"
+                    className="flex w-full items-start gap-3 rounded-sm px-3 py-2.5 text-left hover:bg-muted"
+                    onClick={() => {
+                      setUserUploadOptionOpen(false);
+                      openAddUserDialog();
+                    }}
+                  >
+                    <UserPlus className="mt-0.5 h-4 w-4 text-primary" />
+                    <span>
+                      <span className="block text-sm font-medium">Add one user</span>
+                      <span className="block text-xs text-muted-foreground">
+                        Create an employee profile manually
+                      </span>
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-start gap-3 rounded-sm px-3 py-2.5 text-left hover:bg-muted"
+                    onClick={() => {
+                      setUserUploadOptionOpen(false);
+                      setBulkUsersUploadOpen(true);
+                    }}
+                    data-testid="bulk-users-upload-btn"
+                  >
+                    <Upload className="mt-0.5 h-4 w-4 text-primary" />
+                    <span>
+                      <span className="block text-sm font-medium">Import users from sheet</span>
+                      <span className="block text-xs text-muted-foreground">
+                        Upload Excel or CSV for bulk creation
+                      </span>
+                    </span>
+                  </button>
+                </div>
+              )}
+            </div>
           )}
         </div>
       </div>
@@ -1158,6 +1350,13 @@ const UserRoles = () => {
         setInviteForm={setInviteForm}
         mode={inviteDialogMode}
         handleInviteUser={handleInviteUser}
+      />
+
+      <BulkUsersUploadDialog
+        open={bulkUsersUploadOpen}
+        onOpenChange={setBulkUsersUploadOpen}
+        onDataParsed={handleBulkUsersParsed}
+        disabled={addCorporateUsersLoading}
       />
 
       <AddRoleDialog

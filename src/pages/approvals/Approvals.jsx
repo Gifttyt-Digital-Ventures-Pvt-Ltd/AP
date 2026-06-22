@@ -39,6 +39,9 @@ import {
 } from '../../utils/approvalWorkflow';
 import { getApprovalProgress } from './utils/approvalProgress';
 import { useApprovalsInvoiceEdit } from './hooks/useApprovalsInvoiceEdit';
+import {
+  isRefNoEnabled as isRefNoEnabledForCorporate,
+} from '../../utils/invoiceConfiguration';
 
 const safeFormatDate = (value, pattern = 'dd MMM yy') => {
   if (!value) return '-';
@@ -48,7 +51,7 @@ const safeFormatDate = (value, pattern = 'dd MMM yy') => {
 
 const Approvals = () => {
   const { user } = useAuth();
-  const { isCategoryFeatureEnabled, isCampaignFeatureEnabled } = useRBAC();
+  const { isCategoryFeatureEnabled, isCampaignFeatureEnabled, corporateScreens } = useRBAC();
   const { canPerformAction } = useActionGuard();
   const canCheckInvoices = canPerformAction('invoices.check');
   const canApproveInvoices = canPerformAction('invoices.approve');
@@ -125,6 +128,13 @@ const Approvals = () => {
   const [actionType, setActionType] = useState('');
   const canPerformApprovalActions = canApproveInvoices || canCheckInvoices;
 
+  const isRefNoEnabled = useMemo(
+    () =>
+      isRefNoEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
 
   const normalizeInvoice = (invoice = {}) => toInvoiceUiPayload(invoice);
 
@@ -438,6 +448,7 @@ const Approvals = () => {
             visiblePageNumbers={visibleAllInvoicePageNumbers}
             onPageChange={goToAllInvoicesPage}
             isLoading={allInvoicesFetching}
+            showRefNoField={isRefNoEnabled}
             getStatusBadgeClass={getStatusBadgeClass}
             formatStatus={formatStatus}
             getApprovalProgress={getApprovalProgress}
@@ -486,6 +497,7 @@ const Approvals = () => {
         isCategoryFeatureEnabled={isCategoryFeatureEnabled}
         showCampaignField={isCampaignFeatureEnabled}
         isCampaignFeatureEnabled={isCampaignFeatureEnabled}
+        showRefNoField={isRefNoEnabled}
         findVendorByName={findVendorByName}
         findVendorById={findVendorById}
       />

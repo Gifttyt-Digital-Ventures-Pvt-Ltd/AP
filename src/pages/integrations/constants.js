@@ -20,7 +20,7 @@ export const OBJECT_LABELS = {
 export const FALLBACK_ZOHO_PROVIDER = {
   provider: "ZOHO_BOOKS",
   name: "Zoho Books",
-  description: "OAuth connection for vendors, chart of accounts, bills, payments, journals, and ledgers.",
+  description: "OAuth connection for vendors, chart of accounts, bills, transactions, journals, and ledgers.",
   auth: {
     type: "OAUTH2",
     requiresDataCenter: true,

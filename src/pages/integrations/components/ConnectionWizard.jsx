@@ -19,6 +19,7 @@ import {
   useGetIntegrationProvidersQuery,
   useGetZohoConnectionStatusQuery,
   useGetZohoOrganizationsQuery,
+  useTriggerIntegrationSyncMutation,
 } from "../../../Services/apis/integrationsApi";
 import { useActionGuard } from "../../../hooks/useActionGuard";
 import { Badge } from "../../../components/ui/badge";
@@ -75,6 +76,7 @@ const ConnectionWizard = () => {
   const { data: connectionsResponse } = useGetIntegrationConnectionsQuery();
   const [createConnection, { isLoading: creating }] = useCreateZohoConnectionMutation();
   const [bindOrganization, { isLoading: bindingOrg }] = useBindZohoOrganizationMutation();
+  const [triggerSync] = useTriggerIntegrationSyncMutation();
   const providers = useMemo(() => normalizeProviders(providersResponse), [providersResponse]);
   const providerManifest =
     providers.find((item) => getProviderKey(item) === provider) || FALLBACK_ZOHO_PROVIDER;
@@ -136,7 +138,7 @@ const ConnectionWizard = () => {
   useEffect(() => {
     setPollOAuthStatus(shouldPollOAuthStatus(connectionStatus));
   }, [connectionStatus]);
-  const canLoadOrganizations = connectionId && !["ERROR", "DISCONNECTED"].includes(connectionStatus);
+  const canLoadOrganizations = Boolean(connectionId && connectionStatus === "CONNECTED");
   const { data: organizationsResponse, isFetching: orgsFetching } = useGetZohoOrganizationsQuery(connectionId, {
     skip: !canLoadOrganizations,
   });
@@ -201,7 +203,12 @@ const ConnectionWizard = () => {
     try {
       await bindOrganization({ connectionId, organizationId: selectedOrg }).unwrap();
       sessionStorage.removeItem(ZOHO_OAUTH_SESSION_KEY);
-      toast.success("Zoho organization selected");
+      try {
+        await triggerSync({ connectionId }).unwrap();
+      } catch {
+        // Initial sync can be retried from the dashboard if the backend queue is unavailable.
+      }
+      toast.success("Zoho organization selected. Initial sync started.");
       navigate(`/integrations/${connectionId}`);
     } catch (error) {
       toast.error(getErrorText(error, "Failed to bind organization"));
@@ -286,7 +293,13 @@ const ConnectionWizard = () => {
                 </p>
               )}
               {useByoCredentials ? (
-                <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-4">
+                  <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+                    <li>Create a Server-based Application in the Zoho API Console.</li>
+                    <li>Add the authorized redirect URI shown below.</li>
+                    <li>Copy the generated Client ID and Client Secret into Optifii.</li>
+                  </ol>
+                  <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
                     <Label>Client ID</Label>
                     <Input value={clientId} onChange={(event) => setClientId(event.target.value)} />
@@ -310,6 +323,7 @@ const ConnectionWizard = () => {
                     <p className="text-xs text-muted-foreground">
                       Add this exact URI in the Zoho API Console before authorizing. Optifii stores credentials server-side only.
                     </p>
+                  </div>
                   </div>
                 </div>
               ) : (
@@ -393,7 +407,20 @@ const ConnectionWizard = () => {
               <CardTitle className="text-base">Organization</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {orgsFetching ? (
+              {!connectionId ? (
+                <p className="text-sm text-muted-foreground">
+                  Complete Zoho authorization to load organizations for this connection.
+                </p>
+              ) : connectionStatus === "PENDING" || connectionStatus === "AUTHORIZING" ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Waiting for Zoho authorization to complete.
+                </div>
+              ) : connectionStatus !== "CONNECTED" ? (
+                <p className="text-sm text-muted-foreground">
+                  Organizations are available after the connection reaches Connected status.
+                </p>
+              ) : orgsFetching ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Loading organizations
@@ -424,9 +451,7 @@ const ConnectionWizard = () => {
                 </>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {connectionId
-                    ? "Organizations appear here after Zoho authorization succeeds."
-                    : "Start authorization to load Zoho organizations."}
+                  No Zoho organizations were returned for this account. Verify the connected Zoho user has access to at least one Books organization.
                 </p>
               )}
             </CardContent>

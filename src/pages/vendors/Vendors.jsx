@@ -13,6 +13,7 @@ import { Search, Plus, Pencil, Trash2, Eye, X, Check, RotateCcw } from 'lucide-r
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { useActionGuard } from '../../hooks/useActionGuard';
+import { useCreditErrorHandler } from '../../contexts/CreditErrorContext';
 import { useRBAC } from '../../contexts/RBACContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useGetCorporateUserDetailsQuery } from '../../Services/apis/corporateApi';
@@ -160,6 +161,7 @@ const Vendors = () => {
   const { user } = useAuth();
   const { data: corporateUserContext = null } = useGetCorporateUserDetailsQuery();
   const { guardAction, canPerformAction } = useActionGuard();
+  const { handleCreditError } = useCreditErrorHandler();
   const { corporateScreens, isCorporateAdmin } = useRBAC();
   const { showIntegrationColumn } = useZohoIntegrationActive();
   const activeVendorFields = corporateScreens?.activeVendorFields ?? [];
@@ -295,6 +297,7 @@ const Vendors = () => {
       setDialogOpen(false);
       resetForm();
     } catch (error) {
+      if (handleCreditError(error)) return;
       toast.error(extractApiErrorDetail(error) || 'Failed to save vendor');
     }
   };
@@ -346,7 +349,10 @@ const Vendors = () => {
       }
       setMultipleVendorUploadOpen(false);
       return { errors: [] };
-    } catch (_error) {
+    } catch (error) {
+      if (handleCreditError(error)) {
+        return { errors: ['Insufficient tokens or action unavailable'] };
+      }
       return { errors: ['Failed to parse or upload vendor file'] };
     }
   };

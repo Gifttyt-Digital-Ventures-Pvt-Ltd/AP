@@ -177,6 +177,7 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
     ...invoice,
     currency: normalizeCurrencyCode(invoice.currency ?? invoice.currencyCode ?? DEFAULT_CURRENCY),
     invoiceNumber: pickInvoiceField(invoice, "invoiceNumber", "invoice_number", ""),
+    refNo: pickInvoiceField(invoice, "refNo", "ref_no", "") || null,
     vendorId: pickInvoiceField(invoice, "vendorId", "vendor_id", ""),
     vendorName: pickInvoiceField(invoice, "vendorName", "vendor_name", ""),
     lineItems: Array.isArray(lineItemsSource)

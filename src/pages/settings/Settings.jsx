@@ -19,6 +19,7 @@ import TallyConfigDialog from './components/TallyConfigDialog';
 import ZohoIntegrationCard from './components/ZohoIntegrationCard';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useRBAC } from '../../contexts/RBACContext';
+import CreditsPage from '../credits/CreditsPage';
 
 // Tally Logo Component
 const TallyLogo = () => (
@@ -40,7 +41,7 @@ const SYNC_DATA_ITEMS = [
 ];
 
 const Settings = () => {
-  const { hasAnyPermission, isCorporateSectionEnabled } = useRBAC();
+  const { hasAnyPermission, isCorporateSectionEnabled, isBillingFeatureEnabled } = useRBAC();
   const canViewBankingSettings =
     hasAnyPermission(['settings-banking', 'banking-full']) &&
     isCorporateSectionEnabled('SETTINGS_CONNECTED_BANKING');
@@ -50,13 +51,22 @@ const Settings = () => {
   const canViewIntegrationsSettings =
     hasAnyPermission(['settings-interaction']) &&
     isCorporateSectionEnabled('SETTINGS_INTEGRATIONS');
+  const canViewBillingSettings = hasAnyPermission([
+    'credits-view',
+    'credits-ledger',
+    'credits-manage',
+    'VIEW_WALLET',
+    'VIEW_LEDGER',
+    'MANAGE_BILLING',
+  ]) && isBillingFeatureEnabled;
   const availableSettingsTabs = useMemo(() => {
     const tabs = [];
     if (canViewOrganisationSettings) tabs.push('organisation');
     if (canViewBankingSettings) tabs.push('banking');
+    if (canViewBillingSettings) tabs.push('billing');
     if (canViewIntegrationsSettings) tabs.push('integrations');
     return tabs;
-  }, [canViewBankingSettings, canViewIntegrationsSettings, canViewOrganisationSettings]);
+  }, [canViewBankingSettings, canViewBillingSettings, canViewIntegrationsSettings, canViewOrganisationSettings]);
   const [activeSettingsTab, setActiveSettingsTab] = useState('');
   const {
     data: bankAccountsData = [],
@@ -325,6 +335,9 @@ const Settings = () => {
           )}
           {canViewBankingSettings && (
             <TabsTrigger value="banking" data-testid="tab-banking">Connected Banking</TabsTrigger>
+          )}
+          {canViewBillingSettings && (
+            <TabsTrigger value="billing" data-testid="tab-billing">Billing</TabsTrigger>
           )}
           {canViewIntegrationsSettings && (
             <TabsTrigger value="integrations" data-testid="tab-integrations">Integrations</TabsTrigger>
@@ -684,6 +697,10 @@ const Settings = () => {
               )}
             </div>
           </div>
+        </TabsContent>}
+
+        {canViewBillingSettings && <TabsContent value="billing">
+          <CreditsPage />
         </TabsContent>}
 
         {canViewIntegrationsSettings && <TabsContent value="integrations">
