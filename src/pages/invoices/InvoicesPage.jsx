@@ -683,7 +683,7 @@ const InvoicesPage = () => {
     setActiveTab("list");
   };
 
-  const handleSingleInvoiceFile = async (file) => {
+  const handleSingleInvoiceFile = async (file, uploadContext = {}) => {
     if (!guardAction("invoices.scan")) return false;
     if (!file) return false;
 
@@ -695,6 +695,10 @@ const InvoicesPage = () => {
 
     const formDataUpload = new FormData();
     formDataUpload.append("file", file);
+    if (uploadContext.billingGstin) {
+      formDataUpload.append("billingGstin", uploadContext.billingGstin);
+      formDataUpload.append("billing_gstin", uploadContext.billingGstin);
+    }
 
     try {
       const response = await scanInvoice(formDataUpload).unwrap();
@@ -768,7 +772,7 @@ const InvoicesPage = () => {
     return true;
   };
 
-  const handleBulkInvoiceFiles = async (filesInput) => {
+  const handleBulkInvoiceFiles = async (filesInput, uploadContext = {}) => {
     if (!guardAction("invoices.bulkUpload")) return false;
     const files = Array.from(filesInput || []);
     if (!files || files.length === 0) return false;
@@ -788,6 +792,10 @@ const InvoicesPage = () => {
     files.forEach((file) => {
       formDataUpload.append("files", file);
     });
+    if (uploadContext.billingGstin) {
+      formDataUpload.append("billingGstin", uploadContext.billingGstin);
+      formDataUpload.append("billing_gstin", uploadContext.billingGstin);
+    }
 
     toast.info(`Uploading ${files.length} invoices...`, { duration: 3000 });
 
@@ -889,15 +897,15 @@ const InvoicesPage = () => {
     return true;
   };
 
-  const handleInvoiceFilesUpload = async (filesInput) => {
+  const handleInvoiceFilesUpload = async (filesInput, uploadContext = {}) => {
     const files = Array.from(filesInput || []).filter(Boolean);
     if (files.length === 0) return false;
 
     if (files.length === 1) {
-      return handleSingleInvoiceFile(files[0]);
+      return handleSingleInvoiceFile(files[0], uploadContext);
     }
 
-    return handleBulkInvoiceFiles(files);
+    return handleBulkInvoiceFiles(files, uploadContext);
   };
 
   const handleCreateBulkInvoices = async (mode = "all") => {
@@ -1291,9 +1299,13 @@ const InvoicesPage = () => {
     return true;
   };
 
-  const validateSavedInvoiceEdit = (payload) => {
+  const validateSavedInvoiceEdit = (payload, { requireBillingGst = false } = {}) => {
     if (!payload?.vendorName?.trim()) {
       toast.error("Vendor name is required");
+      return false;
+    }
+    if (requireBillingGst && !String(payload.billingGstin || "").trim()) {
+      toast.error("Select a billing GSTIN from Organisation Details before submitting invoice");
       return false;
     }
     if (!payload.vendorId && !payload.vendorRequestSubmitted) {
@@ -1516,6 +1528,10 @@ const InvoicesPage = () => {
   const handleAddInvoice = async () => {
     if (!guardAction("invoices.create")) return;
     if (!formData) return;
+    if (uploadedFile && !String(formData.billingGstin || "").trim()) {
+      toast.error("Select a billing GSTIN from Organisation Details before adding invoice");
+      return;
+    }
 
     const totals = calculateTotals(formData.lineItems);
     const createStatus = resolveInitialInvoiceStatus({
@@ -1668,8 +1684,12 @@ const InvoicesPage = () => {
     const isSavedDraft = isSavedInvoiceStatus(selectedInvoice.status);
     if (isSavedDraft) {
       if (!validateSavedInvoiceEdit(formData)) return;
-    } else if (!validateMandatoryPayload(formData)) {
-      return;
+    } else {
+      if (!String(formData.billingGstin || "").trim()) {
+        toast.error("Select a billing GSTIN from Organisation Details before updating invoice");
+        return;
+      }
+      if (!validateMandatoryPayload(formData)) return;
     }
 
     try {
@@ -1704,11 +1724,15 @@ const InvoicesPage = () => {
     if (!guardAction("invoices.update")) return;
     if (!selectedInvoice || !formData) return;
     if (!isSavedInvoiceStatus(selectedInvoice.status)) return;
+    if (!String(formData.billingGstin || "").trim()) {
+      toast.error("Select a billing GSTIN from Organisation Details before submitting invoice");
+      return;
+    }
     if (!canForwardSavedInvoice(selectedInvoice, invoiceEditContext)) {
       toast.error("You do not have permission to submit this invoice");
       return;
     }
-    if (!validateSavedInvoiceEdit(formData)) return;
+    if (!validateSavedInvoiceEdit(formData, { requireBillingGst: true })) return;
 
     try {
       await updateInvoice({
@@ -1801,7 +1825,8 @@ const InvoicesPage = () => {
                     formData,
                     invoiceMandatoryFields,
                     mandatoryFieldOptions,
-                  ))
+                  ) &&
+                  Boolean(formData?.billingGstin))
             : canManageInvoices &&
               !invoiceMandatoryFieldsLoading &&
               isInvoiceMandatoryFieldsSatisfied(
@@ -1809,6 +1834,7 @@ const InvoicesPage = () => {
                 invoiceMandatoryFields,
                 mandatoryFieldOptions,
               ) &&
+              (!uploadedFile || Boolean(formData?.billingGstin)) &&
               (Boolean(formData?.vendorId) ||
                 Boolean(formData?.vendorRequestSubmitted))
         }
@@ -1828,6 +1854,8 @@ const InvoicesPage = () => {
         INVOICE_SOURCES={INVOICE_SOURCES}
         LEDGER_OPTIONS={LEDGER_OPTIONS}
         TAX_RATES={TAX_RATES}
+        showBillingGst={isEdit || Boolean(uploadedFile)}
+        requireBillingGst={(isEdit && !isSavedDraft) || Boolean(uploadedFile)}
       />
     );
   };
@@ -2273,6 +2301,7 @@ const InvoicesPage = () => {
         scanning={scanning}
         renderInvoiceForm={renderInvoiceForm}
         handleAddInvoice={handleAddInvoice}
+        canAddInvoice={Boolean(formData?.billingGstin)}
       />
 
       <InvoicesDialogs

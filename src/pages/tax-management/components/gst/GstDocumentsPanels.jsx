@@ -1,14 +1,16 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
+  ArrowLeft,
   ArrowUpDown,
   BarChart2,
+  Calendar,
   CheckCircle2,
+  Clock,
   Eye,
   FileText,
   Loader2,
   Play,
-  RefreshCw,
 } from 'lucide-react';
 import { Button } from '../../../../components/ui/button';
 import { Input } from '../../../../components/ui/input';
@@ -17,12 +19,28 @@ import { cn } from '../../../../lib/utils';
 import {
   GST_DOC_FY_OPTIONS,
   GST_DOC_MONTHS,
-  GST_VENDOR_MASTER,
-  MOCK_AP_INVOICE_COUNTS,
-  MOCK_GSTR2A_B2B_API,
-  MOCK_GSTR2A_DOCUMENTS_API,
-  MOCK_GSTR2B_STATEMENT,
 } from '../../data/taxStaticData';
+import { useOrganisationGstCredentials } from '../../hooks/useOrganisationGstCredentials';
+import { useGstVendors } from '../../hooks/useGstVendors';
+import { useGstTaxpayerSession } from '../../hooks/useGstTaxpayerSession';
+import {
+  useReconcileGstr2aMutation,
+  useFetchGstr2aDocumentsMutation,
+  useFetchGstr2bDocumentsMutation,
+} from '../../../../Services/apis/taxApi';
+import { buildGstPortalFetchCredentials } from '../../../../utils/organisationGst';
+import {
+  buildGstrDocumentsRequestPayload,
+  buildReconcileRequestPayload,
+  humanizeGstEnum,
+  isAmendedGstInvoice,
+  isGstMatchStatus,
+  mapHistoryEntriesToSnapshots,
+} from '../../utils/gstApiMappers';
+import OrgGstCredentialFields from './OrgGstCredentialFields';
+import GstPortalOtpDialog from './GstPortalOtpDialog';
+import { getApiErrorMessage } from '../../hooks/useGstTaxpayerSession';
+import { toast } from 'sonner';
 import { formatCurrency } from '../../utils/taxFormatting';
 import {
   TaxAlertBanner,
@@ -34,21 +52,23 @@ import {
   TaxGstAvailBadge,
   TaxMiniMetric,
   TaxPagination,
+  TaxProgressRow,
   TaxSectionCard,
   TaxSelect,
   TaxStatusBadge,
   TaxViewFilterPills,
 } from '../TaxUi';
 
-const getVendor = (id) => GST_VENDOR_MASTER.find((vendor) => vendor.id === id);
-
-const docTotalGst = (doc) =>
-  Number(doc.cgst || 0) + Number(doc.sgst || 0) + Number(doc.igst || 0) + Number(doc.cess || 0);
+const docTotalGst = (doc) => {
+  const split = Number(doc.cgst || 0) + Number(doc.sgst || 0) + Number(doc.igst || 0) + Number(doc.cess || 0);
+  if (split > 0) return split;
+  return Number(doc.totalGstAmount ?? doc.gstAmount ?? 0);
+};
 
 const b2bRowClass = (row) => {
-  if (row.match === 'Missing in AP' || row.match === 'Missing in GST') return 'bg-red-50/80';
-  if (row.match === 'Amount Mismatch') return 'bg-amber-50/80';
-  if (row.amend !== 'No Amendment') return 'bg-amber-50/40';
+  if (isGstMatchStatus(row, 'MISSING_IN_OPTIFII') || isGstMatchStatus(row, 'MISSING_IN_GSTR2A')) return 'bg-red-50/80';
+  if (isGstMatchStatus(row, 'MISMATCHED') || isGstMatchStatus(row, 'AMOUNT_MISMATCH')) return 'bg-amber-50/80';
+  if (isAmendedGstInvoice(row)) return 'bg-amber-50/40';
   return '';
 };
 
@@ -75,7 +95,7 @@ const GstFetchLoading = ({ message, subMessage }) => (
 
 const B2bInvoiceDrawerContent = ({ record, vendor }) => {
   const totalGst = docTotalGst(record);
-  const amendments = record.amendments || [];
+  const amendments = record.amendmentHistory?.amendments ?? [];
   const hasAmends = amendments.length > 0;
 
   return (
@@ -87,15 +107,15 @@ const B2bInvoiceDrawerContent = ({ record, vendor }) => {
           <p className="font-mono text-xs text-muted-foreground">{vendor?.gstin}</p>
           <TaxDetailGrid
             items={[
-              { label: 'Invoice Number', value: record.inv_num, mono: true },
-              { label: 'Invoice Date', value: record.inv_date },
-              { label: 'ITC Eligibility', value: record.itc },
-              { label: 'Amendment Status', value: record.amend },
+              { label: 'Invoice Number', value: record.invoiceNumber, mono: true },
+              { label: 'Invoice Date', value: record.invoiceDate },
+              { label: 'ITC Eligibility', value: humanizeGstEnum(record.itcEligibility) },
+              { label: 'Amendment Status', value: humanizeGstEnum(record.amendmentStatus) },
             ]}
           />
           <div className="mt-3 space-y-1 text-sm">
             {[
-              ['Taxable Value', formatCurrency(record.taxable)],
+              ['Taxable Value', formatCurrency(record.taxableValue)],
               ['CGST', formatCurrency(record.cgst)],
               ['SGST', formatCurrency(record.sgst)],
               ['IGST', formatCurrency(record.igst)],
@@ -125,11 +145,11 @@ const B2bInvoiceDrawerContent = ({ record, vendor }) => {
           <div className="space-y-3">
             {amendments.map((entry, index) => (
               <div key={index} className="rounded-md border border-amber-200 bg-amber-50/60 p-3 text-sm">
-                <p className="font-semibold text-amber-900">Amendment {index + 1} · {entry.date}</p>
-                <p className="mt-1 text-amber-900/90">{entry.reason}</p>
+                <p className="font-semibold text-amber-900">Amendment {index + 1} · {entry.invoiceDate ?? entry.date}</p>
+                <p className="mt-1 text-amber-900/90">{entry.reason ?? entry.amend_note ?? ''}</p>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                  <p>Taxable: {formatCurrency(entry.taxable_orig)} → <strong>{formatCurrency(entry.taxable_new)}</strong></p>
-                  <p>GST: {formatCurrency(entry.gst_orig)} → <strong>{formatCurrency(entry.gst_new)}</strong></p>
+                  <p>Taxable: {formatCurrency(entry.originalTaxableValue ?? entry.taxable_orig)} → <strong>{formatCurrency(entry.taxableValue ?? entry.taxable_new)}</strong></p>
+                  <p>GST: {formatCurrency(entry.originalTotalGstAmount ?? entry.gst_orig)} → <strong>{formatCurrency(entry.gstAmount ?? entry.gst_new)}</strong></p>
                 </div>
               </div>
             ))}
@@ -139,22 +159,22 @@ const B2bInvoiceDrawerContent = ({ record, vendor }) => {
 
       <div>
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">3 · AP Reconciliation</p>
-        <div className={cn('rounded-md border p-4', record.match === 'Matched' ? 'border-green-200 bg-green-50/60' : 'border-amber-200 bg-amber-50/60')}>
+        <div className={cn('rounded-md border p-4', isGstMatchStatus(record, 'MATCHED') ? 'border-green-200 bg-green-50/60' : 'border-amber-200 bg-amber-50/60')}>
           <div className="mb-3 flex items-center gap-2">
             <span className="text-sm">Status:</span>
-            <TaxStatusBadge status={record.match} />
+            <TaxStatusBadge status={record.matchStatus} />
           </div>
-          {record.ap_inv ? (
+          {record.apInvoiceNumber ? (
             <TaxDetailGrid
               items={[
-                { label: 'AP Invoice', value: record.ap_inv, mono: true },
+                { label: 'AP Invoice', value: record.apInvoiceNumber, mono: true },
                 { label: 'GST Portal Amount', value: formatCurrency(totalGst) },
-                { label: 'Amount Difference', value: record.ap_diff > 0 ? formatCurrency(record.ap_diff) : 'No variance' },
+                { label: 'Amount Difference', value: Number(record.amountVariance ?? record.ap_diff) > 0 ? formatCurrency(record.amountVariance ?? record.ap_diff) : 'No variance' },
               ]}
             />
           ) : (
             <p className="text-sm">
-              {record.match === 'Missing in AP'
+              {isGstMatchStatus(record, 'MISSING_IN_OPTIFII')
                 ? 'This invoice is in the GST portal but has no corresponding record in AP. Verify with the finance team.'
                 : 'This invoice is in AP but has not been uploaded to the GST portal by the supplier.'}
             </p>
@@ -167,7 +187,7 @@ const B2bInvoiceDrawerContent = ({ record, vendor }) => {
 
 const Gst2ADocDrawerContent = ({ doc, vendor }) => {
   const totalGst = docTotalGst(doc);
-  const vendorInfo = vendor || getVendor(doc.vendor_id);
+  const vendorInfo = vendor || { name: doc.vendor, gstin: doc.gstin ?? doc.supplierGstin };
 
   return (
     <div className="space-y-4">
@@ -176,24 +196,24 @@ const Gst2ADocDrawerContent = ({ doc, vendor }) => {
         <p className="mt-2 font-semibold">{vendorInfo?.name ?? 'All Vendors'}</p>
         <p className="font-mono text-xs text-muted-foreground">{vendorInfo?.gstin ?? '—'}</p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <TaxStatusBadge status={doc.doc_type} />
-          <TaxStatusBadge status={doc.doc_status} />
-          <TaxStatusBadge status={doc.amend_rev} />
+          <TaxStatusBadge status={doc.documentType} />
+          <TaxStatusBadge status={doc.documentStatus} />
+          <TaxStatusBadge status={doc.amendmentStatus} />
         </div>
       </div>
 
       <TaxDetailGrid
         items={[
-          { label: 'Document Number', value: doc.doc_num, mono: true },
-          { label: 'Document Date', value: doc.doc_date },
-          { label: 'Document Type', value: doc.doc_type },
+          { label: 'Document Number', value: doc.invoiceNumber, mono: true },
+          { label: 'Document Date', value: doc.documentDate },
+          { label: 'Document Type', value: doc.documentType },
           { label: 'Source', value: 'GST Portal (GSTR-2A)' },
         ]}
       />
 
       <div className="space-y-1 text-sm">
         {[
-          ['Taxable Value', formatCurrency(doc.taxable)],
+          ['Taxable Value', formatCurrency(doc.taxableValue)],
           ['CGST', formatCurrency(doc.cgst)],
           ['SGST', formatCurrency(doc.sgst)],
           ['IGST', formatCurrency(doc.igst)],
@@ -210,32 +230,17 @@ const Gst2ADocDrawerContent = ({ doc, vendor }) => {
         </div>
       </div>
 
-      {doc.amend_history?.length ? (
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Amendment History</p>
-          <div className="space-y-2">
-            {doc.amend_history.map((entry, index) => (
-              <div key={index} className="rounded-md border border-amber-200 bg-amber-50/60 p-3 text-sm">
-                <p className="font-semibold text-amber-900">{entry.label} · {entry.date}</p>
-                <p className="mt-1 text-amber-900/90">{entry.note}</p>
-                <p className="mt-1">Taxable: {formatCurrency(entry.taxable)} · GST: {formatCurrency(entry.gst)}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      ) : null}
-
-      <div className={cn('rounded-md border p-4', doc.ap_match === 'Matched' ? 'border-green-200 bg-green-50/60' : 'border-amber-200 bg-amber-50/60')}>
+      <div className={cn('rounded-md border p-4', doc.apStatus === 'Matched' ? 'border-green-200 bg-green-50/60' : 'border-amber-200 bg-amber-50/60')}>
         <div className="mb-2 flex items-center gap-2">
           <span className="text-sm">AP Match:</span>
-          <TaxStatusBadge status={doc.ap_match} />
+          <TaxStatusBadge status={doc.apStatus} />
         </div>
-        {doc.ap_inv_num ? (
+        {doc.apInvoiceNumber ? (
           <TaxDetailGrid
             items={[
-              { label: 'AP Invoice', value: doc.ap_inv_num, mono: true },
-              { label: 'AP Amount', value: formatCurrency(doc.ap_amount) },
-              { label: 'ITC Eligibility', value: doc.itc },
+              { label: 'AP Invoice', value: doc.apInvoiceNumber, mono: true },
+              { label: 'AP Amount', value: formatCurrency(doc.apAmount) },
+              { label: 'ITC Eligibility', value: humanizeGstEnum(doc.itcEligibility) },
             ]}
           />
         ) : (
@@ -247,8 +252,9 @@ const Gst2ADocDrawerContent = ({ doc, vendor }) => {
 };
 
 const Gst2BDocDrawerContent = ({ doc }) => {
-  const vendor = getVendor(doc.vendor_id);
+  const vendor = { name: doc.vendor, gstin: doc.gstin ?? doc.supplierGstin };
   const totalGst = docTotalGst(doc);
+  const itcStatus = doc.itcEligibility ?? doc.itc_status;
 
   return (
     <div className="space-y-4">
@@ -258,9 +264,9 @@ const Gst2BDocDrawerContent = ({ doc }) => {
         <p className="font-mono text-xs text-muted-foreground">{vendor?.gstin ?? '—'}</p>
         <TaxDetailGrid
           items={[
-            { label: 'Document Number', value: doc.doc_num, mono: true },
-            { label: 'Document Date', value: doc.doc_date },
-            { label: 'Document Type', value: doc.doc_type },
+            { label: 'Document Number', value: doc.invoiceNumber, mono: true },
+            { label: 'Document Date', value: doc.documentDate },
+            { label: 'Document Type', value: doc.documentType },
             { label: 'Source', value: 'GSTR-2B (Finalized)' },
           ]}
         />
@@ -268,7 +274,7 @@ const Gst2BDocDrawerContent = ({ doc }) => {
 
       <div className="space-y-1 text-sm">
         {[
-          ['Taxable Value', formatCurrency(doc.taxable)],
+          ['Taxable Value', formatCurrency(doc.taxableValue)],
           ['CGST', formatCurrency(doc.cgst)],
           ['SGST', formatCurrency(doc.sgst)],
           ['IGST', formatCurrency(doc.igst)],
@@ -287,34 +293,34 @@ const Gst2BDocDrawerContent = ({ doc }) => {
 
       <div className={cn(
         'rounded-md border p-4',
-        doc.itc_status === 'Eligible' ? 'border-green-200 bg-green-50/60' :
-          doc.itc_status === 'Blocked' ? 'border-red-200 bg-red-50/60' :
+        itcStatus === 'Eligible' ? 'border-green-200 bg-green-50/60' :
+          itcStatus === 'Blocked' ? 'border-red-200 bg-red-50/60' :
             'border-amber-200 bg-amber-50/60',
       )}
       >
         <div className="mb-3 flex items-center gap-2">
           <span className="text-sm">ITC Status:</span>
-          <TaxStatusBadge status={doc.itc_status} />
+          <TaxStatusBadge status={itcStatus} />
         </div>
         <TaxDetailGrid
           items={[
             { label: 'Claimable ITC', value: formatCurrency(doc.claimable) },
             { label: 'Blocked ITC', value: formatCurrency(doc.blocked) },
-            { label: 'Block Reason', value: doc.block_reason || '—' },
+            { label: 'Block Reason', value: doc.blockReason ?? doc.block_reason ?? '—' },
           ]}
         />
       </div>
 
-      <div className={cn('rounded-md border p-4', doc.ap_match === 'Matched' ? 'border-green-200 bg-green-50/60' : 'border-amber-200 bg-amber-50/60')}>
+      <div className={cn('rounded-md border p-4', doc.apStatus === 'Matched' ? 'border-green-200 bg-green-50/60' : 'border-amber-200 bg-amber-50/60')}>
         <div className="mb-2 flex items-center gap-2">
           <span className="text-sm">AP Match:</span>
-          <TaxStatusBadge status={doc.ap_match} />
+          <TaxStatusBadge status={doc.apStatus} />
         </div>
-        {doc.ap_inv_num ? (
+        {doc.apInvoiceNumber ? (
           <TaxDetailGrid
             items={[
-              { label: 'AP Invoice', value: doc.ap_inv_num, mono: true },
-              { label: 'AP Amount', value: formatCurrency(doc.ap_amount) },
+              { label: 'AP Invoice', value: doc.apInvoiceNumber, mono: true },
+              { label: 'AP Amount', value: formatCurrency(doc.apAmount) },
             ]}
           />
         ) : (
@@ -325,53 +331,150 @@ const Gst2BDocDrawerContent = ({ doc }) => {
   );
 };
 
-const GstB2bTab = () => {
-  const [vendorId, setVendorId] = useState('');
-  const [month, setMonth] = useState('Sep');
-  const [fy, setFy] = useState('2024-25');
-  const [loading, setLoading] = useState(false);
-  const [fetched, setFetched] = useState(false);
-  const [records, setRecords] = useState([]);
-  const [viewFilter, setViewFilter] = useState('All Invoices');
-  const [selected, setSelected] = useState(null);
+const b2bSnapshotKey = (vendorId, month, fy, orgGst) => `${orgGst}-${vendorId}-${month}-${fy}`;
 
-  const selectedVendor = getVendor(vendorId);
-  const apiKey = vendorId ? `${vendorId}-${month}-${fy}` : '';
-
-  const handleFetch = () => {
-    if (!vendorId) return;
-    setLoading(true);
-    setFetched(false);
-    setViewFilter('All Invoices');
-    window.setTimeout(() => {
-      setRecords(MOCK_GSTR2A_B2B_API[apiKey] ?? []);
-      setFetched(true);
-      setLoading(false);
-    }, 900);
-  };
-
-  const totalTaxable = records.reduce((sum, row) => sum + row.taxable, 0);
+const computeB2bMetrics = (records, apCount) => {
+  const totalTaxable = records.reduce((sum, row) => sum + Number(row.taxableValue ?? 0), 0);
   const totalGst = records.reduce((sum, row) => sum + docTotalGst(row), 0);
-  const eligibleItc = records.filter((row) => row.itc === 'Eligible').reduce((sum, row) => sum + row.cgst + row.sgst + row.igst, 0);
-  const amendedCount = records.filter((row) => row.amend !== 'No Amendment').length;
-  const needsReview = records.filter((row) => row.match !== 'Matched' || row.amend !== 'No Amendment').length;
-  const matched = records.filter((row) => row.match === 'Matched').length;
-  const missingAP = records.filter((row) => row.match === 'Missing in AP').length;
-  const missingGST = records.filter((row) => row.match === 'Missing in GST').length;
-  const mismatch = records.filter((row) => row.match === 'Amount Mismatch').length;
-  const apCount = MOCK_AP_INVOICE_COUNTS[apiKey] ?? 0;
+  const eligibleItc = records
+    .filter((row) => String(row.itcEligibility ?? '').toUpperCase() === 'ELIGIBLE')
+    .reduce((sum, row) => sum + Number(row.cgst ?? 0) + Number(row.sgst ?? 0) + Number(row.igst ?? 0), 0);
+  const amendedCount = records.filter(isAmendedGstInvoice).length;
+  const needsReview = records.filter((row) => !isGstMatchStatus(row, 'MATCHED') || isAmendedGstInvoice(row)).length;
+  const matched = records.filter((row) => isGstMatchStatus(row, 'MATCHED')).length;
+  const missingAP = records.filter((row) => isGstMatchStatus(row, 'MISSING_IN_OPTIFII')).length;
+  const missingGST = records.filter((row) => isGstMatchStatus(row, 'MISSING_IN_GSTR2A')).length;
+  const mismatch = records.filter((row) => isGstMatchStatus(row, 'MISMATCHED') || isGstMatchStatus(row, 'AMOUNT_MISMATCH')).length;
+
+  const syncStatus = records.length === 0
+    ? 'No Records Found'
+    : (missingAP > 0 || mismatch > 0 || amendedCount > 0) ? 'Partial Records' : 'Complete Records';
 
   const gstAvailStatus = records.length === 0
     ? 'No Records Found'
     : (missingAP > 0 || mismatch > 0 || amendedCount > 0) ? 'Partial Records' : 'GST Data Available';
 
-  const visibleRecords = records.filter((row) => {
-    if (viewFilter === 'Amended Only') return row.amend !== 'No Amendment';
-    if (viewFilter === 'Needs Review') return row.match !== 'Matched' || row.amend !== 'No Amendment';
-    return true;
+  const matchParts = [];
+  if (matched) matchParts.push(`${matched} Matched`);
+  if (missingAP) matchParts.push(`${missingAP} Missing in AP`);
+  if (missingGST) matchParts.push(`${missingGST} Missing in GST`);
+  if (mismatch) matchParts.push(`${mismatch} Mismatch`);
+
+  return {
+    totalTaxable,
+    totalGst,
+    eligibleItc,
+    amendedCount,
+    needsReview,
+    matched,
+    missingAP,
+    missingGST,
+    mismatch,
+    apCount,
+    syncStatus,
+    gstAvailStatus,
+    matchStatusSummary: matchParts.length ? matchParts.join(' · ') : '—',
+    totalSupplierInvoices: records.length,
+  };
+};
+
+const formatB2bFetchedOn = (iso) =>
+  new Date(iso).toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   });
 
-  const openRecordDrawer = (row) => setSelected(row);
+const formatB2bDateRange = (dateFrom, dateTo) => {
+  if (dateFrom && dateTo) return `${dateFrom} to ${dateTo}`;
+  if (dateFrom || dateTo) return dateFrom || dateTo;
+  return 'Full month';
+};
+
+const createB2bSnapshot = ({
+  vendorId,
+  month,
+  fy,
+  records,
+  apCount,
+  dateFrom,
+  dateTo,
+  orgGst,
+  orgUserName,
+  existingId,
+  getVendor,
+}) => {
+  const vendor = getVendor(vendorId);
+  return {
+    id: existingId ?? `snap-${orgGst}-${vendorId}-${month}-${fy}-${Date.now()}`,
+    vendorId,
+    vendorName: vendor?.name ?? '—',
+    gstin: vendor?.gstin ?? '—',
+    orgGst,
+    orgUserName,
+    month,
+    fy,
+    dateFrom: dateFrom || '',
+    dateTo: dateTo || '',
+    records,
+    apCount,
+    fetchedAt: new Date().toISOString(),
+    ...computeB2bMetrics(records, apCount),
+  };
+};
+
+const buildB2bSnapshotFromReconcileData = (responseData, params, fetchedAt) => {
+  const records = responseData?.invoices ?? [];
+  const apCount = responseData?.summary?.optifiiInvoiceCount ?? 0;
+  return createB2bSnapshot({
+    ...params,
+    records,
+    apCount,
+    fetchedAt: fetchedAt ?? new Date().toISOString(),
+  });
+};
+
+const buildSnapshotsFromReconcileResponse = (result, params) => {
+  const current = buildB2bSnapshotFromReconcileData(
+    result?.currentData ?? {},
+    params,
+    new Date().toISOString(),
+  );
+  const historical = mapHistoryEntriesToSnapshots({
+    history: result?.history ?? [],
+    mapResponseToSnapshot: (response, meta) => buildB2bSnapshotFromReconcileData(response, {
+      ...params,
+      existingId: meta.idSuffix,
+    }, meta.fetchedAt),
+  });
+  return [current, ...historical];
+};
+
+const B2bReconciliationDetail = ({ snapshot, onBack, getVendor }) => {
+  const [viewFilter, setViewFilter] = useState('All Invoices');
+  const [selected, setSelected] = useState(null);
+
+  const selectedVendor = getVendor(snapshot.vendorId);
+  const records = snapshot.records ?? [];
+  const metrics = useMemo(() => computeB2bMetrics(records, snapshot.apCount), [records, snapshot.apCount]);
+
+  const matchRate = records.length > 0
+    ? Math.round((metrics.matched / records.length) * 100)
+    : 0;
+
+  const filterOptions = useMemo(() => [
+    { value: 'All Invoices', label: 'All Invoices', count: records.length },
+    { value: 'Amended Only', label: 'Amended Only', count: metrics.amendedCount },
+    { value: 'Needs Review', label: 'Needs Review', count: metrics.needsReview },
+  ], [records.length, metrics.amendedCount, metrics.needsReview]);
+
+  const visibleRecords = records.filter((row) => {
+    if (viewFilter === 'Amended Only') return isAmendedGstInvoice(row);
+    if (viewFilter === 'Needs Review') return !isGstMatchStatus(row, 'MATCHED') || isAmendedGstInvoice(row);
+    return true;
+  });
 
   const b2bColumns = useMemo(() => [
     {
@@ -382,26 +485,26 @@ const GstB2bTab = () => {
       render: (_row, index) => index + 1,
     },
     {
-      key: 'inv_num',
+      key: 'invoiceNumber',
       title: 'Invoice Number',
       render: (row) => (
         <div>
-          <p className="font-mono text-xs font-semibold text-primary">{row.inv_num}</p>
-          {row.amend !== 'No Amendment' ? (
+          <p className="font-mono text-xs font-semibold text-primary">{row.invoiceNumber}</p>
+          {isAmendedGstInvoice(row) ? (
             <p className="mt-0.5 text-[10px] font-semibold text-amber-600">
-              {(row.amendments?.length ?? 0) > 1 ? `${row.amendments.length} Amendments` : 'Amended'}
+              {(row.amendmentHistory?.amendments?.length ?? 0) > 1 ? `${row.amendmentHistory.amendments.length} Amendments` : 'Amended'}
             </p>
           ) : null}
         </div>
       ),
     },
-    { key: 'vendor', title: 'Vendor', render: () => selectedVendor?.name ?? '—' },
-    { key: 'inv_date', title: 'Invoice Date', cellClassName: 'text-muted-foreground' },
-    { key: 'taxable', title: 'Taxable Value', render: (row) => formatCurrency(row.taxable), cellClassName: 'text-right font-medium' },
+    { key: 'vendor', title: 'Vendor', render: () => selectedVendor?.name ?? snapshot.vendorName ?? '—' },
+    { key: 'invoiceDate', title: 'Invoice Date', cellClassName: 'text-muted-foreground' },
+    { key: 'taxableValue', title: 'Taxable Value', render: (row) => formatCurrency(row.taxableValue), cellClassName: 'text-right font-medium' },
     { key: 'gst', title: 'GST Amount', render: (row) => formatCurrency(docTotalGst(row)), cellClassName: 'text-right font-semibold text-primary' },
-    { key: 'itc', title: 'ITC Eligibility', render: (row) => <TaxStatusBadge status={row.itc} /> },
-    { key: 'amend', title: 'Amendment Status', render: (row) => <TaxStatusBadge status={row.amend} /> },
-    { key: 'match', title: 'Match Status', render: (row) => <TaxStatusBadge status={row.match} /> },
+    { key: 'itcEligibility', title: 'ITC Eligibility', render: (row) => <TaxStatusBadge status={row.itcEligibility} /> },
+    { key: 'amendmentStatus', title: 'Amendment Status', render: (row) => <TaxStatusBadge status={row.amendmentStatus} /> },
+    { key: 'matchStatus', title: 'Match Status', render: (row) => <TaxStatusBadge status={row.matchStatus} /> },
     {
       key: 'actions',
       title: 'Actions',
@@ -410,20 +513,433 @@ const GstB2bTab = () => {
       render: (row) => (
         <Button
           type="button"
-          variant="ghost"
+          variant="outline"
           size="sm"
-          className="h-8 px-2.5"
+          className="h-8"
           onClick={(event) => {
             event.stopPropagation();
-            openRecordDrawer(row);
+            setSelected(row);
           }}
         >
-          <Eye className="mr-1.5 h-4 w-4" />
+          <Eye className="mr-1.5 h-3.5 w-3.5" />
           View
         </Button>
       ),
     },
-  ], [selectedVendor?.name]);
+  ], [selectedVendor?.name, snapshot.vendorName]);
+
+  return (
+    <div className="space-y-4">
+      <div className="overflow-hidden rounded-lg border bg-card shadow-sm">
+        <div className="border-b px-4 py-4 sm:px-5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            onClick={onBack}
+            className="-ml-2 mb-3 h-8 gap-1.5 px-2 text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Fetch History
+          </Button>
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">GSTR-2A B2B Reconciliation</p>
+              <h3 className="mt-1 text-lg font-semibold tracking-tight">
+                {snapshot.vendorName}
+                <span className="font-normal text-muted-foreground"> · {snapshot.month} FY {snapshot.fy}</span>
+              </h3>
+              <p className="mt-1 font-mono text-xs text-muted-foreground">
+                Org GSTIN: {snapshot.orgGst ?? '—'} · Vendor GSTIN: {snapshot.gstin}
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 lg:justify-end">
+              <TaxGstAvailBadge status={metrics.gstAvailStatus} />
+              <TaxStatusBadge status={snapshot.syncStatus} />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-px bg-border sm:grid-cols-2 lg:grid-cols-3">
+          {[
+            { label: 'Organisation GSTIN', value: snapshot.orgGst, icon: FileText },
+            { label: 'Reporting Period', value: `${snapshot.month} FY ${snapshot.fy}`, icon: Calendar },
+            { label: 'Date Range', value: formatB2bDateRange(snapshot.dateFrom, snapshot.dateTo), icon: ArrowUpDown },
+            { label: 'Fetched On', value: formatB2bFetchedOn(snapshot.fetchedAt), icon: Clock },
+            { label: 'Source', value: 'GST Portal · GSTR-2A B2B + B2BA', icon: ArrowUpDown },
+          ].map(({ label, value, icon: Icon }) => (
+            <div key={label} className="flex items-start gap-3 bg-card px-4 py-3 sm:px-5">
+              <div className="mt-0.5 grid h-8 w-8 shrink-0 place-items-center rounded-md bg-muted text-muted-foreground">
+                <Icon className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
+                <p className="mt-0.5 text-sm font-medium leading-snug">{value}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_320px]">
+        <TaxSectionCard
+          title="Vendor Summary"
+          description="Supplier-reported invoice totals for this reconciliation snapshot"
+          meta={<TaxApiMeta synced={formatB2bFetchedOn(snapshot.fetchedAt)} count={`${records.length} invoices`} />}
+        >
+          <div className="mb-4 flex items-center gap-3 border-b pb-4">
+            <div className="grid h-11 w-11 place-items-center rounded-lg bg-primary/10 text-base font-bold text-primary">
+              {snapshot.vendorName?.[0]}
+            </div>
+            <div>
+              <p className="font-semibold">{snapshot.vendorName}</p>
+              <p className="font-mono text-xs text-muted-foreground">{snapshot.gstin}</p>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <TaxMiniMetric label="Total Supplier Invoices" value={String(metrics.totalSupplierInvoices)} />
+            <TaxMiniMetric label="Amended Invoices" value={String(metrics.amendedCount)} tone={metrics.amendedCount > 0 ? 'amber' : 'default'} />
+            <TaxMiniMetric label="Eligible ITC" value={formatCurrency(metrics.eligibleItc)} tone="green" />
+            <TaxMiniMetric label="Invoices Requiring Review" value={String(metrics.needsReview)} tone={metrics.needsReview > 0 ? 'red' : 'green'} />
+          </div>
+        </TaxSectionCard>
+
+        <TaxSectionCard title="Match Rate" description="AP vs GST portal alignment for this snapshot">
+          <div className="space-y-4">
+            <div className="text-center">
+              <p className={cn(
+                'text-4xl font-bold tabular-nums',
+                matchRate >= 80 ? 'text-green-600' : matchRate >= 50 ? 'text-amber-600' : 'text-red-600',
+              )}
+              >
+                {matchRate}%
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {metrics.matched} of {records.length} invoices matched
+              </p>
+            </div>
+            <TaxProgressRow
+              value={matchRate}
+              progressClassName={cn(
+                matchRate >= 80 ? '[&>div]:bg-green-500' : matchRate >= 50 ? '[&>div]:bg-amber-500' : '[&>div]:bg-red-500',
+              )}
+            />
+            <div className="space-y-2 text-sm">
+              {[
+                { label: 'Matched', value: metrics.matched, tone: 'text-green-700' },
+                { label: 'Missing in AP', value: metrics.missingAP, tone: 'text-red-600' },
+                { label: 'Missing in GST', value: metrics.missingGST, tone: 'text-red-600' },
+                { label: 'Amount Mismatch', value: metrics.mismatch, tone: 'text-amber-600' },
+              ].map(({ label, value, tone }) => (
+                <div key={label} className="flex items-center justify-between border-b border-dashed py-1.5 last:border-0">
+                  <span className="text-muted-foreground">{label}</span>
+                  <span className={cn('font-semibold tabular-nums', tone)}>{value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </TaxSectionCard>
+      </div>
+
+      <TaxSectionCard title="AP Reconciliation Summary" description={`Invoices in AP system vs GST portal — ${snapshot.month} FY ${snapshot.fy}`}>
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+          <TaxMiniMetric label="Invoices in AP System" value={metrics.apCount} className="border-slate-200" />
+          <TaxMiniMetric label="Invoices in GSTR-2A" value={records.length} className="border-slate-200" />
+          <TaxMiniMetric label="Matched" value={metrics.matched} tone="green" className="border-green-200 bg-green-50/60" />
+          <TaxMiniMetric label="Missing in GST" value={metrics.missingGST} tone="red" className="border-red-200 bg-red-50/60" />
+          <TaxMiniMetric label="Missing in AP" value={metrics.missingAP} tone="red" className="border-red-200 bg-red-50/60" />
+        </div>
+        {(metrics.missingAP > 0 || metrics.missingGST > 0 || metrics.mismatch > 0 || metrics.amendedCount > 0) ? (
+          <div className="mt-3">
+            <TaxAlertBanner>
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <div>
+                {metrics.amendedCount > 0 ? `${metrics.amendedCount} invoice(s) have supplier amendments — review ITC impact. ` : ''}
+                {metrics.missingAP > 0 ? `${metrics.missingAP} invoice(s) in GST portal not in AP. ` : ''}
+                {metrics.missingGST > 0 ? `${metrics.missingGST} AP invoice(s) not uploaded by supplier. ` : ''}
+                {metrics.mismatch > 0 ? `${metrics.mismatch} invoice(s) with amount mismatch.` : ''}
+              </div>
+            </TaxAlertBanner>
+          </div>
+        ) : (
+          <div className="mt-3 flex items-center gap-2 rounded-md border border-green-200 bg-green-50/60 px-3 py-2 text-sm text-green-800">
+            <CheckCircle2 className="h-4 w-4 shrink-0" />
+            All invoices are reconciled for this snapshot. No action required.
+          </div>
+        )}
+      </TaxSectionCard>
+
+      <TaxSectionCard
+        title="Fetched Records"
+        description={`GSTR-2A B2B invoices for ${snapshot.vendorName} · ${snapshot.month} FY ${snapshot.fy}`}
+        meta={<TaxApiMeta synced={formatB2bFetchedOn(snapshot.fetchedAt)} count={`${visibleRecords.length} shown`} />}
+        actions={
+          <TaxViewFilterPills
+            value={viewFilter}
+            onChange={setViewFilter}
+            options={filterOptions}
+          />
+        }
+      >
+        {records.length === 0 ? (
+          <TaxEmptyState
+            icon={FileText}
+            title="No GSTR-2A records found for this vendor and period"
+            description="Try fetching again from the history page with a different reporting period."
+          />
+        ) : (
+          <>
+            <TaxCompactTable
+              rows={visibleRecords}
+              columns={b2bColumns}
+              getRowKey={(row) => row.invoiceNumber}
+              getRowClassName={b2bRowClass}
+              onRowClick={setSelected}
+              emptyMessage={
+                viewFilter === 'Amended Only'
+                  ? 'No amended invoices match the current filter.'
+                  : viewFilter === 'Needs Review'
+                    ? 'No invoices require review under the current filter.'
+                    : 'No records to display.'
+              }
+            />
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
+              <span>
+                Showing <strong className="text-foreground">{visibleRecords.length}</strong> of{' '}
+                <strong className="text-foreground">{records.length}</strong> fetched invoice
+                {records.length === 1 ? '' : 's'}
+              </span>
+              <span>
+                Taxable <strong className="text-foreground">{formatCurrency(metrics.totalTaxable)}</strong>
+                {' · '}
+                GST <strong className="text-primary">{formatCurrency(metrics.totalGst)}</strong>
+              </span>
+            </div>
+            <TaxPagination />
+          </>
+        )}
+      </TaxSectionCard>
+
+      <TaxDrawer
+        open={Boolean(selected)}
+        onOpenChange={(open) => !open && setSelected(null)}
+        title={selected ? `Invoice — ${selected.invoiceNumber}` : 'Invoice Details'}
+      >
+        {selected ? <B2bInvoiceDrawerContent record={selected} vendor={selectedVendor} /> : null}
+      </TaxDrawer>
+    </div>
+  );
+};
+
+const GstB2bTab = ({ orgGst, runWithSession }) => {
+  const {
+    credentials,
+    credentialsLoading,
+    selectedOrgGst,
+    onOrgGstChange,
+    selectedOrgCredential,
+    canFetchWithOrgGst,
+    vendors,
+    getVendor,
+  } = orgGst;
+
+  const [vendorId, setVendorId] = useState('');
+  const [month, setMonth] = useState('Sep');
+  const [fy, setFy] = useState('2024-25');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [fetchHistory, setFetchHistory] = useState([]);
+  const [viewMode, setViewMode] = useState('history');
+  const [activeSnapshotId, setActiveSnapshotId] = useState(null);
+  const [reconcileGstr2a] = useReconcileGstr2aMutation();
+
+  const selectedVendor = getVendor(vendorId);
+  const activeSnapshot = fetchHistory.find((entry) => entry.id === activeSnapshotId) ?? null;
+
+  const filteredHistory = useMemo(
+    () => fetchHistory.filter(
+      (entry) => entry.vendorId === vendorId
+        && entry.month === month
+        && entry.fy === fy
+        && entry.orgGst === selectedOrgGst,
+    ),
+    [fetchHistory, vendorId, month, fy, selectedOrgGst],
+  );
+
+  const upsertSnapshot = (snapshot) => {
+    const key = b2bSnapshotKey(snapshot.vendorId, snapshot.month, snapshot.fy, snapshot.orgGst);
+    setFetchHistory((prev) => {
+      const existing = prev.find((entry) => b2bSnapshotKey(entry.vendorId, entry.month, entry.fy, entry.orgGst) === key);
+      const nextSnapshot = existing
+        ? { ...snapshot, id: existing.id }
+        : snapshot;
+      const withoutKey = prev.filter((entry) => b2bSnapshotKey(entry.vendorId, entry.month, entry.fy, entry.orgGst) !== key);
+      return [nextSnapshot, ...withoutKey];
+    });
+    return snapshot;
+  };
+
+  const runFetch = async ({
+    targetVendorId,
+    targetMonth,
+    targetFy,
+    targetDateFrom,
+    targetDateTo,
+    targetOrgCredential,
+    existingId,
+    onComplete,
+    otp,
+  }) => {
+    const portalCredentials = buildGstPortalFetchCredentials(targetOrgCredential);
+    const vendor = getVendor(targetVendorId);
+    if (!targetVendorId || !portalCredentials || !vendor) return;
+
+    setLoading(true);
+    try {
+      const payload = buildReconcileRequestPayload({
+        month: targetMonth,
+        financialYear: targetFy,
+        gstin: portalCredentials.gst,
+        username: portalCredentials.userName,
+        supplierGstin: vendor.gstin,
+        vendor: vendor.name,
+        startDate: targetDateFrom || undefined,
+        endDate: targetDateTo || undefined,
+        otp,
+      });
+
+      const result = await reconcileGstr2a(payload).unwrap();
+      const snapshotParams = {
+        vendorId: targetVendorId,
+        month: targetMonth,
+        fy: targetFy,
+        dateFrom: targetDateFrom,
+        dateTo: targetDateTo,
+        orgGst: portalCredentials.gst,
+        orgUserName: portalCredentials.userName,
+        existingId,
+        getVendor,
+      };
+      const snapshots = buildSnapshotsFromReconcileResponse(result, snapshotParams);
+      setFetchHistory(snapshots);
+      onComplete?.(snapshots[0]);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFetch = () => {
+    runWithSession({
+      orgCredential: selectedOrgCredential,
+      contextLabel: 'GSTR-2A B2B Reconciliation',
+      execute: (otp) => runFetch({
+        targetVendorId: vendorId,
+        targetMonth: month,
+        targetFy: fy,
+        targetDateFrom: dateFrom,
+        targetDateTo: dateTo,
+        targetOrgCredential: selectedOrgCredential,
+        onComplete: () => {
+          setViewMode('history');
+          setActiveSnapshotId(null);
+        },
+        otp,
+      }),
+    });
+  };
+
+  const openSnapshotDetails = useCallback((entryId) => {
+    setActiveSnapshotId(entryId);
+    setViewMode('detail');
+  }, []);
+
+  const historyColumns = useMemo(() => [
+    {
+      key: 'row_num',
+      title: '#',
+      className: 'w-10',
+      cellClassName: 'text-xs text-muted-foreground',
+      render: (_row, index) => index + 1,
+    },
+    { key: 'vendor', title: 'Vendor', render: (row) => row.vendorName },
+    { key: 'org_gst', title: 'Organisation GSTIN', render: (row) => row.orgGst, cellClassName: 'font-mono text-xs' },
+    { key: 'gstin', title: 'Vendor GSTIN', cellClassName: 'font-mono text-xs' },
+    { key: 'month', title: 'Month' },
+    { key: 'fy', title: 'Financial Year' },
+    {
+      key: 'date_range',
+      title: 'Date Range',
+      cellClassName: 'text-xs text-muted-foreground',
+      render: (row) => formatB2bDateRange(row.dateFrom, row.dateTo),
+    },
+    { key: 'total', title: 'Total Supplier Invoices', render: (row) => row.totalSupplierInvoices, cellClassName: 'text-right font-medium' },
+    { key: 'amended', title: 'Amended Invoices', render: (row) => row.amendedCount, cellClassName: 'text-right' },
+    { key: 'itc', title: 'Eligible ITC', render: (row) => formatCurrency(row.eligibleItc), cellClassName: 'text-right font-medium text-green-700' },
+    {
+      key: 'review',
+      title: 'Invoices Requiring Review',
+      cellClassName: 'text-right font-medium',
+      render: (row) => (
+        <span className={row.needsReview > 0 ? 'text-red-600' : 'text-green-700'}>
+          {row.needsReview}
+        </span>
+      ),
+    },
+    {
+      key: 'match_summary',
+      title: 'Match Status Summary',
+      cellClassName: 'max-w-[180px] text-xs text-muted-foreground',
+      render: (row) => row.matchStatusSummary,
+    },
+    {
+      key: 'sync',
+      title: 'Sync Status',
+      render: (row) => <TaxStatusBadge status={row.syncStatus} />,
+    },
+    {
+      key: 'fetched_on',
+      title: 'Fetched On',
+      cellClassName: 'text-xs text-muted-foreground whitespace-nowrap',
+      render: (row) => formatB2bFetchedOn(row.fetchedAt),
+    },
+    {
+      key: 'actions',
+      title: 'Actions',
+      className: 'text-right w-[130px]',
+      cellClassName: 'text-right',
+      render: (row) => (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-8"
+          onClick={(event) => {
+            event.stopPropagation();
+            openSnapshotDetails(row.id);
+          }}
+        >
+          <Eye className="mr-1.5 h-3.5 w-3.5" />
+          View Details
+        </Button>
+      ),
+    },
+  ], [openSnapshotDetails]);
+
+  if (viewMode === 'detail' && activeSnapshot) {
+    return (
+      <B2bReconciliationDetail
+        snapshot={activeSnapshot}
+        getVendor={getVendor}
+        onBack={() => {
+          setViewMode('history');
+          setActiveSnapshotId(null);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -434,168 +950,98 @@ const GstB2bTab = () => {
 
       <TaxSectionCard title="Fetch GST Records" description="Fetches GSTR-2A B2B + B2BA simultaneously">
         <div className="flex flex-wrap items-end gap-4">
+          <OrgGstCredentialFields
+            credentials={credentials}
+            loading={credentialsLoading}
+            selectedGst={selectedOrgGst}
+            onGstChange={onOrgGstChange}
+          />
           <GstFormField label="Vendor" required className="min-w-[220px]">
             <TaxSelect
               value={vendorId || 'placeholder'}
-              onValueChange={(value) => { setVendorId(value === 'placeholder' ? '' : value); setFetched(false); }}
+              onValueChange={(value) => setVendorId(value === 'placeholder' ? '' : value)}
               placeholder="Search or select vendor…"
-              options={[{ value: 'placeholder', label: 'Search or select vendor…' }, ...GST_VENDOR_MASTER.map((vendor) => ({ value: vendor.id, label: vendor.name }))]}
+              options={[{ value: 'placeholder', label: 'Search or select vendor…' }, ...vendors.map((vendor) => ({ value: vendor.id, label: vendor.name }))]}
             />
           </GstFormField>
-          <GstFormField label="GSTIN">
+          <GstFormField label="Vendor GSTIN">
             <Input readOnly value={selectedVendor?.gstin ?? ''} placeholder="Auto-populated from vendor" className="font-mono text-xs bg-muted/40" />
           </GstFormField>
           <GstFormField label="Month" required>
-            <TaxSelect value={month} onValueChange={(value) => { setMonth(value); setFetched(false); }} options={GST_DOC_MONTHS} />
+            <TaxSelect value={month} onValueChange={setMonth} options={GST_DOC_MONTHS} />
           </GstFormField>
           <GstFormField label="Financial Year" required>
-            <TaxSelect value={fy} onValueChange={(value) => { setFy(value); setFetched(false); }} options={GST_DOC_FY_OPTIONS} />
+            <TaxSelect value={fy} onValueChange={setFy} options={GST_DOC_FY_OPTIONS} />
           </GstFormField>
           <GstFormField label="Date Range" optional>
             <div className="flex items-center gap-2">
-              <Input type="date" className="text-xs" />
+              <Input type="date" className="text-xs" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
               <span className="text-xs text-muted-foreground">to</span>
-              <Input type="date" className="text-xs" />
+              <Input type="date" className="text-xs" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
             </div>
           </GstFormField>
-          <Button onClick={handleFetch} disabled={!vendorId || loading} className="self-end">
+          <Button onClick={handleFetch} disabled={!vendorId || !canFetchWithOrgGst || loading} className="self-end">
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
             {loading ? 'Fetching…' : 'Fetch GST Records'}
           </Button>
         </div>
       </TaxSectionCard>
 
-      {!fetched && !loading ? (
-        <TaxEmptyState
-          icon={ArrowUpDown}
-          title="Select a vendor and reporting period to fetch GSTR-2A records"
-          description="Both GSTR-2A B2B and B2BA (amendments) are fetched together in a single reconciliation view."
-        >
-          <Button onClick={handleFetch} disabled={!vendorId}><Play className="mr-2 h-4 w-4" />Fetch GST Records</Button>
-        </TaxEmptyState>
-      ) : null}
-
       {loading ? (
         <GstFetchLoading message="Fetching GSTR-2A B2B records…" subMessage="Also checking GSTR-2A B2BA for amendments…" />
       ) : null}
 
-      {fetched && !loading ? (
-        <>
-          <TaxSectionCard
-            title="Vendor Summary"
-            meta={<TaxApiMeta synced="Just now" status="live" count={`${records.length} invoices`} />}
-          >
-            <div className="mb-4 flex items-center gap-3 border-b pb-4">
-              <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-sm font-bold text-primary">
-                {selectedVendor?.name?.[0]}
-              </div>
-              <div>
-                <p className="font-semibold">{selectedVendor?.name}</p>
-                <p className="font-mono text-xs text-muted-foreground">{selectedVendor?.gstin}</p>
-              </div>
-              <div className="ml-auto"><TaxGstAvailBadge status={gstAvailStatus} /></div>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <TaxMiniMetric label="Total Supplier Invoices" value={String(records.length)} />
-              <TaxMiniMetric label="Amended Invoices" value={String(amendedCount)} tone={amendedCount > 0 ? 'amber' : 'default'} />
-              <TaxMiniMetric label="Eligible ITC" value={formatCurrency(eligibleItc)} tone="green" />
-              <TaxMiniMetric label="Invoices Requiring Review" value={String(needsReview)} tone={needsReview > 0 ? 'red' : 'green'} />
-            </div>
-          </TaxSectionCard>
-
-          <TaxSectionCard title="AP Reconciliation Summary" description={`Invoices in AP system vs GST portal — ${month} FY ${fy}`}>
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-              <TaxMiniMetric label="Invoices in AP System" value={apCount} className="border-slate-200" />
-              <TaxMiniMetric label="Invoices in GSTR-2A" value={records.length} className="border-slate-200" />
-              <TaxMiniMetric label="Matched" value={matched} tone="green" className="border-green-200 bg-green-50/60" />
-              <TaxMiniMetric label="Missing in GST" value={missingGST} tone="red" className="border-red-200 bg-red-50/60" />
-              <TaxMiniMetric label="Missing in AP" value={missingAP} tone="red" className="border-red-200 bg-red-50/60" />
-            </div>
-            {(missingAP > 0 || missingGST > 0 || mismatch > 0 || amendedCount > 0) ? (
-              <div className="mt-3">
-                <TaxAlertBanner>
-                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                <div>
-                  {amendedCount > 0 ? `${amendedCount} invoice(s) have supplier amendments — review ITC impact. ` : ''}
-                  {missingAP > 0 ? `${missingAP} invoice(s) in GST portal not in AP. ` : ''}
-                  {missingGST > 0 ? `${missingGST} AP invoice(s) not uploaded by supplier. ` : ''}
-                  {mismatch > 0 ? `${mismatch} invoice(s) with amount mismatch.` : ''}
-                </div>
-                </TaxAlertBanner>
-              </div>
-            ) : null}
-          </TaxSectionCard>
-
-          <TaxSectionCard
-            title="Fetched Records"
-            description={`GSTR-2A B2B invoices for ${selectedVendor?.name ?? 'vendor'} · ${month} FY ${fy}`}
-            meta={<TaxApiMeta synced="Just now" status="live" count={`${visibleRecords.length} shown`} />}
-            actions={
-              <div className="flex flex-wrap items-center gap-2">
-                <TaxViewFilterPills
-                  value={viewFilter}
-                  onChange={setViewFilter}
-                  options={['All Invoices', 'Amended Only', 'Needs Review']}
-                />
-                <Button variant="outline" size="sm" onClick={handleFetch}>
-                  <RefreshCw className="mr-2 h-4 w-4" />
-                  Refresh
-                </Button>
-              </div>
-            }
-          >
-            {records.length === 0 ? (
-              <TaxEmptyState
-                icon={FileText}
-                title="No GSTR-2A records found for this vendor and period"
-                description="Try a different month, financial year, or vendor. Records appear here after a successful fetch."
-              />
-            ) : (
-              <>
-                <TaxCompactTable
-                  rows={visibleRecords}
-                  columns={b2bColumns}
-                  getRowKey={(row) => row.inv_num}
-                  getRowClassName={b2bRowClass}
-                  emptyMessage={
-                    viewFilter === 'Amended Only'
-                      ? 'No amended invoices match the current filter.'
-                      : viewFilter === 'Needs Review'
-                        ? 'No invoices require review under the current filter.'
-                        : 'No records to display.'
-                  }
-                />
-                <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
-                  <span>
-                    Showing <strong className="text-foreground">{visibleRecords.length}</strong> of{' '}
-                    <strong className="text-foreground">{records.length}</strong> fetched invoice
-                    {records.length === 1 ? '' : 's'}
-                  </span>
-                  <span>
-                    Taxable <strong className="text-foreground">{formatCurrency(totalTaxable)}</strong>
-                    {' · '}
-                    GST <strong className="text-primary">{formatCurrency(totalGst)}</strong>
-                  </span>
-                </div>
-                <TaxPagination />
-              </>
-            )}
-          </TaxSectionCard>
-        </>
+      {!loading && (!canFetchWithOrgGst || !vendorId) ? (
+        <TaxEmptyState
+          icon={ArrowUpDown}
+          title="Select organisation GSTIN, vendor, and reporting period"
+          description="Organisation GSTIN is required. Both GSTR-2A B2B and B2BA (amendments) are fetched together in a single reconciliation view."
+        >
+          <Button onClick={handleFetch} disabled={!vendorId || !canFetchWithOrgGst}><Play className="mr-2 h-4 w-4" />Fetch GST Records</Button>
+        </TaxEmptyState>
       ) : null}
 
-      <TaxDrawer
-        open={Boolean(selected)}
-        onOpenChange={(open) => !open && setSelected(null)}
-        title={selected ? `Invoice — ${selected.inv_num}` : 'Invoice Details'}
-      >
-        {selected ? <B2bInvoiceDrawerContent record={selected} vendor={selectedVendor} /> : null}
-      </TaxDrawer>
+      {!loading && canFetchWithOrgGst && vendorId && filteredHistory.length === 0 ? (
+        <TaxEmptyState
+          icon={FileText}
+          title="No GSTR-2A B2B records fetched yet"
+          description="Select a vendor and reporting period above, then click Fetch GST Records to create a reconciliation snapshot."
+        >
+          <Button onClick={handleFetch} disabled={!vendorId || !canFetchWithOrgGst || loading}><Play className="mr-2 h-4 w-4" />Fetch GST Records</Button>
+        </TaxEmptyState>
+      ) : null}
+
+      {!loading && canFetchWithOrgGst && vendorId && filteredHistory.length > 0 ? (
+        <TaxSectionCard
+          title="Fetch History"
+          description={`Previously fetched GSTR-2A B2B snapshots for ${selectedVendor?.name ?? 'vendor'} · ${month} FY ${fy}`}
+          meta={<TaxApiMeta synced={formatB2bFetchedOn(filteredHistory[0].fetchedAt)} count={`${filteredHistory.length} snapshot${filteredHistory.length === 1 ? '' : 's'}`} />}
+        >
+          <TaxCompactTable
+            rows={filteredHistory}
+            columns={historyColumns}
+            getRowKey={(row) => row.id}
+            onRowClick={(row) => openSnapshotDetails(row.id)}
+            emptyMessage="No fetch history for this vendor and reporting period."
+          />
+        </TaxSectionCard>
+      ) : null}
     </div>
   );
 };
 
-const Gst2ADocumentsTab = () => {
+const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
+  const {
+    credentials,
+    credentialsLoading,
+    selectedOrgGst,
+    onOrgGstChange,
+    selectedOrgCredential,
+    canFetchWithOrgGst,
+    vendors,
+    getVendor,
+  } = orgGst;
+
   const [vendorId, setVendorId] = useState('');
   const [month, setMonth] = useState('Sep');
   const [fy, setFy] = useState('2024-25');
@@ -606,55 +1052,78 @@ const Gst2ADocumentsTab = () => {
   const [docs, setDocs] = useState([]);
   const [quickFilter, setQuickFilter] = useState('All Documents');
   const [selected, setSelected] = useState(null);
+  const [fetchGstr2aDocuments] = useFetchGstr2aDocumentsMutation();
 
   const selectedVendor = vendorId ? getVendor(vendorId) : null;
   const apiKey = vendorId ? `${vendorId}-${month}-${fy}` : `all-${month}-${fy}`;
 
   const handleFetch = () => {
-    setLoading(true);
-    setFetched(false);
-    setQuickFilter('All Documents');
-    window.setTimeout(() => {
-      let result = MOCK_GSTR2A_DOCUMENTS_API[apiKey] ?? [];
-      if (docType !== 'All Documents') result = result.filter((doc) => doc.doc_type === docType);
-      if (itcFilter !== 'All') result = result.filter((doc) => doc.itc === itcFilter);
-      setDocs(result);
-      setFetched(true);
-      setLoading(false);
-    }, 800);
+    const portalCredentials = buildGstPortalFetchCredentials(selectedOrgCredential);
+    if (!portalCredentials) return;
+
+    runWithSession({
+      orgCredential: selectedOrgCredential,
+      contextLabel: 'GSTR-2A Documents',
+      execute: async (otp) => {
+        setLoading(true);
+        setFetched(false);
+        setQuickFilter('All Documents');
+        try {
+          const payload = buildGstrDocumentsRequestPayload({
+            month,
+            financialYear: fy,
+            gstin: portalCredentials.gst,
+            username: portalCredentials.userName,
+            vendorName: selectedVendor?.name,
+            supplierGstin: selectedVendor?.gstin,
+            otp,
+          });
+          const result = await fetchGstr2aDocuments(payload).unwrap();
+          let resultDocs = result?.currentData?.documents ?? [];
+          if (docType !== 'All Documents') resultDocs = resultDocs.filter((doc) => doc.documentType === docType);
+          if (itcFilter !== 'All') resultDocs = resultDocs.filter((doc) => humanizeGstEnum(doc.itcEligibility) === itcFilter);
+          setDocs(resultDocs);
+          setFetched(true);
+        } catch (error) {
+          toast.error(getApiErrorMessage(error));
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
   };
 
-  const totalTaxable = docs.reduce((sum, doc) => sum + doc.taxable, 0);
+  const totalTaxable = docs.reduce((sum, doc) => sum + Number(doc.taxableValue ?? 0), 0);
   const totalGst = docs.reduce((sum, doc) => sum + docTotalGst(doc), 0);
-  const eligibleItc = docs.filter((doc) => doc.itc === 'Eligible').reduce((sum, doc) => sum + doc.cgst + doc.sgst + doc.igst, 0);
-  const ineligibleCnt = docs.filter((doc) => doc.itc === 'Ineligible').length;
+  const eligibleItc = docs.filter((doc) => String(doc.itcEligibility ?? '').toUpperCase() === 'ELIGIBLE').reduce((sum, doc) => sum + Number(doc.cgst ?? 0) + Number(doc.sgst ?? 0) + Number(doc.igst ?? 0), 0);
+  const ineligibleCnt = docs.filter((doc) => String(doc.itcEligibility ?? '').toUpperCase() === 'INELIGIBLE').length;
 
   const quickFilters = ['All Documents', 'Invoices', 'Credit Notes', 'Debit Notes', 'Amended', 'Active', 'Cancelled', 'Eligible ITC', 'Ineligible ITC', 'Matched', 'Missing in AP'];
 
   const visible = docs.filter((doc) => {
-    if (quickFilter === 'Invoices') return doc.doc_type === 'Invoice' || doc.doc_type === 'Amended Invoice';
-    if (quickFilter === 'Credit Notes') return doc.doc_type === 'Credit Note';
-    if (quickFilter === 'Debit Notes') return doc.doc_type === 'Debit Note';
-    if (quickFilter === 'Amended') return doc.amended || doc.doc_status === 'Amended';
-    if (quickFilter === 'Eligible ITC') return doc.itc === 'Eligible';
-    if (quickFilter === 'Ineligible ITC') return doc.itc === 'Ineligible';
-    if (quickFilter === 'Matched') return doc.ap_match === 'Matched';
-    if (quickFilter === 'Missing in AP') return doc.ap_match === 'Missing in AP';
-    if (quickFilter === 'Active') return doc.doc_status === 'Active';
-    if (quickFilter === 'Cancelled') return doc.doc_status === 'Cancelled';
+    if (quickFilter === 'Invoices') return doc.documentType === 'Invoice' || doc.documentType === 'Amended Invoice';
+    if (quickFilter === 'Credit Notes') return doc.documentType === 'Credit Note';
+    if (quickFilter === 'Debit Notes') return doc.documentType === 'Debit Note';
+    if (quickFilter === 'Amended') return doc.documentType === 'Amended Invoice' || doc.documentStatus === 'Amended';
+    if (quickFilter === 'Eligible ITC') return String(doc.itcEligibility ?? '').toUpperCase() === 'ELIGIBLE';
+    if (quickFilter === 'Ineligible ITC') return String(doc.itcEligibility ?? '').toUpperCase() === 'INELIGIBLE';
+    if (quickFilter === 'Matched') return doc.apStatus === 'Matched';
+    if (quickFilter === 'Missing in AP') return doc.apStatus === 'Missing in Optifii AP';
+    if (quickFilter === 'Active') return doc.documentStatus === 'Active';
+    if (quickFilter === 'Cancelled') return doc.documentStatus === 'Cancelled';
     return true;
   });
 
   const docColumns = [
-    { key: 'doc_type', title: 'Type', render: (row) => <TaxStatusBadge status={row.doc_type} /> },
-    { key: 'doc_num', title: 'Document No.', cellClassName: 'font-mono text-xs' },
-    { key: 'vendor', title: 'Vendor', render: (row) => getVendor(row.vendor_id)?.name ?? '—' },
-    { key: 'doc_date', title: 'Date' },
-    { key: 'taxable', title: 'Taxable', render: (row) => formatCurrency(row.taxable), cellClassName: 'text-right' },
+    { key: 'documentType', title: 'Type', render: (row) => <TaxStatusBadge status={row.documentType} /> },
+    { key: 'invoiceNumber', title: 'Document No.', cellClassName: 'font-mono text-xs' },
+    { key: 'vendor', title: 'Vendor', render: (row) => row.vendor ?? getVendor(row.vendor_id)?.name ?? '—' },
+    { key: 'documentDate', title: 'Date' },
+    { key: 'taxableValue', title: 'Taxable', render: (row) => formatCurrency(row.taxableValue), cellClassName: 'text-right' },
     { key: 'gst', title: 'GST', render: (row) => formatCurrency(docTotalGst(row)), cellClassName: 'text-right font-medium text-primary' },
-    { key: 'itc', title: 'ITC', render: (row) => <TaxStatusBadge status={row.itc} /> },
-    { key: 'doc_status', title: 'Status', render: (row) => <TaxStatusBadge status={row.doc_status} /> },
-    { key: 'ap_match', title: 'AP Match', render: (row) => <TaxStatusBadge status={row.ap_match} /> },
+    { key: 'itcEligibility', title: 'ITC', render: (row) => <TaxStatusBadge status={row.itcEligibility} /> },
+    { key: 'documentStatus', title: 'Status', render: (row) => <TaxStatusBadge status={row.documentStatus} /> },
+    { key: 'apStatus', title: 'AP Match', render: (row) => <TaxStatusBadge status={row.apStatus} /> },
   ];
 
   return (
@@ -666,15 +1135,21 @@ const Gst2ADocumentsTab = () => {
 
       <TaxSectionCard title="Fetch GST Documents">
         <div className="flex flex-wrap items-end gap-4">
+          <OrgGstCredentialFields
+            credentials={credentials}
+            loading={credentialsLoading}
+            selectedGst={selectedOrgGst}
+            onGstChange={onOrgGstChange}
+          />
           <GstFormField label="Vendor" optional className="min-w-[210px]">
             <TaxSelect
               value={vendorId || 'all'}
               onValueChange={(value) => { setVendorId(value === 'all' ? '' : value); setFetched(false); }}
               placeholder="All Vendors"
-              options={[{ value: 'all', label: 'All Vendors' }, ...GST_VENDOR_MASTER.map((vendor) => ({ value: vendor.id, label: vendor.name }))]}
+              options={[{ value: 'all', label: 'All Vendors' }, ...vendors.map((vendor) => ({ value: vendor.id, label: vendor.name }))]}
             />
           </GstFormField>
-          <GstFormField label="GSTIN">
+          <GstFormField label="Vendor GSTIN">
             <Input readOnly value={selectedVendor?.gstin ?? ''} placeholder="Auto-populated" className="font-mono text-xs bg-muted/40" />
           </GstFormField>
           <GstFormField label="Month" required>
@@ -689,7 +1164,7 @@ const Gst2ADocumentsTab = () => {
           <GstFormField label="ITC Eligibility">
             <TaxSelect value={itcFilter} onValueChange={setItcFilter} options={['All', 'Eligible', 'Ineligible']} />
           </GstFormField>
-          <Button onClick={handleFetch} disabled={loading} className="self-end">
+          <Button onClick={handleFetch} disabled={!canFetchWithOrgGst || loading} className="self-end">
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
             {loading ? 'Fetching…' : 'Fetch GST Documents'}
           </Button>
@@ -699,10 +1174,10 @@ const Gst2ADocumentsTab = () => {
       {!fetched && !loading ? (
         <TaxEmptyState
           icon={FileText}
-          title="Select a reporting period to fetch GSTR-2A documents"
-          description="You can fetch documents for a specific vendor or leave vendor blank to retrieve all supplier documents for the period."
+          title="Select organisation GSTIN and reporting period"
+          description="Organisation GSTIN is required. You can fetch documents for a specific vendor or leave vendor blank to retrieve all supplier documents for the period."
         >
-          <Button onClick={handleFetch}><Play className="mr-2 h-4 w-4" />Fetch GST Documents</Button>
+          <Button onClick={handleFetch} disabled={!canFetchWithOrgGst}><Play className="mr-2 h-4 w-4" />Fetch GST Documents</Button>
         </TaxEmptyState>
       ) : null}
 
@@ -737,7 +1212,7 @@ const Gst2ADocumentsTab = () => {
                 </button>
               ))}
             </div>
-            <TaxCompactTable rows={visible} columns={docColumns} getRowKey={(row) => row.doc_num} onRowClick={setSelected} />
+            <TaxCompactTable rows={visible} columns={docColumns} getRowKey={(row) => row.invoiceNumber} onRowClick={setSelected} />
             <TaxPagination />
           </TaxSectionCard>
         </>
@@ -750,7 +1225,18 @@ const Gst2ADocumentsTab = () => {
   );
 };
 
-const Gst2BDocumentsTab = () => {
+const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
+  const {
+    credentials,
+    credentialsLoading,
+    selectedOrgGst,
+    onOrgGstChange,
+    selectedOrgCredential,
+    canFetchWithOrgGst,
+    vendors,
+    getVendor,
+  } = orgGst;
+
   const [month, setMonth] = useState('Sep');
   const [fy, setFy] = useState('2024-25');
   const [vendorId, setVendorId] = useState('');
@@ -761,69 +1247,99 @@ const Gst2BDocumentsTab = () => {
   const [docs, setDocs] = useState([]);
   const [quickFilter, setQuickFilter] = useState('All Documents');
   const [selected, setSelected] = useState(null);
+  const [fetchGstr2bDocuments] = useFetchGstr2bDocumentsMutation();
 
   const selectedVendor = vendorId ? getVendor(vendorId) : null;
   const stmtKey = `${month}-${fy}`;
 
   const handleFetch = () => {
-    setLoading(true);
-    setFetched(false);
-    setQuickFilter('All Documents');
-    window.setTimeout(() => {
-      let result = (MOCK_GSTR2B_STATEMENT[stmtKey] ?? []).filter((doc) => {
-        if (vendorId && doc.vendor_id !== vendorId) return false;
-        if (docTypeF !== 'All Documents' && doc.doc_type !== docTypeF) return false;
-        if (itcF !== 'All' && doc.itc_status !== itcF) return false;
-        return true;
-      });
-      setDocs(result);
-      setFetched(true);
-      setLoading(false);
-    }, 820);
+    const portalCredentials = buildGstPortalFetchCredentials(selectedOrgCredential);
+    if (!portalCredentials) return;
+
+    runWithSession({
+      orgCredential: selectedOrgCredential,
+      contextLabel: 'GSTR-2B Documents',
+      execute: async (otp) => {
+        setLoading(true);
+        setFetched(false);
+        setQuickFilter('All Documents');
+        try {
+          const payload = buildGstrDocumentsRequestPayload({
+            month,
+            financialYear: fy,
+            gstin: portalCredentials.gst,
+            username: portalCredentials.userName,
+            vendorName: selectedVendor?.name,
+            supplierGstin: selectedVendor?.gstin,
+            otp,
+          });
+          const result = await fetchGstr2bDocuments(payload).unwrap();
+          let resultDocs = result?.currentData?.documents ?? [];
+          if (vendorId) resultDocs = resultDocs.filter((doc) => (doc.gstin ?? doc.supplierGstin) === selectedVendor?.gstin);
+          if (docTypeF !== 'All Documents') resultDocs = resultDocs.filter((doc) => doc.documentType === docTypeF);
+          if (itcF !== 'All') resultDocs = resultDocs.filter((doc) => humanizeGstEnum(doc.itcEligibility ?? doc.itc_status) === itcF);
+          setDocs(resultDocs);
+          setFetched(true);
+        } catch (error) {
+          toast.error(getApiErrorMessage(error));
+        } finally {
+          setLoading(false);
+        }
+      },
+    });
   };
 
+  const docItcStatus = (doc) => doc.itcEligibility ?? doc.itc_status;
+
   const totalGst = docs.reduce((sum, doc) => sum + docTotalGst(doc), 0);
-  const eligibleItc = docs.filter((doc) => doc.itc_status === 'Eligible' || doc.itc_status === 'Partially Eligible').reduce((sum, doc) => sum + doc.cgst + doc.sgst + doc.igst, 0);
-  const claimableItc = docs.reduce((sum, doc) => sum + doc.claimable, 0);
-  const blockedItc = docs.reduce((sum, doc) => sum + doc.blocked, 0);
+  const eligibleItc = docs.filter((doc) => {
+    const status = String(docItcStatus(doc) ?? '').toUpperCase();
+    return status === 'ELIGIBLE' || status === 'PARTIALLY_ELIGIBLE';
+  }).reduce((sum, doc) => sum + Number(doc.cgst ?? 0) + Number(doc.sgst ?? 0) + Number(doc.igst ?? 0), 0);
+  const claimableItc = docs.reduce((sum, doc) => sum + Number(doc.claimable ?? 0), 0);
+  const blockedItc = docs.reduce((sum, doc) => sum + Number(doc.blocked ?? 0), 0);
 
   const quickFilters = ['All Documents', 'Eligible ITC', 'Ineligible ITC', 'Blocked ITC', 'Invoices', 'Credit Notes', 'Debit Notes', 'Matched', 'Needs Review'];
 
   const countMap = useMemo(() => ({
     'All Documents': docs.length,
-    'Eligible ITC': docs.filter((doc) => doc.itc_status === 'Eligible' || doc.itc_status === 'Partially Eligible').length,
-    'Ineligible ITC': docs.filter((doc) => doc.itc_status === 'Ineligible').length,
-    'Blocked ITC': docs.filter((doc) => doc.itc_status === 'Blocked' || doc.blocked > 0).length,
-    Invoices: docs.filter((doc) => doc.doc_type === 'Invoice').length,
-    'Credit Notes': docs.filter((doc) => doc.doc_type === 'Credit Note').length,
-    'Debit Notes': docs.filter((doc) => doc.doc_type === 'Debit Note').length,
-    Matched: docs.filter((doc) => doc.ap_match === 'Matched').length,
-    'Needs Review': docs.filter((doc) => doc.ap_match !== 'Matched' || doc.itc_status === 'Blocked' || doc.itc_status === 'Ineligible').length,
+    'Eligible ITC': docs.filter((doc) => {
+      const status = String(docItcStatus(doc) ?? '').toUpperCase();
+      return status === 'ELIGIBLE' || status === 'PARTIALLY_ELIGIBLE';
+    }).length,
+    'Ineligible ITC': docs.filter((doc) => String(docItcStatus(doc) ?? '').toUpperCase() === 'INELIGIBLE').length,
+    'Blocked ITC': docs.filter((doc) => String(docItcStatus(doc) ?? '').toUpperCase() === 'BLOCKED' || Number(doc.blocked) > 0).length,
+    Invoices: docs.filter((doc) => doc.documentType === 'Invoice').length,
+    'Credit Notes': docs.filter((doc) => doc.documentType === 'Credit Note').length,
+    'Debit Notes': docs.filter((doc) => doc.documentType === 'Debit Note').length,
+    Matched: docs.filter((doc) => doc.apStatus === 'Matched').length,
+    'Needs Review': docs.filter((doc) => doc.apStatus !== 'Matched' || ['BLOCKED', 'INELIGIBLE'].includes(String(docItcStatus(doc) ?? '').toUpperCase())).length,
   }), [docs]);
 
   const visible = docs.filter((doc) => {
-    if (quickFilter === 'Eligible ITC') return doc.itc_status === 'Eligible' || doc.itc_status === 'Partially Eligible';
-    if (quickFilter === 'Ineligible ITC') return doc.itc_status === 'Ineligible';
-    if (quickFilter === 'Blocked ITC') return doc.itc_status === 'Blocked' || doc.blocked > 0;
-    if (quickFilter === 'Invoices') return doc.doc_type === 'Invoice';
-    if (quickFilter === 'Credit Notes') return doc.doc_type === 'Credit Note';
-    if (quickFilter === 'Debit Notes') return doc.doc_type === 'Debit Note';
-    if (quickFilter === 'Matched') return doc.ap_match === 'Matched';
-    if (quickFilter === 'Needs Review') return doc.ap_match !== 'Matched' || doc.itc_status === 'Blocked' || doc.itc_status === 'Ineligible';
+    const status = String(docItcStatus(doc) ?? '').toUpperCase();
+    if (quickFilter === 'Eligible ITC') return status === 'ELIGIBLE' || status === 'PARTIALLY_ELIGIBLE';
+    if (quickFilter === 'Ineligible ITC') return status === 'INELIGIBLE';
+    if (quickFilter === 'Blocked ITC') return status === 'BLOCKED' || Number(doc.blocked) > 0;
+    if (quickFilter === 'Invoices') return doc.documentType === 'Invoice';
+    if (quickFilter === 'Credit Notes') return doc.documentType === 'Credit Note';
+    if (quickFilter === 'Debit Notes') return doc.documentType === 'Debit Note';
+    if (quickFilter === 'Matched') return doc.apStatus === 'Matched';
+    if (quickFilter === 'Needs Review') return doc.apStatus !== 'Matched' || status === 'BLOCKED' || status === 'INELIGIBLE';
     return true;
   });
 
   const b2bColumns = [
-    { key: 'doc_type', title: 'Type', render: (row) => <TaxStatusBadge status={row.doc_type} /> },
-    { key: 'doc_num', title: 'Document No.', cellClassName: 'font-mono text-xs' },
-    { key: 'vendor', title: 'Vendor', render: (row) => getVendor(row.vendor_id)?.name ?? '—' },
-    { key: 'doc_date', title: 'Date' },
-    { key: 'taxable', title: 'Taxable', render: (row) => formatCurrency(row.taxable), cellClassName: 'text-right' },
+    { key: 'documentType', title: 'Type', render: (row) => <TaxStatusBadge status={row.documentType} /> },
+    { key: 'invoiceNumber', title: 'Document No.', cellClassName: 'font-mono text-xs' },
+    { key: 'vendor', title: 'Vendor', render: (row) => row.vendor ?? '—' },
+    { key: 'documentDate', title: 'Date' },
+    { key: 'taxableValue', title: 'Taxable', render: (row) => formatCurrency(row.taxableValue), cellClassName: 'text-right' },
     { key: 'gst', title: 'GST', render: (row) => formatCurrency(docTotalGst(row)), cellClassName: 'text-right font-medium text-primary' },
-    { key: 'itc_status', title: 'ITC Status', render: (row) => <TaxStatusBadge status={row.itc_status} /> },
+    { key: 'itcEligibility', title: 'ITC Status', render: (row) => <TaxStatusBadge status={docItcStatus(row)} /> },
     { key: 'claimable', title: 'Claimable', render: (row) => formatCurrency(row.claimable), cellClassName: 'text-right text-green-600 font-medium' },
     { key: 'blocked', title: 'Blocked', render: (row) => formatCurrency(row.blocked), cellClassName: 'text-right text-red-600' },
-    { key: 'ap_match', title: 'AP Match', render: (row) => <TaxStatusBadge status={row.ap_match} /> },
+    { key: 'apStatus', title: 'AP Match', render: (row) => <TaxStatusBadge status={row.apStatus} /> },
   ];
 
   return (
@@ -835,6 +1351,12 @@ const Gst2BDocumentsTab = () => {
 
       <TaxSectionCard title="Fetch GSTR-2B Statement" description="Static monthly statement · finalized by GST Portal">
         <div className="flex flex-wrap items-end gap-4">
+          <OrgGstCredentialFields
+            credentials={credentials}
+            loading={credentialsLoading}
+            selectedGst={selectedOrgGst}
+            onGstChange={onOrgGstChange}
+          />
           <GstFormField label="Month" required>
             <TaxSelect value={month} onValueChange={(value) => { setMonth(value); setFetched(false); }} options={GST_DOC_MONTHS} />
           </GstFormField>
@@ -846,10 +1368,10 @@ const Gst2BDocumentsTab = () => {
               value={vendorId || 'all'}
               onValueChange={(value) => { setVendorId(value === 'all' ? '' : value); setFetched(false); }}
               placeholder="All Vendors"
-              options={[{ value: 'all', label: 'All Vendors' }, ...GST_VENDOR_MASTER.map((vendor) => ({ value: vendor.id, label: vendor.name }))]}
+              options={[{ value: 'all', label: 'All Vendors' }, ...vendors.map((vendor) => ({ value: vendor.id, label: vendor.name }))]}
             />
           </GstFormField>
-          <GstFormField label="GSTIN">
+          <GstFormField label="Vendor GSTIN">
             <Input readOnly value={selectedVendor?.gstin ?? ''} placeholder="Auto-populated" className="font-mono text-xs bg-muted/40" />
           </GstFormField>
           <GstFormField label="Document Type">
@@ -858,7 +1380,7 @@ const Gst2BDocumentsTab = () => {
           <GstFormField label="ITC Status">
             <TaxSelect value={itcF} onValueChange={setItcF} options={['All', 'Eligible', 'Ineligible', 'Blocked', 'Partially Eligible']} />
           </GstFormField>
-          <Button onClick={handleFetch} disabled={loading} className="self-end">
+          <Button onClick={handleFetch} disabled={!canFetchWithOrgGst || loading} className="self-end">
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
             {loading ? 'Fetching…' : 'Fetch GSTR-2B Statement'}
           </Button>
@@ -868,10 +1390,10 @@ const Gst2BDocumentsTab = () => {
       {!fetched && !loading ? (
         <TaxEmptyState
           icon={BarChart2}
-          title="Select a tax period to fetch the GSTR-2B statement"
-          description="GSTR-2B is a static, finalized document generated by the GST portal for each tax period."
+          title="Select organisation GSTIN and tax period"
+          description="Organisation GSTIN is required. GSTR-2B is a static, finalized document generated by the GST portal for each tax period."
         >
-          <Button onClick={handleFetch}><Play className="mr-2 h-4 w-4" />Fetch GSTR-2B Statement</Button>
+          <Button onClick={handleFetch} disabled={!canFetchWithOrgGst}><Play className="mr-2 h-4 w-4" />Fetch GSTR-2B Statement</Button>
         </TaxEmptyState>
       ) : null}
 
@@ -895,7 +1417,7 @@ const Gst2BDocumentsTab = () => {
                 options={quickFilters.map((filter) => ({ value: filter, label: filter, count: countMap[filter] }))}
               />
             </div>
-            <TaxCompactTable rows={visible} columns={b2bColumns} getRowKey={(row) => row.doc_num} onRowClick={setSelected} />
+            <TaxCompactTable rows={visible} columns={b2bColumns} getRowKey={(row) => row.invoiceNumber} onRowClick={setSelected} />
             <TaxPagination />
           </TaxSectionCard>
         </>
@@ -910,18 +1432,45 @@ const Gst2BDocumentsTab = () => {
 
 export const GstDocumentsPanel = () => {
   const [subTab, setSubTab] = useState('b2b');
+  const session = useGstTaxpayerSession();
+  const { credentials, isLoading: credentialsLoading } = useOrganisationGstCredentials();
+  const { vendors } = useGstVendors();
+  const [selectedOrgGst, setSelectedOrgGst] = useState('');
+
+  useEffect(() => {
+    if (!selectedOrgGst && credentials.length === 1) {
+      setSelectedOrgGst(credentials[0].gst);
+    }
+  }, [credentials, selectedOrgGst]);
+
+  const selectedOrgCredential = credentials.find((entry) => entry.gst === selectedOrgGst) ?? null;
+  const getVendor = useCallback(
+    (id) => vendors.find((vendor) => vendor.id === id) ?? null,
+    [vendors],
+  );
+  const orgGst = {
+    credentials,
+    credentialsLoading,
+    selectedOrgGst,
+    onOrgGstChange: setSelectedOrgGst,
+    selectedOrgCredential,
+    canFetchWithOrgGst: Boolean(selectedOrgCredential?.gst && selectedOrgCredential?.userName),
+    vendors,
+    getVendor,
+  };
 
   return (
     <TabsContent value="documents" className="space-y-4">
+      <GstPortalOtpDialog {...session.otpDialogProps} />
       <Tabs value={subTab} onValueChange={setSubTab} className="space-y-4">
         <TabsList className="grid w-full max-w-2xl grid-cols-3">
           <TabsTrigger value="b2b">GSTR-2A B2B</TabsTrigger>
           <TabsTrigger value="2a-docs">GSTR-2A Documents</TabsTrigger>
           <TabsTrigger value="2b-docs">GSTR-2B Documents</TabsTrigger>
         </TabsList>
-        <TabsContent value="b2b"><GstB2bTab /></TabsContent>
-        <TabsContent value="2a-docs"><Gst2ADocumentsTab /></TabsContent>
-        <TabsContent value="2b-docs"><Gst2BDocumentsTab /></TabsContent>
+        {subTab === 'b2b' ? <GstB2bTab orgGst={orgGst} runWithSession={session.runWithSession} /> : null}
+        {subTab === '2a-docs' ? <Gst2ADocumentsTab orgGst={orgGst} runWithSession={session.runWithSession} /> : null}
+        {subTab === '2b-docs' ? <Gst2BDocumentsTab orgGst={orgGst} runWithSession={session.runWithSession} /> : null}
       </Tabs>
     </TabsContent>
   );

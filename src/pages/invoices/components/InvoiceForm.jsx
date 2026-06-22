@@ -38,7 +38,10 @@ import {
   computeLineItemsSummary,
   resolveLineItemsExpanded,
 } from "../utils/lineItemsSummary";
-import { useGetTdsSectionsQuery } from "../../../Services/apis/taxApi";
+import {
+  useGetOrganisationGstCredentialsQuery,
+  useGetTdsSectionsQuery,
+} from "../../../Services/apis/taxApi";
 import {
   buildTdsOptions,
   NO_TDS_VALUE,
@@ -154,8 +157,18 @@ export const InvoiceForm = ({
   INVOICE_SOURCES,
   LEDGER_OPTIONS,
   TAX_RATES,
+  showBillingGst = false,
+  requireBillingGst = false,
 }) => {
   const { data: tdsSectionsData = [] } = useGetTdsSectionsQuery();
+  const {
+    data: organisationGstCredentials = [],
+    isLoading: organisationGstLoading,
+    isFetching: organisationGstFetching,
+    isError: organisationGstError,
+  } = useGetOrganisationGstCredentialsQuery(undefined, {
+    skip: !showBillingGst,
+  });
   const [vendorPickerOpen, setVendorPickerOpen] = useState(false);
   const [vendorQuery, setVendorQuery] = useState("");
   const vendorAnchorRef = useRef(null);
@@ -231,11 +244,73 @@ export const InvoiceForm = ({
     [tdsSectionsData, formData?.tds],
   );
 
+  const billingGstOptions = useMemo(
+    () =>
+      organisationGstCredentials.map((entry) => ({
+        value: entry.gst,
+        label: entry.userName ? `${entry.gst} - ${entry.userName}` : entry.gst,
+      })),
+    [organisationGstCredentials],
+  );
+
+  const organisationGstBusy = organisationGstLoading || organisationGstFetching;
+
+  useEffect(() => {
+    if (!showBillingGst || organisationGstBusy || !formData) return;
+    if (organisationGstError || organisationGstCredentials.length === 0) {
+      if (formData.billingGstin) {
+        setFormData((prev) => ({
+          ...prev,
+          billingGstin: "",
+        }));
+      }
+      return;
+    }
+
+    const currentBillingGst = String(formData.billingGstin || "").trim().toUpperCase();
+    const matchedCurrent = organisationGstCredentials.find((entry) => entry.gst === currentBillingGst);
+    if (matchedCurrent) {
+      if (formData.billingGstin !== matchedCurrent.gst) {
+        setFormData((prev) => ({
+          ...prev,
+          billingGstin: matchedCurrent.gst,
+        }));
+      }
+      return;
+    }
+
+    if (currentBillingGst) {
+      setFormData((prev) => ({
+        ...prev,
+        billingGstin: "",
+      }));
+      return;
+    }
+
+    if (organisationGstCredentials.length === 1) {
+      setFormData((prev) => ({
+        ...prev,
+        billingGstin: organisationGstCredentials[0].gst,
+      }));
+    }
+  }, [
+    formData,
+    organisationGstError,
+    organisationGstBusy,
+    organisationGstCredentials,
+    showBillingGst,
+    setFormData,
+  ]);
+
   if (!formData) return null;
   const showLineItems = resolveLineItemsExpanded(formData);
   const invoiceCurrency = formData.currency || DEFAULT_CURRENCY;
   const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
   const isGstinRequired = useInrTax && formData.gstTreatment !== "N/A";
+  const selectedBillingGst = organisationGstCredentials.find(
+    (entry) => entry.gst === String(formData.billingGstin || "").trim().toUpperCase(),
+  );
+  const billingGstSatisfied = !requireBillingGst || Boolean(selectedBillingGst?.gst);
   const isInvoiceLevelDiscount = formData.discountsLevel === INVOICE_LEVEL;
   const isInvoiceLevelTax = formData.taxesLevel === INVOICE_LEVEL;
   const lineItemHeaders = lineItemTableHeader
@@ -918,6 +993,49 @@ export const InvoiceForm = ({
             </div>
 
             <div>
+              {showBillingGst ? (
+                <div className="mb-3">
+                  <RequiredLabel required={requireBillingGst}>Billing GSTIN</RequiredLabel>
+                  <AppSelect
+                    value={formData.billingGstin || ""}
+                    onChange={(event) => {
+                      const nextGst = event.target.value;
+                      const matched = organisationGstCredentials.find((entry) => entry.gst === nextGst);
+                      setFormData({
+                        ...formData,
+                        billingGstin: matched?.gst || "",
+                      });
+                    }}
+                    options={billingGstOptions}
+                    placeholder={
+                      organisationGstBusy
+                        ? "Loading organisation GSTINs..."
+                        : "Select billing GSTIN"
+                    }
+                    className="h-8 text-sm"
+                    disabled={organisationGstBusy || billingGstOptions.length === 0}
+                    data-testid="invoice-preview-billing-gst-select"
+                  />
+                  {organisationGstError ? (
+                    <p className="mt-1 text-xs text-destructive">
+                      Failed to load organisation GSTINs. Add invoice is blocked until this loads.
+                    </p>
+                  ) : billingGstOptions.length === 0 && !organisationGstBusy ? (
+                    <p className="mt-1 text-xs text-destructive">
+                      Add GSTIN and GST portal username in Settings &gt; Organisation Details before proceeding.
+                    </p>
+                  ) : !billingGstSatisfied ? (
+                    <p className="mt-1 text-xs text-destructive">
+                      Select a billing GSTIN configured in Organisation Details.
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Billing GSTIN must be one of this organisation's configured GST registrations.
+                    </p>
+                  )}
+                </div>
+              ) : null}
+
               <Label className="text-xs">Billing Address</Label>
               <textarea
                 value={formData.billingAddress}

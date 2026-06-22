@@ -25,6 +25,9 @@ export const formatRetPeriod = (retPrd) => {
 
 export const formatLakhs = (amountInLakhs) => `₹${Number(amountInLakhs || 0).toFixed(2)}L`;
 
+export const formatLakhsFromRupees = (amount) =>
+  `₹${(Number(amount || 0) / 100000).toFixed(2)}L`;
+
 export const INDIAN_STATES = [
   'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
   'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand', 'Karnataka',

@@ -60,46 +60,55 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
   const [tdsForm, setTdsForm] = useState(DEFAULT_TDS_FORM);
   const [calculateTds] = useCalculateTdsMutation();
 
+  const overviewActive = enabled && tdsSubTab === 'overview';
+  const calculatorActive = enabled && tdsSubTab === 'calculator';
+  const dialogDataActive = enabled && showTdsCalcDialog;
+
   const {
     data: tdsEntriesData = [],
     isLoading: tdsEntriesLoading,
     isFetching: tdsEntriesFetching,
     refetch: refetchTdsEntries,
-  } = useGetTdsEntriesQuery(undefined, { skip: !enabled });
+  } = useGetTdsEntriesQuery(undefined, { skip: !overviewActive });
   const {
     data: tdsSummary = null,
     isLoading: tdsSummaryLoading,
     isFetching: tdsSummaryFetching,
     refetch: refetchTdsSummary,
-  } = useGetTdsSummaryQuery(undefined, { skip: !enabled });
+  } = useGetTdsSummaryQuery(undefined, { skip: !overviewActive });
   const {
     data: tdsSectionsData = [],
     isLoading: tdsSectionsLoading,
     isFetching: tdsSectionsFetching,
     refetch: refetchTdsSections,
-  } = useGetTdsSectionsQuery(undefined, { skip: !enabled });
+  } = useGetTdsSectionsQuery(undefined, { skip: !calculatorActive && !dialogDataActive });
   const {
     data: invoicesListData = EMPTY_INVOICE_LIST_RESPONSE,
     isLoading: invoicesLoading,
     isFetching: invoicesFetching,
     refetch: refetchInvoices,
-  } = useGetInvoicesQuery(undefined, { skip: !enabled });
+  } = useGetInvoicesQuery(undefined, { skip: !dialogDataActive });
 
   const tdsEntries = Array.isArray(tdsEntriesData) ? tdsEntriesData : [];
   const tdsSections = Array.isArray(tdsSectionsData) ? tdsSectionsData : [];
   const invoices = getInvoiceListItems(invoicesListData);
   const canManageTds = canPerformAction('tax.calculateTds') && enabled;
-  const loading = enabled && (tdsEntriesLoading || tdsSummaryLoading || tdsSectionsLoading || invoicesLoading);
+  const loading = overviewActive && (tdsEntriesLoading || tdsSummaryLoading);
   const isFetching =
     tdsEntriesFetching || tdsSummaryFetching || tdsSectionsFetching || invoicesFetching;
 
   const refetch = async () => {
-    await Promise.all([
-      refetchTdsEntries(),
-      refetchTdsSummary(),
-      refetchTdsSections(),
-      refetchInvoices(),
-    ]);
+    const tasks = [];
+    if (overviewActive) {
+      tasks.push(refetchTdsEntries(), refetchTdsSummary());
+    }
+    if (calculatorActive) {
+      tasks.push(refetchTdsSections());
+    }
+    if (dialogDataActive) {
+      tasks.push(refetchInvoices());
+    }
+    await Promise.all(tasks);
   };
 
   useImperativeHandle(ref, () => ({ refetch, isFetching }));
@@ -117,7 +126,9 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
       toast.success(`TDS calculated: ${formatCurrency(data?.entry?.total_tds)}`);
       setShowTdsCalcDialog(false);
       setTdsForm(DEFAULT_TDS_FORM);
-      await refetch();
+      if (overviewActive) {
+        await Promise.all([refetchTdsEntries(), refetchTdsSummary()]);
+      }
     } catch (error) {
       if (handleCreditError(error)) return;
       toast.error(error?.data?.detail || 'Failed to calculate TDS');
@@ -152,118 +163,115 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
           ))}
         </TabsList>
 
-        <TabsContent value="overview" className="space-y-6">
-          {tdsSummary && (
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <Card>
-                <CardContent className="pt-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Total Base Amount</p>
-                      <p className="text-xl font-bold">{formatCurrency(tdsSummary.total_base_amount)}</p>
+        {tdsSubTab === 'overview' ? (
+          <div className="space-y-6">
+            {tdsSummary && (
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Card>
+                  <CardContent className="pt-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Total Base Amount</p>
+                        <p className="text-xl font-bold">{formatCurrency(tdsSummary.total_base_amount)}</p>
+                      </div>
+                      <IndianRupee className="h-8 w-8 text-muted-foreground" />
                     </div>
-                    <IndianRupee className="h-8 w-8 text-muted-foreground" />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">TDS Deducted</p>
-                      <p className="text-xl font-bold">{formatCurrency(tdsSummary.total_tds_deducted)}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-muted-foreground">TDS Deducted</p>
+                        <p className="text-xl font-bold">{formatCurrency(tdsSummary.total_tds_deducted)}</p>
+                      </div>
+                      <Receipt className="h-8 w-8 text-blue-500" />
                     </div>
-                    <Receipt className="h-8 w-8 text-blue-500" />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">TDS Deposited</p>
-                      <p className="text-xl font-bold">{formatCurrency(tdsSummary.total_tds_deposited)}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-muted-foreground">TDS Deposited</p>
+                        <p className="text-xl font-bold">{formatCurrency(tdsSummary.total_tds_deposited)}</p>
+                      </div>
+                      <CheckCircle className="h-8 w-8 text-green-500" />
                     </div>
-                    <CheckCircle className="h-8 w-8 text-green-500" />
-                  </div>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardContent className="pt-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Pending Deposit</p>
-                      <p className="text-xl font-bold">{formatCurrency(tdsSummary.pending_deposit)}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm text-muted-foreground">Pending Deposit</p>
+                        <p className="text-xl font-bold">{formatCurrency(tdsSummary.pending_deposit)}</p>
+                      </div>
+                      <Clock className="h-8 w-8 text-yellow-500" />
                     </div>
-                    <Clock className="h-8 w-8 text-yellow-500" />
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardContent>
+                </Card>
+              </div>
+            )}
+
+            <TdsOverviewPanels />
+
+            <div className="flex gap-2">
+              <Button onClick={() => setShowTdsCalcDialog(true)} data-testid="calc-tds-btn" disabled={!canManageTds}>
+                <Calculator className="h-4 w-4 mr-2" />
+                Calculate TDS
+              </Button>
             </div>
-          )}
 
-          <TdsOverviewPanels />
-
-          <div className="flex gap-2">
-            <Button onClick={() => setShowTdsCalcDialog(true)} data-testid="calc-tds-btn" disabled={!canManageTds}>
-              <Calculator className="h-4 w-4 mr-2" />
-              Calculate TDS
-            </Button>
+            <Card>
+              <CardHeader>
+                <CardTitle>TDS Entries</CardTitle>
+                <CardDescription>TDS deductions and deposits</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <AppDataTable
+                  tableHeader={TDS_ENTRIES_TABLE_HEADER}
+                  tableData={tdsEntries}
+                  renderRow={renderTdsEntryRow}
+                  emptyMessage="No TDS entries found. Calculate TDS for an invoice to create entries."
+                />
+              </CardContent>
+            </Card>
           </div>
+        ) : null}
 
-          <Card>
-            <CardHeader>
-              <CardTitle>TDS Entries</CardTitle>
-              <CardDescription>Live TDS deductions and deposits</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AppDataTable
-                tableHeader={TDS_ENTRIES_TABLE_HEADER}
-                tableData={tdsEntries}
-                renderRow={renderTdsEntryRow}
-                emptyMessage="No TDS entries found. Calculate TDS for an invoice to create entries."
-              />
-            </CardContent>
-          </Card>
-        </TabsContent>
+        {tdsSubTab === 'calculator' ? (
+          <div className="space-y-6">
+            <TdsCalculatorPanel onCalculate={() => setShowTdsCalcDialog(true)} disabled={!canManageTds} />
+            <Card>
+              <CardHeader>
+                <CardTitle>TDS Sections Reference</CardTitle>
+                <CardDescription>Applicable TDS rates by section from API.</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {tdsSectionsLoading ? (
+                  <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Loading TDS sections…
+                  </div>
+                ) : (
+                  <AppDataTable
+                    tableHeader={TDS_SECTIONS_TABLE_HEADER}
+                    tableData={tdsSections}
+                    renderRow={renderTdsSectionRow}
+                    emptyMessage="No TDS sections found."
+                  />
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        ) : null}
 
-        <TabsContent value="calculator" className="space-y-6">
-          <TdsCalculatorPanel onCalculate={() => setShowTdsCalcDialog(true)} disabled={!canManageTds} />
-          <Card>
-            <CardHeader>
-              <CardTitle>TDS Sections Reference</CardTitle>
-              <CardDescription>Applicable TDS rates by section from live API.</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AppDataTable
-                tableHeader={TDS_SECTIONS_TABLE_HEADER}
-                tableData={tdsSections}
-                renderRow={renderTdsSectionRow}
-                emptyMessage="No TDS sections found."
-              />
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="analytics" className="space-y-6">
-          <TdsAnalyticsPanel />
-        </TabsContent>
-
-        <TabsContent value="reports" className="space-y-6">
-          <TdsReportsPanel />
-        </TabsContent>
-
-        <TabsContent value="form16a" className="space-y-6">
-          <TdsForm16aPanel onOpenCertificates={onOpenCertificates} />
-        </TabsContent>
-
-        <TabsContent value="fvu" className="space-y-6">
-          <TdsFvuPanel />
-        </TabsContent>
-
-        <TabsContent value="csi" className="space-y-6">
-          <TdsCsiPanel />
-        </TabsContent>
+        {tdsSubTab === 'analytics' ? <TdsAnalyticsPanel /> : null}
+        {tdsSubTab === 'reports' ? <TdsReportsPanel /> : null}
+        {tdsSubTab === 'form16a' ? <TdsForm16aPanel onOpenCertificates={onOpenCertificates} /> : null}
+        {tdsSubTab === 'fvu' ? <TdsFvuPanel /> : null}
+        {tdsSubTab === 'csi' ? <TdsCsiPanel /> : null}
       </Tabs>
 
       <TdsCalculationDialog

@@ -77,3 +77,27 @@ export function buildOrganisationSavePayload(orgForm) {
     gstin: normalizedRegistrations[0]?.gstin ?? '',
   };
 }
+
+export function normalizeOrganisationGstCredentialsList(response) {
+  const list = Array.isArray(response)
+    ? response
+    : response?.data ?? response?.items ?? response?.gst_registrations ?? response?.gstRegistrations ?? [];
+
+  if (!Array.isArray(list)) return [];
+
+  return list
+    .map((entry, index) => ({
+      id: entry.id ?? entry.gst ?? entry.gstin ?? entry.gstIn ?? `org-gst-${index}`,
+      gst: (entry.gst ?? entry.gstin ?? entry.gstIn ?? '').trim().toUpperCase(),
+      userName: (entry.userName ?? entry.username ?? entry.gst_username ?? entry.gstUsername ?? '').trim(),
+    }))
+    .filter((entry) => entry.gst && entry.userName);
+}
+
+export function buildGstPortalFetchCredentials(orgCredential) {
+  if (!orgCredential?.gst || !orgCredential?.userName) return null;
+  return {
+    gst: orgCredential.gst,
+    userName: orgCredential.userName,
+  };
+}

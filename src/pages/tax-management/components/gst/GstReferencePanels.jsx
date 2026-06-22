@@ -1,11 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import {
   AlertCircle,
-  BarChart2,
   BarChart3,
   Building2,
   CheckCircle2,
-  DollarSign,
   Download,
   FileSearch,
   FileText,
@@ -13,11 +11,9 @@ import {
   Layers,
   Loader2,
   Play,
-  Receipt,
   RefreshCw,
   Search,
   TrendingUp,
-  WalletCards,
 } from 'lucide-react';
 import { Button } from '../../../../components/ui/button';
 import { Input } from '../../../../components/ui/input';
@@ -50,69 +46,17 @@ import {
   TaxSelect,
   TaxStatusBadge,
   TaxValidBadge,
-  TaxVendorSelector,
 } from '../TaxUi';
 import {
   DEFAULT_TAX_PERIOD,
-  GST_VENDOR_MASTER,
-  MOCK_GSTR_RETURNS_API,
-  gstReconciliationRows2A,
-  gstReconciliationRows2B,
-  gstVendorBalances,
   TAX_PERIODS,
 } from '../../data/taxStaticData';
-import { formatCurrency, formatLakhs, formatRetPeriod } from '../../utils/taxFormatting';
-
-const sum = (items, key) => items.reduce((total, item) => total + Number(item[key] || 0), 0);
-
-const deriveLedgerAggregates = (vendors) => {
-  const cgst = sum(vendors, 'cgst');
-  const sgst = sum(vendors, 'sgst');
-  const igst = sum(vendors, 'igst');
-  const cess = sum(vendors, 'cess');
-  const cash = sum(vendors, 'cash');
-  const itc = sum(vendors, 'itc');
-  return { cgst, sgst, igst, cess, cash, itc, total: cash + itc };
-};
-
-const deriveLedgerComposition = (aggregate) => {
-  const totalItc = aggregate.cgst + aggregate.sgst + aggregate.igst + aggregate.cess;
-  const pct = (amount) => (totalItc > 0 ? Math.round((amount / totalItc) * 100) : 0);
-  return [
-    { label: 'IGST Credit', amount: aggregate.igst, pct: pct(aggregate.igst), dotClass: 'bg-green-500', progressClassName: '[&>div]:bg-green-500' },
-    { label: 'CGST Credit', amount: aggregate.cgst, pct: pct(aggregate.cgst), dotClass: 'bg-violet-600', progressClassName: '[&>div]:bg-violet-600' },
-    { label: 'SGST Credit', amount: aggregate.sgst, pct: pct(aggregate.sgst), dotClass: 'bg-blue-500', progressClassName: '[&>div]:bg-blue-500' },
-    { label: 'CESS', amount: aggregate.cess, pct: pct(aggregate.cess), dotClass: 'bg-amber-500', progressClassName: '[&>div]:bg-amber-500' },
-  ];
-};
-
-const deriveLedgerInsights = (aggregate, count) => {
-  const composition = deriveLedgerComposition(aggregate);
-  const top = [...composition].sort((a, b) => b.amount - a.amount)[0];
-  const insights = [
-    { text: `${top.label} is the largest available balance at ${formatLakhs(top.amount)} (${top.pct}% of total ITC) across ${count} GSTIN${count === 1 ? '' : 's'}.`, icon: TrendingUp, className: 'border-green-200 bg-green-50' },
-    { text: `CGST and SGST balances (${formatLakhs(aggregate.cgst)} + ${formatLakhs(aggregate.sgst)}) are sufficient for upcoming tax liabilities.`, icon: CheckCircle2, className: 'border-blue-200 bg-blue-50' },
-  ];
-  if (aggregate.cess < 0.5) {
-    insights.push({
-      text: `CESS balance is low at ${formatLakhs(aggregate.cess)} and should be monitored before the next filing.`,
-      icon: AlertCircle,
-      className: 'border-amber-200 bg-amber-50',
-    });
-  }
-  return insights;
-};
-
-const LedgerSummaryCard = ({ label, value, sub, className, icon: Icon }) => (
-  <div className={cn('rounded-lg border p-4', className)}>
-    <div className="mb-2 flex items-start justify-between gap-2">
-      <p className="text-[11px] font-semibold uppercase tracking-wide opacity-90">{label}</p>
-      {Icon ? <Icon className="h-4 w-4 shrink-0 opacity-80" /> : null}
-    </div>
-    <p className="text-2xl font-bold">{value}</p>
-    <p className="mt-1 text-xs opacity-80">{sub}</p>
-  </div>
-);
+import { useTrackGstReturnsMutation } from '../../../../Services/apis/taxApi';
+import { buildReturnsTrackPayload } from '../../utils/gstApiMappers';
+import { getApiErrorMessage } from '../../hooks/useGstTaxpayerSession';
+import { useGstVendors } from '../../hooks/useGstVendors';
+import { toast } from 'sonner';
+import { formatCurrency, formatRetPeriod } from '../../utils/taxFormatting';
 
 const RECON_SUGGESTED_ACTIONS = {
   Matched: null,
@@ -227,9 +171,9 @@ export const GstReconciliationPanel = () => {
   const [selectedRow, setSelectedRow] = useState(null);
 
   const type = subTab === 'GSTR-2A' ? '2A' : '2B';
-  const sourceRows = type === '2A' ? gstReconciliationRows2A : gstReconciliationRows2B;
-  const matchPct = type === '2A' ? 73 : 81;
-  const totalInvoices = type === '2A' ? 248 : 186;
+  const sourceRows = [];
+  const matchPct = 0;
+  const totalInvoices = 0;
 
   const filteredRows = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -262,7 +206,7 @@ export const GstReconciliationPanel = () => {
         icon={FileSearch}
         title={`GSTR-${type} Reconciliation`}
         description={type === '2A' ? 'Match purchase register with supplier uploaded invoices.' : 'Compare purchase register with static GSTR-2B statement.'}
-        meta={<TaxApiMeta synced="Today, 09:42 AM" status="live" count={String(totalInvoices)} />}
+        meta={<TaxApiMeta synced="Today, 09:42 AM" count={String(totalInvoices)} />}
         actions={
           <>
             <Button variant="outline" size="sm">
@@ -299,24 +243,34 @@ export const GstReconciliationPanel = () => {
           <TaxProgressRow label="Reconciliation progress" value={matchPct} />
         </div>
 
-        <TaxCompactTable
-          rows={filteredRows}
-          onRowClick={setSelectedRow}
-          columns={[
-            { key: 'invoiceNo', title: 'Invoice No.' },
-            { key: 'vendor', title: 'Vendor' },
-            { key: 'gstin', title: 'GSTIN', cellClassName: 'font-mono text-xs' },
-            { key: 'date', title: 'Invoice Date' },
-            { key: 'taxable', title: 'Taxable Value', render: (row) => formatCurrency(row.taxable), cellClassName: 'text-right' },
-            { key: 'gst', title: 'GST Amount', render: (row) => formatCurrency(row.gst), cellClassName: 'text-right' },
-            { key: 'itcEligible', title: 'ITC Eligible', render: (row) => <TaxStatusBadge status={row.itcEligible} /> },
-            { key: 'booksStatus', title: 'Books Status', render: (row) => <TaxStatusBadge status={row.booksStatus} /> },
-            { key: 'portalStatus', title: 'GST Portal Status', render: (row) => <TaxStatusBadge status={row.portalStatus} /> },
-            { key: 'difference', title: 'Difference', render: (row) => formatCurrency(row.difference), cellClassName: 'text-right' },
-            { key: 'result', title: 'Match Result', render: (row) => <TaxStatusBadge status={row.result} /> },
-          ]}
-        />
-        <TaxPagination />
+        {filteredRows.length === 0 ? (
+          <TaxEmptyState
+            icon={FileSearch}
+            title="No reconciliation data"
+            description="Run GSTR-2A B2B reconcile from the Documents tab to populate reconciliation results."
+          />
+        ) : (
+          <>
+            <TaxCompactTable
+              rows={filteredRows}
+              onRowClick={setSelectedRow}
+              columns={[
+                { key: 'invoiceNo', title: 'Invoice No.' },
+                { key: 'vendor', title: 'Vendor' },
+                { key: 'gstin', title: 'GSTIN', cellClassName: 'font-mono text-xs' },
+                { key: 'date', title: 'Invoice Date' },
+                { key: 'taxable', title: 'Taxable Value', render: (row) => formatCurrency(row.taxable), cellClassName: 'text-right' },
+                { key: 'gst', title: 'GST Amount', render: (row) => formatCurrency(row.gst), cellClassName: 'text-right' },
+                { key: 'itcEligible', title: 'ITC Eligible', render: (row) => <TaxStatusBadge status={row.itcEligible} /> },
+                { key: 'booksStatus', title: 'Books Status', render: (row) => <TaxStatusBadge status={row.booksStatus} /> },
+                { key: 'portalStatus', title: 'GST Portal Status', render: (row) => <TaxStatusBadge status={row.portalStatus} /> },
+                { key: 'difference', title: 'Difference', render: (row) => formatCurrency(row.difference), cellClassName: 'text-right' },
+                { key: 'result', title: 'Match Result', render: (row) => <TaxStatusBadge status={row.result} /> },
+              ]}
+            />
+            <TaxPagination />
+          </>
+        )}
       </TaxSectionCard>
 
       <TaxDrawer open={Boolean(selectedRow)} onOpenChange={(open) => !open && setSelectedRow(null)} title={`Invoice Details — ${selectedRow?.invoiceNo || ''}`}>
@@ -330,28 +284,39 @@ const FY_OPTIONS = ['FY 2025-26', 'FY 2024-25', 'FY 2023-24'];
 const RETURN_TYPE_OPTIONS = ['All Returns', 'GSTR-1', 'GSTR-3B', 'GSTR-9'];
 
 export const GstReturnsPanel = () => {
+  const { vendors } = useGstVendors();
   const [vendorId, setVendorId] = useState('');
   const [returnType, setReturnType] = useState('All Returns');
   const [fy, setFy] = useState('FY 2024-25');
   const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState(false);
   const [records, setRecords] = useState([]);
+  const [trackReturns] = useTrackGstReturnsMutation();
 
-  const selectedVendor = GST_VENDOR_MASTER.find((vendor) => vendor.id === vendorId);
-  const fyKey = fy === 'FY 2024-25' ? '2024-25' : fy === 'FY 2023-24' ? '2023-24' : '2025-26';
-  const apiKey = vendorId ? `${vendorId}-${fyKey}` : '';
+  const selectedVendor = vendors.find((vendor) => vendor.id === vendorId);
 
-  const handleTrack = () => {
-    if (!vendorId) return;
+  const handleTrack = async () => {
+    if (!vendorId || !selectedVendor) return;
     setLoading(true);
     setFetched(false);
-    window.setTimeout(() => {
-      const raw = MOCK_GSTR_RETURNS_API[apiKey] ?? [];
-      const filtered = returnType === 'All Returns' ? raw : raw.filter((row) => row.ret_typ === returnType);
+    try {
+      const result = await trackReturns(buildReturnsTrackPayload({
+        vendorName: selectedVendor.name,
+        gstin: selectedVendor.gstin,
+        returnType,
+        financialYear: fy,
+      })).unwrap();
+      const rows = result?.returns ?? [];
+      const filtered = returnType === 'All Returns'
+        ? rows
+        : rows.filter((row) => row.returnType === returnType.replace(/-/g, ''));
       setRecords(filtered);
       setFetched(true);
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
       setLoading(false);
-    }, 900);
+    }
   };
 
   const filedCount = records.filter((row) => row.status === 'Filed').length;
@@ -391,7 +356,7 @@ export const GstReturnsPanel = () => {
               placeholder="Search or select vendor…"
               options={[
                 { value: 'placeholder', label: 'Search or select vendor…' },
-                ...GST_VENDOR_MASTER.map((vendor) => ({ value: vendor.id, label: vendor.name })),
+                ...vendors.map((vendor) => ({ value: vendor.id, label: vendor.name })),
               ]}
             />
           </div>
@@ -437,7 +402,7 @@ export const GstReturnsPanel = () => {
           <TaxSectionCard
             icon={FileText}
             title="Vendor Compliance Summary"
-            meta={<TaxApiMeta synced="Just now" status="live" count={String(records.length)} />}
+            meta={<TaxApiMeta synced="Just now" count={String(records.length)} />}
           >
             <div className="mb-4 flex flex-wrap items-center gap-4 border-b pb-4">
               <div className="grid h-10 w-10 place-items-center rounded-lg bg-primary/10 text-sm font-bold text-primary">
@@ -454,7 +419,7 @@ export const GstReturnsPanel = () => {
             </div>
             <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               <TaxKpiCard label="Returns Found" value={String(records.length)} sub={`${returnType} · ${fy}`} icon={FileText} />
-              <TaxKpiCard label="Last Filed Return" value={lastFiled?.ret_typ || '—'} sub={lastFiled ? formatRetPeriod(lastFiled.ret_prd) : 'No filings found'} icon={CheckCircle2} tone="green" />
+              <TaxKpiCard label="Last Filed Return" value={lastFiled?.returnType || '—'} sub={lastFiled ? formatRetPeriod(lastFiled.returnPeriod) : 'No filings found'} icon={CheckCircle2} tone="green" />
               <TaxKpiCard label="Last Filing Date" value={lastFiled?.dof || '—'} sub={`Mode: ${lastFiled?.filing_mode || '—'}`} icon={Layers} />
               <TaxKpiCard label="Filing Validity" value={invalidCount > 0 ? `${invalidCount} Invalid` : 'All Valid'} sub={`${filedCount} filed of ${records.length}`} icon={AlertCircle} tone={invalidCount > 0 ? 'red' : 'green'} />
             </div>
@@ -481,13 +446,13 @@ export const GstReturnsPanel = () => {
               <>
                 <TaxCompactTable
                   rows={records}
-                  getRowKey={(row, index) => `${row.ret_typ}-${row.ret_prd}-${index}`}
+                  getRowKey={(row, index) => `${row.returnType}-${row.returnPeriod}-${index}`}
                   columns={[
-                    { key: 'ret_typ', title: 'Return Type', cellClassName: 'font-medium text-primary' },
-                    { key: 'ret_prd', title: 'Return Period', render: (row) => formatRetPeriod(row.ret_prd) },
+                    { key: 'returnType', title: 'Return Type', cellClassName: 'font-medium text-primary' },
+                    { key: 'returnPeriod', title: 'Return Period', render: (row) => formatRetPeriod(row.returnPeriod) },
                     { key: 'arn', title: 'ARN', render: (row) => row.arn || '—', cellClassName: 'font-mono text-xs' },
-                    { key: 'dof', title: 'Filed Date' },
-                    { key: 'filing_mode', title: 'Filing Mode', cellClassName: 'text-muted-foreground' },
+                    { key: 'filedDate', title: 'Filed Date' },
+                    { key: 'filingMode', title: 'Filing Mode', cellClassName: 'text-muted-foreground' },
                     { key: 'status', title: 'Status', render: (row) => <TaxStatusBadge status={row.status} /> },
                     { key: 'valid', title: 'Valid', render: (row) => <TaxValidBadge valid={row.valid} /> },
                   ]}
@@ -501,210 +466,6 @@ export const GstReturnsPanel = () => {
           </TaxSectionCard>
         </>
       ) : null}
-    </TabsContent>
-  );
-};
-
-export const GstLedgersPanel = () => {
-  const [selMode, setSelMode] = useState('all');
-  const [selectedIds, setSelectedIds] = useState([]);
-
-  const activeVendors = useMemo(() => {
-    if (selMode === 'all') return gstVendorBalances;
-    return gstVendorBalances.filter((vendor) => selectedIds.includes(vendor.id));
-  }, [selMode, selectedIds]);
-
-  const hasSelection = selMode === 'all' || selectedIds.length > 0;
-  const aggregate = deriveLedgerAggregates(activeVendors);
-  const composition = deriveLedgerComposition(aggregate);
-  const insights = deriveLedgerInsights(aggregate, activeVendors.length);
-  const totalVendors = activeVendors.length;
-
-  return (
-    <TabsContent value="ledgers" className="space-y-4">
-      <div>
-        <h3 className="text-base font-semibold">GST Cash & ITC Balance</h3>
-        <p className="text-sm text-muted-foreground">View available GST cash balances and Input Tax Credit across CGST, SGST, IGST and CESS heads.</p>
-      </div>
-
-      <TaxSectionCard icon={WalletCards} title="Vendor & GSTIN Filter">
-        <div className="flex flex-wrap items-end justify-between gap-4">
-          <TaxVendorSelector
-            vendors={gstVendorBalances}
-            mode={selMode}
-            onModeChange={setSelMode}
-            selectedIds={selectedIds}
-            onSelectedIdsChange={setSelectedIds}
-          />
-          <div className="flex flex-wrap items-center gap-2">
-            {hasSelection ? (
-              <span className="text-xs text-muted-foreground">
-                Showing <strong>{totalVendors}</strong> vendor{totalVendors === 1 ? '' : 's'} · <strong>{totalVendors}</strong> GSTIN{totalVendors === 1 ? '' : 's'}
-              </span>
-            ) : null}
-            <Button variant="outline" size="sm"><RefreshCw className="mr-2 h-4 w-4" />Refresh Balances</Button>
-            <Button variant="outline" size="sm"><Download className="mr-2 h-4 w-4" />Export Balance Summary</Button>
-            <Button size="sm"><Play className="mr-2 h-4 w-4" />Sync GST Balances</Button>
-          </div>
-        </div>
-      </TaxSectionCard>
-
-      {!hasSelection ? (
-        <TaxEmptyState
-          icon={Building2}
-          title="Select one or more vendors to view GST Cash and ITC balances"
-          description="Use the vendor filter above to select a single vendor, multiple vendors, or view all GSTINs at once."
-        />
-      ) : (
-        <>
-          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-            <LedgerSummaryCard label="Cash Ledger Balance" value={formatLakhs(aggregate.cash)} sub="Available GST cash balance" icon={DollarSign} className="border-violet-200 bg-violet-50 text-violet-700" />
-            <LedgerSummaryCard label="ITC Balance" value={formatLakhs(aggregate.itc)} sub="Available input tax credit" icon={CheckCircle2} className="border-green-200 bg-green-50 text-green-700" />
-            <LedgerSummaryCard label="Net Available Credit" value={formatLakhs(aggregate.total)} sub="Total GST funds available for offset" icon={TrendingUp} className="border-blue-200 bg-blue-50 text-blue-700" />
-            <LedgerSummaryCard label="CESS Balance" value={formatLakhs(aggregate.cess)} sub="Available cess balance" icon={Receipt} className="border-slate-200 bg-slate-100 text-slate-700" />
-          </div>
-
-          <div className="grid gap-4 xl:grid-cols-[1fr_1fr_300px]">
-            <TaxSectionCard icon={Layers} title="Balance by Tax Head" description={`Aggregated across ${totalVendors} GSTIN${totalVendors === 1 ? '' : 's'}`}>
-              <div className="space-y-3">
-                {[
-                  { head: 'CGST', cash: aggregate.cgst, itc: aggregate.cgst, totalClass: 'text-violet-600' },
-                  { head: 'SGST', cash: aggregate.sgst, itc: aggregate.sgst, totalClass: 'text-blue-600' },
-                  { head: 'IGST', cash: aggregate.igst, itc: aggregate.igst, totalClass: 'text-green-600' },
-                  { head: 'CESS', cash: aggregate.cess, itc: 0, totalClass: 'text-amber-600' },
-                ].map((row) => (
-                  <div key={row.head} className="rounded-md border bg-muted/20 p-3">
-                    <div className="mb-1.5 flex items-center justify-between">
-                      <span className="font-semibold">{row.head}</span>
-                      <span className={cn('font-semibold', row.totalClass)}>{formatLakhs(row.cash + row.itc)}</span>
-                    </div>
-                    <div className="flex gap-4 text-xs text-muted-foreground">
-                      <span>Cash: <strong className="text-violet-600">{formatLakhs(row.cash)}</strong></span>
-                      <span>ITC: <strong className="text-green-600">{formatLakhs(row.itc)}</strong></span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </TaxSectionCard>
-
-            <TaxSectionCard icon={BarChart3} title="Credit Composition" description="Percentage contribution by GST head">
-              <div className="space-y-4">
-                {composition.map((item) => (
-                  <div key={item.label}>
-                    <div className="mb-1.5 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-2">
-                        <span className={cn('h-2.5 w-2.5 rounded-full', item.dotClass)} />
-                        <span className="text-sm font-medium">{item.label}</span>
-                      </div>
-                      <div className="flex items-center gap-3 text-sm">
-                        <span className="font-semibold">{formatLakhs(item.amount)}</span>
-                        <span className="min-w-[2rem] text-right text-muted-foreground">{item.pct}%</span>
-                      </div>
-                    </div>
-                    <TaxProgressRow label="" value={item.pct} progressClassName={item.progressClassName} />
-                  </div>
-                ))}
-              </div>
-            </TaxSectionCard>
-
-            <TaxSectionCard icon={TrendingUp} title="GST Position Summary" description="Snapshot of tax balance position">
-              <div className="space-y-2">
-                {[
-                  { label: 'Cash Available', value: formatLakhs(aggregate.cash), className: 'text-violet-600' },
-                  { label: 'ITC Available', value: formatLakhs(aggregate.itc), className: 'text-green-600' },
-                  { label: 'Net Available', value: formatLakhs(aggregate.total), className: 'text-blue-600 font-bold text-base' },
-                ].map((row) => (
-                  <div key={row.label} className="flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2 text-sm">
-                    <span>{row.label}</span>
-                    <span className={cn('font-semibold', row.className)}>{row.value}</span>
-                  </div>
-                ))}
-                <div className="space-y-1.5 border-t pt-3">
-                  {[
-                    { label: 'Total Vendors', value: String(totalVendors) },
-                    { label: 'Total GSTINs', value: String(totalVendors) },
-                    { label: 'Last Synced', value: 'Today, 09:42 AM' },
-                    { label: 'Status', value: 'Current', green: true },
-                  ].map((row) => (
-                    <div key={row.label} className="flex justify-between text-xs text-muted-foreground">
-                      <span>{row.label}</span>
-                      <span className={cn('font-medium', row.green ? 'text-green-600' : 'text-foreground')}>{row.value}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </TaxSectionCard>
-          </div>
-
-          <TaxSectionCard
-            icon={BarChart2}
-            title="GST Balance Breakdown"
-            description="Cash and ITC balances by vendor and GSTIN from GST portal"
-            meta={<TaxApiMeta synced="Today, 09:42 AM" status="live" count={`${totalVendors} vendor${totalVendors === 1 ? '' : 's'}`} />}
-          >
-            {activeVendors.length === 0 ? (
-              <TaxEmptyState
-                title="No GST balance information found for the selected vendors"
-                description="Try selecting a different vendor or refreshing balances."
-              />
-            ) : (
-              <div className="overflow-x-auto rounded-md border">
-                <Table>
-                  <TableHeader>
-                    <TableRow className="bg-muted/50">
-                      {['Vendor', 'GSTIN', 'CGST Balance', 'SGST Balance', 'IGST Balance', 'CESS Balance', 'Cash Ledger', 'ITC Ledger', 'Total Available', 'Last Synced'].map((heading) => (
-                        <TableHead key={heading} className="whitespace-nowrap text-xs">{heading}</TableHead>
-                      ))}
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {activeVendors.map((vendor) => (
-                      <TableRow key={vendor.id}>
-                        <TableCell className="whitespace-nowrap font-semibold">{vendor.name || vendor.vendor}</TableCell>
-                        <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">{vendor.gstin}</TableCell>
-                        <TableCell className="font-semibold text-violet-600">{formatLakhs(vendor.cgst)}</TableCell>
-                        <TableCell className="font-semibold text-blue-600">{formatLakhs(vendor.sgst)}</TableCell>
-                        <TableCell className="font-semibold text-green-600">{formatLakhs(vendor.igst)}</TableCell>
-                        <TableCell className={vendor.cess > 0 ? 'text-amber-600' : 'text-muted-foreground'}>{formatLakhs(vendor.cess)}</TableCell>
-                        <TableCell className="font-semibold text-violet-600">{formatLakhs(vendor.cash)}</TableCell>
-                        <TableCell className="font-semibold text-green-600">{formatLakhs(vendor.itc)}</TableCell>
-                        <TableCell className="font-bold text-blue-600">{formatLakhs(vendor.cash + vendor.itc)}</TableCell>
-                        <TableCell className="whitespace-nowrap text-xs text-muted-foreground">{vendor.synced}</TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                  {activeVendors.length > 1 ? (
-                    <tfoot>
-                      <TableRow className="bg-muted/50 font-bold">
-                        <TableCell colSpan={2}>Total ({totalVendors} vendors)</TableCell>
-                        <TableCell className="text-violet-600">{formatLakhs(aggregate.cgst)}</TableCell>
-                        <TableCell className="text-blue-600">{formatLakhs(aggregate.sgst)}</TableCell>
-                        <TableCell className="text-green-600">{formatLakhs(aggregate.igst)}</TableCell>
-                        <TableCell className="text-amber-600">{formatLakhs(aggregate.cess)}</TableCell>
-                        <TableCell className="text-violet-600">{formatLakhs(aggregate.cash)}</TableCell>
-                        <TableCell className="text-green-600">{formatLakhs(aggregate.itc)}</TableCell>
-                        <TableCell className="text-base text-blue-600">{formatLakhs(aggregate.total)}</TableCell>
-                        <TableCell />
-                      </TableRow>
-                    </tfoot>
-                  ) : null}
-                </Table>
-              </div>
-            )}
-          </TaxSectionCard>
-
-          <TaxSectionCard icon={TrendingUp} title="GST Credit Insights" description="Key observations on current balance position">
-            <div className="space-y-3">
-              {insights.map((item) => (
-                <div key={item.text} className={cn('flex items-start gap-3 rounded-md border p-3 text-sm', item.className)}>
-                  <item.icon className="mt-0.5 h-4 w-4 shrink-0" />
-                  <p>{item.text}</p>
-                </div>
-              ))}
-            </div>
-          </TaxSectionCard>
-        </>
-      )}
     </TabsContent>
   );
 };

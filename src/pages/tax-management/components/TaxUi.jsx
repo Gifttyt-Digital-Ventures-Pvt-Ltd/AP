@@ -13,6 +13,7 @@ import {
   SelectValue,
 } from '../../../components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../../../components/ui/sheet';
+import { humanizeGstEnum } from '../utils/gstApiMappers';
 import {
   Table,
   TableBody,
@@ -87,7 +88,7 @@ export const TaxStatusBadge = ({ status }) => {
 
   return (
     <Badge variant="outline" className={cn('whitespace-nowrap font-medium', className)}>
-      {status || '-'}
+      {humanizeGstEnum(status)}
     </Badge>
   );
 };
@@ -102,9 +103,9 @@ export const TaxSearchInput = ({ value, onChange, placeholder = 'Search...' }) =
   <Input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} />
 );
 
-export const TaxSelect = ({ value, onValueChange, options, placeholder = 'Select' }) => (
+export const TaxSelect = ({ value, onValueChange, options, placeholder = 'Select', className }) => (
   <Select value={value} onValueChange={onValueChange}>
-    <SelectTrigger>
+    <SelectTrigger className={className}>
       <SelectValue placeholder={placeholder} />
     </SelectTrigger>
     <SelectContent>
@@ -216,34 +217,22 @@ export const TaxPeriodSelect = ({ value, onValueChange, periods, className }) =>
 
 export const TaxReferenceNotice = ({ children, className }) => (
   <div className={cn('rounded-md border border-dashed border-amber-200 bg-amber-50/60 px-3 py-2 text-xs text-amber-900', className)}>
-    {children || 'Reference data preview — live API integration pending.'}
+    {children || 'Reference data preview — API integration pending.'}
   </div>
 );
 
-export const TaxApiMeta = ({ synced, status = 'live', count }) => {
-  const statusTone = {
-    live: 'text-green-600',
-    error: 'text-red-600',
-    syncing: 'text-amber-600',
-  }[status] || 'text-muted-foreground';
-
-  return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+export const TaxApiMeta = ({ synced, count }) => (
+  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+    <span>
+      Synced: <span className="font-medium text-foreground">{synced}</span>
+    </span>
+    {count != null && (
       <span>
-        Synced: <span className="font-medium text-foreground">{synced}</span>
+        Records: <span className="font-medium text-foreground">{count}</span>
       </span>
-      <span className={cn('inline-flex items-center gap-1.5 font-medium', statusTone)}>
-        <span className={cn('h-1.5 w-1.5 rounded-full', status === 'live' ? 'bg-green-500' : status === 'error' ? 'bg-red-500' : 'bg-amber-500')} />
-        {status === 'live' ? 'Live' : status === 'error' ? 'Error' : 'Syncing'}
-      </span>
-      {count != null && (
-        <span>
-          Records: <span className="font-medium text-foreground">{count}</span>
-        </span>
-      )}
-    </div>
-  );
-};
+    )}
+  </div>
+);
 
 export const TaxPagination = ({ page = 1, totalPages = 3 }) => (
   <div className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground">

@@ -35,7 +35,6 @@ import {
   TaxStatusBadge,
 } from '../TaxUi';
 import {
-  GST_VENDOR_MASTER,
   TDS_RATES,
   TDS_REPORT_TYPES,
   tdsCsiFiles,
@@ -48,11 +47,21 @@ import {
   tdsSectionWise,
   tdsVendorWise,
 } from '../../data/taxStaticData';
+import { useGetVendorsQuery } from '../../../../Services/apis/invoicesVendorsApi';
 import { formatCurrency } from '../../utils/taxFormatting';
 import { TdsMonthlyTrendChart, TdsSectionChart, TdsSectionPieChart, TdsVendorBarChart } from './TdsCharts';
 
 const TDS_SECTIONS = Object.keys(TDS_RATES).filter((key) => key !== 'Others');
-const VENDOR_OPTIONS = GST_VENDOR_MASTER.map((vendor) => vendor.name);
+
+function useVendorNameOptions(enabled = true) {
+  const { data: vendorsData = [] } = useGetVendorsQuery(undefined, { skip: !enabled });
+  return useMemo(() => {
+    const list = Array.isArray(vendorsData) ? vendorsData : [];
+    return list
+      .map((vendor) => vendor.name ?? vendor.vendorName)
+      .filter(Boolean);
+  }, [vendorsData]);
+}
 
 const REPORT_ICONS = {
   'vendor-summary': Users,
@@ -109,6 +118,7 @@ export const TdsOverviewPanels = () => (
 );
 
 export const TdsCalculatorPanel = ({ onCalculate, disabled }) => {
+  const vendorOptions = useVendorNameOptions();
   const [vendor, setVendor] = useState('');
   const [category, setCategory] = useState('Company');
   const [amount, setAmount] = useState('');
@@ -130,7 +140,7 @@ export const TdsCalculatorPanel = ({ onCalculate, disabled }) => {
     <div className="space-y-4">
       <div>
         <h3 className="text-base font-semibold">TDS Calculator</h3>
-        <p className="text-sm text-muted-foreground">Calculate TDS before making vendor payments. Use the live calculator for invoice-linked deductions.</p>
+        <p className="text-sm text-muted-foreground">Calculate TDS before making vendor payments. Use the calculator for invoice-linked deductions.</p>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1fr_360px]">
@@ -138,7 +148,7 @@ export const TdsCalculatorPanel = ({ onCalculate, disabled }) => {
           <div className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1.5">
               <Label>Vendor</Label>
-              <TaxSelect value={vendor || 'placeholder'} onValueChange={(value) => value !== 'placeholder' && setVendor(value)} options={[{ value: 'placeholder', label: 'Select vendor…' }, ...VENDOR_OPTIONS.map((name) => ({ value: name, label: name }))]} />
+              <TaxSelect value={vendor || 'placeholder'} onValueChange={(value) => value !== 'placeholder' && setVendor(value)} options={[{ value: 'placeholder', label: 'Select vendor…' }, ...vendorOptions.map((name) => ({ value: name, label: name }))]} />
             </div>
             <div className="space-y-1.5">
               <Label>Vendor Category</Label>
@@ -172,7 +182,7 @@ export const TdsCalculatorPanel = ({ onCalculate, disabled }) => {
 
           <div className="mt-4 flex flex-wrap justify-end gap-2">
             <Button variant="outline" onClick={onCalculate} disabled={disabled}>
-              Open Live Calculator
+              Open Calculator
             </Button>
             <Button onClick={handleLocalCalculate} disabled={!amount.trim()}>
               <Zap className="mr-2 h-4 w-4" />
@@ -272,6 +282,7 @@ export const TdsAnalyticsPanel = () => (
 );
 
 export const TdsReportsPanel = () => {
+  const vendorOptions = useVendorNameOptions();
   const [selectedReport, setSelectedReport] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [reports, setReports] = useState(tdsReports);
@@ -300,7 +311,7 @@ export const TdsReportsPanel = () => {
         <div className="mb-4 grid gap-3 md:grid-cols-4">
           <TaxSelect value="FY 2023-24" onValueChange={() => {}} options={['FY 2023-24', 'FY 2024-25']} />
           <TaxSelect value="Q3" onValueChange={() => {}} options={['All Quarters', 'Q1', 'Q2', 'Q3', 'Q4']} />
-          <TaxSelect value="All Vendors" onValueChange={() => {}} options={['All Vendors', ...VENDOR_OPTIONS]} />
+          <TaxSelect value="All Vendors" onValueChange={() => {}} options={['All Vendors', ...vendorOptions]} />
           <Button onClick={generate} disabled={!selectedReport || generating}>
             {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
             {generating ? 'Generating…' : 'Generate Report'}
@@ -392,7 +403,7 @@ export const TdsForm16aPanel = ({ onOpenCertificates }) => {
         title="Certificate Generation"
         actions={
           <>
-            <Button variant="outline" onClick={onOpenCertificates}>Open Live Certificates</Button>
+            <Button variant="outline" onClick={onOpenCertificates}>Open Certificates</Button>
             <Button onClick={handleGenerate} disabled={generating}>
               {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
               {generating ? 'Generating…' : 'Generate Form 16A'}
@@ -416,7 +427,7 @@ export const TdsForm16aPanel = ({ onOpenCertificates }) => {
         icon={FileText}
         title="Certificate Records"
         description="Form 16A generation history"
-        meta={<TaxApiMeta synced="Today, 09:42 AM" status="live" count={String(records.length)} />}
+        meta={<TaxApiMeta synced="Today, 09:42 AM" count={String(records.length)} />}
       >
         <TaxCompactTable
           rows={records}
@@ -462,7 +473,7 @@ export const TdsForm16aPanel = ({ onOpenCertificates }) => {
             />
             <div className="flex gap-2">
               <Button size="sm" variant="outline"><Download className="mr-2 h-4 w-4" />Download PDF</Button>
-              <Button size="sm" variant="outline" onClick={onOpenCertificates}>Generate Live Certificate</Button>
+              <Button size="sm" variant="outline" onClick={onOpenCertificates}>Generate Certificate</Button>
             </div>
           </div>
         ) : null}

@@ -1,9 +1,13 @@
 import React, { forwardRef, useImperativeHandle, useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../../components/ui/tabs';
+import {
+  useGetGstSummaryQuery,
+  useGetOrganisationGstCredentialsQuery,
+} from '../../../../Services/apis/taxApi';
 import GstOverviewPanel from './GstOverviewPanel';
 import { GstDocumentsPanel } from './GstDocumentsPanels';
+import GstLedgersPanel from './GstLedgersPanel';
 import {
-  GstLedgersPanel,
   GstReconciliationPanel,
   GstReturnsPanel,
 } from './GstReferencePanels';
@@ -19,9 +23,24 @@ const GST_SUB_TABS = [
 const GstSection = forwardRef(({ enabled = true }, ref) => {
   const [gstSubTab, setGstSubTab] = useState('overview');
 
+  const summaryActive = enabled && gstSubTab === 'overview';
+  const registrationsActive = enabled && (gstSubTab === 'documents' || gstSubTab === 'ledgers');
+
+  const { refetch: refetchSummary, isFetching: summaryFetching } = useGetGstSummaryQuery(undefined, {
+    skip: !summaryActive,
+  });
+  const { refetch: refetchRegistrations, isFetching: registrationsFetching } = useGetOrganisationGstCredentialsQuery(undefined, {
+    skip: !registrationsActive,
+  });
+
   useImperativeHandle(ref, () => ({
-    refetch: async () => {},
-    isFetching: false,
+    refetch: async () => {
+      const tasks = [];
+      if (summaryActive) tasks.push(refetchSummary());
+      if (registrationsActive) tasks.push(refetchRegistrations());
+      await Promise.all(tasks);
+    },
+    isFetching: summaryFetching || registrationsFetching,
   }));
 
   if (!enabled) return null;
@@ -37,11 +56,11 @@ const GstSection = forwardRef(({ enabled = true }, ref) => {
           ))}
         </TabsList>
 
-        <GstOverviewPanel onGotoTab={setGstSubTab} />
-        <GstReconciliationPanel />
-        <GstReturnsPanel />
-        <GstDocumentsPanel />
-        <GstLedgersPanel />
+        {gstSubTab === 'overview' ? <GstOverviewPanel onGotoTab={setGstSubTab} /> : null}
+        {gstSubTab === 'reconciliation' ? <GstReconciliationPanel /> : null}
+        {gstSubTab === 'returns' ? <GstReturnsPanel /> : null}
+        {gstSubTab === 'documents' ? <GstDocumentsPanel /> : null}
+        {gstSubTab === 'ledgers' ? <GstLedgersPanel /> : null}
       </Tabs>
     </TabsContent>
   );

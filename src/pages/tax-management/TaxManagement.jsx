@@ -45,11 +45,13 @@ const TaxManagement = () => {
   const fetchData = async () => {
     setRefreshing(true);
     try {
-      await Promise.all([
-        canViewGst ? gstSectionRef.current?.refetch?.() : Promise.resolve(),
-        canViewTds ? tdsSectionRef.current?.refetch?.() : Promise.resolve(),
-        canViewTds ? certificatesPanelRef.current?.refetch?.() : Promise.resolve(),
-      ]);
+      if (activeTab === 'gst' && canViewGst) {
+        await gstSectionRef.current?.refetch?.();
+      } else if (activeTab === 'tds' && canViewTds) {
+        await tdsSectionRef.current?.refetch?.();
+      } else if (activeTab === 'certificates' && canViewTds) {
+        await certificatesPanelRef.current?.refetch?.();
+      }
     } catch (error) {
       console.error('Error refreshing tax data:', error);
       toast.error('Failed to refresh tax data');
@@ -94,11 +96,11 @@ const TaxManagement = () => {
           ))}
         </TabsList>
 
-        {canViewGst && <GstSection ref={gstSectionRef} enabled={canViewGst} />}
+        {canViewGst && <GstSection ref={gstSectionRef} enabled={activeTab === 'gst'} />}
         {canViewTds && (
-          <TdsSection ref={tdsSectionRef} enabled={canViewTds} onOpenCertificates={openCertificates} />
+          <TdsSection ref={tdsSectionRef} enabled={activeTab === 'tds'} onOpenCertificates={openCertificates} />
         )}
-        {canViewTds && <CertificatesPanel ref={certificatesPanelRef} enabled={canViewTds} />}
+        {canViewTds && <CertificatesPanel ref={certificatesPanelRef} enabled={activeTab === 'certificates'} />}
       </Tabs>
     </div>
   );

@@ -37,6 +37,7 @@ const UploadSection = ({
   scanning,
   renderInvoiceForm,
   handleAddInvoice,
+  canAddInvoice = true,
 }) => {
   const [previewOpen, setPreviewOpen] = useState(true);
   
@@ -123,6 +124,7 @@ const UploadSection = ({
                         onClick={handleAddInvoice}
                         className="flex-1"
                         data-testid="add-invoice-btn"
+                        disabled={!canAddInvoice}
                       >
                         Add Invoice
                       </Button>

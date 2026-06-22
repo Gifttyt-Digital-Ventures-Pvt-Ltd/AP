@@ -83,7 +83,10 @@ export const normalizeScannedInvoice = (scanResponse = {}) => {
   return {
     vendorName: scanResponse?.vendorName ?? scanResponse?.vendorName ?? scanResponse?.merchant ?? "",
     vendorGstin: vendorGstin,
-    billingGstin: scanResponse?.billingGstin ?? scanResponse?.billingGstin ?? "",
+    billingGstin:
+      scanResponse?.billingGstin ??
+      scanResponse?.billing_gstin ??
+      "",
     gstin: vendorGstin,
     vendorAddress: vendorAddress,
     billingAddress:

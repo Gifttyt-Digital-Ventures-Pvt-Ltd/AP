@@ -35,6 +35,53 @@ export const isIndiaCountry = (country) => {
   return normalized === 'india' || normalized === 'in';
 };
 
+export const GSTIN_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+
+export const isValidVendorGstin = (gstin) =>
+  GSTIN_PATTERN.test(String(gstin || '').trim().toUpperCase());
+
+export const isVendorGstVerificationSatisfied = (vendor, gstVerification, { invoiceVendorRequest = false } = {}) => {
+  if (invoiceVendorRequest) return true;
+  if (!isIndiaCountry(vendor?.country)) return true;
+
+  const gstin = String(vendor?.gstin || '').trim().toUpperCase();
+  const requiresGstin = !invoiceVendorRequest;
+
+  if (requiresGstin && !gstin) return false;
+  if (!gstin) return true;
+  if (!isValidVendorGstin(gstin)) return false;
+  if (!gstVerification?.verified || gstVerification.gstin !== gstin) return false;
+  if (gstVerification.validGstin === false) return false;
+  return true;
+};
+
+export const getVendorGstVerificationErrors = (
+  vendor = {},
+  gstVerification = null,
+  { invoiceVendorRequest = false, prefix = '' } = {},
+) => {
+  if (invoiceVendorRequest) return [];
+  if (!isIndiaCountry(vendor.country)) return [];
+
+  const gstin = String(vendor.gstin || '').trim().toUpperCase();
+  const requiresGstin = !invoiceVendorRequest;
+
+  if (requiresGstin && !gstin) {
+    return [`${prefix}GSTIN is required for vendors in India`];
+  }
+  if (!gstin) return [];
+  if (!isValidVendorGstin(gstin)) {
+    return [`${prefix}Enter a valid 15-character GSTIN`];
+  }
+  if (!gstVerification?.verified || gstVerification.gstin !== gstin) {
+    return [`${prefix}Verify GSTIN from the GST portal before saving`];
+  }
+  if (gstVerification.validGstin === false) {
+    return [`${prefix}GSTIN is not valid on the GST portal`];
+  }
+  return [];
+};
+
 export const normalizePincodeInput = (value, country) => {
   const raw = String(value ?? '');
   if (isIndiaCountry(country)) {
