@@ -232,6 +232,7 @@ const InvoiceReadOnlyDetails = ({
 
         <div className="grid grid-cols-2 gap-3">
           <DetailField label="GST Treatment" value={formData.gstTreatment} />
+          <DetailField label="Billing GSTIN" value={formData.billingGstin} mono />
           <DetailField label="GSTIN / Tax ID" value={formData.gstin} mono />
           <DetailField label="Source of Supply" value={formData.sourceOfSupply} />
           <DetailField label="Destination" value={formData.destinationOfSupply} />

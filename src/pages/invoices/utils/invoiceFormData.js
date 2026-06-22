@@ -101,6 +101,10 @@ export const buildInvoiceEditFormData = (
       invoice.vendorAddress ||
       invoice.vendorAddress ||
       "",
+    billingGstin:
+      invoice.billingGstin ||
+      invoice.billing_gstin ||
+      "",
     gstTreatment: invoice.gstTreatment || invoice.gstTreatment || defaultGstTreatment,
     gstin: resolveInvoiceFormGstin(invoice, vendor),
     sourceOfSupply: sourceOfSupply,

@@ -164,6 +164,10 @@ export const initializeInvoiceFormData = (
     dueDate: extractedData?.dueDate || "",
     billingAddress: billingAddress,
     shippingAddress: extractedData?.shippingAddress || extractedData?.shippingAddress || "",
+    billingGstin:
+      extractedData?.billingGstin ||
+      extractedData?.billing_gstin ||
+      "",
     gstTreatment: extractedData?.gstTreatment || extractedData?.gstTreatment || defaultGstTreatment,
     gstin:
       extractedData?.vendorGstin ||

@@ -392,7 +392,7 @@ const InvoiceSingleUploadLayer = ({
     return true;
   };
 
-  const processFile = async (file) => {
+  const processFile = async (file, uploadContext = {}) => {
     if (!guardAction("invoices.scan")) return false;
     if (!file) return false;
 
@@ -406,6 +406,10 @@ const InvoiceSingleUploadLayer = ({
 
     const formDataUpload = new FormData();
     formDataUpload.append("file", file);
+    if (uploadContext.billingGstin) {
+      formDataUpload.append("billingGstin", uploadContext.billingGstin);
+      formDataUpload.append("billing_gstin", uploadContext.billingGstin);
+    }
 
     try {
       const response = await scanInvoice(formDataUpload).unwrap();
@@ -481,6 +485,10 @@ const InvoiceSingleUploadLayer = ({
   const handleAddInvoice = async () => {
     if (!guardAction("invoices.create")) return;
     if (!formData) return;
+    if (uploadedFile && !String(formData.billingGstin || "").trim()) {
+      toast.error("Select a billing GSTIN from Organisation Details before adding invoice");
+      return;
+    }
 
     const totals = calculateTotals(formData.lineItems);
     const resolvedVendorId =
@@ -606,6 +614,7 @@ const InvoiceSingleUploadLayer = ({
     canManageInvoices &&
     !invoiceMandatoryFieldsLoading &&
     Boolean(formData) &&
+    (!uploadedFile || Boolean(formData?.billingGstin)) &&
     isInvoiceMandatoryFieldsSatisfied(formData, invoiceMandatoryFields, mandatoryFieldOptions) &&
     (Boolean(formData?.vendorId) ||
       Boolean(prefillRef.current?.vendorId) ||
@@ -741,13 +750,15 @@ const InvoiceSingleUploadLayer = ({
       INVOICE_SOURCES={INVOICE_SOURCES}
       LEDGER_OPTIONS={LEDGER_OPTIONS}
       TAX_RATES={TAX_RATES}
+      showBillingGst={Boolean(uploadedFile)}
+      requireBillingGst={Boolean(uploadedFile)}
     />
   );
 
-  const handlePickerFiles = async (files) => {
+  const handlePickerFiles = async (files, uploadContext = {}) => {
     const file = files?.[0];
     if (!file) return false;
-    await processFile(file);
+    await processFile(file, uploadContext);
     // Do not let InvoiceUploadDialog call onOpenChange(false) — that was
     // resetting the upload session before React committed uploadedFile.
     return false;
@@ -785,6 +796,7 @@ const InvoiceSingleUploadLayer = ({
         scanning={scanning}
         renderInvoiceForm={renderInvoiceForm}
         handleAddInvoice={handleAddInvoice}
+        canAddInvoice={canSubmit}
       />
       <RequestVendorDialog
         open={requestVendorOpen}

@@ -20,6 +20,13 @@ import ZohoIntegrationCard from './components/ZohoIntegrationCard';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useRBAC } from '../../contexts/RBACContext';
 import CreditsPage from '../credits/CreditsPage';
+import OrgGstRegistrationsSection from './components/OrgGstRegistrationsSection';
+import {
+  buildOrganisationSavePayload,
+  createEmptyGstRegistration,
+  normalizeGstRegistrationsFromApi,
+  validateGstRegistrations,
+} from '../../utils/organisationGst';
 
 // Tally Logo Component
 const TallyLogo = () => (
@@ -105,6 +112,7 @@ const Settings = () => {
     company_name: '',
     legal_name: '',
     gstin: '',
+    gst_registrations: [createEmptyGstRegistration()],
     pan: '',
     cin: '',
     address_line1: '',
@@ -143,10 +151,12 @@ const Settings = () => {
       setOrgForm(prev => {
         const isFormEmpty = !prev.company_name && !prev.email && !prev.phone;
         if (isFormEmpty || !orgDetails) {
+          const gstRegistrations = normalizeGstRegistrationsFromApi(organisationData);
           return {
             company_name: organisationData.company_name || '',
             legal_name: organisationData.legal_name || '',
-            gstin: organisationData.gstin || '',
+            gstin: gstRegistrations[0]?.gstin || organisationData.gstin || '',
+            gst_registrations: gstRegistrations,
             pan: organisationData.pan || '',
             cin: organisationData.cin || '',
             address_line1: organisationData.address_line1 || '',
@@ -190,6 +200,7 @@ const Settings = () => {
       company_name: '',
       legal_name: '',
       gstin: '',
+      gst_registrations: [createEmptyGstRegistration()],
       pan: '',
       cin: '',
       address_line1: '',
@@ -223,15 +234,23 @@ const Settings = () => {
       return;
     }
 
+    const gstValidationError = validateGstRegistrations(orgForm.gst_registrations);
+    if (gstValidationError) {
+      toast.error(gstValidationError);
+      return;
+    }
+
+    const organisationPayload = buildOrganisationSavePayload(orgForm);
+
     setOrgSaving(true);
     try {
       if (orgDetails) {
         // Update existing
-        await updateOrganisation(orgForm).unwrap();
+        await updateOrganisation(organisationPayload).unwrap();
         toast.success('Organisation details updated successfully');
       } else {
         // Create new
-        await createOrganisation(orgForm).unwrap();
+        await createOrganisation(organisationPayload).unwrap();
         toast.success('Organisation details created successfully');
       }
     } catch (error) {
@@ -421,18 +440,17 @@ const Settings = () => {
                 {/* Tax Information */}
                 <div className="space-y-4">
                   <h4 className="font-semibold text-gray-800 border-b pb-2">Tax & Registration</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <Label htmlFor="gstin">GSTIN</Label>
-                      <Input
-                        id="gstin"
-                        value={orgForm.gstin}
-                        onChange={(e) => setOrgForm({ ...orgForm, gstin: e.target.value.toUpperCase() })}
-                        placeholder="22AAAAA0000A1Z5"
-                        maxLength={15}
-                        data-testid="org-gstin-input"
-                      />
-                    </div>
+                  <OrgGstRegistrationsSection
+                    registrations={orgForm.gst_registrations}
+                    onChange={(gst_registrations) => {
+                      setOrgForm({
+                        ...orgForm,
+                        gst_registrations,
+                        gstin: gst_registrations[0]?.gstin ?? '',
+                      });
+                    }}
+                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="pan">PAN</Label>
                       <Input

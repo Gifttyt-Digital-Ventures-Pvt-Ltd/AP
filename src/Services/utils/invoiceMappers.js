@@ -190,6 +190,7 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
     billingAddress:
       pickInvoiceField(invoice, "billingAddress", "billing_address") ??
       pickInvoiceField(invoice, "vendorAddress", "vendor_address"),
+    billingGstin: pickInvoiceField(invoice, "billingGstin", "billing_gstin", ""),
     vendorAddress: pickInvoiceField(invoice, "vendorAddress", "vendor_address"),
     gstTreatment: pickInvoiceField(invoice, "gstTreatment", "gst_treatment"),
     gstin: invoice.gstin ?? invoice.vendorGstin ?? invoice.vendor_gstin,
@@ -403,6 +404,7 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
       pickInvoiceField(invoice, "approvalWorkflowName", "approval_workflow_name"),
     ...(category ? { category, categoryId: category.id, categoryName: category.name } : {}),
     gstTreatment: pickInvoiceField(invoice, "gstTreatment", "gst_treatment", ""),
+    billingGstin: pickInvoiceField(invoice, "billingGstin", "billing_gstin", ""),
     gstin: invoice.gstin ?? invoice.vendorGstin ?? invoice.vendor_gstin ?? "",
     sourceOfSupply: pickInvoiceField(invoice, "sourceOfSupply", "source_of_supply", ""),
     destinationOfSupply:

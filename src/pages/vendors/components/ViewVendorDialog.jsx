@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { FileText, History } from 'lucide-react';
+import { CalendarDays, FileText, History } from 'lucide-react';
 import { toast } from 'sonner';
 import { formatWorkflowStatus } from '../../../utils/approvalWorkflow';
 import { formatMsmeLabel } from '../../../utils/vendorValidation';
 import { useLazyGetVendorHistoryQuery } from '../../../Services/apis/invoicesVendorsApi';
 import ApprovalHistoryTimeline from '../../../components/common/ApprovalHistoryTimeline';
+import VendorReturnPreferenceBlock from '../../../components/vendors/VendorReturnPreferenceBlock';
 import { Button } from '../../../components/ui/button';
 import {
   Dialog,
@@ -132,10 +133,14 @@ const ViewVendorDialog = ({ open, onOpenChange, vendor, canApprove, isPendingApp
 
         {vendor && (
           <Tabs value={viewTab} onValueChange={setViewTab} className="flex-1 min-h-0 flex flex-col">
-            <TabsList className="grid w-full grid-cols-2">
+            <TabsList className="grid w-full grid-cols-3">
               <TabsTrigger value="details">
                 <FileText className="h-4 w-4 mr-2" />
                 Details
+              </TabsTrigger>
+              <TabsTrigger value="gst-preference">
+                <CalendarDays className="h-4 w-4 mr-2" />
+                GST Preference
               </TabsTrigger>
               <TabsTrigger value="history">
                 <History className="h-4 w-4 mr-2" />
@@ -145,6 +150,13 @@ const ViewVendorDialog = ({ open, onOpenChange, vendor, canApprove, isPendingApp
 
             <TabsContent value="details" className="mt-4 flex-1 overflow-y-auto scrollbar-thin-muted">
               <VendorDetailsTab vendor={vendor} />
+            </TabsContent>
+
+            <TabsContent value="gst-preference" className="mt-4 flex-1 overflow-y-auto scrollbar-thin-muted">
+              <VendorReturnPreferenceBlock
+                gstin={vendor.gstin}
+                vendorName={vendor.name}
+              />
             </TabsContent>
 
             <TabsContent value="history" className="mt-4 flex-1 overflow-y-auto scrollbar-thin-muted">
