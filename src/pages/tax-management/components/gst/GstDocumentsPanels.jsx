@@ -88,9 +88,11 @@ const GstFormField = ({ label, required, optional, children, className }) => (
 
 const getHistoryEntryResponse = (entry) => entry?.response?.currentData ?? entry?.response ?? {};
 const getDocumentHistoryDocs = (entry) => {
-  const response = getHistoryEntryResponse(entry);
-  return response?.documents ?? response?.currentData?.documents ?? [];
+  const response = getGstDocumentsPayload(getHistoryEntryResponse(entry));
+  return response?.documents ?? [];
 };
+const getGstDocumentsPayload = (response) => response?.currentData ?? response?.data?.currentData ?? response?.data ?? response ?? {};
+const getGstDocuments = (response) => getGstDocumentsPayload(response)?.documents ?? [];
 
 const formatHistoryRequestedAt = (value) => {
   if (!value) return '—';
@@ -1189,7 +1191,7 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
               otp,
             });
             const result = await fetchGstr2aDocuments(payload).unwrap();
-            let resultDocs = result?.currentData?.documents ?? [];
+            let resultDocs = getGstDocuments(result);
             if (docType !== 'All Documents') resultDocs = resultDocs.filter((doc) => doc.documentType === docType);
             if (itcFilter !== 'All') resultDocs = resultDocs.filter((doc) => humanizeGstEnum(doc.itcEligibility) === itcFilter);
             setDocs(resultDocs);
@@ -1318,7 +1320,7 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
         </div>
       </TaxSectionCard>
 
-      {!fetched && !loading ? (
+      {!fetched && !loading && history.length === 0 ? (
         <TaxEmptyState
           icon={FileText}
           title="Select organisation GSTIN and reporting period"
@@ -1337,45 +1339,10 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
         </div>
       ) : null}
 
-      {fetched && !loading ? (
-        <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-            <TaxMiniMetric label="Total Documents" value={String(docs.length)} />
-            <TaxMiniMetric label="Taxable Amount" value={formatCurrency(totalTaxable)} />
-            <TaxMiniMetric label="GST Amount" value={formatCurrency(totalGst)} tone="primary" />
-            <TaxMiniMetric label="Eligible ITC" value={formatCurrency(eligibleItc)} tone="green" />
-            <TaxMiniMetric label="Ineligible Documents" value={String(ineligibleCnt)} tone={ineligibleCnt > 0 ? 'red' : 'default'} />
-          </div>
-
-          <TaxSectionCard
-            title="GSTR-2A Document Register"
-            description={selectedVendor ? `${selectedVendor.name} · ${month} FY ${fy}` : `All vendors · ${month} FY ${fy}`}
-          >
-            <div className="mb-4 flex flex-wrap gap-2">
-              {quickFilters.map((filter) => (
-                <button
-                  key={filter}
-                  type="button"
-                  onClick={() => setQuickFilter(filter)}
-                  className={cn(
-                    'rounded-full border px-3 py-1 text-xs font-medium transition',
-                    quickFilter === filter ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/30',
-                  )}
-                >
-                  {filter}
-                </button>
-              ))}
-            </div>
-            <TaxCompactTable rows={visible} columns={docColumns} getRowKey={(row) => row.invoiceNumber} onRowClick={setSelected} />
-            <TaxPagination />
-          </TaxSectionCard>
-        </>
-      ) : null}
-
       {!loading && !historyLoading && history.length > 0 ? (
         <TaxSectionCard
           title="Fetch History"
-          description="Previously fetched GSTR-2A document responses for this organisation GSTIN"
+          description="Previously fetched GSTR-2A document responses. Open a run to review its document register."
           meta={<TaxApiMeta synced={formatHistoryRequestedAt(history[0]?.requestedAt)} count={`${history.length} run${history.length === 1 ? '' : 's'}`} />}
         >
           <TaxCompactTable
@@ -1397,6 +1364,47 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
             onNext={() => setHistoryPage((page) => Math.min(getHistoryTotalPages(historyTotal), page + 1))}
           />
         </TaxSectionCard>
+      ) : null}
+
+      {fetched && !loading ? (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+            <TaxMiniMetric label="Total Documents" value={String(docs.length)} />
+            <TaxMiniMetric label="Taxable Amount" value={formatCurrency(totalTaxable)} />
+            <TaxMiniMetric label="GST Amount" value={formatCurrency(totalGst)} tone="primary" />
+            <TaxMiniMetric label="Eligible ITC" value={formatCurrency(eligibleItc)} tone="green" />
+            <TaxMiniMetric label="Ineligible Documents" value={String(ineligibleCnt)} tone={ineligibleCnt > 0 ? 'red' : 'default'} />
+          </div>
+
+          <TaxSectionCard
+            title="GSTR-2A Document Register"
+            description={selectedVendor ? `${selectedVendor.name} · ${month} FY ${fy}` : `All vendors · ${month} FY ${fy}`}
+            actions={(
+              <Button type="button" variant="outline" size="sm" onClick={() => setFetched(false)}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to History
+              </Button>
+            )}
+          >
+            <div className="mb-4 flex flex-wrap gap-2">
+              {quickFilters.map((filter) => (
+                <button
+                  key={filter}
+                  type="button"
+                  onClick={() => setQuickFilter(filter)}
+                  className={cn(
+                    'rounded-full border px-3 py-1 text-xs font-medium transition',
+                    quickFilter === filter ? 'border-primary bg-primary/10 text-primary' : 'border-border text-muted-foreground hover:border-primary/30',
+                  )}
+                >
+                  {filter}
+                </button>
+              ))}
+            </div>
+            <TaxCompactTable rows={visible} columns={docColumns} getRowKey={(row) => row.invoiceNumber} onRowClick={setSelected} />
+            <TaxPagination />
+          </TaxSectionCard>
+        </>
       ) : null}
 
       <TaxDrawer open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)} title="GST Document Details">
@@ -1483,7 +1491,7 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
               otp,
             });
             const result = await fetchGstr2bDocuments(payload).unwrap();
-            let resultDocs = result?.currentData?.documents ?? [];
+            let resultDocs = getGstDocuments(result);
             if (vendorId) resultDocs = resultDocs.filter((doc) => (doc.gstin ?? doc.supplierGstin) === selectedVendor?.gstin);
             if (docTypeF !== 'All Documents') resultDocs = resultDocs.filter((doc) => doc.documentType === docTypeF);
             if (itcF !== 'All') resultDocs = resultDocs.filter((doc) => humanizeGstEnum(doc.itcEligibility ?? doc.itc_status) === itcF);
@@ -1633,7 +1641,7 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
         </div>
       </TaxSectionCard>
 
-      {!fetched && !loading ? (
+      {!fetched && !loading && history.length === 0 ? (
         <TaxEmptyState
           icon={BarChart2}
           title="Select organisation GSTIN and tax period"
@@ -1652,34 +1660,10 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
         </div>
       ) : null}
 
-      {fetched && !loading ? (
-        <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <TaxMiniMetric label="Total Documents" value={String(docs.length)} />
-            <TaxMiniMetric label="Total GST" value={formatCurrency(totalGst)} tone="primary" />
-            <TaxMiniMetric label="Eligible ITC" value={formatCurrency(eligibleItc)} tone="green" />
-            <TaxMiniMetric label="Claimable ITC" value={formatCurrency(claimableItc)} tone="green" />
-            <TaxMiniMetric label="Blocked ITC" value={formatCurrency(blockedItc)} tone={blockedItc > 0 ? 'red' : 'default'} className="sm:col-span-2 xl:col-span-1" />
-          </div>
-
-          <TaxSectionCard title="GSTR-2B Document Register" description={`${month} FY ${fy}${selectedVendor ? ` · ${selectedVendor.name}` : ' · All vendors'}`}>
-            <div className="mb-4">
-              <TaxViewFilterPills
-                value={quickFilter}
-                onChange={setQuickFilter}
-                options={quickFilters.map((filter) => ({ value: filter, label: filter, count: countMap[filter] }))}
-              />
-            </div>
-            <TaxCompactTable rows={visible} columns={b2bColumns} getRowKey={(row) => row.invoiceNumber} onRowClick={setSelected} />
-            <TaxPagination />
-          </TaxSectionCard>
-        </>
-      ) : null}
-
       {!loading && !historyLoading && history.length > 0 ? (
         <TaxSectionCard
           title="Fetch History"
-          description="Previously fetched GSTR-2B document responses for this organisation GSTIN"
+          description="Previously fetched GSTR-2B document responses. Open a run to review its document register."
           meta={<TaxApiMeta synced={formatHistoryRequestedAt(history[0]?.requestedAt)} count={`${history.length} run${history.length === 1 ? '' : 's'}`} />}
         >
           <TaxCompactTable
@@ -1701,6 +1685,39 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
             onNext={() => setHistoryPage((page) => Math.min(getHistoryTotalPages(historyTotal), page + 1))}
           />
         </TaxSectionCard>
+      ) : null}
+
+      {fetched && !loading ? (
+        <>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <TaxMiniMetric label="Total Documents" value={String(docs.length)} />
+            <TaxMiniMetric label="Total GST" value={formatCurrency(totalGst)} tone="primary" />
+            <TaxMiniMetric label="Eligible ITC" value={formatCurrency(eligibleItc)} tone="green" />
+            <TaxMiniMetric label="Claimable ITC" value={formatCurrency(claimableItc)} tone="green" />
+            <TaxMiniMetric label="Blocked ITC" value={formatCurrency(blockedItc)} tone={blockedItc > 0 ? 'red' : 'default'} className="sm:col-span-2 xl:col-span-1" />
+          </div>
+
+          <TaxSectionCard
+            title="GSTR-2B Document Register"
+            description={`${month} FY ${fy}${selectedVendor ? ` · ${selectedVendor.name}` : ' · All vendors'}`}
+            actions={(
+              <Button type="button" variant="outline" size="sm" onClick={() => setFetched(false)}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to History
+              </Button>
+            )}
+          >
+            <div className="mb-4">
+              <TaxViewFilterPills
+                value={quickFilter}
+                onChange={setQuickFilter}
+                options={quickFilters.map((filter) => ({ value: filter, label: filter, count: countMap[filter] }))}
+              />
+            </div>
+            <TaxCompactTable rows={visible} columns={b2bColumns} getRowKey={(row) => row.invoiceNumber} onRowClick={setSelected} />
+            <TaxPagination />
+          </TaxSectionCard>
+        </>
       ) : null}
 
       <TaxDrawer open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)} title="GSTR-2B Document Details">
