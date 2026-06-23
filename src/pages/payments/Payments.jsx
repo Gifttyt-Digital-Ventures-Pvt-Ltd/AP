@@ -132,10 +132,6 @@ const Payments = () => {
   const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
-  const bulkPaymentEstimate = useMeteredActionEstimate(
-    CREDIT_ACTION_CODES.PAYMENT_PROCESSING,
-    invoices.length,
-  );
   const [searchTerm, setSearchTerm] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [createBatchDialogOpen, setCreateBatchDialogOpen] = useState(false);
@@ -197,6 +193,10 @@ const Payments = () => {
   );
   const pendingApproverInvoices = getInvoiceListItems(pendingApproverInvoicesListData).map(normalizeInvoice);
   const invoices = pendingPaymentInvoices;
+  const bulkPaymentEstimate = useMeteredActionEstimate(
+    CREDIT_ACTION_CODES.PAYMENT_PROCESSING,
+    invoices.length,
+  );
   const batchEligibleInvoices = [...pendingPaymentInvoices, ...pendingApproverInvoices];
   const bankAccounts = Array.isArray(bankAccountsData) ? bankAccountsData : [];
   const canManagePayments = canPerformAction('payments.create');
