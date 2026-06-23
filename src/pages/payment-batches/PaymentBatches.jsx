@@ -133,11 +133,6 @@ const PaymentBatches = () => {
   const [getPaymentBatch] = useLazyGetPaymentBatchQuery();
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
-  const processBatchItemCount = selectedBatch?.paymentItems?.length || 0;
-  const processBatchEstimate = useMeteredActionEstimate(
-    CREDIT_ACTION_CODES.PAYMENT_PROCESSING,
-    processBatchItemCount,
-  );
 
   const batches = Array.isArray(batchesData) ? batchesData.map(normalizeBatch) : [];
   const loading =
@@ -154,6 +149,11 @@ const PaymentBatches = () => {
   const [generatedFile, setGeneratedFile] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [utr, setUtr] = useState('');
+  const processBatchItemCount = selectedBatch?.paymentItems?.length || 0;
+  const processBatchEstimate = useMeteredActionEstimate(
+    CREDIT_ACTION_CODES.PAYMENT_PROCESSING,
+    processBatchItemCount,
+  );
   
   const canProcessPaymentBatch = canPerformAction('paymentBatches.process');
   const canMarkProcessedPaymentBatch = canPerformAction('paymentBatches.markProcessed');
