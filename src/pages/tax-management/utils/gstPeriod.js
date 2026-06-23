@@ -59,7 +59,7 @@ export function uiReturnTypeToApi(returnType) {
 export function uiReturnsFyToApi(fyLabel) {
   const normalized = normalizeFinancialYear(fyLabel);
   if (/^\d{4}-\d{2}$/.test(normalized)) {
-    return `FY${normalized.slice(2, 4)}-${normalized.slice(7, 9)}`;
+    return `FY${normalized.slice(2, 4)}-${normalized.slice(5, 7)}`;
   }
   return normalized;
 }

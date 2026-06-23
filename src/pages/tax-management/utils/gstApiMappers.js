@@ -144,7 +144,7 @@ export function buildReturnsTrackPayload({
     vendorName,
     gstin,
     ...(apiReturnType ? { returnType: apiReturnType } : {}),
-    ...(apiFy ? { financialYear: apiFy } : {}),
+    ...(apiFy ? { financial_year: apiFy } : {}),
   };
 }
 

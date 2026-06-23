@@ -50,6 +50,7 @@ export const taxApi = serviceApi.injectEndpoints({
       query: (body) => ({
         url: "/tax/gst/returns/track",
         method: "POST",
+        params: body,
         body,
       }),
       transformResponse: (response) => response?.returns ? response : response?.data ?? response,
