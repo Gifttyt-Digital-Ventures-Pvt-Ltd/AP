@@ -4,7 +4,6 @@ import {
   useCreateVendorMutation,
   useUpdateVendorMutation,
   useDeleteVendorMutation,
-  useGetPendingVendorApprovalsQuery,
   useApproveVendorMutation,
 } from '../../Services/apis/invoicesVendorsApi';
 import { Button } from '../../components/ui/button';
@@ -147,12 +146,6 @@ const Vendors = () => {
     isFetching: vendorsFetching,
     refetch: refetchVendors,
   } = useGetVendorsQuery();
-  const {
-    data: pendingApprovalsData = [],
-    isError: pendingApprovalsError,
-    isFetching: pendingApprovalsFetching,
-    refetch: refetchPendingApprovals,
-  } = useGetPendingVendorApprovalsQuery();
 
   const [createVendor, { isLoading: createVendorLoading }] = useCreateVendorMutation();
   const [updateVendor] = useUpdateVendorMutation();
@@ -239,18 +232,12 @@ const Vendors = () => {
   });
 
   const vendors = Array.isArray(vendorsData) ? vendorsData : [];
-  const pendingApprovalVendors = Array.isArray(pendingApprovalsData) ? pendingApprovalsData : [];
 
   useEffect(() => {
     if (vendorsError) {
       toast.error('Failed to load vendors');
     }
   }, [vendorsError]);
-  useEffect(() => {
-    if (pendingApprovalsError) {
-      toast.error('Failed to load pending vendor approvals');
-    }
-  }, [pendingApprovalsError]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -576,20 +563,15 @@ const Vendors = () => {
   const filteredVendors = vendors.filter(vendor =>
     vendor.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
-  const filteredPendingVendorIds = new Set(
-    pendingApprovalVendors
-      .map((vendor) => (vendor?.id !== undefined && vendor?.id !== null ? String(vendor.id) : null))
-      .filter((id) => id !== undefined && id !== null),
-  );
   const canCreateVendor = canPerformAction('vendors.create');
   const canEditVendorPermission = canUpdateVendorPermission;
   const canDeleteVendor = canPerformAction('vendors.delete');
   const canApproveVendor = canPerformAction('vendors.approve');
-  const vendorsRefreshing = vendorsFetching || pendingApprovalsFetching;
+  const vendorsRefreshing = vendorsFetching;
 
   const handleRefreshVendors = async () => {
     try {
-      await Promise.all([refetchVendors(), refetchPendingApprovals()]);
+      await refetchVendors();
       toast.success('Vendors refreshed');
     } catch {
       toast.error('Failed to refresh vendors');
@@ -601,9 +583,7 @@ const Vendors = () => {
       .trim()
       .toLowerCase()
       .replace(/[_-]+/g, ' ');
-    if (normalizedStatus === 'pending approval') return true;
-    const vendorId = vendor?.id !== undefined && vendor?.id !== null ? String(vendor.id) : '';
-    return vendorId ? filteredPendingVendorIds.has(vendorId) : false;
+    return normalizedStatus === 'pending approval';
   };
 
   const vendorsTableHeader = useMemo(

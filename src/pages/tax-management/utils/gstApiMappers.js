@@ -34,16 +34,22 @@ export function isAmendedGstInvoice(invoice) {
 }
 
 export function mapVendorGstDetailsToForm(currentData = {}) {
+  const validGstin =
+    currentData.validGstin ??
+    currentData.valid_gstin ??
+    currentData.isValid ??
+    currentData.is_valid;
+
   return {
-    gstin: (currentData.gstin ?? '').toUpperCase(),
-    legalName: currentData.legalName ?? currentData.tradeName ?? '',
-    businessNature: currentData.bussNature ?? currentData.businessNature ?? '',
-    state: currentData.stateName ?? currentData.state ?? '',
+    gstin: (currentData.gstin ?? currentData.gstIn ?? currentData.gst ?? '').toUpperCase(),
+    legalName: currentData.legalName ?? currentData.legal_name ?? currentData.tradeName ?? '',
+    businessNature: currentData.bussNature ?? currentData.businessNature ?? currentData.business_nature ?? '',
+    state: currentData.stateName ?? currentData.state_name ?? currentData.state ?? '',
     stateCode: currentData.stateCode ?? '',
     pan: currentData.pan ?? '',
-    registrationDate: currentData.regStartDate ?? currentData.registrationDate ?? '',
-    gstStatus: currentData.status ?? '',
-    validGstin: currentData.validGstin ?? true,
+    registrationDate: currentData.regStartDate ?? currentData.registrationDate ?? currentData.registration_date ?? '',
+    gstStatus: currentData.status ?? currentData.gstStatus ?? currentData.gst_status ?? '',
+    validGstin: validGstin === undefined ? true : validGstin === true || String(validGstin).toLowerCase() === 'true',
   };
 }
 

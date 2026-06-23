@@ -123,7 +123,10 @@ const ViewVendorDialog = ({ open, onOpenChange, vendor, canApprove, isPendingApp
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent
+        className="max-w-3xl max-h-[90vh] overflow-hidden flex flex-col"
+        onInteractOutside={(event) => event.preventDefault()}
+      >
         <DialogHeader>
           <DialogTitle>{vendor?.name ? `Vendor: ${vendor.name}` : 'Vendor Details'}</DialogTitle>
           <DialogDescription>
