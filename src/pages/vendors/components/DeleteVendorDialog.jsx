@@ -1,4 +1,5 @@
 import React from 'react';
+import { Loader2 } from 'lucide-react';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -10,9 +11,12 @@ import {
   AlertDialogTitle,
 } from '../../../components/ui/alert-dialog';
 
-const DeleteVendorDialog = ({ open, onOpenChange, onConfirm }) => (
+const DeleteVendorDialog = ({ open, onOpenChange, onConfirm, deleting = false }) => (
   <AlertDialog open={open} onOpenChange={onOpenChange}>
-    <AlertDialogContent>
+    <AlertDialogContent
+      onEscapeKeyDown={(event) => deleting && event.preventDefault()}
+      onInteractOutside={(event) => deleting && event.preventDefault()}
+    >
       <AlertDialogHeader>
         <AlertDialogTitle>Delete Vendor?</AlertDialogTitle>
         <AlertDialogDescription>
@@ -20,8 +24,17 @@ const DeleteVendorDialog = ({ open, onOpenChange, onConfirm }) => (
         </AlertDialogDescription>
       </AlertDialogHeader>
       <AlertDialogFooter>
-        <AlertDialogCancel>Cancel</AlertDialogCancel>
-        <AlertDialogAction onClick={onConfirm}>Delete</AlertDialogAction>
+        <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+        <AlertDialogAction
+          disabled={deleting}
+          onClick={(event) => {
+            event.preventDefault();
+            onConfirm?.();
+          }}
+        >
+          {deleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          {deleting ? 'Deleting…' : 'Delete'}
+        </AlertDialogAction>
       </AlertDialogFooter>
     </AlertDialogContent>
   </AlertDialog>

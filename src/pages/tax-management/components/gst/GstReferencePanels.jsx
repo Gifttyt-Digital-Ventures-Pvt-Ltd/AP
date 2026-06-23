@@ -430,9 +430,9 @@ export const GstReturnsPanel = () => {
             title="Filing History"
             description="Source: Sandbox Track GSTRs API · Read-only"
             actions={
-              <Button variant="outline" size="sm" onClick={handleTrack}>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Refresh
+              <Button variant="outline" size="sm" onClick={handleTrack} disabled={!vendorId || loading}>
+                <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+                {loading ? 'Refreshing…' : 'Refresh'}
               </Button>
             }
           >

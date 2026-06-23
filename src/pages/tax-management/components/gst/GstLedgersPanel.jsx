@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   BarChart2,
@@ -26,10 +26,14 @@ import {
 } from '../../../../components/ui/table';
 import { TabsContent } from '../../../../components/ui/tabs';
 import { cn } from '../../../../lib/utils';
-import { useFetchCashItcBalanceMutation } from '../../../../Services/apis/taxApi';
+import {
+  useFetchCashItcBalanceMutation,
+  useFetchCashItcBalanceHistoryMutation,
+} from '../../../../Services/apis/taxApi';
 import {
   TaxApiMeta,
   TaxEmptyState,
+  TaxPagination,
   TaxProgressRow,
   TaxSearchInput,
   TaxSectionCard,
@@ -74,6 +78,9 @@ const LEDGER_HISTORY_STATUS_OPTIONS = [
   { value: 'success', label: 'Success' },
   { value: 'failed', label: 'Failed' },
 ];
+
+const HISTORY_PAGE_SIZE = 20;
+const getHistoryTotalPages = (total) => Math.max(1, Math.ceil(Number(total || 0) / HISTORY_PAGE_SIZE));
 
 const GstFormField = ({ label, required, children, className }) => (
   <div className={cn('flex min-w-[160px] flex-col gap-1.5', className)}>
@@ -125,6 +132,7 @@ const GstLedgersPanel = () => {
   const { credentials, isLoading: credentialsLoading } = useOrganisationGstCredentials();
   const session = useGstTaxpayerSession();
   const [fetchCashItcBalance] = useFetchCashItcBalanceMutation();
+  const [fetchCashItcBalanceHistory] = useFetchCashItcBalanceHistoryMutation();
   const [selectedOrgGst, setSelectedOrgGst] = useState('');
   const [selMonth, setSelMonth] = useState('June');
   const [selYear, setSelYear] = useState('2026');
@@ -132,6 +140,9 @@ const GstLedgersPanel = () => {
   const [fetched, setFetched] = useState(false);
   const [ledgerData, setLedgerData] = useState(null);
   const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [histTotal, setHistTotal] = useState(0);
   const [histSearch, setHistSearch] = useState('');
   const [histMonth, setHistMonth] = useState('all');
   const [histYear, setHistYear] = useState('all');
@@ -193,38 +204,62 @@ const GstLedgersPanel = () => {
 
   const applyLedgerResult = (uiData) => {
     setLedgerData(uiData);
-    setHistory(uiData.history ?? []);
+    if (uiData.history?.length) setHistory(uiData.history);
     setFetched(true);
     toast.success('GST Ledger Balance retrieved successfully.');
   };
 
-  const handleFetch = () => {
+  const loadLedgerHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const offset = (historyPage - 1) * HISTORY_PAGE_SIZE;
+      const result = await fetchCashItcBalanceHistory({ limit: HISTORY_PAGE_SIZE, offset }).unwrap();
+      const historyPayload = Array.isArray(result) ? { history: result } : result;
+      setHistory(mapCashItcBalanceResponseToUi(historyPayload).history ?? []);
+      setHistTotal(Number(result?.total ?? historyPayload?.history?.length ?? 0));
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+      setHistory([]);
+      setHistTotal(0);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [fetchCashItcBalanceHistory, historyPage]);
+
+  useEffect(() => {
+    loadLedgerHistory();
+  }, [loadLedgerHistory]);
+
+  const handleFetch = async () => {
     if (!canFetchWithOrgGst || isFetching) return;
 
-    session.runWithSession({
-      orgCredential: selectedOrgCredential,
-      contextLabel: 'GST Ledger Balance',
-      execute: async (otp, portalCredentials) => {
-        setIsFetching(true);
-        try {
-          const payload = buildCashItcBalanceRequestPayload({
-            gstin: portalCredentials.gst,
-            username: portalCredentials.userName,
-            month: selMonth,
-            year: selYear,
-            otp,
-          });
-          const result = await fetchCashItcBalance(payload).unwrap();
-          applyLedgerResult(mapCashItcBalanceResponseToUi(result));
-          return result;
-        } catch (error) {
-          toast.error(getApiErrorMessage(error));
-          throw error;
-        } finally {
-          setIsFetching(false);
-        }
-      },
-    });
+    setIsFetching(true);
+    try {
+      await session.runWithSession({
+        orgCredential: selectedOrgCredential,
+        contextLabel: 'GST Ledger Balance',
+        execute: async (otp, portalCredentials) => {
+          try {
+            const payload = buildCashItcBalanceRequestPayload({
+              gstin: portalCredentials.gst,
+              username: portalCredentials.userName,
+              month: selMonth,
+              year: selYear,
+              otp,
+            });
+            const result = await fetchCashItcBalance(payload).unwrap();
+            applyLedgerResult(mapCashItcBalanceResponseToUi(result));
+            loadLedgerHistory();
+            return result;
+          } catch (error) {
+            toast.error(getApiErrorMessage(error));
+            return null;
+          }
+        },
+      });
+    } finally {
+      setIsFetching(false);
+    }
   };
 
   const handleViewHistory = (entry) => {
@@ -554,7 +589,12 @@ const GstLedgersPanel = () => {
           ) : null}
         </div>
 
-        {filteredHistory.length === 0 ? (
+        {historyLoading ? (
+          <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            Loading ledger history…
+          </div>
+        ) : filteredHistory.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">
             {history.length === 0
               ? 'Fetch a ledger balance to populate history.'
@@ -630,22 +670,13 @@ const GstLedgersPanel = () => {
           </div>
         )}
 
-        <div className="mt-3 flex items-center justify-between border-t pt-3 text-xs text-muted-foreground">
-          <span>Showing {filteredHistory.length} of {history.length} records</span>
-          <div className="flex gap-1">
-            {['‹', '1', '›'].map((label, index) => (
-              <Button
-                key={label}
-                type="button"
-                variant={index === 1 ? 'default' : 'outline'}
-                size="sm"
-                className="h-7 w-7 px-0"
-              >
-                {label}
-              </Button>
-            ))}
-          </div>
-        </div>
+        <TaxPagination
+          page={historyPage}
+          totalPages={getHistoryTotalPages(histTotal)}
+          loading={historyLoading}
+          onPrevious={() => setHistoryPage((page) => Math.max(1, page - 1))}
+          onNext={() => setHistoryPage((page) => Math.min(getHistoryTotalPages(histTotal), page + 1))}
+        />
       </TaxSectionCard>
 
       <GstPortalOtpDialog {...session.otpDialogProps} />

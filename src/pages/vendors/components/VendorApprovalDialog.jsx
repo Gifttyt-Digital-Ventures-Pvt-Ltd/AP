@@ -1,4 +1,5 @@
 import React from 'react';
+import { Loader2 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
 import { Label } from '../../../components/ui/label';
@@ -12,9 +13,10 @@ const VendorApprovalDialog = ({
   approvalComments,
   onCommentsChange,
   onConfirm,
+  confirming = false,
 }) => (
   <Dialog open={open} onOpenChange={onOpenChange}>
-    <DialogContent>
+    <DialogContent onInteractOutside={(event) => confirming && event.preventDefault()}>
       <DialogHeader>
         <DialogTitle>{approvalTarget?.action || 'Update'} Vendor</DialogTitle>
         <DialogDescription>
@@ -34,15 +36,17 @@ const VendorApprovalDialog = ({
               onChange={(event) => onCommentsChange(event.target.value)}
               placeholder="Optional comments"
               rows={3}
+              disabled={confirming}
               data-testid="vendor-approval-comments"
             />
           </div>
         </div>
       )}
       <DialogFooter>
-        <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+        <Button variant="outline" onClick={() => onOpenChange(false)} disabled={confirming}>Cancel</Button>
         <Button
           onClick={onConfirm}
+          disabled={confirming}
           variant={
             approvalTarget?.action === 'Rejected'
               ? 'destructive'
@@ -52,7 +56,8 @@ const VendorApprovalDialog = ({
           }
           data-testid="confirm-vendor-approval"
         >
-          Confirm
+          {confirming ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          {confirming ? 'Updating…' : 'Confirm'}
         </Button>
       </DialogFooter>
     </DialogContent>
