@@ -50,7 +50,8 @@ export const isVendorGstVerificationSatisfied = (vendor, gstVerification, { invo
   if (requiresGstin && !gstin) return false;
   if (!gstin) return true;
   if (!isValidVendorGstin(gstin)) return false;
-  if (!gstVerification?.verified || gstVerification.gstin !== gstin) return false;
+  const verifiedGstin = String(gstVerification?.gstin || '').trim().toUpperCase();
+  if (!gstVerification?.verified || verifiedGstin !== gstin) return false;
   if (gstVerification.validGstin === false) return false;
   return true;
 };
@@ -73,7 +74,8 @@ export const getVendorGstVerificationErrors = (
   if (!isValidVendorGstin(gstin)) {
     return [`${prefix}Enter a valid 15-character GSTIN`];
   }
-  if (!gstVerification?.verified || gstVerification.gstin !== gstin) {
+  const verifiedGstin = String(gstVerification?.gstin || '').trim().toUpperCase();
+  if (!gstVerification?.verified || verifiedGstin !== gstin) {
     return [`${prefix}Verify GSTIN from the GST portal before saving`];
   }
   if (gstVerification.validGstin === false) {

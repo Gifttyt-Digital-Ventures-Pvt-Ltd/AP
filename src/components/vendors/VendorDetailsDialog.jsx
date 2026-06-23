@@ -87,9 +87,7 @@ const VendorDetailsDialog = ({
       pan: data.pan || prev.pan,
       state: data.state || prev.state,
       country: prev.country || "India",
-      name: prev.name?.trim()
-        ? prev.name
-        : data.legalName || prev.name,
+      name: data.legalName || prev.name,
     }));
   }, [setFormData]);
 

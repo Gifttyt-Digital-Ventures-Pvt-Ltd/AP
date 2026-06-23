@@ -33,7 +33,7 @@ const GstStatusBadge = ({ status, valid }) => {
 };
 
 /**
- * GST portal lookup on explicit user action only (Verify button).
+ * GST portal lookup once a valid GSTIN is entered.
  * Calls POST /tax/gst/vendor/details (no taxpayer OTP).
  */
 const VendorGstVerificationBlock = ({
@@ -55,9 +55,10 @@ const VendorGstVerificationBlock = ({
   msmeValue,
   onMsmeChange,
 }) => {
-  const { verifyGstinNow, isLoading } = useVendorGstAutofill();
+  const { autofillByGstin, verifyGstinNow, isLoading } = useVendorGstAutofill();
   const [verification, setVerification] = useState(null);
   const lastVerifiedGstinRef = useRef('');
+  const lastRequestedGstinRef = useRef('');
 
   const notifyUnverified = useCallback((normalized) => {
     onVerificationChange?.({
@@ -70,12 +71,14 @@ const VendorGstVerificationBlock = ({
   const clearVerification = useCallback((normalized = '') => {
     setVerification(null);
     lastVerifiedGstinRef.current = '';
+    lastRequestedGstinRef.current = '';
     notifyUnverified(normalized);
   }, [notifyUnverified]);
 
   const handleLookupResult = useCallback((gstinValue, result) => {
     if (result.success) {
       lastVerifiedGstinRef.current = gstinValue;
+      lastRequestedGstinRef.current = gstinValue;
       setVerification({ status: 'verified', data: result.data });
       onVerified?.(result.data);
       onVerificationChange?.({
@@ -96,15 +99,36 @@ const VendorGstVerificationBlock = ({
       return;
     }
 
+    lastRequestedGstinRef.current = normalized;
     setVerification({ status: 'loading' });
     verifyGstinNow(normalized, (result) => handleLookupResult(normalized, result));
   }, [gstin, verifyGstinNow, handleLookupResult, verification?.status]);
 
   useEffect(() => {
-    if (!String(gstin || '').trim()) {
+    const normalized = String(gstin || '').trim().toUpperCase();
+    if (!normalized) {
       clearVerification('');
+      return undefined;
     }
-  }, [gstin, clearVerification]);
+
+    if (!isValidGstin(normalized)) {
+      if (lastVerifiedGstinRef.current || lastRequestedGstinRef.current) {
+        clearVerification(normalized);
+      }
+      return undefined;
+    }
+
+    if (
+      lastVerifiedGstinRef.current === normalized ||
+      lastRequestedGstinRef.current === normalized
+    ) {
+      return undefined;
+    }
+
+    lastRequestedGstinRef.current = normalized;
+    setVerification({ status: 'loading' });
+    return autofillByGstin(normalized, (result) => handleLookupResult(normalized, result));
+  }, [gstin, autofillByGstin, clearVerification, handleLookupResult]);
 
   const handleGstinInput = (event) => {
     const next = event.target.value.toUpperCase();
@@ -131,45 +155,33 @@ const VendorGstVerificationBlock = ({
             {verificationRequired ? <span className="text-destructive"> *</span> : null}
           </p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Enter a 15-character GSTIN, then click Verify to check against the GST portal.
+            Enter a 15-character GSTIN to check it automatically against the GST portal.
           </p>
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-[1fr_auto] sm:items-end">
-        <div>
-          <Label>
-            {gstLabel}
-            {gstRequired ? ' *' : ''}
-          </Label>
-          <Input
-            value={gstin}
-            onChange={handleGstinInput}
-            placeholder="29ABCDE1234F1Z5"
-            maxLength={15}
-            className="mt-1.5 font-mono uppercase"
-            data-testid="vendor-gstin-input"
-            required={gstRequired}
-          />
-        </div>
-        <Button
-          type="button"
-          variant="outline"
-          className="sm:mb-0.5"
-          disabled={!isValidGstin(gstin) || isLoading}
-          onClick={runVerification}
-          data-testid="vendor-gst-verify-button"
-        >
-          {isLoading ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Verifying…
-            </>
-          ) : (
-            'Verify GSTIN'
-          )}
-        </Button>
+      <div>
+        <Label>
+          {gstLabel}
+          {gstRequired ? ' *' : ''}
+        </Label>
+        <Input
+          value={gstin}
+          onChange={handleGstinInput}
+          placeholder="29ABCDE1234F1Z5"
+          maxLength={15}
+          className="mt-1.5 font-mono uppercase"
+          data-testid="vendor-gstin-input"
+          required={gstRequired}
+        />
       </div>
+
+      {isLoading ? (
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Looking up GSTIN on the portal…
+        </div>
+      ) : null}
 
       {showResult ? (
         <div
@@ -212,16 +224,24 @@ const VendorGstVerificationBlock = ({
               </div>
             </div>
           ) : (
-            <div className="flex items-start gap-2 text-red-800 dark:text-red-200">
-              <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-              <p>{verification.error}</p>
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="flex items-start gap-2 text-red-800 dark:text-red-200">
+                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+                <p>{verification.error}</p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                disabled={!isValidGstin(gstin) || isLoading}
+                onClick={runVerification}
+                data-testid="vendor-gst-retry-button"
+              >
+                Retry
+              </Button>
             </div>
           )}
-        </div>
-      ) : isLoading ? (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          Looking up GSTIN on the portal…
         </div>
       ) : null}
 
@@ -230,7 +250,7 @@ const VendorGstVerificationBlock = ({
           <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
           <p>
             {verificationRequired && !String(gstin || '').trim()
-              ? 'GSTIN is required. Enter it and click Verify GSTIN.'
+              ? 'GSTIN is required. Enter it to verify automatically.'
               : 'GST verification is required before you can save this vendor.'}
           </p>
         </div>

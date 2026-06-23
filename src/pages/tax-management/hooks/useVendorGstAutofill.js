@@ -4,6 +4,15 @@ import { mapVendorGstDetailsToForm } from '../utils/gstApiMappers';
 import { getApiErrorMessage } from './useGstTaxpayerSession';
 import { GSTIN_PATTERN, isValidVendorGstin } from '../../../utils/vendorValidation';
 
+const getVendorGstCurrentData = (response) =>
+  response?.currentData ??
+  response?.data?.currentData ??
+  response?.data ??
+  response;
+
+const getVendorGstHistory = (response) =>
+  response?.history ?? response?.data?.history ?? [];
+
 /**
  * Debounced GSTIN lookup for vendor create/edit forms.
  * Calls POST /tax/gst/vendor/details (no taxpayer OTP required).
@@ -20,8 +29,8 @@ export function useVendorGstAutofill({ debounceMs = 400 } = {}) {
 
     try {
       const data = await lookup({ gstin: normalized }).unwrap();
-      const mapped = mapVendorGstDetailsToForm(data?.currentData ?? data);
-      onResult?.({ success: true, data: mapped, history: data?.history ?? [] });
+      const mapped = mapVendorGstDetailsToForm(getVendorGstCurrentData(data));
+      onResult?.({ success: true, data: mapped, history: getVendorGstHistory(data) });
     } catch (error) {
       onResult?.({ success: false, error: getApiErrorMessage(error) });
     }
