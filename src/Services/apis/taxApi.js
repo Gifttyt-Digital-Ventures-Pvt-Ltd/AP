@@ -47,12 +47,18 @@ export const taxApi = serviceApi.injectEndpoints({
       transformResponse: gstMutationResponse,
     }),
     trackGstReturns: builder.mutation({
-      query: (body) => ({
-        url: "/tax/gst/returns/track",
-        method: "POST",
-        params: body,
-        body,
-      }),
+      query: (body) => {
+        const { financialYear, ...restBody } = body ?? {};
+        return {
+          url: "/tax/gst/returns/track",
+          method: "POST",
+          params: financialYear ? { financial_year: financialYear } : undefined,
+          body: {
+            ...restBody,
+            ...(financialYear ? { financialYear } : {}),
+          },
+        };
+      },
       transformResponse: (response) => response?.returns ? response : response?.data ?? response,
     }),
     reconcileGstr2a: builder.mutation({
