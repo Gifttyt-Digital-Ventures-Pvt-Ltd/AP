@@ -25,8 +25,11 @@ import { useGstVendors } from '../../hooks/useGstVendors';
 import { useGstTaxpayerSession } from '../../hooks/useGstTaxpayerSession';
 import {
   useReconcileGstr2aMutation,
+  useFetchGstr2aReconcileHistoryMutation,
   useFetchGstr2aDocumentsMutation,
+  useFetchGstr2aDocumentsHistoryMutation,
   useFetchGstr2bDocumentsMutation,
+  useFetchGstr2bDocumentsHistoryMutation,
 } from '../../../../Services/apis/taxApi';
 import { buildGstPortalFetchCredentials } from '../../../../utils/organisationGst';
 import {
@@ -83,6 +86,27 @@ const GstFormField = ({ label, required, optional, children, className }) => (
   </div>
 );
 
+const getHistoryEntryResponse = (entry) => entry?.response?.currentData ?? entry?.response ?? {};
+const getDocumentHistoryDocs = (entry) => {
+  const response = getGstDocumentsPayload(getHistoryEntryResponse(entry));
+  return response?.documents ?? [];
+};
+const getGstDocumentsPayload = (response) => response?.currentData ?? response?.data?.currentData ?? response?.data ?? response ?? {};
+const getGstDocuments = (response) => getGstDocumentsPayload(response)?.documents ?? [];
+
+const formatHistoryRequestedAt = (value) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
 const GstFetchLoading = ({ message, subMessage }) => (
   <TaxSectionCard>
     <div className="flex flex-col items-center gap-3 py-10 text-sm text-muted-foreground">
@@ -92,6 +116,10 @@ const GstFetchLoading = ({ message, subMessage }) => (
     </div>
   </TaxSectionCard>
 );
+
+const HISTORY_PAGE_SIZE = 20;
+const getHistoryTotal = (items) => Number(items?.total ?? items?.length ?? 0);
+const getHistoryTotalPages = (total) => Math.max(1, Math.ceil(Number(total || 0) / HISTORY_PAGE_SIZE));
 
 const B2bInvoiceDrawerContent = ({ record, vendor }) => {
   const totalGst = docTotalGst(record);
@@ -404,6 +432,7 @@ const createB2bSnapshot = ({
   orgGst,
   orgUserName,
   existingId,
+  fetchedAt,
   getVendor,
 }) => {
   const vendor = getVendor(vendorId);
@@ -420,7 +449,7 @@ const createB2bSnapshot = ({
     dateTo: dateTo || '',
     records,
     apCount,
-    fetchedAt: new Date().toISOString(),
+    fetchedAt: fetchedAt ?? new Date().toISOString(),
     ...computeB2bMetrics(records, apCount),
   };
 };
@@ -750,22 +779,18 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
   const [dateTo, setDateTo] = useState('');
   const [loading, setLoading] = useState(false);
   const [fetchHistory, setFetchHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyTotal, setHistoryTotal] = useState(0);
   const [viewMode, setViewMode] = useState('history');
   const [activeSnapshotId, setActiveSnapshotId] = useState(null);
   const [reconcileGstr2a] = useReconcileGstr2aMutation();
+  const [fetchReconcileHistory] = useFetchGstr2aReconcileHistoryMutation();
 
   const selectedVendor = getVendor(vendorId);
   const activeSnapshot = fetchHistory.find((entry) => entry.id === activeSnapshotId) ?? null;
 
-  const filteredHistory = useMemo(
-    () => fetchHistory.filter(
-      (entry) => entry.vendorId === vendorId
-        && entry.month === month
-        && entry.fy === fy
-        && entry.orgGst === selectedOrgGst,
-    ),
-    [fetchHistory, vendorId, month, fy, selectedOrgGst],
-  );
+  const filteredHistory = fetchHistory;
 
   const upsertSnapshot = (snapshot) => {
     const key = b2bSnapshotKey(snapshot.vendorId, snapshot.month, snapshot.fy, snapshot.orgGst);
@@ -779,6 +804,43 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
     });
     return snapshot;
   };
+
+  const loadReconcileHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const offset = (historyPage - 1) * HISTORY_PAGE_SIZE;
+      const history = await fetchReconcileHistory({ limit: HISTORY_PAGE_SIZE, offset }).unwrap();
+      const snapshots = mapHistoryEntriesToSnapshots({
+        history: Array.isArray(history) ? history : [],
+        mapResponseToSnapshot: (response, meta) => {
+          const currentData = response?.currentData ?? response;
+          return buildB2bSnapshotFromReconcileData(currentData, {
+          vendorId: currentData?.vendorId ?? currentData?.vendor_id ?? '',
+          month: currentData?.month ?? '',
+          fy: currentData?.fy ?? currentData?.financialYear ?? currentData?.financial_year ?? '',
+          dateFrom: currentData?.dateFrom ?? currentData?.startDate ?? '',
+          dateTo: currentData?.dateTo ?? currentData?.endDate ?? '',
+          orgGst: currentData?.orgGst ?? currentData?.gstin ?? currentData?.gstIn ?? '',
+          orgUserName: currentData?.orgUserName ?? currentData?.username ?? '',
+          existingId: meta.idSuffix,
+          getVendor,
+        }, meta.fetchedAt);
+        },
+      });
+      setFetchHistory(snapshots);
+      setHistoryTotal(getHistoryTotal(history));
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+      setFetchHistory([]);
+      setHistoryTotal(0);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [fetchReconcileHistory, getVendor, historyPage]);
+
+  useEffect(() => {
+    loadReconcileHistory();
+  }, [loadReconcileHistory]);
 
   const runFetch = async ({
     targetVendorId,
@@ -823,6 +885,7 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
       };
       const snapshots = buildSnapshotsFromReconcileResponse(result, snapshotParams);
       setFetchHistory(snapshots);
+      loadReconcileHistory();
       onComplete?.(snapshots[0]);
     } catch (error) {
       toast.error(getApiErrorMessage(error));
@@ -831,24 +894,31 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
     }
   };
 
-  const handleFetch = () => {
-    runWithSession({
-      orgCredential: selectedOrgCredential,
-      contextLabel: 'GSTR-2A B2B Reconciliation',
-      execute: (otp) => runFetch({
-        targetVendorId: vendorId,
-        targetMonth: month,
-        targetFy: fy,
-        targetDateFrom: dateFrom,
-        targetDateTo: dateTo,
-        targetOrgCredential: selectedOrgCredential,
-        onComplete: () => {
-          setViewMode('history');
-          setActiveSnapshotId(null);
-        },
-        otp,
-      }),
-    });
+  const handleFetch = async () => {
+    if (!vendorId || !canFetchWithOrgGst || loading) return;
+
+    setLoading(true);
+    try {
+      await runWithSession({
+        orgCredential: selectedOrgCredential,
+        contextLabel: 'GSTR-2A B2B Reconciliation',
+        execute: (otp) => runFetch({
+          targetVendorId: vendorId,
+          targetMonth: month,
+          targetFy: fy,
+          targetDateFrom: dateFrom,
+          targetDateTo: dateTo,
+          targetOrgCredential: selectedOrgCredential,
+          onComplete: () => {
+            setViewMode('history');
+            setActiveSnapshotId(null);
+          },
+          otp,
+        }),
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const openSnapshotDetails = useCallback((entryId) => {
@@ -991,6 +1061,13 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
         <GstFetchLoading message="Fetching GSTR-2A B2B records…" subMessage="Also checking GSTR-2A B2BA for amendments…" />
       ) : null}
 
+      {historyLoading && !loading ? (
+        <div className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          Loading fetch history…
+        </div>
+      ) : null}
+
       {!loading && (!canFetchWithOrgGst || !vendorId) ? (
         <TaxEmptyState
           icon={ArrowUpDown}
@@ -1001,7 +1078,7 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
         </TaxEmptyState>
       ) : null}
 
-      {!loading && canFetchWithOrgGst && vendorId && filteredHistory.length === 0 ? (
+      {!loading && !historyLoading && fetchHistory.length === 0 && canFetchWithOrgGst && vendorId ? (
         <TaxEmptyState
           icon={FileText}
           title="No GSTR-2A B2B records fetched yet"
@@ -1011,10 +1088,10 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
         </TaxEmptyState>
       ) : null}
 
-      {!loading && canFetchWithOrgGst && vendorId && filteredHistory.length > 0 ? (
+      {!loading && !historyLoading && filteredHistory.length > 0 ? (
         <TaxSectionCard
           title="Fetch History"
-          description={`Previously fetched GSTR-2A B2B snapshots for ${selectedVendor?.name ?? 'vendor'} · ${month} FY ${fy}`}
+          description="Previously fetched GSTR-2A B2B snapshots across organisation GSTINs"
           meta={<TaxApiMeta synced={formatB2bFetchedOn(filteredHistory[0].fetchedAt)} count={`${filteredHistory.length} snapshot${filteredHistory.length === 1 ? '' : 's'}`} />}
         >
           <TaxCompactTable
@@ -1022,7 +1099,14 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
             columns={historyColumns}
             getRowKey={(row) => row.id}
             onRowClick={(row) => openSnapshotDetails(row.id)}
-            emptyMessage="No fetch history for this vendor and reporting period."
+            emptyMessage="No fetch history found."
+          />
+          <TaxPagination
+            page={historyPage}
+            totalPages={getHistoryTotalPages(historyTotal)}
+            loading={historyLoading}
+            onPrevious={() => setHistoryPage((page) => Math.max(1, page - 1))}
+            onNext={() => setHistoryPage((page) => Math.min(getHistoryTotalPages(historyTotal), page + 1))}
           />
         </TaxSectionCard>
       ) : null}
@@ -1050,47 +1134,77 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
   const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState(false);
   const [docs, setDocs] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyTotal, setHistoryTotal] = useState(0);
   const [quickFilter, setQuickFilter] = useState('All Documents');
   const [selected, setSelected] = useState(null);
   const [fetchGstr2aDocuments] = useFetchGstr2aDocumentsMutation();
+  const [fetchGstr2aDocumentsHistory] = useFetchGstr2aDocumentsHistoryMutation();
 
   const selectedVendor = vendorId ? getVendor(vendorId) : null;
   const apiKey = vendorId ? `${vendorId}-${month}-${fy}` : `all-${month}-${fy}`;
 
-  const handleFetch = () => {
+  const loadDocumentsHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const offset = (historyPage - 1) * HISTORY_PAGE_SIZE;
+      const result = await fetchGstr2aDocumentsHistory({ limit: HISTORY_PAGE_SIZE, offset }).unwrap();
+      setHistory(Array.isArray(result) ? result : []);
+      setHistoryTotal(getHistoryTotal(result));
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+      setHistory([]);
+      setHistoryTotal(0);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [fetchGstr2aDocumentsHistory, historyPage]);
+
+  useEffect(() => {
+    loadDocumentsHistory();
+  }, [loadDocumentsHistory]);
+
+  const handleFetch = async () => {
+    if (!canFetchWithOrgGst || loading) return;
+
     const portalCredentials = buildGstPortalFetchCredentials(selectedOrgCredential);
     if (!portalCredentials) return;
 
-    runWithSession({
-      orgCredential: selectedOrgCredential,
-      contextLabel: 'GSTR-2A Documents',
-      execute: async (otp) => {
-        setLoading(true);
-        setFetched(false);
-        setQuickFilter('All Documents');
-        try {
-          const payload = buildGstrDocumentsRequestPayload({
-            month,
-            financialYear: fy,
-            gstin: portalCredentials.gst,
-            username: portalCredentials.userName,
-            vendorName: selectedVendor?.name,
-            supplierGstin: selectedVendor?.gstin,
-            otp,
-          });
-          const result = await fetchGstr2aDocuments(payload).unwrap();
-          let resultDocs = result?.currentData?.documents ?? [];
-          if (docType !== 'All Documents') resultDocs = resultDocs.filter((doc) => doc.documentType === docType);
-          if (itcFilter !== 'All') resultDocs = resultDocs.filter((doc) => humanizeGstEnum(doc.itcEligibility) === itcFilter);
-          setDocs(resultDocs);
-          setFetched(true);
-        } catch (error) {
-          toast.error(getApiErrorMessage(error));
-        } finally {
-          setLoading(false);
-        }
-      },
-    });
+    setLoading(true);
+    setFetched(false);
+    setQuickFilter('All Documents');
+    try {
+      await runWithSession({
+        orgCredential: selectedOrgCredential,
+        contextLabel: 'GSTR-2A Documents',
+        execute: async (otp) => {
+          try {
+            const payload = buildGstrDocumentsRequestPayload({
+              month,
+              financialYear: fy,
+              gstin: portalCredentials.gst,
+              username: portalCredentials.userName,
+              vendorName: selectedVendor?.name,
+              supplierGstin: selectedVendor?.gstin,
+              otp,
+            });
+            const result = await fetchGstr2aDocuments(payload).unwrap();
+            let resultDocs = getGstDocuments(result);
+            if (docType !== 'All Documents') resultDocs = resultDocs.filter((doc) => doc.documentType === docType);
+            if (itcFilter !== 'All') resultDocs = resultDocs.filter((doc) => humanizeGstEnum(doc.itcEligibility) === itcFilter);
+            setDocs(resultDocs);
+            setFetched(true);
+            loadDocumentsHistory();
+          } catch (error) {
+            toast.error(getApiErrorMessage(error));
+          }
+        },
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const totalTaxable = docs.reduce((sum, doc) => sum + Number(doc.taxableValue ?? 0), 0);
@@ -1124,6 +1238,41 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
     { key: 'itcEligibility', title: 'ITC', render: (row) => <TaxStatusBadge status={row.itcEligibility} /> },
     { key: 'documentStatus', title: 'Status', render: (row) => <TaxStatusBadge status={row.documentStatus} /> },
     { key: 'apStatus', title: 'AP Match', render: (row) => <TaxStatusBadge status={row.apStatus} /> },
+  ];
+
+  const historyColumns = [
+    {
+      key: 'requestedAt',
+      title: 'Fetched On',
+      render: (row) => formatHistoryRequestedAt(row.requestedAt),
+    },
+    {
+      key: 'count',
+      title: 'Documents',
+      cellClassName: 'text-right font-medium',
+      render: (row) => getDocumentHistoryDocs(row).length,
+    },
+    {
+      key: 'actions',
+      title: 'Actions',
+      cellClassName: 'text-right',
+      render: (row) => (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={(event) => {
+            event.stopPropagation();
+            setDocs(getDocumentHistoryDocs(row));
+            setFetched(true);
+            setQuickFilter('All Documents');
+          }}
+        >
+          <Eye className="mr-1.5 h-3.5 w-3.5" />
+          View
+        </Button>
+      ),
+    },
   ];
 
   return (
@@ -1171,7 +1320,7 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
         </div>
       </TaxSectionCard>
 
-      {!fetched && !loading ? (
+      {!fetched && !loading && history.length === 0 ? (
         <TaxEmptyState
           icon={FileText}
           title="Select organisation GSTIN and reporting period"
@@ -1182,6 +1331,40 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
       ) : null}
 
       {loading ? <GstFetchLoading message="Fetching GSTR-2A documents from GST portal…" /> : null}
+
+      {historyLoading && !loading ? (
+        <div className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          Loading GSTR-2A document history…
+        </div>
+      ) : null}
+
+      {!loading && !historyLoading && history.length > 0 ? (
+        <TaxSectionCard
+          title="Fetch History"
+          description="Previously fetched GSTR-2A document responses. Open a run to review its document register."
+          meta={<TaxApiMeta synced={formatHistoryRequestedAt(history[0]?.requestedAt)} count={`${history.length} run${history.length === 1 ? '' : 's'}`} />}
+        >
+          <TaxCompactTable
+            rows={history}
+            columns={historyColumns}
+            getRowKey={(row, index) => row.requestedAt ?? `gstr2a-history-${index}`}
+            onRowClick={(row) => {
+              setDocs(getDocumentHistoryDocs(row));
+              setFetched(true);
+              setQuickFilter('All Documents');
+            }}
+            emptyMessage="No GSTR-2A document fetch history found."
+          />
+          <TaxPagination
+            page={historyPage}
+            totalPages={getHistoryTotalPages(historyTotal)}
+            loading={historyLoading}
+            onPrevious={() => setHistoryPage((page) => Math.max(1, page - 1))}
+            onNext={() => setHistoryPage((page) => Math.min(getHistoryTotalPages(historyTotal), page + 1))}
+          />
+        </TaxSectionCard>
+      ) : null}
 
       {fetched && !loading ? (
         <>
@@ -1196,6 +1379,12 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
           <TaxSectionCard
             title="GSTR-2A Document Register"
             description={selectedVendor ? `${selectedVendor.name} · ${month} FY ${fy}` : `All vendors · ${month} FY ${fy}`}
+            actions={(
+              <Button type="button" variant="outline" size="sm" onClick={() => setFetched(false)}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to History
+              </Button>
+            )}
           >
             <div className="mb-4 flex flex-wrap gap-2">
               {quickFilters.map((filter) => (
@@ -1245,48 +1434,78 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
   const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState(false);
   const [docs, setDocs] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyTotal, setHistoryTotal] = useState(0);
   const [quickFilter, setQuickFilter] = useState('All Documents');
   const [selected, setSelected] = useState(null);
   const [fetchGstr2bDocuments] = useFetchGstr2bDocumentsMutation();
+  const [fetchGstr2bDocumentsHistory] = useFetchGstr2bDocumentsHistoryMutation();
 
   const selectedVendor = vendorId ? getVendor(vendorId) : null;
   const stmtKey = `${month}-${fy}`;
 
-  const handleFetch = () => {
+  const loadDocumentsHistory = useCallback(async () => {
+    setHistoryLoading(true);
+    try {
+      const offset = (historyPage - 1) * HISTORY_PAGE_SIZE;
+      const result = await fetchGstr2bDocumentsHistory({ limit: HISTORY_PAGE_SIZE, offset }).unwrap();
+      setHistory(Array.isArray(result) ? result : []);
+      setHistoryTotal(getHistoryTotal(result));
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+      setHistory([]);
+      setHistoryTotal(0);
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [fetchGstr2bDocumentsHistory, historyPage]);
+
+  useEffect(() => {
+    loadDocumentsHistory();
+  }, [loadDocumentsHistory]);
+
+  const handleFetch = async () => {
+    if (!canFetchWithOrgGst || loading) return;
+
     const portalCredentials = buildGstPortalFetchCredentials(selectedOrgCredential);
     if (!portalCredentials) return;
 
-    runWithSession({
-      orgCredential: selectedOrgCredential,
-      contextLabel: 'GSTR-2B Documents',
-      execute: async (otp) => {
-        setLoading(true);
-        setFetched(false);
-        setQuickFilter('All Documents');
-        try {
-          const payload = buildGstrDocumentsRequestPayload({
-            month,
-            financialYear: fy,
-            gstin: portalCredentials.gst,
-            username: portalCredentials.userName,
-            vendorName: selectedVendor?.name,
-            supplierGstin: selectedVendor?.gstin,
-            otp,
-          });
-          const result = await fetchGstr2bDocuments(payload).unwrap();
-          let resultDocs = result?.currentData?.documents ?? [];
-          if (vendorId) resultDocs = resultDocs.filter((doc) => (doc.gstin ?? doc.supplierGstin) === selectedVendor?.gstin);
-          if (docTypeF !== 'All Documents') resultDocs = resultDocs.filter((doc) => doc.documentType === docTypeF);
-          if (itcF !== 'All') resultDocs = resultDocs.filter((doc) => humanizeGstEnum(doc.itcEligibility ?? doc.itc_status) === itcF);
-          setDocs(resultDocs);
-          setFetched(true);
-        } catch (error) {
-          toast.error(getApiErrorMessage(error));
-        } finally {
-          setLoading(false);
-        }
-      },
-    });
+    setLoading(true);
+    setFetched(false);
+    setQuickFilter('All Documents');
+    try {
+      await runWithSession({
+        orgCredential: selectedOrgCredential,
+        contextLabel: 'GSTR-2B Documents',
+        execute: async (otp) => {
+          try {
+            const payload = buildGstrDocumentsRequestPayload({
+              month,
+              financialYear: fy,
+              gstin: portalCredentials.gst,
+              username: portalCredentials.userName,
+              vendorName: selectedVendor?.name,
+              supplierGstin: selectedVendor?.gstin,
+              otp,
+            });
+            const result = await fetchGstr2bDocuments(payload).unwrap();
+            let resultDocs = getGstDocuments(result);
+            if (vendorId) resultDocs = resultDocs.filter((doc) => (doc.gstin ?? doc.supplierGstin) === selectedVendor?.gstin);
+            if (docTypeF !== 'All Documents') resultDocs = resultDocs.filter((doc) => doc.documentType === docTypeF);
+            if (itcF !== 'All') resultDocs = resultDocs.filter((doc) => humanizeGstEnum(doc.itcEligibility ?? doc.itc_status) === itcF);
+            setDocs(resultDocs);
+            setFetched(true);
+            loadDocumentsHistory();
+          } catch (error) {
+            toast.error(getApiErrorMessage(error));
+          }
+        },
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const docItcStatus = (doc) => doc.itcEligibility ?? doc.itc_status;
@@ -1342,6 +1561,41 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
     { key: 'apStatus', title: 'AP Match', render: (row) => <TaxStatusBadge status={row.apStatus} /> },
   ];
 
+  const historyColumns = [
+    {
+      key: 'requestedAt',
+      title: 'Fetched On',
+      render: (row) => formatHistoryRequestedAt(row.requestedAt),
+    },
+    {
+      key: 'count',
+      title: 'Documents',
+      cellClassName: 'text-right font-medium',
+      render: (row) => getDocumentHistoryDocs(row).length,
+    },
+    {
+      key: 'actions',
+      title: 'Actions',
+      cellClassName: 'text-right',
+      render: (row) => (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={(event) => {
+            event.stopPropagation();
+            setDocs(getDocumentHistoryDocs(row));
+            setFetched(true);
+            setQuickFilter('All Documents');
+          }}
+        >
+          <Eye className="mr-1.5 h-3.5 w-3.5" />
+          View
+        </Button>
+      ),
+    },
+  ];
+
   return (
     <div className="space-y-4">
       <div>
@@ -1387,7 +1641,7 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
         </div>
       </TaxSectionCard>
 
-      {!fetched && !loading ? (
+      {!fetched && !loading && history.length === 0 ? (
         <TaxEmptyState
           icon={BarChart2}
           title="Select organisation GSTIN and tax period"
@@ -1399,6 +1653,40 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
 
       {loading ? <GstFetchLoading message="Fetching GSTR-2B statement from GST portal…" /> : null}
 
+      {historyLoading && !loading ? (
+        <div className="flex items-center gap-2 rounded-md border bg-muted/20 px-3 py-2 text-sm text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          Loading GSTR-2B document history…
+        </div>
+      ) : null}
+
+      {!loading && !historyLoading && history.length > 0 ? (
+        <TaxSectionCard
+          title="Fetch History"
+          description="Previously fetched GSTR-2B document responses. Open a run to review its document register."
+          meta={<TaxApiMeta synced={formatHistoryRequestedAt(history[0]?.requestedAt)} count={`${history.length} run${history.length === 1 ? '' : 's'}`} />}
+        >
+          <TaxCompactTable
+            rows={history}
+            columns={historyColumns}
+            getRowKey={(row, index) => row.requestedAt ?? `gstr2b-history-${index}`}
+            onRowClick={(row) => {
+              setDocs(getDocumentHistoryDocs(row));
+              setFetched(true);
+              setQuickFilter('All Documents');
+            }}
+            emptyMessage="No GSTR-2B document fetch history found."
+          />
+          <TaxPagination
+            page={historyPage}
+            totalPages={getHistoryTotalPages(historyTotal)}
+            loading={historyLoading}
+            onPrevious={() => setHistoryPage((page) => Math.max(1, page - 1))}
+            onNext={() => setHistoryPage((page) => Math.min(getHistoryTotalPages(historyTotal), page + 1))}
+          />
+        </TaxSectionCard>
+      ) : null}
+
       {fetched && !loading ? (
         <>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
@@ -1409,7 +1697,16 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
             <TaxMiniMetric label="Blocked ITC" value={formatCurrency(blockedItc)} tone={blockedItc > 0 ? 'red' : 'default'} className="sm:col-span-2 xl:col-span-1" />
           </div>
 
-          <TaxSectionCard title="GSTR-2B Document Register" description={`${month} FY ${fy}${selectedVendor ? ` · ${selectedVendor.name}` : ' · All vendors'}`}>
+          <TaxSectionCard
+            title="GSTR-2B Document Register"
+            description={`${month} FY ${fy}${selectedVendor ? ` · ${selectedVendor.name}` : ' · All vendors'}`}
+            actions={(
+              <Button type="button" variant="outline" size="sm" onClick={() => setFetched(false)}>
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to History
+              </Button>
+            )}
+          >
             <div className="mb-4">
               <TaxViewFilterPills
                 value={quickFilter}

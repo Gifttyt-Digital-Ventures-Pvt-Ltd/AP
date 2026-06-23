@@ -148,9 +148,9 @@ const Vendors = () => {
   } = useGetVendorsQuery();
 
   const [createVendor, { isLoading: createVendorLoading }] = useCreateVendorMutation();
-  const [updateVendor] = useUpdateVendorMutation();
-  const [deleteVendor] = useDeleteVendorMutation();
-  const [approveVendor] = useApproveVendorMutation();
+  const [updateVendor, { isLoading: updateVendorLoading }] = useUpdateVendorMutation();
+  const [deleteVendor, { isLoading: deleteVendorLoading }] = useDeleteVendorMutation();
+  const [approveVendor, { isLoading: approveVendorLoading }] = useApproveVendorMutation();
   const { user } = useAuth();
   const { data: corporateUserContext = null } = useGetCorporateUserDetailsQuery();
   const { guardAction, canPerformAction } = useActionGuard();
@@ -840,6 +840,7 @@ const Vendors = () => {
         title={editingVendor ? 'Edit Vendor' : 'Create Vendor'}
         description="Add contact details and payment info of your vendor in OptiFii"
         submitLabel={editingVendor ? 'Update Vendor' : 'Create Vendor'}
+        submitting={createVendorLoading || updateVendorLoading}
         activeVendorFields={activeVendorFields}
         vendorFieldConfiguration={vendorFieldConfiguration}
         testId="vendor-dialog"
@@ -872,8 +873,11 @@ const Vendors = () => {
 
       <DeleteVendorDialog
         open={Boolean(vendorDeleteTarget)}
-        onOpenChange={(open) => !open && setVendorDeleteTarget(null)}
+        onOpenChange={(open) => {
+          if (!open && !deleteVendorLoading) setVendorDeleteTarget(null);
+        }}
         onConfirm={confirmDeleteVendor}
+        deleting={deleteVendorLoading}
       />
 
       <ViewVendorDialog
@@ -890,11 +894,14 @@ const Vendors = () => {
 
       <VendorApprovalDialog
         open={Boolean(approvalTarget)}
-        onOpenChange={(open) => !open && setApprovalTarget(null)}
+        onOpenChange={(open) => {
+          if (!open && !approveVendorLoading) setApprovalTarget(null);
+        }}
         approvalTarget={approvalTarget}
         approvalComments={approvalComments}
         onCommentsChange={setApprovalComments}
         onConfirm={confirmVendorApprovalAction}
+        confirming={approveVendorLoading}
       />
     </div>
   );

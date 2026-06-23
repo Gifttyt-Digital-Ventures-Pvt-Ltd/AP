@@ -4,6 +4,17 @@ import { normalizeOrganisationGstCredentialsList } from "../../utils/organisatio
 import { unwrapGstApiResponse } from "../../pages/tax-management/utils/gstApiMappers";
 
 const gstMutationResponse = (response) => unwrapGstApiResponse(response);
+const withHistoryMeta = (items, response = {}) => Object.assign(items, {
+  total: Number(response?.total ?? items.length),
+  limit: Number(response?.limit ?? items.length),
+  offset: Number(response?.offset ?? 0),
+});
+
+const gstHistoryResponse = (response) => {
+  if (Array.isArray(response)) return withHistoryMeta(response, response);
+  if (Array.isArray(response?.data)) return withHistoryMeta(response.data, response);
+  return withHistoryMeta(response?.data?.history ?? response?.history ?? [], response);
+};
 
 export const taxApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -36,11 +47,18 @@ export const taxApi = serviceApi.injectEndpoints({
       transformResponse: gstMutationResponse,
     }),
     trackGstReturns: builder.mutation({
-      query: (body) => ({
-        url: "/tax/gst/returns/track",
-        method: "POST",
-        body,
-      }),
+      query: (body) => {
+        const { financialYear, ...restBody } = body ?? {};
+        return {
+          url: "/tax/gst/returns/track",
+          method: "POST",
+          params: financialYear ? { financial_year: financialYear } : undefined,
+          body: {
+            ...restBody,
+            ...(financialYear ? { financialYear } : {}),
+          },
+        };
+      },
       transformResponse: (response) => response?.returns ? response : response?.data ?? response,
     }),
     reconcileGstr2a: builder.mutation({
@@ -51,6 +69,14 @@ export const taxApi = serviceApi.injectEndpoints({
       }),
       transformResponse: gstMutationResponse,
       invalidatesTags: ["Tax", ...CREDIT_INVALIDATION_TAGS],
+    }),
+    fetchGstr2aReconcileHistory: builder.mutation({
+      query: ({ limit = 20, offset = 0 } = {}) => ({
+        url: "/tax/gst/gstr-2a/reconcile/history",
+        method: "GET",
+        params: { limit, offset },
+      }),
+      transformResponse: gstHistoryResponse,
     }),
     getGstr2aInvoiceDetails: builder.mutation({
       query: (body) => ({
@@ -70,6 +96,14 @@ export const taxApi = serviceApi.injectEndpoints({
       transformResponse: gstMutationResponse,
       invalidatesTags: ["Tax", ...CREDIT_INVALIDATION_TAGS],
     }),
+    fetchGstr2aDocumentsHistory: builder.mutation({
+      query: ({ limit = 20, offset = 0 } = {}) => ({
+        url: "/tax/gst/gstr-2a/documents/history",
+        method: "GET",
+        params: { limit, offset },
+      }),
+      transformResponse: gstHistoryResponse,
+    }),
     fetchGstr2bDocuments: builder.mutation({
       query: (body) => ({
         url: "/tax/gst/gstr-2b/documents",
@@ -78,6 +112,14 @@ export const taxApi = serviceApi.injectEndpoints({
       }),
       transformResponse: gstMutationResponse,
       invalidatesTags: ["Tax", ...CREDIT_INVALIDATION_TAGS],
+    }),
+    fetchGstr2bDocumentsHistory: builder.mutation({
+      query: ({ limit = 20, offset = 0 } = {}) => ({
+        url: "/tax/gst/gstr-2b/documents/history",
+        method: "GET",
+        params: { limit, offset },
+      }),
+      transformResponse: gstHistoryResponse,
     }),
     fetchCashItcBalance: builder.mutation({
       query: (body) => ({
@@ -89,6 +131,22 @@ export const taxApi = serviceApi.injectEndpoints({
         response?.overallStats ? response : response?.data ?? response
       ),
       invalidatesTags: ["Tax", ...CREDIT_INVALIDATION_TAGS],
+    }),
+    fetchCashItcBalanceHistory: builder.mutation({
+      query: ({ limit = 20, offset = 0 } = {}) => ({
+        url: "/tax/gst/ledger/cash-itc-balance/history",
+        method: "GET",
+        params: { limit, offset },
+      }),
+      transformResponse: (response) => {
+        const payload = response?.data ?? response;
+        if (!payload || Array.isArray(payload)) return payload;
+        return Object.assign(payload, {
+          total: Number(response?.total ?? payload?.total ?? payload?.history?.length ?? 0),
+          limit: Number(response?.limit ?? payload?.limit ?? payload?.history?.length ?? 0),
+          offset: Number(response?.offset ?? payload?.offset ?? 0),
+        });
+      },
     }),
     getGstEntries: builder.query({
       query: () => ({ url: "/tax/gst/entries", method: "GET" }),
@@ -148,10 +206,14 @@ export const {
   useGetVendorReturnPreferenceMutation,
   useTrackGstReturnsMutation,
   useReconcileGstr2aMutation,
+  useFetchGstr2aReconcileHistoryMutation,
   useGetGstr2aInvoiceDetailsMutation,
   useFetchGstr2aDocumentsMutation,
+  useFetchGstr2aDocumentsHistoryMutation,
   useFetchGstr2bDocumentsMutation,
+  useFetchGstr2bDocumentsHistoryMutation,
   useFetchCashItcBalanceMutation,
+  useFetchCashItcBalanceHistoryMutation,
   useGetGstEntriesQuery,
   useCreateGstEntryMutation,
   useGetGstSummaryQuery,

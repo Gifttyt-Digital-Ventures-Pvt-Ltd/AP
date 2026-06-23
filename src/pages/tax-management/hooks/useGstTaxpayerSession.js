@@ -58,6 +58,7 @@ export function useGstTaxpayerSession() {
             resolve(null);
           }
         },
+        onCancelled: () => resolve(null),
       });
     });
   }, [checkSession, otp]);

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Building2, User } from "lucide-react";
+import { Building2, Loader2, User } from "lucide-react";
 import { useGetAvailableCurrenciesQuery } from "../../Services/apis/corporateApi";
 import { useRBAC } from "../../contexts/RBACContext";
 import { CURRENCY_SCREENS, FALLBACK_CURRENCIES } from "../../utils/currency";
@@ -83,7 +83,6 @@ const VendorDetailsDialog = ({
     if (!data) return;
     setFormData((prev) => ({
       ...prev,
-      gstin: data.gstin || prev.gstin,
       pan: data.pan || prev.pan,
       state: data.state || prev.state,
       country: prev.country || "India",
@@ -588,6 +587,7 @@ const VendorDetailsDialog = ({
               data-testid="vendor-submit-button"
               disabled={submitting || (gstVerificationRequired && !gstVerificationSatisfied)}
             >
+              {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {submitting ? "Saving…" : submitLabel}
             </Button>
           </div>

@@ -234,16 +234,34 @@ export const TaxApiMeta = ({ synced, count }) => (
   </div>
 );
 
-export const TaxPagination = ({ page = 1, totalPages = 3 }) => (
+export const TaxPagination = ({
+  page = 1,
+  totalPages = 1,
+  onPrevious,
+  onNext,
+  loading = false,
+}) => (
   <div className="flex items-center justify-between border-t px-4 py-3 text-xs text-muted-foreground">
     <span>
       Page {page} of {totalPages}
     </span>
     <div className="flex gap-2">
-      <Button type="button" variant="outline" size="sm" disabled={page <= 1}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={loading || page <= 1}
+        onClick={onPrevious}
+      >
         Previous
       </Button>
-      <Button type="button" variant="outline" size="sm" disabled={page >= totalPages}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        disabled={loading || page >= totalPages}
+        onClick={onNext}
+      >
         Next
       </Button>
     </div>
