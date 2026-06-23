@@ -439,7 +439,7 @@ const createB2bSnapshot = ({
   return {
     id: existingId ?? `snap-${orgGst}-${vendorId}-${month}-${fy}-${Date.now()}`,
     vendorId,
-    vendorName: vendor?.name ?? '—',
+    vendorName: vendor?.name ?? 'All Vendors',
     gstin: vendor?.gstin ?? '—',
     orgGst,
     orgUserName,
@@ -527,7 +527,7 @@ const B2bReconciliationDetail = ({ snapshot, onBack, getVendor }) => {
         </div>
       ),
     },
-    { key: 'vendor', title: 'Vendor', render: () => selectedVendor?.name ?? snapshot.vendorName ?? '—' },
+    { key: 'vendor', title: 'Vendor', render: (row) => row.vendor ?? selectedVendor?.name ?? snapshot.vendorName ?? 'All Vendors' },
     { key: 'invoiceDate', title: 'Invoice Date', cellClassName: 'text-muted-foreground' },
     { key: 'taxableValue', title: 'Taxable Value', render: (row) => formatCurrency(row.taxableValue), cellClassName: 'text-right font-medium' },
     { key: 'gst', title: 'GST Amount', render: (row) => formatCurrency(docTotalGst(row)), cellClassName: 'text-right font-semibold text-primary' },
@@ -855,7 +855,7 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
   }) => {
     const portalCredentials = buildGstPortalFetchCredentials(targetOrgCredential);
     const vendor = getVendor(targetVendorId);
-    if (!targetVendorId || !portalCredentials || !vendor) return;
+    if (!portalCredentials) return;
 
     setLoading(true);
     try {
@@ -864,8 +864,8 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
         financialYear: targetFy,
         gstin: portalCredentials.gst,
         username: portalCredentials.userName,
-        supplierGstin: vendor.gstin,
-        vendor: vendor.name,
+        supplierGstin: vendor?.gstin,
+        vendor: vendor?.name,
         startDate: targetDateFrom || undefined,
         endDate: targetDateTo || undefined,
         otp,
@@ -895,7 +895,7 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
   };
 
   const handleFetch = async () => {
-    if (!vendorId || !canFetchWithOrgGst || loading) return;
+    if (!canFetchWithOrgGst || loading) return;
 
     setLoading(true);
     try {
@@ -1026,12 +1026,12 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
             selectedGst={selectedOrgGst}
             onGstChange={onOrgGstChange}
           />
-          <GstFormField label="Vendor" required className="min-w-[220px]">
+          <GstFormField label="Vendor" optional className="min-w-[220px]">
             <TaxSelect
-              value={vendorId || 'placeholder'}
-              onValueChange={(value) => setVendorId(value === 'placeholder' ? '' : value)}
-              placeholder="Search or select vendor…"
-              options={[{ value: 'placeholder', label: 'Search or select vendor…' }, ...vendors.map((vendor) => ({ value: vendor.id, label: vendor.name }))]}
+              value={vendorId || 'all'}
+              onValueChange={(value) => setVendorId(value === 'all' ? '' : value)}
+              placeholder="All Vendors"
+              options={[{ value: 'all', label: 'All Vendors' }, ...vendors.map((vendor) => ({ value: vendor.id, label: vendor.name }))]}
             />
           </GstFormField>
           <GstFormField label="Vendor GSTIN">
@@ -1050,7 +1050,7 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
               <Input type="date" className="text-xs" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
             </div>
           </GstFormField>
-          <Button onClick={handleFetch} disabled={!vendorId || !canFetchWithOrgGst || loading} className="self-end">
+          <Button onClick={handleFetch} disabled={!canFetchWithOrgGst || loading} className="self-end">
             {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
             {loading ? 'Fetching…' : 'Fetch GST Records'}
           </Button>
@@ -1068,23 +1068,23 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
         </div>
       ) : null}
 
-      {!loading && (!canFetchWithOrgGst || !vendorId) ? (
+      {!loading && !canFetchWithOrgGst ? (
         <TaxEmptyState
           icon={ArrowUpDown}
-          title="Select organisation GSTIN, vendor, and reporting period"
-          description="Organisation GSTIN is required. Both GSTR-2A B2B and B2BA (amendments) are fetched together in a single reconciliation view."
+          title="Select organisation GSTIN and reporting period"
+          description="Vendor is optional. Leave it as All Vendors to fetch the full GSTR-2A B2B reconciliation for the organisation GSTIN."
         >
-          <Button onClick={handleFetch} disabled={!vendorId || !canFetchWithOrgGst}><Play className="mr-2 h-4 w-4" />Fetch GST Records</Button>
+          <Button onClick={handleFetch} disabled={!canFetchWithOrgGst}><Play className="mr-2 h-4 w-4" />Fetch GST Records</Button>
         </TaxEmptyState>
       ) : null}
 
-      {!loading && !historyLoading && fetchHistory.length === 0 && canFetchWithOrgGst && vendorId ? (
+      {!loading && !historyLoading && fetchHistory.length === 0 && canFetchWithOrgGst ? (
         <TaxEmptyState
           icon={FileText}
           title="No GSTR-2A B2B records fetched yet"
-          description="Select a vendor and reporting period above, then click Fetch GST Records to create a reconciliation snapshot."
+          description="Select an organisation GSTIN and reporting period above, then click Fetch GST Records to create a reconciliation snapshot."
         >
-          <Button onClick={handleFetch} disabled={!vendorId || !canFetchWithOrgGst || loading}><Play className="mr-2 h-4 w-4" />Fetch GST Records</Button>
+          <Button onClick={handleFetch} disabled={!canFetchWithOrgGst || loading}><Play className="mr-2 h-4 w-4" />Fetch GST Records</Button>
         </TaxEmptyState>
       ) : null}
 
