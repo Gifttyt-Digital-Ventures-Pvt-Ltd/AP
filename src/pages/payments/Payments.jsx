@@ -46,6 +46,9 @@ import PaymentDialog from './components/PaymentDialog';
 import RecordPaymentDialog from './components/RecordPaymentDialog';
 import PendingPaymentsTab from './components/PendingPaymentsTab';
 import ReleasedPaymentsTab from './components/ReleasedPaymentsTab';
+import ConnectedBankAccountsPanel from '../../components/banking/ConnectedBankAccountsPanel';
+import BankAccountSelectField from '../../components/banking/BankAccountSelectField';
+import { getDefaultBankAccountId } from '../banking/utils/bankAccounts';
 import ViewDialog from '../invoices/components/ViewDialog';
 import { InvoicePdfPreview } from '../invoices/components/InvoicePdfPreview';
 import { getInvoiceFileUrl, openInvoiceFileDownload } from '../invoices/utils/invoicePreview';
@@ -199,6 +202,26 @@ const Payments = () => {
   );
   const batchEligibleInvoices = [...pendingPaymentInvoices, ...pendingApproverInvoices];
   const bankAccounts = Array.isArray(bankAccountsData) ? bankAccountsData : [];
+
+  useEffect(() => {
+    if (!createBatchDialogOpen || !isConnectedBankingEnabled || createBatchForm.bank_account_id) {
+      return;
+    }
+
+    const defaultBankAccountId = getDefaultBankAccountId(bankAccounts);
+    if (!defaultBankAccountId) return;
+
+    setCreateBatchForm((prev) => ({
+      ...prev,
+      bank_account_id: defaultBankAccountId,
+    }));
+  }, [
+    bankAccounts,
+    createBatchDialogOpen,
+    createBatchForm.bank_account_id,
+    isConnectedBankingEnabled,
+  ]);
+
   const canManagePayments = canPerformAction('payments.create');
   const canBulkRelease = canPerformAction('payments.releaseBulk');
   const canCreateBatch =
@@ -638,6 +661,14 @@ const Payments = () => {
         }
       />
 
+      {isConnectedBankingEnabled ? (
+        <ConnectedBankAccountsPanel
+          accounts={bankAccounts}
+          loading={bankAccountsFetching}
+          className="mb-6"
+        />
+      ) : null}
+
       {isPaymentBatchesFeatureEnabled && (
         <Dialog
           open={createBatchDialogOpen}
@@ -676,26 +707,15 @@ const Payments = () => {
                   </Select>
                 </div>
                 {isConnectedBankingEnabled && (
-                  <div className="space-y-2">
-                    <Label>Bank Account *</Label>
-                    <Select
-                      value={createBatchForm.bank_account_id}
-                      onValueChange={(value) =>
-                        setCreateBatchForm((prev) => ({ ...prev, bank_account_id: value }))
-                      }
-                    >
-                      <SelectTrigger data-testid="create-batch-bank-select">
-                        <SelectValue placeholder="Select bank account" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {bankAccounts.map((bank) => (
-                          <SelectItem key={bank.id} value={String(bank.id)}>
-                            {bank.bank_name} - {bank.account_number}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+                  <BankAccountSelectField
+                    value={createBatchForm.bank_account_id}
+                    onChange={(value) =>
+                      setCreateBatchForm((prev) => ({ ...prev, bank_account_id: value }))
+                    }
+                    accounts={bankAccounts}
+                    activeOnly
+                    testId="create-batch-bank-select"
+                  />
                 )}
               </div>
 

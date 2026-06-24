@@ -6,6 +6,19 @@ import { formatMsmeLabel } from '../../../utils/vendorValidation';
 import { useLazyGetVendorHistoryQuery } from '../../../Services/apis/invoicesVendorsApi';
 import ApprovalHistoryTimeline from '../../../components/common/ApprovalHistoryTimeline';
 import VendorReturnPreferenceBlock from '../../../components/vendors/VendorReturnPreferenceBlock';
+import VendorGstRegistrationsPanel, {
+  getFirstVendorGstin,
+  getVendorGstRegistrations,
+  getVendorRegistrationStates,
+} from './VendorGstRegistrationsPanel';
+import VendorMultiGstBadge from './VendorMultiGstBadge';
+import VendorDocumentsPanel from './VendorDocumentsPanel';
+import VendorTdsPanel from './VendorTdsPanel';
+import { useRBAC } from '../../../contexts/RBACContext';
+import {
+  getVisibleVendorDocumentTypes,
+  hasVisibleVendorDocuments,
+} from '../../../utils/vendorDocumentConfig';
 import { Button } from '../../../components/ui/button';
 import {
   Dialog,
@@ -17,15 +30,46 @@ import {
 } from '../../../components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui/tabs';
 
-const VendorDetailsTab = ({ vendor }) => (
+const VendorDetailsTab = ({ vendor }) => {
+  const { corporateScreens } = useRBAC();
+  const activeVendorDocuments = corporateScreens?.activeVendorDocuments;
+  const vendorDocumentConfiguration = corporateScreens?.vendorDocumentConfiguration ?? [];
+  const visibleVendorDocumentTypes = getVisibleVendorDocumentTypes(
+    activeVendorDocuments,
+    vendorDocumentConfiguration,
+  );
+  const showVendorDocumentsSection = hasVisibleVendorDocuments(
+    activeVendorDocuments,
+    vendorDocumentConfiguration,
+  );
+  const registrations = getVendorGstRegistrations(vendor);
+  const registrationStates = getVendorRegistrationStates(vendor);
+
+  return (
   <div className="space-y-6 text-sm">
-    <div>
-      <h3 className="font-semibold mb-3">Basic Information</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div><p className="text-muted-foreground">Name</p><p className="font-medium">{vendor.name || '-'}</p></div>
-        <div><p className="text-muted-foreground">Type</p><p className="font-medium">{vendor.vendor_type || 'Company'}</p></div>
-        <div><p className="text-muted-foreground">Status</p><p className="font-medium">{formatWorkflowStatus(vendor.status) || 'Pending Approval'}</p></div>
-        <div><p className="text-muted-foreground">Category</p><p className="font-medium">{vendor.category || '-'}</p></div>
+    <div className="rounded-lg border border-border bg-muted/20 p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h3 className="text-base font-semibold text-foreground">{vendor.name || '-'}</h3>
+          <p className="mt-1 font-mono text-xs text-muted-foreground">
+            PAN: {vendor.pan || '-'}
+          </p>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center rounded-full border border-border bg-background px-2.5 py-0.5 text-xs font-medium">
+              {formatWorkflowStatus(vendor.status) || 'Pending Approval'}
+            </span>
+            {registrations.length > 0 ? (
+              <VendorMultiGstBadge count={registrations.length} states={registrationStates} />
+            ) : null}
+          </div>
+        </div>
+        <div className="grid gap-2 text-xs text-muted-foreground sm:min-w-44">
+          <div><span className="font-medium text-foreground">Type:</span> {vendor.vendor_type || 'Company'}</div>
+          <div><span className="font-medium text-foreground">Category:</span> {vendor.category || '-'}</div>
+          {registrationStates.length > 0 ? (
+            <div><span className="font-medium text-foreground">States:</span> {registrationStates.join(', ')}</div>
+          ) : null}
+        </div>
       </div>
     </div>
 
@@ -43,34 +87,37 @@ const VendorDetailsTab = ({ vendor }) => (
     <div>
       <h3 className="font-semibold mb-3">Tax Information</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div><p className="text-muted-foreground">PAN</p><p className="font-medium  ">{vendor.pan || '-'}</p></div>
-        <div><p className="text-muted-foreground">GSTIN</p><p className="font-medium  ">{vendor.gstin || '-'}</p></div>
+        <div><p className="text-muted-foreground">PAN</p><p className="font-medium font-mono">{vendor.pan || '-'}</p></div>
+        <div><p className="text-muted-foreground">Primary GSTIN</p><p className="font-medium font-mono">{getFirstVendorGstin(vendor) || '-'}</p></div>
         <div><p className="text-muted-foreground">MSME</p><p className="font-medium">{formatMsmeLabel(vendor.msme)}</p></div>
       </div>
-    </div>
-
-    <div>
-      <h3 className="font-semibold mb-3">Address</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div><p className="text-muted-foreground">Address Line 1</p><p className="font-medium">{vendor.address_line1 || '-'}</p></div>
-        <div><p className="text-muted-foreground">Address Line 2</p><p className="font-medium">{vendor.address_line2 || '-'}</p></div>
-        <div><p className="text-muted-foreground">City</p><p className="font-medium">{vendor.city || '-'}</p></div>
-        <div><p className="text-muted-foreground">State</p><p className="font-medium">{vendor.state || '-'}</p></div>
-        <div><p className="text-muted-foreground">Pincode</p><p className="font-medium">{vendor.pincode || '-'}</p></div>
-        <div><p className="text-muted-foreground">Country</p><p className="font-medium">{vendor.country || '-'}</p></div>
+      <div className="mt-4">
+        <p className="text-muted-foreground mb-2">TDS</p>
+        <VendorTdsPanel tdsMapping={vendor.tdsMapping ?? vendor.tdsMappings} readOnly />
       </div>
     </div>
 
     <div>
-      <h3 className="font-semibold mb-3">Bank Details</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div><p className="text-muted-foreground">Bank Name</p><p className="font-medium">{vendor.bank_name || '-'}</p></div>
-        <div><p className="text-muted-foreground">Account Holder Name</p><p className="font-medium">{vendor.account_holder_name || '-'}</p></div>
-        <div><p className="text-muted-foreground">Account Number</p><p className="font-medium  ">{vendor.account_number || '-'}</p></div>
-        <div><p className="text-muted-foreground">IFSC</p><p className="font-medium  ">{vendor.ifsc_code || '-'}</p></div>
-        <div><p className="text-muted-foreground">Branch</p><p className="font-medium">{vendor.branch || '-'}</p></div>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-semibold">GSTIN Details</h3>
+        <span className="text-xs text-muted-foreground">
+          {registrations.length} GSTIN{registrations.length === 1 ? '' : 's'}
+          {registrationStates.length > 0 ? ` · ${registrationStates.length} state${registrationStates.length === 1 ? '' : 's'}` : ''}
+        </span>
       </div>
+      <VendorGstRegistrationsPanel vendor={vendor} />
     </div>
+
+    {showVendorDocumentsSection ? (
+      <div>
+        <h3 className="font-semibold mb-3">Vendor Documents</h3>
+        <VendorDocumentsPanel
+          documents={vendor.documents}
+          readOnly
+          visibleDocumentTypes={visibleVendorDocumentTypes}
+        />
+      </div>
+    ) : null}
 
     <div>
       <h3 className="font-semibold mb-3">Additional Information</h3>
@@ -80,7 +127,8 @@ const VendorDetailsTab = ({ vendor }) => (
       </div>
     </div>
   </div>
-);
+  );
+};
 
 const ViewVendorDialog = ({ open, onOpenChange, vendor, canApprove, isPendingApproval, onApproveAction }) => {
   const [viewTab, setViewTab] = useState('details');
@@ -157,7 +205,7 @@ const ViewVendorDialog = ({ open, onOpenChange, vendor, canApprove, isPendingApp
 
             <TabsContent value="gst-preference" className="mt-4 flex-1 overflow-y-auto scrollbar-thin-muted">
               <VendorReturnPreferenceBlock
-                gstin={vendor.gstin}
+                gstin={getFirstVendorGstin(vendor)}
                 vendorName={vendor.name}
               />
             </TabsContent>

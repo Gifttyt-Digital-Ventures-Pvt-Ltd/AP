@@ -91,6 +91,7 @@ import {
   getInvoiceTaxAmount,
   getInvoiceTdsAmount,
 } from "./utils/invoiceAmounts";
+import { getMsmeDueDateValidationErrorForInvoice } from "./utils/msmePaymentDue";
 import { Sparkles, Eye, Mail, Pencil, Search, Trash2 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -1287,6 +1288,15 @@ const InvoicesPage = () => {
   };
 
   const validateMandatoryPayload = (payload) => {
+    const msmeDueDateError = getMsmeDueDateValidationErrorForInvoice(payload, {
+      findVendorById,
+      findVendorByName,
+    });
+    if (msmeDueDateError) {
+      toast.error(msmeDueDateError);
+      return false;
+    }
+
     const message = getInvoiceMandatoryFieldValidationMessage(
       payload,
       invoiceMandatoryFields,
@@ -1360,6 +1370,7 @@ const InvoicesPage = () => {
           data.lineItems,
           data.tds,
           calculateLineItemSubtotal,
+          data.tdsRate,
         ),
       },
     );
@@ -1566,6 +1577,7 @@ const InvoicesPage = () => {
           formData.lineItems,
           formData.tds,
           calculateLineItemSubtotal,
+          formData.tdsRate,
         ),
         uploadedFileName: uploadedFile?.name,
       },
@@ -1591,6 +1603,7 @@ const InvoicesPage = () => {
               formData.lineItems,
               formData.tds,
               calculateLineItemSubtotal,
+              formData.tdsRate,
             ),
           },
         );
@@ -1802,6 +1815,7 @@ const InvoicesPage = () => {
         isSavedDraft={isSavedDraft}
         calculateTotals={calculateTotals}
         findVendorByName={findVendorByName}
+        findVendorById={findVendorById}
         handleAddVendorFromInvoice={handleAddVendorFromInvoice}
         updateLineItem={updateLineItem}
         removeLineItem={removeLineItem}
@@ -2064,6 +2078,7 @@ const InvoicesPage = () => {
         })
       }
       findVendorByName={findVendorByName}
+      findVendorById={findVendorById}
       handleAddVendorFromInvoice={() => {
         if (bulkEditItemId) handleAddVendorForBulkItem(bulkEditItemId);
       }}

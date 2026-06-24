@@ -3,6 +3,7 @@ import { useGetVendorGstDetailsMutation } from '../../../Services/apis/taxApi';
 import { mapVendorGstDetailsToForm } from '../utils/gstApiMappers';
 import { getApiErrorMessage } from './useGstTaxpayerSession';
 import { GSTIN_PATTERN, isValidVendorGstin } from '../../../utils/vendorValidation';
+import { buildVendorGstDetailsRequestBody } from '../../../pages/vendors/utils/vendorGstFetch';
 
 const getVendorGstCurrentData = (response) =>
   response?.currentData ??
@@ -28,7 +29,7 @@ export function useVendorGstAutofill({ debounceMs = 400 } = {}) {
     }
 
     try {
-      const data = await lookup({ gstin: normalized }).unwrap();
+      const data = await lookup(buildVendorGstDetailsRequestBody({ gstin: normalized })).unwrap();
       const mapped = mapVendorGstDetailsToForm(getVendorGstCurrentData(data));
       onResult?.({ success: true, data: mapped, history: getVendorGstHistory(data) });
     } catch (error) {

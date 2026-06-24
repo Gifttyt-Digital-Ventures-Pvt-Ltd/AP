@@ -1,4 +1,5 @@
 import { format } from "date-fns";
+import { capMsmeDueDate, normalizeMsmePaymentDue, resolveVendorIsMsme } from "./msmePaymentDue";
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../../utils/currency";
 import {
   createDefaultLineItem,
@@ -80,7 +81,11 @@ export const buildInvoiceEditFormData = (
     invoice.location || invoice.placeOfSupply || invoice.placeOfSupply || "";
 
   const invoiceDate = formatInvoiceDateInput(invoice.invoiceDate ?? invoice.invoiceDate);
-  const dueDate = formatInvoiceDateInput(invoice.dueDate ?? invoice.dueDate);
+  const dueDate = capMsmeDueDate({
+    invoiceDate,
+    dueDate: formatInvoiceDateInput(invoice.dueDate ?? invoice.dueDate),
+    vendorIsMsme: resolveVendorIsMsme(invoice, vendor),
+  });
   const gstAmount = Number(invoice.gstAmount ?? invoice.gstAmount);
   const tdsSectionId = invoice.tdsSectionId ?? invoice.tds_section_id ?? null;
   const tdsSectionCode = invoice.tdsSectionCode ?? invoice.tds_section_code ?? null;
@@ -187,5 +192,6 @@ export const buildInvoiceEditFormData = (
           campaignName: "",
           referenceNumber: "",
         }),
+    ...normalizeMsmePaymentDue(invoice),
   };
 };

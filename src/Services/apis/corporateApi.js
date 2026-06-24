@@ -11,6 +11,10 @@ import {
   normalizeVendorFieldCatalog,
 } from "../../utils/vendorFieldConfig";
 import {
+  normalizeActiveVendorDocuments,
+  normalizeVendorDocumentCatalog,
+} from "../../utils/vendorDocumentConfig";
+import {
   isTokenBasedSubscription,
   normalizeSubscriptionModel,
 } from "../../utils/subscriptionModel";
@@ -326,6 +330,13 @@ const normalizeCorporateScreensResponse = (response = {}) => {
   const activeVendorFields = normalizeActiveVendorFields(
     response?.activeVendorFields,
   );
+  const vendorDocumentConfiguration = normalizeVendorDocumentCatalog(
+    toArray(response?.vendorDocumentConfiguration),
+  );
+  const activeVendorDocuments =
+    response && 'activeVendorDocuments' in response
+      ? normalizeActiveVendorDocuments(response.activeVendorDocuments)
+      : undefined;
   const invoiceConfiguration = normalizeInvoiceConfigurationCatalog(
     toArray(response?.invoiceConfiguration),
   );
@@ -348,6 +359,11 @@ const normalizeCorporateScreensResponse = (response = {}) => {
         ? vendorFieldConfiguration
         : DEFAULT_VENDOR_FIELD_CATALOG,
     activeVendorFields,
+    vendorDocumentConfiguration:
+      vendorDocumentConfiguration.length > 0
+        ? vendorDocumentConfiguration
+        : undefined,
+    activeVendorDocuments,
     invoiceConfiguration:
       invoiceConfiguration.length > 0
         ? invoiceConfiguration

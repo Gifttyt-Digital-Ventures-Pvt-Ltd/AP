@@ -36,13 +36,98 @@ export const isIndiaCountry = (country) => {
 };
 
 export const GSTIN_PATTERN = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+export const PAN_PATTERN = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
 
 export const isValidVendorGstin = (gstin) =>
   GSTIN_PATTERN.test(String(gstin || '').trim().toUpperCase());
 
+export const isValidVendorPan = (pan) =>
+  PAN_PATTERN.test(String(pan || '').trim().toUpperCase());
+
+export const getVendorPanFormatError = (pan, { prefix = '', required = true } = {}) => {
+  const value = String(pan || '').trim().toUpperCase();
+  if (!value) {
+    return required ? `${prefix}PAN is required` : null;
+  }
+  if (value.length !== 10) {
+    return `${prefix}PAN must be exactly 10 characters`;
+  }
+  if (!isValidVendorPan(value)) {
+    return `${prefix}Enter a valid PAN (e.g. ABCDE1234F)`;
+  }
+  return null;
+};
+
+export const getVendorGstinFormatError = (gstin, { prefix = '', required = true } = {}) => {
+  const value = String(gstin || '').trim().toUpperCase();
+  if (!value) {
+    return required ? `${prefix}GSTIN is required` : null;
+  }
+  if (value.length !== 15) {
+    return `${prefix}GSTIN must be exactly 15 characters`;
+  }
+  if (!isValidVendorGstin(value)) {
+    return `${prefix}Enter a valid GSTIN (e.g. 27ABCDE1234F1Z5)`;
+  }
+  return null;
+};
+
+/** PAN takes priority; GSTIN is used only when PAN is absent. */
+export const resolveVendorFetchSource = ({ pan, gstin } = {}) => {
+  const normalizedPan = String(pan || '').trim().toUpperCase();
+  if (normalizedPan) {
+    return { mode: 'pan', value: normalizedPan };
+  }
+
+  const normalizedGstin = String(gstin || '').trim().toUpperCase();
+  if (normalizedGstin) {
+    return { mode: 'gstin', value: normalizedGstin };
+  }
+
+  return null;
+};
+
+export const getVendorFetchValidationError = ({ pan, gstin } = {}) => {
+  const source = resolveVendorFetchSource({ pan, gstin });
+  if (!source) {
+    return 'Enter PAN in vendor identity or a GSTIN below to fetch details';
+  }
+
+  if (source.mode === 'pan') {
+    return getVendorPanFormatError(source.value);
+  }
+
+  return getVendorGstinFormatError(source.value);
+};
+
+export const isVendorFetchReady = ({ pan, gstin } = {}) =>
+  !getVendorFetchValidationError({ pan, gstin });
+
+export const getVendorGstRegistrationsFromForm = (vendor = {}) => {
+  const registrations =
+    vendor.gstRegistrations ??
+    vendor.gst_regs ??
+    vendor.gstRegs ??
+    vendor.gst_registrations;
+
+  if (Array.isArray(registrations) && registrations.length > 0) {
+    return registrations.filter((registration) =>
+      isValidVendorGstin(registration?.gstin ?? registration?.gstIn ?? registration?.gst),
+    );
+  }
+
+  const gstin = String(vendor.gstin || '').trim().toUpperCase();
+  return isValidVendorGstin(gstin) ? [{ gstin }] : [];
+};
+
+export const hasVendorGstRegistrations = (vendor = {}) =>
+  getVendorGstRegistrationsFromForm(vendor).length > 0;
+
 export const isVendorGstVerificationSatisfied = (vendor, gstVerification, { invoiceVendorRequest = false } = {}) => {
   if (invoiceVendorRequest) return true;
   if (!isIndiaCountry(vendor?.country)) return true;
+
+  if (hasVendorGstRegistrations(vendor)) return true;
 
   const gstin = String(vendor?.gstin || '').trim().toUpperCase();
   const requiresGstin = !invoiceVendorRequest;
@@ -64,11 +149,13 @@ export const getVendorGstVerificationErrors = (
   if (invoiceVendorRequest) return [];
   if (!isIndiaCountry(vendor.country)) return [];
 
+  if (hasVendorGstRegistrations(vendor)) return [];
+
   const gstin = String(vendor.gstin || '').trim().toUpperCase();
   const requiresGstin = !invoiceVendorRequest;
 
   if (requiresGstin && !gstin) {
-    return [`${prefix}GSTIN is required for vendors in India`];
+    return [`${prefix}Add at least one GST registration or enter a GSTIN`];
   }
   if (!gstin) return [];
   if (!isValidVendorGstin(gstin)) {
@@ -156,7 +243,7 @@ const getVendorFormatValidationErrors = (vendor = {}, { prefix = '' } = {}) => {
 
   if (pan) {
     if (isIndiaCountry(country)) {
-      if (!/^[A-Z]{5}[0-9]{4}[A-Z]{1}$/.test(pan)) {
+      if (!isValidVendorPan(pan)) {
         errors.push(`${prefix}PAN format is invalid`);
       }
     } else if (pan.length !== 10) {
@@ -164,8 +251,8 @@ const getVendorFormatValidationErrors = (vendor = {}, { prefix = '' } = {}) => {
     }
   }
 
-  if (gstin && isIndiaCountry(country) && gstin.length !== 15) {
-    errors.push(`${prefix}GSTIN must be 15 characters for vendors in India`);
+  if (gstin && isIndiaCountry(country) && !isValidVendorGstin(gstin)) {
+    errors.push(`${prefix}GSTIN format is invalid`);
   }
 
   const msmeError = getMsmeValidationError(vendor.msme, { prefix });
@@ -174,6 +261,23 @@ const getVendorFormatValidationErrors = (vendor = {}, { prefix = '' } = {}) => {
   }
 
   return errors;
+};
+
+/**
+ * Validation for bulk vendor spreadsheet upload.
+ * Vendors are created in Saved status, so only name is mandatory at import time.
+ * Format rules still apply when values are present.
+ */
+export const getBulkVendorUploadValidationErrors = (vendor = {}, { rowIndex = null } = {}) => {
+  const prefix = rowIndex !== null && rowIndex !== undefined ? `Row ${rowIndex + 2}: ` : '';
+  const errors = [];
+  const name = String(vendor.name || '').trim();
+
+  if (!name) {
+    errors.push(`${prefix}Company Name is required`);
+  }
+
+  return [...errors, ...getVendorFormatValidationErrors(vendor, { prefix })];
 };
 
 export const getVendorValidationErrors = (

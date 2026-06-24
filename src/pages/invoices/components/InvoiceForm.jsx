@@ -40,14 +40,19 @@ import {
 } from "../utils/lineItemsSummary";
 import {
   useGetOrganisationGstCredentialsQuery,
-  useGetTdsSectionsQuery,
 } from "../../../Services/apis/taxApi";
 import {
-  buildTdsOptions,
-  NO_TDS_VALUE,
-  parseTdsRate,
-  parseTdsSelection,
+  formatTdsDisplayLabel,
+  resolveTdsRate,
 } from "../utils/tds";
+import { buildInvoiceTdsStateFromVendor } from "../../vendors/utils/vendorTds";
+import TdsSelectionField from "./TdsSelectionField";
+import MsmePaymentDueBadge from "./MsmePaymentDueBadge";
+import {
+  capMsmeDueDate,
+  computeMsmeMaxDueDate,
+  normalizeMsmePaymentDue,
+} from "../utils/msmePaymentDue";
 
 const lineItemTableHeader = [
   {
@@ -128,6 +133,7 @@ export const InvoiceForm = ({
   isSavedDraft = false,
   calculateTotals,
   findVendorByName,
+  findVendorById,
   handleAddVendorFromInvoice,
   updateLineItem,
   removeLineItem,
@@ -160,7 +166,6 @@ export const InvoiceForm = ({
   showBillingGst = false,
   requireBillingGst = false,
 }) => {
-  const { data: tdsSectionsData = [] } = useGetTdsSectionsQuery();
   const {
     data: organisationGstCredentials = [],
     isLoading: organisationGstLoading,
@@ -187,6 +192,20 @@ export const InvoiceForm = ({
         .includes(query),
     );
   }, [vendorOptions, vendorQuery]);
+
+  const selectedVendor = useMemo(() => {
+    if (formData?.vendorId && typeof findVendorById === "function") {
+      return findVendorById(formData.vendorId);
+    }
+    if (formData?.vendorName && typeof findVendorByName === "function") {
+      return findVendorByName(formData.vendorName);
+    }
+    return null;
+  }, [formData?.vendorId, formData?.vendorName, findVendorById, findVendorByName]);
+
+  const msmePaymentDue = normalizeMsmePaymentDue(formData);
+  const vendorIsMsme = Boolean(selectedVendor?.msme) || msmePaymentDue.vendorIsMsme;
+  const msmeMaxDueDate = vendorIsMsme ? computeMsmeMaxDueDate(formData?.invoiceDate) : "";
 
   const resolvedCurrencyOptions = useMemo(
     () =>
@@ -238,11 +257,6 @@ export const InvoiceForm = ({
   useEffect(() => {
     setCurrencyQuery(formData?.currency || DEFAULT_CURRENCY);
   }, [formData?.currency]);
-
-  const tdsOptions = useMemo(
-    () => buildTdsOptions(tdsSectionsData, formData?.tds),
-    [tdsSectionsData, formData?.tds],
-  );
 
   const billingGstOptions = useMemo(
     () =>
@@ -346,7 +360,12 @@ export const InvoiceForm = ({
     roundOffValue !== null &&
     roundOffValue !== "" &&
     Number.isFinite(Number(roundOffValue));
-  const tdsRate = parseTdsRate(formData.tds);
+  const tdsRate = resolveTdsRate(formData.tds, formData.tdsRate);
+  const tdsLabel = formatTdsDisplayLabel({
+    tds: formData.tds,
+    tdsSectionCode: formData.tdsSectionCode,
+    tdsRate: formData.tdsRate,
+  });
   const tdsAmount = Math.round(((totals.subTotal * tdsRate) / 100) * 100) / 100;
   const netPayable = Math.max(
     Math.round((totals.total - tdsAmount) * 100) / 100,
@@ -361,6 +380,7 @@ export const InvoiceForm = ({
 
   const applyVendorNameChange = (newName) => {
     const matched = findVendorByName(newName);
+    const matchedIsMsme = Boolean(matched?.msme);
     setFormData({
       ...formData,
       vendorName: newName,
@@ -371,10 +391,16 @@ export const InvoiceForm = ({
       gstin: matched?.gstin
         ? String(matched.gstin).trim().toUpperCase()
         : formData.gstin,
+      dueDate: capMsmeDueDate({
+        invoiceDate: formData.invoiceDate,
+        dueDate: formData.dueDate,
+        vendorIsMsme: matchedIsMsme,
+      }),
       campaignId: "",
       campaignName: "",
       referenceNumber: "",
       campaignReferenceNumber: "",
+      ...buildInvoiceTdsStateFromVendor(matched),
     });
   };
 
@@ -391,6 +417,10 @@ export const InvoiceForm = ({
       campaignName: "",
       referenceNumber: "",
       campaignReferenceNumber: "",
+      tds: "",
+      tdsSectionId: null,
+      tdsSectionCode: null,
+      tdsRate: null,
     });
   };
 
@@ -801,9 +831,18 @@ export const InvoiceForm = ({
                 <Input
                   type="date"
                   value={formData.invoiceDate}
-                  onChange={(e) =>
-                    setFormData({ ...formData, invoiceDate: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const invoiceDate = e.target.value;
+                    setFormData((prev) => ({
+                      ...prev,
+                      invoiceDate,
+                      dueDate: capMsmeDueDate({
+                        invoiceDate,
+                        dueDate: prev.dueDate,
+                        vendorIsMsme,
+                      }),
+                    }));
+                  }}
                   className="h-8 text-sm"
                 />
               </div>
@@ -812,11 +851,22 @@ export const InvoiceForm = ({
                 <Input
                   type="date"
                   value={formData.dueDate}
-                  onChange={(e) =>
-                    setFormData({ ...formData, dueDate: e.target.value })
-                  }
+                  min={formData.invoiceDate || undefined}
+                  max={msmeMaxDueDate || undefined}
+                  onChange={(e) => {
+                    const dueDate = e.target.value;
+                    setFormData((prev) => ({
+                      ...prev,
+                      dueDate: capMsmeDueDate({
+                        invoiceDate: prev.invoiceDate,
+                        dueDate,
+                        vendorIsMsme,
+                      }),
+                    }));
+                  }}
                   className="h-8 text-sm"
                 />
+                {isEdit ? <MsmePaymentDueBadge invoice={formData} className="mt-2" /> : null}
               </div>
             </div>
 
@@ -1404,26 +1454,27 @@ export const InvoiceForm = ({
                 <span>{formatAmount(Number(roundOffValue))}</span>
               </div>
             )}
-            <div className="flex justify-between items-center pt-1.5 border-t text-xs">
-              <div className="flex items-center gap-1.5">
-                <span>TDS</span>
-                <AppSelect
-                  value={formData.tds || NO_TDS_VALUE}
-                  onChange={(e) => {
-                    const nextValue = e.target.value;
-                    const tdsSelection = parseTdsSelection(nextValue);
+            <div className="flex justify-between items-start pt-1.5 border-t text-xs gap-3">
+              <div className="min-w-0 flex-1 space-y-1">
+                <span>TDS{tdsLabel ? ` (${tdsLabel})` : ""}</span>
+                <TdsSelectionField
+                  value={formData.tds || ""}
+                  onChange={(selection) =>
                     setFormData({
                       ...formData,
-                      tds: nextValue === NO_TDS_VALUE ? "" : nextValue,
-                      ...tdsSelection,
-                    });
-                  }}
-                  placeholder="TDS"
-                  options={tdsOptions}
-                  className="h-6 w-36 rounded border pl-1 pr-6 text-xs"
+                      tds: selection.tds,
+                      tdsSectionId: selection.tdsSectionId,
+                      tdsSectionCode: selection.tdsSectionCode,
+                      tdsRate: selection.tdsRate,
+                    })
+                  }
+                  showLabel={false}
+                  selectClassName="h-6 w-full max-w-[220px] rounded border pl-1 pr-6 text-xs"
+                  inputClassName="h-6 w-16 px-1 text-xs"
+                  testIdPrefix="invoice-tds"
                 />
               </div>
-              <span>{formatAmount(tdsAmount)}</span>
+              <span className="shrink-0 pt-1">{formatAmount(tdsAmount)}</span>
             </div>
             <div className="flex justify-between text-sm pt-1.5 border-t">
               <span>Total</span>

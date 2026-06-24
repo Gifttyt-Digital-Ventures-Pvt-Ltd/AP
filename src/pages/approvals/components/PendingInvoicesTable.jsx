@@ -1,4 +1,5 @@
 import React from "react";
+import InvoiceDueDateCell from "../../invoices/components/InvoiceDueDateCell";
 import { Eye } from "lucide-react";
 import AppDataTable from "../../../components/common/AppDataTable";
 import ClippedTextWithTooltip from "../../../components/common/ClippedTextWithTooltip";
@@ -72,7 +73,12 @@ const PendingInvoicesTable = ({
               );
               break;
             case "dueDate":
-              value = safeFormatDate(invoice.dueDate || invoice.dueDate);
+              value = (
+                <InvoiceDueDateCell
+                  invoice={invoice}
+                  formattedDueDate={safeFormatDate(invoice.dueDate || invoice.dueDate)}
+                />
+              );
               break;
             case "actions":
               value = (

@@ -13,10 +13,16 @@ import {
   resolveLineItemSubtotal,
 } from "./invoiceTax";
 import { parseNumericInput } from "./numericInput";
-import { parseTdsRate } from "./tds";
+import { resolveTdsRate } from "./tds";
+import { capMsmeDueDate, resolveVendorIsMsme } from "./msmePaymentDue";
 
-export const computeTdsAmount = (lineItems = [], tdsValue = "", calculateLineItemSubtotal) => {
-  const tdsRate = parseTdsRate(tdsValue);
+export const computeTdsAmount = (
+  lineItems = [],
+  tdsValue = "",
+  calculateLineItemSubtotal,
+  tdsRateOverride = null,
+) => {
+  const tdsRate = resolveTdsRate(tdsValue, tdsRateOverride);
   if (!tdsRate) return null;
   const subTotal = (lineItems || []).reduce(
     (sum, item) => sum + calculateLineItemSubtotal(item),
@@ -138,6 +144,14 @@ export const initializeInvoiceFormData = (
   { findVendorByName, isCategoryFeatureEnabled },
 ) => {
   const matchedVendor = extractedData?.vendorName ? findVendorByName(extractedData.vendorName) : null;
+  const vendorIsMsme = resolveVendorIsMsme({}, matchedVendor);
+  const invoiceDate = extractedData?.invoiceDate || format(new Date(), "yyyy-MM-dd");
+  const extractedDueDate = extractedData?.dueDate || "";
+  const dueDate = capMsmeDueDate({
+    invoiceDate,
+    dueDate: extractedDueDate,
+    vendorIsMsme,
+  });
   const notesText = Array.isArray(extractedData?.notes) ? extractedData.notes.join("\n") : "";
   const invoiceCurrency = normalizeCurrencyCode(extractedData?.currency) || DEFAULT_CURRENCY;
   const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
@@ -160,8 +174,8 @@ export const initializeInvoiceFormData = (
     vendorGstin: extractedData?.vendorGstin || "",
     vendorAddress: vendorAddress,
     invoiceNumber: extractedData?.invoiceNumber || "",
-    invoiceDate: extractedData?.invoiceDate || format(new Date(), "yyyy-MM-dd"),
-    dueDate: extractedData?.dueDate || "",
+    invoiceDate,
+    dueDate,
     billingAddress: billingAddress,
     shippingAddress: extractedData?.shippingAddress || extractedData?.shippingAddress || "",
     billingGstin:
@@ -349,7 +363,12 @@ export const buildToCreateInvoicePayload = (
       totals,
       tdsAmount:
         options.tdsAmount ??
-        computeTdsAmount(lineItems, invoiceData.tds, calculateLineItemSubtotal),
+        computeTdsAmount(
+          lineItems,
+          invoiceData.tds,
+          calculateLineItemSubtotal,
+          invoiceData.tdsRate,
+        ),
       categoryEnabled: isCategoryFeatureEnabled,
       campaignEnabled: isCampaignFeatureEnabled,
     },

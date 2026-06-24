@@ -72,6 +72,7 @@ import {
   buildVendorRequestForm,
   createEmptyVendorRequestForm,
 } from "../utils/invoiceBulkUtils";
+import { getMsmeDueDateValidationErrorForInvoice } from "../utils/msmePaymentDue";
 import { useCurrencyFilter } from "../../../hooks/useCurrencyFilter";
 import { CURRENCY_SCREENS } from "../../../utils/currency";
 import { getInvoiceVendorRequestValidationErrors } from "../../../utils/vendorValidation";
@@ -380,6 +381,15 @@ const InvoiceSingleUploadLayer = ({
   };
 
   const validateMandatoryPayload = (payload) => {
+    const msmeDueDateError = getMsmeDueDateValidationErrorForInvoice(payload, {
+      findVendorById,
+      findVendorByName,
+    });
+    if (msmeDueDateError) {
+      toast.error(msmeDueDateError);
+      return false;
+    }
+
     const message = getInvoiceMandatoryFieldValidationMessage(
       payload,
       invoiceMandatoryFields,
@@ -551,6 +561,7 @@ const InvoiceSingleUploadLayer = ({
           formData.lineItems,
           formData.tds,
           calculateLineItemSubtotal,
+          formData.tdsRate,
         ),
         uploadedFileName: uploadedFile?.name,
       },
@@ -721,6 +732,7 @@ const InvoiceSingleUploadLayer = ({
       hideActions={hideActions}
       calculateTotals={calculateTotals}
       findVendorByName={findVendorByName}
+      findVendorById={findVendorById}
       handleAddVendorFromInvoice={handleAddVendorFromInvoice}
       updateLineItem={updateLineItem}
       removeLineItem={removeLineItem}

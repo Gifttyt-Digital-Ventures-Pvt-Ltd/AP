@@ -12,12 +12,12 @@ import {
   resolveLineItemSubtotal,
 } from "../utils/invoiceTax";
 import { parseNumericInput } from "../utils/numericInput";
-import { formatTdsLabel, parseTdsRate } from "../utils/tds";
+import { formatTdsDisplayLabel, resolveTdsRate } from "../utils/tds";
 import LineItemsSummary, { LineItemsSectionHeader } from "./LineItemsSummary";
+import MsmePaymentDueBadge from "./MsmePaymentDueBadge";
 import {
-  computeLineItemsSummary,
-  resolveLineItemsExpanded,
-} from "../utils/lineItemsSummary";
+  normalizeMsmePaymentDue,
+} from "../utils/msmePaymentDue";
 
 const formatDisplayDate = (value) => {
   if (!value) return "-";
@@ -35,8 +35,8 @@ const DetailField = ({ label, value, mono = false, className = "" }) => (
   </div>
 );
 
-const computeTdsAmount = (lineItems = [], tdsValue = "", subTotalOverride) => {
-  const tdsRate = parseTdsRate(tdsValue);
+const computeTdsAmount = (lineItems = [], tdsValue = "", subTotalOverride, tdsRateOverride = null) => {
+  const tdsRate = resolveTdsRate(tdsValue, tdsRateOverride);
   if (!tdsRate) return 0;
   const subTotal =
     subTotalOverride ??
@@ -80,6 +80,7 @@ const InvoiceReadOnlyDetails = ({
 
   if (!formData) return null;
 
+  const msmePaymentDue = normalizeMsmePaymentDue(invoice);
   const invoiceCurrency = normalizeCurrencyCode(formData.currency);
   const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
   const isInvoiceLevelDiscount = formData.discountsLevel === INVOICE_LEVEL;
@@ -130,6 +131,7 @@ const InvoiceReadOnlyDetails = ({
     formData.lineItems,
     formData.tds,
     isInvoiceLevelDiscount ? totals.subTotalBeforeDiscount : totals.subTotal,
+    formData.tdsRate,
   );
   const tdsAmount =
     tdsAmountFromRate ||
@@ -156,9 +158,11 @@ const InvoiceReadOnlyDetails = ({
   const netPayable =
     Number(invoice.netAmount) ||
     Math.max(Math.round((totals.total - tdsAmount) * 100) / 100, 0);
-  const tdsLabel =
-    formatTdsLabel(formData.tdsSectionCode, formData.tdsRate) ||
-    (formData.tds ? String(formData.tds).split("::").pop() : "");
+  const tdsLabel = formatTdsDisplayLabel({
+    tds: formData.tds,
+    tdsSectionCode: formData.tdsSectionCode,
+    tdsRate: formData.tdsRate,
+  });
 
   const showCategory =
     showCategoryField &&
@@ -208,7 +212,15 @@ const InvoiceReadOnlyDetails = ({
             <DetailField label="Ref No" value={invoice?.refNo} mono />
           )}
           <DetailField label="Billing Date" value={formatDisplayDate(formData.invoiceDate)} />
-          <DetailField label="Due Date" value={formatDisplayDate(formData.dueDate)} />
+          <div>
+            <DetailField label="Due Date" value={formatDisplayDate(formData.dueDate)} />
+            <MsmePaymentDueBadge invoice={invoice} className="mt-1" />
+            {msmePaymentDue.vendorIsMsme && msmePaymentDue.msmeMaxDueDate ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                MSME max due date: {formatDisplayDate(msmePaymentDue.msmeMaxDueDate)}
+              </p>
+            ) : null}
+          </div>
           <DetailField label="Currency" value={invoiceCurrency} mono />
           <DetailField label="Department" value={formData.departmentName} />
           {showCategory && (

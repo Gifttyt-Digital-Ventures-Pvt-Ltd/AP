@@ -1,4 +1,5 @@
 import React from "react";
+import InvoiceDueDateCell from "../../invoices/components/InvoiceDueDateCell";
 import { Button } from "../../../components/ui/button";
 import { CheckCircle, Eye, RotateCcw, XCircle } from "lucide-react";
 import {
@@ -99,7 +100,12 @@ const NeedsApprovalTable = ({
               );
               break;
             case "dueDate":
-              value = safeFormatDate(invoice.dueDate || invoice.dueDate);
+              value = (
+                <InvoiceDueDateCell
+                  invoice={invoice}
+                  formattedDueDate={safeFormatDate(invoice.dueDate || invoice.dueDate)}
+                />
+              );
               break;
             case "invoiceDate":
               value = safeFormatDate(

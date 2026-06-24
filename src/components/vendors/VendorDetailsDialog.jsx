@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
-import { Building2, Loader2, User } from "lucide-react";
+import { Building2, CheckCircle2, Loader2, MapPin, Plus, Trash2, User } from "lucide-react";
 import { useGetAvailableCurrenciesQuery } from "../../Services/apis/corporateApi";
 import { useRBAC } from "../../contexts/RBACContext";
 import { CURRENCY_SCREENS, FALLBACK_CURRENCIES } from "../../utils/currency";
@@ -10,9 +10,10 @@ import {
 } from "../../utils/vendorFieldConfig";
 import {
   isIndiaCountry,
-  normalizePincodeInput,
   getVendorGstVerificationErrors,
   isVendorGstVerificationSatisfied,
+  getVendorGstinFormatError,
+  isVendorFetchReady,
 } from "../../utils/vendorValidation";
 import { toast } from "sonner";
 import { Button } from "../ui/button";
@@ -27,7 +28,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../ui/select";
-import VendorGstVerificationBlock from "./VendorGstVerificationBlock";
+import { useVendorGstDetailsFetch } from "../../pages/vendors/hooks/useVendorGstDetailsFetch";
+import VendorDocumentsPanel from "../../pages/vendors/components/VendorDocumentsPanel";
+import VendorTdsPanel from "../../pages/vendors/components/VendorTdsPanel";
+import { createEmptyVendorDocuments } from "../../pages/vendors/utils/vendorDocuments";
+import {
+  getVisibleVendorDocumentTypes,
+  hasVisibleVendorDocuments,
+} from "../../utils/vendorDocumentConfig";
+import { getVendorTdsValidationErrors } from "../../pages/vendors/utils/vendorTds";
 
 const CATEGORY_OPTIONS = [
   "IT Services",
@@ -52,6 +61,366 @@ const FormSection = ({ title, description, children, className }) => (
   </section>
 );
 
+const buildGstRegistrationFromVerification = (data) => {
+  const gstin = String(data?.gstin || "").trim().toUpperCase();
+  if (!gstin) return null;
+
+  return {
+    gstin,
+    state: data.state || "",
+    stateCode: data.stateCode || "",
+    businessNature: data.businessNature || "",
+    location: data.location ?? null,
+    bankDetails: data.bankDetails ?? data.bank_details ?? {},
+    address: formatRegistrationLocation(data),
+  };
+};
+
+const getRegistrationValue = (registration, ...keys) => {
+  for (const key of keys) {
+    const value = registration?.[key];
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return "";
+};
+
+const formatRegistrationLocation = (registration = {}) => {
+  const location = registration.location ?? registration.addressDetails ?? registration.address_details;
+  if (location && typeof location === "object") {
+    return [
+      location.addressLine1 ?? location.address_line1,
+      location.addressLine2 ?? location.address_line2,
+      location.city,
+      location.state,
+      location.pincode ?? location.postalCode ?? location.postal_code,
+      location.country,
+    ]
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  return getRegistrationValue(registration, "address", "principalAddress", "principal_address");
+};
+
+const normalizeFormGstRegistrations = (registrations = []) =>
+  (Array.isArray(registrations) ? registrations : [])
+    .map((registration) => ({
+      ...registration,
+      gstin: String(getRegistrationValue(registration, "gstin", "gstIn", "gst")).trim().toUpperCase(),
+      state: getRegistrationValue(registration, "state", "stateName", "state_name"),
+      stateCode: getRegistrationValue(registration, "stateCode", "state_code"),
+      address: formatRegistrationLocation(registration),
+      location: registration.location ?? registration.addressDetails ?? registration.address_details ?? null,
+      bankDetails: registration.bankDetails ?? registration.bank_details ?? {},
+      _clientId:
+        registration._clientId ||
+        (getRegistrationValue(registration, "gstin", "gstIn", "gst")
+          ? `reg-${String(getRegistrationValue(registration, "gstin", "gstIn", "gst")).trim().toUpperCase()}`
+          : undefined),
+      _fromFetch: registration._fromFetch === true,
+    }))
+    .filter((registration) => registration.gstin || registration._clientId);
+
+const getRegistrationKey = (registration = {}) =>
+  registration._clientId || String(registration.gstin || "").trim().toUpperCase();
+
+const createEmptyGstRegistration = () => ({
+  _clientId: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  gstin: "",
+  state: "",
+  location: { country: "India" },
+  bankDetails: {},
+});
+
+const GstRegistrationsEditor = ({
+  registrations,
+  onUpdate,
+  onRemove,
+}) => {
+  if (!registrations.length) {
+    return (
+      <div className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
+        No GSTINs added yet. Use Fetch Details above or add a GSTIN block manually.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {registrations.map((registration) => {
+        const registrationKey = getRegistrationKey(registration);
+        const isFetchedRegistration = Boolean(registration._fromFetch && registration.gstin);
+
+        const updateRegistrationField = (field, value) => {
+          onUpdate(registrationKey, { [field]: value });
+        };
+
+        const updateLocationField = (field, value) => {
+          onUpdate(registrationKey, {
+            location: {
+              ...(registration.location || {}),
+              [field]: value,
+            },
+          });
+        };
+
+        const updateBankField = (field, value) => {
+          onUpdate(registrationKey, {
+            bankDetails: {
+              ...(registration.bankDetails || {}),
+              [field]: value,
+            },
+          });
+        };
+
+        return (
+          <div
+            key={registrationKey}
+            className="rounded-lg border border-border bg-background p-3"
+          >
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0 flex-1">
+                  {isFetchedRegistration ? (
+                    <>
+                      <span className="font-mono text-sm font-semibold text-foreground">
+                        {registration.gstin}
+                      </span>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        GSTIN from fetch lookup.
+                      </p>
+                    </>
+                  ) : (
+                    <div>
+                      <Label>GSTIN *</Label>
+                      <Input
+                        value={registration.gstin || ""}
+                        onChange={(event) =>
+                          updateRegistrationField("gstin", event.target.value.toUpperCase())
+                        }
+                        placeholder="e.g. 27ABCDE1234F1Z5"
+                        className="mt-1.5 font-mono uppercase"
+                        maxLength={15}
+                      />
+                    </div>
+                  )}
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-8 px-2 text-destructive hover:text-destructive"
+                  onClick={() => onRemove(registrationKey)}
+                  title="Remove GST registration"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
+
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                  <Label className="text-sm">Registration Location</Label>
+                </div>
+                <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                  <div className="sm:col-span-2">
+                    <Input
+                      value={registration.location?.addressLine1 || ""}
+                      onChange={(event) => updateLocationField("addressLine1", event.target.value)}
+                      placeholder="Address line 1"
+                    />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <Input
+                      value={registration.location?.addressLine2 || ""}
+                      onChange={(event) => updateLocationField("addressLine2", event.target.value)}
+                      placeholder="Address line 2"
+                    />
+                  </div>
+                  <Input
+                    value={registration.location?.city || ""}
+                    onChange={(event) => updateLocationField("city", event.target.value)}
+                    placeholder="City"
+                  />
+                  <Input
+                    value={registration.location?.state || registration.state || ""}
+                    onChange={(event) => {
+                      updateRegistrationField("state", event.target.value);
+                      updateLocationField("state", event.target.value);
+                    }}
+                    placeholder="State"
+                  />
+                  <Input
+                    value={registration.location?.pincode || ""}
+                    onChange={(event) => updateLocationField("pincode", event.target.value)}
+                    placeholder="Pincode"
+                  />
+                  <Input
+                    value={registration.location?.country || "India"}
+                    onChange={(event) => updateLocationField("country", event.target.value)}
+                    placeholder="Country"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-sm">Bank Details</Label>
+                <div className="mt-2 grid gap-3 sm:grid-cols-2">
+                  <div className="sm:col-span-2">
+                    <Input
+                      value={registration.bankDetails?.accountHolderName || ""}
+                      onChange={(event) => updateBankField("accountHolderName", event.target.value)}
+                      placeholder="Account holder name"
+                    />
+                  </div>
+                  <Input
+                    value={registration.bankDetails?.accountNumber || ""}
+                    onChange={(event) => updateBankField("accountNumber", event.target.value)}
+                    placeholder="Account number"
+                  />
+                  <Input
+                    value={registration.bankDetails?.ifscCode || ""}
+                    onChange={(event) => updateBankField("ifscCode", event.target.value.toUpperCase())}
+                    placeholder="IFSC code"
+                    className="uppercase"
+                  />
+                  <Input
+                    value={registration.bankDetails?.bankName || ""}
+                    onChange={(event) => updateBankField("bankName", event.target.value)}
+                    placeholder="Bank name"
+                  />
+                  <Input
+                    value={registration.bankDetails?.branch || ""}
+                    onChange={(event) => updateBankField("branch", event.target.value)}
+                    placeholder="Branch"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+};
+
+const mapFetchedRegistrationToVerification = (registration = {}) => ({
+  gstin: registration.gstin,
+  pan: registration.pan || "",
+  state: registration.state || "",
+  stateCode: registration.stateCode || "",
+  location: registration.location ?? null,
+  bankDetails: registration.bankDetails ?? {},
+  address: registration.address || "",
+  validGstin: true,
+});
+
+const FetchVendorResultsPreview = ({
+  fetchMode,
+  records,
+  selectedGstins,
+  onToggleGstin,
+  onSelectAll,
+  onSelectNone,
+  onApply,
+}) => {
+  if (!records.length) return null;
+
+  const firstRecord = records[0];
+  const isPanMode = fetchMode === "pan";
+  const selectedCount = selectedGstins.size;
+
+  return (
+    <div className="space-y-3 rounded-lg border border-border bg-background p-3">
+      <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+        <div className="font-semibold">{firstRecord.legalName || firstRecord.tradeName}</div>
+        <div className="mt-0.5 text-xs">
+          PAN: <span className="font-mono font-medium">{firstRecord.pan || "—"}</span>
+          {" · "}
+          {records.length} GSTIN{records.length !== 1 ? "s" : ""} found
+        </div>
+      </div>
+
+      {isPanMode ? (
+        <div className="overflow-hidden rounded-md border border-border">
+          <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-2">
+            <span className="text-xs font-semibold text-foreground">
+              GSTINs Found ({records.length})
+            </span>
+            <div className="flex gap-2">
+              <button type="button" className="text-xs font-medium text-primary" onClick={onSelectAll}>
+                All
+              </button>
+              <button type="button" className="text-xs text-muted-foreground" onClick={onSelectNone}>
+                None
+              </button>
+            </div>
+          </div>
+            {records.map((record) => {
+            const checked = selectedGstins.has(record.gstin);
+            return (
+              <div
+                key={record.gstin}
+                role="button"
+                tabIndex={0}
+                onClick={() => onToggleGstin(record.gstin)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    onToggleGstin(record.gstin);
+                  }
+                }}
+                className={`flex w-full cursor-pointer items-center gap-3 border-b border-border px-3 py-2 text-left last:border-b-0 ${
+                  checked ? "bg-primary/5" : "bg-background hover:bg-muted/30"
+                }`}
+              >
+                <Checkbox
+                  checked={checked}
+                  onCheckedChange={() => onToggleGstin(record.gstin)}
+                  onClick={(event) => event.stopPropagation()}
+                />
+                <span className="min-w-[150px] font-mono text-xs font-semibold text-primary">
+                  {record.gstin}
+                </span>
+                <span className="flex-1 text-sm text-foreground">{record.state || "—"}</span>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="overflow-hidden rounded-md border border-border text-sm">
+          {[
+            ["State", firstRecord.state],
+            ["Address", firstRecord.address || formatRegistrationLocation(firstRecord)],
+          ].map(([label, value]) => (
+            <div
+              key={label}
+              className="flex gap-3 border-b border-border px-3 py-2 last:border-b-0"
+            >
+              <span className="min-w-24 text-xs font-semibold text-muted-foreground">{label}</span>
+              <span className="text-foreground">{value || "—"}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div className="flex justify-end">
+        <Button
+          type="button"
+          size="sm"
+          disabled={selectedCount === 0}
+          onClick={onApply}
+        >
+          <CheckCircle2 className="mr-2 h-4 w-4" />
+          {isPanMode
+            ? `Add ${selectedCount} Selected GSTIN${selectedCount !== 1 ? "s" : ""}`
+            : "Add GSTIN"}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
 const VendorDetailsDialog = ({
   open,
   onOpenChange,
@@ -73,6 +442,15 @@ const VendorDetailsDialog = ({
     activeVendorFieldsProp ?? corporateScreens?.activeVendorFields ?? [];
   const vendorFieldConfiguration =
     vendorFieldConfigurationProp ?? corporateScreens?.vendorFieldConfiguration ?? [];
+  const activeVendorDocuments = corporateScreens?.activeVendorDocuments;
+  const vendorDocumentConfiguration = corporateScreens?.vendorDocumentConfiguration ?? [];
+  const visibleVendorDocumentTypes = getVisibleVendorDocumentTypes(
+    activeVendorDocuments,
+    vendorDocumentConfiguration,
+  );
+  const showVendorDocumentsSection =
+    !invoiceVendorRequest &&
+    hasVisibleVendorDocuments(activeVendorDocuments, vendorDocumentConfiguration);
 
   const { data: availableCurrencies = [] } = useGetAvailableCurrenciesQuery(
     CURRENCY_SCREENS.INVOICE,
@@ -81,12 +459,29 @@ const VendorDetailsDialog = ({
 
   const applyGstVerification = useCallback((data) => {
     if (!data) return;
+    const registration = buildGstRegistrationFromVerification(data);
     setFormData((prev) => ({
       ...prev,
       pan: data.pan || prev.pan,
       state: data.state || prev.state,
       country: prev.country || "India",
       name: data.legalName || prev.name,
+      gstin: registration?.gstin || prev.gstin,
+      gstRegistrations: registration
+        ? [
+            {
+              ...registration,
+              _clientId: `reg-${registration.gstin}`,
+              _fromFetch: true,
+            },
+            ...(
+              normalizeFormGstRegistrations(prev.gstRegistrations).filter(
+                    (item) =>
+                      String(item?.gstin || "").trim().toUpperCase() !== registration.gstin,
+                  )
+            ),
+          ]
+        : prev.gstRegistrations,
     }));
   }, [setFormData]);
 
@@ -96,13 +491,68 @@ const VendorDetailsDialog = ({
     validGstin: null,
   });
   const [gstVerificationAttempted, setGstVerificationAttempted] = useState(false);
+  const [fetchGstinQuery, setFetchGstinQuery] = useState("");
+  const [fetchInputMode, setFetchInputMode] = useState("gstin");
+  const [lastFetchMode, setLastFetchMode] = useState("pan");
+  const [fetchMessage, setFetchMessage] = useState("");
+  const [fetchMessageIsError, setFetchMessageIsError] = useState(false);
+  const [fetchedRecords, setFetchedRecords] = useState([]);
+  const [selectedFetchedGstins, setSelectedFetchedGstins] = useState(() => new Set());
+
+  const hasPanForFetch = Boolean(String(formData?.pan || "").trim());
+  const fetchUsesPan = fetchInputMode === "pan";
+  const { fetchVendorDetails, isLoading: isFetchLoading } = useVendorGstDetailsFetch();
+
+  const clearFetchResults = () => {
+    setFetchedRecords([]);
+    setSelectedFetchedGstins(new Set());
+    setFetchMessage("");
+    setFetchMessageIsError(false);
+  };
+
+  const switchFetchInputMode = (mode) => {
+    if (mode === fetchInputMode) return;
+    setFetchInputMode(mode);
+    clearFetchResults();
+  };
 
   useEffect(() => {
     if (!open) {
       setGstVerification({ verified: false, gstin: "", validGstin: null });
       setGstVerificationAttempted(false);
+      setFetchGstinQuery("");
+      setFetchInputMode("gstin");
+      setLastFetchMode("pan");
+      setFetchMessage("");
+      setFetchMessageIsError(false);
+      setFetchedRecords([]);
+      setSelectedFetchedGstins(new Set());
+      return;
     }
+
+    const hasPan = Boolean(String(formData?.pan || "").trim());
+    setFetchInputMode(hasPan ? "pan" : "gstin");
   }, [open]);
+
+  useEffect(() => {
+    if (!open || !formData?.gstin) return;
+
+    const normalized = String(formData.gstin || "").trim().toUpperCase();
+    const existingRegistration = normalizeFormGstRegistrations(formData.gstRegistrations).find(
+      (registration) => registration.gstin === normalized,
+    );
+
+    if (!existingRegistration) return;
+
+    setGstVerification((prev) => {
+      if (prev.verified && prev.gstin === normalized) return prev;
+      return {
+        verified: true,
+        gstin: normalized,
+        validGstin: true,
+      };
+    });
+  }, [open, formData?.gstin, formData?.gstRegistrations]);
 
   const handleGstVerificationChange = useCallback((next) => {
     setGstVerification((prev) => {
@@ -131,6 +581,24 @@ const VendorDetailsDialog = ({
       return;
     }
 
+    const incompleteRegistrations = normalizeFormGstRegistrations(formData.gstRegistrations).filter(
+      (registration) => {
+        const gstin = String(registration.gstin || "").trim().toUpperCase();
+        if (!gstin) return false;
+        return Boolean(getVendorGstinFormatError(gstin, { required: true }));
+      },
+    );
+    if (incompleteRegistrations.length > 0) {
+      toast.error(getVendorGstinFormatError(incompleteRegistrations[0].gstin) || "Invalid GSTIN in a registration block.");
+      return;
+    }
+
+    const tdsErrors = getVendorTdsValidationErrors(formData.tdsMapping ?? null);
+    if (tdsErrors.length > 0) {
+      toast.error(tdsErrors[0]);
+      return;
+    }
+
     onSubmit(event);
   };
 
@@ -143,7 +611,6 @@ const VendorDetailsDialog = ({
     getVendorFieldDisplayName(sectionId, vendorFieldConfiguration) || fallback;
 
   const isIndia = isIndiaCountry(formData.country);
-  const gstVerificationRequired = isIndia && !invoiceVendorRequest;
   const gstVerificationSatisfied = isVendorGstVerificationSatisfied(
     formData,
     gstVerification,
@@ -156,6 +623,187 @@ const VendorDetailsDialog = ({
 
   const updateField = (field, value) =>
     setFormData((prev) => ({ ...prev, [field]: value }));
+
+  const gstRegistrations = normalizeFormGstRegistrations(formData.gstRegistrations);
+
+  const setFetchFeedback = (message, isError = false) => {
+    setFetchMessage(message);
+    setFetchMessageIsError(isError);
+  };
+
+  const clearFetchFeedback = () => {
+    setFetchMessage("");
+    setFetchMessageIsError(false);
+  };
+
+  const prefillVendorIdentityFromFetch = (records = []) => {
+    const firstRecord = records[0];
+    if (!firstRecord) return;
+
+    setFormData((prev) => ({
+      ...prev,
+      name: firstRecord.legalName || firstRecord.tradeName || prev.name,
+      vendor_type: firstRecord.vendorType || prev.vendor_type,
+      pan: firstRecord.pan || prev.pan,
+      email: firstRecord.email || prev.email,
+      mobile: firstRecord.mobile || prev.mobile,
+      contact_person: firstRecord.contactPerson || prev.contact_person,
+      country: prev.country || "India",
+    }));
+  };
+
+  const applySelectedFetchedRegistrations = () => {
+    const selectedRecords = fetchedRecords.filter((record) =>
+      selectedFetchedGstins.has(record.gstin),
+    );
+    if (!selectedRecords.length) {
+      toast.error("Select at least one GST registration to add.");
+      return;
+    }
+
+    const newRegistrations = selectedRecords
+      .map((record) => {
+        const registration = buildGstRegistrationFromVerification(
+          mapFetchedRegistrationToVerification(record),
+        );
+        if (!registration?.gstin) return null;
+        return {
+          ...registration,
+          _clientId: `reg-${registration.gstin}`,
+          _fromFetch: true,
+        };
+      })
+      .filter(Boolean);
+
+    setFormData((prev) => {
+      const existing = normalizeFormGstRegistrations(prev.gstRegistrations);
+      const existingGstins = new Set(existing.map((registration) => registration.gstin));
+      const toAdd = newRegistrations.filter((registration) => !existingGstins.has(registration.gstin));
+
+      if (!toAdd.length) {
+        toast.info("Selected GST registrations are already added.");
+        return prev;
+      }
+
+      const merged = [...existing, ...toAdd];
+      const primaryGstin = merged.find((registration) => registration.gstin)?.gstin || prev.gstin;
+
+      return {
+        ...prev,
+        gstin: primaryGstin,
+        gstRegistrations: merged,
+      };
+    });
+
+    const existingGstins = new Set(gstRegistrations.map((registration) => registration.gstin));
+    const addedCount = newRegistrations.filter((registration) => !existingGstins.has(registration.gstin)).length;
+    if (!addedCount) return;
+
+    if (newRegistrations.find((registration) => !existingGstins.has(registration.gstin))?.gstin) {
+      const firstAdded = newRegistrations.find((registration) => !existingGstins.has(registration.gstin));
+      setGstVerification({
+        verified: true,
+        gstin: firstAdded.gstin,
+        validGstin: true,
+      });
+    }
+
+    setFetchedRecords([]);
+    setSelectedFetchedGstins(new Set());
+    setFetchFeedback(
+      `${addedCount} GST registration${addedCount !== 1 ? "s" : ""} added.`,
+      false,
+    );
+  };
+
+  const handleFetchDetails = async () => {
+    const fetchParams = fetchUsesPan
+      ? { pan: formData.pan }
+      : { gstin: fetchGstinQuery };
+
+    const result = await fetchVendorDetails(fetchParams);
+
+    if (!result.success) {
+      setFetchedRecords([]);
+      setSelectedFetchedGstins(new Set());
+      setFetchFeedback(result.error || "Failed to fetch vendor details.", true);
+      return;
+    }
+
+    prefillVendorIdentityFromFetch(result.records);
+    setFetchedRecords(result.records);
+    setSelectedFetchedGstins(new Set(result.records.map((record) => record.gstin)));
+    setLastFetchMode(result.mode || "pan");
+    clearFetchFeedback();
+  };
+
+  const addManualGstRegistration = () => {
+    setFormData((prev) => ({
+      ...prev,
+      gstRegistrations: [
+        ...normalizeFormGstRegistrations(prev.gstRegistrations),
+        createEmptyGstRegistration(),
+      ],
+    }));
+  };
+
+  const removeGstRegistration = (registrationKey) => {
+    if (!registrationKey) return;
+
+    setFormData((prev) => {
+      const remaining = normalizeFormGstRegistrations(prev.gstRegistrations).filter(
+        (registration) => getRegistrationKey(registration) !== registrationKey,
+      );
+      const nextGstin = remaining.find((registration) => registration.gstin)?.gstin ?? "";
+
+      return {
+        ...prev,
+        gstin: nextGstin,
+        gstRegistrations: remaining,
+      };
+    });
+
+    const removed = gstRegistrations.find(
+      (registration) => getRegistrationKey(registration) === registrationKey,
+    );
+    if (removed?.gstin && String(formData.gstin || "").trim().toUpperCase() === removed.gstin) {
+      setGstVerification({ verified: false, gstin: "", validGstin: null });
+    }
+  };
+
+  const updateGstRegistration = (registrationKey, patch) => {
+    if (!registrationKey) return;
+
+    setFormData((prev) => ({
+      ...prev,
+      gstRegistrations: normalizeFormGstRegistrations(prev.gstRegistrations).map((registration) => {
+        if (getRegistrationKey(registration) !== registrationKey) return registration;
+        const next = {
+          ...registration,
+          ...patch,
+          location: patch.location
+            ? {
+                ...(registration.location || {}),
+                ...patch.location,
+              }
+            : registration.location,
+          bankDetails: patch.bankDetails
+            ? {
+                ...(registration.bankDetails || {}),
+                ...patch.bankDetails,
+              }
+            : registration.bankDetails,
+        };
+        if (patch.gstin !== undefined) {
+          next.gstin = String(patch.gstin || "").trim().toUpperCase();
+        }
+        return {
+          ...next,
+          address: formatRegistrationLocation(next),
+        };
+      }),
+    }));
+  };
 
   const basicInfoFields = [
     {
@@ -186,67 +834,6 @@ const VendorDetailsDialog = ({
       key: "website",
       section: VENDOR_FIELD_SECTIONS.WEBSITE,
       placeholder: "https://example.com",
-    },
-  ];
-
-  const addressFields = [
-    {
-      key: "address_line1",
-      section: VENDOR_FIELD_SECTIONS.ADDRESS_LINE_1,
-      placeholder: "Building/Street address",
-      colSpan: "col-span-2",
-    },
-    {
-      key: "address_line2",
-      section: VENDOR_FIELD_SECTIONS.ADDRESS_LINE_2,
-      placeholder: "Apartment, suite, etc.",
-      colSpan: "col-span-2",
-    },
-    {
-      key: "city",
-      section: VENDOR_FIELD_SECTIONS.CITY,
-      placeholder: "e.g., Mumbai",
-    },
-    {
-      key: "state",
-      section: VENDOR_FIELD_SECTIONS.STATE,
-      placeholder: "e.g., Maharashtra",
-    },
-    {
-      key: "country",
-      section: VENDOR_FIELD_SECTIONS.COUNTRY,
-      placeholder: "India",
-    },
-  ];
-
-  const bankFields = [
-    {
-      key: "account_holder_name",
-      section: VENDOR_FIELD_SECTIONS.ACCOUNT_NAME,
-      placeholder: "As per bank records",
-      colSpan: "col-span-2",
-    },
-    {
-      key: "account_number",
-      section: VENDOR_FIELD_SECTIONS.ACCOUNT_NUMBER,
-      placeholder: "1234567890",
-    },
-    {
-      key: "ifsc_code",
-      section: VENDOR_FIELD_SECTIONS.IFSC_CODE,
-      placeholder: "ICIC0001234",
-      transform: (value) => value.toUpperCase(),
-      className: "uppercase",
-    },
-    {
-      key: "bank_name",
-      section: VENDOR_FIELD_SECTIONS.BANK_NAME,
-      placeholder: "e.g., ICICI Bank",
-    },
-    {
-      key: "branch",
-      section: VENDOR_FIELD_SECTIONS.BRANCH,
-      placeholder: "e.g., Andheri West",
     },
   ];
 
@@ -371,39 +958,184 @@ const VendorDetailsDialog = ({
                   }
                 />
               </div>
+
+              {isIndia && !invoiceVendorRequest ? (
+                <div>
+                  <Label>
+                    {labelFor(VENDOR_FIELD_SECTIONS.PAN_NO, "PAN Number")}
+                    {isRequired(VENDOR_FIELD_SECTIONS.PAN_NO) ? " *" : ""}
+                  </Label>
+                  <Input
+                    value={formData.pan || ""}
+                    onChange={(event) => updateField("pan", event.target.value.toUpperCase())}
+                    placeholder="e.g. ABCDE1234F"
+                    className="mt-1.5 font-mono uppercase"
+                    maxLength={10}
+                    data-testid="vendor-pan-input"
+                    required={isRequired(VENDOR_FIELD_SECTIONS.PAN_NO)}
+                  />
+                </div>
+              ) : null}
             </div>
           </FormSection>
 
           <FormSection
-            title={isIndia && !invoiceVendorRequest ? "Tax & GST verification" : "Tax information"}
+            title={isIndia && !invoiceVendorRequest ? "Tax & GSTIN details" : "Tax information"}
             description={
               isIndia && !invoiceVendorRequest
-                ? "GSTIN is required. Click Verify to check against the GST portal before saving."
+                ? "Fetch vendor details from the GST portal by PAN or a specific GSTIN."
                 : invoiceVendorRequest
                   ? "Optional tax details. GST will be verified when the vendor is approved."
                   : "Enter tax identifiers for this vendor."
             }
           >
             {isIndia && !invoiceVendorRequest ? (
-              <VendorGstVerificationBlock
-                gstin={formData.gstin || ""}
-                onGstinChange={(value) => updateField("gstin", value)}
-                onVerified={applyGstVerification}
-                onVerificationChange={handleGstVerificationChange}
-                verificationRequired={gstVerificationRequired}
-                showVerificationError={gstVerificationAttempted && !gstVerificationSatisfied}
-                gstLabel={labelFor(VENDOR_FIELD_SECTIONS.GST_NO, "GSTIN")}
-                gstRequired={gstVerificationRequired || isRequired(VENDOR_FIELD_SECTIONS.GST_NO)}
-                panLabel={labelFor(VENDOR_FIELD_SECTIONS.PAN_NO, "PAN Number")}
-                panRequired={isRequired(VENDOR_FIELD_SECTIONS.PAN_NO)}
-                panValue={formData.pan || ""}
-                onPanChange={(value) => updateField("pan", value)}
-                showMsme={!invoiceVendorRequest}
-                msmeLabel={labelFor(VENDOR_FIELD_SECTIONS.MSME, "MSME registered vendor")}
-                msmeRequired={isRequired(VENDOR_FIELD_SECTIONS.MSME)}
-                msmeValue={formData.msme}
-                onMsmeChange={(checked) => updateField("msme", checked)}
-              />
+              <div className="space-y-4">
+                <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+                  <div className="mb-3">
+                    <h4 className="text-sm font-semibold text-foreground">Fetch Vendor Details</h4>
+                    <p className="text-xs text-muted-foreground">
+                      {fetchUsesPan
+                        ? "Fetch will load all GSTINs registered under the PAN entered above."
+                        : "Enter a GSTIN to fetch that registration and linked vendor identity."}
+                    </p>
+                    {hasPanForFetch ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                        <button
+                          type="button"
+                          className={
+                            fetchUsesPan
+                              ? "font-semibold text-foreground underline-offset-2 hover:underline"
+                              : "text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                          }
+                          onClick={() => switchFetchInputMode("pan")}
+                        >
+                          Fetch by PAN
+                        </button>
+                        <span className="text-muted-foreground">|</span>
+                        <button
+                          type="button"
+                          className={
+                            !fetchUsesPan
+                              ? "font-semibold text-foreground underline-offset-2 hover:underline"
+                              : "text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                          }
+                          onClick={() => switchFetchInputMode("gstin")}
+                        >
+                          Fetch by GSTIN
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                  <div className="grid gap-3">
+                    {fetchUsesPan ? (
+                      <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                        Using PAN{" "}
+                        <span className="font-mono font-medium text-foreground">
+                          {String(formData.pan || "").trim().toUpperCase()}
+                        </span>
+                      </div>
+                    ) : (
+                      <div>
+                        <Label htmlFor="vendor-fetch-gstin">GSTIN for lookup</Label>
+                        <Input
+                          id="vendor-fetch-gstin"
+                          value={fetchGstinQuery}
+                          onChange={(event) => {
+                            setFetchGstinQuery(event.target.value.toUpperCase());
+                            if (fetchMessageIsError) clearFetchFeedback();
+                          }}
+                          placeholder="27ABCDE1234F1Z5"
+                          className="mt-1.5 font-mono uppercase"
+                          maxLength={15}
+                          aria-invalid={fetchMessageIsError}
+                          data-testid="vendor-fetch-gstin-input"
+                        />
+                      </div>
+                    )}
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        className="shrink-0"
+                        onClick={handleFetchDetails}
+                        disabled={
+                          isFetchLoading ||
+                          !isVendorFetchReady(
+                            fetchUsesPan
+                              ? { pan: formData.pan }
+                              : { gstin: fetchGstinQuery },
+                          )
+                        }
+                      >
+                        {isFetchLoading ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Fetching…
+                          </>
+                        ) : (
+                          'Fetch Details'
+                        )}
+                      </Button>
+                    </div>
+                    {fetchMessage ? (
+                      <p
+                        className={`text-xs ${fetchMessageIsError ? "text-destructive" : "text-muted-foreground"}`}
+                      >
+                        {fetchMessage}
+                      </p>
+                    ) : null}
+                    <FetchVendorResultsPreview
+                      fetchMode={lastFetchMode}
+                      records={fetchedRecords}
+                      selectedGstins={selectedFetchedGstins}
+                      onToggleGstin={(gstin) => {
+                        setSelectedFetchedGstins((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(gstin)) next.delete(gstin);
+                          else next.add(gstin);
+                          return next;
+                        });
+                      }}
+                      onSelectAll={() => {
+                        setSelectedFetchedGstins(new Set(fetchedRecords.map((record) => record.gstin)));
+                      }}
+                      onSelectNone={() => setSelectedFetchedGstins(new Set())}
+                      onApply={applySelectedFetchedRegistrations}
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="vendor-msme"
+                    checked={Boolean(formData.msme)}
+                    onCheckedChange={(checked) => updateField("msme", checked === true)}
+                    data-testid="vendor-msme-checkbox"
+                  />
+                  <Label htmlFor="vendor-msme" className="cursor-pointer font-normal">
+                    {labelFor(VENDOR_FIELD_SECTIONS.MSME, "MSME registered vendor")}
+                    {isRequired(VENDOR_FIELD_SECTIONS.MSME) ? " *" : ""}
+                  </Label>
+                </div>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <h4 className="text-sm font-semibold text-foreground">GSTIN Details</h4>
+                      <p className="text-xs text-muted-foreground">
+                        Review fetch results above and add selected GSTINs, or add GSTIN blocks manually.
+                      </p>
+                    </div>
+                    <Button type="button" variant="outline" size="sm" onClick={addManualGstRegistration}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add GSTIN
+                    </Button>
+                  </div>
+                  <GstRegistrationsEditor
+                    registrations={gstRegistrations}
+                    onUpdate={updateGstRegistration}
+                    onRemove={removeGstRegistration}
+                  />
+                </div>
+              </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -511,54 +1243,32 @@ const VendorDetailsDialog = ({
             </div>
           </FormSection>
 
-          <FormSection title="Address">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {addressFields.map(renderInputField)}
+          {showVendorDocumentsSection ? (
+            <FormSection
+              title="Vendor documents"
+              description="Upload supporting documents for this vendor. All documents are optional."
+            >
+              <VendorDocumentsPanel
+                documents={formData.documents}
+                onChange={(documents) => updateField("documents", documents)}
+                disabled={submitting}
+                visibleDocumentTypes={visibleVendorDocumentTypes}
+              />
+            </FormSection>
+          ) : null}
 
-              <div>
-                <Label>
-                  {isIndia
-                    ? labelFor(VENDOR_FIELD_SECTIONS.PINCODE, "Pincode")
-                    : "Postal Code"}
-                  {isRequired(VENDOR_FIELD_SECTIONS.PINCODE) ? " *" : ""}
-                </Label>
-                <Input
-                  type="text"
-                  inputMode={isIndia ? "numeric" : "text"}
-                  value={formData.pincode || ""}
-                  onChange={(event) =>
-                    updateField(
-                      "pincode",
-                      normalizePincodeInput(event.target.value, formData.country),
-                    )
-                  }
-                  placeholder={
-                    isIndia ? "e.g., 400001" : "e.g., 10001 or SW1A 1AA"
-                  }
-                  className="mt-1.5"
-                  required={isRequired(VENDOR_FIELD_SECTIONS.PINCODE)}
-                  maxLength={isIndia ? 6 : undefined}
-                  data-testid="vendor-pincode-input"
-                />
-              </div>
-            </div>
-          </FormSection>
+          {!invoiceVendorRequest ? (
+            <FormSection title="TDS">
+              <VendorTdsPanel
+                tdsMapping={formData.tdsMapping}
+                onChange={(tdsMapping) => updateField("tdsMapping", tdsMapping)}
+                disabled={submitting}
+              />
+            </FormSection>
+          ) : null}
 
           {!invoiceVendorRequest ? (
             <>
-              <FormSection
-                title="Bank details"
-                description="Used for vendor payouts. Changes require re-entry for security."
-              >
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {bankFields.map(renderInputField)}
-                </div>
-
-                <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50/80 px-3 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-100">
-                  Bank details are sensitive. To change them later, delete and re-enter the account information.
-                </div>
-              </FormSection>
-
               <FormSection title="Notes">
                 <textarea
                   value={formData.notes}
@@ -585,7 +1295,7 @@ const VendorDetailsDialog = ({
               type="submit"
               className="flex-1"
               data-testid="vendor-submit-button"
-              disabled={submitting || (gstVerificationRequired && !gstVerificationSatisfied)}
+              disabled={submitting || (isIndia && !invoiceVendorRequest && !gstVerificationSatisfied)}
             >
               {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {submitting ? "Saving…" : submitLabel}

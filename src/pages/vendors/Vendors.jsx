@@ -8,7 +8,30 @@ import {
 } from '../../Services/apis/invoicesVendorsApi';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Search, Plus, Pencil, Trash2, Eye, X, Check, RotateCcw } from 'lucide-react';
+import { Card, CardContent } from '../../components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../components/ui/select';
+import {
+  Building2,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Clock3,
+  Eye,
+  Map as MapIcon,
+  Plus,
+  RotateCcw,
+  Search,
+  Trash2,
+  X,
+  Pencil,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { useActionGuard } from '../../hooks/useActionGuard';
@@ -22,8 +45,11 @@ import {
   canSaveVendorEdit,
   extractApiErrorDetail,
   formatWorkflowStatus,
+  isSavedVendorStatus,
   NEEDS_CORRECTION_ACTION,
   NEEDS_CORRECTION_STATUS,
+  resolveBulkCreateVendorStatus,
+  resolveSavedVendorSubmitStatus,
 } from '../../utils/approvalWorkflow';
 import VendorDetailsDialog from '../../components/vendors/VendorDetailsDialog';
 import * as XLSX from '@e965/xlsx';
@@ -34,12 +60,34 @@ import MultipleVendorUploadDialog from './components/MultipleVendorUploadDialog'
 import {
   getVendorUploadMandatoryFieldKeys,
   isVendorFieldRequired,
+  VENDOR_FIELD_SECTIONS,
   VENDOR_FORM_KEY_TO_SECTION,
 } from '../../utils/vendorFieldConfig';
-import { getVendorValidationErrors, parseMsmeValue } from '../../utils/vendorValidation';
+import {
+  getBulkVendorUploadValidationErrors,
+  getVendorValidationErrors,
+  parseMsmeValue,
+} from '../../utils/vendorValidation';
 import BulkUploadReviewDialog from './components/BulkUploadReviewDialog';
 import DeleteVendorDialog from './components/DeleteVendorDialog';
 import ViewVendorDialog from './components/ViewVendorDialog';
+import {
+  getFirstVendorGstin,
+  getVendorGstRegistrations,
+  getVendorMultiStateCount,
+  getVendorRegistrationStates,
+} from './components/VendorGstRegistrationsPanel';
+import VendorMultiGstBadge from './components/VendorMultiGstBadge';
+import VendorTableGstExpandedRow from './components/VendorTableGstExpandedRow';
+import {
+  createEmptyVendorDocuments,
+  normalizeVendorDocuments,
+} from './utils/vendorDocuments';
+import {
+  getVendorTdsValidationErrors,
+  normalizeVendorTds,
+} from './utils/vendorTds';
+import { normalizeVendorForSave } from './utils/vendorSave';
 import VendorApprovalDialog from './components/VendorApprovalDialog';
 import IntegrationSourceBadge from '../../components/integrations/IntegrationSourceBadge';
 import useZohoIntegrationActive from '../../hooks/useZohoIntegrationActive';
@@ -139,6 +187,84 @@ const getVendorApiErrorMessages = (response) => {
   );
 };
 
+const getVendorType = (vendor) => vendor?.vendor_type || vendor?.vendorType || 'Company';
+
+const GST_REGISTRATION_OWNED_VENDOR_SECTIONS = new Set([
+  VENDOR_FIELD_SECTIONS.ADDRESS_LINE_1,
+  VENDOR_FIELD_SECTIONS.ADDRESS_LINE_2,
+  VENDOR_FIELD_SECTIONS.CITY,
+  VENDOR_FIELD_SECTIONS.STATE,
+  VENDOR_FIELD_SECTIONS.PINCODE,
+  VENDOR_FIELD_SECTIONS.COUNTRY,
+  VENDOR_FIELD_SECTIONS.ACCOUNT_NAME,
+  VENDOR_FIELD_SECTIONS.ACCOUNT_NUMBER,
+  VENDOR_FIELD_SECTIONS.IFSC_CODE,
+  VENDOR_FIELD_SECTIONS.BANK_NAME,
+  VENDOR_FIELD_SECTIONS.BRANCH,
+]);
+
+const getNormalizedVendorStatusKey = (status) =>
+  String(status || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ');
+
+const isPendingApprovalStatus = (status) =>
+  getNormalizedVendorStatusKey(status) === 'pending approval';
+
+const matchesVendorSearch = (vendor, query) => {
+  if (!query) return true;
+  const searchableText = [
+    vendor?.name,
+    vendor?.pan,
+    vendor?.gstin,
+    ...getVendorGstRegistrations(vendor).map((registration) =>
+      [
+        registration.gstin,
+        registration.state,
+      ].join(' '),
+    ),
+    vendor?.state,
+    vendor?.city,
+    vendor?.email,
+    vendor?.mobile,
+    vendor?.phone,
+    vendor?.contact_person,
+    vendor?.contactPerson,
+    vendor?.category,
+  ]
+    .filter(Boolean)
+    .join(' ')
+    .toLowerCase();
+
+  return searchableText.includes(query);
+};
+
+const VendorMetricCard = ({ label, value, icon: Icon, tone = 'primary' }) => {
+  const toneClasses = {
+    primary: 'bg-primary/10 text-primary',
+    success: 'bg-emerald-50 text-emerald-700',
+    warning: 'bg-amber-50 text-amber-700',
+    neutral: 'bg-slate-100 text-slate-700',
+  };
+
+  return (
+    <Card className="rounded-md border-border shadow-none">
+      <CardContent className="flex items-center justify-between gap-2 px-3 py-2">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium leading-none text-muted-foreground">{label}</p>
+          <p className="mt-1 text-lg font-semibold leading-none tabular-nums text-foreground">{value}</p>
+        </div>
+        <div
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${toneClasses[tone]}`}
+        >
+          <Icon className="h-3.5 w-3.5" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
 const Vendors = () => {
   const {
     data: vendorsData = [],
@@ -159,9 +285,16 @@ const Vendors = () => {
   const { showIntegrationColumn } = useZohoIntegrationActive();
   const activeVendorFields = corporateScreens?.activeVendorFields ?? [];
   const vendorFieldConfiguration = corporateScreens?.vendorFieldConfiguration ?? [];
-  const vendorUploadMandatoryFields = useMemo(
-    () => getVendorUploadMandatoryFieldKeys(activeVendorFields),
+  const effectiveActiveVendorFields = useMemo(
+    () =>
+      activeVendorFields.filter(
+        (section) => !GST_REGISTRATION_OWNED_VENDOR_SECTIONS.has(String(section).trim().toUpperCase()),
+      ),
     [activeVendorFields],
+  );
+  const vendorUploadMandatoryFields = useMemo(
+    () => getVendorUploadMandatoryFieldKeys(effectiveActiveVendorFields),
+    [effectiveActiveVendorFields],
   );
   const vendorUploadOptionalFields = useMemo(
     () => VENDOR_UPLOAD_FIELDS.filter((field) => !vendorUploadMandatoryFields.includes(field)),
@@ -185,6 +318,8 @@ const Vendors = () => {
     ],
   );
   const [searchTerm, setSearchTerm] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [vendorUploadOptionOpen, setVendorUploadOptionOpen] = useState(false);
   const [multipleVendorUploadOpen, setMultipleVendorUploadOpen] = useState(false);
@@ -195,6 +330,7 @@ const Vendors = () => {
   const [approvalComments, setApprovalComments] = useState('');
   const [bulkReviewOpen, setBulkReviewOpen] = useState(false);
   const [bulkReviewData, setBulkReviewData] = useState(null);
+  const [expandedVendorIds, setExpandedVendorIds] = useState(() => new Set());
   const [formData, setFormData] = useState({
     // Basic Information
     name: '',
@@ -206,6 +342,7 @@ const Vendors = () => {
     // Tax Information
     pan: '',
     gstin: '',
+    gstRegistrations: [],
     msme: false,
     
     // Address
@@ -228,7 +365,9 @@ const Vendors = () => {
     currency: 'INR',
     contact_person: '',
     website: '',
-    notes: ''
+    notes: '',
+    documents: createEmptyVendorDocuments(),
+    tdsMapping: null,
   });
 
   const vendors = Array.isArray(vendorsData) ? vendorsData : [];
@@ -252,20 +391,37 @@ const Vendors = () => {
     }
 
     const validationErrors = getVendorValidationErrors(formData, {
-      activeVendorFields,
+      activeVendorFields: effectiveActiveVendorFields,
       vendorFieldConfiguration,
     });
+    const tdsValidationErrors = getVendorTdsValidationErrors(formData.tdsMapping);
     if (validationErrors.length > 0) {
       toast.error(validationErrors[0]);
       return;
     }
+    if (tdsValidationErrors.length > 0) {
+      toast.error(tdsValidationErrors[0]);
+      return;
+    }
 
     try {
+      const vendorPayload = normalizeVendorForSave(formData);
+
       if (editingVendor) {
-        await updateVendor({ id: editingVendor.id, body: formData }).unwrap();
-        toast.success('Vendor updated successfully');
+        const submittingSavedVendor = isSavedVendorStatus(editingVendor.status);
+        await updateVendor({
+          id: editingVendor.id,
+          body: submittingSavedVendor
+            ? { ...vendorPayload, status: resolveSavedVendorSubmitStatus() }
+            : vendorPayload,
+        }).unwrap();
+        toast.success(
+          submittingSavedVendor
+            ? 'Vendor submitted for approval'
+            : 'Vendor updated successfully',
+        );
       } else {
-        const response = await createVendor(formData).unwrap();
+        const response = await createVendor(vendorPayload).unwrap();
         const successCount = Number(response?.successCount ?? 0);
         const failedCount = Number(response?.failedCount ?? 0);
         const errorMessages = getVendorApiErrorMessages(response);
@@ -307,7 +463,7 @@ const Vendors = () => {
 
     try {
       const vendorsPayload = rows
-        .map((row) => toBulkVendorPayload(row))
+        .map((row) => normalizeVendorForSave(toBulkVendorPayload(row)))
         .filter((vendor) => vendor.name);
 
       if (!vendorsPayload.length) {
@@ -316,7 +472,10 @@ const Vendors = () => {
         };
       }
 
-      const response = await createVendor(vendorsPayload).unwrap();
+      const bulkStatus = resolveBulkCreateVendorStatus();
+      const response = await createVendor(
+        vendorsPayload.map((vendor) => ({ ...vendor, status: bulkStatus })),
+      ).unwrap();
       const successCount = Number(response?.successCount ?? 0);
       const failedCount = Number(response?.failedCount ?? 0);
       const errorMessages = getVendorApiErrorMessages(response);
@@ -345,15 +504,11 @@ const Vendors = () => {
   };
 
   const validateVendorUploadRow = (row, rowIndex) =>
-    getVendorValidationErrors(row, {
-      rowIndex,
-      activeVendorFields,
-      vendorFieldConfiguration,
-    });
+    getBulkVendorUploadValidationErrors(row, { rowIndex });
 
   const getUploadGuideType = (fieldKey, optionalText) => {
     const section = VENDOR_FORM_KEY_TO_SECTION[fieldKey];
-    if (section && isVendorFieldRequired(section, activeVendorFields)) {
+    if (section && isVendorFieldRequired(section, effectiveActiveVendorFields)) {
       return 'Mandatory';
     }
     return optionalText;
@@ -449,6 +604,7 @@ const Vendors = () => {
       return;
     }
     setEditingVendor(vendor);
+    const firstGstin = getFirstVendorGstin(vendor);
     setFormData({
       name: vendor.name || '',
       vendor_type: vendor.vendor_type || 'Company',
@@ -456,7 +612,8 @@ const Vendors = () => {
       phone: vendor.phone || '',
       mobile: vendor.mobile || '',
       pan: vendor.pan || '',
-      gstin: vendor.gstin || '',
+      gstin: firstGstin || '',
+      gstRegistrations: getVendorGstRegistrations(vendor),
       msme: parseMsmeValue(vendor.msme) === true,
       address_line1: vendor.address_line1 || '',
       address_line2: vendor.address_line2 || '',
@@ -473,7 +630,9 @@ const Vendors = () => {
       currency: vendor.currency || 'INR',
       contact_person: vendor.contact_person || '',
       website: vendor.website || '',
-      notes: vendor.notes || ''
+      notes: vendor.notes || '',
+      documents: normalizeVendorDocuments(vendor.documents),
+      tdsMapping: normalizeVendorTds(vendor.tdsMapping ?? vendor.tdsMappings),
     });
     setDialogOpen(true);
   };
@@ -524,6 +683,7 @@ const Vendors = () => {
     const normalizedStatus = formatWorkflowStatus(status);
     if (normalizedStatus === 'Approved') return 'bg-emerald-100 text-emerald-800 border-emerald-200';
     if (normalizedStatus === 'Rejected') return 'bg-red-100 text-red-800 border-red-200';
+    if (normalizedStatus === 'Saved') return 'bg-slate-100 text-slate-800 border-slate-200';
     if (normalizedStatus === 'Draft' || normalizedStatus === NEEDS_CORRECTION_STATUS) {
       return 'bg-amber-100 text-amber-900 border-amber-200';
     }
@@ -540,6 +700,7 @@ const Vendors = () => {
       mobile: '',
       pan: '',
       gstin: '',
+      gstRegistrations: [],
       msme: false,
       address_line1: '',
       address_line2: '',
@@ -556,12 +717,94 @@ const Vendors = () => {
       currency: 'INR',
       contact_person: '',
       website: '',
-      notes: ''
+      notes: '',
+      documents: createEmptyVendorDocuments(),
+      tdsMapping: null,
     });
   };
 
-  const filteredVendors = vendors.filter(vendor =>
-    vendor.name.toLowerCase().includes(searchTerm.toLowerCase())
+  const vendorStats = useMemo(() => {
+    const approved = vendors.filter((vendor) => formatWorkflowStatus(vendor.status) === 'Approved').length;
+    const pendingApproval = vendors.filter((vendor) => isPendingApprovalStatus(vendor.status)).length;
+    const saved = vendors.filter((vendor) => isSavedVendorStatus(vendor.status)).length;
+    const multiState = getVendorMultiStateCount(vendors);
+
+    return {
+      total: vendors.length,
+      approved,
+      pendingApproval,
+      saved,
+      multiState,
+    };
+  }, [vendors]);
+
+  const isEditingSavedVendor =
+    Boolean(editingVendor) && isSavedVendorStatus(editingVendor?.status);
+
+  const toggleVendorExpanded = (vendorId) => {
+    setExpandedVendorIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(vendorId)) {
+        next.delete(vendorId);
+      } else {
+        next.add(vendorId);
+      }
+      return next;
+    });
+  };
+
+  const filteredVendors = useMemo(() => {
+    const query = searchTerm.trim().toLowerCase();
+
+    return vendors.filter((vendor) => {
+      const vendorType = getVendorType(vendor).toLowerCase();
+      const statusLabel = formatWorkflowStatus(vendor.status) || 'Pending Approval';
+      const statusKey = getNormalizedVendorStatusKey(statusLabel);
+
+      const matchesSearch = matchesVendorSearch(vendor, query);
+      const matchesType = typeFilter === 'all' || vendorType === typeFilter;
+      const matchesStatus = statusFilter === 'all' || statusKey === statusFilter;
+
+      return matchesSearch && matchesType && matchesStatus;
+    });
+  }, [vendors, searchTerm, typeFilter, statusFilter]);
+
+  const hasActiveFilters = Boolean(searchTerm.trim()) || typeFilter !== 'all' || statusFilter !== 'all';
+
+  const resetVendorFilters = () => {
+    setSearchTerm('');
+    setTypeFilter('all');
+    setStatusFilter('all');
+  };
+
+  const vendorFilterSummary = `${filteredVendors.length} of ${vendors.length} vendor${
+    vendors.length === 1 ? '' : 's'
+  } shown`;
+
+  const isPendingApprovalVendor = (vendor) => isPendingApprovalStatus(vendor?.status);
+
+  const vendorTypeOptions = useMemo(() => {
+    const options = new Map([
+      ['company', 'Company'],
+      ['individual', 'Individual'],
+    ]);
+    vendors.forEach((vendor) => {
+      const type = String(getVendorType(vendor)).trim();
+      if (type) options.set(type.toLowerCase(), type);
+    });
+    return Array.from(options.values());
+  }, [vendors]);
+
+  const vendorStatusOptions = useMemo(
+    () => {
+      const options = new Map();
+      vendors.forEach((vendor) => {
+        const status = formatWorkflowStatus(vendor.status) || 'Pending Approval';
+        if (status) options.set(getNormalizedVendorStatusKey(status), status);
+      });
+      return Array.from(options.values());
+    },
+    [vendors],
   );
   const canCreateVendor = canPerformAction('vendors.create');
   const canEditVendorPermission = canUpdateVendorPermission;
@@ -578,14 +821,6 @@ const Vendors = () => {
     }
   };
 
-  const isPendingApprovalVendor = (vendor) => {
-    const normalizedStatus = String(vendor?.status || '')
-      .trim()
-      .toLowerCase()
-      .replace(/[_-]+/g, ' ');
-    return normalizedStatus === 'pending approval';
-  };
-
   const vendorsTableHeader = useMemo(
     () =>
       withIntegrationTableHeader(
@@ -594,7 +829,7 @@ const Vendors = () => {
           { key: 'createdAt', title: 'Created Date', cellClassName: 'text-xs text-muted-foreground whitespace-nowrap' },
           { key: 'status', title: 'Status' },
           { key: 'contact', title: 'Contact' },
-          { key: 'gstin', title: 'GSTIN' },
+          { key: 'gstRegistrations', title: 'GSTINs' },
           { key: 'actions', title: 'Actions', headerClassName: 'text-left' },
         ],
         showIntegrationColumn,
@@ -602,20 +837,31 @@ const Vendors = () => {
     [showIntegrationColumn],
   );
 
-  const renderVendorRow = (vendor, rowIndex, headers) => (
-    <TableRow
-      key={vendor.id ?? rowIndex}
-      className="border-b border-border hover:bg-muted/50 transition-colors"
-      data-testid={`vendor-row-${vendor.id}`}
-    >
-      {headers.map((header) => {
-        let value;
+  const renderVendorRow = (vendor, rowIndex, headers) => {
+    const vendorId = vendor.id ?? rowIndex;
+    const registrations = getVendorGstRegistrations(vendor);
+    const registrationStates = getVendorRegistrationStates(vendor);
+    const isExpanded = expandedVendorIds.has(vendorId);
+    const canExpand = registrations.length > 0;
 
-        switch (header.key) {
+    return (
+      <React.Fragment key={vendorId}>
+        <TableRow
+          className="border-b border-border hover:bg-muted/50 transition-colors"
+          data-testid={`vendor-row-${vendor.id}`}
+        >
+          {headers.map((header) => {
+            let value;
+
+            switch (header.key) {
           case 'vendor':
             value = (
               <div>
                 <div className="font-medium">{vendor.name}</div>
+                <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <span>{getVendorType(vendor)}</span>
+                  {vendor.pan && <span className="font-mono">{vendor.pan}</span>}
+                </div>
               </div>
             );
             break;
@@ -648,8 +894,31 @@ const Vendors = () => {
           case 'pan':
             value = vendor.pan || '-';
             break;
-          case 'gstin':
-            value = vendor.gstin || '-';
+          case 'gstRegistrations':
+            value = registrations.length > 0 ? (
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => toggleVendorExpanded(vendorId)}
+                  className="inline-flex items-center gap-1.5 text-left"
+                  data-testid={`toggle-vendor-gst-${vendor.id}`}
+                >
+                  <VendorMultiGstBadge count={registrations.length} states={registrationStates} />
+                  {canExpand ? (
+                    isExpanded ? (
+                      <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                    )
+                  ) : null}
+                </button>
+                {registrations.length > 1 && !isExpanded ? (
+                  <div className="text-xs text-muted-foreground">{registrationStates.join(' · ')}</div>
+                ) : null}
+              </div>
+            ) : (
+              <span className="text-sm text-muted-foreground">-</span>
+            );
             break;
           case 'integration':
             value = <IntegrationSourceBadge record={vendor} />;
@@ -748,31 +1017,38 @@ const Vendors = () => {
             value = '-';
         }
 
-        const className = [
-          header.cellClassName,
-          header.key === 'pan' || header.key === 'gstin' ? "  text-sm" : '',
-          header.key === 'actions' ? 'text-left' : '',
-        ]
-          .filter(Boolean)
-          .join(' ');
+            const className = [
+              header.cellClassName,
+              header.key === 'pan' ? 'text-sm' : '',
+              header.key === 'actions' ? 'text-left' : '',
+            ]
+              .filter(Boolean)
+              .join(' ');
 
-        return (
-          <TableCell key={header.key} className={className}>
-            {value}
-          </TableCell>
-        );
-      })}
-    </TableRow>
-  );
+            return (
+              <TableCell key={header.key} className={className}>
+                {value}
+              </TableCell>
+            );
+          })}
+        </TableRow>
+        {isExpanded && canExpand ? (
+          <VendorTableGstExpandedRow vendor={vendor} colSpan={headers.length} />
+        ) : null}
+      </React.Fragment>
+    );
+  };
 
   return (
     <div data-testid="vendors-page">
-      <div className="flex justify-between items-center mb-8">
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-4xl md:text-5xl font-bold font-['Manrope'] text-primary mb-2" data-testid="vendors-title">
+          <h1 className="text-3xl font-bold font-['Manrope'] text-primary md:text-4xl" data-testid="vendors-title">
             Vendors
           </h1>
-          <p className="text-muted-foreground">Manage your vendor relationships</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Manage vendor legal entities and their GST registrations
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <RefreshButton
@@ -837,27 +1113,115 @@ const Vendors = () => {
         formData={formData}
         setFormData={setFormData}
         onSubmit={handleSubmit}
-        title={editingVendor ? 'Edit Vendor' : 'Create Vendor'}
-        description="Add contact details and payment info of your vendor in OptiFii"
-        submitLabel={editingVendor ? 'Update Vendor' : 'Create Vendor'}
+        title={
+          isEditingSavedVendor
+            ? 'Complete Vendor'
+            : editingVendor
+              ? 'Edit Vendor'
+              : 'Create Vendor'
+        }
+        description={
+          isEditingSavedVendor
+            ? 'Review imported vendor details, complete GSTIN and documents, then submit for approval.'
+            : 'Add contact details and payment info of your vendor in OptiFii'
+        }
+        submitLabel={
+          isEditingSavedVendor
+            ? 'Submit for Approval'
+            : editingVendor
+              ? 'Update Vendor'
+              : 'Create Vendor'
+        }
         submitting={createVendorLoading || updateVendorLoading}
-        activeVendorFields={activeVendorFields}
+        activeVendorFields={effectiveActiveVendorFields}
         vendorFieldConfiguration={vendorFieldConfiguration}
         testId="vendor-dialog"
       />
 
-      <div className="mb-6">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search and filter"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-            data-testid="vendor-search-input"
-          />
-        </div>
+      <div className="mb-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <VendorMetricCard
+          label="Total Vendors"
+          value={vendorStats.total}
+          icon={Building2}
+        />
+        <VendorMetricCard
+          label="Approved"
+          value={vendorStats.approved}
+          icon={CheckCircle2}
+          tone="success"
+        />
+        <VendorMetricCard
+          label="Pending Approval"
+          value={vendorStats.pendingApproval}
+          icon={Clock3}
+          tone="warning"
+        />
+        <VendorMetricCard
+          label="Multi-State"
+          value={vendorStats.multiState}
+          icon={MapIcon}
+          tone="neutral"
+        />
       </div>
+
+      <Card className="mb-3 rounded-md border-border shadow-none">
+        <CardContent className="p-3">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search vendors by name, PAN, GSTIN, state, email, or phone"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="h-9 pl-10"
+                data-testid="vendor-search-input"
+              />
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:w-[360px]">
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className="h-9" data-testid="vendor-type-filter">
+                  <SelectValue placeholder="Vendor type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  {vendorTypeOptions.map((type) => (
+                    <SelectItem key={type} value={type.toLowerCase()}>
+                      {type}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="h-9" data-testid="vendor-status-filter">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  {vendorStatusOptions.map((status) => (
+                    <SelectItem key={status} value={getNormalizedVendorStatusKey(status)}>
+                      {status}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+            <span>{vendorFilterSummary}</span>
+            {hasActiveFilters && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={resetVendorFilters}
+              >
+                Clear filters
+              </Button>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
         <AppDataTable
