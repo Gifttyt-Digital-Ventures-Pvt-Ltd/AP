@@ -333,9 +333,10 @@ const normalizeCorporateScreensResponse = (response = {}) => {
   const vendorDocumentConfiguration = normalizeVendorDocumentCatalog(
     toArray(response?.vendorDocumentConfiguration),
   );
-  const activeVendorDocuments = normalizeActiveVendorDocuments(
-    response?.activeVendorDocuments,
-  );
+  const activeVendorDocuments =
+    response && 'activeVendorDocuments' in response
+      ? normalizeActiveVendorDocuments(response.activeVendorDocuments)
+      : undefined;
   const invoiceConfiguration = normalizeInvoiceConfigurationCatalog(
     toArray(response?.invoiceConfiguration),
   );

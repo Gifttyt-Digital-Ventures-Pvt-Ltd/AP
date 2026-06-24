@@ -75,12 +75,16 @@ export const getVendorDocumentDisplayName = (sectionId, catalog = []) => {
 };
 
 export const getVisibleVendorDocumentTypes = (
-  activeVendorDocuments = [],
+  activeVendorDocuments,
   catalog = DEFAULT_VENDOR_DOCUMENT_CATALOG,
 ) => {
+  if (activeVendorDocuments === undefined || activeVendorDocuments === null) {
+    return VENDOR_DOCUMENT_TYPES;
+  }
+
   const normalized = normalizeActiveVendorDocuments(activeVendorDocuments);
   if (normalized.length === 0) {
-    return VENDOR_DOCUMENT_TYPES;
+    return [];
   }
 
   const allowedKeys = new Set(

@@ -40,19 +40,10 @@ export const getVendorGstRegistrations = (vendor = {}) => {
       .map((registration) => ({
         ...registration,
         gstin: getRegistrationValue(registration, 'gstin', 'gstIn', 'gst'),
-        tradeName: getRegistrationValue(registration, 'tradeName', 'trade_name', 'legalName', 'legal_name'),
         state: getRegistrationValue(registration, 'state', 'stateName', 'state_name'),
         address: formatRegistrationLocation(registration),
         location: registration.location ?? registration.addressDetails ?? registration.address_details ?? null,
         bankDetails: registration.bankDetails ?? registration.bank_details ?? {},
-        registrationDate: getRegistrationValue(
-          registration,
-          'registrationDate',
-          'registration_date',
-          'regStartDate',
-          'regDate',
-        ),
-        registrationType: getRegistrationValue(registration, 'registrationType', 'registration_type', 'regType'),
       }))
       .filter((registration) => registration.gstin);
   }
@@ -63,13 +54,10 @@ export const getVendorGstRegistrations = (vendor = {}) => {
   return [
     {
       gstin,
-      tradeName: vendor.tradeName || vendor.trade_name || vendor.name || '',
       state: vendor.state || '',
       address: [vendor.address_line1 || vendor.addressLine1, vendor.address_line2 || vendor.addressLine2]
         .filter(Boolean)
         .join(', '),
-      registrationDate: vendor.registrationDate || vendor.registration_date || '',
-      registrationType: vendor.registrationType || vendor.registration_type || '',
     },
   ];
 };
@@ -106,9 +94,6 @@ const VendorGstRegistrationsPanel = ({ vendor }) => {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0">
                 <span className="font-mono text-sm font-semibold text-foreground">{registration.gstin}</span>
-                <p className="mt-1 text-sm font-medium text-foreground">
-                  {registration.tradeName || vendor?.name || '-'}
-                </p>
                 {registration.address ? (
                   <p className="mt-1 text-xs text-muted-foreground">
                     <span className="font-medium text-foreground">Location:</span> {registration.address}
@@ -140,16 +125,6 @@ const VendorGstRegistrationsPanel = ({ vendor }) => {
                   <MapPin className="h-3.5 w-3.5" />
                   <span>{registration.state || '-'}</span>
                 </div>
-                {registration.registrationType ? (
-                  <div>
-                    <span className="font-medium text-foreground">Type:</span> {registration.registrationType}
-                  </div>
-                ) : null}
-                {registration.registrationDate ? (
-                  <div>
-                    <span className="font-medium text-foreground">Registered:</span> {registration.registrationDate}
-                  </div>
-                ) : null}
               </div>
             </div>
           </CardContent>

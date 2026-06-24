@@ -29,7 +29,6 @@ import {
   SelectValue,
 } from "../ui/select";
 import { useVendorGstDetailsFetch } from "../../pages/vendors/hooks/useVendorGstDetailsFetch";
-import { USE_DUMMY_VENDOR_DATA } from "../../pages/vendors/data/dummyVendors";
 import VendorDocumentsPanel from "../../pages/vendors/components/VendorDocumentsPanel";
 import VendorTdsPanel from "../../pages/vendors/components/VendorTdsPanel";
 import { createEmptyVendorDocuments } from "../../pages/vendors/utils/vendorDocuments";
@@ -38,7 +37,6 @@ import {
   hasVisibleVendorDocuments,
 } from "../../utils/vendorDocumentConfig";
 import { getVendorTdsValidationErrors } from "../../pages/vendors/utils/vendorTds";
-import VendorGstVerificationBlock from "./VendorGstVerificationBlock";
 
 const CATEGORY_OPTIONS = [
   "IT Services",
@@ -69,11 +67,8 @@ const buildGstRegistrationFromVerification = (data) => {
 
   return {
     gstin,
-    tradeName: data.legalName || data.tradeName || "",
     state: data.state || "",
     stateCode: data.stateCode || "",
-    registrationDate: data.registrationDate || "",
-    registrationType: data.registrationType || "",
     businessNature: data.businessNature || "",
     location: data.location ?? null,
     bankDetails: data.bankDetails ?? data.bank_details ?? {},
@@ -112,7 +107,6 @@ const normalizeFormGstRegistrations = (registrations = []) =>
     .map((registration) => ({
       ...registration,
       gstin: String(getRegistrationValue(registration, "gstin", "gstIn", "gst")).trim().toUpperCase(),
-      tradeName: getRegistrationValue(registration, "tradeName", "trade_name", "legalName", "legal_name"),
       state: getRegistrationValue(registration, "state", "stateName", "state_name"),
       stateCode: getRegistrationValue(registration, "stateCode", "state_code"),
       address: formatRegistrationLocation(registration),
@@ -124,14 +118,6 @@ const normalizeFormGstRegistrations = (registrations = []) =>
           ? `reg-${String(getRegistrationValue(registration, "gstin", "gstIn", "gst")).trim().toUpperCase()}`
           : undefined),
       _fromFetch: registration._fromFetch === true,
-      registrationDate: getRegistrationValue(
-        registration,
-        "registrationDate",
-        "registration_date",
-        "regStartDate",
-        "regDate",
-      ),
-      registrationType: getRegistrationValue(registration, "registrationType", "registration_type", "regType"),
     }))
     .filter((registration) => registration.gstin || registration._clientId);
 
@@ -141,17 +127,13 @@ const getRegistrationKey = (registration = {}) =>
 const createEmptyGstRegistration = () => ({
   _clientId: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
   gstin: "",
-  tradeName: "",
   state: "",
-  registrationType: "",
-  registrationDate: "",
   location: { country: "India" },
   bankDetails: {},
 });
 
 const GstRegistrationsEditor = ({
   registrations,
-  vendorName,
   onUpdate,
   onRemove,
 }) => {
@@ -233,45 +215,6 @@ const GstRegistrationsEditor = ({
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <Label>Trade Name</Label>
-                  <Input
-                    value={registration.tradeName || vendorName || ""}
-                    onChange={(event) => updateRegistrationField("tradeName", event.target.value)}
-                    placeholder="Registered trade name"
-                    className="mt-1.5"
-                  />
-                </div>
-                <div>
-                  <Label>Registration Type</Label>
-                  <Select
-                    value={registration.registrationType || ""}
-                    onValueChange={(value) => updateRegistrationField("registrationType", value)}
-                  >
-                    <SelectTrigger className="mt-1.5">
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {["Regular", "Composition", "SEZ", "Casual Taxable Person"].map((type) => (
-                        <SelectItem key={type} value={type}>
-                          {type}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div>
-                  <Label>Registration Date</Label>
-                  <Input
-                    value={registration.registrationDate || ""}
-                    onChange={(event) => updateRegistrationField("registrationDate", event.target.value)}
-                    placeholder="DD/MM/YYYY"
-                    className="mt-1.5"
-                  />
-                </div>
               </div>
 
               <div>
@@ -361,16 +304,11 @@ const GstRegistrationsEditor = ({
   );
 };
 
-const mapDummyRegistrationToVerification = (registration = {}) => ({
+const mapFetchedRegistrationToVerification = (registration = {}) => ({
   gstin: registration.gstin,
-  legalName: registration.legalName || registration.tradeName || "",
-  tradeName: registration.tradeName || "",
   pan: registration.pan || "",
   state: registration.state || "",
   stateCode: registration.stateCode || "",
-  registrationDate: registration.registrationDate || "",
-  registrationType: registration.registrationType || "",
-  businessNature: registration.businessNature || "",
   location: registration.location ?? null,
   bankDetails: registration.bankDetails ?? {},
   address: registration.address || "",
@@ -452,7 +390,6 @@ const FetchVendorResultsPreview = ({
       ) : (
         <div className="overflow-hidden rounded-md border border-border text-sm">
           {[
-            ["Trade Name", firstRecord.tradeName || firstRecord.legalName],
             ["State", firstRecord.state],
             ["Address", firstRecord.address || formatRegistrationLocation(firstRecord)],
           ].map(([label, value]) => (
@@ -505,7 +442,7 @@ const VendorDetailsDialog = ({
     activeVendorFieldsProp ?? corporateScreens?.activeVendorFields ?? [];
   const vendorFieldConfiguration =
     vendorFieldConfigurationProp ?? corporateScreens?.vendorFieldConfiguration ?? [];
-  const activeVendorDocuments = corporateScreens?.activeVendorDocuments ?? [];
+  const activeVendorDocuments = corporateScreens?.activeVendorDocuments;
   const vendorDocumentConfiguration = corporateScreens?.vendorDocumentConfiguration ?? [];
   const visibleVendorDocumentTypes = getVisibleVendorDocumentTypes(
     activeVendorDocuments,
@@ -555,35 +492,47 @@ const VendorDetailsDialog = ({
   });
   const [gstVerificationAttempted, setGstVerificationAttempted] = useState(false);
   const [fetchGstinQuery, setFetchGstinQuery] = useState("");
+  const [fetchInputMode, setFetchInputMode] = useState("gstin");
   const [lastFetchMode, setLastFetchMode] = useState("pan");
   const [fetchMessage, setFetchMessage] = useState("");
   const [fetchMessageIsError, setFetchMessageIsError] = useState(false);
   const [fetchedRecords, setFetchedRecords] = useState([]);
   const [selectedFetchedGstins, setSelectedFetchedGstins] = useState(() => new Set());
 
-  const fetchUsesPan = Boolean(String(formData?.pan || "").trim());
+  const hasPanForFetch = Boolean(String(formData?.pan || "").trim());
+  const fetchUsesPan = fetchInputMode === "pan";
   const { fetchVendorDetails, isLoading: isFetchLoading } = useVendorGstDetailsFetch();
+
+  const clearFetchResults = () => {
+    setFetchedRecords([]);
+    setSelectedFetchedGstins(new Set());
+    setFetchMessage("");
+    setFetchMessageIsError(false);
+  };
+
+  const switchFetchInputMode = (mode) => {
+    if (mode === fetchInputMode) return;
+    setFetchInputMode(mode);
+    clearFetchResults();
+  };
 
   useEffect(() => {
     if (!open) {
       setGstVerification({ verified: false, gstin: "", validGstin: null });
       setGstVerificationAttempted(false);
       setFetchGstinQuery("");
+      setFetchInputMode("gstin");
       setLastFetchMode("pan");
       setFetchMessage("");
       setFetchMessageIsError(false);
       setFetchedRecords([]);
       setSelectedFetchedGstins(new Set());
+      return;
     }
-  }, [open]);
 
-  useEffect(() => {
-    if (!open) return;
-    setFetchedRecords([]);
-    setSelectedFetchedGstins(new Set());
-    setFetchMessage("");
-    setFetchMessageIsError(false);
-  }, [fetchUsesPan, open]);
+    const hasPan = Boolean(String(formData?.pan || "").trim());
+    setFetchInputMode(hasPan ? "pan" : "gstin");
+  }, [open]);
 
   useEffect(() => {
     if (!open || !formData?.gstin) return;
@@ -662,7 +611,6 @@ const VendorDetailsDialog = ({
     getVendorFieldDisplayName(sectionId, vendorFieldConfiguration) || fallback;
 
   const isIndia = isIndiaCountry(formData.country);
-  const gstVerificationRequired = isIndia && !invoiceVendorRequest && !USE_DUMMY_VENDOR_DATA;
   const gstVerificationSatisfied = isVendorGstVerificationSatisfied(
     formData,
     gstVerification,
@@ -716,7 +664,7 @@ const VendorDetailsDialog = ({
     const newRegistrations = selectedRecords
       .map((record) => {
         const registration = buildGstRegistrationFromVerification(
-          mapDummyRegistrationToVerification(record),
+          mapFetchedRegistrationToVerification(record),
         );
         if (!registration?.gstin) return null;
         return {
@@ -769,10 +717,11 @@ const VendorDetailsDialog = ({
   };
 
   const handleFetchDetails = async () => {
-    const result = await fetchVendorDetails({
-      pan: formData.pan,
-      gstin: fetchGstinQuery,
-    });
+    const fetchParams = fetchUsesPan
+      ? { pan: formData.pan }
+      : { gstin: fetchGstinQuery };
+
+    const result = await fetchVendorDetails(fetchParams);
 
     if (!result.success) {
       setFetchedRecords([]);
@@ -1034,9 +983,7 @@ const VendorDetailsDialog = ({
             title={isIndia && !invoiceVendorRequest ? "Tax & GSTIN details" : "Tax information"}
             description={
               isIndia && !invoiceVendorRequest
-                ? USE_DUMMY_VENDOR_DATA
-                  ? "Fetch uses PAN from vendor identity when present; otherwise enter a GSTIN below."
-                  : "GSTIN is required. Click Verify to check against the GST portal before saving."
+                ? "Fetch vendor details from the GST portal by PAN or a specific GSTIN."
                 : invoiceVendorRequest
                   ? "Optional tax details. GST will be verified when the vendor is approved."
                   : "Enter tax identifiers for this vendor."
@@ -1044,135 +991,137 @@ const VendorDetailsDialog = ({
           >
             {isIndia && !invoiceVendorRequest ? (
               <div className="space-y-4">
-                {USE_DUMMY_VENDOR_DATA ? (
-                  <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
-                    <div className="mb-3">
-                      <h4 className="text-sm font-semibold text-foreground">Fetch Vendor Details</h4>
-                      <p className="text-xs text-muted-foreground">
-                        {fetchUsesPan
-                          ? "PAN is set above — fetch will load all GSTINs registered under this PAN."
-                          : "No PAN entered — provide a GSTIN to fetch that registration and linked vendor identity."}
-                      </p>
-                    </div>
-                    <div className="grid gap-3">
-                      {!fetchUsesPan ? (
-                        <div>
-                          <Label htmlFor="vendor-fetch-gstin">GSTIN for lookup</Label>
-                          <Input
-                            id="vendor-fetch-gstin"
-                            value={fetchGstinQuery}
-                            onChange={(event) => {
-                              setFetchGstinQuery(event.target.value.toUpperCase());
-                              if (fetchMessageIsError) clearFetchFeedback();
-                            }}
-                            placeholder="27ABCDE1234F1Z5"
-                            className="mt-1.5 font-mono uppercase"
-                            maxLength={15}
-                            aria-invalid={fetchMessageIsError}
-                            data-testid="vendor-fetch-gstin-input"
-                          />
-                        </div>
-                      ) : (
-                        <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                          Using PAN{" "}
-                          <span className="font-mono font-medium text-foreground">
-                            {String(formData.pan || "").trim().toUpperCase()}
-                          </span>
-                        </div>
-                      )}
-                      <div className="flex justify-end">
-                        <Button
+                <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
+                  <div className="mb-3">
+                    <h4 className="text-sm font-semibold text-foreground">Fetch Vendor Details</h4>
+                    <p className="text-xs text-muted-foreground">
+                      {fetchUsesPan
+                        ? "Fetch will load all GSTINs registered under the PAN entered above."
+                        : "Enter a GSTIN to fetch that registration and linked vendor identity."}
+                    </p>
+                    {hasPanForFetch ? (
+                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                        <button
                           type="button"
-                          className="shrink-0"
-                          onClick={handleFetchDetails}
-                          disabled={
-                            isFetchLoading ||
-                            !isVendorFetchReady({
-                              pan: formData.pan,
-                              gstin: fetchGstinQuery,
-                            })
+                          className={
+                            fetchUsesPan
+                              ? "font-semibold text-foreground underline-offset-2 hover:underline"
+                              : "text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
                           }
+                          onClick={() => switchFetchInputMode("pan")}
                         >
-                          {isFetchLoading ? (
-                            <>
-                              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                              Fetching…
-                            </>
-                          ) : (
-                            'Fetch Details'
-                          )}
-                        </Button>
+                          Fetch by PAN
+                        </button>
+                        <span className="text-muted-foreground">|</span>
+                        <button
+                          type="button"
+                          className={
+                            !fetchUsesPan
+                              ? "font-semibold text-foreground underline-offset-2 hover:underline"
+                              : "text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+                          }
+                          onClick={() => switchFetchInputMode("gstin")}
+                        >
+                          Fetch by GSTIN
+                        </button>
                       </div>
-                      {fetchMessage ? (
-                        <p
-                          className={`text-xs ${fetchMessageIsError ? "text-destructive" : "text-muted-foreground"}`}
-                        >
-                          {fetchMessage}
-                        </p>
-                      ) : null}
-                      <FetchVendorResultsPreview
-                        fetchMode={lastFetchMode}
-                        records={fetchedRecords}
-                        selectedGstins={selectedFetchedGstins}
-                        onToggleGstin={(gstin) => {
-                          setSelectedFetchedGstins((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(gstin)) next.delete(gstin);
-                            else next.add(gstin);
-                            return next;
-                          });
-                        }}
-                        onSelectAll={() => {
-                          setSelectedFetchedGstins(new Set(fetchedRecords.map((record) => record.gstin)));
-                        }}
-                        onSelectNone={() => setSelectedFetchedGstins(new Set())}
-                        onApply={applySelectedFetchedRegistrations}
-                      />
+                    ) : null}
+                  </div>
+                  <div className="grid gap-3">
+                    {fetchUsesPan ? (
+                      <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
+                        Using PAN{" "}
+                        <span className="font-mono font-medium text-foreground">
+                          {String(formData.pan || "").trim().toUpperCase()}
+                        </span>
+                      </div>
+                    ) : (
+                      <div>
+                        <Label htmlFor="vendor-fetch-gstin">GSTIN for lookup</Label>
+                        <Input
+                          id="vendor-fetch-gstin"
+                          value={fetchGstinQuery}
+                          onChange={(event) => {
+                            setFetchGstinQuery(event.target.value.toUpperCase());
+                            if (fetchMessageIsError) clearFetchFeedback();
+                          }}
+                          placeholder="27ABCDE1234F1Z5"
+                          className="mt-1.5 font-mono uppercase"
+                          maxLength={15}
+                          aria-invalid={fetchMessageIsError}
+                          data-testid="vendor-fetch-gstin-input"
+                        />
+                      </div>
+                    )}
+                    <div className="flex justify-end">
+                      <Button
+                        type="button"
+                        className="shrink-0"
+                        onClick={handleFetchDetails}
+                        disabled={
+                          isFetchLoading ||
+                          !isVendorFetchReady(
+                            fetchUsesPan
+                              ? { pan: formData.pan }
+                              : { gstin: fetchGstinQuery },
+                          )
+                        }
+                      >
+                        {isFetchLoading ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Fetching…
+                          </>
+                        ) : (
+                          'Fetch Details'
+                        )}
+                      </Button>
                     </div>
-                  </div>
-                ) : null}
-                {!USE_DUMMY_VENDOR_DATA ? (
-                  <VendorGstVerificationBlock
-                    gstin={formData.gstin || ""}
-                    onGstinChange={(value) => updateField("gstin", value)}
-                    onVerified={applyGstVerification}
-                    onVerificationChange={handleGstVerificationChange}
-                    verificationRequired={gstVerificationRequired}
-                    showVerificationError={gstVerificationAttempted && !gstVerificationSatisfied}
-                    gstLabel={labelFor(VENDOR_FIELD_SECTIONS.GST_NO, "GSTIN")}
-                    gstRequired={gstVerificationRequired || isRequired(VENDOR_FIELD_SECTIONS.GST_NO)}
-                    panLabel={labelFor(VENDOR_FIELD_SECTIONS.PAN_NO, "PAN Number")}
-                    panRequired={isRequired(VENDOR_FIELD_SECTIONS.PAN_NO)}
-                    panValue={formData.pan || ""}
-                    onPanChange={(value) => updateField("pan", value)}
-                    showMsme={!invoiceVendorRequest}
-                    msmeLabel={labelFor(VENDOR_FIELD_SECTIONS.MSME, "MSME registered vendor")}
-                    msmeRequired={isRequired(VENDOR_FIELD_SECTIONS.MSME)}
-                    msmeValue={formData.msme}
-                    onMsmeChange={(checked) => updateField("msme", checked)}
-                  />
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Checkbox
-                      id="vendor-msme-dummy"
-                      checked={Boolean(formData.msme)}
-                      onCheckedChange={(checked) => updateField("msme", checked === true)}
-                      data-testid="vendor-msme-checkbox"
+                    {fetchMessage ? (
+                      <p
+                        className={`text-xs ${fetchMessageIsError ? "text-destructive" : "text-muted-foreground"}`}
+                      >
+                        {fetchMessage}
+                      </p>
+                    ) : null}
+                    <FetchVendorResultsPreview
+                      fetchMode={lastFetchMode}
+                      records={fetchedRecords}
+                      selectedGstins={selectedFetchedGstins}
+                      onToggleGstin={(gstin) => {
+                        setSelectedFetchedGstins((prev) => {
+                          const next = new Set(prev);
+                          if (next.has(gstin)) next.delete(gstin);
+                          else next.add(gstin);
+                          return next;
+                        });
+                      }}
+                      onSelectAll={() => {
+                        setSelectedFetchedGstins(new Set(fetchedRecords.map((record) => record.gstin)));
+                      }}
+                      onSelectNone={() => setSelectedFetchedGstins(new Set())}
+                      onApply={applySelectedFetchedRegistrations}
                     />
-                    <Label htmlFor="vendor-msme-dummy" className="cursor-pointer font-normal">
-                      {labelFor(VENDOR_FIELD_SECTIONS.MSME, "MSME registered vendor")}
-                      {isRequired(VENDOR_FIELD_SECTIONS.MSME) ? " *" : ""}
-                    </Label>
                   </div>
-                )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="vendor-msme"
+                    checked={Boolean(formData.msme)}
+                    onCheckedChange={(checked) => updateField("msme", checked === true)}
+                    data-testid="vendor-msme-checkbox"
+                  />
+                  <Label htmlFor="vendor-msme" className="cursor-pointer font-normal">
+                    {labelFor(VENDOR_FIELD_SECTIONS.MSME, "MSME registered vendor")}
+                    {isRequired(VENDOR_FIELD_SECTIONS.MSME) ? " *" : ""}
+                  </Label>
+                </div>
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>
                       <h4 className="text-sm font-semibold text-foreground">GSTIN Details</h4>
                       <p className="text-xs text-muted-foreground">
-                        {USE_DUMMY_VENDOR_DATA
-                          ? "Review fetch results above and add selected GSTINs, or add GSTIN blocks manually."
-                          : "Verify a GSTIN above to add details here."}
+                        Review fetch results above and add selected GSTINs, or add GSTIN blocks manually.
                       </p>
                     </div>
                     <Button type="button" variant="outline" size="sm" onClick={addManualGstRegistration}>
@@ -1182,7 +1131,6 @@ const VendorDetailsDialog = ({
                   </div>
                   <GstRegistrationsEditor
                     registrations={gstRegistrations}
-                    vendorName={formData.name}
                     onUpdate={updateGstRegistration}
                     onRemove={removeGstRegistration}
                   />
@@ -1347,7 +1295,7 @@ const VendorDetailsDialog = ({
               type="submit"
               className="flex-1"
               data-testid="vendor-submit-button"
-              disabled={submitting || (gstVerificationRequired && !gstVerificationSatisfied)}
+              disabled={submitting || (isIndia && !invoiceVendorRequest && !gstVerificationSatisfied)}
             >
               {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {submitting ? "Saving…" : submitLabel}

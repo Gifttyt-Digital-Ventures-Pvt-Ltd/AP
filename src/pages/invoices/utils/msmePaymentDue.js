@@ -1,3 +1,5 @@
+import { addDays, format, isValid, parseISO } from 'date-fns';
+
 export const MSME_MAX_PAYMENT_DAYS = 45;
 
 export const MSME_PAYMENT_DUE_STATUS = {
@@ -12,11 +14,77 @@ export const MSME_PAYMENT_DUE_STATUS = {
 const pickField = (source, camelKey, snakeKey) =>
   source?.[camelKey] ?? source?.[snakeKey];
 
-export const normalizeMsmePaymentDue = (invoice = {}) => {
-  const vendorIsMsme = Boolean(
-    pickField(invoice, 'vendorIsMsme', 'vendor_is_msme') ??
-      pickField(invoice, 'vendorMsme', 'vendor_msme'),
+const parseInvoiceDateValue = (value) => {
+  if (!value) return null;
+  const date = parseISO(String(value).slice(0, 10));
+  return isValid(date) ? date : null;
+};
+
+const formatInvoiceDateValue = (date) => {
+  if (!date || !isValid(date)) return '';
+  return format(date, 'yyyy-MM-dd');
+};
+
+export const computeMsmeMaxDueDate = (invoiceDate) => {
+  const base = parseInvoiceDateValue(invoiceDate);
+  if (!base) return '';
+  return formatInvoiceDateValue(addDays(base, MSME_MAX_PAYMENT_DAYS));
+};
+
+export const resolveVendorIsMsme = (payload = {}, vendor = null) =>
+  Boolean(vendor?.msme) ||
+  Boolean(
+    pickField(payload, 'vendorIsMsme', 'vendor_is_msme') ??
+      pickField(payload, 'vendorMsme', 'vendor_msme'),
   );
+
+export const capMsmeDueDate = ({ invoiceDate, dueDate, vendorIsMsme } = {}) => {
+  if (!vendorIsMsme) return dueDate || '';
+
+  const maxDueDate = computeMsmeMaxDueDate(invoiceDate);
+  if (!maxDueDate) return dueDate || '';
+  if (!dueDate) return dueDate || '';
+
+  return dueDate > maxDueDate ? maxDueDate : dueDate;
+};
+
+export const getMsmeDueDateValidationError = ({
+  invoiceDate,
+  dueDate,
+  vendorIsMsme,
+} = {}) => {
+  if (!vendorIsMsme || !dueDate || !invoiceDate) return null;
+
+  const maxDueDate = computeMsmeMaxDueDate(invoiceDate);
+  if (!maxDueDate) return null;
+
+  if (dueDate > maxDueDate) {
+    return `MSME vendors require payment due within ${MSME_MAX_PAYMENT_DAYS} days of the invoice date (latest due date: ${maxDueDate}).`;
+  }
+
+  return null;
+};
+
+export const getMsmeDueDateValidationErrorForInvoice = (
+  payload = {},
+  { findVendorById, findVendorByName } = {},
+) => {
+  const vendor =
+    payload.vendorId && typeof findVendorById === 'function'
+      ? findVendorById(payload.vendorId)
+      : payload.vendorName && typeof findVendorByName === 'function'
+        ? findVendorByName(payload.vendorName)
+        : null;
+
+  return getMsmeDueDateValidationError({
+    invoiceDate: payload.invoiceDate,
+    dueDate: payload.dueDate,
+    vendorIsMsme: resolveVendorIsMsme(payload, vendor),
+  });
+};
+
+export const normalizeMsmePaymentDue = (invoice = {}) => {
+  const vendorIsMsme = resolveVendorIsMsme(invoice);
 
   const msmePaymentTermDaysRaw = pickField(
     invoice,
@@ -30,7 +98,10 @@ export const normalizeMsmePaymentDue = (invoice = {}) => {
         : null
       : Number(msmePaymentTermDaysRaw);
 
-  const msmeMaxDueDate = pickField(invoice, 'msmeMaxDueDate', 'msme_max_due_date') || null;
+  const msmeMaxDueDate =
+    pickField(invoice, 'msmeMaxDueDate', 'msme_max_due_date') ||
+    (vendorIsMsme ? computeMsmeMaxDueDate(invoice.invoiceDate) : null) ||
+    null;
 
   const daysRemainingRaw = pickField(
     invoice,
@@ -81,9 +152,4 @@ export const getMsmePaymentDueBadgeClassName = (status) => {
 export const shouldShowMsmePaymentDue = (invoice = {}) => {
   const msme = normalizeMsmePaymentDue(invoice);
   return msme.vendorIsMsme && Boolean(msme.msmePaymentDueLabel);
-};
-
-export const getMsmeDueDateHelperText = ({ vendorIsMsme } = {}) => {
-  if (!vendorIsMsme) return null;
-  return `MSME vendor: payment must be due within ${MSME_MAX_PAYMENT_DAYS} days of the invoice date. Due-date limits and countdown are enforced and tracked by the backend.`;
 };

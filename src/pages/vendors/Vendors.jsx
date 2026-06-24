@@ -82,14 +82,12 @@ import VendorTableGstExpandedRow from './components/VendorTableGstExpandedRow';
 import {
   createEmptyVendorDocuments,
   normalizeVendorDocuments,
-  sanitizeVendorDocumentsForSave,
 } from './utils/vendorDocuments';
 import {
   getVendorTdsValidationErrors,
   normalizeVendorTds,
-  sanitizeVendorTdsForSave,
 } from './utils/vendorTds';
-import { DUMMY_VENDOR_LIST, USE_DUMMY_VENDOR_DATA } from './data/dummyVendors';
+import { normalizeVendorForSave } from './utils/vendorSave';
 import VendorApprovalDialog from './components/VendorApprovalDialog';
 import IntegrationSourceBadge from '../../components/integrations/IntegrationSourceBadge';
 import useZohoIntegrationActive from '../../hooks/useZohoIntegrationActive';
@@ -223,9 +221,7 @@ const matchesVendorSearch = (vendor, query) => {
     ...getVendorGstRegistrations(vendor).map((registration) =>
       [
         registration.gstin,
-        registration.tradeName,
         registration.state,
-        registration.registrationType,
       ].join(' '),
     ),
     vendor?.state,
@@ -269,96 +265,13 @@ const VendorMetricCard = ({ label, value, icon: Icon, tone = 'primary' }) => {
   );
 };
 
-const createDummyVendorId = () => `dummy-vendor-${Date.now()}`;
-
-const stripVendorLevelAddressAndBank = (vendor = {}) => {
-  const {
-    address_line1,
-    address_line2,
-    city,
-    state,
-    pincode,
-    bank_name,
-    account_number,
-    ifsc_code,
-    branch,
-    account_holder_name,
-    ...rest
-  } = vendor;
-
-  return rest;
-};
-
-const sanitizeGstRegistrationsForSave = (registrations = []) =>
-  (Array.isArray(registrations) ? registrations : [])
-    .map((registration) => {
-      const { _clientId, _fromFetch, ...rest } = registration;
-      return rest;
-    })
-    .filter((registration) => String(registration.gstin || '').trim());
-
-const normalizeDummyVendorForGstModel = (vendor = {}) => {
-  const sanitized = stripVendorLevelAddressAndBank(vendor);
-  const { tdsMappings, ...restSanitized } = sanitized;
-  const tdsMapping = sanitizeVendorTdsForSave(restSanitized.tdsMapping ?? tdsMappings);
-
-  if (Array.isArray(restSanitized.gstRegistrations) && restSanitized.gstRegistrations.length > 0) {
-    const cleanedRegistrations = sanitizeGstRegistrationsForSave(restSanitized.gstRegistrations);
-    return {
-      ...restSanitized,
-      gstRegistrations: cleanedRegistrations,
-      gstin: cleanedRegistrations[0]?.gstin || restSanitized.gstin || '',
-      documents: sanitizeVendorDocumentsForSave(restSanitized.documents),
-      tdsMapping,
-    };
-  }
-
-  const gstin = String(vendor.gstin || '').trim().toUpperCase();
-  if (!gstin) {
-    return {
-      ...restSanitized,
-      documents: sanitizeVendorDocumentsForSave(restSanitized.documents),
-      tdsMapping,
-    };
-  }
-
-  return {
-    ...restSanitized,
-    documents: sanitizeVendorDocumentsForSave(restSanitized.documents),
-    tdsMapping,
-    gstRegistrations: [
-      {
-        gstin,
-        tradeName: vendor.name || '',
-        state: vendor.state || '',
-        registrationType: 'Regular',
-        location: {
-          addressLine1: vendor.address_line1 || '',
-          addressLine2: vendor.address_line2 || '',
-          city: vendor.city || '',
-          state: vendor.state || '',
-          pincode: vendor.pincode || '',
-          country: vendor.country || 'India',
-        },
-        bankDetails: {
-          accountHolderName: vendor.account_holder_name || vendor.name || '',
-          accountNumber: vendor.account_number || '',
-          ifscCode: vendor.ifsc_code || '',
-          bankName: vendor.bank_name || '',
-          branch: vendor.branch || '',
-        },
-      },
-    ],
-  };
-};
-
 const Vendors = () => {
   const {
     data: vendorsData = [],
     isError: vendorsError,
     isFetching: vendorsFetching,
     refetch: refetchVendors,
-  } = useGetVendorsQuery(undefined, { skip: USE_DUMMY_VENDOR_DATA });
+  } = useGetVendorsQuery();
 
   const [createVendor, { isLoading: createVendorLoading }] = useCreateVendorMutation();
   const [updateVendor, { isLoading: updateVendorLoading }] = useUpdateVendorMutation();
@@ -374,11 +287,9 @@ const Vendors = () => {
   const vendorFieldConfiguration = corporateScreens?.vendorFieldConfiguration ?? [];
   const effectiveActiveVendorFields = useMemo(
     () =>
-      USE_DUMMY_VENDOR_DATA
-        ? activeVendorFields.filter(
-            (section) => !GST_REGISTRATION_OWNED_VENDOR_SECTIONS.has(String(section).trim().toUpperCase()),
-          )
-        : activeVendorFields,
+      activeVendorFields.filter(
+        (section) => !GST_REGISTRATION_OWNED_VENDOR_SECTIONS.has(String(section).trim().toUpperCase()),
+      ),
     [activeVendorFields],
   );
   const vendorUploadMandatoryFields = useMemo(
@@ -420,7 +331,6 @@ const Vendors = () => {
   const [bulkReviewOpen, setBulkReviewOpen] = useState(false);
   const [bulkReviewData, setBulkReviewData] = useState(null);
   const [expandedVendorIds, setExpandedVendorIds] = useState(() => new Set());
-  const [dummyVendors, setDummyVendors] = useState(DUMMY_VENDOR_LIST);
   const [formData, setFormData] = useState({
     // Basic Information
     name: '',
@@ -460,14 +370,10 @@ const Vendors = () => {
     tdsMapping: null,
   });
 
-  const vendors = USE_DUMMY_VENDOR_DATA
-    ? dummyVendors
-    : Array.isArray(vendorsData)
-      ? vendorsData
-      : [];
+  const vendors = Array.isArray(vendorsData) ? vendorsData : [];
 
   useEffect(() => {
-    if (!USE_DUMMY_VENDOR_DATA && vendorsError) {
+    if (vendorsError) {
       toast.error('Failed to load vendors');
     }
   }, [vendorsError]);
@@ -499,55 +405,15 @@ const Vendors = () => {
     }
 
     try {
-      if (USE_DUMMY_VENDOR_DATA) {
-        const dummyVendorPayload = normalizeDummyVendorForGstModel(formData);
-        const submittingSavedVendor =
-          editingVendor && isSavedVendorStatus(editingVendor.status);
-        if (editingVendor) {
-          setDummyVendors((prev) =>
-            prev.map((vendor) =>
-              vendor.id === editingVendor.id
-                ? {
-                    ...vendor,
-                    ...dummyVendorPayload,
-                    id: vendor.id,
-                    status: submittingSavedVendor
-                      ? resolveSavedVendorSubmitStatus()
-                      : vendor.status,
-                    createdAt: vendor.createdAt,
-                    created_via: vendor.created_via,
-                  }
-                : vendor,
-            ),
-          );
-          toast.success(
-            submittingSavedVendor
-              ? 'Vendor submitted for approval'
-              : 'Vendor updated in dummy data',
-          );
-        } else {
-          const nextVendor = {
-            ...dummyVendorPayload,
-            id: createDummyVendorId(),
-            status: 'Pending Approval',
-            createdAt: new Date().toISOString(),
-            created_by_name: vendorEditContext.userName || 'Current User',
-          };
-          setDummyVendors((prev) => [nextVendor, ...prev]);
-          toast.success('Vendor added to dummy data');
-        }
-        setDialogOpen(false);
-        resetForm();
-        return;
-      }
+      const vendorPayload = normalizeVendorForSave(formData);
 
       if (editingVendor) {
         const submittingSavedVendor = isSavedVendorStatus(editingVendor.status);
         await updateVendor({
           id: editingVendor.id,
           body: submittingSavedVendor
-            ? { ...formData, status: resolveSavedVendorSubmitStatus() }
-            : formData,
+            ? { ...vendorPayload, status: resolveSavedVendorSubmitStatus() }
+            : vendorPayload,
         }).unwrap();
         toast.success(
           submittingSavedVendor
@@ -555,7 +421,7 @@ const Vendors = () => {
             : 'Vendor updated successfully',
         );
       } else {
-        const response = await createVendor(formData).unwrap();
+        const response = await createVendor(vendorPayload).unwrap();
         const successCount = Number(response?.successCount ?? 0);
         const failedCount = Number(response?.failedCount ?? 0);
         const errorMessages = getVendorApiErrorMessages(response);
@@ -597,39 +463,13 @@ const Vendors = () => {
 
     try {
       const vendorsPayload = rows
-        .map((row) => toBulkVendorPayload(row))
+        .map((row) => normalizeVendorForSave(toBulkVendorPayload(row)))
         .filter((vendor) => vendor.name);
 
       if (!vendorsPayload.length) {
         return {
           errors: ['No valid vendor records found. Please include at least a vendor name column'],
         };
-      }
-
-      if (USE_DUMMY_VENDOR_DATA) {
-        const bulkStatus = resolveBulkCreateVendorStatus();
-        const nextVendors = vendorsPayload.map((vendor, index) => ({
-          ...normalizeDummyVendorForGstModel(vendor),
-          id: `${createDummyVendorId()}-${index}`,
-          status: bulkStatus,
-          created_via: 'bulk_upload',
-          createdAt: new Date().toISOString(),
-          created_by_name: vendorEditContext.userName || 'Current User',
-        }));
-        setDummyVendors((prev) => [...nextVendors, ...prev]);
-        setBulkReviewData({
-          successCount: nextVendors.length,
-          failedCount: 0,
-          successful: nextVendors,
-          failed: [],
-          savedAsDraft: true,
-        });
-        setBulkReviewOpen(true);
-        toast.success(
-          `${nextVendors.length} vendor${nextVendors.length === 1 ? '' : 's'} saved — review and submit each for approval`,
-        );
-        setMultipleVendorUploadOpen(false);
-        return { errors: [] };
       }
 
       const bulkStatus = resolveBulkCreateVendorStatus();
@@ -805,11 +645,6 @@ const Vendors = () => {
   const confirmDeleteVendor = async () => {
     if (!vendorDeleteTarget) return;
     try {
-      if (USE_DUMMY_VENDOR_DATA) {
-        setDummyVendors((prev) => prev.filter((vendor) => vendor.id !== vendorDeleteTarget));
-        toast.success('Vendor removed from dummy data');
-        return;
-      }
       await deleteVendor(vendorDeleteTarget).unwrap();
       toast.success('Vendor deleted successfully');
     } catch (error) {
@@ -829,33 +664,6 @@ const Vendors = () => {
     if (!approvalTarget) return;
 
     try {
-      if (USE_DUMMY_VENDOR_DATA) {
-        setDummyVendors((prev) =>
-          prev.map((vendor) =>
-            vendor.id === approvalTarget.vendor.id
-              ? {
-                  ...vendor,
-                  status: approvalTarget.action,
-                  approvalRecords: [
-                    ...(Array.isArray(vendor.approvalRecords) ? vendor.approvalRecords : []),
-                    {
-                      level: 'Checker',
-                      userName: vendorEditContext.userName || 'Current User',
-                      action: approvalTarget.action,
-                      comments: approvalComments.trim(),
-                      timestamp: new Date().toISOString(),
-                    },
-                  ],
-                }
-              : vendor,
-          ),
-        );
-        toast.success(`Vendor ${approvalTarget.action.toLowerCase()} in dummy data`);
-        setApprovalTarget(null);
-        setApprovalComments('');
-        return;
-      }
-
       await approveVendor({
         id: approvalTarget.vendor.id,
         body: {
@@ -1005,11 +813,6 @@ const Vendors = () => {
   const vendorsRefreshing = vendorsFetching;
 
   const handleRefreshVendors = async () => {
-    if (USE_DUMMY_VENDOR_DATA) {
-      toast.success('Dummy vendors refreshed');
-      return;
-    }
-
     try {
       await refetchVendors();
       toast.success('Vendors refreshed');

@@ -14,6 +14,7 @@ import {
 } from "./invoiceTax";
 import { parseNumericInput } from "./numericInput";
 import { resolveTdsRate } from "./tds";
+import { capMsmeDueDate, resolveVendorIsMsme } from "./msmePaymentDue";
 
 export const computeTdsAmount = (
   lineItems = [],
@@ -143,6 +144,14 @@ export const initializeInvoiceFormData = (
   { findVendorByName, isCategoryFeatureEnabled },
 ) => {
   const matchedVendor = extractedData?.vendorName ? findVendorByName(extractedData.vendorName) : null;
+  const vendorIsMsme = resolveVendorIsMsme({}, matchedVendor);
+  const invoiceDate = extractedData?.invoiceDate || format(new Date(), "yyyy-MM-dd");
+  const extractedDueDate = extractedData?.dueDate || "";
+  const dueDate = capMsmeDueDate({
+    invoiceDate,
+    dueDate: extractedDueDate,
+    vendorIsMsme,
+  });
   const notesText = Array.isArray(extractedData?.notes) ? extractedData.notes.join("\n") : "";
   const invoiceCurrency = normalizeCurrencyCode(extractedData?.currency) || DEFAULT_CURRENCY;
   const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
@@ -165,8 +174,8 @@ export const initializeInvoiceFormData = (
     vendorGstin: extractedData?.vendorGstin || "",
     vendorAddress: vendorAddress,
     invoiceNumber: extractedData?.invoiceNumber || "",
-    invoiceDate: extractedData?.invoiceDate || format(new Date(), "yyyy-MM-dd"),
-    dueDate: extractedData?.dueDate || "",
+    invoiceDate,
+    dueDate,
     billingAddress: billingAddress,
     shippingAddress: extractedData?.shippingAddress || extractedData?.shippingAddress || "",
     billingGstin:

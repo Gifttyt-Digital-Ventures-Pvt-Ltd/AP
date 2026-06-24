@@ -16,7 +16,6 @@ import { formatTdsDisplayLabel, resolveTdsRate } from "../utils/tds";
 import LineItemsSummary, { LineItemsSectionHeader } from "./LineItemsSummary";
 import MsmePaymentDueBadge from "./MsmePaymentDueBadge";
 import {
-  getMsmeDueDateHelperText,
   normalizeMsmePaymentDue,
 } from "../utils/msmePaymentDue";
 

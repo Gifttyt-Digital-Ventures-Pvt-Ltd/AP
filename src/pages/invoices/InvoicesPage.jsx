@@ -91,6 +91,7 @@ import {
   getInvoiceTaxAmount,
   getInvoiceTdsAmount,
 } from "./utils/invoiceAmounts";
+import { getMsmeDueDateValidationErrorForInvoice } from "./utils/msmePaymentDue";
 import { Sparkles, Eye, Mail, Pencil, Search, Trash2 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -1287,6 +1288,15 @@ const InvoicesPage = () => {
   };
 
   const validateMandatoryPayload = (payload) => {
+    const msmeDueDateError = getMsmeDueDateValidationErrorForInvoice(payload, {
+      findVendorById,
+      findVendorByName,
+    });
+    if (msmeDueDateError) {
+      toast.error(msmeDueDateError);
+      return false;
+    }
+
     const message = getInvoiceMandatoryFieldValidationMessage(
       payload,
       invoiceMandatoryFields,

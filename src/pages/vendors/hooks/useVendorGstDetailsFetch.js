@@ -2,14 +2,12 @@ import { useCallback } from 'react';
 import { useGetVendorGstDetailsMutation } from '../../../Services/apis/taxApi';
 import { getApiErrorMessage } from '../../tax-management/hooks/useGstTaxpayerSession';
 import { getVendorFetchValidationError, resolveVendorFetchSource } from '../../../utils/vendorValidation';
-import { DUMMY_VENDOR_GST_LOOKUP, USE_DUMMY_VENDOR_DATA } from '../data/dummyVendors';
 import {
   buildVendorGstDetailsRequestBody,
-  fetchVendorGstDetailsFromLookup,
   mapVendorGstDetailsToFetchRecords,
 } from '../utils/vendorGstFetch';
 
-export function useVendorGstDetailsFetch({ lookup = DUMMY_VENDOR_GST_LOOKUP } = {}) {
+export function useVendorGstDetailsFetch() {
   const [getVendorGstDetails, { isLoading }] = useGetVendorGstDetailsMutation();
 
   const fetchVendorDetails = useCallback(
@@ -23,10 +21,6 @@ export function useVendorGstDetailsFetch({ lookup = DUMMY_VENDOR_GST_LOOKUP } = 
       const requestBody = buildVendorGstDetailsRequestBody({ pan, gstin });
       if (!requestBody || !source) {
         return { success: false, error: 'Enter PAN or GSTIN to fetch details' };
-      }
-
-      if (USE_DUMMY_VENDOR_DATA) {
-        return fetchVendorGstDetailsFromLookup({ pan, gstin }, lookup);
       }
 
       try {
@@ -53,7 +47,7 @@ export function useVendorGstDetailsFetch({ lookup = DUMMY_VENDOR_GST_LOOKUP } = 
         };
       }
     },
-    [getVendorGstDetails, lookup],
+    [getVendorGstDetails],
   );
 
   const fetchVendorDetailsByPan = useCallback(

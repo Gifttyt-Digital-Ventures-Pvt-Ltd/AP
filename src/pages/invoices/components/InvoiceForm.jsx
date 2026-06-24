@@ -49,7 +49,8 @@ import { buildInvoiceTdsStateFromVendor } from "../../vendors/utils/vendorTds";
 import TdsSelectionField from "./TdsSelectionField";
 import MsmePaymentDueBadge from "./MsmePaymentDueBadge";
 import {
-  getMsmeDueDateHelperText,
+  capMsmeDueDate,
+  computeMsmeMaxDueDate,
   normalizeMsmePaymentDue,
 } from "../utils/msmePaymentDue";
 
@@ -204,7 +205,7 @@ export const InvoiceForm = ({
 
   const msmePaymentDue = normalizeMsmePaymentDue(formData);
   const vendorIsMsme = Boolean(selectedVendor?.msme) || msmePaymentDue.vendorIsMsme;
-  const msmeDueDateHelper = getMsmeDueDateHelperText({ vendorIsMsme });
+  const msmeMaxDueDate = vendorIsMsme ? computeMsmeMaxDueDate(formData?.invoiceDate) : "";
 
   const resolvedCurrencyOptions = useMemo(
     () =>
@@ -379,6 +380,7 @@ export const InvoiceForm = ({
 
   const applyVendorNameChange = (newName) => {
     const matched = findVendorByName(newName);
+    const matchedIsMsme = Boolean(matched?.msme);
     setFormData({
       ...formData,
       vendorName: newName,
@@ -389,6 +391,11 @@ export const InvoiceForm = ({
       gstin: matched?.gstin
         ? String(matched.gstin).trim().toUpperCase()
         : formData.gstin,
+      dueDate: capMsmeDueDate({
+        invoiceDate: formData.invoiceDate,
+        dueDate: formData.dueDate,
+        vendorIsMsme: matchedIsMsme,
+      }),
       campaignId: "",
       campaignName: "",
       referenceNumber: "",
@@ -824,9 +831,18 @@ export const InvoiceForm = ({
                 <Input
                   type="date"
                   value={formData.invoiceDate}
-                  onChange={(e) =>
-                    setFormData({ ...formData, invoiceDate: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const invoiceDate = e.target.value;
+                    setFormData((prev) => ({
+                      ...prev,
+                      invoiceDate,
+                      dueDate: capMsmeDueDate({
+                        invoiceDate,
+                        dueDate: prev.dueDate,
+                        vendorIsMsme,
+                      }),
+                    }));
+                  }}
                   className="h-8 text-sm"
                 />
               </div>
@@ -835,14 +851,21 @@ export const InvoiceForm = ({
                 <Input
                   type="date"
                   value={formData.dueDate}
-                  onChange={(e) =>
-                    setFormData({ ...formData, dueDate: e.target.value })
-                  }
+                  min={formData.invoiceDate || undefined}
+                  max={msmeMaxDueDate || undefined}
+                  onChange={(e) => {
+                    const dueDate = e.target.value;
+                    setFormData((prev) => ({
+                      ...prev,
+                      dueDate: capMsmeDueDate({
+                        invoiceDate: prev.invoiceDate,
+                        dueDate,
+                        vendorIsMsme,
+                      }),
+                    }));
+                  }}
                   className="h-8 text-sm"
                 />
-                {msmeDueDateHelper ? (
-                  <p className="mt-1 text-xs text-muted-foreground">{msmeDueDateHelper}</p>
-                ) : null}
                 {isEdit ? <MsmePaymentDueBadge invoice={formData} className="mt-2" /> : null}
               </div>
             </div>

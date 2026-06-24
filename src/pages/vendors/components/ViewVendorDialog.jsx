@@ -19,7 +19,6 @@ import {
   getVisibleVendorDocumentTypes,
   hasVisibleVendorDocuments,
 } from '../../../utils/vendorDocumentConfig';
-import { USE_DUMMY_VENDOR_DATA } from '../data/dummyVendors';
 import { Button } from '../../../components/ui/button';
 import {
   Dialog,
@@ -33,7 +32,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui
 
 const VendorDetailsTab = ({ vendor }) => {
   const { corporateScreens } = useRBAC();
-  const activeVendorDocuments = corporateScreens?.activeVendorDocuments ?? [];
+  const activeVendorDocuments = corporateScreens?.activeVendorDocuments;
   const vendorDocumentConfiguration = corporateScreens?.vendorDocumentConfiguration ?? [];
   const visibleVendorDocumentTypes = getVisibleVendorDocumentTypes(
     activeVendorDocuments,
@@ -141,22 +140,6 @@ const ViewVendorDialog = ({ open, onOpenChange, vendor, canApprove, isPendingApp
     if (!open || !vendor?.id) {
       setViewTab('details');
       setVendorHistory([]);
-      return undefined;
-    }
-
-    if (USE_DUMMY_VENDOR_DATA) {
-      const records = Array.isArray(vendor.approvalRecords) ? vendor.approvalRecords : [];
-      setVendorHistory(
-        records.map((record, index) => ({
-          id: `dummy-history-${vendor.id}-${index}`,
-          action: record.action,
-          comments: record.comments,
-          userName: record.userName,
-          timestamp: record.timestamp,
-          level: record.level,
-        })),
-      );
-      setLoadingHistory(false);
       return undefined;
     }
 
