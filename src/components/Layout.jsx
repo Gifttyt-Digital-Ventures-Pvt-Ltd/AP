@@ -81,8 +81,13 @@ export const Layout = ({ children }) => {
   const mainContentRef = useRef(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [hideSidebar, setHideSidebar] = useState(false);
-  const corporateName = String(corporateContext?.corporate?.name || "").trim();
+  const corporateName = String(
+    corporateContext?.corporate?.name ||
+      corporateUserContext?.corporate?.name ||
+      "",
+  ).trim();
   const userName =
+    String(corporateUserContext?.employeeDetails?.name || "").trim() ||
     String(corporateUserContext?.corporateUser?.name || "").trim() ||
     String(user?.name || "").trim();
   const sidebarPrimaryName = corporateName || userName || "User";
