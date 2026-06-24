@@ -1,4 +1,5 @@
 import { parseMsmeValue } from '../../utils/vendorValidation';
+import { sanitizeVendorTdsForSave } from '../../pages/vendors/utils/vendorTds';
 
 export const toVendorApiPayload = (vendor = {}) => {
   const {
@@ -36,10 +37,31 @@ export const toVendorApiPayload = (vendor = {}) => {
     contactPerson,
     website,
     notes,
+    status,
+    action,
+    documents,
+    vendorDocuments,
+    vendor_documents,
+    tdsMapping,
+    tds_mapping,
+    tdsMappings,
+    tds_mappings,
+    gstRegistrations,
+    gst_regs,
+    gstRegs,
+    gst_registrations,
   } = vendor;
 
   const resolvedMsme = parseMsmeValue(msme);
   const msmeBoolean = resolvedMsme === null ? false : resolvedMsme;
+  const resolvedTdsMapping = sanitizeVendorTdsForSave(
+    tdsMapping ??
+      tds_mapping ??
+      (Array.isArray(tdsMappings ?? tds_mappings) ? (tdsMappings ?? tds_mappings)[0] : null),
+  );
+  const resolvedGstRegistrations =
+    gstRegistrations ?? gst_regs ?? gstRegs ?? gst_registrations ?? undefined;
+  const resolvedDocuments = documents ?? vendorDocuments ?? vendor_documents ?? undefined;
 
   return {
     name,
@@ -67,12 +89,35 @@ export const toVendorApiPayload = (vendor = {}) => {
     contactPerson: contactPerson ?? contact_person,
     website,
     notes,
+    ...(resolvedDocuments !== undefined ? { documents: resolvedDocuments } : {}),
+    ...(resolvedGstRegistrations !== undefined
+      ? { gstRegistrations: resolvedGstRegistrations }
+      : {}),
+    ...(resolvedTdsMapping ? { tdsMapping: resolvedTdsMapping } : {}),
+    ...(status ? { status } : {}),
+    ...(action ? { action } : {}),
   };
 };
 
 export const toVendorUiPayload = (vendor = {}) => ({
   ...vendor,
   vendor_type: vendor.vendor_type ?? vendor.vendorType,
+  gstRegistrations:
+    vendor.gstRegistrations ??
+    vendor.gst_regs ??
+    vendor.gstRegs ??
+    vendor.gst_registrations ??
+    (vendor.gstin ? [{ gstin: vendor.gstin, isPrimary: true }] : []),
+  documents: vendor.documents ?? vendor.vendorDocuments ?? vendor.vendor_documents ?? {},
+  tdsMapping:
+    vendor.tdsMapping ??
+    vendor.tds_mapping ??
+    (Array.isArray(vendor.tdsMappings ?? vendor.tds_mappings)
+      ? (vendor.tdsMappings ?? vendor.tds_mappings)[0]
+      : null) ??
+    vendor.vendorTdsMapping ??
+    vendor.vendor_tds_mapping ??
+    null,
   msme: parseMsmeValue(vendor.msme ?? vendor.is_msme) === true,
   address_line1: vendor.address_line1 ?? vendor.addressLine1,
   address_line2: vendor.address_line2 ?? vendor.addressLine2,

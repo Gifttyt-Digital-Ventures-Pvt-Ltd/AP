@@ -23,6 +23,8 @@ export const DEFAULT_TDS_SECTIONS = [
 ];
 
 export const NO_TDS_VALUE = "__NO_TDS__";
+export const CUSTOM_TDS_VALUE = "__CUSTOM_TDS__";
+export const CUSTOM_TDS_SECTION_ID = "custom-tds";
 
 const normalizeSectionsResponse = (sections = []) => {
   if (Array.isArray(sections)) return sections;
@@ -35,12 +37,24 @@ const normalizeSectionsResponse = (sections = []) => {
   return [];
 };
 
-export const parseTdsRate = (value) => {
+export const parseTdsRate = (value, tdsRateOverride = null) => {
+  if (
+    tdsRateOverride !== null &&
+    tdsRateOverride !== undefined &&
+    tdsRateOverride !== ""
+  ) {
+    const overrideRate = Number(tdsRateOverride);
+    if (Number.isFinite(overrideRate)) {
+      return overrideRate;
+    }
+  }
+
   if (
     value === null ||
     value === undefined ||
     value === "" ||
-    value === NO_TDS_VALUE
+    value === NO_TDS_VALUE ||
+    value === CUSTOM_TDS_VALUE
   ) {
     return 0;
   }
@@ -68,38 +82,157 @@ export const parseTdsSelection = (value) => {
 
   const [rawId, rawLabel = rawId] = String(value).split("::");
   const label = rawLabel.trim();
-  const match = label.match(/^(.+)-(\d+(?:\.\d+)?)%$/);
+  const sectionRateMatch = label.match(/^(.+)-(\d+(?:\.\d{1,2})?)%$/);
+  const rateOnlyMatch = label.match(/^(\d+(?:\.\d{1,2})?)%$/);
+
+  if (sectionRateMatch) {
+    return {
+      tdsSectionId: rawId || null,
+      tdsSectionCode: sectionRateMatch[1] || null,
+      tdsRate: Number(sectionRateMatch[2]),
+    };
+  }
+
+  if (rateOnlyMatch) {
+    return {
+      tdsSectionId: rawId || null,
+      tdsSectionCode: null,
+      tdsRate: Number(rateOnlyMatch[1]),
+    };
+  }
 
   return {
     tdsSectionId: rawId || null,
-    tdsSectionCode: match?.[1] || null,
-    tdsRate: match ? Number(match[2]) : null,
+    tdsSectionCode: null,
+    tdsRate: null,
   };
 };
 
-const normalizeTdsRate = (rate) => {
+const normalizeTdsRate = (rate, { treatAsPercentage = false } = {}) => {
   const numericRate = Number(rate);
   if (!Number.isFinite(numericRate)) return null;
 
   const percentageRate =
-    numericRate > 0 && numericRate <= 1 ? numericRate * 100 : numericRate;
+    !treatAsPercentage && numericRate > 0 && numericRate <= 1
+      ? numericRate * 100
+      : numericRate;
+
+  if (percentageRate < 0 || percentageRate > 100) return null;
 
   return Number.isInteger(percentageRate)
     ? String(percentageRate)
     : percentageRate.toFixed(2).replace(/\.?0+$/, "");
 };
 
+export const sanitizeCustomTdsRateInput = (rawValue = "") => {
+  let text = String(rawValue).replace(/[^\d.]/g, "");
+  const firstDotIndex = text.indexOf(".");
+
+  if (firstDotIndex !== -1) {
+    const whole = text.slice(0, firstDotIndex);
+    const fraction = text.slice(firstDotIndex + 1).replace(/\./g, "").slice(0, 2);
+    text = `${whole}.${fraction}`;
+  }
+
+  if (text.startsWith(".")) {
+    text = `0${text}`;
+  }
+
+  if (text !== "" && text !== ".") {
+    const numeric = Number(text);
+    if (Number.isFinite(numeric) && numeric > 100) {
+      text = "100";
+    }
+  }
+
+  const numeric =
+    text === "" || text === "." || text.endsWith(".")
+      ? null
+      : Number(text);
+
+  return {
+    text,
+    numeric: Number.isFinite(numeric) ? numeric : null,
+    isComplete: text !== "" && text !== "." && !text.endsWith("."),
+  };
+};
+
+export const isValidCustomTdsRate = (rate) => {
+  const numeric = Number(rate);
+  return Number.isFinite(numeric) && numeric >= 0 && numeric <= 100;
+};
+
+export const buildCustomTdsValue = (rate) => {
+  const normalizedRate = normalizeTdsRate(rate, { treatAsPercentage: true });
+  if (!normalizedRate) return "";
+
+  return `${CUSTOM_TDS_SECTION_ID}::${normalizedRate}%`;
+};
+
+export const formatTdsDisplayLabel = ({
+  tds = "",
+  tdsSectionCode = null,
+  tdsRate = null,
+} = {}) => {
+  const sectionLabel = formatTdsLabel(tdsSectionCode, tdsRate);
+  if (sectionLabel) return sectionLabel;
+
+  if (isCustomTdsSelection(tds)) {
+    const rate =
+      tdsRate ??
+      extractCustomTdsRate(tds === CUSTOM_TDS_VALUE ? "" : tds);
+    if (rate !== null && rate !== undefined && rate !== "") {
+      const normalizedRate = normalizeTdsRate(rate, { treatAsPercentage: true });
+      return normalizedRate ? `${normalizedRate}%` : "";
+    }
+    return "Custom %";
+  }
+
+  if (tds && tds !== NO_TDS_VALUE) {
+    return String(tds).split("::").pop();
+  }
+
+  return "";
+};
+
 export const formatTdsLabel = (sectionCode, rate) => {
   const code = String(sectionCode || "").trim().toUpperCase();
-  const normalizedRate = normalizeTdsRate(rate);
+  const normalizedRate = normalizeTdsRate(rate, { treatAsPercentage: true });
   if (!code || !normalizedRate) return "";
   return `${code}-${normalizedRate}%`;
 };
 
+export const resolveTdsRate = (tdsValue = "", tdsRate = null) =>
+  parseTdsRate(tdsValue, tdsRate);
+
 export const buildTdsValue = ({ tdsSectionId, tdsSectionCode, tdsRate } = {}) => {
-  const label = formatTdsLabel(tdsSectionCode, tdsRate);
-  if (!tdsSectionId || !label) return "";
-  return `${tdsSectionId}::${label}`;
+  const isCustomSection =
+    String(tdsSectionId || "").trim() === CUSTOM_TDS_SECTION_ID && !tdsSectionCode;
+
+  const normalizedRate = normalizeTdsRate(tdsRate, {
+    treatAsPercentage: isCustomSection,
+  });
+  if (!normalizedRate) return "";
+
+  const sectionCode = String(tdsSectionCode || "").trim().toUpperCase();
+  const valueId = tdsSectionId || CUSTOM_TDS_SECTION_ID;
+
+  if (sectionCode) {
+    return `${valueId}::${sectionCode}-${normalizedRate}%`;
+  }
+
+  return `${valueId}::${normalizedRate}%`;
+};
+
+export const isCustomTdsSelection = (value) =>
+  value === CUSTOM_TDS_VALUE ||
+  String(value || "").startsWith(`${CUSTOM_TDS_SECTION_ID}::`);
+
+export const extractCustomTdsRate = (value) => {
+  if (!value || value === CUSTOM_TDS_VALUE) return "";
+  const selection = parseTdsSelection(value);
+  if (selection.tdsRate === null || selection.tdsRate === undefined) return "";
+  return String(selection.tdsRate);
 };
 
 const extractTdsRates = (rate) => {
@@ -159,17 +292,21 @@ export const buildTdsOptionsFromSection = (section = {}) => {
   });
 };
 
-export const buildTdsOptions = (sections = [], currentValue = "") => {
+export const buildTdsOptions = (sections = [], currentValue = "", extraOptions = []) => {
   const normalizedSections = normalizeSectionsResponse(sections);
   const sourceSections = [...normalizedSections, ...DEFAULT_TDS_SECTIONS];
   const sectionOptions = sourceSections.flatMap(buildTdsOptionsFromSection);
 
   const options = [
     { value: NO_TDS_VALUE, label: "No TDS" },
+    ...extraOptions,
     ...sectionOptions,
   ];
-  if (currentValue && currentValue !== NO_TDS_VALUE) {
-    options.unshift({ value: String(currentValue), label: String(currentValue).split("::").pop() });
+  if (currentValue && currentValue !== NO_TDS_VALUE && currentValue !== CUSTOM_TDS_VALUE) {
+    options.unshift({
+      value: String(currentValue),
+      label: String(currentValue).split("::").pop(),
+    });
   }
 
   const seen = new Set();

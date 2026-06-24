@@ -93,6 +93,13 @@ export const resolveInitialInvoiceStatus = ({
 
 export const resolveBulkCreateInvoiceStatus = () => SAVED_STATUS;
 
+export const resolveBulkCreateVendorStatus = () => SAVED_STATUS;
+
+export const isSavedVendorStatus = (status) =>
+  normalizeWorkflowStatus(status) === SAVED_STATUS;
+
+export const resolveSavedVendorSubmitStatus = () => "Pending Approval";
+
 export const emailsMatch = (left, right) => {
   if (!left || !right) return false;
   return String(left).trim().toLowerCase() === String(right).trim().toLowerCase();
@@ -362,6 +369,7 @@ const VENDOR_MAKER_EDITABLE_STATUSES = new Set([
   "Pending Approval",
   "Approved",
   "Draft",
+  SAVED_STATUS,
 ]);
 
 export const canEditVendor = (vendor, identity = {}) => {

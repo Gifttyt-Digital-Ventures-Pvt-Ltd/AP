@@ -1360,6 +1360,7 @@ const InvoicesPage = () => {
           data.lineItems,
           data.tds,
           calculateLineItemSubtotal,
+          data.tdsRate,
         ),
       },
     );
@@ -1566,6 +1567,7 @@ const InvoicesPage = () => {
           formData.lineItems,
           formData.tds,
           calculateLineItemSubtotal,
+          formData.tdsRate,
         ),
         uploadedFileName: uploadedFile?.name,
       },
@@ -1591,6 +1593,7 @@ const InvoicesPage = () => {
               formData.lineItems,
               formData.tds,
               calculateLineItemSubtotal,
+              formData.tdsRate,
             ),
           },
         );
@@ -1802,6 +1805,7 @@ const InvoicesPage = () => {
         isSavedDraft={isSavedDraft}
         calculateTotals={calculateTotals}
         findVendorByName={findVendorByName}
+        findVendorById={findVendorById}
         handleAddVendorFromInvoice={handleAddVendorFromInvoice}
         updateLineItem={updateLineItem}
         removeLineItem={removeLineItem}
@@ -2064,6 +2068,7 @@ const InvoicesPage = () => {
         })
       }
       findVendorByName={findVendorByName}
+      findVendorById={findVendorById}
       handleAddVendorFromInvoice={() => {
         if (bulkEditItemId) handleAddVendorForBulkItem(bulkEditItemId);
       }}

@@ -74,7 +74,9 @@ const MultipleVendorUploadDialog = ({
         <DialogHeader>
           <DialogTitle>Multiple Vendor Upload</DialogTitle>
           <DialogDescription>
-            Fill the required vendor fields in the template, then upload your spreadsheet below.
+            Upload a spreadsheet to import vendors in Saved status. Only company name is required
+            at import; complete GSTIN, bank, and documents by editing each vendor before submitting
+            for approval.
           </DialogDescription>
         </DialogHeader>
         <MeteredActionCostHint actionCode={CREDIT_ACTION_CODES.VENDOR_UPLOAD} className="mb-4" />

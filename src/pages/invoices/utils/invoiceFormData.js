@@ -1,4 +1,5 @@
 import { format } from "date-fns";
+import { normalizeMsmePaymentDue } from "./msmePaymentDue";
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../../utils/currency";
 import {
   createDefaultLineItem,
@@ -187,5 +188,6 @@ export const buildInvoiceEditFormData = (
           campaignName: "",
           referenceNumber: "",
         }),
+    ...normalizeMsmePaymentDue(invoice),
   };
 };

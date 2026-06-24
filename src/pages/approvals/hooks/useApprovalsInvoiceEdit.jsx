@@ -436,6 +436,7 @@ export const useApprovalsInvoiceEdit = ({
           data.lineItems,
           data.tds,
           calculateLineItemSubtotal,
+          data.tdsRate,
         ),
       },
     );

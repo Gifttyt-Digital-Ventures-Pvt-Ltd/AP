@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   useGetPaymentBatchesQuery,
   useGetPaymentBatchStatsQuery,
@@ -7,6 +7,15 @@ import {
   useMarkProcessedPaymentBatchMutation,
   useGeneratePaymentBatchFileMutation,
 } from '../../Services/apis/paymentBatchesApi';
+import { useGetBankAccountsQuery } from '../../Services/apis/approvalsPaymentsBankingApi';
+import ConnectedBankAccountsPanel, {
+  SelectedBankAccountPreview,
+} from '../../components/banking/ConnectedBankAccountsPanel';
+import {
+  findBankAccountForBatch,
+  formatBankAccountSummaryLine,
+} from '../banking/utils/bankAccounts';
+import { useRBAC } from '../../contexts/RBACContext';
 import { Button } from '../../components/ui/button';
 import { Label } from '../../components/ui/label';
 import { Input } from '../../components/ui/input';
@@ -68,6 +77,7 @@ const formatDate = (dateStr) => {
 const normalizeBatch = (batch = {}) => ({
   ...batch,
   batchNumber: batch.batchNumber ?? batch.batch_number ?? '',
+  bankAccountId: batch.bankAccountId ?? batch.bank_account_id ?? null,
   bankAccountName: batch.bankAccountName ?? batch.bank_account_name ?? '',
   paymentMethod: batch.paymentMethod ?? batch.payment_method ?? '',
   status: batch.status ?? 'Pending',
@@ -99,6 +109,7 @@ const getStatsCount = (stats, key) => Number(stats?.[key]?.count ?? stats?.[key]
 const batchTableHeader = [
   { key: 'batchNumber', title: 'Batch Number', cellClassName: 'font-medium' },
   { key: 'createdAt', title: 'Date' },
+  { key: 'bankAccount', title: 'Source Bank' },
   { key: 'paymentMethod', title: 'Method' },
   { key: 'totalItems', title: 'Items' },
   { key: 'totalAmount', title: 'Total Amount', cellClassName: 'font-medium' },
@@ -117,6 +128,7 @@ const paymentItemTableHeader = [
 ];
 
 const PaymentBatches = () => {
+  const { isConnectedBankingEnabled } = useRBAC();
   const {
     data: batchesData = [],
     isLoading: batchesLoading,
@@ -127,6 +139,11 @@ const PaymentBatches = () => {
     isLoading: statsLoading,
     refetch: refetchStats,
   } = useGetPaymentBatchStatsQuery();
+  const {
+    data: bankAccountsData = [],
+    isFetching: bankAccountsFetching,
+    refetch: refetchBankAccounts,
+  } = useGetBankAccountsQuery(undefined, { skip: !isConnectedBankingEnabled });
   const [processPaymentBatch] = useProcessPaymentBatchMutation();
   const [markProcessedPaymentBatch] = useMarkProcessedPaymentBatchMutation();
   const [generatePaymentBatchFile] = useGeneratePaymentBatchFileMutation();
@@ -135,9 +152,8 @@ const PaymentBatches = () => {
   const { handleCreditError } = useCreditErrorHandler();
 
   const batches = Array.isArray(batchesData) ? batchesData.map(normalizeBatch) : [];
-  const loading =
-    batchesLoading ||
-    statsLoading;
+  const bankAccounts = Array.isArray(bankAccountsData) ? bankAccountsData : [];
+  const loading = batchesLoading || statsLoading;
 
   const [activeTab, setActiveTab] = useState('all');
 
@@ -149,6 +165,10 @@ const PaymentBatches = () => {
   const [generatedFile, setGeneratedFile] = useState(null);
   const [processing, setProcessing] = useState(false);
   const [utr, setUtr] = useState('');
+  const selectedBatchBankAccount = useMemo(
+    () => findBankAccountForBatch(bankAccounts, selectedBatch ?? {}),
+    [bankAccounts, selectedBatch],
+  );
   const processBatchItemCount = selectedBatch?.paymentItems?.length || 0;
   const processBatchEstimate = useMeteredActionEstimate(
     CREDIT_ACTION_CODES.PAYMENT_PROCESSING,
@@ -164,6 +184,7 @@ const PaymentBatches = () => {
       await Promise.all([
         refetchBatches(),
         refetchStats(),
+        isConnectedBankingEnabled ? refetchBankAccounts() : Promise.resolve(),
       ]);
     } catch (error) {
       console.error('Error refreshing payment batch data:', error);
@@ -256,6 +277,22 @@ const PaymentBatches = () => {
           case 'createdAt':
             value = formatDate(batch.createdAt);
             break;
+          case 'bankAccount': {
+            const sourceAccount = findBankAccountForBatch(bankAccounts, batch);
+            value = sourceAccount ? (
+              <div className="text-xs">
+                <p className="font-medium">
+                  {sourceAccount.account_name || sourceAccount.bank_name || '-'}
+                </p>
+                <p className="text-muted-foreground">
+                  {formatBankAccountSummaryLine(sourceAccount)}
+                </p>
+              </div>
+            ) : (
+              batch.bankAccountName || '-'
+            );
+            break;
+          }
           case 'paymentMethod':
             value = <Badge variant="outline">{batch.paymentMethod}</Badge>;
             break;
@@ -386,6 +423,13 @@ const PaymentBatches = () => {
         </div>
       </div>
 
+      {isConnectedBankingEnabled ? (
+        <ConnectedBankAccountsPanel
+          accounts={bankAccounts}
+          loading={bankAccountsFetching}
+        />
+      ) : null}
+
       {/* Stats Cards */}
       {stats && (
         <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
@@ -475,7 +519,7 @@ const PaymentBatches = () => {
           {selectedBatch && (
             <div className="space-y-6">
               {/* Header Info */}
-              <div className="grid grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                 <div>
                   <p className="text-sm text-muted-foreground">Status</p>
                   <Badge className={`${statusColors[selectedBatch.status]} text-white mt-1`}>
@@ -487,13 +531,20 @@ const PaymentBatches = () => {
                   <p className="font-medium">{selectedBatch.paymentMethod}</p>
                 </div>
                 <div>
-                  <p className="text-sm text-muted-foreground">Bank Account</p>
-                  <p className="font-medium">{selectedBatch.bankAccountName || '-'}</p>
-                </div>
-                <div>
                   <p className="text-sm text-muted-foreground">Created</p>
                   <p className="font-medium">{formatDate(selectedBatch.createdAt)}</p>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <p className="text-sm font-medium">Source Bank Account</p>
+                {selectedBatchBankAccount ? (
+                  <SelectedBankAccountPreview account={selectedBatchBankAccount} />
+                ) : (
+                  <div className="rounded-md border border-dashed border-border px-3 py-2 text-sm text-muted-foreground">
+                    {selectedBatch.bankAccountName || 'Bank account details unavailable'}
+                  </div>
+                )}
               </div>
 
               {/* Summary */}

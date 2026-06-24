@@ -551,6 +551,7 @@ const InvoiceSingleUploadLayer = ({
           formData.lineItems,
           formData.tds,
           calculateLineItemSubtotal,
+          formData.tdsRate,
         ),
         uploadedFileName: uploadedFile?.name,
       },
@@ -721,6 +722,7 @@ const InvoiceSingleUploadLayer = ({
       hideActions={hideActions}
       calculateTotals={calculateTotals}
       findVendorByName={findVendorByName}
+      findVendorById={findVendorById}
       handleAddVendorFromInvoice={handleAddVendorFromInvoice}
       updateLineItem={updateLineItem}
       removeLineItem={removeLineItem}

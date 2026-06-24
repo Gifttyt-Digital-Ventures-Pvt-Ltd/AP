@@ -1,4 +1,5 @@
 import React, { useMemo } from 'react';
+import InvoiceDueDateCell from '../../invoices/components/InvoiceDueDateCell';
 import { Download, Eye } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Checkbox } from '../../../components/ui/checkbox';
@@ -117,7 +118,12 @@ const PendingPaymentsTab = ({
             value = safeFormatDate(invoice.invoiceDate);
             break;
           case 'dueDate':
-            value = safeFormatDate(invoice.dueDate);
+            value = (
+              <InvoiceDueDateCell
+                invoice={invoice}
+                formattedDueDate={safeFormatDate(invoice.dueDate)}
+              />
+            );
             break;
           case 'status':
             value = (

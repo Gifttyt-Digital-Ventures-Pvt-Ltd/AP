@@ -1,4 +1,5 @@
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../utils/currency";
+import { normalizeMsmePaymentDue } from "../../pages/invoices/utils/msmePaymentDue";
 
 const toLocalDateTimeString = (value) => {
   if (!value) return value;
@@ -279,6 +280,7 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
       invoice.lineItemsExpanded ??
       invoice.line_items_expanded ??
       true,
+    ...normalizeMsmePaymentDue(invoice),
   };
 };
 
