@@ -294,7 +294,7 @@ export const InvoiceForm = ({
     () =>
       organisationGstCredentials.map((entry) => ({
         value: entry.gst,
-        label: entry.userName ? `${entry.gst} - ${entry.userName}` : entry.gst,
+        label: entry.gst,
       })),
     [organisationGstCredentials],
   );
