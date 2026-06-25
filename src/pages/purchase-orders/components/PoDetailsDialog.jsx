@@ -37,16 +37,6 @@ import {
 } from "../utils";
 import PoLogo from "./PoLogo";
 
-const poLineItemTableHeader = [
-  { key: "lineNumber", title: "#" },
-  { key: "description", title: "Description" },
-  { key: "hsnSacCode", title: "HSN/SAC" },
-  { key: "quantity", title: "Qty" },
-  { key: "unitPrice", title: "Unit Price" },
-  { key: "taxAmount", title: "Tax" },
-  { key: "totalAmount", title: "Amount", cellClassName: "font-medium" },
-];
-
 const PoDetailsDialog = ({
   showViewDialog,
   setShowViewDialog,
@@ -61,6 +51,7 @@ const PoDetailsDialog = ({
   setShowApprovalDialog,
   canManagePo,
   canApprovePo,
+  onEditPO,
 }) => {
   const selectedPoId = selectedPO?.id || selectedPO?.po_id || selectedPO?.poId;
   const [viewTab, setViewTab] = useState("details");
@@ -103,18 +94,49 @@ const PoDetailsDialog = ({
     selectedPO?.logoUrl ||
     selectedPO?.logo_url ||
     null;
+  const hideStatusInDocument = ["Approved", "Issued"].includes(selectedPO?.status);
+  const poLineItemTableHeader = [
+    { key: "lineNumber", title: "#" },
+    ...(fieldOn("LINE_ITEM", "item_name")
+      ? [{ key: "description", title: "Description" }]
+      : []),
+    ...(isInr && fieldOn("LINE_ITEM", "hsn_sac_code")
+      ? [{ key: "hsnSacCode", title: "HSN/SAC" }]
+      : []),
+    ...(fieldOn("LINE_ITEM", "quantity")
+      ? [{ key: "quantity", title: "Qty" }]
+      : []),
+    ...(fieldOn("LINE_ITEM", "uom")
+      ? [{ key: "unitOfMeasure", title: "Unit" }]
+      : []),
+    ...(fieldOn("LINE_ITEM", "unit_rate")
+      ? [{ key: "unitPrice", title: "Unit Price" }]
+      : []),
+    ...(fieldOn("LINE_ITEM", "discount_percent")
+      ? [{ key: "discountPercent", title: "Disc %" }]
+      : []),
+    ...(isInr && fieldOn("LINE_ITEM", "gst_rate")
+      ? [{ key: "gstRate", title: "GST %" }]
+      : []),
+    ...(isInr && fieldOn("LINE_ITEM", "gst_rate")
+      ? [{ key: "taxAmount", title: "Tax" }]
+      : []),
+    { key: "totalAmount", title: "Amount", cellClassName: "font-medium" },
+  ];
 
   const renderLineItemRow = (item, rowIndex, headers) => {
     const lineItem = {
       lineNumber: item.line_number ?? item.lineNumber ?? rowIndex + 1,
       description: item.item_description ?? item.description ?? "-",
-      hsnSacCode: item.hsn_sac_code ?? item.hsnSac ?? "-",
-      quantity:
-        `${Number(item.quantity ?? 0)} ${item.unit_of_measure ?? item.uom ?? ""}`.trim(),
+      hsnSacCode: item.hsn_sac_code ?? item.hsnSacCode ?? item.hsnSac ?? "-",
+      quantity: Number(item.quantity ?? 0),
+      unitOfMeasure: item.unit_of_measure ?? item.unitOfMeasure ?? item.uom ?? "-",
       unitPrice: formatCurrency(
-        Number(item.unit_price ?? item.unitPrice ?? 0),
+        Number(item.unit_price ?? item.unitRate ?? item.unitPrice ?? 0),
         poCurrency,
       ),
+      discountPercent: `${Number(item.discount_percent ?? item.discountPercent ?? 0)}%`,
+      gstRate: `${Number(item.gst_rate ?? item.gstRate ?? 0)}%`,
       taxAmount: formatCurrency(
         Number(
           item.tax_amount ??
@@ -231,16 +253,18 @@ const PoDetailsDialog = ({
                         </div>
 
                         <div className="space-y-1 text-right text-sm">
-                          <div>
-                            <span className="text-muted-foreground">
-                              Status:
-                            </span>{" "}
-                            <Badge
-                              className={`${statusColors[selectedPO.status] || "bg-gray-500"} text-white`}
-                            >
-                              {selectedPO.status}
-                            </Badge>
-                          </div>
+                          {!hideStatusInDocument && (
+                            <div>
+                              <span className="text-muted-foreground">
+                                Status:
+                              </span>{" "}
+                              <Badge
+                                className={`${statusColors[selectedPO.status] || "bg-gray-500"} text-white`}
+                              >
+                                {selectedPO.status}
+                              </Badge>
+                            </div>
+                          )}
                           {fieldOn("HEADER", "po_number") && (
                             <p>
                               <span className="text-muted-foreground">
@@ -529,7 +553,7 @@ const PoDetailsDialog = ({
               Download PO
             </Button>
           )}
-          {selectedPO?.status === "Draft" && canManagePo && (
+          {["Draft", "Sent Back"].includes(selectedPO?.status) && canManagePo && (
             <Button
               onClick={() => handleSubmitForApproval(selectedPoId)}
               disabled={submitting}
@@ -538,6 +562,16 @@ const PoDetailsDialog = ({
               {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               <Send className="h-4 w-4 mr-2" />
               Submit for Approval
+            </Button>
+          )}
+          {["Draft", "Sent Back"].includes(selectedPO?.status) && canManagePo && (
+            <Button
+              variant="outline"
+              onClick={() => onEditPO?.(selectedPO)}
+              disabled={submitting}
+              data-testid="edit-po-btn"
+            >
+              Edit PO
             </Button>
           )}
           {selectedPO?.status === "Pending Approval" && canApprovePo && (

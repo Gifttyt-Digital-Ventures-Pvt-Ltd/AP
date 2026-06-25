@@ -13,6 +13,10 @@ import MeteredActionCostHint from "../../../components/credits/MeteredActionCost
 import { CREDIT_ACTION_CODES } from "../../../constants/creditActions";
 import { useMeteredActionEstimate } from "../../../hooks/useMeteredActionEstimate";
 import PoLogo from "./PoLogo";
+import TdsSelectionField from "../../invoices/components/TdsSelectionField";
+import { TAX_RATES } from "../../invoices/constants";
+import { parseTaxRateFromLabel } from "../../invoices/utils/invoiceTax";
+import { buildTdsValue } from "../../invoices/utils/tds";
 
 const getPoFormLineItemTableHeader = ({ isInr, fieldOn }) => [
   ...(fieldOn("LINE_ITEM", "item_name") ? [{ key: "item_description", title: "Description *", headerClassName: "w-[220px]" }] : []),
@@ -35,11 +39,26 @@ const FieldBlock = ({ label, children, className = "" }) => (
 
 const inputClassName = "h-9 bg-white/80 text-sm";
 
+const resolvePoGstSelectionValue = (item = {}) => {
+  if (item.gst_tax_label && TAX_RATES.some((option) => option.value === item.gst_tax_label)) {
+    return item.gst_tax_label;
+  }
+
+  const rate = Number(item.gst_rate);
+  const fallback =
+    TAX_RATES.find((option) => parseTaxRateFromLabel(option.value) === rate && option.value.startsWith("IGST")) ||
+    TAX_RATES.find((option) => parseTaxRateFromLabel(option.value) === rate);
+
+  return fallback?.value || "Exempt";
+};
+
 const PoFormDialog = ({
   showCreateDialog,
   setShowCreateDialog,
   poForm,
   setPoForm,
+  isEditMode = false,
+  editingStatus = "",
   formatConfigs = [],
   activeFormatId,
   applyPoFormat,
@@ -52,6 +71,7 @@ const PoFormDialog = ({
   calculateLineTotal,
   calculatePOTotal,
   handleCreatePO,
+  onBeforePreview,
   taxMode,
   createAction,
 }) => {
@@ -83,6 +103,13 @@ const PoFormDialog = ({
   const poTdsPercent = showTdsPreview ? Number(poForm.tds_percent) || 0 : 0;
   const poTdsAmount = showTdsPreview ? poTaxableSubtotal * poTdsPercent / 100 : 0;
   const poNetPayable = poPreviewTotal - poTdsAmount;
+  const poTdsSelectionValue = showTdsPreview
+    ? buildTdsValue({
+        tdsSectionId: poForm.tds_section || undefined,
+        tdsSectionCode: poForm.tds_section || null,
+        tdsRate: poForm.tds_percent,
+      })
+    : "";
 
   useEffect(() => {
     if (!showCreateDialog) setPreviewAction(null);
@@ -91,6 +118,12 @@ const PoFormDialog = ({
   const handleOpenChange = (open) => {
     if (!open) setPreviewAction(null);
     setShowCreateDialog(open);
+  };
+
+  const handlePreviewAction = (action) => {
+    const canPreview = onBeforePreview?.({ submitForApproval: action === "submit" });
+    if (canPreview === false) return;
+    setPreviewAction(action);
   };
 
   const renderLineItemRow = (item, idx, headers) => (
@@ -184,16 +217,33 @@ const PoFormDialog = ({
             break;
           case "gst_rate":
             value = (
-              <Select value={String(item.gst_rate)} onValueChange={(v) => updateLineItem(idx, "gst_rate", parseFloat(v))}>
-                <SelectTrigger className="h-9 bg-white/80">
-                  <SelectValue />
+              <Select
+                value={resolvePoGstSelectionValue(item)}
+                onValueChange={(value) => {
+                  const nextRate = parseTaxRateFromLabel(value);
+                  setPoForm((prev) => ({
+                    ...prev,
+                    line_items: prev.line_items.map((lineItem, lineIndex) =>
+                      lineIndex === idx
+                        ? {
+                            ...lineItem,
+                            gst_rate: nextRate,
+                            gst_tax_label: value,
+                          }
+                        : lineItem,
+                    ),
+                  }));
+                }}
+              >
+                <SelectTrigger className="h-9 min-w-[150px] bg-white/80">
+                  <SelectValue placeholder="Select tax" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="0">0%</SelectItem>
-                  <SelectItem value="5">5%</SelectItem>
-                  <SelectItem value="12">12%</SelectItem>
-                  <SelectItem value="18">18%</SelectItem>
-                  <SelectItem value="28">28%</SelectItem>
+                  {TAX_RATES.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             );
@@ -227,9 +277,13 @@ const PoFormDialog = ({
         <DialogHeader className="border-b px-6 pt-6 pb-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <DialogTitle>Create Purchase Order</DialogTitle>
+              <DialogTitle>{isEditMode ? "Edit Purchase Order" : "Create Purchase Order"}</DialogTitle>
               <p className="mt-1 text-xs text-muted-foreground">
-                {isPreviewing ? "Preview before saving in" : "Editing in selected format:"} {selectedFormat.name || "PO Format"} ({templateCode})
+                {isPreviewing
+                  ? "Preview before saving in"
+                  : isEditMode
+                    ? `Revising ${editingStatus || "purchase order"} in`
+                    : "Editing in selected format:"} {selectedFormat.name || "PO Format"} ({templateCode})
               </p>
             </div>
           </div>
@@ -446,54 +500,21 @@ const PoFormDialog = ({
                     </div>
                     {showTdsControls && (
                       <div className="mt-3 rounded border bg-slate-50/60 p-3">
-                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                          <FieldBlock label="TDS">
-                            <Select
-                              value={poForm.tds_applicable ? "yes" : "no"}
-                              onValueChange={(value) =>
-                                setPoForm((prev) => ({
-                                  ...prev,
-                                  tds_applicable: value === "yes",
-                                  tds_section: value === "yes" ? prev.tds_section : "",
-                                  tds_percent: value === "yes" ? prev.tds_percent : "",
-                                }))
-                              }
-                            >
-                              <SelectTrigger className="h-9 bg-white/80" data-testid="tds-applicable-select">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="no">Not Applicable</SelectItem>
-                                <SelectItem value="yes">Applicable</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </FieldBlock>
-                          {poForm.tds_applicable && (
-                            <>
-                              <FieldBlock label="TDS Section">
-                                <Input
-                                  value={poForm.tds_section}
-                                  onChange={(e) => setPoForm((prev) => ({ ...prev, tds_section: e.target.value.toUpperCase() }))}
-                                  placeholder="e.g. 194C"
-                                  className={inputClassName}
-                                  data-testid="tds-section-input"
-                                />
-                              </FieldBlock>
-                              <FieldBlock label="TDS %">
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  step="0.01"
-                                  value={poForm.tds_percent}
-                                  onChange={(e) => setPoForm((prev) => ({ ...prev, tds_percent: e.target.value }))}
-                                  placeholder="Rate"
-                                  className={inputClassName}
-                                  data-testid="tds-percent-input"
-                                />
-                              </FieldBlock>
-                            </>
-                          )}
-                        </div>
+                        <TdsSelectionField
+                          value={poTdsSelectionValue}
+                          onChange={(selection) =>
+                            setPoForm((prev) => ({
+                              ...prev,
+                              tds_applicable: Boolean(selection.tdsRate),
+                              tds_section: selection.tdsSectionCode || "",
+                              tds_percent: selection.tdsRate ?? "",
+                            }))
+                          }
+                          label="TDS"
+                          selectClassName="h-9 min-w-[220px] bg-white/80"
+                          inputClassName="h-9 w-24 bg-white/80"
+                          testIdPrefix="po-tds"
+                        />
                       </div>
                     )}
                     {!isInr && (
@@ -551,7 +572,7 @@ const PoFormDialog = ({
                 data-testid={previewSubmitForApproval ? "confirm-submit-po-btn" : "confirm-save-draft-po-btn"}
               >
                 {(isSavingDraft || isSubmittingForApproval) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                {previewSubmitForApproval ? "Confirm & Submit" : "Confirm & Save Draft"}
+                {previewSubmitForApproval ? "Confirm & Submit" : isEditMode ? "Confirm & Save Changes" : "Confirm & Save Draft"}
               </Button>
             </>
           ) : (
@@ -561,14 +582,14 @@ const PoFormDialog = ({
               </Button>
               <Button
                 variant="outline"
-                onClick={() => setPreviewAction("draft")}
+                onClick={() => handlePreviewAction("draft")}
                 disabled={isCreating}
                 data-testid="save-draft-po-btn"
               >
-                Save as Draft
+                {isEditMode ? "Save Changes" : "Save as Draft"}
               </Button>
               <Button
-                onClick={() => setPreviewAction("submit")}
+                onClick={() => handlePreviewAction("submit")}
                 disabled={isCreating}
                 data-testid="submit-po-btn"
               >

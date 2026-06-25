@@ -166,6 +166,20 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
         ...CREDIT_INVALIDATION_TAGS,
       ],
     }),
+    // PUT /purchase-orders/{id}
+    // Updates an editable PO such as DRAFT or SENT_BACK. Payload shape is the
+    // same as createPurchaseOrder.
+    updatePurchaseOrder: builder.mutation({
+      query: ({ id, body }) => ({
+        url: `/purchase-orders/${id}`,
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: (result, error, { id } = {}) => [
+        ...invalidateEntityAndList("PurchaseOrders", id),
+        { type: "Approvals", id: "LIST" },
+      ],
+    }),
     // POST /purchase-orders/{id}/submit
     // Moves an existing DRAFT or SENT_BACK PO into PENDING_APPROVAL.
     submitPurchaseOrder: builder.mutation({
@@ -254,6 +268,7 @@ export const {
   useUploadPurchaseOrderTenantLogoMutation,
   useSavePurchaseOrderDraftMutation,
   useCreatePurchaseOrderMutation,
+  useUpdatePurchaseOrderMutation,
   useSubmitPurchaseOrderMutation,
   useApprovePurchaseOrderMutation,
   useGeneratePurchaseOrderPdfMutation,

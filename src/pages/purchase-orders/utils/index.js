@@ -132,11 +132,13 @@ export const formatDate = (dateStr) => {
 export const normalizePoLineItem = (item = {}) => ({
   ...item,
   item_description: item.item_description ?? item.description ?? "",
-  hsn_sac_code: item.hsn_sac_code ?? item.hsnSac ?? "",
-  unit_of_measure: item.unit_of_measure ?? item.uom ?? "NOS",
-  unit_price: item.unit_price ?? item.unitPrice ?? 0,
+  hsn_sac_code: item.hsn_sac_code ?? item.hsnSacCode ?? item.hsnSac ?? "",
+  unit_of_measure: item.unit_of_measure ?? item.unitOfMeasure ?? item.uom ?? "NOS",
+  unit_price: item.unit_price ?? item.unitRate ?? item.unitPrice ?? 0,
   discount_percent: item.discount_percent ?? item.discountPercent ?? 0,
   gst_rate: item.gst_rate ?? item.gstRate ?? 0,
+  gst_tax_label: item.gst_tax_label ?? item.gstTaxLabel ?? "",
+  gst_tax_type: item.gst_tax_type ?? item.gstTaxType ?? "",
   tax_amount: item.tax_amount ?? item.taxAmount ?? 0,
   total_amount: item.total_amount ?? item.totalAmount ?? item.lineTotal ?? item.amount ?? 0,
 });
@@ -247,6 +249,15 @@ export const buildCreatePurchaseOrderPayload = (form = {}, formatConfig = null) 
       const quantity = Number(item.quantity) || 0;
       const unitRate = Number(item.unit_price) || 0;
       const discountPercent = lineOn("discount_percent") ? Number(item.discount_percent) || 0 : 0;
+      const gstTaxLabel = lineOn("gst_rate") ? item.gst_tax_label || "" : "";
+      const gstTaxType =
+        gstTaxLabel.startsWith("IGST")
+          ? "IGST"
+          : gstTaxLabel.startsWith("CGST + SGST")
+            ? "CGST_SGST"
+            : gstTaxLabel === "Exempt"
+              ? "EXEMPT"
+              : null;
       const baseLine = {
         itemDescription: item.item_description || "",
         quantity,
@@ -262,6 +273,8 @@ export const buildCreatePurchaseOrderPayload = (form = {}, formatConfig = null) 
         ...baseLine,
         hsnSacCode: lineOn("hsn_sac_code") ? item.hsn_sac_code || "" : "",
         gstRate: lineOn("gst_rate") ? Number(item.gst_rate) || 0 : 0,
+        gstTaxLabel: gstTaxLabel || null,
+        gstTaxType,
       };
     }),
   };

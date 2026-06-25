@@ -10,6 +10,7 @@ import {
   useDeletePurchaseOrderFormatConfigMutation,
   useSavePurchaseOrderDraftMutation,
   useCreatePurchaseOrderMutation,
+  useUpdatePurchaseOrderMutation,
   useSubmitPurchaseOrderMutation,
   useApprovePurchaseOrderMutation,
 } from '../../Services/apis/purchaseOrdersMasterDataApi';
@@ -83,6 +84,29 @@ const createDefaultPoForm = (defaultCurrency = 'INR', formatId = 'default-format
   line_items: [createEmptyLineItem(defaultCurrency)],
 });
 
+const buildPoEditForm = (po = {}, fallbackFormatId = 'default-format') => ({
+  po_format_id: po.po_format_id || po.poFormatId || po.formatConfigId || fallbackFormatId,
+  vendor_id: po.vendor_id || po.vendorId || '',
+  po_date: String(po.po_date || po.poDate || '').slice(0, 10) || new Date().toISOString().split('T')[0],
+  valid_till: String(po.valid_till || po.validTill || '').slice(0, 10),
+  expected_delivery_date: String(po.expected_delivery_date || po.expectedDeliveryDate || '').slice(0, 10),
+  currency: po.currency || 'INR',
+  exchange_rate: po.exchange_rate || po.exchangeRate || '',
+  place_of_supply: po.place_of_supply || po.placeOfSupply || '',
+  shipping_address: po.shipping_address || po.shipToAddress || po.shippingAddress || '',
+  billing_address: po.billing_address || po.billingAddress || '',
+  delivery_terms: po.delivery_terms || po.deliveryTerms || '',
+  freight_terms: po.freight_terms || po.freightTerms || '',
+  payment_terms: po.payment_terms || po.paymentTerms || '',
+  tds_applicable: Boolean(po.tds_applicable ?? po.isTdsApplicable),
+  tds_section: po.tds_section || po.tdsSection || '',
+  tds_percent: po.tds_percent || po.tdsPercent || '',
+  remarks: po.remarks || '',
+  line_items: (po.line_items || []).length
+    ? po.line_items
+    : [createEmptyLineItem(po.currency || 'INR')],
+});
+
 const cloneFormatConfig = (config) => ({
   ...config,
   sections: (config.sections || []).map((section) => ({
@@ -103,6 +127,11 @@ const makeFormatConfig = (
   templateCode: normalizePoTemplateCode(config.templateCode),
   id: config.id || fallbackId,
   name: config.name || fallbackName,
+  companyName:
+    config.companyName ||
+    config.company_name ||
+    tenantBranding.companyName ||
+    "Company Name",
   logoUrl: config.logoUrl || config.logo_url || tenantBranding.logoUrl || null,
   logoS3Key: config.logoS3Key || config.logo_s3_key || tenantBranding.logoS3Key || null,
 });
@@ -182,6 +211,12 @@ const PurchaseOrdersPage = () => {
   const { data: organisationData } = useGetOrganisationQuery();
 
   const tenantBranding = {
+    companyName:
+      organisationData?.companyName ||
+      organisationData?.company_name ||
+      organisationData?.legalName ||
+      organisationData?.legal_name ||
+      null,
     logoUrl: organisationData?.logoUrl || organisationData?.logo_url || null,
     logoS3Key: organisationData?.logoS3Key || organisationData?.logo_s3_key || null,
   };
@@ -192,6 +227,7 @@ const PurchaseOrdersPage = () => {
   const [deletePurchaseOrderFormatConfig] = useDeletePurchaseOrderFormatConfigMutation();
   const [savePurchaseOrderDraft] = useSavePurchaseOrderDraftMutation();
   const [createPurchaseOrder] = useCreatePurchaseOrderMutation();
+  const [updatePurchaseOrder] = useUpdatePurchaseOrderMutation();
   const [submitPurchaseOrder] = useSubmitPurchaseOrderMutation();
   const [approvePurchaseOrder] = useApprovePurchaseOrderMutation();
 
@@ -207,6 +243,7 @@ const PurchaseOrdersPage = () => {
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showApprovalDialog, setShowApprovalDialog] = useState(false);
   const [selectedPO, setSelectedPO] = useState(null);
+  const [editingPO, setEditingPO] = useState(null);
   const [createAction, setCreateAction] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [downloadingPoId, setDownloadingPoId] = useState(null);
@@ -253,6 +290,7 @@ const PurchaseOrdersPage = () => {
       if (
         prev?.id === nextDraft.id &&
         prev?.name === nextDraft.name &&
+        prev?.companyName === nextDraft.companyName &&
         prev?.defaultCurrency === nextDraft.defaultCurrency &&
         prev?.templateCode === nextDraft.templateCode &&
         (prev?.logoUrl || '') === (nextDraft.logoUrl || '') &&
@@ -278,7 +316,14 @@ const PurchaseOrdersPage = () => {
         line_items: prev.line_items.map((item) => sanitizeLineItemForCurrency(item, resolvedActiveFormat.defaultCurrency)),
       };
     });
-  }, [formatConfigData, formatConfigsData, activeFormatId, tenantBranding.logoUrl, tenantBranding.logoS3Key]);
+  }, [
+    formatConfigData,
+    formatConfigsData,
+    activeFormatId,
+    tenantBranding.companyName,
+    tenantBranding.logoUrl,
+    tenantBranding.logoS3Key,
+  ]);
 
   const fetchData = async () => {
     try {
@@ -326,12 +371,8 @@ const PurchaseOrdersPage = () => {
       toast.error('Exchange rate is required for foreign-currency purchase orders');
       return false;
     }
-    if (tdsEnabled && poForm.tds_applicable && !poForm.tds_section) {
-      toast.error('Please select the TDS section');
-      return false;
-    }
     if (tdsEnabled && poForm.tds_applicable && !(Number(poForm.tds_percent) > 0)) {
-      toast.error('Please enter the TDS percent');
+      toast.error('Please select a valid TDS rate');
       return false;
     }
     return true;
@@ -346,23 +387,31 @@ const PurchaseOrdersPage = () => {
     try {
       const selectedFormat = savedFormatConfigs.find((config) => config.id === poForm.po_format_id) || activeFormatConfig;
       const payload = buildCreatePurchaseOrderPayload(poForm, selectedFormat);
-      const data = submitForApproval
-        ? await createPurchaseOrder(payload).unwrap()
-        : await savePurchaseOrderDraft(payload).unwrap();
+      const editingPoId = getPoId(editingPO);
+      const data = editingPoId
+        ? await updatePurchaseOrder({ id: editingPoId, body: payload }).unwrap()
+        : submitForApproval
+          ? await createPurchaseOrder(payload).unwrap()
+          : await savePurchaseOrderDraft(payload).unwrap();
       const createdPo = getCreatedPo(data);
       const normalizedCreatedPo = normalizePurchaseOrder(createdPo || {});
-      const createdPoId = getPoId(createdPo);
+      const createdPoId = getPoId(createdPo) || editingPoId;
 
-      if (submitForApproval && createdPoId && normalizedCreatedPo.status === 'Draft') {
+      if (
+        submitForApproval &&
+        createdPoId &&
+        (editingPoId || normalizedCreatedPo.status === 'Draft' || normalizedCreatedPo.status === 'Sent Back')
+      ) {
         await submitPurchaseOrder(createdPoId).unwrap();
       }
 
       toast.success(
         submitForApproval
-          ? `Purchase Order ${createdPo?.po_number || createdPo?.poNumber || ''} submitted for approval`
-          : `Purchase Order ${createdPo?.po_number || createdPo?.poNumber || ''} saved as draft`,
+          ? `Purchase Order ${createdPo?.po_number || createdPo?.poNumber || poForm.po_number || ''} submitted for approval`
+          : `Purchase Order ${createdPo?.po_number || createdPo?.poNumber || poForm.po_number || ''} saved`,
       );
       setShowCreateDialog(false);
+      setEditingPO(null);
       resetForm();
       fetchData();
     } catch (error) {
@@ -371,6 +420,12 @@ const PurchaseOrdersPage = () => {
     } finally {
       setCreateAction(null);
     }
+  };
+
+  const handlePoPreviewCheck = ({ submitForApproval = false } = {}) => {
+    if (!guardAction('po.create')) return false;
+    if (submitForApproval && !guardAction('po.submit')) return false;
+    return validatePoForm();
   };
 
   const handleSubmitForApproval = async (poId) => {
@@ -432,6 +487,17 @@ const PurchaseOrdersPage = () => {
 
   const resetForm = () => {
     setPoForm(createDefaultPoForm(activeFormatConfig.defaultCurrency, activeFormatConfig.id));
+  };
+
+  const openEditPoDialog = (po) => {
+    if (!po) return;
+    const selectedFormat =
+      savedFormatConfigs.find((config) => config.id === (po.po_format_id || po.poFormatId || po.formatConfigId)) ||
+      activeFormatConfig;
+    setEditingPO(po);
+    setPoForm(buildPoEditForm(po, selectedFormat.id));
+    setShowViewDialog(false);
+    setShowCreateDialog(true);
   };
 
   const openBuilderDialog = (open) => {
@@ -659,13 +725,20 @@ const PurchaseOrdersPage = () => {
         statusColors={statusColors}
         setSelectedPO={setSelectedPO}
         setShowViewDialog={setShowViewDialog}
+        canManagePo={canManagePo}
+        onEditPO={openEditPoDialog}
       />
 
       <PoFormDialog
         showCreateDialog={showCreateDialog}
-        setShowCreateDialog={setShowCreateDialog}
+        setShowCreateDialog={(open) => {
+          setShowCreateDialog(open);
+          if (!open) setEditingPO(null);
+        }}
         poForm={poForm}
         setPoForm={setPoForm}
+        isEditMode={Boolean(editingPO)}
+        editingStatus={editingPO?.status}
         formatConfigs={savedFormatConfigs}
         activeFormatId={activeFormatId}
         applyPoFormat={applyPoFormat}
@@ -679,6 +752,7 @@ const PurchaseOrdersPage = () => {
         calculatePOTotal={calculatePOTotal}
         taxMode={getTaxMode(poForm.currency)}
         handleCreatePO={handleCreatePO}
+        onBeforePreview={handlePoPreviewCheck}
         createAction={createAction}
       />
 
@@ -708,6 +782,7 @@ const PurchaseOrdersPage = () => {
         submitting={submitting}
         setShowApprovalDialog={setShowApprovalDialog}
         canManagePo={canManagePo}
+        onEditPO={openEditPoDialog}
         canApprovePo={canApprovePo}
       />
 

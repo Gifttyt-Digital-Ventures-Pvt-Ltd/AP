@@ -1,5 +1,5 @@
 import React from "react";
-import { Eye, Search } from "lucide-react";
+import { Eye, Pencil, Search } from "lucide-react";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Card } from "../../../components/ui/card";
@@ -30,6 +30,8 @@ const PoListTable = ({
   statusColors,
   setSelectedPO,
   setShowViewDialog,
+  canManagePo = false,
+  onEditPO,
 }) => {
   const renderPoRow = (po, rowIndex, headers) => (
     <TableRow
@@ -58,17 +60,29 @@ const PoListTable = ({
             break;
           case "actions":
             value = (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setSelectedPO(po);
-                  setShowViewDialog(true);
-                }}
-                data-testid={`view-po-${po.id}`}
-              >
-                <Eye className="h-4 w-4" />
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedPO(po);
+                    setShowViewDialog(true);
+                  }}
+                  data-testid={`view-po-${po.id}`}
+                >
+                  <Eye className="h-4 w-4" />
+                </Button>
+                {canManagePo && ["Draft", "Sent Back"].includes(po.status) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => onEditPO?.(po)}
+                    data-testid={`edit-po-${po.id}`}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                )}
+              </div>
             );
             break;
           default:
