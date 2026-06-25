@@ -28,11 +28,18 @@ export const invoiceMatchingApi = serviceApi.injectEndpoints({
       providesTags: ["Matching"],
     }),
     getAvailablePurchaseOrders: builder.query({
-      query: (invoiceId) => ({
-        url: "/invoice-matching/purchase-orders/available",
-        method: "GET",
-        params: { invoiceId },
-      }),
+      query: (args) => {
+        const params =
+          args && typeof args === "object" && !Array.isArray(args)
+            ? args
+            : { invoiceId: args };
+
+        return {
+          url: "/invoice-matching/purchase-orders/available",
+          method: "GET",
+          params,
+        };
+      },
       providesTags: ["Matching"],
     }),
     getAvailableGrns: builder.query({
