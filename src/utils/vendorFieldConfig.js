@@ -25,6 +25,10 @@ export const VENDOR_FIELD_SECTIONS = {
   REMARKS: 'REMARKS',
 };
 
+export const VENDOR_VERIFICATION_SECTION_IDS = new Set([
+  'VENDOR_VERIFY_PORTAL',
+]);
+
 /** Section ID → snake_case form / bulk-upload field key */
 export const VENDOR_SECTION_TO_FORM_KEY = {
   [VENDOR_FIELD_SECTIONS.COMPANY_NAME]: 'name',
@@ -116,7 +120,10 @@ export const normalizeVendorFieldCatalog = (catalog = []) => {
 
 export const normalizeActiveVendorFields = (activeVendorFields = []) => {
   if (!Array.isArray(activeVendorFields)) return [];
-  return activeVendorFields.map(normalizeVendorFieldSection).filter(Boolean);
+  return activeVendorFields
+    .map(normalizeVendorFieldSection)
+    .filter(Boolean)
+    .filter((section) => !VENDOR_VERIFICATION_SECTION_IDS.has(section));
 };
 
 export const isVendorFieldRequired = (sectionId, activeVendorFields = []) => {

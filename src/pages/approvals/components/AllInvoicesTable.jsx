@@ -14,6 +14,7 @@ import {
 } from "../../../components/ui/pagination";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import { formatCurrency } from "../../../utils/currency";
+import InvoiceDueDateCell from "../../invoices/components/InvoiceDueDateCell";
 
 const baseAllInvoicesTableHeader = [
   { key: "srNo", title: "Sr. No", cellClassName: "text-sm font-medium" },
@@ -22,6 +23,7 @@ const baseAllInvoicesTableHeader = [
   { key: "vendorName", title: "Vendor" },
   { key: "approval", title: "Approval" },
   { key: "amount", title: "Amount", cellClassName: "font-semibold" },
+  { key: "dueDate", title: "Due Date", cellClassName: "text-sm whitespace-nowrap" },
   { key: "status", title: "Status" },
   {
     key: "createdByName",
@@ -89,6 +91,14 @@ const AllInvoicesTable = ({
               break;
             case "amount":
               value = formatCurrency(invoice.amount, invoice.currency);
+              break;
+            case "dueDate":
+              value = (
+                <InvoiceDueDateCell
+                  invoice={invoice}
+                  formattedDueDate={safeFormatDate(invoice.dueDate ?? invoice.due_date)}
+                />
+              );
               break;
             case "vendorName":
               value = <ClippedTextWithTooltip text={invoice.vendorName} />;

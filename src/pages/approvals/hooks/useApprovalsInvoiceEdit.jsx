@@ -43,6 +43,7 @@ import {
   isInvoiceMandatoryFieldsSatisfied,
   normalizeInvoiceMandatoryFields,
 } from "../../invoices/utils/mandatoryFields";
+import { getInvoiceDueDateValidationErrorForInvoice } from "../../invoices/utils/msmePaymentDue";
 import {
   applyForeignLineItemTax,
   applyInrLineItemTax,
@@ -367,6 +368,15 @@ export const useApprovalsInvoiceEdit = ({
   };
 
   const validateMandatoryPayload = (payload) => {
+    const dueDateError = getInvoiceDueDateValidationErrorForInvoice(payload, {
+      findVendorById,
+      findVendorByName,
+    });
+    if (dueDateError) {
+      toast.error(dueDateError);
+      return false;
+    }
+
     const message = getInvoiceMandatoryFieldValidationMessage(
       payload,
       invoiceMandatoryFields,

@@ -66,6 +66,7 @@ import {
 import {
   getBulkVendorUploadValidationErrors,
   getVendorValidationErrors,
+  getVendorGstVerificationErrors,
   parseMsmeValue,
 } from '../../utils/vendorValidation';
 import BulkUploadReviewDialog from './components/BulkUploadReviewDialog';
@@ -88,6 +89,7 @@ import {
   normalizeVendorTds,
 } from './utils/vendorTds';
 import { normalizeVendorForSave } from './utils/vendorSave';
+import { isVendorPortalFetchEnabled } from '../../utils/vendorVerificationConfig';
 import VendorApprovalDialog from './components/VendorApprovalDialog';
 import IntegrationSourceBadge from '../../components/integrations/IntegrationSourceBadge';
 import useZohoIntegrationActive from '../../hooks/useZohoIntegrationActive';
@@ -284,6 +286,7 @@ const Vendors = () => {
   const { corporateScreens, isCorporateAdmin } = useRBAC();
   const { showIntegrationColumn } = useZohoIntegrationActive();
   const activeVendorFields = corporateScreens?.activeVendorFields ?? [];
+  const portalVerificationEnabled = isVendorPortalFetchEnabled(corporateScreens?.activeVendorVerification);
   const vendorFieldConfiguration = corporateScreens?.vendorFieldConfiguration ?? [];
   const effectiveActiveVendorFields = useMemo(
     () =>
@@ -401,6 +404,14 @@ const Vendors = () => {
     }
     if (tdsValidationErrors.length > 0) {
       toast.error(tdsValidationErrors[0]);
+      return;
+    }
+
+    const gstVerificationErrors = getVendorGstVerificationErrors(formData, null, {
+      gstVerificationEnabled: portalVerificationEnabled,
+    });
+    if (gstVerificationErrors.length > 0) {
+      toast.error(gstVerificationErrors[0]);
       return;
     }
 

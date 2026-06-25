@@ -123,7 +123,12 @@ export const getVendorGstRegistrationsFromForm = (vendor = {}) => {
 export const hasVendorGstRegistrations = (vendor = {}) =>
   getVendorGstRegistrationsFromForm(vendor).length > 0;
 
-export const isVendorGstVerificationSatisfied = (vendor, gstVerification, { invoiceVendorRequest = false } = {}) => {
+export const isVendorGstVerificationSatisfied = (
+  vendor,
+  gstVerification,
+  { invoiceVendorRequest = false, gstVerificationEnabled = true } = {},
+) => {
+  if (!gstVerificationEnabled) return true;
   if (invoiceVendorRequest) return true;
   if (!isIndiaCountry(vendor?.country)) return true;
 
@@ -144,8 +149,9 @@ export const isVendorGstVerificationSatisfied = (vendor, gstVerification, { invo
 export const getVendorGstVerificationErrors = (
   vendor = {},
   gstVerification = null,
-  { invoiceVendorRequest = false, prefix = '' } = {},
+  { invoiceVendorRequest = false, prefix = '', gstVerificationEnabled = true } = {},
 ) => {
+  if (!gstVerificationEnabled) return [];
   if (invoiceVendorRequest) return [];
   if (!isIndiaCountry(vendor.country)) return [];
 

@@ -8,7 +8,8 @@
     "start": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "lint:errors": "eslint . --quiet"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.0.1",

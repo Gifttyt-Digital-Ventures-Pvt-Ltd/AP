@@ -14,7 +14,7 @@ import {
 } from "./invoiceTax";
 import { parseNumericInput } from "./numericInput";
 import { resolveTdsRate } from "./tds";
-import { capMsmeDueDate, resolveVendorIsMsme } from "./msmePaymentDue";
+import { normalizeDueDateForInvoice, resolveVendorIsMsme } from "./msmePaymentDue";
 
 export const computeTdsAmount = (
   lineItems = [],
@@ -147,7 +147,7 @@ export const initializeInvoiceFormData = (
   const vendorIsMsme = resolveVendorIsMsme({}, matchedVendor);
   const invoiceDate = extractedData?.invoiceDate || format(new Date(), "yyyy-MM-dd");
   const extractedDueDate = extractedData?.dueDate || "";
-  const dueDate = capMsmeDueDate({
+  const dueDate = normalizeDueDateForInvoice({
     invoiceDate,
     dueDate: extractedDueDate,
     vendorIsMsme,
