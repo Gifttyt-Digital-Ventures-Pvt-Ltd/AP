@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   useEditInvoiceMatchMutation,
   useGetAvailableGrnsQuery,
@@ -58,6 +58,7 @@ import { useCreditErrorHandler } from "../../contexts/CreditErrorContext";
 import MeteredActionCostHint from "../../components/credits/MeteredActionCostHint";
 import { useMeteredActionEstimate } from "../../hooks/useMeteredActionEstimate";
 import { CREDIT_ACTION_CODES } from "../../constants/creditActions";
+import { useRBAC } from "../../contexts/RBACContext";
 
 const STATUS_OPTIONS = [
   { value: "ALL", label: "All Statuses" },
@@ -181,7 +182,7 @@ const normalizeMatching = (match = {}) => ({
 
 const normalizeInvoice = (invoice = {}) => ({
   ...invoice,
-  id: invoice.id,
+  id: invoice.id ?? invoice.invoiceId ?? invoice.invoice_id,
   invoiceNumber: invoice.invoiceNumber ?? invoice.invoice_number ?? invoice.number ?? "",
   vendorName: invoice.vendorName ?? invoice.vendor_name ?? "",
   totalAmount: Number(invoice.totalAmount ?? invoice.total_amount ?? invoice.amount ?? 0),
@@ -193,7 +194,7 @@ const normalizeInvoice = (invoice = {}) => ({
 
 const normalizePurchaseOrder = (po = {}) => ({
   ...po,
-  id: po.id,
+  id: po.id ?? po.poId ?? po.po_id ?? po.purchaseOrderId ?? po.purchase_order_id,
   poNumber: po.poNumber ?? po.po_number ?? po.number ?? "",
   date: po.date ?? po.poDate ?? po.po_date ?? po.poDateOrReceivedDate,
   amount: Number(po.amount ?? po.poAmount ?? po.po_amount ?? 0),
@@ -205,7 +206,7 @@ const normalizePurchaseOrder = (po = {}) => ({
 
 const normalizeGrn = (grn = {}) => ({
   ...grn,
-  id: grn.id,
+  id: grn.id ?? grn.grnId ?? grn.grn_id,
   grnNumber: grn.grnNumber ?? grn.grn_number ?? grn.number ?? "",
   amount: Number(grn.amount ?? grn.grnAmount ?? grn.grn_amount ?? 0),
   currency: grn.currency ?? "INR",
@@ -229,10 +230,19 @@ const emptyMatchForm = {
 
 const InvoiceMatching = () => {
   const { guardAction, canPerformAction } = useActionGuard();
+  const { isCorporateScreenAllowed, isCorporateSectionEnabled } = useRBAC();
   const { handleCreditError } = useCreditErrorHandler();
   const canPerform = canPerformAction("matching.perform");
   const canEdit = canPerformAction("matching.edit");
   const canMarkException = canPerformAction("matching.exception");
+  const hasPurchaseOrderSubscription =
+    isCorporateScreenAllowed("PURCHASE_ORDER") &&
+    (isCorporateSectionEnabled("PURCHASE_ORDER_ALL") ||
+      isCorporateSectionEnabled("PURCHASE_ORDER_CREATE") ||
+      isCorporateSectionEnabled("PURCHASE_ORDER_UPLOAD"));
+  const hasGrnSubscription =
+    isCorporateScreenAllowed("GRN") && isCorporateSectionEnabled("GRN_ALL");
+  const canUseThreeWayMatching = hasPurchaseOrderSubscription && hasGrnSubscription;
 
   const [query, setQuery] = useState({
     page: 0,
@@ -288,7 +298,12 @@ const InvoiceMatching = () => {
     });
   const { data: grnsData = {}, isFetching: grnsLoading } = useGetAvailableGrnsQuery(
     matchForm.purchaseOrderId,
-    { skip: !showMatchDialog || !matchForm.purchaseOrderId },
+    {
+      skip:
+        !showMatchDialog ||
+        matchForm.matchType !== "THREE_WAY" ||
+        !matchForm.purchaseOrderId,
+    },
   );
 
   const [getInvoiceMatchingDetail] = useLazyGetInvoiceMatchingDetailQuery();
@@ -322,6 +337,31 @@ const InvoiceMatching = () => {
   const selectedInvoice = invoices.find((invoice) => invoice.id === matchForm.invoiceId);
   const selectedPo = purchaseOrders.find((po) => po.id === matchForm.purchaseOrderId);
   const selectedGrn = grns.find((grn) => grn.id === matchForm.grnId);
+  const availableMatchTypeOptions = canUseThreeWayMatching
+    ? MATCH_TYPE_OPTIONS
+    : MATCH_TYPE_OPTIONS.filter((option) => option.value !== "THREE_WAY");
+
+  useEffect(() => {
+    if (canUseThreeWayMatching) return;
+
+    if (query.matchType === "THREE_WAY") {
+      setQuery((current) => ({
+        ...current,
+        page: 0,
+        matchType: "ALL",
+      }));
+    }
+  }, [canUseThreeWayMatching, query.matchType]);
+
+  useEffect(() => {
+    if (canUseThreeWayMatching || matchForm.matchType !== "THREE_WAY") return;
+
+    setMatchForm((current) => ({
+      ...current,
+      matchType: "TWO_WAY",
+      grnId: "",
+    }));
+  }, [canUseThreeWayMatching, matchForm.matchType]);
 
   const refreshData = async () => {
     try {
@@ -742,7 +782,7 @@ const InvoiceMatching = () => {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {MATCH_TYPE_OPTIONS.map((option) => (
+            {availableMatchTypeOptions.map((option) => (
               <SelectItem key={option.value} value={option.value}>
                 {option.label}
               </SelectItem>
@@ -845,24 +885,31 @@ const InvoiceMatching = () => {
 
             <div className="space-y-2">
               <Label>Match Type</Label>
-              <Select
-                value={matchForm.matchType}
-                onValueChange={(matchType) =>
-                  setMatchForm((current) => ({
-                    ...current,
-                    matchType,
-                    grnId: matchType === "TWO_WAY" ? "" : current.grnId,
-                  }))
-                }
-              >
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="TWO_WAY">2-Way Matching</SelectItem>
-                  <SelectItem value="THREE_WAY">3-Way Matching</SelectItem>
-                </SelectContent>
-              </Select>
+              {canUseThreeWayMatching ? (
+                <Select
+                  value={matchForm.matchType}
+                  onValueChange={(matchType) =>
+                    setMatchForm((current) => ({
+                      ...current,
+                      matchType,
+                      grnId: matchType === "TWO_WAY" ? "" : current.grnId,
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="TWO_WAY">2-Way Matching</SelectItem>
+                    <SelectItem value="THREE_WAY">3-Way Matching</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="flex min-h-10 items-center justify-between rounded-md border bg-muted/40 px-3 text-sm">
+                  <span className="font-medium">2-Way Matching</span>
+                  <Badge variant="outline">Default</Badge>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2">

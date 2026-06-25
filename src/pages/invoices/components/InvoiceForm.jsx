@@ -42,6 +42,10 @@ import {
   useGetOrganisationGstCredentialsQuery,
 } from "../../../Services/apis/taxApi";
 import {
+  useGetAvailableGrnsQuery,
+  useGetAvailablePurchaseOrdersQuery,
+} from "../../../Services/apis/invoiceMatchingApi";
+import {
   formatTdsDisplayLabel,
   resolveTdsRate,
 } from "../utils/tds";
@@ -125,6 +129,32 @@ const RequiredLabel = ({ children, required = false, className = "" }) => (
 const resolveRoundOff = (data = {}) =>
   data.roundOff ?? data.round_off ?? data.roundoff;
 
+const getPageContent = (response) => {
+  if (Array.isArray(response)) return response;
+  if (Array.isArray(response?.content)) return response.content;
+  if (Array.isArray(response?.items)) return response.items;
+  if (Array.isArray(response?.data)) return response.data;
+  if (Array.isArray(response?.purchaseOrders)) return response.purchaseOrders;
+  if (Array.isArray(response?.grns)) return response.grns;
+  return [];
+};
+
+const normalizePurchaseOrderOption = (po = {}) => ({
+  ...po,
+  id: po.id ?? po.poId ?? po.po_id ?? po.purchaseOrderId ?? po.purchase_order_id,
+  poNumber: po.poNumber ?? po.po_number ?? po.number ?? "",
+  amount: Number(po.amount ?? po.poAmount ?? po.po_amount ?? 0),
+  currency: po.currency ?? DEFAULT_CURRENCY,
+});
+
+const normalizeGrnOption = (grn = {}) => ({
+  ...grn,
+  id: grn.id ?? grn.grnId ?? grn.grn_id,
+  grnNumber: grn.grnNumber ?? grn.grn_number ?? grn.number ?? "",
+  amount: Number(grn.amount ?? grn.grnAmount ?? grn.grn_amount ?? 0),
+  currency: grn.currency ?? DEFAULT_CURRENCY,
+});
+
 export const InvoiceForm = ({
   formData,
   setFormData,
@@ -165,6 +195,8 @@ export const InvoiceForm = ({
   TAX_RATES,
   showBillingGst = false,
   requireBillingGst = false,
+  showInvoiceMatching = false,
+  canUseThreeWayMatching = false,
 }) => {
   const {
     data: organisationGstCredentials = [],
@@ -316,17 +348,16 @@ export const InvoiceForm = ({
     setFormData,
   ]);
 
-  if (!formData) return null;
-  const showLineItems = resolveLineItemsExpanded(formData);
-  const invoiceCurrency = formData.currency || DEFAULT_CURRENCY;
+  const showLineItems = resolveLineItemsExpanded(formData || {});
+  const invoiceCurrency = formData?.currency || DEFAULT_CURRENCY;
   const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
-  const isGstinRequired = useInrTax && formData.gstTreatment !== "N/A";
+  const isGstinRequired = useInrTax && formData?.gstTreatment !== "N/A";
   const selectedBillingGst = organisationGstCredentials.find(
-    (entry) => entry.gst === String(formData.billingGstin || "").trim().toUpperCase(),
+    (entry) => entry.gst === String(formData?.billingGstin || "").trim().toUpperCase(),
   );
   const billingGstSatisfied = !requireBillingGst || Boolean(selectedBillingGst?.gst);
-  const isInvoiceLevelDiscount = formData.discountsLevel === INVOICE_LEVEL;
-  const isInvoiceLevelTax = formData.taxesLevel === INVOICE_LEVEL;
+  const isInvoiceLevelDiscount = formData?.discountsLevel === INVOICE_LEVEL;
+  const isInvoiceLevelTax = formData?.taxesLevel === INVOICE_LEVEL;
   const lineItemHeaders = lineItemTableHeader
     .filter(
       (column) =>
@@ -347,8 +378,43 @@ export const InvoiceForm = ({
       return column;
     });
   const formatAmount = (amount) => formatCurrency(amount, invoiceCurrency);
-  const totals = calculateTotals(formData.lineItems, invoiceCurrency);
-  const roundOffValue = resolveRoundOff(formData);
+  const totals = calculateTotals(formData?.lineItems || [], invoiceCurrency);
+  const invoiceMatchingPoQuery = useMemo(
+    () => ({
+      vendorName: String(formData?.vendorName || "").trim(),
+      amount: Number(totals.total || 0),
+    }),
+    [formData?.vendorName, totals.total],
+  );
+  const shouldLoadPurchaseOrders =
+    showInvoiceMatching &&
+    Boolean(invoiceMatchingPoQuery.vendorName) &&
+    invoiceMatchingPoQuery.amount > 0;
+  const {
+    data: availablePurchaseOrdersData = {},
+    isFetching: purchaseOrdersLoading,
+  } = useGetAvailablePurchaseOrdersQuery(invoiceMatchingPoQuery, {
+    skip: !shouldLoadPurchaseOrders,
+  });
+  const selectedMatchingPoId = formData?.matchingPurchaseOrderId || "";
+  const {
+    data: availableGrnsData = {},
+    isFetching: grnsLoading,
+  } = useGetAvailableGrnsQuery(selectedMatchingPoId, {
+    skip:
+      !showInvoiceMatching ||
+      !canUseThreeWayMatching ||
+      !selectedMatchingPoId,
+  });
+  const availablePurchaseOrders = useMemo(
+    () => getPageContent(availablePurchaseOrdersData).map(normalizePurchaseOrderOption),
+    [availablePurchaseOrdersData],
+  );
+  const availableGrns = useMemo(
+    () => getPageContent(availableGrnsData).map(normalizeGrnOption),
+    [availableGrnsData],
+  );
+  const roundOffValue = resolveRoundOff(formData || {});
   const totalTax = useInrTax
     ? (Number(totals.cgst) || 0) + (Number(totals.sgst) || 0) + (Number(totals.igst) || 0)
     : (totals.foreignTaxes || []).reduce(
@@ -372,11 +438,13 @@ export const InvoiceForm = ({
     0,
   );
   const lineItemsSummary = computeLineItemsSummary({
-    lineItems: formData.lineItems,
+    lineItems: formData?.lineItems || [],
     calculateLineItemSubtotal,
     isInvoiceLevelTax,
     useInrTax,
   });
+
+  if (!formData) return null;
 
   const applyVendorNameChange = (newName) => {
     const matched = findVendorByName(newName);
@@ -400,6 +468,8 @@ export const InvoiceForm = ({
       campaignName: "",
       referenceNumber: "",
       campaignReferenceNumber: "",
+      matchingPurchaseOrderId: "",
+      matchingGrnId: "",
       ...buildInvoiceTdsStateFromVendor(matched),
     });
   };
@@ -417,6 +487,8 @@ export const InvoiceForm = ({
       campaignName: "",
       referenceNumber: "",
       campaignReferenceNumber: "",
+      matchingPurchaseOrderId: "",
+      matchingGrnId: "",
       tds: "",
       tdsSectionId: null,
       tdsSectionCode: null,
@@ -1096,6 +1168,102 @@ export const InvoiceForm = ({
                 className="w-full min-h-[50px] rounded-md border border-input bg-background px-2 py-1.5 text-xs resize-none"
               />
             </div>
+
+            {showInvoiceMatching && (
+              <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <Label className="text-xs font-medium">Invoice Matching</Label>
+                    <p className="text-xs text-muted-foreground">
+                      Optional. Select a PO for 2-way matching; add a GRN for 3-way matching.
+                    </p>
+                  </div>
+                  {selectedMatchingPoId ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() =>
+                        setFormData({
+                          ...formData,
+                          matchingPurchaseOrderId: "",
+                          matchingGrnId: "",
+                        })
+                      }
+                    >
+                      <X className="mr-1 h-3 w-3" />
+                      Clear
+                    </Button>
+                  ) : null}
+                </div>
+                <div className={canUseThreeWayMatching ? "grid gap-3 md:grid-cols-2" : "grid gap-3"}>
+                  <div>
+                    <Label className="text-xs">Purchase Order</Label>
+                    <AppSelect
+                      value={selectedMatchingPoId}
+                      onChange={(event) =>
+                        setFormData({
+                          ...formData,
+                          matchingPurchaseOrderId: event.target.value,
+                          matchingGrnId: "",
+                        })
+                      }
+                      options={availablePurchaseOrders.map((po) => ({
+                        value: po.id,
+                        label: `${po.poNumber || "PO"} - ${formatAmount(po.amount)}`,
+                      }))}
+                      placeholder={
+                        !invoiceMatchingPoQuery.vendorName
+                          ? "Select vendor first"
+                          : purchaseOrdersLoading
+                            ? "Loading purchase orders..."
+                            : "Select purchase order"
+                      }
+                      className="h-8 text-sm"
+                      disabled={!shouldLoadPurchaseOrders || purchaseOrdersLoading}
+                    />
+                    {shouldLoadPurchaseOrders && !purchaseOrdersLoading && availablePurchaseOrders.length === 0 ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        No available purchase orders found for this vendor and invoice amount.
+                      </p>
+                    ) : null}
+                  </div>
+                  {canUseThreeWayMatching ? (
+                    <div>
+                      <Label className="text-xs">GRN</Label>
+                      <AppSelect
+                        value={formData.matchingGrnId || ""}
+                        onChange={(event) =>
+                          setFormData({
+                            ...formData,
+                            matchingGrnId: event.target.value,
+                          })
+                        }
+                        options={availableGrns.map((grn) => ({
+                          value: grn.id,
+                          label: `${grn.grnNumber || "GRN"} - ${formatAmount(grn.amount)}`,
+                        }))}
+                        placeholder={
+                          !selectedMatchingPoId
+                            ? "Select PO first"
+                            : grnsLoading
+                              ? "Loading GRNs..."
+                              : "Select GRN"
+                        }
+                        className="h-8 text-sm"
+                        disabled={!selectedMatchingPoId || grnsLoading}
+                      />
+                      {selectedMatchingPoId && !grnsLoading && availableGrns.length === 0 ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          No available GRNs found for the selected purchase order.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div>

@@ -124,6 +124,7 @@ import IntegrationSourceBadge from "../../components/integrations/IntegrationSou
 import useZohoIntegrationActive from "../../hooks/useZohoIntegrationActive";
 import { withIntegrationTableHeader } from "../../utils/integrationProvenance";
 import { useCurrencyFilter } from "../../hooks/useCurrencyFilter";
+import { usePerformInvoiceMatchMutation } from "../../Services/apis/invoiceMatchingApi";
 import {
   CURRENCY_SCREENS,
   DEFAULT_CURRENCY,
@@ -153,6 +154,22 @@ const getApprovalWorkflowName = (invoice) =>
   invoice.workflowName ??
   invoice.approvalWorkflow?.name ??
   "-";
+
+const extractInvoiceIdFromSaveResponse = (response) => {
+  const candidate =
+    response?.invoice ??
+    response?.data?.invoice ??
+    response?.data ??
+    response;
+  const id =
+    candidate?.id ??
+    candidate?.invoiceId ??
+    candidate?.invoice_id ??
+    response?.id ??
+    response?.invoiceId ??
+    response?.invoice_id;
+  return id !== undefined && id !== null ? String(id) : "";
+};
 
 const baseInvoiceTableHeader = [
   {
@@ -260,7 +277,23 @@ const InvoicesPage = () => {
     isCategoryFeatureEnabled,
     isCampaignFeatureEnabled,
     isCorporateAdmin,
+    isCorporateScreenAllowed,
+    isCorporateSectionEnabled,
   } = useRBAC();
+  const hasPurchaseOrderSubscription =
+    isCorporateScreenAllowed("PURCHASE_ORDER") &&
+    (isCorporateSectionEnabled("PURCHASE_ORDER_ALL") ||
+      isCorporateSectionEnabled("PURCHASE_ORDER_CREATE") ||
+      isCorporateSectionEnabled("PURCHASE_ORDER_UPLOAD"));
+  const hasGrnSubscription =
+    isCorporateScreenAllowed("GRN") && isCorporateSectionEnabled("GRN_ALL");
+  const isInvoiceMatchingEnabled =
+    isCorporateScreenAllowed("INVOICE_MATCHING") &&
+    isCorporateSectionEnabled("INVOICE_MATCHING_ALL");
+  const showInvoiceMatchingSelection =
+    isInvoiceMatchingEnabled && hasPurchaseOrderSubscription;
+  const canUseThreeWayMatching =
+    showInvoiceMatchingSelection && hasGrnSubscription;
   const { showIntegrationColumn } = useZohoIntegrationActive();
   const { data: corporateUserContext = null } =
     useGetCorporateUserDetailsQuery();
@@ -357,6 +390,8 @@ const InvoicesPage = () => {
   const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
   const [updateInvoice, { isLoading: updateInvoiceLoading }] =
     useUpdateInvoiceMutation();
+  const [performInvoiceMatch, { isLoading: invoiceMatchingLoading }] =
+    usePerformInvoiceMatchMutation();
   const [forwardInvoice, { isLoading: forwardInvoiceLoading }] =
     useForwardInvoiceMutation();
   const [deleteInvoice] = useDeleteInvoiceMutation();
@@ -1383,6 +1418,34 @@ const InvoicesPage = () => {
     );
   };
 
+  const maybePerformInvoiceMatching = async (invoiceId, sourceData, { skip = false } = {}) => {
+    const purchaseOrderId = String(sourceData?.matchingPurchaseOrderId || "").trim();
+    const grnId = String(sourceData?.matchingGrnId || "").trim();
+
+    if (skip || !showInvoiceMatchingSelection || !purchaseOrderId) return false;
+
+    if (!invoiceId) {
+      toast.error("Invoice saved, but matching could not run because invoice id was missing");
+      return false;
+    }
+
+    try {
+      await performInvoiceMatch({
+        invoiceId,
+        purchaseOrderId,
+        grnId: canUseThreeWayMatching && grnId ? grnId : null,
+        matchType: canUseThreeWayMatching && grnId ? "THREE_WAY" : "TWO_WAY",
+      }).unwrap();
+      return true;
+    } catch (error) {
+      toast.error(
+        extractApiErrorDetail(error) ||
+          "Invoice saved, but automatic matching failed",
+      );
+      return false;
+    }
+  };
+
   // Add vendor from scanned invoice data
   const handleAddVendorFromInvoice = async () => {
     if (!guardAction("invoices.addVendor")) return;
@@ -1600,6 +1663,7 @@ const InvoicesPage = () => {
     if (!validateMandatoryPayload(formData)) return;
 
     try {
+      let createResponse = null;
       if (uploadedFile) {
         const multipartPayload = buildMultipartPayload(
           invoicePayload,
@@ -1614,12 +1678,22 @@ const InvoicesPage = () => {
             ),
           },
         );
-        await createInvoice(multipartPayload).unwrap();
+        createResponse = await createInvoice(multipartPayload).unwrap();
       } else {
-        await createInvoice(invoicePayload).unwrap();
+        createResponse = await createInvoice(invoicePayload).unwrap();
       }
 
-      toast.success("Invoice added successfully");
+      const matched = await maybePerformInvoiceMatching(
+        extractInvoiceIdFromSaveResponse(createResponse),
+        formData,
+        { skip: isSavedInvoiceStatus(createStatus) },
+      );
+
+      toast.success(
+        matched
+          ? "Invoice added and matching performed"
+          : "Invoice added successfully",
+      );
       resetUploadWorkspace();
     } catch (error) {
       const errorMessage =
@@ -1713,14 +1787,21 @@ const InvoicesPage = () => {
     }
 
     try {
-      await updateInvoice({
+      const updateResponse = await updateInvoice({
         id: selectedInvoice.id,
         body: buildUpdateInvoiceBody(formData, { keepSaved: isSavedDraft }),
       }).unwrap();
+      const matched = await maybePerformInvoiceMatching(
+        extractInvoiceIdFromSaveResponse(updateResponse) || selectedInvoice.id,
+        formData,
+        { skip: isSavedDraft },
+      );
 
       toast.success(
         isSavedDraft
           ? "Draft saved successfully"
+          : matched
+            ? "Invoice updated and matching performed"
           : "Invoice updated successfully",
       );
       setEditDialogOpen(false);
@@ -1755,7 +1836,7 @@ const InvoicesPage = () => {
     if (!validateSavedInvoiceEdit(formData, { requireBillingGst: true })) return;
 
     try {
-      await updateInvoice({
+      const updateResponse = await updateInvoice({
         id: selectedInvoice.id,
         body: buildUpdateInvoiceBody(formData),
       }).unwrap();
@@ -1765,7 +1846,16 @@ const InvoicesPage = () => {
         action: "forward",
       }).unwrap();
 
-      toast.success("Invoice submitted to checker");
+      const matched = await maybePerformInvoiceMatching(
+        extractInvoiceIdFromSaveResponse(updateResponse) || selectedInvoice.id,
+        formData,
+      );
+
+      toast.success(
+        matched
+          ? "Invoice submitted and matching performed"
+          : "Invoice submitted to checker",
+      );
       setEditDialogOpen(false);
       setSelectedInvoice(null);
       setFormData(null);
@@ -1847,7 +1937,8 @@ const InvoicesPage = () => {
                     invoiceMandatoryFields,
                     mandatoryFieldOptions,
                   ) &&
-                  Boolean(formData?.billingGstin))
+                  Boolean(formData?.billingGstin) &&
+                  !invoiceMatchingLoading)
             : canManageInvoices &&
               !invoiceMandatoryFieldsLoading &&
               isInvoiceMandatoryFieldsSatisfied(
@@ -1857,7 +1948,8 @@ const InvoicesPage = () => {
               ) &&
               (!uploadedFile || Boolean(formData?.billingGstin)) &&
               (Boolean(formData?.vendorId) ||
-                Boolean(formData?.vendorRequestSubmitted))
+                Boolean(formData?.vendorRequestSubmitted)) &&
+              !invoiceMatchingLoading
         }
         departmentMandatory={invoiceMandatoryFields.department}
         categoryMandatory={invoiceMandatoryFields.category}
@@ -1877,6 +1969,8 @@ const InvoicesPage = () => {
         TAX_RATES={TAX_RATES}
         showBillingGst={isEdit || Boolean(uploadedFile)}
         requireBillingGst={(isEdit && !isSavedDraft) || Boolean(uploadedFile)}
+        showInvoiceMatching={showInvoiceMatchingSelection}
+        canUseThreeWayMatching={canUseThreeWayMatching}
       />
     );
   };
@@ -1886,7 +1980,8 @@ const InvoicesPage = () => {
     Boolean(selectedInvoice) &&
     isSavedInvoiceStatus(selectedInvoice?.status) &&
     canForwardSavedInvoice(selectedInvoice, invoiceEditContext) &&
-    canSubmitSavedDraft(formData);
+    canSubmitSavedDraft(formData) &&
+    !invoiceMatchingLoading;
 
   const {
     total: invoiceTotal = 0,
@@ -2395,7 +2490,7 @@ const InvoicesPage = () => {
         handleForwardSavedInvoice={handleForwardSavedInvoice}
         canForwardSavedDraft={canForwardSavedDraft}
         forwardSavedInvoiceLoading={
-          updateInvoiceLoading || forwardInvoiceLoading
+          updateInvoiceLoading || forwardInvoiceLoading || invoiceMatchingLoading
         }
         renderInvoiceForm={renderInvoiceForm}
         requestVendorOpen={requestVendorOpen}
