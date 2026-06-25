@@ -36,6 +36,9 @@ import {
   getVisibleVendorDocumentTypes,
   hasVisibleVendorDocuments,
 } from "../../utils/vendorDocumentConfig";
+import {
+  isVendorPortalFetchEnabled,
+} from "../../utils/vendorVerificationConfig";
 import { getVendorTdsValidationErrors } from "../../pages/vendors/utils/vendorTds";
 
 const CATEGORY_OPTIONS = [
@@ -136,11 +139,14 @@ const GstRegistrationsEditor = ({
   registrations,
   onUpdate,
   onRemove,
+  portalFetchEnabled = false,
 }) => {
   if (!registrations.length) {
     return (
       <div className="rounded-lg border border-dashed border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
-        No GSTINs added yet. Use Fetch Details above or add a GSTIN block manually.
+        {portalFetchEnabled
+          ? "No GSTINs added yet. Use Fetch Details above or add a GSTIN block manually."
+          : "No GSTINs added yet. Add a GSTIN block manually."}
       </div>
     );
   }
@@ -451,6 +457,12 @@ const VendorDetailsDialog = ({
   const showVendorDocumentsSection =
     !invoiceVendorRequest &&
     hasVisibleVendorDocuments(activeVendorDocuments, vendorDocumentConfiguration);
+  const activeVendorVerification = corporateScreens?.activeVendorVerification;
+  const portalVerificationEnabled = isVendorPortalFetchEnabled(activeVendorVerification);
+  const panVerificationEnabled = portalVerificationEnabled;
+  const gstVerificationEnabled = portalVerificationEnabled;
+  const showPortalFetch =
+    !invoiceVendorRequest && portalVerificationEnabled;
 
   const { data: availableCurrencies = [] } = useGetAvailableCurrenciesQuery(
     CURRENCY_SCREENS.INVOICE,
@@ -500,7 +512,9 @@ const VendorDetailsDialog = ({
   const [selectedFetchedGstins, setSelectedFetchedGstins] = useState(() => new Set());
 
   const hasPanForFetch = Boolean(String(formData?.pan || "").trim());
-  const fetchUsesPan = fetchInputMode === "pan";
+  const fetchUsesPan = panVerificationEnabled && fetchInputMode === "pan";
+  const canToggleFetchMode =
+    panVerificationEnabled && gstVerificationEnabled && hasPanForFetch;
   const { fetchVendorDetails, isLoading: isFetchLoading } = useVendorGstDetailsFetch();
 
   const clearFetchResults = () => {
@@ -511,6 +525,8 @@ const VendorDetailsDialog = ({
   };
 
   const switchFetchInputMode = (mode) => {
+    if (mode === "pan" && !panVerificationEnabled) return;
+    if (mode === "gstin" && !gstVerificationEnabled) return;
     if (mode === fetchInputMode) return;
     setFetchInputMode(mode);
     clearFetchResults();
@@ -531,8 +547,23 @@ const VendorDetailsDialog = ({
     }
 
     const hasPan = Boolean(String(formData?.pan || "").trim());
-    setFetchInputMode(hasPan ? "pan" : "gstin");
-  }, [open]);
+    if (panVerificationEnabled && hasPan) {
+      setFetchInputMode("pan");
+    } else if (gstVerificationEnabled) {
+      setFetchInputMode("gstin");
+    } else if (panVerificationEnabled) {
+      setFetchInputMode("pan");
+    } else {
+      setFetchInputMode("gstin");
+    }
+  }, [open, panVerificationEnabled, gstVerificationEnabled]);
+
+  useEffect(() => {
+    if (!showPortalFetch) {
+      clearFetchResults();
+      setFetchGstinQuery("");
+    }
+  }, [showPortalFetch]);
 
   useEffect(() => {
     if (!open || !formData?.gstin) return;
@@ -574,6 +605,7 @@ const VendorDetailsDialog = ({
 
     const gstErrors = getVendorGstVerificationErrors(formData, gstVerification, {
       invoiceVendorRequest,
+      gstVerificationEnabled,
     });
     if (gstErrors.length > 0) {
       setGstVerificationAttempted(true);
@@ -614,7 +646,7 @@ const VendorDetailsDialog = ({
   const gstVerificationSatisfied = isVendorGstVerificationSatisfied(
     formData,
     gstVerification,
-    { invoiceVendorRequest },
+    { invoiceVendorRequest, gstVerificationEnabled },
   );
   const currencyOptions =
     Array.isArray(availableCurrencies) && availableCurrencies.length > 0
@@ -717,6 +749,10 @@ const VendorDetailsDialog = ({
   };
 
   const handleFetchDetails = async () => {
+    if (!showPortalFetch) return;
+    if (fetchUsesPan && !panVerificationEnabled) return;
+    if (!fetchUsesPan && !gstVerificationEnabled) return;
+
     const fetchParams = fetchUsesPan
       ? { pan: formData.pan }
       : { gstin: fetchGstinQuery };
@@ -983,7 +1019,9 @@ const VendorDetailsDialog = ({
             title={isIndia && !invoiceVendorRequest ? "Tax & GSTIN details" : "Tax information"}
             description={
               isIndia && !invoiceVendorRequest
-                ? "Fetch vendor details from the GST portal by PAN or a specific GSTIN."
+                ? showPortalFetch
+                  ? "Fetch vendor details from the GST portal by PAN or GSTIN."
+                  : "Enter tax identifiers and GSTIN details manually."
                 : invoiceVendorRequest
                   ? "Optional tax details. GST will be verified when the vendor is approved."
                   : "Enter tax identifiers for this vendor."
@@ -991,6 +1029,7 @@ const VendorDetailsDialog = ({
           >
             {isIndia && !invoiceVendorRequest ? (
               <div className="space-y-4">
+                {showPortalFetch ? (
                 <div className="rounded-lg border border-primary/20 bg-primary/5 p-4">
                   <div className="mb-3">
                     <h4 className="text-sm font-semibold text-foreground">Fetch Vendor Details</h4>
@@ -999,7 +1038,7 @@ const VendorDetailsDialog = ({
                         ? "Fetch will load all GSTINs registered under the PAN entered above."
                         : "Enter a GSTIN to fetch that registration and linked vendor identity."}
                     </p>
-                    {hasPanForFetch ? (
+                    {canToggleFetchMode ? (
                       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
                         <button
                           type="button"
@@ -1035,7 +1074,7 @@ const VendorDetailsDialog = ({
                           {String(formData.pan || "").trim().toUpperCase()}
                         </span>
                       </div>
-                    ) : (
+                    ) : gstVerificationEnabled ? (
                       <div>
                         <Label htmlFor="vendor-fetch-gstin">GSTIN for lookup</Label>
                         <Input
@@ -1052,7 +1091,7 @@ const VendorDetailsDialog = ({
                           data-testid="vendor-fetch-gstin-input"
                         />
                       </div>
-                    )}
+                    ) : null}
                     <div className="flex justify-end">
                       <Button
                         type="button"
@@ -1104,6 +1143,7 @@ const VendorDetailsDialog = ({
                     />
                   </div>
                 </div>
+                ) : null}
                 <div className="flex items-center gap-2">
                   <Checkbox
                     id="vendor-msme"
@@ -1121,7 +1161,9 @@ const VendorDetailsDialog = ({
                     <div>
                       <h4 className="text-sm font-semibold text-foreground">GSTIN Details</h4>
                       <p className="text-xs text-muted-foreground">
-                        Review fetch results above and add selected GSTINs, or add GSTIN blocks manually.
+                        {showPortalFetch
+                          ? "Review fetch results above and add selected GSTINs, or add GSTIN blocks manually."
+                          : "Add GSTIN blocks manually."}
                       </p>
                     </div>
                     <Button type="button" variant="outline" size="sm" onClick={addManualGstRegistration}>
@@ -1133,6 +1175,7 @@ const VendorDetailsDialog = ({
                     registrations={gstRegistrations}
                     onUpdate={updateGstRegistration}
                     onRemove={removeGstRegistration}
+                    portalFetchEnabled={showPortalFetch}
                   />
                 </div>
               </div>
@@ -1295,7 +1338,10 @@ const VendorDetailsDialog = ({
               type="submit"
               className="flex-1"
               data-testid="vendor-submit-button"
-              disabled={submitting || (isIndia && !invoiceVendorRequest && !gstVerificationSatisfied)}
+              disabled={
+                submitting ||
+                (isIndia && !invoiceVendorRequest && gstVerificationEnabled && !gstVerificationSatisfied)
+              }
             >
               {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {submitting ? "Saving…" : submitLabel}

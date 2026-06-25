@@ -1,5 +1,6 @@
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../utils/currency";
 import { normalizeMsmePaymentDue } from "../../pages/invoices/utils/msmePaymentDue";
+import { normalizeInvoiceOverdueFields } from "../../pages/invoices/utils/invoiceDueDate";
 
 const toLocalDateTimeString = (value) => {
   if (!value) return value;
@@ -186,6 +187,7 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
       : [],
     invoiceDate: pickInvoiceField(invoice, "invoiceDate", "invoice_date"),
     dueDate: pickInvoiceField(invoice, "dueDate", "due_date"),
+    ...normalizeInvoiceOverdueFields(invoice),
     amount: invoice.amount ?? invoice.netAmount ?? invoice.net_amount,
     memo: invoice.memo ?? invoice.description,
     billingAddress:

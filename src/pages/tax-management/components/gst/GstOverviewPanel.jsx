@@ -22,12 +22,46 @@ import {
 } from '../TaxUi';
 import { useGetGstSummaryQuery } from '../../../../Services/apis/taxApi';
 import { mapGstSummaryToOverviewKpis } from '../../utils/gstApiMappers';
+import { GST_TAB_VALUES, isGstTabEnabled } from '../../../../utils/gstConfiguration';
 
-const GstOverviewPanel = ({ onGotoTab }) => {
+const GstOverviewPanel = ({ onGotoTab, activeGstConfiguration = [] }) => {
   const { data: summary, isLoading, isFetching, isError, refetch } = useGetGstSummaryQuery();
 
   const kpis = useMemo(() => mapGstSummaryToOverviewKpis(summary ?? {}), [summary]);
   const loading = isLoading || isFetching;
+
+  const quickActions = useMemo(() => {
+    const actions = [];
+
+    if (isGstTabEnabled(GST_TAB_VALUES.RECONCILIATION, activeGstConfiguration)) {
+      actions.push(
+        { label: 'Run GSTR-2A Reconciliation', icon: ArrowUpDown, onClick: () => onGotoTab?.(GST_TAB_VALUES.RECONCILIATION) },
+        { label: 'Run GSTR-2B Reconciliation', icon: FileCheck, onClick: () => onGotoTab?.(GST_TAB_VALUES.RECONCILIATION) },
+      );
+    }
+
+    if (isGstTabEnabled(GST_TAB_VALUES.RETURNS, activeGstConfiguration)) {
+      actions.push({ label: 'Track GST Returns', icon: Calendar, onClick: () => onGotoTab?.(GST_TAB_VALUES.RETURNS) });
+    }
+
+    if (isGstTabEnabled(GST_TAB_VALUES.DOCUMENTS, activeGstConfiguration)) {
+      actions.push({ label: 'View Documents', icon: FileText, onClick: () => onGotoTab?.(GST_TAB_VALUES.DOCUMENTS) });
+    }
+
+    actions.push(
+      {
+        label: 'Refresh GST Data',
+        icon: RefreshCw,
+        onClick: async () => {
+          await refetch();
+          toast.success('GST summary refreshed');
+        },
+      },
+      { label: 'Download GST Report', icon: Download, onClick: () => toast.success('GST report download started') },
+    );
+
+    return actions;
+  }, [activeGstConfiguration, onGotoTab, refetch]);
 
   return (
     <TabsContent value="overview" className="space-y-6">
@@ -62,23 +96,7 @@ const GstOverviewPanel = ({ onGotoTab }) => {
         </TaxSectionCard>
 
         <TaxSectionCard icon={Zap} title="Quick Actions" description="Jump to common GST workflows.">
-          <TaxQuickActions
-            actions={[
-              { label: 'Run GSTR-2A Reconciliation', icon: ArrowUpDown, onClick: () => onGotoTab?.('reconciliation') },
-              { label: 'Run GSTR-2B Reconciliation', icon: FileCheck, onClick: () => onGotoTab?.('reconciliation') },
-              { label: 'Track GST Returns', icon: Calendar, onClick: () => onGotoTab?.('returns') },
-              { label: 'View Documents', icon: FileText, onClick: () => onGotoTab?.('documents') },
-              {
-                label: 'Refresh GST Data',
-                icon: RefreshCw,
-                onClick: async () => {
-                  await refetch();
-                  toast.success('GST summary refreshed');
-                },
-              },
-              { label: 'Download GST Report', icon: Download, onClick: () => toast.success('GST report download started') },
-            ]}
-          />
+          <TaxQuickActions actions={quickActions} />
         </TaxSectionCard>
       </div>
     </TabsContent>

@@ -91,7 +91,8 @@ import {
   getInvoiceTaxAmount,
   getInvoiceTdsAmount,
 } from "./utils/invoiceAmounts";
-import { getMsmeDueDateValidationErrorForInvoice } from "./utils/msmePaymentDue";
+import { getInvoiceDueDateValidationErrorForInvoice } from "./utils/msmePaymentDue";
+import InvoiceDueDateCell from "./components/InvoiceDueDateCell";
 import { Sparkles, Eye, Mail, Pencil, Search, Trash2 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -225,6 +226,12 @@ const baseInvoiceTableHeader = [
     title: "Invoice Date",
     headerClassName: "p-3 text-left text-xs font-medium",
     cellClassName: "p-3 text-xs text-muted-foreground whitespace-nowrap",
+  },
+  {
+    key: "dueDate",
+    title: "Due Date",
+    headerClassName: "p-3 text-left text-xs font-medium",
+    cellClassName: "p-3 text-xs whitespace-nowrap",
   },
   {
     key: "status",
@@ -1288,7 +1295,7 @@ const InvoicesPage = () => {
   };
 
   const validateMandatoryPayload = (payload) => {
-    const msmeDueDateError = getMsmeDueDateValidationErrorForInvoice(payload, {
+    const msmeDueDateError = getInvoiceDueDateValidationErrorForInvoice(payload, {
       findVendorById,
       findVendorByName,
     });
@@ -1960,6 +1967,18 @@ const InvoicesPage = () => {
             value = invoice.invoiceDate
               ? format(new Date(invoice.invoiceDate), "dd MMM yy")
               : "-";
+            break;
+          case "dueDate":
+            value = (
+              <InvoiceDueDateCell
+                invoice={invoice}
+                formattedDueDate={
+                  invoice.dueDate
+                    ? format(new Date(invoice.dueDate), "dd MMM yy")
+                    : "-"
+                }
+              />
+            );
             break;
           case "status":
             value = (

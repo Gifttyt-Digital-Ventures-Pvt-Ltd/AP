@@ -12,6 +12,7 @@ import PaymentBatchesCard from "./components/PaymentBatchesCard";
 import RecentInvoicesCard from "./components/RecentInvoicesCard";
 import TopVendorsCard from "./components/TopVendorsCard";
 import PendingApprovalsAlert from "./components/PendingApprovalsAlert";
+import OverdueInvoicesAlert from "./components/OverdueInvoicesAlert";
 import InvoiceStatusSummaryCard from "./components/InvoiceStatusSummaryCard";
 import PaymentSummaryCard from "./components/PaymentSummaryCard";
 
@@ -22,6 +23,8 @@ const Dashboard = () => {
     bottleneck,
     recentInvoices,
     pendingApprovals,
+    overdueInvoices,
+    overdueSummary,
     paymentBatchStats,
     showPaymentBatches,
     loading,
@@ -86,10 +89,17 @@ const Dashboard = () => {
         formatCompactCurrency={formatCompactCurrency}
       />
 
-      <PendingApprovalsAlert
-        pendingApprovals={pendingApprovals}
-        formatFullCurrency={formatFullCurrency}
-      />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <OverdueInvoicesAlert
+          overdueInvoices={overdueInvoices}
+          overdueSummary={overdueSummary}
+          formatFullCurrency={formatFullCurrency}
+        />
+        <PendingApprovalsAlert
+          pendingApprovals={pendingApprovals}
+          formatFullCurrency={formatFullCurrency}
+        />
+      </div>
       <PaymentProgressCard
         paidValue={paidValue}
         totalValue={totalValue}

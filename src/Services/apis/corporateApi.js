@@ -9,11 +9,23 @@ import {
   DEFAULT_VENDOR_FIELD_CATALOG,
   normalizeActiveVendorFields,
   normalizeVendorFieldCatalog,
+  normalizeVendorFieldSection,
+  VENDOR_VERIFICATION_SECTION_IDS,
 } from "../../utils/vendorFieldConfig";
 import {
   normalizeActiveVendorDocuments,
   normalizeVendorDocumentCatalog,
 } from "../../utils/vendorDocumentConfig";
+import {
+  normalizeVendorVerificationCatalog,
+  resolveActiveVendorVerification,
+} from "../../utils/vendorVerificationConfig";
+import {
+  DEFAULT_GST_CONFIGURATION,
+  normalizeActiveGstConfiguration,
+  normalizeGstConfigurationCatalog,
+  resolveActiveGstConfiguration,
+} from "../../utils/gstConfiguration";
 import {
   isTokenBasedSubscription,
   normalizeSubscriptionModel,
@@ -337,12 +349,47 @@ const normalizeCorporateScreensResponse = (response = {}) => {
     response && 'activeVendorDocuments' in response
       ? normalizeActiveVendorDocuments(response.activeVendorDocuments)
       : undefined;
+  const vendorVerificationConfigurationFromApi = normalizeVendorVerificationCatalog(
+    toArray(response?.vendorVerificationConfiguration ?? response?.vendor_verification_configuration),
+  );
+  const vendorVerificationConfigurationFromFields = normalizeVendorVerificationCatalog(
+    vendorFieldConfiguration.filter((item) =>
+      VENDOR_VERIFICATION_SECTION_IDS.has(normalizeVendorFieldSection(item?.section)),
+    ),
+  );
+  const vendorVerificationConfiguration =
+    vendorVerificationConfigurationFromApi.length > 0
+      ? vendorVerificationConfigurationFromApi
+      : vendorVerificationConfigurationFromFields.length > 0
+        ? vendorVerificationConfigurationFromFields
+        : undefined;
+  const hasExplicitActiveVendorVerification = Boolean(
+    response &&
+      ('activeVendorVerification' in response || 'active_vendor_verification' in response),
+  );
+  const activeVendorVerification = resolveActiveVendorVerification({
+    activeVendorVerification:
+      response?.activeVendorVerification ?? response?.active_vendor_verification,
+    hasExplicitActiveVendorVerification,
+  });
   const invoiceConfiguration = normalizeInvoiceConfigurationCatalog(
     toArray(response?.invoiceConfiguration),
   );
   const activeInvoiceConfiguration = normalizeActiveInvoiceConfiguration(
     response?.activeInvoiceConfiguration,
   );
+  const gstConfiguration = normalizeGstConfigurationCatalog(
+    toArray(response?.gstConfiguration ?? response?.gst_configuration),
+  );
+  const hasExplicitActiveGstConfiguration = Boolean(
+    response &&
+      ('activeGstConfiguration' in response || 'active_gst_configuration' in response),
+  );
+  const activeGstConfiguration = resolveActiveGstConfiguration({
+    activeGstConfiguration:
+      response?.activeGstConfiguration ?? response?.active_gst_configuration,
+    hasExplicitActiveGstConfiguration,
+  });
 
   return {
     raw: response ?? null,
@@ -364,11 +411,20 @@ const normalizeCorporateScreensResponse = (response = {}) => {
         ? vendorDocumentConfiguration
         : undefined,
     activeVendorDocuments,
+    vendorVerificationConfiguration:
+      vendorVerificationConfiguration?.length > 0
+        ? vendorVerificationConfiguration
+        : undefined,
+    activeVendorVerification,
     invoiceConfiguration:
       invoiceConfiguration.length > 0
         ? invoiceConfiguration
         : DEFAULT_INVOICE_CONFIGURATION,
     activeInvoiceConfiguration,
+    gstConfiguration:
+      gstConfiguration.length > 0 ? gstConfiguration : DEFAULT_GST_CONFIGURATION,
+    activeGstConfiguration,
+    hasExplicitActiveGstConfiguration,
   };
 };
 

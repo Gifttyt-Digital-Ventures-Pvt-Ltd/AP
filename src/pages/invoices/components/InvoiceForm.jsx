@@ -47,10 +47,10 @@ import {
 } from "../utils/tds";
 import { buildInvoiceTdsStateFromVendor } from "../../vendors/utils/vendorTds";
 import TdsSelectionField from "./TdsSelectionField";
-import MsmePaymentDueBadge from "./MsmePaymentDueBadge";
+import InvoiceDueDateIndicators from "./InvoiceDueDateIndicators";
 import {
-  capMsmeDueDate,
   computeMsmeMaxDueDate,
+  normalizeDueDateForInvoice,
   normalizeMsmePaymentDue,
 } from "../utils/msmePaymentDue";
 
@@ -391,7 +391,7 @@ export const InvoiceForm = ({
       gstin: matched?.gstin
         ? String(matched.gstin).trim().toUpperCase()
         : formData.gstin,
-      dueDate: capMsmeDueDate({
+      dueDate: normalizeDueDateForInvoice({
         invoiceDate: formData.invoiceDate,
         dueDate: formData.dueDate,
         vendorIsMsme: matchedIsMsme,
@@ -836,7 +836,7 @@ export const InvoiceForm = ({
                     setFormData((prev) => ({
                       ...prev,
                       invoiceDate,
-                      dueDate: capMsmeDueDate({
+                      dueDate: normalizeDueDateForInvoice({
                         invoiceDate,
                         dueDate: prev.dueDate,
                         vendorIsMsme,
@@ -857,7 +857,7 @@ export const InvoiceForm = ({
                     const dueDate = e.target.value;
                     setFormData((prev) => ({
                       ...prev,
-                      dueDate: capMsmeDueDate({
+                      dueDate: normalizeDueDateForInvoice({
                         invoiceDate: prev.invoiceDate,
                         dueDate,
                         vendorIsMsme,
@@ -866,7 +866,7 @@ export const InvoiceForm = ({
                   }}
                   className="h-8 text-sm"
                 />
-                {isEdit ? <MsmePaymentDueBadge invoice={formData} className="mt-2" /> : null}
+                {isEdit ? <InvoiceDueDateIndicators invoice={formData} className="mt-2" /> : null}
               </div>
             </div>
 

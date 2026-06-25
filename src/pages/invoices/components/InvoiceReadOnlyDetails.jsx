@@ -15,9 +15,11 @@ import { parseNumericInput } from "../utils/numericInput";
 import { formatTdsDisplayLabel, resolveTdsRate } from "../utils/tds";
 import LineItemsSummary, { LineItemsSectionHeader } from "./LineItemsSummary";
 import MsmePaymentDueBadge from "./MsmePaymentDueBadge";
+import InvoiceDueDateIndicators from "./InvoiceDueDateIndicators";
 import {
   normalizeMsmePaymentDue,
 } from "../utils/msmePaymentDue";
+import { computeLineItemsSummary, resolveLineItemsExpanded } from "../utils/lineItemsSummary";
 
 const formatDisplayDate = (value) => {
   if (!value) return "-";
@@ -214,7 +216,7 @@ const InvoiceReadOnlyDetails = ({
           <DetailField label="Billing Date" value={formatDisplayDate(formData.invoiceDate)} />
           <div>
             <DetailField label="Due Date" value={formatDisplayDate(formData.dueDate)} />
-            <MsmePaymentDueBadge invoice={invoice} className="mt-1" />
+            <InvoiceDueDateIndicators invoice={invoice} className="mt-1" />
             {msmePaymentDue.vendorIsMsme && msmePaymentDue.msmeMaxDueDate ? (
               <p className="mt-1 text-xs text-muted-foreground">
                 MSME max due date: {formatDisplayDate(msmePaymentDue.msmeMaxDueDate)}

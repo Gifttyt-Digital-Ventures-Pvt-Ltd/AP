@@ -1,4 +1,8 @@
 import { addDays, format, isValid, parseISO } from 'date-fns';
+import {
+  clampDueDateToInvoiceDate,
+  getInvoiceDueDateOrderValidationError,
+} from './invoiceDueDate';
 
 export const MSME_MAX_PAYMENT_DAYS = 45;
 
@@ -39,14 +43,26 @@ export const resolveVendorIsMsme = (payload = {}, vendor = null) =>
   );
 
 export const capMsmeDueDate = ({ invoiceDate, dueDate, vendorIsMsme } = {}) => {
-  if (!vendorIsMsme) return dueDate || '';
+  const clampedDueDate = clampDueDateToInvoiceDate({ invoiceDate, dueDate });
+  if (!vendorIsMsme) return clampedDueDate || '';
 
   const maxDueDate = computeMsmeMaxDueDate(invoiceDate);
-  if (!maxDueDate) return dueDate || '';
-  if (!dueDate) return dueDate || '';
+  if (!maxDueDate) return clampedDueDate || '';
+  if (!clampedDueDate) return clampedDueDate || '';
 
-  return dueDate > maxDueDate ? maxDueDate : dueDate;
+  return clampedDueDate > maxDueDate ? maxDueDate : clampedDueDate;
 };
+
+export const normalizeDueDateForInvoice = ({
+  invoiceDate,
+  dueDate,
+  vendorIsMsme,
+} = {}) =>
+  capMsmeDueDate({
+    invoiceDate,
+    dueDate: clampDueDateToInvoiceDate({ invoiceDate, dueDate }),
+    vendorIsMsme,
+  });
 
 export const getMsmeDueDateValidationError = ({
   invoiceDate,
@@ -81,6 +97,19 @@ export const getMsmeDueDateValidationErrorForInvoice = (
     dueDate: payload.dueDate,
     vendorIsMsme: resolveVendorIsMsme(payload, vendor),
   });
+};
+
+export const getInvoiceDueDateValidationErrorForInvoice = (
+  payload = {},
+  options = {},
+) => {
+  const orderError = getInvoiceDueDateOrderValidationError({
+    invoiceDate: payload.invoiceDate,
+    dueDate: payload.dueDate,
+  });
+  if (orderError) return orderError;
+
+  return getMsmeDueDateValidationErrorForInvoice(payload, options);
 };
 
 export const normalizeMsmePaymentDue = (invoice = {}) => {

@@ -1,5 +1,6 @@
 import { format } from "date-fns";
-import { capMsmeDueDate, normalizeMsmePaymentDue, resolveVendorIsMsme } from "./msmePaymentDue";
+import { normalizeDueDateForInvoice, normalizeMsmePaymentDue, resolveVendorIsMsme } from "./msmePaymentDue";
+import { normalizeInvoiceOverdueFields } from "./invoiceDueDate";
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../../utils/currency";
 import {
   createDefaultLineItem,
@@ -81,7 +82,7 @@ export const buildInvoiceEditFormData = (
     invoice.location || invoice.placeOfSupply || invoice.placeOfSupply || "";
 
   const invoiceDate = formatInvoiceDateInput(invoice.invoiceDate ?? invoice.invoiceDate);
-  const dueDate = capMsmeDueDate({
+  const dueDate = normalizeDueDateForInvoice({
     invoiceDate,
     dueDate: formatInvoiceDateInput(invoice.dueDate ?? invoice.dueDate),
     vendorIsMsme: resolveVendorIsMsme(invoice, vendor),
@@ -193,5 +194,6 @@ export const buildInvoiceEditFormData = (
           referenceNumber: "",
         }),
     ...normalizeMsmePaymentDue(invoice),
+    ...normalizeInvoiceOverdueFields(invoice),
   };
 };

@@ -72,7 +72,7 @@ import {
   buildVendorRequestForm,
   createEmptyVendorRequestForm,
 } from "../utils/invoiceBulkUtils";
-import { getMsmeDueDateValidationErrorForInvoice } from "../utils/msmePaymentDue";
+import { getInvoiceDueDateValidationErrorForInvoice } from "../utils/msmePaymentDue";
 import { useCurrencyFilter } from "../../../hooks/useCurrencyFilter";
 import { CURRENCY_SCREENS } from "../../../utils/currency";
 import { getInvoiceVendorRequestValidationErrors } from "../../../utils/vendorValidation";
@@ -381,7 +381,7 @@ const InvoiceSingleUploadLayer = ({
   };
 
   const validateMandatoryPayload = (payload) => {
-    const msmeDueDateError = getMsmeDueDateValidationErrorForInvoice(payload, {
+    const msmeDueDateError = getInvoiceDueDateValidationErrorForInvoice(payload, {
       findVendorById,
       findVendorByName,
     });
