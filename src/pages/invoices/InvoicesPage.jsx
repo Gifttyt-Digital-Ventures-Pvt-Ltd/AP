@@ -386,7 +386,8 @@ const InvoicesPage = () => {
   const [bulkUploadInvoices] = useBulkUploadInvoicesMutation();
   const [requestVendorAddition, { isLoading: requestVendorLoading }] =
     useRequestVendorAdditionMutation();
-  const [createInvoice] = useCreateInvoiceMutation();
+  const [createInvoice, { isLoading: createInvoiceLoading }] =
+    useCreateInvoiceMutation();
   const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
   const [updateInvoice, { isLoading: updateInvoiceLoading }] =
     useUpdateInvoiceMutation();
@@ -1924,6 +1925,11 @@ const InvoicesPage = () => {
         setActiveTab={setActiveTab}
         handleUpdateInvoice={handleUpdateInvoice}
         handleAddInvoice={handleAddInvoice}
+        isSubmitting={
+          isEdit
+            ? updateInvoiceLoading || invoiceMatchingLoading
+            : createInvoiceLoading || invoiceMatchingLoading
+        }
         canAddVendor={canAddVendors}
         canSubmit={
           isEdit

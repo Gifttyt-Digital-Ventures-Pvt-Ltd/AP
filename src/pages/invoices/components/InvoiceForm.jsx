@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Building2, CheckCircle2, ChevronsUpDown, Plus, X } from "lucide-react";
+import { Building2, CheckCircle2, ChevronsUpDown, Loader2, Plus, X } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
@@ -175,6 +175,7 @@ export const InvoiceForm = ({
   setActiveTab,
   handleUpdateInvoice,
   handleAddInvoice,
+  isSubmitting = false,
   canAddVendor = true,
   canSubmit = true,
   vendorOptions = [],
@@ -294,7 +295,7 @@ export const InvoiceForm = ({
     () =>
       organisationGstCredentials.map((entry) => ({
         value: entry.gst,
-        label: entry.userName ? `${entry.gst} - ${entry.userName}` : entry.gst,
+        label: entry.gst,
       })),
     [organisationGstCredentials],
   );
@@ -1676,13 +1677,26 @@ export const InvoiceForm = ({
             <Button
               onClick={isEdit ? handleUpdateInvoice : handleAddInvoice}
               className="flex-1"
-              disabled={!canSubmit}
+              disabled={!canSubmit || isSubmitting}
             >
-              {isEdit
-                ? isSavedDraft
-                  ? "Save Draft"
-                  : "Update Invoice"
-                : "Add Invoice"}
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {isEdit
+                    ? isSavedDraft
+                      ? "Saving..."
+                      : "Updating..."
+                    : "Creating..."}
+                </>
+              ) : isEdit ? (
+                isSavedDraft ? (
+                  "Save Draft"
+                ) : (
+                  "Update Invoice"
+                )
+              ) : (
+                "Add Invoice"
+              )}
             </Button>
           </div>
         )}
