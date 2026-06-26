@@ -89,6 +89,7 @@ import {
   normalizeVendorTds,
 } from './utils/vendorTds';
 import { normalizeVendorForSave } from './utils/vendorSave';
+import { mergeBulkVendorRowsByPan } from './utils/bulkVendorMerge';
 import { isVendorPortalFetchEnabled } from '../../utils/vendorVerificationConfig';
 import VendorApprovalDialog from './components/VendorApprovalDialog';
 import IntegrationSourceBadge from '../../components/integrations/IntegrationSourceBadge';
@@ -149,40 +150,6 @@ const VENDOR_UPLOAD_HEADER_MAP = {
   bank_name: 'Bank Name',
   branch: 'Branch',
   notes: 'Remarks',
-};
-
-const toBulkVendorPayload = (row) => {
-  const name = String(row.name || '').trim();
-  const vendorTypeRaw = String(row.vendor_type || '').trim().toLowerCase();
-  const vendorType = vendorTypeRaw === 'individual' ? 'Individual' : 'Company';
-  return {
-    name,
-    trade_name: String(row.trade_name || '').trim(),
-    vendor_type: vendorType,
-    email: String(row.email || '').trim(),
-    phone: String(row.phone || '').trim(),
-    mobile: String(row.mobile || '').trim(),
-    pan: String(row.pan || '').trim().toUpperCase(),
-    gstin: String(row.gstin || '').trim().toUpperCase(),
-    address_line1: String(row.address_line1 || '').trim(),
-    address_line2: String(row.address_line2 || '').trim(),
-    city: String(row.city || '').trim(),
-    state: String(row.state || '').trim(),
-    pincode: String(row.pincode || '').trim(),
-    country: String(row.country || '').trim() || 'India',
-    bank_name: String(row.bank_name || '').trim(),
-    account_number: String(row.account_number || '').trim(),
-    ifsc_code: String(row.ifsc_code || '').trim().toUpperCase(),
-    branch: String(row.branch || '').trim(),
-    account_holder_name: String(row.account_holder_name || '').trim(),
-    category: String(row.category || '').trim(),
-    currency: String(row.currency || '').trim() || 'INR',
-    payment_terms: String(row.payment_terms || '').trim() || '30',
-    contact_person: String(row.contact_person || '').trim(),
-    website: String(row.website || '').trim(),
-    notes: String(row.notes || '').trim(),
-    msme: parseMsmeValue(row.msme) === true,
-  };
 };
 
 const getVendorApiErrorMessages = (response) => {
@@ -480,8 +447,8 @@ const Vendors = () => {
     }
 
     try {
-      const vendorsPayload = rows
-        .map((row) => normalizeVendorForSave(toBulkVendorPayload(row)))
+      const vendorsPayload = mergeBulkVendorRowsByPan(rows)
+        .map((vendor) => normalizeVendorForSave(vendor))
         .filter((vendor) => vendor.name);
 
       if (!vendorsPayload.length) {
@@ -562,6 +529,19 @@ const Vendors = () => {
     ];
 
     const guideRows = [
+      ['Bulk upload instructions'],
+      [
+        'Rows with the same valid PAN in this file are merged into one vendor with multiple GST registrations.',
+      ],
+      [
+        'Use one row per GSTIN. Repeat company name and PAN on each row. Identity fields (name, trade name, contact, etc.) are taken from the first row in each PAN group.',
+      ],
+      [''],
+      ['Example: one vendor, two GSTINs (same PAN on both rows)'],
+      ['Company Name', 'PAN No', 'GST no', 'State', 'City'],
+      ['Acme India Pvt Ltd', 'ABCDE1234F', '27AAAAA0000A1Z5', 'Maharashtra', 'Mumbai'],
+      ['Acme India Pvt Ltd', 'ABCDE1234F', '29AAAAA0000A1Z6', 'Karnataka', 'Bengaluru'],
+      [''],
       ['Parameter', 'Type'],
       ['Company Name', getUploadGuideType('name', 'Optional')],
       ['Trade Name', getUploadGuideType('trade_name', 'Optional')],
@@ -585,8 +565,8 @@ const Vendors = () => {
         ),
       ],
       ['Country', getUploadGuideType('country', 'Optional')],
-      ['PAN No', getUploadGuideType('pan', 'Optional')],
-      ['GST no', getUploadGuideType('gstin', 'Optional')],
+      ['PAN No', getUploadGuideType('pan', 'Optional. Repeat the same PAN on each row for multi-GST vendors')],
+      ['GST no', getUploadGuideType('gstin', 'Optional. One GSTIN per row; multiple rows with the same PAN are merged')],
       ['MSME', getUploadGuideType('msme', 'Optional (Yes/No)')],
       ['Account Name', getUploadGuideType('account_holder_name', 'Optional')],
       ['Account Number', getUploadGuideType('account_number', 'Optional')],

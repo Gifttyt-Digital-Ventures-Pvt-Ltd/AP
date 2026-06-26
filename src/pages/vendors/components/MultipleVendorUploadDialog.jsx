@@ -76,7 +76,7 @@ const MultipleVendorUploadDialog = ({
           <DialogDescription>
             Upload a spreadsheet to import vendors in Saved status. Only company name is required
             at import; complete GSTIN, bank, and documents by editing each vendor before submitting
-            for approval.
+            for approval. See the Guide sheet in the sample spreadsheet for upload rules.
           </DialogDescription>
         </DialogHeader>
         <MeteredActionCostHint actionCode={CREDIT_ACTION_CODES.VENDOR_UPLOAD} className="mb-4" />
