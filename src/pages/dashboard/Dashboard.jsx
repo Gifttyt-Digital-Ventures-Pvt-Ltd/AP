@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { useDashboardData } from "./hooks/useDashboardData";
 import DashboardLoadingState from "./components/DashboardLoadingState";
 import DashboardHeader from "./components/DashboardHeader";
@@ -45,6 +45,18 @@ const Dashboard = () => {
     formatCompactCurrency,
   } = useDashboardData();
 
+  const showOverdueAlert = useMemo(() => {
+    const count = overdueSummary?.count ?? overdueInvoices?.length ?? 0;
+    return count > 0 && overdueInvoices.length > 0;
+  }, [overdueInvoices, overdueSummary]);
+
+  const showPendingApprovalsAlert = pendingApprovals.length > 0;
+
+  const alertGridClassName =
+    showOverdueAlert && showPendingApprovalsAlert
+      ? "grid grid-cols-1 gap-4 lg:grid-cols-2"
+      : "grid grid-cols-1 gap-4";
+
   if (loading) {
     return <DashboardLoadingState />;
   }
@@ -89,17 +101,23 @@ const Dashboard = () => {
         formatCompactCurrency={formatCompactCurrency}
       />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <OverdueInvoicesAlert
-          overdueInvoices={overdueInvoices}
-          overdueSummary={overdueSummary}
-          formatFullCurrency={formatFullCurrency}
-        />
-        <PendingApprovalsAlert
-          pendingApprovals={pendingApprovals}
-          formatFullCurrency={formatFullCurrency}
-        />
-      </div>
+      {(showOverdueAlert || showPendingApprovalsAlert) && (
+        <div className={alertGridClassName}>
+          {showOverdueAlert ? (
+            <OverdueInvoicesAlert
+              overdueInvoices={overdueInvoices}
+              overdueSummary={overdueSummary}
+              formatFullCurrency={formatFullCurrency}
+            />
+          ) : null}
+          {showPendingApprovalsAlert ? (
+            <PendingApprovalsAlert
+              pendingApprovals={pendingApprovals}
+              formatFullCurrency={formatFullCurrency}
+            />
+          ) : null}
+        </div>
+      )}
       <PaymentProgressCard
         paidValue={paidValue}
         totalValue={totalValue}
