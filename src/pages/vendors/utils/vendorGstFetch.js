@@ -1,4 +1,4 @@
-import { mapVendorGstDetailsToForm } from '../../tax-management/utils/gstApiMappers';
+import { mapVendorGstDetailsToForm, normalizeGstPortalVendorDetails } from '../../tax-management/utils/gstApiMappers';
 import { resolveVendorFetchSource } from '../../../utils/vendorValidation';
 
 export const getVendorGstDetailsCurrentData = (response = {}) =>
@@ -34,13 +34,14 @@ const mapRegistrationToFetchRecord = (registration = {}, identity = {}) => {
   return {
     gstin: gstin || mapped.gstin,
     tradeName:
-      pickIdentityField(registration, 'tradeName', 'trade_name') ||
+      pickIdentityField(registration, 'tradeName', 'trade_name', 'tradeNam') ||
+      mapped.tradeName ||
       mapped.legalName ||
       identity.legalName ||
       '',
     legalName:
       identity.legalName ||
-      pickIdentityField(registration, 'legalName', 'legal_name') ||
+      pickIdentityField(registration, 'legalName', 'legal_name', 'lgnm') ||
       mapped.legalName ||
       '',
     pan: (
@@ -62,14 +63,18 @@ const mapRegistrationToFetchRecord = (registration = {}, identity = {}) => {
     state: pickIdentityField(registration, 'state', 'stateName', 'state_name') || mapped.state,
     stateCode: pickIdentityField(registration, 'stateCode', 'state_code') || mapped.stateCode,
     address:
-      pickIdentityField(registration, 'address', 'principalAddress', 'principal_address') || '',
-    location: registration.location ?? registration.addressDetails ?? registration.address_details ?? null,
+      pickIdentityField(registration, 'address', 'principalAddress', 'principal_address') ||
+      mapped.address ||
+      '',
+    location: registration.location ?? registration.addressDetails ?? registration.address_details ?? mapped.location ?? null,
     bankDetails: registration.bankDetails ?? registration.bank_details ?? {},
     registrationDate:
       pickIdentityField(registration, 'registrationDate', 'registration_date') ||
       mapped.registrationDate,
     registrationType:
-      pickIdentityField(registration, 'registrationType', 'registration_type') || '',
+      pickIdentityField(registration, 'registrationType', 'registration_type', 'dty') ||
+      mapped.registrationType ||
+      '',
     businessNature:
       pickIdentityField(registration, 'businessNature', 'business_nature', 'bussNature') ||
       mapped.businessNature,
@@ -84,11 +89,14 @@ export const buildVendorGstDetailsRequestBody = ({ pan, gstin } = {}) => {
 };
 
 export const mapVendorGstDetailsToFetchRecords = (response = {}, requestedMode = 'gstin') => {
-  const currentData = getVendorGstDetailsCurrentData(response);
+  const currentData = normalizeGstPortalVendorDetails(getVendorGstDetailsCurrentData(response));
   const identity = {
     legalName:
-      pickIdentityField(currentData, 'legalName', 'legal_name', 'tradeName', 'trade_name') || '',
-    pan: pickIdentityField(currentData, 'pan').toUpperCase(),
+      pickIdentityField(currentData, 'legalName', 'legal_name', 'lgnm', 'tradeNam', 'tradeName', 'trade_name') || '',
+    pan: (
+      pickIdentityField(currentData, 'pan') ||
+      String(currentData.gstin || '').trim().toUpperCase().slice(2, 12)
+    ).toUpperCase(),
     vendorType: pickIdentityField(currentData, 'vendorType', 'vendor_type') || 'Company',
     email: pickIdentityField(currentData, 'email') || '',
     mobile: pickIdentityField(currentData, 'mobile') || '',

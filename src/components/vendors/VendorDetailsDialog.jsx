@@ -315,9 +315,11 @@ const mapFetchedRegistrationToVerification = (registration = {}) => ({
   pan: registration.pan || "",
   state: registration.state || "",
   stateCode: registration.stateCode || "",
+  businessNature: registration.businessNature || "",
   location: registration.location ?? null,
   bankDetails: registration.bankDetails ?? {},
   address: registration.address || "",
+  legalName: registration.legalName || registration.tradeName || "",
   validGstin: true,
 });
 
@@ -459,7 +461,6 @@ const VendorDetailsDialog = ({
     hasVisibleVendorDocuments(activeVendorDocuments, vendorDocumentConfiguration);
   const activeVendorVerification = corporateScreens?.activeVendorVerification;
   const portalVerificationEnabled = isVendorPortalFetchEnabled(activeVendorVerification);
-  const panVerificationEnabled = portalVerificationEnabled;
   const gstVerificationEnabled = portalVerificationEnabled;
   const showPortalFetch =
     !invoiceVendorRequest && portalVerificationEnabled;
@@ -504,17 +505,12 @@ const VendorDetailsDialog = ({
   });
   const [gstVerificationAttempted, setGstVerificationAttempted] = useState(false);
   const [fetchGstinQuery, setFetchGstinQuery] = useState("");
-  const [fetchInputMode, setFetchInputMode] = useState("gstin");
-  const [lastFetchMode, setLastFetchMode] = useState("pan");
+  const [lastFetchMode, setLastFetchMode] = useState("gstin");
   const [fetchMessage, setFetchMessage] = useState("");
   const [fetchMessageIsError, setFetchMessageIsError] = useState(false);
   const [fetchedRecords, setFetchedRecords] = useState([]);
   const [selectedFetchedGstins, setSelectedFetchedGstins] = useState(() => new Set());
 
-  const hasPanForFetch = Boolean(String(formData?.pan || "").trim());
-  const fetchUsesPan = panVerificationEnabled && fetchInputMode === "pan";
-  const canToggleFetchMode =
-    panVerificationEnabled && gstVerificationEnabled && hasPanForFetch;
   const { fetchVendorDetails, isLoading: isFetchLoading } = useVendorGstDetailsFetch();
 
   const clearFetchResults = () => {
@@ -524,39 +520,18 @@ const VendorDetailsDialog = ({
     setFetchMessageIsError(false);
   };
 
-  const switchFetchInputMode = (mode) => {
-    if (mode === "pan" && !panVerificationEnabled) return;
-    if (mode === "gstin" && !gstVerificationEnabled) return;
-    if (mode === fetchInputMode) return;
-    setFetchInputMode(mode);
-    clearFetchResults();
-  };
-
   useEffect(() => {
     if (!open) {
       setGstVerification({ verified: false, gstin: "", validGstin: null });
       setGstVerificationAttempted(false);
       setFetchGstinQuery("");
-      setFetchInputMode("gstin");
-      setLastFetchMode("pan");
+      setLastFetchMode("gstin");
       setFetchMessage("");
       setFetchMessageIsError(false);
       setFetchedRecords([]);
       setSelectedFetchedGstins(new Set());
-      return;
     }
-
-    const hasPan = Boolean(String(formData?.pan || "").trim());
-    if (panVerificationEnabled && hasPan) {
-      setFetchInputMode("pan");
-    } else if (gstVerificationEnabled) {
-      setFetchInputMode("gstin");
-    } else if (panVerificationEnabled) {
-      setFetchInputMode("pan");
-    } else {
-      setFetchInputMode("gstin");
-    }
-  }, [open, panVerificationEnabled, gstVerificationEnabled]);
+  }, [open]);
 
   useEffect(() => {
     if (!showPortalFetch) {
@@ -749,15 +724,9 @@ const VendorDetailsDialog = ({
   };
 
   const handleFetchDetails = async () => {
-    if (!showPortalFetch) return;
-    if (fetchUsesPan && !panVerificationEnabled) return;
-    if (!fetchUsesPan && !gstVerificationEnabled) return;
+    if (!showPortalFetch || !gstVerificationEnabled) return;
 
-    const fetchParams = fetchUsesPan
-      ? { pan: formData.pan }
-      : { gstin: fetchGstinQuery };
-
-    const result = await fetchVendorDetails(fetchParams);
+    const result = await fetchVendorDetails({ gstin: fetchGstinQuery });
 
     if (!result.success) {
       setFetchedRecords([]);
@@ -769,7 +738,7 @@ const VendorDetailsDialog = ({
     prefillVendorIdentityFromFetch(result.records);
     setFetchedRecords(result.records);
     setSelectedFetchedGstins(new Set(result.records.map((record) => record.gstin)));
-    setLastFetchMode(result.mode || "pan");
+    setLastFetchMode(result.mode || "gstin");
     clearFetchFeedback();
   };
 
@@ -1020,7 +989,7 @@ const VendorDetailsDialog = ({
             description={
               isIndia && !invoiceVendorRequest
                 ? showPortalFetch
-                  ? "Fetch vendor details from the GST portal by PAN or GSTIN."
+                  ? "Fetch vendor details from the GST portal by GSTIN."
                   : "Enter tax identifiers and GSTIN details manually."
                 : invoiceVendorRequest
                   ? "Optional tax details. GST will be verified when the vendor is approved."
@@ -1034,47 +1003,11 @@ const VendorDetailsDialog = ({
                   <div className="mb-3">
                     <h4 className="text-sm font-semibold text-foreground">Fetch Vendor Details</h4>
                     <p className="text-xs text-muted-foreground">
-                      {fetchUsesPan
-                        ? "Fetch will load all GSTINs registered under the PAN entered above."
-                        : "Enter a GSTIN to fetch that registration and linked vendor identity."}
+                      Enter a GSTIN to fetch that registration and linked vendor identity.
                     </p>
-                    {canToggleFetchMode ? (
-                      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-                        <button
-                          type="button"
-                          className={
-                            fetchUsesPan
-                              ? "font-semibold text-foreground underline-offset-2 hover:underline"
-                              : "text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                          }
-                          onClick={() => switchFetchInputMode("pan")}
-                        >
-                          Fetch by PAN
-                        </button>
-                        <span className="text-muted-foreground">|</span>
-                        <button
-                          type="button"
-                          className={
-                            !fetchUsesPan
-                              ? "font-semibold text-foreground underline-offset-2 hover:underline"
-                              : "text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
-                          }
-                          onClick={() => switchFetchInputMode("gstin")}
-                        >
-                          Fetch by GSTIN
-                        </button>
-                      </div>
-                    ) : null}
                   </div>
                   <div className="grid gap-3">
-                    {fetchUsesPan ? (
-                      <div className="rounded-md border border-border bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-                        Using PAN{" "}
-                        <span className="font-mono font-medium text-foreground">
-                          {String(formData.pan || "").trim().toUpperCase()}
-                        </span>
-                      </div>
-                    ) : gstVerificationEnabled ? (
+                    {gstVerificationEnabled ? (
                       <div>
                         <Label htmlFor="vendor-fetch-gstin">GSTIN for lookup</Label>
                         <Input
@@ -1099,11 +1032,7 @@ const VendorDetailsDialog = ({
                         onClick={handleFetchDetails}
                         disabled={
                           isFetchLoading ||
-                          !isVendorFetchReady(
-                            fetchUsesPan
-                              ? { pan: formData.pan }
-                              : { gstin: fetchGstinQuery },
-                          )
+                          !isVendorFetchReady({ gstin: fetchGstinQuery })
                         }
                       >
                         {isFetchLoading ? (
