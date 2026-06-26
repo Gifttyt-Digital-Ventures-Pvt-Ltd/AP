@@ -57,6 +57,11 @@ import { getApiErrorMessage } from '../../hooks/useGstTaxpayerSession';
 import { useGstVendors } from '../../hooks/useGstVendors';
 import { toast } from 'sonner';
 import { formatCurrency, formatRetPeriod } from '../../utils/taxFormatting';
+import {
+  getCurrentIndianFinancialYear,
+  getIndianFinancialYearReturnsOptions,
+  toIndianFinancialYearReturnsLabel,
+} from '../../utils/gstPeriod';
 
 const RECON_SUGGESTED_ACTIONS = {
   Matched: null,
@@ -280,14 +285,15 @@ export const GstReconciliationPanel = () => {
   );
 };
 
-const FY_OPTIONS = ['FY 2025-26', 'FY 2024-25', 'FY 2023-24'];
+const FY_OPTIONS = getIndianFinancialYearReturnsOptions();
+const DEFAULT_GST_RETURNS_FY = toIndianFinancialYearReturnsLabel(getCurrentIndianFinancialYear());
 const RETURN_TYPE_OPTIONS = ['All Returns', 'GSTR-1', 'GSTR-3B', 'GSTR-9'];
 
 export const GstReturnsPanel = () => {
   const { vendors } = useGstVendors();
   const [vendorId, setVendorId] = useState('');
   const [returnType, setReturnType] = useState('All Returns');
-  const [fy, setFy] = useState('FY 2024-25');
+  const [fy, setFy] = useState(DEFAULT_GST_RETURNS_FY);
   const [loading, setLoading] = useState(false);
   const [fetched, setFetched] = useState(false);
   const [records, setRecords] = useState([]);

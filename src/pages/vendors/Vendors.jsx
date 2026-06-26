@@ -97,6 +97,7 @@ import { withIntegrationTableHeader } from '../../utils/integrationProvenance';
 
 const VENDOR_UPLOAD_FIELDS = [
   'name',
+  'trade_name',
   'vendor_type',
   'email',
   'mobile',
@@ -124,6 +125,7 @@ const VENDOR_UPLOAD_FIELDS = [
 
 const VENDOR_UPLOAD_HEADER_MAP = {
   name: 'Company Name',
+  trade_name: 'Trade Name',
   vendor_type: 'Vendor Type',
   email: 'Email ID',
   mobile: 'Mobile No',
@@ -155,6 +157,7 @@ const toBulkVendorPayload = (row) => {
   const vendorType = vendorTypeRaw === 'individual' ? 'Individual' : 'Company';
   return {
     name,
+    trade_name: String(row.trade_name || '').trim(),
     vendor_type: vendorType,
     email: String(row.email || '').trim(),
     phone: String(row.phone || '').trim(),
@@ -218,6 +221,8 @@ const matchesVendorSearch = (vendor, query) => {
   if (!query) return true;
   const searchableText = [
     vendor?.name,
+    vendor?.trade_name,
+    vendor?.tradeName,
     vendor?.pan,
     vendor?.gstin,
     ...getVendorGstRegistrations(vendor).map((registration) =>
@@ -337,6 +342,7 @@ const Vendors = () => {
   const [formData, setFormData] = useState({
     // Basic Information
     name: '',
+    trade_name: '',
     vendor_type: 'Company',
     email: '',
     phone: '',
@@ -409,6 +415,7 @@ const Vendors = () => {
 
     const gstVerificationErrors = getVendorGstVerificationErrors(formData, null, {
       gstVerificationEnabled: portalVerificationEnabled,
+      activeVendorFields: effectiveActiveVendorFields,
     });
     if (gstVerificationErrors.length > 0) {
       toast.error(gstVerificationErrors[0]);
@@ -528,6 +535,7 @@ const Vendors = () => {
   const downloadVendorTemplate = () => {
     const headerRow = [
       'Company Name',
+      'Trade Name',
       'Vendor Type',
       'Email ID',
       'Mobile No',
@@ -556,6 +564,7 @@ const Vendors = () => {
     const guideRows = [
       ['Parameter', 'Type'],
       ['Company Name', getUploadGuideType('name', 'Optional')],
+      ['Trade Name', getUploadGuideType('trade_name', 'Optional')],
       ['Vendor Type', getUploadGuideType('vendor_type', 'Optional (Company/Individual)')],
       ['Email ID', getUploadGuideType('email', 'Optional')],
       ['Mobile No', getUploadGuideType('mobile', 'Optional')],
@@ -618,6 +627,7 @@ const Vendors = () => {
     const firstGstin = getFirstVendorGstin(vendor);
     setFormData({
       name: vendor.name || '',
+      trade_name: vendor.trade_name || vendor.tradeName || '',
       vendor_type: vendor.vendor_type || 'Company',
       email: vendor.email || '',
       phone: vendor.phone || '',
@@ -705,6 +715,7 @@ const Vendors = () => {
     setEditingVendor(null);
     setFormData({
       name: '',
+      trade_name: '',
       vendor_type: 'Company',
       email: '',
       phone: '',

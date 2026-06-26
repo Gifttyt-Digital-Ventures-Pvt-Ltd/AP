@@ -32,6 +32,34 @@ export function normalizeFinancialYear(fy) {
   return String(fy || '').replace(/^FY\s+/i, '').trim();
 }
 
+/** Indian FY (Apr–Mar) ending in the reference date, e.g. `"2025-26"`. */
+export function getCurrentIndianFinancialYear(referenceDate = new Date()) {
+  const month = referenceDate.getMonth() + 1;
+  const calendarYear = referenceDate.getFullYear();
+  const startYear = month >= 4 ? calendarYear : calendarYear - 1;
+  return `${startYear}-${String(startYear + 1).slice(-2)}`;
+}
+
+/** UI label for Returns tab, e.g. `"FY 2025-26"`. */
+export function toIndianFinancialYearReturnsLabel(fy = '') {
+  const normalized = normalizeFinancialYear(fy);
+  return normalized ? `FY ${normalized}` : '';
+}
+
+/** Recent Indian FY values for Documents (newest first). */
+export function getIndianFinancialYearOptions(count = 3, referenceDate = new Date()) {
+  const startYear = Number.parseInt(getCurrentIndianFinancialYear(referenceDate).slice(0, 4), 10);
+  return Array.from({ length: count }, (_, index) => {
+    const year = startYear - index;
+    return `${year}-${String(year + 1).slice(-2)}`;
+  });
+}
+
+/** Recent Indian FY labels for Returns tab (newest first). */
+export function getIndianFinancialYearReturnsOptions(count = 3, referenceDate = new Date()) {
+  return getIndianFinancialYearOptions(count, referenceDate).map(toIndianFinancialYearReturnsLabel);
+}
+
 /** Convert UI month label (`Sep`, `September`) to API month (`"09"`). */
 export function uiMonthToApiMonth(monthLabel) {
   const key = String(monthLabel || '').trim();

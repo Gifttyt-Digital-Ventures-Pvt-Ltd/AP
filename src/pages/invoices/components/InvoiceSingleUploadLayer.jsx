@@ -72,6 +72,7 @@ import {
   buildVendorRequestForm,
   createEmptyVendorRequestForm,
 } from "../utils/invoiceBulkUtils";
+import { findVendorByInvoiceName } from "../utils/vendorMatching";
 import { getInvoiceDueDateValidationErrorForInvoice } from "../utils/msmePaymentDue";
 import { useCurrencyFilter } from "../../../hooks/useCurrencyFilter";
 import { CURRENCY_SCREENS } from "../../../utils/currency";
@@ -216,15 +217,7 @@ const InvoiceSingleUploadLayer = ({
   }, [uploadedFileURL, uploadedFile]);
 
   const findVendorByName = useCallback(
-    (vendorName) => {
-      if (!vendorName) return null;
-      const normalizedName = vendorName.toLowerCase().trim();
-      return (
-        invoiceVendorOptions.find(
-          (vendor) => String(vendor?.name || "").toLowerCase().trim() === normalizedName,
-        ) || null
-      );
-    },
+    (vendorName) => findVendorByInvoiceName(invoiceVendorOptions, vendorName),
     [invoiceVendorOptions],
   );
 
@@ -678,18 +671,12 @@ const InvoiceSingleUploadLayer = ({
         vendorsResult?.data || [],
         pendingResult?.data || [],
       );
-      const normalizedVendorName = vendorName.toLowerCase().trim();
       const matchedVendor =
         (requestedVendorId
           ? freshVendorOptions.find(
               (vendor) => String(vendor.id) === String(requestedVendorId),
             )
-          : null) ||
-        freshVendorOptions.find(
-          (vendor) =>
-            String(vendor?.name || "").toLowerCase().trim() === normalizedVendorName,
-        ) ||
-        null;
+          : null) || findVendorByInvoiceName(freshVendorOptions, vendorName);
       const resolvedVendorId = matchedVendor?.id || requestedVendorId || "";
 
       setFormData((prev) =>

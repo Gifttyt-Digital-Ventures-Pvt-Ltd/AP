@@ -9,6 +9,10 @@ import {
   PopoverContent,
 } from "../../../components/ui/popover";
 import { cn } from "../../../lib/utils";
+import {
+  vendorMatchesInvoiceName,
+  vendorMatchesInvoiceNameQuery,
+} from "../utils/vendorMatching";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import AppDataTable from "../../../components/common/AppDataTable";
 import AppSelect from "../../../components/common/AppSelect";
@@ -45,6 +49,7 @@ import {
   useGetAvailableGrnsQuery,
   useGetAvailablePurchaseOrdersQuery,
 } from "../../../Services/apis/invoiceMatchingApi";
+import { mergeSelectedMatchingOption } from "../utils/invoiceMatchingFlow";
 import {
   formatTdsDisplayLabel,
   resolveTdsRate,
@@ -219,11 +224,7 @@ export const InvoiceForm = ({
       .trim();
     const options = Array.isArray(vendorOptions) ? vendorOptions : [];
     if (!query) return options;
-    return options.filter((vendor) =>
-      String(vendor?.name || "")
-        .toLowerCase()
-        .includes(query),
-    );
+    return options.filter((vendor) => vendorMatchesInvoiceNameQuery(vendor, query));
   }, [vendorOptions, vendorQuery]);
 
   const selectedVendor = useMemo(() => {
@@ -384,8 +385,9 @@ export const InvoiceForm = ({
     () => ({
       vendorName: String(formData?.vendorName || "").trim(),
       amount: Number(totals.total || 0),
+      ...(formData?.invoiceId ? { invoiceId: formData.invoiceId } : {}),
     }),
-    [formData?.vendorName, totals.total],
+    [formData?.vendorName, formData?.invoiceId, totals.total],
   );
   const shouldLoadPurchaseOrders =
     showInvoiceMatching &&
@@ -407,14 +409,30 @@ export const InvoiceForm = ({
       !canUseThreeWayMatching ||
       !selectedMatchingPoId,
   });
-  const availablePurchaseOrders = useMemo(
-    () => getPageContent(availablePurchaseOrdersData).map(normalizePurchaseOrderOption),
-    [availablePurchaseOrdersData],
-  );
-  const availableGrns = useMemo(
-    () => getPageContent(availableGrnsData).map(normalizeGrnOption),
-    [availableGrnsData],
-  );
+  const availablePurchaseOrders = useMemo(() => {
+    const items = getPageContent(availablePurchaseOrdersData).map(normalizePurchaseOrderOption);
+    return mergeSelectedMatchingOption(items, selectedMatchingPoId, {
+      id: selectedMatchingPoId,
+      poNumber: formData?.matchingPoNumber || selectedMatchingPoId,
+      amount: 0,
+    });
+  }, [
+    availablePurchaseOrdersData,
+    selectedMatchingPoId,
+    formData?.matchingPoNumber,
+  ]);
+  const availableGrns = useMemo(() => {
+    const items = getPageContent(availableGrnsData).map(normalizeGrnOption);
+    return mergeSelectedMatchingOption(items, formData?.matchingGrnId, {
+      id: formData?.matchingGrnId,
+      grnNumber: formData?.matchingGrnNumber || formData?.matchingGrnId,
+      amount: 0,
+    });
+  }, [
+    availableGrnsData,
+    formData?.matchingGrnId,
+    formData?.matchingGrnNumber,
+  ]);
   const roundOffValue = resolveRoundOff(formData || {});
   const totalTax = useInrTax
     ? (Number(totals.cgst) || 0) + (Number(totals.sgst) || 0) + (Number(totals.igst) || 0)
@@ -850,7 +868,7 @@ export const InvoiceForm = ({
                             type="button"
                             className={cn(
                               "flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent",
-                              formData.vendorName === vendor.name &&
+                              vendorMatchesInvoiceName(vendor, formData.vendorName) &&
                                 "bg-accent",
                             )}
                             onMouseDown={(event) => event.preventDefault()}
@@ -1031,6 +1049,7 @@ export const InvoiceForm = ({
             </div>
 
             <div className="grid grid-cols-2 gap-3">
+              {/* Department field hidden during create/edit — restore when needed
               <div>
                 <RequiredLabel required={departmentMandatory}>
                   Department
@@ -1073,6 +1092,7 @@ export const InvoiceForm = ({
                   }))}
                 />
               </div>
+              */}
               {showCategoryField && (
                 <div>
                   <RequiredLabel required={categoryMandatory}>
@@ -1176,8 +1196,16 @@ export const InvoiceForm = ({
                   <div>
                     <Label className="text-xs font-medium">Invoice Matching</Label>
                     <p className="text-xs text-muted-foreground">
-                      Optional. Select a PO for 2-way matching; add a GRN for 3-way matching.
+                      {isEdit
+                        ? "Optional. Existing PO/GRN selections are loaded on edit. Change them to update the match after save."
+                        : "Optional. Select a PO for 2-way matching; add a GRN for 3-way matching."}
                     </p>
+                    {formData?.matchingStatus ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Current match status:{" "}
+                        <span className="font-medium text-foreground">{formData.matchingStatus}</span>
+                      </p>
+                    ) : null}
                   </div>
                   {selectedMatchingPoId ? (
                     <Button

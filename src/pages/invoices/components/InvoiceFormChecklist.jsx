@@ -180,11 +180,13 @@ export const buildInvoiceFormChecklist = (
           done: !!(formData.currency || DEFAULT_CURRENCY).trim(),
           required: true,
         }),
+        /* Department checklist hidden during create/edit — restore when needed
         item({
           label: "Department",
           done: !!formData.departmentId,
           required: departmentMandatory,
         }),
+        */
         item({
           label: "Category",
           done: !!(formData.categoryId || formData.category?.id),

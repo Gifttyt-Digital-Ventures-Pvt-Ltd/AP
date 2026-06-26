@@ -1,5 +1,12 @@
 import { serviceApi } from "../serviceApi";
-import { toInvoiceApiPayload, toInvoiceUiPayload, toVendorApiPayload, toVendorUiPayload, normalizeInvoiceListResponse } from "../utils/payloadMappers";
+import {
+  toInvoiceApiPayload,
+  toInvoiceUiPayload,
+  toVendorApiPayload,
+  toVendorRequestApiPayload,
+  toVendorUiPayload,
+  normalizeInvoiceListResponse,
+} from "../utils/payloadMappers";
 import { normalizeApprovalHistoryEntries } from "../../pages/invoices/utils/invoiceHistory";
 import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
 
@@ -143,7 +150,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
       query: (body) => ({
         url: "/vendors/request",
         method: "POST",
-        body: toVendorApiPayload(body),
+        body: toVendorRequestApiPayload(body),
       }),
       transformResponse: (response) => {
         const payload = response?.vendor ?? response?.data ?? response;

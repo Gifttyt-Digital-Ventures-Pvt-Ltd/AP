@@ -1,3 +1,8 @@
+import {
+  getCurrentIndianFinancialYear,
+  getIndianFinancialYearOptions,
+} from '../utils/gstPeriod';
+
 export const TAX_PERIODS = [
   { value: '2026-05', label: 'May 2026' },
   { value: '2026-04', label: 'Apr 2026' },
@@ -9,7 +14,8 @@ export const DEFAULT_TAX_PERIOD = TAX_PERIODS[0].value;
 
 export const GST_DOC_MONTHS = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
 
-export const GST_DOC_FY_OPTIONS = ['2025-26', '2024-25', '2023-24'];
+export const DEFAULT_GST_DOC_FY = getCurrentIndianFinancialYear();
+export const GST_DOC_FY_OPTIONS = getIndianFinancialYearOptions();
 
 export const GST_LEDGER_MONTHS = [
   'January', 'February', 'March', 'April', 'May', 'June',

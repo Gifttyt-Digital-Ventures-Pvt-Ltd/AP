@@ -51,6 +51,11 @@ const VendorDetailsTab = ({ vendor }) => {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h3 className="text-base font-semibold text-foreground">{vendor.name || '-'}</h3>
+          {vendor.trade_name || vendor.tradeName ? (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Trade name: <span className="font-medium text-foreground">{vendor.trade_name || vendor.tradeName}</span>
+            </p>
+          ) : null}
           <p className="mt-1 font-mono text-xs text-muted-foreground">
             PAN: {vendor.pan || '-'}
           </p>

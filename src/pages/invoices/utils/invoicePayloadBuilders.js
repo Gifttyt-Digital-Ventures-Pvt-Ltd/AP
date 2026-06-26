@@ -293,6 +293,14 @@ export const initializeInvoiceFormData = (
       extractedData?.referenceCode ||
       extractedData?.reference_code ||
       "",
+    matchingPurchaseOrderId: "",
+    matchingGrnId: "",
+    matchingId: "",
+    existingMatchingPurchaseOrderId: "",
+    existingMatchingGrnId: "",
+    matchingPoNumber: "",
+    matchingGrnNumber: "",
+    matchingStatus: "",
   };
 };
 

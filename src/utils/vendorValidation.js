@@ -1,7 +1,9 @@
 import {
   getVendorFieldDisplayName,
   hasVendorFieldValue,
+  isVendorFieldRequired,
   normalizeActiveVendorFields,
+  VENDOR_FIELD_SECTIONS,
 } from './vendorFieldConfig';
 
 const MSME_TRUE_VALUES = new Set(['yes', 'y', 'true', '1']);
@@ -123,11 +125,28 @@ export const getVendorGstRegistrationsFromForm = (vendor = {}) => {
 export const hasVendorGstRegistrations = (vendor = {}) =>
   getVendorGstRegistrationsFromForm(vendor).length > 0;
 
+export const isVendorGstFieldRequired = (activeVendorFields = []) =>
+  isVendorFieldRequired(VENDOR_FIELD_SECTIONS.GST_NO, activeVendorFields);
+
+const resolveGstinRequired = ({ gstinRequired = false, activeVendorFields } = {}) => {
+  if (activeVendorFields !== undefined && activeVendorFields !== null) {
+    return isVendorGstFieldRequired(activeVendorFields);
+  }
+  return gstinRequired;
+};
+
 export const isVendorGstVerificationSatisfied = (
   vendor,
   gstVerification,
-  { invoiceVendorRequest = false, gstVerificationEnabled = true } = {},
+  {
+    invoiceVendorRequest = false,
+    gstVerificationEnabled = true,
+    gstinRequired = false,
+    activeVendorFields,
+  } = {},
 ) => {
+  const requiresGstin = resolveGstinRequired({ gstinRequired, activeVendorFields });
+
   if (!gstVerificationEnabled) return true;
   if (invoiceVendorRequest) return true;
   if (!isIndiaCountry(vendor?.country)) return true;
@@ -135,8 +154,8 @@ export const isVendorGstVerificationSatisfied = (
   if (hasVendorGstRegistrations(vendor)) return true;
 
   const gstin = String(vendor?.gstin || '').trim().toUpperCase();
-  const requiresGstin = !invoiceVendorRequest;
 
+  if (!requiresGstin && !gstin) return true;
   if (requiresGstin && !gstin) return false;
   if (!gstin) return true;
   if (!isValidVendorGstin(gstin)) return false;
@@ -149,8 +168,16 @@ export const isVendorGstVerificationSatisfied = (
 export const getVendorGstVerificationErrors = (
   vendor = {},
   gstVerification = null,
-  { invoiceVendorRequest = false, prefix = '', gstVerificationEnabled = true } = {},
+  {
+    invoiceVendorRequest = false,
+    prefix = '',
+    gstVerificationEnabled = true,
+    gstinRequired = false,
+    activeVendorFields,
+  } = {},
 ) => {
+  const requiresGstin = resolveGstinRequired({ gstinRequired, activeVendorFields });
+
   if (!gstVerificationEnabled) return [];
   if (invoiceVendorRequest) return [];
   if (!isIndiaCountry(vendor.country)) return [];
@@ -158,7 +185,8 @@ export const getVendorGstVerificationErrors = (
   if (hasVendorGstRegistrations(vendor)) return [];
 
   const gstin = String(vendor.gstin || '').trim().toUpperCase();
-  const requiresGstin = !invoiceVendorRequest;
+
+  if (!requiresGstin && !gstin) return [];
 
   if (requiresGstin && !gstin) {
     return [`${prefix}Add at least one GST registration or enter a GSTIN`];
@@ -333,5 +361,6 @@ export const getInvoiceVendorRequestValidationErrors = (vendor = {}) => {
     errors.push("Vendor type must be Company or Individual");
   }
 
-  return errors;
+  // Format checks only when optional fields are filled — never require email/mobile here.
+  return [...errors, ...getVendorFormatValidationErrors(vendor)];
 };

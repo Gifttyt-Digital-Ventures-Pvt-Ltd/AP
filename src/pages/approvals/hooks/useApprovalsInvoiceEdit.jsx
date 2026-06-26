@@ -23,7 +23,11 @@ import {
   useGetCorporateUserDetailsQuery,
 } from "../../../Services/apis/corporateApi";
 import { useGetCategoriesForInvoiceQuery } from "../../../Services/apis/categoriesApi";
-import { mergeInvoiceVendorOptions } from "../../../Services/utils/payloadMappers";
+import { findVendorByInvoiceName } from "../../invoices/utils/vendorMatching";
+import {
+  extractVendorIdFromResponse,
+  mergeInvoiceVendorOptions,
+} from "../../../Services/utils/payloadMappers";
 import { useAuth } from "../../../contexts/AuthContext";
 import { useRBAC } from "../../../contexts/RBACContext";
 import { useActionGuard } from "../../../hooks/useActionGuard";
@@ -205,18 +209,7 @@ export const useApprovalsInvoiceEdit = ({
   );
 
   const findVendorByName = useCallback(
-    (vendorName) => {
-      if (!vendorName) return null;
-      const normalizedName = vendorName.toLowerCase().trim();
-      return (
-        invoiceVendorOptions.find(
-          (vendor) =>
-            String(vendor?.name || "")
-              .toLowerCase()
-              .trim() === normalizedName,
-        ) || null
-      );
-    },
+    (vendorName) => findVendorByInvoiceName(invoiceVendorOptions, vendorName),
     [invoiceVendorOptions],
   );
 

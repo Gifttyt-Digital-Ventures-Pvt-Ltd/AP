@@ -1,5 +1,6 @@
 import { format } from "date-fns";
 import { normalizeDueDateForInvoice, normalizeMsmePaymentDue, resolveVendorIsMsme } from "./msmePaymentDue";
+import { resolveInvoiceMatchingFormState } from "./invoiceMatchingFlow";
 import { normalizeInvoiceOverdueFields } from "./invoiceDueDate";
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../../utils/currency";
 import {
@@ -195,5 +196,6 @@ export const buildInvoiceEditFormData = (
         }),
     ...normalizeMsmePaymentDue(invoice),
     ...normalizeInvoiceOverdueFields(invoice),
+    ...resolveInvoiceMatchingFormState(invoice),
   };
 };

@@ -59,6 +59,8 @@ import {
   formatBulkStatusLabel,
   getBulkStatusBadgeClass,
 } from "./utils/invoiceBulkUtils";
+import { findVendorByInvoiceName } from "./utils/vendorMatching";
+import { syncInvoiceMatchingOnSave } from "./utils/invoiceMatchingFlow";
 import { getInvoiceFileUrl } from "./utils/invoicePreview";
 import {
   EMPTY_INVOICE_LIST_RESPONSE,
@@ -124,7 +126,7 @@ import IntegrationSourceBadge from "../../components/integrations/IntegrationSou
 import useZohoIntegrationActive from "../../hooks/useZohoIntegrationActive";
 import { withIntegrationTableHeader } from "../../utils/integrationProvenance";
 import { useCurrencyFilter } from "../../hooks/useCurrencyFilter";
-import { usePerformInvoiceMatchMutation } from "../../Services/apis/invoiceMatchingApi";
+import { usePerformInvoiceMatchMutation, useEditInvoiceMatchMutation } from "../../Services/apis/invoiceMatchingApi";
 import {
   CURRENCY_SCREENS,
   DEFAULT_CURRENCY,
@@ -391,8 +393,11 @@ const InvoicesPage = () => {
   const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
   const [updateInvoice, { isLoading: updateInvoiceLoading }] =
     useUpdateInvoiceMutation();
-  const [performInvoiceMatch, { isLoading: invoiceMatchingLoading }] =
+  const [performInvoiceMatch, { isLoading: performMatchingLoading }] =
     usePerformInvoiceMatchMutation();
+  const [editInvoiceMatch, { isLoading: editMatchingLoading }] =
+    useEditInvoiceMatchMutation();
+  const invoiceMatchingLoading = performMatchingLoading || editMatchingLoading;
   const [forwardInvoice, { isLoading: forwardInvoiceLoading }] =
     useForwardInvoiceMutation();
   const [deleteInvoice] = useDeleteInvoiceMutation();
@@ -601,18 +606,7 @@ const InvoicesPage = () => {
   }, [bulkPreviewOpen, bulkCreating, bulkPreviewItems]);
 
   const findVendorByName = useCallback(
-    (vendorName) => {
-      if (!vendorName) return null;
-      const normalizedName = vendorName.toLowerCase().trim();
-      return (
-        invoiceVendorOptions.find(
-          (vendor) =>
-            String(vendor?.name || "")
-              .toLowerCase()
-              .trim() === normalizedName,
-        ) || null
-      );
-    },
+    (vendorName) => findVendorByInvoiceName(invoiceVendorOptions, vendorName),
     [invoiceVendorOptions],
   );
 
@@ -1419,33 +1413,22 @@ const InvoicesPage = () => {
     );
   };
 
-  const maybePerformInvoiceMatching = async (invoiceId, sourceData, { skip = false } = {}) => {
-    const purchaseOrderId = String(sourceData?.matchingPurchaseOrderId || "").trim();
-    const grnId = String(sourceData?.matchingGrnId || "").trim();
-
-    if (skip || !showInvoiceMatchingSelection || !purchaseOrderId) return false;
-
-    if (!invoiceId) {
-      toast.error("Invoice saved, but matching could not run because invoice id was missing");
-      return false;
-    }
-
-    try {
-      await performInvoiceMatch({
-        invoiceId,
-        purchaseOrderId,
-        grnId: canUseThreeWayMatching && grnId ? grnId : null,
-        matchType: canUseThreeWayMatching && grnId ? "THREE_WAY" : "TWO_WAY",
-      }).unwrap();
-      return true;
-    } catch (error) {
-      toast.error(
-        extractApiErrorDetail(error) ||
-          "Invoice saved, but automatic matching failed",
-      );
-      return false;
-    }
-  };
+  const maybePerformInvoiceMatching = async (invoiceId, sourceData, { skip = false } = {}) =>
+    syncInvoiceMatchingOnSave(invoiceId, sourceData, {
+      skip,
+      enabled: showInvoiceMatchingSelection,
+      canUseThreeWayMatching,
+      performInvoiceMatch,
+      editInvoiceMatch,
+      onError: (error) => {
+        const message =
+          typeof error === "string"
+            ? error
+            : extractApiErrorDetail(error) ||
+              "Invoice saved, but automatic matching failed";
+        toast.error(message);
+      },
+    });
 
   // Add vendor from scanned invoice data
   const handleAddVendorFromInvoice = async () => {
@@ -1499,20 +1482,12 @@ const InvoicesPage = () => {
         vendorsResult?.data || [],
         pendingResult?.data || [],
       );
-      const normalizedVendorName = vendorName.toLowerCase().trim();
       const matchedVendor =
         (requestedVendorId
           ? freshVendorOptions.find(
               (vendor) => String(vendor.id) === String(requestedVendorId),
             )
-          : null) ||
-        freshVendorOptions.find(
-          (vendor) =>
-            String(vendor?.name || "")
-              .toLowerCase()
-              .trim() === normalizedVendorName,
-        ) ||
-        null;
+          : null) || findVendorByInvoiceName(freshVendorOptions, vendorName);
       const resolvedVendorId = matchedVendor?.id || requestedVendorId || "";
 
       if (requestVendorContext?.type === "bulk") {
@@ -1684,14 +1659,14 @@ const InvoicesPage = () => {
         createResponse = await createInvoice(invoicePayload).unwrap();
       }
 
-      const matched = await maybePerformInvoiceMatching(
+      const matchResult = await maybePerformInvoiceMatching(
         extractInvoiceIdFromSaveResponse(createResponse),
         formData,
         { skip: isSavedInvoiceStatus(createStatus) },
       );
 
       toast.success(
-        matched
+        matchResult === "created"
           ? "Invoice added and matching performed"
           : "Invoice added successfully",
       );
@@ -1792,7 +1767,7 @@ const InvoicesPage = () => {
         id: selectedInvoice.id,
         body: buildUpdateInvoiceBody(formData, { keepSaved: isSavedDraft }),
       }).unwrap();
-      const matched = await maybePerformInvoiceMatching(
+      const matchResult = await maybePerformInvoiceMatching(
         extractInvoiceIdFromSaveResponse(updateResponse) || selectedInvoice.id,
         formData,
         { skip: isSavedDraft },
@@ -1801,9 +1776,11 @@ const InvoicesPage = () => {
       toast.success(
         isSavedDraft
           ? "Draft saved successfully"
-          : matched
+          : matchResult === "created"
             ? "Invoice updated and matching performed"
-          : "Invoice updated successfully",
+            : matchResult === "updated"
+              ? "Invoice updated and matching updated"
+              : "Invoice updated successfully",
       );
       setEditDialogOpen(false);
       setSelectedInvoice(null);
@@ -1847,15 +1824,17 @@ const InvoicesPage = () => {
         action: "forward",
       }).unwrap();
 
-      const matched = await maybePerformInvoiceMatching(
+      const matchResult = await maybePerformInvoiceMatching(
         extractInvoiceIdFromSaveResponse(updateResponse) || selectedInvoice.id,
         formData,
       );
 
       toast.success(
-        matched
+        matchResult === "created"
           ? "Invoice submitted and matching performed"
-          : "Invoice submitted to checker",
+          : matchResult === "updated"
+            ? "Invoice submitted and matching updated"
+            : "Invoice submitted to checker",
       );
       setEditDialogOpen(false);
       setSelectedInvoice(null);

@@ -10,10 +10,12 @@ import {
 } from "../../utils/vendorFieldConfig";
 import {
   isIndiaCountry,
+  getInvoiceVendorRequestValidationErrors,
   getVendorGstVerificationErrors,
   isVendorGstVerificationSatisfied,
   getVendorGstinFormatError,
   isVendorFetchReady,
+  getVendorValidationErrors,
 } from "../../utils/vendorValidation";
 import { toast } from "sonner";
 import { Button } from "../ui/button";
@@ -140,6 +142,7 @@ const GstRegistrationsEditor = ({
   onUpdate,
   onRemove,
   portalFetchEnabled = false,
+  gstinRequired = false,
 }) => {
   if (!registrations.length) {
     return (
@@ -198,7 +201,7 @@ const GstRegistrationsEditor = ({
                     </>
                   ) : (
                     <div>
-                      <Label>GSTIN *</Label>
+                      <Label>GSTIN{gstinRequired ? " *" : ""}</Label>
                       <Input
                         value={registration.gstin || ""}
                         onChange={(event) =>
@@ -319,7 +322,8 @@ const mapFetchedRegistrationToVerification = (registration = {}) => ({
   location: registration.location ?? null,
   bankDetails: registration.bankDetails ?? {},
   address: registration.address || "",
-  legalName: registration.legalName || registration.tradeName || "",
+  legalName: registration.legalName || "",
+  tradeName: registration.tradeName || "",
   validGstin: true,
 });
 
@@ -342,6 +346,13 @@ const FetchVendorResultsPreview = ({
     <div className="space-y-3 rounded-lg border border-border bg-background p-3">
       <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
         <div className="font-semibold">{firstRecord.legalName || firstRecord.tradeName}</div>
+        {firstRecord.tradeName &&
+        firstRecord.legalName &&
+        firstRecord.tradeName.trim().toUpperCase() !== firstRecord.legalName.trim().toUpperCase() ? (
+          <div className="mt-0.5 text-xs">
+            Trade name: <span className="font-medium">{firstRecord.tradeName}</span>
+          </div>
+        ) : null}
         <div className="mt-0.5 text-xs">
           PAN: <span className="font-mono font-medium">{firstRecord.pan || "—"}</span>
           {" · "}
@@ -478,7 +489,8 @@ const VendorDetailsDialog = ({
       pan: data.pan || prev.pan,
       state: data.state || prev.state,
       country: prev.country || "India",
-      name: data.legalName || prev.name,
+      name: data.legalName || data.tradeName || prev.name,
+      trade_name: data.tradeName || prev.trade_name,
       gstin: registration?.gstin || prev.gstin,
       gstRegistrations: registration
         ? [
@@ -578,9 +590,29 @@ const VendorDetailsDialog = ({
     event.preventDefault();
     if (!formData) return;
 
+    if (invoiceVendorRequest) {
+      const requestErrors = getInvoiceVendorRequestValidationErrors(formData);
+      if (requestErrors.length > 0) {
+        toast.error(requestErrors[0]);
+        return;
+      }
+      onSubmit(event);
+      return;
+    }
+
+    const validationErrors = getVendorValidationErrors(formData, {
+      activeVendorFields,
+      vendorFieldConfiguration,
+    });
+    if (validationErrors.length > 0) {
+      toast.error(validationErrors[0]);
+      return;
+    }
+
     const gstErrors = getVendorGstVerificationErrors(formData, gstVerification, {
       invoiceVendorRequest,
       gstVerificationEnabled,
+      activeVendorFields,
     });
     if (gstErrors.length > 0) {
       setGstVerificationAttempted(true);
@@ -621,7 +653,7 @@ const VendorDetailsDialog = ({
   const gstVerificationSatisfied = isVendorGstVerificationSatisfied(
     formData,
     gstVerification,
-    { invoiceVendorRequest, gstVerificationEnabled },
+    { invoiceVendorRequest, gstVerificationEnabled, activeVendorFields },
   );
   const currencyOptions =
     Array.isArray(availableCurrencies) && availableCurrencies.length > 0
@@ -650,6 +682,7 @@ const VendorDetailsDialog = ({
     setFormData((prev) => ({
       ...prev,
       name: firstRecord.legalName || firstRecord.tradeName || prev.name,
+      trade_name: firstRecord.tradeName || prev.trade_name,
       vendor_type: firstRecord.vendorType || prev.vendor_type,
       pan: firstRecord.pan || prev.pan,
       email: firstRecord.email || prev.email,
@@ -899,7 +932,7 @@ const VendorDetailsDialog = ({
           ) : null}
         </DialogHeader>
 
-        <form onSubmit={handleFormSubmit} className="px-6 py-6 space-y-8">
+        <form onSubmit={handleFormSubmit} noValidate className="px-6 py-6 space-y-8">
           <FormSection
             title="Vendor identity"
             description="Choose the vendor type and registered name."
@@ -961,6 +994,21 @@ const VendorDetailsDialog = ({
                     invoiceVendorRequest ||
                     isRequired(VENDOR_FIELD_SECTIONS.COMPANY_NAME)
                   }
+                />
+              </div>
+
+              <div>
+                <Label>
+                  {labelFor(VENDOR_FIELD_SECTIONS.TRADE_NAME, "Trade Name")}
+                  {isRequired(VENDOR_FIELD_SECTIONS.TRADE_NAME) ? " *" : ""}
+                </Label>
+                <Input
+                  value={formData.trade_name || ""}
+                  onChange={(event) => updateField("trade_name", event.target.value)}
+                  placeholder="e.g., Tensai"
+                  className="mt-1.5"
+                  data-testid="vendor-trade-name-input"
+                  required={isRequired(VENDOR_FIELD_SECTIONS.TRADE_NAME)}
                 />
               </div>
 
@@ -1105,6 +1153,7 @@ const VendorDetailsDialog = ({
                     onUpdate={updateGstRegistration}
                     onRemove={removeGstRegistration}
                     portalFetchEnabled={showPortalFetch}
+                    gstinRequired={isRequired(VENDOR_FIELD_SECTIONS.GST_NO)}
                   />
                 </div>
               </div>

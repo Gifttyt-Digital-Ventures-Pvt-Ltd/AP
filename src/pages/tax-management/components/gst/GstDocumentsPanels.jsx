@@ -19,6 +19,7 @@ import { cn } from '../../../../lib/utils';
 import {
   GST_DOC_FY_OPTIONS,
   GST_DOC_MONTHS,
+  DEFAULT_GST_DOC_FY,
 } from '../../data/taxStaticData';
 import { useOrganisationGstCredentials } from '../../hooks/useOrganisationGstCredentials';
 import { useGstVendors } from '../../hooks/useGstVendors';
@@ -774,7 +775,7 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
 
   const [vendorId, setVendorId] = useState('');
   const [month, setMonth] = useState('Sep');
-  const [fy, setFy] = useState('2024-25');
+  const [fy, setFy] = useState(DEFAULT_GST_DOC_FY);
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [loading, setLoading] = useState(false);
@@ -1128,7 +1129,7 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
 
   const [vendorId, setVendorId] = useState('');
   const [month, setMonth] = useState('Sep');
-  const [fy, setFy] = useState('2024-25');
+  const [fy, setFy] = useState(DEFAULT_GST_DOC_FY);
   const [docType, setDocType] = useState('All Documents');
   const [itcFilter, setItcFilter] = useState('All');
   const [loading, setLoading] = useState(false);
@@ -1427,7 +1428,7 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
   } = orgGst;
 
   const [month, setMonth] = useState('Sep');
-  const [fy, setFy] = useState('2024-25');
+  const [fy, setFy] = useState(DEFAULT_GST_DOC_FY);
   const [vendorId, setVendorId] = useState('');
   const [docTypeF, setDocTypeF] = useState('All Documents');
   const [itcF, setItcF] = useState('All');

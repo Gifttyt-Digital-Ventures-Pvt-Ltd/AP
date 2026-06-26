@@ -92,7 +92,9 @@ export const mapVendorGstDetailsToFetchRecords = (response = {}, requestedMode =
   const currentData = normalizeGstPortalVendorDetails(getVendorGstDetailsCurrentData(response));
   const identity = {
     legalName:
-      pickIdentityField(currentData, 'legalName', 'legal_name', 'lgnm', 'tradeNam', 'tradeName', 'trade_name') || '',
+      pickIdentityField(currentData, 'legalName', 'legal_name', 'lgnm') || '',
+    tradeName:
+      pickIdentityField(currentData, 'tradeName', 'trade_name', 'tradeNam') || '',
     pan: (
       pickIdentityField(currentData, 'pan') ||
       String(currentData.gstin || '').trim().toUpperCase().slice(2, 12)
@@ -154,7 +156,8 @@ export const fetchVendorGstDetailsFromLookup = ({ pan, gstin } = {}, lookup = { 
       mode: 'pan',
       records,
       identity: {
-        legalName: records[0]?.legalName || records[0]?.tradeName || '',
+        legalName: records[0]?.legalName || '',
+        tradeName: records[0]?.tradeName || '',
         pan: source.value,
         vendorType: records[0]?.vendorType || 'Company',
         email: records[0]?.email || '',
@@ -174,7 +177,8 @@ export const fetchVendorGstDetailsFromLookup = ({ pan, gstin } = {}, lookup = { 
     mode: 'gstin',
     records: [record],
     identity: {
-      legalName: record.legalName || record.tradeName || '',
+      legalName: record.legalName || '',
+      tradeName: record.tradeName || '',
       pan: record.pan || '',
       vendorType: record.vendorType || 'Company',
       email: record.email || '',

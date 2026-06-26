@@ -4,6 +4,8 @@ import { sanitizeVendorTdsForSave } from '../../pages/vendors/utils/vendorTds';
 export const toVendorApiPayload = (vendor = {}) => {
   const {
     name,
+    trade_name,
+    tradeName,
     vendor_type,
     vendorType,
     msme,
@@ -65,6 +67,7 @@ export const toVendorApiPayload = (vendor = {}) => {
 
   return {
     name,
+    tradeName: tradeName ?? trade_name,
     vendorType: vendorType ?? vendor_type,
     msme: msmeBoolean,
     email,
@@ -99,6 +102,19 @@ export const toVendorApiPayload = (vendor = {}) => {
   };
 };
 
+/** Invoice vendor-request payload — omits blank contact fields so create-vendor mandatory rules are not triggered server-side. */
+export const toVendorRequestApiPayload = (vendor = {}) => {
+  const payload = toVendorApiPayload(vendor);
+
+  ['email', 'mobile', 'phone', 'contactPerson'].forEach((key) => {
+    if (!String(payload[key] ?? '').trim()) {
+      delete payload[key];
+    }
+  });
+
+  return payload;
+};
+
 export const toVendorUiPayload = (vendor = {}) => ({
   ...vendor,
   vendor_type: vendor.vendor_type ?? vendor.vendorType,
@@ -119,6 +135,7 @@ export const toVendorUiPayload = (vendor = {}) => ({
     vendor.vendor_tds_mapping ??
     null,
   msme: parseMsmeValue(vendor.msme ?? vendor.is_msme) === true,
+  trade_name: vendor.trade_name ?? vendor.tradeName ?? '',
   address_line1: vendor.address_line1 ?? vendor.addressLine1,
   address_line2: vendor.address_line2 ?? vendor.addressLine2,
   bank_name: vendor.bank_name ?? vendor.bankName,

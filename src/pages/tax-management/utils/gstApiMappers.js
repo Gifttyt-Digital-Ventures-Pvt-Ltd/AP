@@ -141,7 +141,7 @@ export function mapVendorGstDetailsToForm(currentData = {}) {
 
   return {
     gstin: (data.gstin ?? data.gstIn ?? data.gst ?? '').toUpperCase(),
-    legalName: data.legalName ?? data.legal_name ?? data.tradeName ?? data.trade_name ?? '',
+    legalName: data.legalName ?? data.legal_name ?? '',
     tradeName: data.tradeName ?? data.trade_name ?? '',
     businessNature: data.bussNature ?? data.businessNature ?? data.business_nature ?? '',
     state: data.stateName ?? data.state_name ?? data.state ?? '',
