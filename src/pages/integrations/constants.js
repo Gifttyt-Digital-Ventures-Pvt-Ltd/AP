@@ -25,7 +25,7 @@ export const FALLBACK_ZOHO_PROVIDER = {
     type: "OAUTH2",
     requiresDataCenter: true,
     requiresOrgSelection: true,
-    supportsByoCredentials: true,
+    requiresClientCredentials: true,
   },
   objects: {
     CHART_OF_ACCOUNTS: { supported: true, directions: ["PULL"] },
@@ -55,6 +55,3 @@ export const REVIEW_RESOLVE_ACTIONS = [
   { value: "REJECT", label: "Reject" },
   { value: "IGNORE", label: "Ignore" },
 ];
-
-export const isZohoByoFeatureEnabled = () =>
-  import.meta.env.VITE_INTEGRATIONS_ZOHO_BYO_ENABLED !== "false";
