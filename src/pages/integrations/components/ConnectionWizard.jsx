@@ -34,13 +34,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../components/ui/select";
-import { Switch } from "../../../components/ui/switch";
 import {
   DATA_CENTERS,
   FALLBACK_ZOHO_PROVIDER,
   OBJECT_LABELS,
   ZOHO_OAUTH_SESSION_KEY,
-  isZohoByoFeatureEnabled,
 } from "../constants";
 import {
   getConnectionId,
@@ -87,15 +85,12 @@ const ConnectionWizard = () => {
   const oauthErrorDescription = searchParams.get("error_description") || searchParams.get("message") || "";
 
   const [dataCenter, setDataCenter] = useState("in");
-  const [useByoCredentials, setUseByoCredentials] = useState(false);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [connectionId, setConnectionId] = useState("");
   const [selectedOrg, setSelectedOrg] = useState("");
   const [enabledObjects, setEnabledObjects] = useState(() => new Set(providerManifest.syncOrder || []));
-  const byoEnabled =
-    isZohoByoFeatureEnabled() && providerManifest.auth?.supportsByoCredentials !== false;
-  const model = useByoCredentials ? "B" : "A";
+  const model = "B";
 
   const resumedConnectionId = useMemo(() => {
     if (queryConnectionId) return queryConnectionId;
@@ -159,8 +154,8 @@ const ConnectionWizard = () => {
 
   const handleStartConnection = async () => {
     if (!guardAction("integrations.connect")) return;
-    if (useByoCredentials && (!clientId.trim() || !clientSecret.trim())) {
-      toast.error("Client ID and Client Secret are required for BYO credentials");
+    if (!clientId.trim() || !clientSecret.trim()) {
+      toast.error("Client ID and Client Secret are required to connect Zoho");
       return;
     }
     if (enabledObjects.size === 0) {
@@ -173,9 +168,8 @@ const ConnectionWizard = () => {
         model,
         dataCenter,
         enabledObjects: Array.from(enabledObjects),
-        ...(useByoCredentials
-          ? { clientId: clientId.trim(), clientSecret: clientSecret.trim() }
-          : {}),
+        clientId: clientId.trim(),
+        clientSecret: clientSecret.trim(),
       };
       const response = await createConnection(payload).unwrap();
       const nextConnectionId = response.connectionId || response.connection_id || response.id;
@@ -227,7 +221,7 @@ const ConnectionWizard = () => {
   return (
     <PageShell
       title={`Connect ${getProviderName(providerManifest)}`}
-      description="Model A uses Optifii's shared OAuth app. Model B lets enterprise clients bring their own Zoho app credentials."
+      description="Connect Zoho Books using your own Zoho app credentials. Tokens and secrets remain server-side."
       backAction={
         <Button asChild variant="outline" size="sm">
           <Link to="/integrations">
@@ -272,40 +266,23 @@ const ConnectionWizard = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <KeyRound className="h-4 w-4" />
-                OAuth model
+                Zoho app credentials
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between rounded-md border p-3">
-                <div>
-                  <p className="font-medium">Use my own Zoho app</p>
-                  <p className="text-sm text-muted-foreground">Advanced Model B path with client-owned OAuth credentials.</p>
-                </div>
-                <Switch
-                  checked={useByoCredentials}
-                  disabled={!byoEnabled}
-                  onCheckedChange={setUseByoCredentials}
-                />
-              </div>
-              {!byoEnabled && (
-                <p className="text-xs text-muted-foreground">
-                  BYO credentials are disabled for this tenant. Contact your administrator to enable Model B.
-                </p>
-              )}
-              {useByoCredentials ? (
-                <div className="space-y-4">
-                  <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
-                    <li>Create a Server-based Application in the Zoho API Console.</li>
-                    <li>Add the authorized redirect URI shown below.</li>
-                    <li>Copy the generated Client ID and Client Secret into Optifii.</li>
-                  </ol>
-                  <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-4">
+                <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+                  <li>Create a Server-based Application in the Zoho API Console.</li>
+                  <li>Add the authorized redirect URI shown below.</li>
+                  <li>Copy the generated Client ID and Client Secret into Optifii.</li>
+                </ol>
+                <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Client ID</Label>
+                    <Label>Client ID *</Label>
                     <Input value={clientId} onChange={(event) => setClientId(event.target.value)} />
                   </div>
                   <div className="space-y-2">
-                    <Label>Client Secret</Label>
+                    <Label>Client Secret *</Label>
                     <Input
                       type="password"
                       value={clientSecret}
@@ -324,13 +301,8 @@ const ConnectionWizard = () => {
                       Add this exact URI in the Zoho API Console before authorizing. Optifii stores credentials server-side only.
                     </p>
                   </div>
-                  </div>
                 </div>
-              ) : (
-                <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
-                  Model A uses Optifii&apos;s server-side OAuth app. No client secret is collected or exposed in the browser.
-                </div>
-              )}
+              </div>
             </CardContent>
           </Card>
 
@@ -369,8 +341,8 @@ const ConnectionWizard = () => {
             <CardContent className="space-y-4">
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Model</span>
-                  <Badge variant="outline">Model {model}</Badge>
+                  <span className="text-muted-foreground">Connection type</span>
+                  <Badge variant="outline">Client-owned app</Badge>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Data center</span>

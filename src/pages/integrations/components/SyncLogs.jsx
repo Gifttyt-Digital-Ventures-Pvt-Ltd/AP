@@ -24,7 +24,27 @@ import { OBJECT_LABELS } from "../constants";
 import { formatDateTime, normalizeLogs, titleize } from "../utils";
 import { EmptyState, LoadingState, PageShell, StatusBadge } from "./shared";
 
-const SyncLogs = () => {
+const DashboardBackButton = ({ connectionId, onOpenDashboard }) => {
+  if (onOpenDashboard) {
+    return (
+      <Button type="button" variant="outline" size="sm" onClick={onOpenDashboard}>
+        <ArrowLeft className="mr-2 h-4 w-4" />
+        Dashboard
+      </Button>
+    );
+  }
+
+  return (
+    <Button asChild variant="outline" size="sm">
+      <Link to={`/integrations/${connectionId}`}>
+        <ArrowLeft className="mr-2 h-4 w-4" />
+        Dashboard
+      </Link>
+    </Button>
+  );
+};
+
+const SyncLogs = ({ onOpenDashboard }) => {
   const { connectionId } = useParams();
   const [object, setObject] = useState("ALL");
   const { data, isLoading, refetch } = useGetIntegrationLogsQuery({
@@ -37,14 +57,7 @@ const SyncLogs = () => {
     <PageShell
       title="Sync Logs"
       description="Backend sync history, throttling, partial failures, and resolved events."
-      backAction={
-        <Button asChild variant="outline" size="sm">
-          <Link to={`/integrations/${connectionId}`}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Dashboard
-          </Link>
-        </Button>
-      }
+      backAction={<DashboardBackButton connectionId={connectionId} onOpenDashboard={onOpenDashboard} />}
       actions={
         <>
           <Select value={object} onValueChange={setObject}>

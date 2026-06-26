@@ -12,7 +12,7 @@ import {
 import { useActionGuard } from "../../../hooks/useActionGuard";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card";
-import { FALLBACK_ZOHO_PROVIDER, OBJECT_LABELS } from "../constants";
+import { DATA_CENTERS, FALLBACK_ZOHO_PROVIDER, OBJECT_LABELS } from "../constants";
 import {
   formatDateTime,
   getConnectionOrgName,
@@ -114,6 +114,11 @@ const SyncDashboard = () => {
     providers.find((item) => getProviderKey(item) === getConnectionProvider(connection || {})) ||
     FALLBACK_ZOHO_PROVIDER;
   const rows = useMemo(() => normalizeSyncRows(syncResponse, manifest), [syncResponse, manifest]);
+  const dataCenterValue = connection?.dataCenter || connection?.data_center || "";
+  const dataCenterLabel =
+    DATA_CENTERS.find((dataCenter) => dataCenter.value === dataCenterValue)?.label ||
+    dataCenterValue ||
+    "Not set";
 
   useEffect(() => {
     setPollSyncStatus(shouldPollSyncStatus(rows) || syncing);
@@ -172,13 +177,13 @@ const SyncDashboard = () => {
         <Card className="rounded-md">
           <CardContent className="p-4">
             <p className="text-sm text-muted-foreground">Data center</p>
-            <p className="mt-2 font-medium">{connection?.dataCenter || connection?.data_center || "Not set"}</p>
+            <p className="mt-2 font-medium">{dataCenterLabel}</p>
           </CardContent>
         </Card>
         <Card className="rounded-md">
           <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">OAuth model</p>
-            <p className="mt-2 font-medium">Model {connection?.model || connection?.oauthModel || connection?.oauth_model || "A"}</p>
+            <p className="text-sm text-muted-foreground">Connection type</p>
+            <p className="mt-2 font-medium">Client-owned Zoho app</p>
           </CardContent>
         </Card>
       </div>
