@@ -12,6 +12,8 @@ import {
   SelectValue,
 } from '../ui/select';
 import { cn } from '../../lib/utils';
+import MeteredActionCostHint from '../credits/MeteredActionCostHint';
+import { CREDIT_ACTION_CODES } from '../../constants/creditActions';
 
 const QUARTERS = [
   { key: 'q1Preference', label: 'Q1', period: 'Apr-Jun' },
@@ -159,6 +161,8 @@ const VendorReturnPreferenceBlock = ({ gstin, vendorName, className }) => {
           </Button>
         </div>
       </div>
+
+      <MeteredActionCostHint actionCode={CREDIT_ACTION_CODES.GST_RETURN_PREFERENCE_API} className="mt-4" />
 
       {!canFetch ? (
         <div className="mt-4 rounded-md border border-amber-200 bg-amber-50/80 px-3 py-2 text-xs text-amber-900">

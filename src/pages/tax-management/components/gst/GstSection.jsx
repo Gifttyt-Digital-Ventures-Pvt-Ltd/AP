@@ -13,6 +13,7 @@ import {
   GstReconciliationPanel,
   GstReturnsPanel,
 } from './GstReferencePanels';
+import { GstAnalyticsReconciliationProvider } from '../../contexts/GstAnalyticsReconciliationContext';
 
 const GST_SUB_TABS = [
   { value: GST_TAB_VALUES.OVERVIEW, label: 'Overview' },
@@ -72,8 +73,9 @@ const GstSection = forwardRef(({ enabled = true }, ref) => {
         : 'grid-cols-2 md:grid-cols-5';
 
   return (
-    <TabsContent value="gst" className="space-y-5">
-      <Tabs value={gstSubTab} onValueChange={setGstSubTab} className="space-y-5">
+    <GstAnalyticsReconciliationProvider enabled={enabled}>
+      <TabsContent value="gst" className="space-y-5">
+        <Tabs value={gstSubTab} onValueChange={setGstSubTab} className="space-y-5">
         <TabsList className={`grid w-full ${gridColsClass}`}>
           {visibleTabs.map((tab) => (
             <TabsTrigger key={tab.value} value={tab.value}>
@@ -92,8 +94,9 @@ const GstSection = forwardRef(({ enabled = true }, ref) => {
         {gstSubTab === GST_TAB_VALUES.RETURNS ? <GstReturnsPanel /> : null}
         {gstSubTab === GST_TAB_VALUES.DOCUMENTS ? <GstDocumentsPanel /> : null}
         {gstSubTab === GST_TAB_VALUES.LEDGERS ? <GstLedgersPanel /> : null}
-      </Tabs>
-    </TabsContent>
+        </Tabs>
+      </TabsContent>
+    </GstAnalyticsReconciliationProvider>
   );
 });
 

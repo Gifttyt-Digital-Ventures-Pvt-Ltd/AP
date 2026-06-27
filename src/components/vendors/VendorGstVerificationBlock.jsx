@@ -11,6 +11,8 @@ import {
   useVendorGstAutofill,
 } from '../../pages/tax-management/hooks/useVendorGstAutofill';
 import { cn } from '../../lib/utils';
+import MeteredActionCostHint from '../credits/MeteredActionCostHint';
+import { CREDIT_ACTION_CODES } from '../../constants/creditActions';
 
 const isValidGstin = (value) => GSTIN_PATTERN.test(String(value || '').trim().toUpperCase());
 
@@ -175,6 +177,8 @@ const VendorGstVerificationBlock = ({
           required={gstRequired}
         />
       </div>
+
+      <MeteredActionCostHint actionCode={CREDIT_ACTION_CODES.GST_VENDOR_DETAILS_API} />
 
       {isLoading ? (
         <div className="flex items-center gap-2 text-xs text-muted-foreground">

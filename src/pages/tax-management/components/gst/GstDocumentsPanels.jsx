@@ -46,6 +46,8 @@ import GstPortalOtpDialog from './GstPortalOtpDialog';
 import { getApiErrorMessage } from '../../hooks/useGstTaxpayerSession';
 import { toast } from 'sonner';
 import { formatCurrency } from '../../utils/taxFormatting';
+import MeteredActionCostHint from '../../../../components/credits/MeteredActionCostHint';
+import { CREDIT_ACTION_CODES } from '../../../../constants/creditActions';
 import {
   TaxAlertBanner,
   TaxApiMeta,
@@ -1020,6 +1022,7 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
       </div>
 
       <TaxSectionCard title="Fetch GST Records" description="Fetches GSTR-2A B2B + B2BA simultaneously">
+        <MeteredActionCostHint actionCode={CREDIT_ACTION_CODES.GST_RECON_API} className="mb-4" />
         <div className="flex flex-wrap items-end gap-4">
           <OrgGstCredentialFields
             credentials={credentials}
@@ -1284,6 +1287,7 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
       </div>
 
       <TaxSectionCard title="Fetch GST Documents">
+        <MeteredActionCostHint actionCode={CREDIT_ACTION_CODES.GST_DOCUMENTS_API} className="mb-4" />
         <div className="flex flex-wrap items-end gap-4">
           <OrgGstCredentialFields
             credentials={credentials}
@@ -1605,6 +1609,7 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
       </div>
 
       <TaxSectionCard title="Fetch GSTR-2B Statement" description="Static monthly statement · finalized by GST Portal">
+        <MeteredActionCostHint actionCode={CREDIT_ACTION_CODES.GST_DOCUMENTS_API} className="mb-4" />
         <div className="flex flex-wrap items-end gap-4">
           <OrgGstCredentialFields
             credentials={credentials}

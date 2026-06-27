@@ -16,6 +16,12 @@ const gstHistoryResponse = (response) => {
   return withHistoryMeta(response?.data?.history ?? response?.history ?? [], response);
 };
 
+const gstAnalyticsHistoryResponse = (response) => {
+  if (Array.isArray(response)) return withHistoryMeta(response, response);
+  if (Array.isArray(response?.data)) return withHistoryMeta(response.data, response);
+  return withHistoryMeta([], response);
+};
+
 export const taxApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getOrganisationGstCredentials: builder.query({
@@ -37,6 +43,7 @@ export const taxApi = serviceApi.injectEndpoints({
         body,
       }),
       transformResponse: gstMutationResponse,
+      invalidatesTags: ["Tax", ...CREDIT_INVALIDATION_TAGS],
     }),
     getVendorReturnPreference: builder.mutation({
       query: (body) => ({
@@ -45,6 +52,7 @@ export const taxApi = serviceApi.injectEndpoints({
         body,
       }),
       transformResponse: gstMutationResponse,
+      invalidatesTags: ["Tax", ...CREDIT_INVALIDATION_TAGS],
     }),
     trackGstReturns: builder.mutation({
       query: (body) => {
@@ -60,6 +68,7 @@ export const taxApi = serviceApi.injectEndpoints({
         };
       },
       transformResponse: (response) => response?.returns ? response : response?.data ?? response,
+      invalidatesTags: ["Tax", ...CREDIT_INVALIDATION_TAGS],
     }),
     reconcileGstr2a: builder.mutation({
       query: (body) => ({
@@ -77,6 +86,50 @@ export const taxApi = serviceApi.injectEndpoints({
         params: { limit, offset },
       }),
       transformResponse: gstHistoryResponse,
+    }),
+    submitGstr2aAnalyticsReconciliation: builder.mutation({
+      query: (body) => ({
+        url: "/tax/gst/analytics/gstr-2a/reconciliation",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Tax", ...CREDIT_INVALIDATION_TAGS],
+    }),
+    getGstr2aAnalyticsReconciliationJob: builder.mutation({
+      query: (jobId) => ({
+        url: `/tax/gst/analytics/gstr-2a/reconciliation/${jobId}`,
+        method: "GET",
+      }),
+    }),
+    fetchGstr2aAnalyticsReconciliationHistory: builder.mutation({
+      query: ({ limit = 20, offset = 0 } = {}) => ({
+        url: "/tax/gst/analytics/gstr-2a/reconciliation/history",
+        method: "GET",
+        params: { limit, offset },
+      }),
+      transformResponse: gstAnalyticsHistoryResponse,
+    }),
+    submitGstr2bAnalyticsReconciliation: builder.mutation({
+      query: (body) => ({
+        url: "/tax/gst/analytics/gstr-2b/reconciliation",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Tax", ...CREDIT_INVALIDATION_TAGS],
+    }),
+    getGstr2bAnalyticsReconciliationJob: builder.mutation({
+      query: (jobId) => ({
+        url: `/tax/gst/analytics/gstr-2b/reconciliation/${jobId}`,
+        method: "GET",
+      }),
+    }),
+    fetchGstr2bAnalyticsReconciliationHistory: builder.mutation({
+      query: ({ limit = 20, offset = 0 } = {}) => ({
+        url: "/tax/gst/analytics/gstr-2b/reconciliation/history",
+        method: "GET",
+        params: { limit, offset },
+      }),
+      transformResponse: gstAnalyticsHistoryResponse,
     }),
     getGstr2aInvoiceDetails: builder.mutation({
       query: (body) => ({
@@ -176,14 +229,6 @@ export const taxApi = serviceApi.injectEndpoints({
       query: () => ({ url: "/tax/tds/sections", method: "GET" }),
       providesTags: ["Tax"],
     }),
-    calculateGst: builder.mutation({
-      query: (body) => ({
-        url: "/tax/gst/calculate",
-        method: "POST",
-        body,
-      }),
-      invalidatesTags: ["Tax", ...CREDIT_INVALIDATION_TAGS],
-    }),
     calculateTds: builder.mutation({
       query: (body) => ({
         url: "/tax/tds/calculate",
@@ -207,6 +252,12 @@ export const {
   useTrackGstReturnsMutation,
   useReconcileGstr2aMutation,
   useFetchGstr2aReconcileHistoryMutation,
+  useSubmitGstr2aAnalyticsReconciliationMutation,
+  useGetGstr2aAnalyticsReconciliationJobMutation,
+  useFetchGstr2aAnalyticsReconciliationHistoryMutation,
+  useSubmitGstr2bAnalyticsReconciliationMutation,
+  useGetGstr2bAnalyticsReconciliationJobMutation,
+  useFetchGstr2bAnalyticsReconciliationHistoryMutation,
   useGetGstr2aInvoiceDetailsMutation,
   useFetchGstr2aDocumentsMutation,
   useFetchGstr2aDocumentsHistoryMutation,
@@ -220,7 +271,6 @@ export const {
   useGetTdsEntriesQuery,
   useGetTdsSummaryQuery,
   useGetTdsSectionsQuery,
-  useCalculateGstMutation,
   useCalculateTdsMutation,
   useGenerateForm16aMutation,
 } = taxApi;
