@@ -458,9 +458,6 @@ export const RBACProvider = ({ children }) => {
     if (actionKey === "billing.requestTokens" || actionKey === "billing.updateSettings") {
       return isBillingFeatureEnabled;
     }
-    if (actionKey === "tax.calculateGst") {
-      return isCorporateSectionEnabled("TAX_GST");
-    }
     if (actionKey === "tax.calculateTds" || actionKey === "tax.generateForm16a") {
       return isCorporateSectionEnabled("TAX_TDS_COMPLIANCE");
     }

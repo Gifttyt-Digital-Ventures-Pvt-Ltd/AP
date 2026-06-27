@@ -73,8 +73,9 @@ export const Layout = ({ children }) => {
     isLoading: walletLoading,
     isError: walletError,
   } = useGetClientWalletSummaryQuery(undefined, {
-    pollingInterval: 60000,
     skip: !user || !rbacLoaded || !isTokenBasedSubscription,
+    refetchOnFocus: false,
+    refetchOnMountOrArgChange: false,
   });
   const navigate = useNavigate();
   const location = useLocation();

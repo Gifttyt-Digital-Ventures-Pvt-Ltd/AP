@@ -221,7 +221,6 @@ export const ACTION_PERMISSION_RULES = {
   "categories.update": { anyOf: ["category-manage"] },
   "categories.delete": { anyOf: ["category-manage"] },
 
-  "tax.calculateGst": { anyOf: ["tax-manage"] },
   "tax.calculateTds": { anyOf: ["tax-manage"] },
   "tax.generateForm16a": { anyOf: ["tax-manage"] },
 

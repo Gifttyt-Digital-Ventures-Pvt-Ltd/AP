@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   AlertCircle,
   BarChart3,
@@ -51,17 +51,34 @@ import {
   DEFAULT_TAX_PERIOD,
   TAX_PERIODS,
 } from '../../data/taxStaticData';
-import { useTrackGstReturnsMutation } from '../../../../Services/apis/taxApi';
+import {
+  useSubmitGstr2aAnalyticsReconciliationMutation,
+  useSubmitGstr2bAnalyticsReconciliationMutation,
+  useTrackGstReturnsMutation,
+} from '../../../../Services/apis/taxApi';
 import { buildReturnsTrackPayload } from '../../utils/gstApiMappers';
 import { getApiErrorMessage } from '../../hooks/useGstTaxpayerSession';
 import { useGstVendors } from '../../hooks/useGstVendors';
+import { useOrganisationGstCredentials } from '../../hooks/useOrganisationGstCredentials';
 import { toast } from 'sonner';
 import { formatCurrency, formatRetPeriod } from '../../utils/taxFormatting';
+import MeteredActionCostHint from '../../../../components/credits/MeteredActionCostHint';
+import { CREDIT_ACTION_CODES } from '../../../../constants/creditActions';
 import {
   getCurrentIndianFinancialYear,
   getIndianFinancialYearReturnsOptions,
   toIndianFinancialYearReturnsLabel,
 } from '../../utils/gstPeriod';
+import OrgGstCredentialFields from './OrgGstCredentialFields';
+import { useCreditErrorHandler } from '../../../../contexts/CreditErrorContext';
+import { useGstAnalyticsReconciliation } from '../../contexts/GstAnalyticsReconciliationContext';
+import {
+  getAnalyticsDocumentUrl,
+  getAnalyticsJob,
+  getAnalyticsJobId,
+  getAnalyticsStatus,
+  isAnalyticsJobTerminal,
+} from '../../utils/gstAnalyticsReconciliation';
 
 const RECON_SUGGESTED_ACTIONS = {
   Matched: null,
@@ -168,119 +185,384 @@ const GstReconciliationDrawerContent = ({ row }) => {
   );
 };
 
+const GST_RECONCILIATION_PAGE_SIZE = 20;
+const GST_RECONCILIATION_MONTHS = [
+  { value: '1', label: 'January' },
+  { value: '2', label: 'February' },
+  { value: '3', label: 'March' },
+  { value: '4', label: 'April' },
+  { value: '5', label: 'May' },
+  { value: '6', label: 'June' },
+  { value: '7', label: 'July' },
+  { value: '8', label: 'August' },
+  { value: '9', label: 'September' },
+  { value: '10', label: 'October' },
+  { value: '11', label: 'November' },
+  { value: '12', label: 'December' },
+];
+const GST_RECONCILIATION_CRITERIA = [
+  { value: 'strict', label: 'Strict' },
+  { value: 'relaxed', label: 'Relaxed' },
+];
+const GST_RECONCILIATION_FILING_PREFERENCES = [
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'quarterly', label: 'Quarterly' },
+];
+
+const getCalendarYearOptions = () => {
+  const currentYear = new Date().getFullYear();
+  return Array.from({ length: 7 }, (_, index) => String(currentYear - 4 + index));
+};
+
+const getAnalyticsHistoryTotal = (history) => Number(history?.total ?? history?.length ?? 0);
+const getAnalyticsHistoryPages = (history) => {
+  const total = getAnalyticsHistoryTotal(history);
+  return Math.max(1, Math.ceil(total / GST_RECONCILIATION_PAGE_SIZE));
+};
+const formatAnalyticsDateTime = (value) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+const formatAnalyticsPeriod = (job) => {
+  const month = GST_RECONCILIATION_MONTHS.find((item) => item.value === String(job?.month))?.label;
+  return [month, job?.year].filter(Boolean).join(' ') || '—';
+};
+
 export const GstReconciliationPanel = () => {
-  const [subTab, setSubTab] = useState('GSTR-2A');
-  const [status, setStatus] = useState('All');
-  const [search, setSearch] = useState('');
-  const [period, setPeriod] = useState(DEFAULT_TAX_PERIOD);
-  const [selectedRow, setSelectedRow] = useState(null);
+  const now = new Date();
+  const yearOptions = useMemo(() => getCalendarYearOptions(), []);
+  const [subTab, setSubTab] = useState('2a');
+  const [selectedOrgGst, setSelectedOrgGst] = useState('');
+  const [vendorId, setVendorId] = useState('all');
+  const [month, setMonth] = useState(String(now.getMonth() + 1));
+  const [year, setYear] = useState(String(now.getFullYear()));
+  const [criteria, setCriteria] = useState('strict');
+  const [filingPreference, setFilingPreference] = useState('monthly');
+  const [historyRows, setHistoryRows] = useState([]);
+  const [historyPage, setHistoryPage] = useState(1);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [submitLoading, setSubmitLoading] = useState(false);
 
-  const type = subTab === 'GSTR-2A' ? '2A' : '2B';
-  const sourceRows = [];
-  const matchPct = 0;
-  const totalInvoices = 0;
+  const { handleCreditError } = useCreditErrorHandler();
+  const {
+    activeJobsByType,
+    historyRefreshTick,
+    setActiveJobForType,
+    startPollingJob,
+    clearPendingJobForType,
+    fetchHistoryRows,
+  } = useGstAnalyticsReconciliation();
+  const { credentials, isLoading: credentialsLoading } = useOrganisationGstCredentials();
+  const { vendors, isLoading: vendorsLoading } = useGstVendors();
+  const [submitGstr2a] = useSubmitGstr2aAnalyticsReconciliationMutation();
+  const [submitGstr2b] = useSubmitGstr2bAnalyticsReconciliationMutation();
 
-  const filteredRows = useMemo(() => {
-    const query = search.trim().toLowerCase();
-    return sourceRows.filter((row) => {
-      const matchesStatus = status === 'All' || row.result === status;
-      const matchesSearch =
-        !query ||
-        row.invoiceNo.toLowerCase().includes(query) ||
-        row.vendor.toLowerCase().includes(query) ||
-        row.gstin.toLowerCase().includes(query);
-      return matchesStatus && matchesSearch;
-    });
-  }, [search, sourceRows, status]);
+  const selectedCredential = credentials.find((entry) => entry.gst === selectedOrgGst);
+  const selectedVendor = vendors.find((vendor) => vendor.id === vendorId);
+  const activeTypeLabel = subTab === '2a' ? 'GSTR-2A' : 'GSTR-2B';
+  const activeJob = activeJobsByType[subTab] ?? null;
+  const historyTotalPages = getAnalyticsHistoryPages(historyRows);
 
-  const matchedCount = filteredRows.filter((row) => row.result === 'Matched').length;
-  const partialCount = filteredRows.filter((row) => row.result === 'Partial').length;
-  const missingBooks = filteredRows.filter((row) => row.result === 'Missing in Books').length;
-  const missingPortal = filteredRows.filter((row) => row.result.includes('Missing') && row.result !== 'Missing in Books').length;
+  const loadHistory = useCallback(async (page = 1, type = subTab) => {
+    setHistoryLoading(true);
+    try {
+      const rows = await fetchHistoryRows(type, page);
+      setHistoryRows(rows);
+      return rows;
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+      setHistoryRows([]);
+      return [];
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, [fetchHistoryRows, subTab]);
+
+  const openReport = (job) => {
+    const documentUrl = getAnalyticsDocumentUrl(job);
+    if (!documentUrl) {
+      toast.error('Report is not available yet.');
+      return;
+    }
+    window.open(documentUrl, '_blank', 'noopener,noreferrer');
+  };
+
+  useEffect(() => {
+    if (!selectedOrgGst && credentials.length > 0) {
+      setSelectedOrgGst(credentials[0].gst);
+    }
+  }, [credentials, selectedOrgGst]);
+
+  useEffect(() => {
+    setSubmitLoading(false);
+    setHistoryPage(1);
+    loadHistory(1, subTab);
+  }, [subTab, loadHistory]);
+
+  useEffect(() => {
+    if (!historyRefreshTick[subTab]) return;
+    loadHistory(historyPage, subTab);
+  }, [historyPage, historyRefreshTick, loadHistory, subTab]);
+
+  const handleSubmit = async () => {
+    if (!selectedCredential?.gst) {
+      toast.error('Select organisation GSTIN before generating reconciliation.');
+      return;
+    }
+
+    setSubmitLoading(true);
+    try {
+      const payload = {
+        gstin: selectedCredential.gst,
+        username: selectedCredential.userName || undefined,
+        ...(selectedVendor?.name ? { vendor: selectedVendor.name } : {}),
+        year: Number(year),
+        month: Number(month),
+        reconciliationCriteria: criteria,
+        ...(subTab === '2b' ? { filingPreference } : {}),
+      };
+      const result = subTab === '2a'
+        ? await submitGstr2a(payload).unwrap()
+        : await submitGstr2b(payload).unwrap();
+      const job = getAnalyticsJob(result);
+      const jobId = getAnalyticsJobId(job);
+      setActiveJobForType(subTab, job);
+      toast.success(`${activeTypeLabel} reconciliation started.`);
+
+      if (!isAnalyticsJobTerminal(job) && !jobId) {
+        setSubmitLoading(false);
+        toast.error('Reconciliation job id was not returned by the server.');
+        return;
+      }
+
+      if (!isAnalyticsJobTerminal(job) && jobId) {
+        startPollingJob(subTab, jobId, job);
+        setSubmitLoading(false);
+        return;
+      }
+
+      clearPendingJobForType(subTab);
+      setSubmitLoading(false);
+      await loadHistory(1, subTab);
+    } catch (error) {
+      setSubmitLoading(false);
+      if (handleCreditError(error)) return;
+      toast.error(getApiErrorMessage(error));
+    }
+  };
 
   return (
     <TabsContent value="reconciliation" className="space-y-4">
       <Tabs value={subTab} onValueChange={setSubTab}>
         <TabsList className="grid w-full max-w-md grid-cols-2">
-          <TabsTrigger value="GSTR-2A">GSTR-2A</TabsTrigger>
-          <TabsTrigger value="GSTR-2B">GSTR-2B</TabsTrigger>
+          <TabsTrigger value="2a">GSTR-2A</TabsTrigger>
+          <TabsTrigger value="2b">GSTR-2B</TabsTrigger>
         </TabsList>
       </Tabs>
 
       <TaxSectionCard
         icon={FileSearch}
-        title={`GSTR-${type} Reconciliation`}
-        description={type === '2A' ? 'Match purchase register with supplier uploaded invoices.' : 'Compare purchase register with static GSTR-2B statement.'}
-        meta={<TaxApiMeta synced="Today, 09:42 AM" count={String(totalInvoices)} />}
+        title={`${activeTypeLabel} Analytics Reconciliation`}
+        description="Generate a GST analytics reconciliation report for an organisation GSTIN."
         actions={
-          <>
-            <Button variant="outline" size="sm">
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Refresh
-            </Button>
-            <Button variant="outline" size="sm">
-              Export Report
-            </Button>
-            <Button size="sm">
-              <Play className="mr-2 h-4 w-4" />
-              Run Reconciliation
-            </Button>
-          </>
+          <Button size="sm" onClick={handleSubmit} disabled={submitLoading || credentialsLoading || !selectedOrgGst}>
+            {submitLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
+            {submitLoading ? 'Submitting…' : 'Generate Report'}
+          </Button>
         }
       >
-        <TaxFilterBar className="mb-4 md:grid-cols-6">
-          <TaxPeriodSelect value={period} onValueChange={setPeriod} periods={TAX_PERIODS} />
-          <TaxSelect value={status} onValueChange={setStatus} options={['All', 'Matched', 'Partial', 'Amount Mismatch', 'Missing in Books', 'Missing in AP', 'Missing in GST']} />
-          <TaxSearchInput value={search} onChange={setSearch} placeholder="Search invoice, vendor, GSTIN" />
-        </TaxFilterBar>
-
-        <div className="mb-4 grid gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <TaxKpiCard label="Total Invoices" value={String(totalInvoices)} icon={FileText} />
-          <TaxKpiCard label="Matched" value={String(matchedCount)} tone="green" icon={FileSearch} />
-          <TaxKpiCard label="Partial Match" value={String(partialCount)} tone="amber" icon={Search} />
-          <TaxKpiCard label="Missing in Books" value={String(missingBooks)} tone="red" icon={Layers} />
-          <TaxKpiCard label="Missing in Portal" value={String(missingPortal)} tone="red" icon={Layers} />
-          <TaxKpiCard label="Match %" value={`${matchPct}%`} tone={matchPct >= 80 ? 'green' : 'amber'} icon={BarChart3} />
+        <MeteredActionCostHint actionCode={CREDIT_ACTION_CODES.GST_RECON_API} className="mb-4" />
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+          <OrgGstCredentialFields
+            credentials={credentials}
+            loading={credentialsLoading}
+            selectedGst={selectedOrgGst}
+            onGstChange={setSelectedOrgGst}
+            className="xl:col-span-2"
+          />
+          <div className="space-y-1.5 xl:col-span-2">
+            <label className="text-xs font-medium text-muted-foreground">Supplier</label>
+            <TaxSelect
+              value={vendorId}
+              onValueChange={setVendorId}
+              placeholder={vendorsLoading ? 'Loading suppliers…' : 'All Suppliers'}
+              options={[
+                { value: 'all', label: 'All Suppliers' },
+                ...vendors.map((vendor) => ({
+                  value: vendor.id,
+                  label: vendor.gstin ? `${vendor.name} · ${vendor.gstin}` : vendor.name,
+                })),
+              ]}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Month</label>
+            <TaxSelect value={month} onValueChange={setMonth} options={GST_RECONCILIATION_MONTHS} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Calendar Year</label>
+            <TaxSelect value={year} onValueChange={setYear} options={yearOptions} />
+          </div>
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium text-muted-foreground">Criteria</label>
+            <TaxSelect value={criteria} onValueChange={setCriteria} options={GST_RECONCILIATION_CRITERIA} />
+          </div>
+          {subTab === '2b' ? (
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium text-muted-foreground">Filing Preference</label>
+              <TaxSelect value={filingPreference} onValueChange={setFilingPreference} options={GST_RECONCILIATION_FILING_PREFERENCES} />
+            </div>
+          ) : null}
         </div>
 
-        <div className="mb-4 px-1">
-          <p className="mb-2 text-xs text-muted-foreground">Overall Match Progress</p>
-          <TaxProgressRow label="Reconciliation progress" value={matchPct} />
-        </div>
+        {activeJob ? (
+          <div className="mt-4 rounded-md border bg-muted/20 p-4">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-sm font-semibold">Current Request</p>
+                {getAnalyticsStatus(activeJob) === 'PROCESSING' ? (
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Processing in background. Status updates automatically while you stay in Tax Management.
+                  </p>
+                ) : null}
+              </div>
+              <TaxStatusBadge status={activeJob.status} />
+            </div>
+            <TaxDetailGrid
+              items={[
+                { label: 'Supplier', value: activeJob.supplierName || selectedVendor?.name || 'All Suppliers' },
+                { label: 'Period', value: formatAnalyticsPeriod(activeJob) },
+                { label: 'Criteria', value: activeJob.reconciliationCriteria || criteria },
+                { label: 'Generated On', value: formatAnalyticsDateTime(activeJob.fetchDateTime) },
+                { label: 'Completed On', value: formatAnalyticsDateTime(activeJob.completedAt) },
+                { label: 'Filing Preference', value: activeJob.filingPreference || (subTab === '2b' ? filingPreference : '—') },
+              ]}
+            />
+            {activeJob.failureMessage ? (
+              <TaxAlertBanner tone="red" className="mt-3">
+                <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                <span>{activeJob.failureMessage}</span>
+              </TaxAlertBanner>
+            ) : null}
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => openReport(activeJob)} disabled={!getAnalyticsDocumentUrl(activeJob)}>
+                <Download className="mr-2 h-4 w-4" />
+                Download Report
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </TaxSectionCard>
 
-        {filteredRows.length === 0 ? (
+      <TaxSectionCard
+        icon={FileText}
+        title={`${activeTypeLabel} Report History`}
+        description="Previously generated analytics reconciliation reports. Download uses the saved report URL and does not re-run reconciliation."
+        meta={<TaxApiMeta synced={historyLoading ? 'Refreshing…' : 'Latest'} count={String(getAnalyticsHistoryTotal(historyRows))} />}
+        actions={
+          <Button variant="outline" size="sm" onClick={() => loadHistory(historyPage, subTab)} disabled={historyLoading}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${historyLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+        }
+      >
+        {historyLoading && historyRows.length === 0 ? (
           <TaxEmptyState
-            icon={FileSearch}
-            title="No reconciliation data"
-            description="Run GSTR-2A B2B reconcile from the Documents tab to populate reconciliation results."
+            icon={RefreshCw}
+            title="Loading reconciliation history…"
+            description="Fetching the latest generated reports."
           />
         ) : (
           <>
             <TaxCompactTable
-              rows={filteredRows}
-              onRowClick={setSelectedRow}
+              rows={historyRows}
+              getRowKey={(row, index) => `${getAnalyticsJobId(getAnalyticsJob(row)) || row?.requestedAt || index}-${index}`}
+              emptyMessage="No reconciliation reports found."
               columns={[
-                { key: 'invoiceNo', title: 'Invoice No.' },
-                { key: 'vendor', title: 'Vendor' },
-                { key: 'gstin', title: 'GSTIN', cellClassName: 'font-mono text-xs' },
-                { key: 'date', title: 'Invoice Date' },
-                { key: 'taxable', title: 'Taxable Value', render: (row) => formatCurrency(row.taxable), cellClassName: 'text-right' },
-                { key: 'gst', title: 'GST Amount', render: (row) => formatCurrency(row.gst), cellClassName: 'text-right' },
-                { key: 'itcEligible', title: 'ITC Eligible', render: (row) => <TaxStatusBadge status={row.itcEligible} /> },
-                { key: 'booksStatus', title: 'Books Status', render: (row) => <TaxStatusBadge status={row.booksStatus} /> },
-                { key: 'portalStatus', title: 'GST Portal Status', render: (row) => <TaxStatusBadge status={row.portalStatus} /> },
-                { key: 'difference', title: 'Difference', render: (row) => formatCurrency(row.difference), cellClassName: 'text-right' },
-                { key: 'result', title: 'Match Result', render: (row) => <TaxStatusBadge status={row.result} /> },
+                {
+                  key: 'requestedAt',
+                  title: 'Generated On',
+                  render: (row) => formatAnalyticsDateTime(row?.requestedAt ?? getAnalyticsJob(row)?.fetchDateTime),
+                },
+                {
+                  key: 'completedAt',
+                  title: 'Completed On',
+                  render: (row) => formatAnalyticsDateTime(getAnalyticsJob(row)?.completedAt),
+                },
+                {
+                  key: 'supplierName',
+                  title: 'Supplier',
+                  render: (row) => getAnalyticsJob(row)?.supplierName || 'All Suppliers',
+                },
+                {
+                  key: 'period',
+                  title: 'Period',
+                  render: (row) => formatAnalyticsPeriod(getAnalyticsJob(row)),
+                },
+                {
+                  key: 'criteria',
+                  title: 'Criteria',
+                  render: (row) => getAnalyticsJob(row)?.reconciliationCriteria || '—',
+                },
+                ...(subTab === '2b'
+                  ? [{
+                    key: 'filingPreference',
+                    title: 'Filing Preference',
+                    render: (row) => getAnalyticsJob(row)?.filingPreference || '—',
+                  }]
+                  : []),
+                {
+                  key: 'status',
+                  title: 'Status',
+                  render: (row) => <TaxStatusBadge status={getAnalyticsJob(row)?.status} />,
+                },
+                {
+                  key: 'download',
+                  title: 'Report',
+                  render: (row) => {
+                    const job = getAnalyticsJob(row);
+                    return (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={!getAnalyticsDocumentUrl(job)}
+                        onClick={() => openReport(job)}
+                      >
+                        <Download className="mr-2 h-4 w-4" />
+                        Download
+                      </Button>
+                    );
+                  },
+                },
               ]}
             />
-            <TaxPagination />
+            <TaxPagination
+              page={historyPage}
+              totalPages={historyTotalPages}
+              loading={historyLoading}
+              onPrevious={() => {
+                const nextPage = Math.max(1, historyPage - 1);
+                setHistoryPage(nextPage);
+                loadHistory(nextPage, subTab);
+              }}
+              onNext={() => {
+                const nextPage = Math.min(historyTotalPages, historyPage + 1);
+                setHistoryPage(nextPage);
+                loadHistory(nextPage, subTab);
+              }}
+            />
           </>
         )}
       </TaxSectionCard>
-
-      <TaxDrawer open={Boolean(selectedRow)} onOpenChange={(open) => !open && setSelectedRow(null)} title={`Invoice Details — ${selectedRow?.invoiceNo || ''}`}>
-        {selectedRow ? <GstReconciliationDrawerContent row={selectedRow} /> : null}
-      </TaxDrawer>
     </TabsContent>
   );
 };
@@ -349,6 +631,7 @@ export const GstReturnsPanel = () => {
       </div>
 
       <TaxSectionCard icon={Building2} title="Select Vendor & Filter" description="Vendor selection is required before fetching filing history.">
+        <MeteredActionCostHint actionCode={CREDIT_ACTION_CODES.GST_RETURNS_API} className="mb-4" />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Vendor *</label>

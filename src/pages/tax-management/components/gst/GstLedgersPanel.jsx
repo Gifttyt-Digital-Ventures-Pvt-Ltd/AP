@@ -55,6 +55,8 @@ import {
   resolveLedgerHistoryPeriod,
 } from '../../data/taxStaticData';
 import { formatCurrency, formatDate, formatLakhsFromRupees } from '../../utils/taxFormatting';
+import MeteredActionCostHint from '../../../../components/credits/MeteredActionCostHint';
+import { CREDIT_ACTION_CODES } from '../../../../constants/creditActions';
 
 const LEDGER_TONE = {
   green: { dot: 'bg-green-500', text: 'text-green-600', card: 'border-green-200 bg-green-50 text-green-700' },
@@ -300,6 +302,7 @@ const GstLedgersPanel = () => {
         title="Fetch GST Ledger Balance"
         description="Select a period and authenticate with the GST Portal to retrieve your ledger balances."
       >
+        <MeteredActionCostHint actionCode={CREDIT_ACTION_CODES.GST_LEDGER_API} className="mb-4" />
         <div className="flex flex-wrap items-end gap-4">
           <OrgGstCredentialFields
             credentials={credentials}
