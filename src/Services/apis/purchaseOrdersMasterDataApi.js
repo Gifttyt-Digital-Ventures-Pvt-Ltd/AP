@@ -149,6 +149,14 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
         "Settings",
       ],
     }),
+    scanPurchaseOrder: builder.mutation({
+      query: (body) => ({
+        url: "/scan/extract-po-data",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: [...CREDIT_INVALIDATION_TAGS],
+    }),
     // POST /purchase-orders/draft
     // Saves a PO draft. Payload shape is the same as createPurchaseOrder.
     savePurchaseOrderDraft: builder.mutation({
@@ -266,6 +274,7 @@ export const {
   useDeletePurchaseOrderFormatConfigMutation,
   useSetDefaultPurchaseOrderFormatConfigMutation,
   useUploadPurchaseOrderTenantLogoMutation,
+  useScanPurchaseOrderMutation,
   useSavePurchaseOrderDraftMutation,
   useCreatePurchaseOrderMutation,
   useUpdatePurchaseOrderMutation,

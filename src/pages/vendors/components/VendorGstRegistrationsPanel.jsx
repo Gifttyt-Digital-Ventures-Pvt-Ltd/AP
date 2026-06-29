@@ -28,6 +28,22 @@ const formatRegistrationLocation = (registration = {}) => {
   return getRegistrationValue(registration, 'address', 'principalAddress', 'principal_address');
 };
 
+const normalizeVendorGstin = (value = '') => String(value || '').trim().toUpperCase();
+
+const buildVendorLevelRegistration = (vendor = {}) => {
+  const gstin = normalizeVendorGstin(vendor.gstin);
+  if (!gstin) return null;
+
+  return {
+    gstin,
+    state: vendor.state || '',
+    address: [vendor.address_line1 || vendor.addressLine1, vendor.address_line2 || vendor.addressLine2]
+      .filter(Boolean)
+      .join(', '),
+    isPrimary: true,
+  };
+};
+
 export const getVendorGstRegistrations = (vendor = {}) => {
   const registrations =
     vendor.gstRegistrations ??
@@ -35,36 +51,30 @@ export const getVendorGstRegistrations = (vendor = {}) => {
     vendor.gstRegs ??
     vendor.gst_registrations;
 
-  if (Array.isArray(registrations) && registrations.length > 0) {
-    return registrations
+  const mapped = Array.isArray(registrations) && registrations.length > 0
+    ? registrations
       .map((registration) => ({
         ...registration,
-        gstin: getRegistrationValue(registration, 'gstin', 'gstIn', 'gst'),
-        state: getRegistrationValue(registration, 'state', 'stateName', 'state_name'),
+        gstin: normalizeVendorGstin(getRegistrationValue(registration, 'gstin', 'gstIn', 'gst')),
+        state: getRegistrationValue(registration, 'state', 'stateName', 'state_name') || vendor.state || '',
         address: formatRegistrationLocation(registration),
         location: registration.location ?? registration.addressDetails ?? registration.address_details ?? null,
         bankDetails: registration.bankDetails ?? registration.bank_details ?? {},
       }))
-      .filter((registration) => registration.gstin);
+      .filter((registration) => registration.gstin)
+    : [];
+
+  const vendorLevelRegistration = buildVendorLevelRegistration(vendor);
+  if (vendorLevelRegistration && !mapped.some((registration) => registration.gstin === vendorLevelRegistration.gstin)) {
+    mapped.unshift(vendorLevelRegistration);
   }
 
-  const gstin = String(vendor.gstin || '').trim().toUpperCase();
-  if (!gstin) return [];
-
-  return [
-    {
-      gstin,
-      state: vendor.state || '',
-      address: [vendor.address_line1 || vendor.addressLine1, vendor.address_line2 || vendor.addressLine2]
-        .filter(Boolean)
-        .join(', '),
-    },
-  ];
+  return mapped;
 };
 
 export const getFirstVendorGstin = (vendor = {}) => {
   const registrations = getVendorGstRegistrations(vendor);
-  return registrations[0]?.gstin || vendor.gstin || '';
+  return registrations[0]?.gstin || normalizeVendorGstin(vendor.gstin);
 };
 
 export const getVendorRegistrationStates = (vendor = {}) => {

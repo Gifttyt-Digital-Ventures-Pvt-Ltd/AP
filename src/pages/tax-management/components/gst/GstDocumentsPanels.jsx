@@ -23,7 +23,9 @@ import {
 } from '../../data/taxStaticData';
 import { useOrganisationGstCredentials } from '../../hooks/useOrganisationGstCredentials';
 import { useGstVendors } from '../../hooks/useGstVendors';
+import { useVendorGstSelection } from '../../hooks/useVendorGstSelection';
 import { useGstTaxpayerSession } from '../../hooks/useGstTaxpayerSession';
+import VendorGstPickerFields from './VendorGstPickerFields';
 import {
   useReconcileGstr2aMutation,
   useFetchGstr2aReconcileHistoryMutation,
@@ -437,13 +439,14 @@ const createB2bSnapshot = ({
   existingId,
   fetchedAt,
   getVendor,
+  supplierGstin,
 }) => {
   const vendor = getVendor(vendorId);
   return {
     id: existingId ?? `snap-${orgGst}-${vendorId}-${month}-${fy}-${Date.now()}`,
     vendorId,
     vendorName: vendor?.name ?? 'All Vendors',
-    gstin: vendor?.gstin ?? '—',
+    gstin: supplierGstin || vendor?.gstin || '—',
     orgGst,
     orgUserName,
     month,
@@ -775,7 +778,16 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
     getVendor,
   } = orgGst;
 
-  const [vendorId, setVendorId] = useState('');
+  const {
+    vendorId,
+    setVendorId,
+    selectedVendor,
+    selectedGstin,
+    setSelectedGstin,
+    activeGstin,
+    gstRegistrations,
+    hasMultipleGstins,
+  } = useVendorGstSelection(vendors);
   const [month, setMonth] = useState('Sep');
   const [fy, setFy] = useState(DEFAULT_GST_DOC_FY);
   const [dateFrom, setDateFrom] = useState('');
@@ -790,7 +802,6 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
   const [reconcileGstr2a] = useReconcileGstr2aMutation();
   const [fetchReconcileHistory] = useFetchGstr2aReconcileHistoryMutation();
 
-  const selectedVendor = getVendor(vendorId);
   const activeSnapshot = fetchHistory.find((entry) => entry.id === activeSnapshotId) ?? null;
 
   const filteredHistory = fetchHistory;
@@ -847,6 +858,7 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
 
   const runFetch = async ({
     targetVendorId,
+    targetSupplierGstin,
     targetMonth,
     targetFy,
     targetDateFrom,
@@ -858,6 +870,7 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
   }) => {
     const portalCredentials = buildGstPortalFetchCredentials(targetOrgCredential);
     const vendor = getVendor(targetVendorId);
+    const supplierGstin = targetSupplierGstin || vendor?.gstin;
     if (!portalCredentials) return;
 
     setLoading(true);
@@ -867,7 +880,7 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
         financialYear: targetFy,
         gstin: portalCredentials.gst,
         username: portalCredentials.userName,
-        supplierGstin: vendor?.gstin,
+        supplierGstin,
         vendor: vendor?.name,
         startDate: targetDateFrom || undefined,
         endDate: targetDateTo || undefined,
@@ -877,6 +890,7 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
       const result = await reconcileGstr2a(payload).unwrap();
       const snapshotParams = {
         vendorId: targetVendorId,
+        supplierGstin,
         month: targetMonth,
         fy: targetFy,
         dateFrom: targetDateFrom,
@@ -907,6 +921,7 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
         contextLabel: 'GSTR-2A B2B Reconciliation',
         execute: (otp) => runFetch({
           targetVendorId: vendorId,
+          targetSupplierGstin: activeGstin || undefined,
           targetMonth: month,
           targetFy: fy,
           targetDateFrom: dateFrom,
@@ -1030,17 +1045,21 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
             selectedGst={selectedOrgGst}
             onGstChange={onOrgGstChange}
           />
-          <GstFormField label="Vendor" optional className="min-w-[220px]">
-            <TaxSelect
-              value={vendorId || 'all'}
-              onValueChange={(value) => setVendorId(value === 'all' ? '' : value)}
-              placeholder="All Vendors"
-              options={[{ value: 'all', label: 'All Vendors' }, ...vendors.map((vendor) => ({ value: vendor.id, label: vendor.name }))]}
-            />
-          </GstFormField>
-          <GstFormField label="Vendor GSTIN">
-            <Input readOnly value={selectedVendor?.gstin ?? ''} placeholder="Auto-populated from vendor" className="font-mono text-xs bg-muted/40" />
-          </GstFormField>
+          <VendorGstPickerFields
+            vendors={vendors}
+            vendorId={vendorId}
+            onVendorIdChange={setVendorId}
+            selectedGstin={selectedGstin}
+            onSelectedGstinChange={setSelectedGstin}
+            activeGstin={activeGstin}
+            gstRegistrations={gstRegistrations}
+            hasMultipleGstins={hasMultipleGstins}
+            allowAll
+            vendorOptional
+            vendorLabel="Vendor"
+            variant="gst-form"
+            vendorClassName="min-w-[220px]"
+          />
           <GstFormField label="Month" required>
             <TaxSelect value={month} onValueChange={setMonth} options={GST_DOC_MONTHS} />
           </GstFormField>
@@ -1127,10 +1146,18 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
     selectedOrgCredential,
     canFetchWithOrgGst,
     vendors,
-    getVendor,
   } = orgGst;
 
-  const [vendorId, setVendorId] = useState('');
+  const {
+    vendorId,
+    setVendorId,
+    selectedVendor,
+    selectedGstin,
+    setSelectedGstin,
+    activeGstin,
+    gstRegistrations,
+    hasMultipleGstins,
+  } = useVendorGstSelection(vendors);
   const [month, setMonth] = useState('Sep');
   const [fy, setFy] = useState(DEFAULT_GST_DOC_FY);
   const [docType, setDocType] = useState('All Documents');
@@ -1147,8 +1174,7 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
   const [fetchGstr2aDocuments] = useFetchGstr2aDocumentsMutation();
   const [fetchGstr2aDocumentsHistory] = useFetchGstr2aDocumentsHistoryMutation();
 
-  const selectedVendor = vendorId ? getVendor(vendorId) : null;
-  const apiKey = vendorId ? `${vendorId}-${month}-${fy}` : `all-${month}-${fy}`;
+  const apiKey = vendorId ? `${vendorId}-${activeGstin}-${month}-${fy}` : `all-${month}-${fy}`;
 
   const loadDocumentsHistory = useCallback(async () => {
     setHistoryLoading(true);
@@ -1191,7 +1217,7 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
               gstin: portalCredentials.gst,
               username: portalCredentials.userName,
               vendorName: selectedVendor?.name,
-              supplierGstin: selectedVendor?.gstin,
+              supplierGstin: activeGstin || undefined,
               otp,
             });
             const result = await fetchGstr2aDocuments(payload).unwrap();
@@ -1235,7 +1261,7 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
   const docColumns = [
     { key: 'documentType', title: 'Type', render: (row) => <TaxStatusBadge status={row.documentType} /> },
     { key: 'invoiceNumber', title: 'Document No.', cellClassName: 'font-mono text-xs' },
-    { key: 'vendor', title: 'Vendor', render: (row) => row.vendor ?? getVendor(row.vendor_id)?.name ?? '—' },
+    { key: 'vendor', title: 'Vendor', render: (row) => row.vendor ?? vendors.find((entry) => entry.id === row.vendor_id)?.name ?? '—' },
     { key: 'documentDate', title: 'Date' },
     { key: 'taxableValue', title: 'Taxable', render: (row) => formatCurrency(row.taxableValue), cellClassName: 'text-right' },
     { key: 'gst', title: 'GST', render: (row) => formatCurrency(docTotalGst(row)), cellClassName: 'text-right font-medium text-primary' },
@@ -1295,17 +1321,22 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
             selectedGst={selectedOrgGst}
             onGstChange={onOrgGstChange}
           />
-          <GstFormField label="Vendor" optional className="min-w-[210px]">
-            <TaxSelect
-              value={vendorId || 'all'}
-              onValueChange={(value) => { setVendorId(value === 'all' ? '' : value); setFetched(false); }}
-              placeholder="All Vendors"
-              options={[{ value: 'all', label: 'All Vendors' }, ...vendors.map((vendor) => ({ value: vendor.id, label: vendor.name }))]}
-            />
-          </GstFormField>
-          <GstFormField label="Vendor GSTIN">
-            <Input readOnly value={selectedVendor?.gstin ?? ''} placeholder="Auto-populated" className="font-mono text-xs bg-muted/40" />
-          </GstFormField>
+          <VendorGstPickerFields
+            vendors={vendors}
+            vendorId={vendorId}
+            onVendorIdChange={setVendorId}
+            selectedGstin={selectedGstin}
+            onSelectedGstinChange={setSelectedGstin}
+            activeGstin={activeGstin}
+            gstRegistrations={gstRegistrations}
+            hasMultipleGstins={hasMultipleGstins}
+            allowAll
+            vendorOptional
+            vendorLabel="Vendor"
+            variant="gst-form"
+            vendorClassName="min-w-[210px]"
+            onVendorChange={() => setFetched(false)}
+          />
           <GstFormField label="Month" required>
             <TaxSelect value={month} onValueChange={(value) => { setMonth(value); setFetched(false); }} options={GST_DOC_MONTHS} />
           </GstFormField>
@@ -1413,7 +1444,12 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
       ) : null}
 
       <TaxDrawer open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)} title="GST Document Details">
-        {selected ? <Gst2ADocDrawerContent doc={selected} vendor={selectedVendor} /> : null}
+        {selected ? (
+          <Gst2ADocDrawerContent
+            doc={selected}
+            vendor={selectedVendor ? { ...selectedVendor, gstin: activeGstin || selectedVendor.gstin } : null}
+          />
+        ) : null}
       </TaxDrawer>
     </div>
   );
@@ -1428,12 +1464,20 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
     selectedOrgCredential,
     canFetchWithOrgGst,
     vendors,
-    getVendor,
   } = orgGst;
 
+  const {
+    vendorId,
+    setVendorId,
+    selectedVendor,
+    selectedGstin,
+    setSelectedGstin,
+    activeGstin,
+    gstRegistrations,
+    hasMultipleGstins,
+  } = useVendorGstSelection(vendors);
   const [month, setMonth] = useState('Sep');
   const [fy, setFy] = useState(DEFAULT_GST_DOC_FY);
-  const [vendorId, setVendorId] = useState('');
   const [docTypeF, setDocTypeF] = useState('All Documents');
   const [itcF, setItcF] = useState('All');
   const [loading, setLoading] = useState(false);
@@ -1448,7 +1492,6 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
   const [fetchGstr2bDocuments] = useFetchGstr2bDocumentsMutation();
   const [fetchGstr2bDocumentsHistory] = useFetchGstr2bDocumentsHistoryMutation();
 
-  const selectedVendor = vendorId ? getVendor(vendorId) : null;
   const stmtKey = `${month}-${fy}`;
 
   const loadDocumentsHistory = useCallback(async () => {
@@ -1492,12 +1535,14 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
               gstin: portalCredentials.gst,
               username: portalCredentials.userName,
               vendorName: selectedVendor?.name,
-              supplierGstin: selectedVendor?.gstin,
+              supplierGstin: activeGstin || undefined,
               otp,
             });
             const result = await fetchGstr2bDocuments(payload).unwrap();
             let resultDocs = getGstDocuments(result);
-            if (vendorId) resultDocs = resultDocs.filter((doc) => (doc.gstin ?? doc.supplierGstin) === selectedVendor?.gstin);
+            if (vendorId && activeGstin) {
+              resultDocs = resultDocs.filter((doc) => (doc.gstin ?? doc.supplierGstin) === activeGstin);
+            }
             if (docTypeF !== 'All Documents') resultDocs = resultDocs.filter((doc) => doc.documentType === docTypeF);
             if (itcF !== 'All') resultDocs = resultDocs.filter((doc) => humanizeGstEnum(doc.itcEligibility ?? doc.itc_status) === itcF);
             setDocs(resultDocs);
@@ -1623,17 +1668,22 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
           <GstFormField label="Financial Year" required>
             <TaxSelect value={fy} onValueChange={(value) => { setFy(value); setFetched(false); }} options={GST_DOC_FY_OPTIONS} />
           </GstFormField>
-          <GstFormField label="Vendor" optional className="min-w-[200px]">
-            <TaxSelect
-              value={vendorId || 'all'}
-              onValueChange={(value) => { setVendorId(value === 'all' ? '' : value); setFetched(false); }}
-              placeholder="All Vendors"
-              options={[{ value: 'all', label: 'All Vendors' }, ...vendors.map((vendor) => ({ value: vendor.id, label: vendor.name }))]}
-            />
-          </GstFormField>
-          <GstFormField label="Vendor GSTIN">
-            <Input readOnly value={selectedVendor?.gstin ?? ''} placeholder="Auto-populated" className="font-mono text-xs bg-muted/40" />
-          </GstFormField>
+          <VendorGstPickerFields
+            vendors={vendors}
+            vendorId={vendorId}
+            onVendorIdChange={setVendorId}
+            selectedGstin={selectedGstin}
+            onSelectedGstinChange={setSelectedGstin}
+            activeGstin={activeGstin}
+            gstRegistrations={gstRegistrations}
+            hasMultipleGstins={hasMultipleGstins}
+            allowAll
+            vendorOptional
+            vendorLabel="Vendor"
+            variant="gst-form"
+            vendorClassName="min-w-[200px]"
+            onVendorChange={() => setFetched(false)}
+          />
           <GstFormField label="Document Type">
             <TaxSelect value={docTypeF} onValueChange={setDocTypeF} options={['All Documents', 'Invoice', 'Credit Note', 'Debit Note']} />
           </GstFormField>

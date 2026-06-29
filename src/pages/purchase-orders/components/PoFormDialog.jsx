@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Loader2, Plus, Trash2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../../../components/ui/dialog";
@@ -9,6 +9,7 @@ import AppDataTable from "../../../components/common/AppDataTable";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import { Textarea } from "../../../components/ui/textarea";
 import { isFormatFieldEnabled, isFormatSectionEnabled, normalizePoTemplateCode } from "../utils";
+import { resolvePoTotals } from "../utils/poTotals";
 import MeteredActionCostHint from "../../../components/credits/MeteredActionCostHint";
 import { CREDIT_ACTION_CODES } from "../../../constants/creditActions";
 import { useMeteredActionEstimate } from "../../../hooks/useMeteredActionEstimate";
@@ -38,6 +39,69 @@ const FieldBlock = ({ label, children, className = "" }) => (
 );
 
 const inputClassName = "h-9 bg-white/80 text-sm";
+
+const getRegistrationValue = (registration, ...keys) => {
+  for (const key of keys) {
+    const value = registration?.[key];
+    if (value !== undefined && value !== null && value !== "") return value;
+  }
+  return "";
+};
+
+const normalizeGstin = (value = "") => String(value || "").trim().toUpperCase();
+
+const formatRegistrationLocation = (registration = {}) => {
+  const location = registration.location ?? registration.addressDetails ?? registration.address_details;
+  if (location && typeof location === "object") {
+    return [
+      location.addressLine1 ?? location.address_line1,
+      location.addressLine2 ?? location.address_line2,
+      location.city,
+      location.state,
+      location.pincode ?? location.postalCode ?? location.postal_code,
+      location.country,
+    ]
+      .filter(Boolean)
+      .join(", ");
+  }
+
+  return getRegistrationValue(registration, "address", "principalAddress", "principal_address");
+};
+
+const getVendorGstRegistrationsForPo = (vendor = {}) => {
+  const registrations = vendor.gstRegistrations ?? vendor.gst_regs ?? vendor.gstRegs ?? vendor.gst_registrations;
+  const mapped = Array.isArray(registrations)
+    ? registrations
+      .map((registration) => {
+        const gstin = normalizeGstin(getRegistrationValue(registration, "gstin", "gstIn", "gst"));
+        if (!gstin) return null;
+        return {
+          ...registration,
+          id: getRegistrationValue(registration, "id", "registrationId", "registration_id") || gstin,
+          gstin,
+          pan: getRegistrationValue(registration, "pan", "vendorPan", "vendor_pan") || vendor.pan || "",
+          state: getRegistrationValue(registration, "state", "stateName", "state_name") || vendor.state || "",
+          address: formatRegistrationLocation(registration),
+        };
+      })
+      .filter(Boolean)
+    : [];
+
+  const vendorLevelGstin = normalizeGstin(vendor.gstin);
+  if (vendorLevelGstin && !mapped.some((registration) => registration.gstin === vendorLevelGstin)) {
+    mapped.unshift({
+      id: vendorLevelGstin,
+      gstin: vendorLevelGstin,
+      pan: vendor.pan || "",
+      state: vendor.state || "",
+      address: [vendor.address_line1 || vendor.addressLine1, vendor.address_line2 || vendor.addressLine2]
+        .filter(Boolean)
+        .join(", "),
+    });
+  }
+
+  return mapped;
+};
 
 const resolvePoGstSelectionValue = (item = {}) => {
   if (item.gst_tax_label && TAX_RATES.some((option) => option.value === item.gst_tax_label)) {
@@ -74,13 +138,17 @@ const PoFormDialog = ({
   onBeforePreview,
   taxMode,
   createAction,
+  embedded = false,
+  hideFooter = false,
+  plainDataMode = false,
+  scannedVendorHint = null,
 }) => {
   const [previewAction, setPreviewAction] = useState(null);
 
   const isInr = taxMode === "GST";
   const selectedFormat = formatConfigs.find((format) => format.id === (poForm.po_format_id || activeFormatId)) || formatConfigs[0] || {};
-  const sectionOn = (sectionKey) => isFormatSectionEnabled(selectedFormat, sectionKey);
-  const fieldOn = (sectionKey, fieldKey) => isFormatFieldEnabled(selectedFormat, sectionKey, fieldKey);
+  const sectionOn = (sectionKey) => plainDataMode || isFormatSectionEnabled(selectedFormat, sectionKey);
+  const fieldOn = (sectionKey, fieldKey) => plainDataMode || isFormatFieldEnabled(selectedFormat, sectionKey, fieldKey);
   const tableHeader = getPoFormLineItemTableHeader({ isInr, fieldOn });
   const formatPoCurrency = (amount) => formatCurrency(amount, poForm.currency);
   const isSavingDraft = createAction === "draft";
@@ -92,7 +160,7 @@ const PoFormDialog = ({
   const templateCode = normalizePoTemplateCode(selectedFormat.templateCode || "T1");
   const documentBorderClass = templateCode === "T3" ? "border-2 border-slate-900" : "border";
   const headerBorderClass = templateCode === "T4" ? "border-b-4 border-emerald-600" : "border-b";
-  const showTdsControls = isInr && fieldOn("TAX_TOTALS", "is_tds_applicable");
+  const showTdsControls = !plainDataMode && isInr && fieldOn("TAX_TOTALS", "is_tds_applicable");
   const showTdsPreview = showTdsControls && Boolean(poForm.tds_applicable);
   const poTaxableSubtotal = (poForm.line_items || []).reduce((sum, item) => {
     const amount = (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
@@ -100,6 +168,8 @@ const PoFormDialog = ({
     return sum + Math.max(amount - discount, 0);
   }, 0);
   const poPreviewTotal = calculatePOTotal();
+  const poTotals = useMemo(() => resolvePoTotals(poForm), [poForm]);
+  const displayTotal = plainDataMode ? poTotals.total_amount : poPreviewTotal;
   const poTdsPercent = showTdsPreview ? Number(poForm.tds_percent) || 0 : 0;
   const poTdsAmount = showTdsPreview ? poTaxableSubtotal * poTdsPercent / 100 : 0;
   const poNetPayable = poPreviewTotal - poTdsAmount;
@@ -110,14 +180,63 @@ const PoFormDialog = ({
         tdsRate: poForm.tds_percent,
       })
     : "";
+  const selectedVendor = vendors.find((vendor) => String(vendor.id) === String(poForm.vendor_id));
+  const vendorGstRegistrations = useMemo(
+    () => getVendorGstRegistrationsForPo(selectedVendor),
+    [selectedVendor],
+  );
+  const selectedVendorRegistration = vendorGstRegistrations.find((registration) =>
+    String(registration.id) === String(poForm.vendor_gst_registration_id) ||
+    registration.gstin === normalizeGstin(poForm.vendor_gstin),
+  );
 
   useEffect(() => {
-    if (!showCreateDialog) setPreviewAction(null);
-  }, [showCreateDialog]);
+    if (!showCreateDialog && !embedded) setPreviewAction(null);
+  }, [embedded, showCreateDialog]);
+
+  useEffect(() => {
+    if (!isInr || !poForm.vendor_id || vendorGstRegistrations.length === 0) return;
+
+    const scannedMatch = vendorGstRegistrations.find(
+      (registration) => registration.gstin === normalizeGstin(poForm.scanned_vendor_gstin),
+    );
+    const currentMatch = vendorGstRegistrations.find(
+      (registration) =>
+        String(registration.id) === String(poForm.vendor_gst_registration_id) ||
+        registration.gstin === normalizeGstin(poForm.vendor_gstin),
+    );
+    const nextRegistration = currentMatch || scannedMatch || (vendorGstRegistrations.length === 1 ? vendorGstRegistrations[0] : null);
+    if (!nextRegistration) return;
+
+    setPoForm((prev) => {
+      if (
+        String(prev.vendor_gst_registration_id || "") === String(nextRegistration.id || "") &&
+        normalizeGstin(prev.vendor_gstin) === nextRegistration.gstin &&
+        String(prev.vendor_pan || "") === String(nextRegistration.pan || "")
+      ) {
+        return prev;
+      }
+
+      return {
+        ...prev,
+        vendor_gst_registration_id: nextRegistration.id,
+        vendor_gstin: nextRegistration.gstin,
+        vendor_pan: nextRegistration.pan || "",
+      };
+    });
+  }, [
+    isInr,
+    poForm.vendor_id,
+    poForm.vendor_gst_registration_id,
+    poForm.vendor_gstin,
+    poForm.scanned_vendor_gstin,
+    setPoForm,
+    vendorGstRegistrations,
+  ]);
 
   const handleOpenChange = (open) => {
     if (!open) setPreviewAction(null);
-    setShowCreateDialog(open);
+    setShowCreateDialog?.(open);
   };
 
   const handlePreviewAction = (action) => {
@@ -271,54 +390,126 @@ const PoFormDialog = ({
     </TableRow>
   );
 
-  return (
-    <Dialog open={showCreateDialog} onOpenChange={handleOpenChange}>
-      <DialogContent className="flex flex-col w-[96vw] max-w-6xl max-h-[92vh] overflow-hidden p-0">
-        <DialogHeader className="border-b px-6 pt-6 pb-3">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <DialogTitle>{isEditMode ? "Edit Purchase Order" : "Create Purchase Order"}</DialogTitle>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {isPreviewing
-                  ? "Preview before saving in"
-                  : isEditMode
-                    ? `Revising ${editingStatus || "purchase order"} in`
-                    : "Editing in selected format:"} {selectedFormat.name || "PO Format"} ({templateCode})
-              </p>
+  const dialogFooter = (
+    <DialogFooter className="border-t px-6 py-4">
+      {isPreviewing ? (
+        <>
+          <Button variant="outline" onClick={() => setPreviewAction(null)} disabled={isCreating}>
+            Back to Edit
+          </Button>
+          <Button
+            onClick={() => handleCreatePO({ submitForApproval: previewSubmitForApproval })}
+            disabled={isCreating || poUploadEstimate.isDisabled}
+            data-testid={previewSubmitForApproval ? "confirm-submit-po-btn" : "confirm-save-draft-po-btn"}
+          >
+            {(isSavingDraft || isSubmittingForApproval) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+            {previewSubmitForApproval ? "Confirm & Submit" : isEditMode ? "Confirm & Save Changes" : "Confirm & Save Draft"}
+          </Button>
+        </>
+      ) : (
+        <>
+          <Button variant="outline" onClick={() => handleOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => handlePreviewAction("draft")}
+            disabled={isCreating}
+            data-testid="save-draft-po-btn"
+          >
+            {isEditMode ? "Save Changes" : "Save as Draft"}
+          </Button>
+          <Button
+            onClick={() => handlePreviewAction("submit")}
+            disabled={isCreating}
+            data-testid="submit-po-btn"
+          >
+            Submit for Approval
+          </Button>
+        </>
+      )}
+    </DialogFooter>
+  );
+
+  const formContent = (
+    <>
+      <div className={`overflow-y-auto bg-slate-100 ${embedded ? 'px-4 py-4' : 'px-6 py-5'}`}>
+        <div className="mx-auto max-w-5xl space-y-4">
+          {!plainDataMode && isPreviewing && (
+            <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+              Review this PO exactly as it will be saved with the selected format. Go back to edit if anything needs changing.
             </div>
+          )}
+          {!plainDataMode && isPreviewing && (
+            <MeteredActionCostHint actionCode={CREDIT_ACTION_CODES.PO_UPLOAD} />
+          )}
+          {!plainDataMode ? (
+          <div className="rounded-lg border bg-white p-4">
+            <FieldBlock label="PO Format">
+              <Select value={poForm.po_format_id || activeFormatId} onValueChange={applyPoFormat} disabled={isPreviewing}>
+                <SelectTrigger data-testid="po-format-select">
+                  <SelectValue placeholder="Select PO format" />
+                </SelectTrigger>
+                <SelectContent>
+                  {formatConfigs.map((format) => (
+                    <SelectItem key={format.id} value={format.id}>
+                      {format.name} ({normalizePoTemplateCode(format.templateCode)}, {format.defaultCurrency})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </FieldBlock>
           </div>
-        </DialogHeader>
-
-        <div className="overflow-y-auto bg-slate-100 px-6 py-5">
-          <div className="mx-auto max-w-5xl space-y-4">
-            {isPreviewing && (
-              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-                Review this PO exactly as it will be saved with the selected format. Go back to edit if anything needs changing.
-              </div>
-            )}
-            {isPreviewing && (
-              <MeteredActionCostHint actionCode={CREDIT_ACTION_CODES.PO_UPLOAD} />
-            )}
-            <div className="rounded-lg border bg-white p-4">
-              <FieldBlock label="PO Format">
-                <Select value={poForm.po_format_id || activeFormatId} onValueChange={applyPoFormat} disabled={isPreviewing}>
-                  <SelectTrigger data-testid="po-format-select">
-                    <SelectValue placeholder="Select PO format" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {formatConfigs.map((format) => (
-                      <SelectItem key={format.id} value={format.id}>
-                        {format.name} ({normalizePoTemplateCode(format.templateCode)}, {format.defaultCurrency})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </FieldBlock>
+          ) : (
+            <div className="rounded-md border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+              Data extracted from the uploaded vendor PO. The original document is shown on the left — review and correct fields before saving.
             </div>
+          )}
 
-            <div className={isPreviewing ? "pointer-events-none" : ""}>
-              <div className={`bg-white shadow-sm ${documentBorderClass} p-6 md:p-8`}>
-              {sectionOn("HEADER") && (
+          <div className={isPreviewing ? "pointer-events-none" : ""}>
+            <div className={`bg-white shadow-sm ${plainDataMode ? 'rounded-lg border p-4 md:p-6' : `${documentBorderClass} p-6 md:p-8`}`}>
+              {plainDataMode ? (
+                <div className="mb-5 space-y-4 border-b pb-5">
+                  <div>
+                    <h2 className="text-lg font-semibold">Vendor Purchase Order</h2>
+                    <p className="text-xs text-muted-foreground">Extracted from uploaded document — not an internal PO format.</p>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                    <FieldBlock label="PO Number">
+                      <Input
+                        value={poForm.po_number || ''}
+                        onChange={(e) => setPoForm((prev) => ({ ...prev, po_number: e.target.value }))}
+                        placeholder="As on vendor PO"
+                        className={inputClassName}
+                        data-testid="upload-po-number-input"
+                      />
+                    </FieldBlock>
+                    <FieldBlock label="Currency">
+                      <Select value={poForm.currency} onValueChange={updatePoCurrency}>
+                        <SelectTrigger className="h-9 bg-white/80" data-testid="po-currency-select">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="INR">INR</SelectItem>
+                          <SelectItem value="USD">USD</SelectItem>
+                          <SelectItem value="EUR">EUR</SelectItem>
+                          <SelectItem value="GBP">GBP</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </FieldBlock>
+                    <FieldBlock label="PO Date">
+                      <Input type="date" value={poForm.po_date} onChange={(e) => setPoForm((prev) => ({ ...prev, po_date: e.target.value }))} className={inputClassName} data-testid="po-date-input" />
+                    </FieldBlock>
+                    <FieldBlock label="Valid Till">
+                      <Input type="date" value={poForm.valid_till} onChange={(e) => setPoForm((prev) => ({ ...prev, valid_till: e.target.value }))} className={inputClassName} data-testid="valid-till-input" />
+                    </FieldBlock>
+                    <FieldBlock label="Delivery Date">
+                      <Input type="date" value={poForm.expected_delivery_date} onChange={(e) => setPoForm((prev) => ({ ...prev, expected_delivery_date: e.target.value }))} className={inputClassName} data-testid="delivery-date-input" />
+                    </FieldBlock>
+                  </div>
+                </div>
+              ) : null}
+              {!plainDataMode && sectionOn("HEADER") && (
                 <header className={`mb-5 pb-5 ${headerBorderClass}`}>
                   <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_360px]">
                     <div className="flex items-start gap-3">
@@ -378,24 +569,76 @@ const PoFormDialog = ({
                   <section className="rounded border bg-slate-50/60 p-4">
                     <h3 className="mb-3 text-sm font-semibold">Vendor</h3>
                     <FieldBlock label="Vendor">
-                      <Select value={poForm.vendor_id} onValueChange={(v) => setPoForm((prev) => ({ ...prev, vendor_id: v }))}>
+                      <Select
+                        value={poForm.vendor_id}
+                        onValueChange={(v) =>
+                          setPoForm((prev) => ({
+                            ...prev,
+                            vendor_id: v,
+                            vendor_gst_registration_id: "",
+                            vendor_gstin: "",
+                            vendor_pan: "",
+                          }))
+                        }
+                      >
                         <SelectTrigger className="h-9 bg-white/80" data-testid="vendor-select">
                           <SelectValue placeholder="Select vendor" />
                         </SelectTrigger>
                         <SelectContent>
                           {vendors.map((v) => (
-                            <SelectItem key={v.id} value={v.id}>
+                            <SelectItem key={v.id} value={String(v.id)}>
                               {v.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
                     </FieldBlock>
-                    {isInr && (fieldOn("VENDOR", "vendor_gstin") || fieldOn("VENDOR", "vendor_pan")) && (
-                      <p className="mt-2 text-xs text-muted-foreground">
-                        GSTIN/PAN will be taken from vendor master when backend is connected.
+                    {scannedVendorHint && !poForm.vendor_id ? (
+                      <p className="mt-2 text-xs text-amber-700">
+                        Scanned vendor: {scannedVendorHint.name}
+                        {scannedVendorHint.gstin ? ` · ${scannedVendorHint.gstin}` : ''}. Select a matching vendor from the list.
                       </p>
-                    )}
+                    ) : null}
+                    {isInr && poForm.vendor_id && vendorGstRegistrations.length > 1 ? (
+                      <FieldBlock label="Vendor GST Registration" className="mt-3">
+                        <Select
+                          value={String(selectedVendorRegistration?.id || "")}
+                          onValueChange={(registrationId) => {
+                            const registration = vendorGstRegistrations.find((item) => String(item.id) === String(registrationId));
+                            setPoForm((prev) => ({
+                              ...prev,
+                              vendor_gst_registration_id: registration?.id || "",
+                              vendor_gstin: registration?.gstin || "",
+                              vendor_pan: registration?.pan || "",
+                            }));
+                          }}
+                        >
+                          <SelectTrigger className="h-9 bg-white/80" data-testid="vendor-gst-registration-select">
+                            <SelectValue placeholder="Select GSTIN / location" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {vendorGstRegistrations.map((registration) => (
+                              <SelectItem key={registration.id} value={String(registration.id)}>
+                                {registration.gstin}
+                                {registration.state ? ` · ${registration.state}` : ""}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        {selectedVendorRegistration?.address ? (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            {selectedVendorRegistration.address}
+                          </p>
+                        ) : null}
+                      </FieldBlock>
+                    ) : null}
+                    {isInr && (fieldOn("VENDOR", "vendor_gstin") || fieldOn("VENDOR", "vendor_pan")) && poForm.vendor_id ? (
+                      <p className="mt-2 text-xs text-muted-foreground">
+                        {selectedVendorRegistration
+                          ? `Using verified GSTIN ${selectedVendorRegistration.gstin}${selectedVendorRegistration.pan ? ` and PAN ${selectedVendorRegistration.pan}` : ""}.`
+                          : "Select a GST registration to use verified GSTIN, PAN, and address details."}
+                      </p>
+                    ) : null}
                   </section>
                 )}
 
@@ -415,7 +658,13 @@ const PoFormDialog = ({
                       )}
                       {isInr && fieldOn("SHIP_BILL", "place_of_supply") && (
                         <FieldBlock label="Place of Supply">
-                          <Input value={poForm.place_of_supply} onChange={(e) => setPoForm((prev) => ({ ...prev, place_of_supply: e.target.value.toUpperCase().slice(0, 2) }))} placeholder="State code, e.g. MH" className={inputClassName} data-testid="place-of-supply-input" />
+                          <Input
+                            value={poForm.place_of_supply}
+                            onChange={(e) => setPoForm((prev) => ({ ...prev, place_of_supply: plainDataMode ? e.target.value : e.target.value.toUpperCase().slice(0, 2) }))}
+                            placeholder={plainDataMode ? 'State or place of supply' : 'State code, e.g. MH'}
+                            className={inputClassName}
+                            data-testid="place-of-supply-input"
+                          />
                         </FieldBlock>
                       )}
                     </div>
@@ -523,10 +772,64 @@ const PoFormDialog = ({
                         <span>{formatPoCurrency(0)}</span>
                       </div>
                     )}
-                    <div className="mt-3 flex justify-between border-t pt-3 text-base font-semibold">
-                      <span>Preview Total</span>
-                      <span>{formatPoCurrency(poPreviewTotal)}</span>
-                    </div>
+                    {plainDataMode && isInr ? (
+                      <>
+                        <div className="mt-3 flex justify-between text-muted-foreground">
+                          <span>Subtotal</span>
+                          <span>{formatPoCurrency(poTotals.subtotal)}</span>
+                        </div>
+                        {poTotals.total_discount > 0 ? (
+                          <div className="mt-1 flex justify-between text-muted-foreground">
+                            <span>Discount</span>
+                            <span>- {formatPoCurrency(poTotals.total_discount)}</span>
+                          </div>
+                        ) : null}
+                        {poTotals.total_taxable_value > 0 &&
+                        poTotals.total_taxable_value !== poTotals.subtotal - poTotals.total_discount ? (
+                          <div className="mt-1 flex justify-between text-muted-foreground">
+                            <span>Taxable Value</span>
+                            <span>{formatPoCurrency(poTotals.total_taxable_value)}</span>
+                          </div>
+                        ) : null}
+                        {poTotals.total_cgst > 0 ? (
+                          <div className="mt-1 flex justify-between text-muted-foreground">
+                            <span>CGST</span>
+                            <span>{formatPoCurrency(poTotals.total_cgst)}</span>
+                          </div>
+                        ) : null}
+                        {poTotals.total_sgst > 0 ? (
+                          <div className="mt-1 flex justify-between text-muted-foreground">
+                            <span>SGST</span>
+                            <span>{formatPoCurrency(poTotals.total_sgst)}</span>
+                          </div>
+                        ) : null}
+                        {poTotals.total_igst > 0 ? (
+                          <div className="mt-1 flex justify-between text-muted-foreground">
+                            <span>IGST</span>
+                            <span>{formatPoCurrency(poTotals.total_igst)}</span>
+                          </div>
+                        ) : null}
+                        {poTotals.total_cess > 0 ? (
+                          <div className="mt-1 flex justify-between text-muted-foreground">
+                            <span>CESS</span>
+                            <span>{formatPoCurrency(poTotals.total_cess)}</span>
+                          </div>
+                        ) : null}
+                        <div className="mt-1 flex justify-between text-muted-foreground">
+                          <span>Tax</span>
+                          <span>{formatPoCurrency(poTotals.tax_amount)}</span>
+                        </div>
+                        <div className="mt-3 flex justify-between border-t pt-3 text-base font-semibold">
+                          <span>Total</span>
+                          <span>{formatPoCurrency(displayTotal)}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="mt-3 flex justify-between border-t pt-3 text-base font-semibold">
+                        <span>Preview Total</span>
+                        <span>{formatPoCurrency(poPreviewTotal)}</span>
+                      </div>
+                    )}
                     {showTdsPreview && (
                       <>
                         <div className="mt-2 flex justify-between text-muted-foreground">
@@ -559,45 +862,38 @@ const PoFormDialog = ({
             </div>
           </div>
         </div>
+    </>
+  );
 
-        <DialogFooter className="border-t px-6 py-4">
-          {isPreviewing ? (
-            <>
-              <Button variant="outline" onClick={() => setPreviewAction(null)} disabled={isCreating}>
-                Back to Edit
-              </Button>
-              <Button
-                onClick={() => handleCreatePO({ submitForApproval: previewSubmitForApproval })}
-                disabled={isCreating || poUploadEstimate.isDisabled}
-                data-testid={previewSubmitForApproval ? "confirm-submit-po-btn" : "confirm-save-draft-po-btn"}
-              >
-                {(isSavingDraft || isSubmittingForApproval) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                {previewSubmitForApproval ? "Confirm & Submit" : isEditMode ? "Confirm & Save Changes" : "Confirm & Save Draft"}
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button variant="outline" onClick={() => handleOpenChange(false)}>
-                Cancel
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() => handlePreviewAction("draft")}
-                disabled={isCreating}
-                data-testid="save-draft-po-btn"
-              >
-                {isEditMode ? "Save Changes" : "Save as Draft"}
-              </Button>
-              <Button
-                onClick={() => handlePreviewAction("submit")}
-                disabled={isCreating}
-                data-testid="submit-po-btn"
-              >
-                Submit for Approval
-              </Button>
-            </>
-          )}
-        </DialogFooter>
+  if (embedded) {
+    return (
+      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+        {formContent}
+      </div>
+    );
+  }
+
+  return (
+    <Dialog open={showCreateDialog} onOpenChange={handleOpenChange}>
+      <DialogContent className="flex flex-col w-[96vw] max-w-6xl max-h-[92vh] overflow-hidden p-0">
+        <DialogHeader className="border-b px-6 pt-6 pb-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <DialogTitle>{isEditMode ? "Edit Purchase Order" : "Create Purchase Order"}</DialogTitle>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {isPreviewing
+                  ? "Preview before saving in"
+                  : isEditMode
+                    ? `Revising ${editingStatus || "purchase order"} in`
+                    : "Editing in selected format:"} {selectedFormat.name || "PO Format"} ({templateCode})
+              </p>
+            </div>
+          </div>
+        </DialogHeader>
+
+        {formContent}
+
+        {!hideFooter ? dialogFooter : null}
       </DialogContent>
     </Dialog>
   );

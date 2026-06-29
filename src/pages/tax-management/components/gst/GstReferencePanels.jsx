@@ -59,6 +59,7 @@ import {
 import { buildReturnsTrackPayload } from '../../utils/gstApiMappers';
 import { getApiErrorMessage } from '../../hooks/useGstTaxpayerSession';
 import { useGstVendors } from '../../hooks/useGstVendors';
+import { useVendorGstSelection } from '../../hooks/useVendorGstSelection';
 import { useOrganisationGstCredentials } from '../../hooks/useOrganisationGstCredentials';
 import { toast } from 'sonner';
 import { formatCurrency, formatRetPeriod } from '../../utils/taxFormatting';
@@ -70,6 +71,7 @@ import {
   toIndianFinancialYearReturnsLabel,
 } from '../../utils/gstPeriod';
 import OrgGstCredentialFields from './OrgGstCredentialFields';
+import VendorGstPickerFields from './VendorGstPickerFields';
 import { useCreditErrorHandler } from '../../../../contexts/CreditErrorContext';
 import { useGstAnalyticsReconciliation } from '../../contexts/GstAnalyticsReconciliationContext';
 import {
@@ -241,7 +243,6 @@ export const GstReconciliationPanel = () => {
   const yearOptions = useMemo(() => getCalendarYearOptions(), []);
   const [subTab, setSubTab] = useState('2a');
   const [selectedOrgGst, setSelectedOrgGst] = useState('');
-  const [vendorId, setVendorId] = useState('all');
   const [month, setMonth] = useState(String(now.getMonth() + 1));
   const [year, setYear] = useState(String(now.getFullYear()));
   const [criteria, setCriteria] = useState('strict');
@@ -262,11 +263,20 @@ export const GstReconciliationPanel = () => {
   } = useGstAnalyticsReconciliation();
   const { credentials, isLoading: credentialsLoading } = useOrganisationGstCredentials();
   const { vendors, isLoading: vendorsLoading } = useGstVendors();
+  const {
+    vendorId,
+    setVendorId,
+    selectedVendor,
+    selectedGstin,
+    setSelectedGstin,
+    activeGstin,
+    gstRegistrations,
+    hasMultipleGstins,
+  } = useVendorGstSelection(vendors);
   const [submitGstr2a] = useSubmitGstr2aAnalyticsReconciliationMutation();
   const [submitGstr2b] = useSubmitGstr2bAnalyticsReconciliationMutation();
 
   const selectedCredential = credentials.find((entry) => entry.gst === selectedOrgGst);
-  const selectedVendor = vendors.find((vendor) => vendor.id === vendorId);
   const activeTypeLabel = subTab === '2a' ? 'GSTR-2A' : 'GSTR-2B';
   const activeJob = activeJobsByType[subTab] ?? null;
   const historyTotalPages = getAnalyticsHistoryPages(historyRows);
@@ -324,6 +334,7 @@ export const GstReconciliationPanel = () => {
         gstin: selectedCredential.gst,
         username: selectedCredential.userName || undefined,
         ...(selectedVendor?.name ? { vendor: selectedVendor.name } : {}),
+        ...(activeGstin && selectedVendor ? { supplierGstin: activeGstin } : {}),
         year: Number(year),
         month: Number(month),
         reconciliationCriteria: criteria,
@@ -388,21 +399,21 @@ export const GstReconciliationPanel = () => {
             onGstChange={setSelectedOrgGst}
             className="xl:col-span-2"
           />
-          <div className="space-y-1.5 xl:col-span-2">
-            <label className="text-xs font-medium text-muted-foreground">Supplier</label>
-            <TaxSelect
-              value={vendorId}
-              onValueChange={setVendorId}
-              placeholder={vendorsLoading ? 'Loading suppliers…' : 'All Suppliers'}
-              options={[
-                { value: 'all', label: 'All Suppliers' },
-                ...vendors.map((vendor) => ({
-                  value: vendor.id,
-                  label: vendor.gstin ? `${vendor.name} · ${vendor.gstin}` : vendor.name,
-                })),
-              ]}
-            />
-          </div>
+          <VendorGstPickerFields
+            vendors={vendors}
+            vendorsLoading={vendorsLoading}
+            vendorId={vendorId}
+            onVendorIdChange={setVendorId}
+            selectedGstin={selectedGstin}
+            onSelectedGstinChange={setSelectedGstin}
+            activeGstin={activeGstin}
+            gstRegistrations={gstRegistrations}
+            hasMultipleGstins={hasMultipleGstins}
+            allowAll
+            vendorOptional
+            vendorLabel="Supplier"
+            vendorPlaceholder="All Suppliers"
+          />
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Month</label>
             <TaxSelect value={month} onValueChange={setMonth} options={GST_RECONCILIATION_MONTHS} />
@@ -439,6 +450,7 @@ export const GstReconciliationPanel = () => {
             <TaxDetailGrid
               items={[
                 { label: 'Supplier', value: activeJob.supplierName || selectedVendor?.name || 'All Suppliers' },
+                { label: 'Supplier GSTIN', value: activeJob.supplierGstin || activeGstin || '—' },
                 { label: 'Period', value: formatAnalyticsPeriod(activeJob) },
                 { label: 'Criteria', value: activeJob.reconciliationCriteria || criteria },
                 { label: 'Generated On', value: formatAnalyticsDateTime(activeJob.fetchDateTime) },
@@ -573,7 +585,16 @@ const RETURN_TYPE_OPTIONS = ['All Returns', 'GSTR-1', 'GSTR-3B', 'GSTR-9'];
 
 export const GstReturnsPanel = () => {
   const { vendors } = useGstVendors();
-  const [vendorId, setVendorId] = useState('');
+  const {
+    vendorId,
+    setVendorId,
+    selectedVendor,
+    selectedGstin,
+    setSelectedGstin,
+    activeGstin,
+    gstRegistrations,
+    hasMultipleGstins,
+  } = useVendorGstSelection(vendors);
   const [returnType, setReturnType] = useState('All Returns');
   const [fy, setFy] = useState(DEFAULT_GST_RETURNS_FY);
   const [loading, setLoading] = useState(false);
@@ -581,16 +602,18 @@ export const GstReturnsPanel = () => {
   const [records, setRecords] = useState([]);
   const [trackReturns] = useTrackGstReturnsMutation();
 
-  const selectedVendor = vendors.find((vendor) => vendor.id === vendorId);
-
   const handleTrack = async () => {
     if (!vendorId || !selectedVendor) return;
+    if (!activeGstin) {
+      toast.error('Selected vendor does not have a GSTIN. Add a GST registration to the vendor first.');
+      return;
+    }
     setLoading(true);
     setFetched(false);
     try {
       const result = await trackReturns(buildReturnsTrackPayload({
         vendorName: selectedVendor.name,
-        gstin: selectedVendor.gstin,
+        gstin: activeGstin,
         returnType,
         financialYear: fy,
       })).unwrap();
@@ -633,26 +656,19 @@ export const GstReturnsPanel = () => {
       <TaxSectionCard icon={Building2} title="Select Vendor & Filter" description="Vendor selection is required before fetching filing history.">
         <MeteredActionCostHint actionCode={CREDIT_ACTION_CODES.GST_RETURNS_API} className="mb-4" />
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Vendor *</label>
-            <TaxSelect
-              value={vendorId || 'placeholder'}
-              onValueChange={(value) => {
-                if (value === 'placeholder') return;
-                setVendorId(value);
-                setFetched(false);
-              }}
-              placeholder="Search or select vendor…"
-              options={[
-                { value: 'placeholder', label: 'Search or select vendor…' },
-                ...vendors.map((vendor) => ({ value: vendor.id, label: vendor.name })),
-              ]}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">GSTIN</label>
-            <Input readOnly value={selectedVendor?.gstin || ''} placeholder="Auto-populated from vendor" className="font-mono text-sm" />
-          </div>
+          <VendorGstPickerFields
+            vendors={vendors}
+            vendorId={vendorId}
+            onVendorIdChange={setVendorId}
+            selectedGstin={selectedGstin}
+            onSelectedGstinChange={setSelectedGstin}
+            activeGstin={activeGstin}
+            gstRegistrations={gstRegistrations}
+            hasMultipleGstins={hasMultipleGstins}
+            vendorRequired
+            vendorLabel="Vendor"
+            onVendorChange={() => setFetched(false)}
+          />
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">Return Type</label>
             <TaxSelect value={returnType} onValueChange={setReturnType} options={RETURN_TYPE_OPTIONS} />
@@ -662,7 +678,7 @@ export const GstReturnsPanel = () => {
             <TaxSelect value={fy} onValueChange={setFy} options={FY_OPTIONS} />
           </div>
           <div className="flex items-end">
-            <Button onClick={handleTrack} disabled={!vendorId || loading} className="w-full">
+            <Button onClick={handleTrack} disabled={!vendorId || !activeGstin || loading} className="w-full">
               {loading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
               {loading ? 'Fetching…' : 'Track Returns'}
             </Button>
@@ -699,7 +715,7 @@ export const GstReturnsPanel = () => {
               </div>
               <div className="min-w-0 flex-1">
                 <p className="font-semibold">{selectedVendor?.name}</p>
-                <p className="font-mono text-xs text-muted-foreground">{selectedVendor?.gstin}</p>
+                <p className="font-mono text-xs text-muted-foreground">{activeGstin || '—'}</p>
               </div>
               <div className="flex flex-wrap gap-2">
                 <TaxStatusBadge status={vendorStatus} />
@@ -719,7 +735,7 @@ export const GstReturnsPanel = () => {
             title="Filing History"
             description="Source: Sandbox Track GSTRs API · Read-only"
             actions={
-              <Button variant="outline" size="sm" onClick={handleTrack} disabled={!vendorId || loading}>
+              <Button variant="outline" size="sm" onClick={handleTrack} disabled={!vendorId || !activeGstin || loading}>
                 <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
                 {loading ? 'Refreshing…' : 'Refresh'}
               </Button>

@@ -115,15 +115,32 @@ export const toVendorRequestApiPayload = (vendor = {}) => {
   return payload;
 };
 
-export const toVendorUiPayload = (vendor = {}) => ({
-  ...vendor,
-  vendor_type: vendor.vendor_type ?? vendor.vendorType,
-  gstRegistrations:
+const buildUiVendorGstRegistrations = (vendor = {}) => {
+  const registrations =
     vendor.gstRegistrations ??
     vendor.gst_regs ??
     vendor.gstRegs ??
-    vendor.gst_registrations ??
-    (vendor.gstin ? [{ gstin: vendor.gstin, isPrimary: true }] : []),
+    vendor.gst_registrations;
+
+  if (Array.isArray(registrations) && registrations.length > 0) {
+    return registrations;
+  }
+
+  const gstin = String(vendor.gstin || '').trim().toUpperCase();
+  if (!gstin) return [];
+
+  return [{
+    gstin,
+    state: vendor.state || '',
+    isPrimary: true,
+  }];
+};
+
+export const toVendorUiPayload = (vendor = {}) => ({
+  ...vendor,
+  vendor_type: vendor.vendor_type ?? vendor.vendorType,
+  gstin: String(vendor.gstin || '').trim().toUpperCase() || vendor.gstin || '',
+  gstRegistrations: buildUiVendorGstRegistrations(vendor),
   documents: vendor.documents ?? vendor.vendorDocuments ?? vendor.vendor_documents ?? {},
   tdsMapping:
     vendor.tdsMapping ??

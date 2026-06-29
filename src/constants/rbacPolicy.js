@@ -194,6 +194,7 @@ export const ACTION_PERMISSION_RULES = {
   "campaigns.markPaid": { anyOf: ["campaign-manage"] },
 
   "po.create": { anyOf: ["po-manage"] },
+  "po.scan": { anyOf: ["po-manage"] },
   "po.submit": { anyOf: ["po-manage"] },
   "po.approve": { anyOf: ["po-approve"] },
 
