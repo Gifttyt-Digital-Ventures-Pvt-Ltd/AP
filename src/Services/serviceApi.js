@@ -37,7 +37,7 @@ const baseQuery = (args, api, extraOptions) => {
   if (api.endpoint === "bulkUploadInvoices") {
     return bulkScanBaseQuery(args, api, extraOptions);
   }
-  if (api.endpoint === "scanInvoice") {
+  if (api.endpoint === "scanInvoice" || api.endpoint === "scanPurchaseOrder") {
     return scanBaseQuery(args, api, extraOptions);
   }
   return defaultBaseQuery(args, api, extraOptions);

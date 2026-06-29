@@ -1,5 +1,5 @@
 import React from "react";
-import { CheckCircle, Clock, FileText, IndianRupee, Plus, Settings2 } from "lucide-react";
+import { CheckCircle, Clock, FileText, IndianRupee, Plus, Settings2, Upload } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent } from "../../../components/ui/card";
 import RefreshButton from "../../../components/common/RefreshButton";
@@ -7,10 +7,12 @@ import { normalizePoTemplateCode } from "../utils";
 
 const PurchaseOrdersToolbar = ({
   setShowCreateDialog,
+  setShowUploadPicker,
   setShowBuilderDialog,
   stats,
   formatCurrency,
   canManagePo,
+  canUploadPo = false,
   activeFormat,
   onRefresh,
   refreshing = false,
@@ -37,6 +39,12 @@ const PurchaseOrdersToolbar = ({
                 <Settings2 className="h-4 w-4 mr-2" />
                 Format Builder
               </Button>
+              {canUploadPo ? (
+                <Button variant="outline" onClick={() => setShowUploadPicker(true)} data-testid="upload-po-btn">
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload PO
+                </Button>
+              ) : null}
               <Button onClick={() => setShowCreateDialog(true)} data-testid="create-po-btn">
                 <Plus className="h-4 w-4 mr-2" />
                 Create PO
