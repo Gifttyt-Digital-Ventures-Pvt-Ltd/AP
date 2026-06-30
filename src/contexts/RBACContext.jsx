@@ -85,6 +85,8 @@ const getAssignedRoles = (employeeDetails = null) => {
 };
 
 const FALLBACK_DIRECT_ROLE_PERMISSIONS = {
+  MASTER_ADMIN: [FULL_ACCESS_PERMISSION, "master-admin"],
+  AP_MASTER_ADMIN: [FULL_ACCESS_PERMISSION, "master-admin"],
   CREATOR: ["campaign-manage"],
   MAKER: ["campaign-manage"],
   CHECKER: ["invoice-checker"],
@@ -178,9 +180,13 @@ export const RBACProvider = ({ children }) => {
   const isCorporateAdmin =
     normalizedCorporateUserRole === "CORP_ADMIN" ||
     normalizedCorporateUserRole === "CORPADMIN" ||
+    normalizedCorporateUserRole === "MASTER_ADMIN" ||
+    normalizedCorporateUserRole === "AP_MASTER_ADMIN" ||
     normalizedCorporateUserRole === "ADMIN" ||
     normalizedAuthRole === "CORP_ADMIN" ||
     normalizedAuthRole === "CORPADMIN" ||
+    normalizedAuthRole === "MASTER_ADMIN" ||
+    normalizedAuthRole === "AP_MASTER_ADMIN" ||
     normalizedAuthRole === "ADMIN";
 
   const computedPermissions = useMemo(() => {

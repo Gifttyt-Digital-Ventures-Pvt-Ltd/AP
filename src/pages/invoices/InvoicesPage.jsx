@@ -281,6 +281,7 @@ const InvoicesPage = () => {
     isCorporateAdmin,
     isCorporateScreenAllowed,
     isCorporateSectionEnabled,
+    hasPermission,
   } = useRBAC();
   const hasPurchaseOrderSubscription =
     isCorporateScreenAllowed("PURCHASE_ORDER") &&
@@ -458,6 +459,7 @@ const InvoicesPage = () => {
   const canDeleteInvoices = canPerformAction("invoices.delete");
   const canCheckInvoices = canPerformAction("invoices.check");
   const canAddVendors = canPerformAction("invoices.addVendor");
+  const isMasterAdmin = hasPermission("master-admin");
   const isCheckerEditEnabled = useMemo(
     () =>
       isCheckerEditEnabledForCorporate(
@@ -484,7 +486,7 @@ const InvoicesPage = () => {
       canUpdateInvoices,
       canManageInvoices,
       canCheckInvoices,
-      isCorporateAdmin,
+      isCorporateAdmin: isCorporateAdmin || isMasterAdmin,
       isCheckerEditEnabled,
     }),
     [
@@ -494,6 +496,7 @@ const InvoicesPage = () => {
       canManageInvoices,
       canCheckInvoices,
       isCorporateAdmin,
+      isMasterAdmin,
       isCheckerEditEnabled,
     ],
   );
