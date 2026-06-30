@@ -14,6 +14,7 @@ import {
 import { Badge } from "../../components/ui/badge";
 import { Button } from "../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../components/ui/card";
+import { Checkbox } from "../../components/ui/checkbox";
 import {
   Dialog,
   DialogContent,
@@ -42,6 +43,8 @@ import {
   AlertTriangle,
   CheckCheck,
   CheckCircle,
+  ChevronDown,
+  ChevronRight,
   Edit,
   Eye,
   FileText,
@@ -76,13 +79,12 @@ const MATCH_TYPE_OPTIONS = [
 ];
 
 const matchingTableHeader = [
-  { key: "match", title: "Match" },
-  { key: "invoice", title: "Invoice" },
-  { key: "poNumber", title: "PO" },
+  { key: "poGroup", title: "PO / Invoice" },
+  { key: "vendor", title: "Vendor" },
   { key: "grnNumber", title: "GRN" },
   { key: "matchType", title: "Type" },
-  { key: "invoiceAmount", title: "Invoice Amt" },
   { key: "poAmount", title: "PO Amt" },
+  { key: "matchedAmount", title: "Matched Amt" },
   { key: "variance", title: "Variance" },
   { key: "status", title: "Status" },
   { key: "actions", title: "Actions" },
@@ -180,6 +182,76 @@ const normalizeMatching = (match = {}) => ({
   createdAt: match.createdAt ?? match.created_at,
 });
 
+const normalizeMatchingGroup = (group = {}) => {
+  const rawSubRows =
+    Array.isArray(group.invoiceMatches)
+      ? group.invoiceMatches
+      : Array.isArray(group.invoice_matches)
+        ? group.invoice_matches
+        : [];
+
+  if (rawSubRows.length === 0 && (group.id || group.matchNumber || group.match_number)) {
+    const flatMatch = normalizeMatching(group);
+    return {
+      id: group.poId ?? group.po_id ?? group.purchaseOrderId ?? group.purchase_order_id ?? flatMatch.id,
+      poId: group.poId ?? group.po_id ?? group.purchaseOrderId ?? group.purchase_order_id ?? "",
+      poNumber: flatMatch.poNumber,
+      vendorName: flatMatch.vendorName,
+      grnNumber: flatMatch.grnNumber,
+      matchType: flatMatch.matchType,
+      poAmount: flatMatch.poAmount,
+      cumulativeInvoiceAmount: flatMatch.invoiceAmount,
+      varianceAmount: flatMatch.varianceAmount,
+      variancePercentage: flatMatch.variancePercentage,
+      status: flatMatch.status,
+      isException: flatMatch.isException,
+      requiresReview: flatMatch.requiresReview,
+      createdAt: flatMatch.createdAt,
+      totalLineCount: Number(group.totalLineCount ?? group.total_line_count ?? 0),
+      discrepantLineCount: Number(group.discrepantLineCount ?? group.discrepant_line_count ?? 0),
+      invoiceMatches: [flatMatch],
+    };
+  }
+
+  const invoiceMatches = rawSubRows
+    .map(normalizeMatching)
+    .sort((left, right) => new Date(left.createdAt || 0) - new Date(right.createdAt || 0));
+  const latestMatch = invoiceMatches[invoiceMatches.length - 1] || {};
+
+  return {
+    ...group,
+    id: group.poId ?? group.po_id ?? group.purchaseOrderId ?? group.purchase_order_id ?? group.id ?? latestMatch.id,
+    poId: group.poId ?? group.po_id ?? group.purchaseOrderId ?? group.purchase_order_id ?? "",
+    poNumber: group.poNumber ?? group.po_number ?? latestMatch.poNumber ?? "",
+    vendorName: group.vendorName ?? group.vendor_name ?? latestMatch.vendorName ?? "",
+    grnNumber: group.grnNumber ?? group.grn_number ?? latestMatch.grnNumber ?? "",
+    matchType: normalizeMatchType(group.matchType ?? group.match_type ?? latestMatch.matchType),
+    poAmount: Number(group.poAmount ?? group.po_amount ?? latestMatch.poAmount ?? 0),
+    cumulativeInvoiceAmount: Number(
+      group.cumulativeInvoiceAmount ??
+        group.cumulative_invoice_amount ??
+        invoiceMatches.reduce((sum, item) => sum + Number(item.invoiceAmount || 0), 0),
+    ),
+    varianceAmount: Number(group.varianceAmount ?? group.variance_amount ?? 0),
+    variancePercentage: Number(group.variancePercentage ?? group.variance_percentage ?? 0),
+    status: normalizeStatus(group.status ?? group.match_status ?? latestMatch.status),
+    isException: Boolean(group.isException ?? group.is_exception ?? invoiceMatches.some((item) => item.isException)),
+    requiresReview: Boolean(group.requiresReview ?? group.requires_review ?? invoiceMatches.some((item) => item.requiresReview)),
+    createdAt: group.createdAt ?? group.created_at ?? latestMatch.createdAt,
+    totalLineCount: Number(
+      group.totalLineCount ??
+        group.total_line_count ??
+        invoiceMatches.reduce((sum, item) => sum + Number(item.totalLineCount || 0), 0),
+    ),
+    discrepantLineCount: Number(
+      group.discrepantLineCount ??
+        group.discrepant_line_count ??
+        invoiceMatches.reduce((sum, item) => sum + Number(item.discrepantLineCount || 0), 0),
+    ),
+    invoiceMatches,
+  };
+};
+
 const normalizeInvoice = (invoice = {}) => ({
   ...invoice,
   id: invoice.id ?? invoice.invoiceId ?? invoice.invoice_id,
@@ -222,6 +294,7 @@ const mergeById = (items, fallbackItem) => {
 
 const emptyMatchForm = {
   invoiceId: "",
+  invoiceIds: [],
   purchaseOrderId: "",
   grnId: "",
   matchType: "TWO_WAY",
@@ -262,6 +335,7 @@ const InvoiceMatching = () => {
   const [editingMatching, setEditingMatching] = useState(null);
   const [matchForm, setMatchForm] = useState(emptyMatchForm);
   const [exceptionReason, setExceptionReason] = useState("");
+  const [expandedGroupIds, setExpandedGroupIds] = useState(new Set());
 
   const listParams = useMemo(
     () => ({
@@ -292,9 +366,14 @@ const InvoiceMatching = () => {
       { page: 0, size: 100 },
       { skip: !showMatchDialog },
     );
+  const isEditMode = Boolean(editingMatching);
+  const selectedInvoiceIds = isEditMode
+    ? [matchForm.invoiceId].filter(Boolean)
+    : (matchForm.invoiceIds?.length ? matchForm.invoiceIds : [matchForm.invoiceId].filter(Boolean));
+  const firstSelectedInvoiceId = selectedInvoiceIds[0] || "";
   const { data: purchaseOrdersData = {}, isFetching: purchaseOrdersLoading } =
-    useGetAvailablePurchaseOrdersQuery(matchForm.invoiceId, {
-      skip: !showMatchDialog || !matchForm.invoiceId,
+    useGetAvailablePurchaseOrdersQuery(firstSelectedInvoiceId, {
+      skip: !showMatchDialog || !firstSelectedInvoiceId,
     });
   const { data: grnsData = {}, isFetching: grnsLoading } = useGetAvailableGrnsQuery(
     matchForm.purchaseOrderId,
@@ -312,7 +391,7 @@ const InvoiceMatching = () => {
   const [markInvoiceMatchException, { isLoading: markingException }] =
     useMarkInvoiceMatchExceptionMutation();
 
-  const matchings = getPageContent(listData).map(normalizeMatching);
+  const matchingGroups = getPageContent(listData).map(normalizeMatchingGroup);
   const invoices = mergeById(
     getPageContent(invoicesData).map(normalizeInvoice),
     editingMatching?.invoice ? normalizeInvoice(editingMatching.invoice) : null,
@@ -327,14 +406,14 @@ const InvoiceMatching = () => {
   );
   const detail = detailData ? normalizeMatching(detailData) : selectedMatching;
   const totalPages = Number(listData?.totalPages ?? 1) || 1;
-  const totalElements = Number(listData?.totalElements ?? matchings.length) || 0;
+  const totalElements = Number(listData?.totalElements ?? matchingGroups.length) || 0;
   const loading = summaryLoading || listLoading;
-  const isEditMode = Boolean(editingMatching);
   const matchCostEstimate = useMeteredActionEstimate(
     CREDIT_ACTION_CODES.INVOICE_MATCHING,
-    isEditMode ? 0 : 1,
+    isEditMode ? 0 : Math.max(selectedInvoiceIds.length, 1),
   );
-  const selectedInvoice = invoices.find((invoice) => invoice.id === matchForm.invoiceId);
+  const selectedInvoices = invoices.filter((invoice) => selectedInvoiceIds.includes(invoice.id));
+  const selectedInvoice = selectedInvoices[0];
   const selectedPo = purchaseOrders.find((po) => po.id === matchForm.purchaseOrderId);
   const selectedGrn = grns.find((grn) => grn.id === matchForm.grnId);
   const availableMatchTypeOptions = canUseThreeWayMatching
@@ -392,6 +471,7 @@ const InvoiceMatching = () => {
       setEditingMatching(detailRecord);
       setMatchForm({
         invoiceId: detailRecord.invoice?.id ?? detailRecord.invoiceId ?? "",
+        invoiceIds: [],
         purchaseOrderId: detailRecord.purchaseOrder?.id ?? detailRecord.purchaseOrderId ?? "",
         grnId: detailRecord.grn?.id ?? detailRecord.grnId ?? "",
         matchType: normalizeMatchType(detailRecord.matchType ?? match.matchType),
@@ -407,9 +487,27 @@ const InvoiceMatching = () => {
     setMatchForm((current) => ({
       ...current,
       invoiceId,
+      invoiceIds: invoiceId ? [invoiceId] : [],
       purchaseOrderId: "",
       grnId: "",
     }));
+  };
+
+  const handleInvoiceToggle = (invoiceId, checked) => {
+    setMatchForm((current) => {
+      const currentIds = current.invoiceIds?.length ? current.invoiceIds : [current.invoiceId].filter(Boolean);
+      const nextIds = checked
+        ? [...new Set([...currentIds, invoiceId])]
+        : currentIds.filter((id) => id !== invoiceId);
+
+      return {
+        ...current,
+        invoiceId: nextIds[0] || "",
+        invoiceIds: nextIds,
+        purchaseOrderId: "",
+        grnId: "",
+      };
+    });
   };
 
   const handlePoChange = (purchaseOrderId) => {
@@ -423,9 +521,17 @@ const InvoiceMatching = () => {
   const handleMatchSubmit = async () => {
     const action = isEditMode ? "matching.edit" : "matching.perform";
     if (!guardAction(action)) return;
-    if (!matchForm.invoiceId || !matchForm.purchaseOrderId) {
+    if (selectedInvoiceIds.length === 0 || !matchForm.purchaseOrderId) {
       toast.error("Please select an invoice and purchase order");
       return;
+    }
+    if (!isEditMode && selectedInvoices.length > 1) {
+      const vendorNames = new Set(selectedInvoices.map((invoice) => String(invoice.vendorName || "").trim().toUpperCase()));
+      const currencies = new Set(selectedInvoices.map((invoice) => String(invoice.currency || "INR").trim().toUpperCase()));
+      if (vendorNames.size > 1 || currencies.size > 1) {
+        toast.error("Select invoices from the same vendor and currency for batch matching");
+        return;
+      }
     }
     if (matchForm.matchType === "THREE_WAY" && !matchForm.grnId) {
       toast.error("Please select a GRN for 3-way matching");
@@ -433,11 +539,15 @@ const InvoiceMatching = () => {
     }
 
     const body = {
-      invoiceId: matchForm.invoiceId,
       purchaseOrderId: matchForm.purchaseOrderId,
       grnId: matchForm.matchType === "THREE_WAY" ? matchForm.grnId : null,
       matchType: matchForm.matchType,
     };
+    if (isEditMode || selectedInvoiceIds.length <= 1) {
+      body.invoiceId = selectedInvoiceIds[0];
+    } else {
+      body.invoiceIds = selectedInvoiceIds;
+    }
     if (isEditMode && matchForm.remarks.trim()) {
       body.remarks = matchForm.remarks.trim();
     }
@@ -486,7 +596,7 @@ const InvoiceMatching = () => {
 
   const getSubmitDisabledReason = () => {
     if (performing || editing) return "Saving match...";
-    if (!matchForm.invoiceId) return "Select an invoice";
+    if (selectedInvoiceIds.length === 0) return "Select an invoice";
     if (!matchForm.purchaseOrderId) return "Select a purchase order";
     if (matchForm.matchType === "THREE_WAY" && !matchForm.grnId) return "Select a GRN";
     return "";
@@ -537,99 +647,152 @@ const InvoiceMatching = () => {
     );
   };
 
-  const renderMatchingRow = (match, rowIndex, headers) => {
+  const renderMatchActions = (match) => {
     const canOpenException =
       canMarkException &&
       (match.status === "PARTIAL_MATCH" || match.status === "MISMATCH");
 
     return (
-      <TableRow key={match.id ?? rowIndex} data-testid={`matching-row-${match.id}`}>
-        {headers.map((header) => {
-          let value;
+      <div className="flex gap-1">
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            setSelectedMatching(match);
+            setShowDetailDialog(true);
+          }}
+          data-testid={`view-matching-${match.id}`}
+        >
+          <Eye className="h-4 w-4" />
+        </Button>
+        {canEdit && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => openEditDialog(match)}
+            data-testid={`edit-matching-${match.id}`}
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+        )}
+        {canOpenException && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => openExceptionDialog(match)}
+            data-testid={`exception-matching-${match.id}`}
+          >
+            <AlertTriangle className="h-4 w-4" />
+          </Button>
+        )}
+      </div>
+    );
+  };
 
-          switch (header.key) {
-            case "match":
-              value = (
-                <>
-                  <div className="font-medium">{match.matchNumber || "-"}</div>
-                  <div className="text-xs text-muted-foreground">{formatDate(match.createdAt)}</div>
-                </>
-              );
-              break;
-            case "invoice":
-              value = (
-                <>
-                  <div className="font-medium">{match.invoiceNumber || "-"}</div>
-                  <div className="text-xs text-muted-foreground">{match.vendorName || "-"}</div>
-                </>
-              );
-              break;
-            case "matchType":
-              value = <Badge variant="outline">{match.matchType === "THREE_WAY" ? "3-Way" : "2-Way"}</Badge>;
-              break;
-            case "invoiceAmount":
-              value = formatCurrency(match.invoiceAmount);
-              break;
-            case "poAmount":
-              value = formatCurrency(match.poAmount);
-              break;
-            case "variance":
-              value = (
-                <>
-                  <div>{formatCurrency(match.varianceAmount)}</div>
-                  <div className="text-xs text-muted-foreground">
-                    {formatPercent(match.variancePercentage)}%
-                  </div>
-                </>
-              );
-              break;
-            case "status":
-              value = renderStatusBadge(match.status);
-              break;
-            case "actions":
-              value = (
-                <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setSelectedMatching(match);
-                      setShowDetailDialog(true);
-                    }}
-                    data-testid={`view-matching-${match.id}`}
-                  >
-                    <Eye className="h-4 w-4" />
-                  </Button>
-                  {canEdit && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openEditDialog(match)}
-                      data-testid={`edit-matching-${match.id}`}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                  )}
-                  {canOpenException && (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openExceptionDialog(match)}
-                      data-testid={`exception-matching-${match.id}`}
-                    >
-                      <AlertTriangle className="h-4 w-4" />
-                    </Button>
-                  )}
+  const renderMatchingRow = (group, rowIndex, headers) => {
+    const groupId = String(group.id || group.poId || rowIndex);
+    const isExpanded = expandedGroupIds.has(groupId);
+    const hasChildren = group.invoiceMatches.length > 0;
+    const progressValue = group.poAmount > 0
+      ? Math.min(100, Math.max(0, (group.cumulativeInvoiceAmount / group.poAmount) * 100))
+      : 0;
+    const rowTone = group.isException
+      ? "bg-red-50/70"
+      : group.requiresReview
+        ? "bg-amber-50/70"
+        : "bg-white";
+
+    const toggleExpanded = () => {
+      setExpandedGroupIds((current) => {
+        const next = new Set(current);
+        if (next.has(groupId)) next.delete(groupId);
+        else next.add(groupId);
+        return next;
+      });
+    };
+
+    return (
+      <React.Fragment key={groupId}>
+        <TableRow className={`${rowTone} border-b`} data-testid={`matching-po-row-${groupId}`}>
+          <TableCell>
+            <div className="flex items-start gap-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="mt-0.5 h-7 w-7 p-0"
+                onClick={toggleExpanded}
+                disabled={!hasChildren}
+                aria-label={isExpanded ? "Collapse invoice matches" : "Expand invoice matches"}
+              >
+                {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+              </Button>
+              <div className="min-w-0">
+                <div className="font-semibold">{group.poNumber || "PO -"}</div>
+                <div className="text-xs text-muted-foreground">
+                  {group.invoiceMatches.length} invoice{group.invoiceMatches.length === 1 ? "" : "s"} matched · Latest {formatDate(group.createdAt)}
                 </div>
-              );
-              break;
-            default:
-              value = match?.[header.key] || "-";
-          }
+                {group.requiresReview ? (
+                  <div className="mt-1 text-xs font-medium text-amber-700">Needs review</div>
+                ) : null}
+              </div>
+            </div>
+          </TableCell>
+          <TableCell>
+            <div className="font-medium">{group.vendorName || "-"}</div>
+          </TableCell>
+          <TableCell>
+            {group.grnNumber || "-"}
+          </TableCell>
+          <TableCell>
+            <Badge variant="outline">{group.matchType === "THREE_WAY" ? "3-Way" : "2-Way"}</Badge>
+          </TableCell>
+          <TableCell>{formatCurrency(group.poAmount)}</TableCell>
+          <TableCell>
+            <div className="font-medium">{formatCurrency(group.cumulativeInvoiceAmount)}</div>
+            <div className="mt-1 h-1.5 w-32 overflow-hidden rounded-full bg-muted">
+              <div className="h-full rounded-full bg-primary" style={{ width: `${progressValue}%` }} />
+            </div>
+          </TableCell>
+          <TableCell>
+            <div>{formatCurrency(group.varianceAmount)}</div>
+            <div className="text-xs text-muted-foreground">{formatPercent(group.variancePercentage)}%</div>
+          </TableCell>
+          <TableCell>{renderStatusBadge(group.status)}</TableCell>
+          <TableCell>
+            <span className="text-xs text-muted-foreground">Expand for actions</span>
+          </TableCell>
+        </TableRow>
 
-          return <TableCell key={header.key}>{value}</TableCell>;
-        })}
-      </TableRow>
+        {isExpanded
+          ? group.invoiceMatches.map((match, matchIndex) => (
+            <TableRow
+              key={match.id || `${groupId}-${matchIndex}`}
+              className="bg-muted/20"
+              data-testid={`matching-row-${match.id}`}
+            >
+              <TableCell className="pl-12">
+                <div className="font-medium">{match.invoiceNumber || "-"}</div>
+                <div className="text-xs text-muted-foreground">
+                  {match.matchNumber || "-"} · {formatDate(match.createdAt)}
+                </div>
+              </TableCell>
+              <TableCell>{match.vendorName || group.vendorName || "-"}</TableCell>
+              <TableCell>{match.grnNumber || group.grnNumber || "-"}</TableCell>
+              <TableCell>
+                <Badge variant="outline">{match.matchType === "THREE_WAY" ? "3-Way" : "2-Way"}</Badge>
+              </TableCell>
+              <TableCell>{formatCurrency(match.poAmount || group.poAmount)}</TableCell>
+              <TableCell>{formatCurrency(match.invoiceAmount)}</TableCell>
+              <TableCell>
+                <div>{formatCurrency(match.varianceAmount)}</div>
+                <div className="text-xs text-muted-foreground">{formatPercent(match.variancePercentage)}%</div>
+              </TableCell>
+              <TableCell>{renderStatusBadge(match.status)}</TableCell>
+              <TableCell>{renderMatchActions(match)}</TableCell>
+            </TableRow>
+          ))
+          : null}
+      </React.Fragment>
     );
   };
 
@@ -800,7 +963,7 @@ const InvoiceMatching = () => {
       <Card>
         <AppDataTable
           tableHeader={matchingTableHeader}
-          tableData={matchings}
+          tableData={matchingGroups}
           renderRow={renderMatchingRow}
           emptyMessage="No matching records found."
         />
@@ -808,7 +971,7 @@ const InvoiceMatching = () => {
 
       <div className="flex items-center justify-between text-sm text-muted-foreground">
         <span>
-          Page {query.page + 1} of {totalPages} ({totalElements} records)
+          Page {query.page + 1} of {totalPages} ({totalElements} PO groups)
         </span>
         <div className="flex gap-2">
           <Button
@@ -847,36 +1010,74 @@ const InvoiceMatching = () => {
 
           <div className="space-y-6">
             <div className="space-y-2">
-              <Label>Select Invoice</Label>
-              <Select value={matchForm.invoiceId} onValueChange={handleInvoiceChange}>
-                <SelectTrigger data-testid="select-invoice">
-                  <SelectValue placeholder={invoicesLoading ? "Loading invoices..." : "Select an invoice"} />
-                </SelectTrigger>
-                <SelectContent>
-                  {invoices.map((invoice) => (
-                    <SelectItem key={invoice.id} value={invoice.id}>
-                      {invoice.invoiceNumber} - {invoice.vendorName} ({formatCurrency(invoice.remainingAmount, invoice.currency)})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label>{isEditMode ? "Select Invoice" : "Select Invoice(s)"}</Label>
+              {isEditMode ? (
+                <Select value={matchForm.invoiceId} onValueChange={handleInvoiceChange}>
+                  <SelectTrigger data-testid="select-invoice">
+                    <SelectValue placeholder={invoicesLoading ? "Loading invoices..." : "Select an invoice"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {invoices.map((invoice) => (
+                      <SelectItem key={invoice.id} value={invoice.id}>
+                        {invoice.invoiceNumber} - {invoice.vendorName} ({formatCurrency(invoice.remainingAmount, invoice.currency)})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="max-h-64 overflow-y-auto rounded-md border bg-white">
+                  {invoicesLoading ? (
+                    <div className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading invoices...
+                    </div>
+                  ) : invoices.length === 0 ? (
+                    <div className="px-3 py-4 text-sm text-muted-foreground">No available invoices found.</div>
+                  ) : (
+                    invoices.map((invoice) => {
+                      const checked = selectedInvoiceIds.includes(invoice.id);
+                      return (
+                        <label
+                          key={invoice.id}
+                          className="flex cursor-pointer items-start gap-3 border-b px-3 py-3 last:border-b-0 hover:bg-muted/40"
+                        >
+                          <Checkbox
+                            checked={checked}
+                            onCheckedChange={(value) => handleInvoiceToggle(invoice.id, Boolean(value))}
+                            data-testid={`select-invoice-${invoice.id}`}
+                          />
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-medium">{invoice.invoiceNumber || "-"}</span>
+                            <span className="block text-xs text-muted-foreground">
+                              {invoice.vendorName || "-"} · {formatCurrency(invoice.remainingAmount, invoice.currency)}
+                            </span>
+                          </span>
+                        </label>
+                      );
+                    })
+                  )}
+                </div>
+              )}
             </div>
 
-            {selectedInvoice && (
+            {selectedInvoices.length > 0 && (
               <Card className="bg-muted">
                 <CardContent className="grid gap-4 pt-4 text-sm md:grid-cols-3">
                   <div>
-                    <p className="text-muted-foreground">Invoice Number</p>
-                    <p className="font-medium">{selectedInvoice.invoiceNumber}</p>
+                    <p className="text-muted-foreground">Selected Invoice(s)</p>
+                    <p className="font-medium">{selectedInvoices.length}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Vendor</p>
-                    <p className="font-medium">{selectedInvoice.vendorName}</p>
+                    <p className="text-muted-foreground">Primary Vendor</p>
+                    <p className="font-medium">{selectedInvoice?.vendorName || "-"}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Remaining Amount</p>
+                    <p className="text-muted-foreground">Total Remaining Amount</p>
                     <p className="font-medium">
-                      {formatCurrency(selectedInvoice.remainingAmount, selectedInvoice.currency)}
+                      {formatCurrency(
+                        selectedInvoices.reduce((sum, invoice) => sum + Number(invoice.remainingAmount || 0), 0),
+                        selectedInvoice?.currency || "INR",
+                      )}
                     </p>
                   </div>
                 </CardContent>
