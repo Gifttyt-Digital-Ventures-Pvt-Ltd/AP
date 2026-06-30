@@ -106,6 +106,7 @@ export const useApprovalsInvoiceEdit = ({
   const canManageInvoices = canPerformAction("invoices.create");
   const canCheckInvoices = canPerformAction("invoices.check");
   const canAddVendors = canPerformAction("invoices.addVendor");
+  const isMasterAdmin = hasPermission("master-admin");
 
   const { data: corporateUserContext = null } =
     useGetCorporateUserDetailsQuery();
@@ -194,7 +195,7 @@ export const useApprovalsInvoiceEdit = ({
       canUpdateInvoices,
       canManageInvoices,
       canCheckInvoices,
-      isCorporateAdmin,
+      isCorporateAdmin: isCorporateAdmin || isMasterAdmin,
       isCheckerEditEnabled,
     }),
     [
@@ -204,6 +205,7 @@ export const useApprovalsInvoiceEdit = ({
       canManageInvoices,
       canCheckInvoices,
       isCorporateAdmin,
+      isMasterAdmin,
       isCheckerEditEnabled,
     ],
   );

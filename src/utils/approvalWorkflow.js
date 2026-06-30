@@ -327,7 +327,9 @@ export const canEditInvoice = (invoice, identity = {}) => {
   const canMutateInvoice = canUpdateInvoices || canManageInvoices;
   if (!canMutateInvoice) return false;
 
-  if (status === NEEDS_CORRECTION_STATUS) return matchesCreator(invoice, identity);
+  if (status === NEEDS_CORRECTION_STATUS) {
+    return Boolean(canManageInvoices || matchesCreator(invoice, identity));
+  }
   return true;
 };
 
@@ -353,7 +355,7 @@ export const getInvoiceEditBlockedMessage = (invoice, identity = {}) => {
   }
 
   if (status === NEEDS_CORRECTION_STATUS) {
-    return 'Only the creator can edit an invoice in Needs Correction status';
+    return 'Only the creator or an invoice manager can edit an invoice in Needs Correction status';
   }
 
   return `Invoices in ${status || 'this'} status cannot be edited`;
