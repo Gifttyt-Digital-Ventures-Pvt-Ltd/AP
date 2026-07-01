@@ -19,6 +19,30 @@ export const invoiceMatchingApi = serviceApi.injectEndpoints({
       query: (id) => ({ url: `/invoice-matching/${id}`, method: "GET" }),
       providesTags: ["Matching"],
     }),
+    getInvoiceMatchingChecklist: builder.query({
+      query: (id) => ({ url: `/invoice-matching/${id}/checklist`, method: "GET" }),
+      providesTags: (_result, _error, id) => [
+        { type: "Matching", id: `CHECKLIST-${id}` },
+      ],
+    }),
+    getInvoiceMatchingAcceptanceLog: builder.query({
+      query: (id) => ({ url: `/invoice-matching/${id}/acceptance-log`, method: "GET" }),
+      providesTags: (_result, _error, id) => [
+        { type: "Matching", id: `ACCEPTANCE-LOG-${id}` },
+      ],
+    }),
+    getInvoiceMatchingGroupChecklist: builder.query({
+      query: (groupId) => ({ url: `/invoice-matching/groups/${groupId}/checklist`, method: "GET" }),
+      providesTags: (_result, _error, groupId) => [
+        { type: "Matching", id: `GROUP-CHECKLIST-${groupId}` },
+      ],
+    }),
+    getInvoiceMatchingGroupAcceptanceLog: builder.query({
+      query: (groupId) => ({ url: `/invoice-matching/groups/${groupId}/acceptance-log`, method: "GET" }),
+      providesTags: (_result, _error, groupId) => [
+        { type: "Matching", id: `GROUP-ACCEPTANCE-LOG-${groupId}` },
+      ],
+    }),
     getAvailableMatchingInvoices: builder.query({
       query: (params = {}) => ({
         url: "/invoice-matching/invoices/available",
@@ -74,6 +98,56 @@ export const invoiceMatchingApi = serviceApi.injectEndpoints({
       }),
       invalidatesTags: ["Matching", "Invoices"],
     }),
+    acceptInvoiceMatchCriterion: builder.mutation({
+      query: ({ matchId, criterionType, reason }) => ({
+        url: `/invoice-matching/${matchId}/criteria/${criterionType}/accept`,
+        method: "PATCH",
+        body: { reason },
+      }),
+      invalidatesTags: (_result, _error, { matchId }) => [
+        "Matching",
+        { type: "Matching", id: `CHECKLIST-${matchId}` },
+        { type: "Matching", id: `ACCEPTANCE-LOG-${matchId}` },
+      ],
+    }),
+    acceptInvoiceMatchOverall: builder.mutation({
+      query: ({ matchId, reason }) => ({
+        url: `/invoice-matching/${matchId}/accept-overall`,
+        method: "PATCH",
+        body: { reason },
+      }),
+      invalidatesTags: (_result, _error, { matchId }) => [
+        "Matching",
+        "Invoices",
+        { type: "Matching", id: `CHECKLIST-${matchId}` },
+        { type: "Matching", id: `ACCEPTANCE-LOG-${matchId}` },
+      ],
+    }),
+    acceptInvoiceMatchGroupCriterion: builder.mutation({
+      query: ({ groupId, criterionType, reason }) => ({
+        url: `/invoice-matching/groups/${groupId}/criteria/${criterionType}/accept`,
+        method: "PATCH",
+        body: { reason },
+      }),
+      invalidatesTags: (_result, _error, { groupId }) => [
+        "Matching",
+        { type: "Matching", id: `GROUP-CHECKLIST-${groupId}` },
+        { type: "Matching", id: `GROUP-ACCEPTANCE-LOG-${groupId}` },
+      ],
+    }),
+    acceptInvoiceMatchGroupOverall: builder.mutation({
+      query: ({ groupId, reason }) => ({
+        url: `/invoice-matching/groups/${groupId}/accept-overall`,
+        method: "PATCH",
+        body: { reason },
+      }),
+      invalidatesTags: (_result, _error, { groupId }) => [
+        "Matching",
+        "Invoices",
+        { type: "Matching", id: `GROUP-CHECKLIST-${groupId}` },
+        { type: "Matching", id: `GROUP-ACCEPTANCE-LOG-${groupId}` },
+      ],
+    }),
   }),
 });
 
@@ -82,10 +156,18 @@ export const {
   useGetInvoiceMatchingListQuery,
   useGetInvoiceMatchingDetailQuery,
   useLazyGetInvoiceMatchingDetailQuery,
+  useGetInvoiceMatchingChecklistQuery,
+  useGetInvoiceMatchingAcceptanceLogQuery,
+  useGetInvoiceMatchingGroupChecklistQuery,
+  useGetInvoiceMatchingGroupAcceptanceLogQuery,
   useGetAvailableMatchingInvoicesQuery,
   useGetAvailablePurchaseOrdersQuery,
   useGetAvailableGrnsQuery,
   usePerformInvoiceMatchMutation,
   useEditInvoiceMatchMutation,
   useMarkInvoiceMatchExceptionMutation,
+  useAcceptInvoiceMatchCriterionMutation,
+  useAcceptInvoiceMatchOverallMutation,
+  useAcceptInvoiceMatchGroupCriterionMutation,
+  useAcceptInvoiceMatchGroupOverallMutation,
 } = invoiceMatchingApi;

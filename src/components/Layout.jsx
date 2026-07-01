@@ -80,6 +80,7 @@ export const Layout = ({ children }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const mainContentRef = useRef(null);
+  const scrollContainerRef = useRef(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [hideSidebar, setHideSidebar] = useState(false);
   const corporateName = String(
@@ -135,9 +136,10 @@ export const Layout = ({ children }) => {
   };
 
   useEffect(() => {
-    if (!mainContentRef.current) return;
-    mainContentRef.current.scrollTo({ top: 0, behavior: "auto" });
-  }, [location.pathname]);
+    scrollContainerRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    mainContentRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [location.pathname, location.search]);
 
   return (
     <SidebarContext.Provider value={{ hideSidebar, setHideSidebar }}>
@@ -317,6 +319,7 @@ export const Layout = ({ children }) => {
             data-testid="main-content"
           >
             <div
+              ref={scrollContainerRef}
               className={
                 hideSidebar
                   ? "flex min-h-0 flex-1 flex-col overflow-y-auto p-4"

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
@@ -1171,6 +1171,7 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
   const [historyTotal, setHistoryTotal] = useState(0);
   const [quickFilter, setQuickFilter] = useState('All Documents');
   const [selected, setSelected] = useState(null);
+  const documentRegisterRef = useRef(null);
   const [fetchGstr2aDocuments] = useFetchGstr2aDocumentsMutation();
   const [fetchGstr2aDocumentsHistory] = useFetchGstr2aDocumentsHistoryMutation();
 
@@ -1195,6 +1196,15 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
   useEffect(() => {
     loadDocumentsHistory();
   }, [loadDocumentsHistory]);
+
+  const showHistoryRun = useCallback((row) => {
+    setDocs(getDocumentHistoryDocs(row));
+    setFetched(true);
+    setQuickFilter('All Documents');
+    requestAnimationFrame(() => {
+      documentRegisterRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, []);
 
   const handleFetch = async () => {
     if (!canFetchWithOrgGst || loading) return;
@@ -1293,9 +1303,7 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
           size="sm"
           onClick={(event) => {
             event.stopPropagation();
-            setDocs(getDocumentHistoryDocs(row));
-            setFetched(true);
-            setQuickFilter('All Documents');
+            showHistoryRun(row);
           }}
         >
           <Eye className="mr-1.5 h-3.5 w-3.5" />
@@ -1385,11 +1393,7 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
             rows={history}
             columns={historyColumns}
             getRowKey={(row, index) => row.requestedAt ?? `gstr2a-history-${index}`}
-            onRowClick={(row) => {
-              setDocs(getDocumentHistoryDocs(row));
-              setFetched(true);
-              setQuickFilter('All Documents');
-            }}
+            onRowClick={showHistoryRun}
             emptyMessage="No GSTR-2A document fetch history found."
           />
           <TaxPagination
@@ -1403,7 +1407,7 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
       ) : null}
 
       {fetched && !loading ? (
-        <>
+        <div ref={documentRegisterRef} className="space-y-4 scroll-mt-6">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <TaxMiniMetric label="Total Documents" value={String(docs.length)} />
             <TaxMiniMetric label="Taxable Amount" value={formatCurrency(totalTaxable)} />
@@ -1440,7 +1444,7 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
             <TaxCompactTable rows={visible} columns={docColumns} getRowKey={(row) => row.invoiceNumber} onRowClick={setSelected} />
             <TaxPagination />
           </TaxSectionCard>
-        </>
+        </div>
       ) : null}
 
       <TaxDrawer open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)} title="GST Document Details">
@@ -1489,6 +1493,7 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
   const [historyTotal, setHistoryTotal] = useState(0);
   const [quickFilter, setQuickFilter] = useState('All Documents');
   const [selected, setSelected] = useState(null);
+  const documentRegisterRef = useRef(null);
   const [fetchGstr2bDocuments] = useFetchGstr2bDocumentsMutation();
   const [fetchGstr2bDocumentsHistory] = useFetchGstr2bDocumentsHistoryMutation();
 
@@ -1513,6 +1518,15 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
   useEffect(() => {
     loadDocumentsHistory();
   }, [loadDocumentsHistory]);
+
+  const showHistoryRun = useCallback((row) => {
+    setDocs(getDocumentHistoryDocs(row));
+    setFetched(true);
+    setQuickFilter('All Documents');
+    requestAnimationFrame(() => {
+      documentRegisterRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, []);
 
   const handleFetch = async () => {
     if (!canFetchWithOrgGst || loading) return;
@@ -1634,9 +1648,7 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
           size="sm"
           onClick={(event) => {
             event.stopPropagation();
-            setDocs(getDocumentHistoryDocs(row));
-            setFetched(true);
-            setQuickFilter('All Documents');
+            showHistoryRun(row);
           }}
         >
           <Eye className="mr-1.5 h-3.5 w-3.5" />
@@ -1726,11 +1738,7 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
             rows={history}
             columns={historyColumns}
             getRowKey={(row, index) => row.requestedAt ?? `gstr2b-history-${index}`}
-            onRowClick={(row) => {
-              setDocs(getDocumentHistoryDocs(row));
-              setFetched(true);
-              setQuickFilter('All Documents');
-            }}
+            onRowClick={showHistoryRun}
             emptyMessage="No GSTR-2B document fetch history found."
           />
           <TaxPagination
@@ -1744,7 +1752,7 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
       ) : null}
 
       {fetched && !loading ? (
-        <>
+        <div ref={documentRegisterRef} className="space-y-4 scroll-mt-6">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <TaxMiniMetric label="Total Documents" value={String(docs.length)} />
             <TaxMiniMetric label="Total GST" value={formatCurrency(totalGst)} tone="primary" />
@@ -1773,7 +1781,7 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
             <TaxCompactTable rows={visible} columns={b2bColumns} getRowKey={(row) => row.invoiceNumber} onRowClick={setSelected} />
             <TaxPagination />
           </TaxSectionCard>
-        </>
+        </div>
       ) : null}
 
       <TaxDrawer open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)} title="GSTR-2B Document Details">
