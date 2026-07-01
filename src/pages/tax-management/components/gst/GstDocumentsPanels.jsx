@@ -1353,13 +1353,13 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
     {
       key: 'count',
       title: 'Documents',
-      cellClassName: 'text-right font-medium',
+      cellClassName: 'text-left font-medium',
       render: (row) => getDocumentHistoryCount(row),
     },
     {
       key: 'actions',
       title: 'Actions',
-      cellClassName: 'text-right',
+      cellClassName: 'text-eft',
       render: (row) => (
         <Button
           type="button"
@@ -1727,13 +1727,13 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
     {
       key: 'count',
       title: 'Documents',
-      cellClassName: 'text-right font-medium',
+      cellClassName: 'text-left font-medium',
       render: (row) => getDocumentHistoryCount(row),
     },
     {
       key: 'actions',
       title: 'Actions',
-      cellClassName: 'text-right',
+      cellClassName: 'text-left',
       render: (row) => (
         <Button
           type="button"
