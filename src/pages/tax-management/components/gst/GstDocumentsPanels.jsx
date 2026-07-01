@@ -116,8 +116,30 @@ const getDocumentHistoryVendor = (entry) => {
   return vendorName || supplierGstin || 'All Vendors';
 };
 
-const getDocumentHistoryMonth = (entry) =>
-  getHistoryMetaValue(entry, ['month', 'returnMonth', 'return_month']) || '—';
+const GST_MONTH_NUMBER_LABELS = {
+  1: 'Jan',
+  2: 'Feb',
+  3: 'Mar',
+  4: 'Apr',
+  5: 'May',
+  6: 'Jun',
+  7: 'Jul',
+  8: 'Aug',
+  9: 'Sep',
+  10: 'Oct',
+  11: 'Nov',
+  12: 'Dec',
+};
+
+const getDocumentHistoryMonth = (entry) => {
+  const month = getHistoryMetaValue(entry, ['month', 'returnMonth', 'return_month']);
+  if (month === '') return '—';
+  const numericMonth = Number(month);
+  if (Number.isInteger(numericMonth) && GST_MONTH_NUMBER_LABELS[numericMonth]) {
+    return GST_MONTH_NUMBER_LABELS[numericMonth];
+  }
+  return String(month);
+};
 
 const getDocumentHistoryFy = (entry) =>
   getHistoryMetaValue(entry, ['financialYear', 'financial_year', 'fy']) || '—';
@@ -570,16 +592,16 @@ const B2bReconciliationDetail = ({ snapshot, onBack, getVendor }) => {
     },
     { key: 'vendor', title: 'Vendor', render: (row) => row.vendor ?? selectedVendor?.name ?? snapshot.vendorName ?? 'All Vendors' },
     { key: 'invoiceDate', title: 'Invoice Date', cellClassName: 'text-muted-foreground' },
-    { key: 'taxableValue', title: 'Taxable Value', render: (row) => formatCurrency(row.taxableValue), cellClassName: 'text-right font-medium' },
-    { key: 'gst', title: 'GST Amount', render: (row) => formatCurrency(docTotalGst(row)), cellClassName: 'text-right font-semibold text-primary' },
+    { key: 'taxableValue', title: 'Taxable Value', render: (row) => formatCurrency(row.taxableValue), cellClassName: 'text-left font-medium' },
+    { key: 'gst', title: 'GST Amount', render: (row) => formatCurrency(docTotalGst(row)), cellClassName: 'text-left font-semibold text-primary' },
     { key: 'itcEligibility', title: 'ITC Eligibility', render: (row) => <TaxStatusBadge status={row.itcEligibility} /> },
     { key: 'amendmentStatus', title: 'Amendment Status', render: (row) => <TaxStatusBadge status={row.amendmentStatus} /> },
     { key: 'matchStatus', title: 'Match Status', render: (row) => <TaxStatusBadge status={row.matchStatus} /> },
     {
       key: 'actions',
       title: 'Actions',
-      className: 'text-right',
-      cellClassName: 'text-right',
+      className: 'text-left',
+      cellClassName: 'text-left',
       render: (row) => (
         <Button
           type="button"
@@ -988,16 +1010,16 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
       render: (_row, index) => index + 1,
     },
     { key: 'vendor', title: 'Vendor', render: (row) => row.vendorName },
-    { key: 'org_gst', title: 'Organisation GSTIN', render: (row) => row.orgGst, cellClassName: 'font-mono text-xs' },
-    { key: 'gstin', title: 'Vendor GSTIN', cellClassName: 'font-mono text-xs' },
+    // { key: 'org_gst', title: 'Organisation GSTIN', render: (row) => row.orgGst, cellClassName: 'font-mono text-xs' },
+    // { key: 'gstin', title: 'Vendor GSTIN', cellClassName: 'font-mono text-xs' },
     { key: 'month', title: 'Month' },
     { key: 'fy', title: 'Financial Year' },
-    {
-      key: 'date_range',
-      title: 'Date Range',
-      cellClassName: 'text-xs text-muted-foreground',
-      render: (row) => formatB2bDateRange(row.dateFrom, row.dateTo),
-    },
+    // {
+    //   key: 'date_range',
+    //   title: 'Date Range',
+    //   cellClassName: 'text-xs text-muted-foreground',
+    //   render: (row) => formatB2bDateRange(row.dateFrom, row.dateTo),
+    // },
     { key: 'total', title: 'Total Supplier Invoices', render: (row) => row.totalSupplierInvoices, cellClassName: 'text-right font-medium' },
     { key: 'amended', title: 'Amended Invoices', render: (row) => row.amendedCount, cellClassName: 'text-right' },
     { key: 'itc', title: 'Eligible ITC', render: (row) => formatCurrency(row.eligibleItc), cellClassName: 'text-right font-medium text-green-700' },
@@ -1011,12 +1033,12 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
         </span>
       ),
     },
-    {
-      key: 'match_summary',
-      title: 'Match Status Summary',
-      cellClassName: 'max-w-[180px] text-xs text-muted-foreground',
-      render: (row) => row.matchStatusSummary,
-    },
+    // {
+    //   key: 'match_summary',
+    //   title: 'Match Status Summary',
+    //   cellClassName: 'max-w-[180px] text-xs text-muted-foreground',
+    //   render: (row) => row.matchStatusSummary,
+    // },
     {
       key: 'sync',
       title: 'Sync Status',
