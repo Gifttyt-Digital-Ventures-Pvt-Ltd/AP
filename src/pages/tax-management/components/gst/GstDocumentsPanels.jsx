@@ -1010,8 +1010,8 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
     },
     { key: 'org_gst', title: 'Org GSTIN', render: (row) => row.orgGst, cellClassName: 'font-mono text-xs' },
     { key: 'period', title: 'Period', render: (row) => `${row.month || '—'} FY ${row.fy || '—'}` },
-    { key: 'total', title: 'Invoices', render: (row) => row.totalSupplierInvoices, cellClassName: 'text-right font-medium' },
-    { key: 'tax', title: 'Tax / ITC', render: (row) => formatCurrency(row.totalGst), cellClassName: 'text-right font-medium text-green-700' },
+    { key: 'total', title: 'Invoices', render: (row) => row.totalSupplierInvoices, cellClassName: 'text-left font-medium' },
+    { key: 'tax', title: 'Tax / ITC', render: (row) => formatCurrency(row.totalGst), cellClassName: 'text-left font-medium text-green-700' },
     {
       key: 'status',
       title: 'Status',
