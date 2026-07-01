@@ -99,6 +99,41 @@ const getDocumentHistoryDocs = (entry) => {
 const getGstDocumentsPayload = (response) => response?.currentData ?? response?.data?.currentData ?? response?.data ?? response ?? {};
 const getGstDocuments = (response) => getGstDocumentsPayload(response)?.documents ?? [];
 
+const getHistoryMetaValue = (entry, keys) => {
+  const response = getGstDocumentsPayload(getHistoryEntryResponse(entry));
+  const filters = entry?.filters ?? entry?.request ?? response?.filters ?? response?.request ?? {};
+  for (const key of keys) {
+    const value = entry?.[key] ?? filters?.[key] ?? response?.[key];
+    if (value !== undefined && value !== null && value !== '') return value;
+  }
+  return '';
+};
+
+const getDocumentHistoryVendor = (entry) => {
+  const vendorName = getHistoryMetaValue(entry, ['vendorName', 'vendor_name', 'vendor']);
+  const supplierGstin = getHistoryMetaValue(entry, ['supplierGstin', 'supplier_gstin', 'gstin']);
+  if (vendorName && supplierGstin) return `${vendorName} · ${supplierGstin}`;
+  return vendorName || supplierGstin || 'All Vendors';
+};
+
+const getDocumentHistoryMonth = (entry) =>
+  getHistoryMetaValue(entry, ['month', 'returnMonth', 'return_month']) || '—';
+
+const getDocumentHistoryFy = (entry) =>
+  getHistoryMetaValue(entry, ['financialYear', 'financial_year', 'fy']) || '—';
+
+const getDocumentHistoryType = (entry) =>
+  getHistoryMetaValue(entry, ['documentType', 'document_type', 'docType', 'doc_type']) || 'All Documents';
+
+const getDocumentHistoryItc = (entry) =>
+  getHistoryMetaValue(entry, ['itcEligibility', 'itc_eligibility', 'itcStatus', 'itc_status']) || 'All';
+
+const getDocumentHistoryCount = (entry) => {
+  const count = getHistoryMetaValue(entry, ['documentCount', 'document_count', 'count']);
+  if (count !== '') return Number(count);
+  return getDocumentHistoryDocs(entry).length;
+};
+
 const formatHistoryRequestedAt = (value) => {
   if (!value) return '—';
   const date = new Date(value);
@@ -1283,14 +1318,43 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
   const historyColumns = [
     {
       key: 'requestedAt',
-      title: 'Fetched On',
+      title: 'Fetch Date',
       render: (row) => formatHistoryRequestedAt(row.requestedAt),
+    },
+    {
+      key: 'fetchedFor',
+      title: 'Fetched For',
+      render: (row) => (
+        <span className="text-xs" title={getDocumentHistoryVendor(row)}>
+          {getDocumentHistoryVendor(row)}
+        </span>
+      ),
+    },
+    {
+      key: 'month',
+      title: 'Month',
+      render: (row) => getDocumentHistoryMonth(row),
+    },
+    {
+      key: 'financialYear',
+      title: 'Financial Year',
+      render: (row) => getDocumentHistoryFy(row),
+    },
+    {
+      key: 'documentType',
+      title: 'Doc Type',
+      render: (row) => getDocumentHistoryType(row),
+    },
+    {
+      key: 'itcEligibility',
+      title: 'ITC Eligibility',
+      render: (row) => getDocumentHistoryItc(row),
     },
     {
       key: 'count',
       title: 'Documents',
       cellClassName: 'text-right font-medium',
-      render: (row) => getDocumentHistoryDocs(row).length,
+      render: (row) => getDocumentHistoryCount(row),
     },
     {
       key: 'actions',
@@ -1628,14 +1692,43 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
   const historyColumns = [
     {
       key: 'requestedAt',
-      title: 'Fetched On',
+      title: 'Fetch Date',
       render: (row) => formatHistoryRequestedAt(row.requestedAt),
+    },
+    {
+      key: 'fetchedFor',
+      title: 'Fetched For',
+      render: (row) => (
+        <span className="text-xs" title={getDocumentHistoryVendor(row)}>
+          {getDocumentHistoryVendor(row)}
+        </span>
+      ),
+    },
+    {
+      key: 'month',
+      title: 'Month',
+      render: (row) => getDocumentHistoryMonth(row),
+    },
+    {
+      key: 'financialYear',
+      title: 'Financial Year',
+      render: (row) => getDocumentHistoryFy(row),
+    },
+    {
+      key: 'documentType',
+      title: 'Doc Type',
+      render: (row) => getDocumentHistoryType(row),
+    },
+    {
+      key: 'itcEligibility',
+      title: 'ITC Eligibility',
+      render: (row) => getDocumentHistoryItc(row),
     },
     {
       key: 'count',
       title: 'Documents',
       cellClassName: 'text-right font-medium',
-      render: (row) => getDocumentHistoryDocs(row).length,
+      render: (row) => getDocumentHistoryCount(row),
     },
     {
       key: 'actions',

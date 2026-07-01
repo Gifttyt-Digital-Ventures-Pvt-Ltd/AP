@@ -62,7 +62,7 @@ const CRITERION_META = {
     label: "Vendor GST Number",
   },
   CLIENT_GSTIN: {
-    label: "Client GST Number",
+    label: "Our GST Number",
   },
   BILLING_ADDRESS: {
     label: "Billing Address",
@@ -119,6 +119,177 @@ const formatChecklistValue = (value) => {
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 };
+
+const cleanLineMatchKey = (value) =>
+  String(value || "-")
+    .replace(/^DESC:/i, "")
+    .replace(/^ITEM:/i, "")
+    .trim() || "-";
+
+const getFirstValue = (...values) => values.find((value) => value !== undefined && value !== null && value !== "");
+
+const buildLineComparisonRows = (mismatch = {}) => {
+  const field = String(mismatch.field || "").toUpperCase();
+  const isMissingInPo = field === "MISSING_IN_PO";
+  const isMissingInInvoice = field === "MISSING_IN_INVOICE";
+  const rows = [];
+
+  const buildComparison = ({
+    key,
+    label,
+    invoiceValue,
+    poValue,
+    similarity,
+    passed,
+  }) => {
+    const hasInvoice = invoiceValue !== undefined && invoiceValue !== null && invoiceValue !== "";
+    const hasPo = poValue !== undefined && poValue !== null && poValue !== "";
+    if (!hasInvoice && !hasPo) return;
+
+    const resolvedSimilarity = getFirstValue(similarity, hasInvoice && hasPo && invoiceValue === poValue ? 100 : undefined);
+    const resolvedPassed =
+      passed !== undefined && passed !== null
+        ? Boolean(passed)
+        : resolvedSimilarity !== undefined
+          ? Number(resolvedSimilarity) === 100
+          : hasInvoice && hasPo && invoiceValue === poValue;
+
+    rows.push({
+      key,
+      label,
+      invoiceValue,
+      poValue,
+      similarity: resolvedSimilarity,
+      passed: resolvedPassed,
+    });
+  };
+
+  buildComparison({
+    key: "quantity",
+    label: "Quantity",
+    invoiceValue: isMissingInInvoice
+      ? null
+      : getFirstValue(
+          mismatch.invoiceQuantity,
+          mismatch.invoiceQty,
+          mismatch.quantityInvoice,
+          field === "QTY" ? mismatch.invoice : undefined,
+          mismatch.quantity,
+        ),
+    poValue: isMissingInPo
+      ? null
+      : getFirstValue(
+          mismatch.poQuantity,
+          mismatch.poQty,
+          mismatch.quantityPo,
+          field === "QTY" ? mismatch.po : undefined,
+          mismatch.quantity,
+        ),
+    similarity: getFirstValue(mismatch.quantitySimilarityPct, mismatch.qtySimilarityPct, mismatch.quantityScore),
+    passed: getFirstValue(mismatch.quantityPassed, mismatch.qtyPassed),
+  });
+
+  buildComparison({
+    key: "rate",
+    label: "Item Rate",
+    invoiceValue: isMissingInInvoice
+      ? null
+      : getFirstValue(
+          mismatch.invoiceRate,
+          mismatch.rateInvoice,
+          field === "RATE" ? mismatch.invoice : undefined,
+          mismatch.rate,
+        ),
+    poValue: isMissingInPo
+      ? null
+      : getFirstValue(
+          mismatch.poRate,
+          mismatch.ratePo,
+          field === "RATE" ? mismatch.po : undefined,
+          mismatch.rate,
+        ),
+    similarity: getFirstValue(mismatch.rateSimilarityPct, mismatch.itemRateSimilarityPct, mismatch.rateScore),
+    passed: getFirstValue(mismatch.ratePassed, mismatch.itemRatePassed),
+  });
+
+  return rows;
+};
+
+const normalizeLineItemComparisonRows = (lineItem = {}) => {
+  if (Array.isArray(lineItem.criteria)) {
+    return lineItem.criteria
+      .filter((item) => ["QUANTITY", "QTY", "ITEM_RATE", "RATE"].includes(String(item.field || item.key || "").toUpperCase()))
+      .map((item) => {
+        const field = String(item.field || item.key || "").toUpperCase();
+        const isQuantity = field === "QUANTITY" || field === "QTY";
+        const similarity = getFirstValue(item.similarityPct, item.similarity, item.score);
+        return {
+          key: isQuantity ? "quantity" : "rate",
+          label: isQuantity ? "Quantity" : "Item Rate",
+          invoiceValue: getFirstValue(item.invoiceValue, item.invoice, item.invoiceQuantity, item.invoiceRate),
+          poValue: getFirstValue(item.poValue, item.po, item.poQuantity, item.poRate),
+          similarity,
+          passed: getFirstValue(item.passed, item.result === "PASS" ? true : item.result === "FAIL" ? false : undefined),
+        };
+      });
+  }
+
+  return buildLineComparisonRows(lineItem);
+};
+
+const buildLineItemGroups = (detail = {}) => {
+  if (Array.isArray(detail.lineItems)) {
+    return detail.lineItems.map((item, index) => ({
+      key: item.lineId || item.matchKey || item.description || `line-${index}`,
+      description: cleanLineMatchKey(item.description || item.itemDescription || item.matchKey),
+      field: item.field || item.issue || item.status || "Line Item",
+      invoiceValue: getFirstValue(item.invoiceValue, item.invoice),
+      poValue: getFirstValue(item.poValue, item.po),
+      similarity: getFirstValue(item.similarityPct, item.similarity),
+      passed: getFirstValue(item.passed, item.result === "PASS" ? true : item.result === "FAIL" ? false : undefined),
+      criteria: normalizeLineItemComparisonRows(item),
+    }));
+  }
+
+  const grouped = new Map();
+  const mismatches = Array.isArray(detail.mismatchedLines) ? detail.mismatchedLines : [];
+
+  mismatches.forEach((mismatch, index) => {
+    const key = mismatch.matchKey || `line-${index}`;
+    const existing = grouped.get(key) || {
+      key,
+      description: cleanLineMatchKey(key),
+      fields: [],
+      invoiceValue: undefined,
+      poValue: undefined,
+      criteriaByKey: new Map(),
+    };
+
+    existing.fields.push(titleCase(mismatch.field));
+    existing.invoiceValue = getFirstValue(existing.invoiceValue, mismatch.invoice);
+    existing.poValue = getFirstValue(existing.poValue, mismatch.po);
+
+    buildLineComparisonRows(mismatch).forEach((row) => {
+      existing.criteriaByKey.set(row.key, row);
+    });
+
+    grouped.set(key, existing);
+  });
+
+  return Array.from(grouped.values()).map((group) => ({
+    key: group.key,
+    description: group.description,
+    field: group.fields.filter(Boolean).join(", ") || "Line Item",
+    invoiceValue: group.invoiceValue,
+    poValue: group.poValue,
+    similarity: undefined,
+    passed: undefined,
+    criteria: Array.from(group.criteriaByKey.values()),
+  }));
+};
+
+const getLineCriterion = (item, key) =>
+  item.criteria.find((criterion) => criterion.key === key) || {};
 
 const formatDateTime = (value) => {
   if (!value) return "-";
@@ -223,22 +394,27 @@ const SimilarityCell = ({ criterion }) => {
 };
 
 const LineItemsDetail = ({ detail }) => {
-  const mismatches = Array.isArray(detail?.mismatchedLines) ? detail.mismatchedLines : [];
+  const lineItemGroups = buildLineItemGroups(detail);
   const statClass = (ok) =>
     ok ? "border-emerald-200 bg-emerald-50 text-emerald-700" : "border-amber-200 bg-amber-50 text-amber-700";
+  const scoreOk = (value) => Number(value) === 100;
 
   return (
     <div className="space-y-3 rounded-lg border border-border bg-muted/30 p-3">
-      <div className="grid gap-2 md:grid-cols-4">
+      <div className="grid gap-2 md:grid-cols-5">
         <div className={`rounded-md border px-3 py-2 text-sm ${statClass(detail?.lineCountMatch)}`}>
           <div className="text-xs font-medium uppercase tracking-wide">Line Count</div>
           <div className="font-semibold">{detail?.lineCountMatch ? "Matched" : "Differs"}</div>
         </div>
-        <div className={`rounded-md border px-3 py-2 text-sm ${statClass(Number(detail?.rateScore) === 100)}`}>
+        <div className={`rounded-md border px-3 py-2 text-sm ${statClass(scoreOk(detail?.countScore))}`}>
+          <div className="text-xs font-medium uppercase tracking-wide">Count Score</div>
+          <div className="font-semibold">{formatPercent(detail?.countScore)}%</div>
+        </div>
+        <div className={`rounded-md border px-3 py-2 text-sm ${statClass(scoreOk(detail?.rateScore))}`}>
           <div className="text-xs font-medium uppercase tracking-wide">Rate Match</div>
           <div className="font-semibold">{formatPercent(detail?.rateScore)}%</div>
         </div>
-        <div className={`rounded-md border px-3 py-2 text-sm ${statClass(Number(detail?.qtyScore) === 100)}`}>
+        <div className={`rounded-md border px-3 py-2 text-sm ${statClass(scoreOk(detail?.qtyScore))}`}>
           <div className="text-xs font-medium uppercase tracking-wide">Qty Match</div>
           <div className="font-semibold">{formatPercent(detail?.qtyScore)}%</div>
         </div>
@@ -248,34 +424,73 @@ const LineItemsDetail = ({ detail }) => {
         </div>
       </div>
 
-      {mismatches.length > 0 ? (
+      {lineItemGroups.length > 0 ? (
         <div className="overflow-hidden rounded-md border border-border bg-background">
           <Table className="table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-[38%]">Item</TableHead>
-                <TableHead className="w-[22%]">Field</TableHead>
-                <TableHead className="w-[20%]">Invoice</TableHead>
-                <TableHead className="w-[20%]">PO</TableHead>
+                <TableHead className="w-[12%]">Line</TableHead>
+                <TableHead className="w-[22%] text-right">Quantity</TableHead>
+                <TableHead className="w-[16%] text-right">Qty Match</TableHead>
+                <TableHead className="w-[22%] text-right">Item Rate</TableHead>
+                <TableHead className="w-[16%] text-right">Rate Match</TableHead>
+                <TableHead className="w-[12%]">Result</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {mismatches.map((mismatch, index) => (
-                <TableRow key={`${mismatch.matchKey}-${mismatch.field}-${index}`}>
-                  <TableCell className="truncate font-medium" title={mismatch.matchKey || "-"}>
-                    {mismatch.matchKey || "-"}
-                  </TableCell>
-                  <TableCell className="truncate" title={titleCase(mismatch.field)}>
-                    {titleCase(mismatch.field)}
-                  </TableCell>
-                  <TableCell className="truncate tabular-nums" title={formatChecklistValue(mismatch.invoice)}>
-                    {formatChecklistValue(mismatch.invoice)}
-                  </TableCell>
-                  <TableCell className="truncate tabular-nums" title={formatChecklistValue(mismatch.po)}>
-                    {formatChecklistValue(mismatch.po)}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {lineItemGroups.map((item, index) => {
+                const quantity = getLineCriterion(item, "quantity");
+                const rate = getLineCriterion(item, "rate");
+                const quantityPassed = quantity.passed ?? null;
+                const ratePassed = rate.passed ?? null;
+                const rowPassed =
+                  quantityPassed === null && ratePassed === null
+                    ? null
+                    : quantityPassed !== false && ratePassed !== false;
+
+                return (
+                  <TableRow key={item.key || index}>
+                    <TableCell className="font-medium">
+                      {index + 1}
+                    </TableCell>
+                    <TableCell className="text-right text-xs tabular-nums">
+                      <span title={`Invoice: ${formatChecklistValue(quantity.invoiceValue)}`}>
+                        Inv {formatChecklistValue(quantity.invoiceValue)}
+                      </span>
+                      <span className="mx-1 text-muted-foreground">/</span>
+                      <span title={`PO: ${formatChecklistValue(quantity.poValue)}`}>
+                        PO {formatChecklistValue(quantity.poValue)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right text-xs tabular-nums">
+                      {quantity.similarity !== undefined && quantity.similarity !== null
+                        ? `${formatPercent(quantity.similarity)}%`
+                        : "-"}
+                    </TableCell>
+                    <TableCell className="text-right text-xs tabular-nums">
+                      <span title={`Invoice: ${formatChecklistValue(rate.invoiceValue)}`}>
+                        Inv {formatChecklistValue(rate.invoiceValue)}
+                      </span>
+                      <span className="mx-1 text-muted-foreground">/</span>
+                      <span title={`PO: ${formatChecklistValue(rate.poValue)}`}>
+                        PO {formatChecklistValue(rate.poValue)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right text-xs tabular-nums">
+                      {rate.similarity !== undefined && rate.similarity !== null
+                        ? `${formatPercent(rate.similarity)}%`
+                        : "-"}
+                    </TableCell>
+                    <TableCell>
+                      {rowPassed === null ? (
+                        <span className="text-xs text-muted-foreground">-</span>
+                      ) : (
+                        <ResultBadge passed={rowPassed} accepted={false} />
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
             </TableBody>
           </Table>
         </div>
