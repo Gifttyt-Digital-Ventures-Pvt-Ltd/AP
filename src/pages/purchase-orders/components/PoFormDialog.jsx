@@ -142,6 +142,8 @@ const PoFormDialog = ({
   hideFooter = false,
   plainDataMode = false,
   scannedVendorHint = null,
+  onRequestVendor,
+  requestingVendor = false,
 }) => {
   const [previewAction, setPreviewAction] = useState(null);
 
@@ -594,10 +596,25 @@ const PoFormDialog = ({
                       </Select>
                     </FieldBlock>
                     {scannedVendorHint && !poForm.vendor_id ? (
-                      <p className="mt-2 text-xs text-amber-700">
-                        Scanned vendor: {scannedVendorHint.name}
-                        {scannedVendorHint.gstin ? ` · ${scannedVendorHint.gstin}` : ''}. Select a matching vendor from the list.
-                      </p>
+                      <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+                        <p className="text-xs text-amber-800">
+                          Scanned vendor: {scannedVendorHint.name}
+                          {scannedVendorHint.gstin ? ` · ${scannedVendorHint.gstin}` : ''}. Select a matching vendor or request addition.
+                        </p>
+                        {onRequestVendor ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="mt-2"
+                            onClick={onRequestVendor}
+                            disabled={requestingVendor}
+                            data-testid="po-upload-request-vendor-btn"
+                          >
+                            {requestingVendor ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                            Request Vendor
+                          </Button>
+                        ) : null}
+                      </div>
                     ) : null}
                     {isInr && poForm.vendor_id && vendorGstRegistrations.length > 1 ? (
                       <FieldBlock label="Vendor GST Registration" className="mt-3">

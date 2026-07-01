@@ -23,7 +23,12 @@ const getRegistrationValue = (registration, ...keys) => {
 };
 
 const getVendorGstRegistrationsForScan = (vendor = {}) => {
-  const registrations = vendor.gstRegistrations ?? vendor.gst_regs ?? vendor.gstRegs ?? vendor.gst_registrations;
+  const safeVendor = vendor || {};
+  const registrations =
+    safeVendor.gstRegistrations ??
+    safeVendor.gst_regs ??
+    safeVendor.gstRegs ??
+    safeVendor.gst_registrations;
   const mapped = Array.isArray(registrations)
     ? registrations
       .map((registration) => {
@@ -32,18 +37,18 @@ const getVendorGstRegistrationsForScan = (vendor = {}) => {
         return {
           id: getRegistrationValue(registration, 'id', 'registrationId', 'registration_id') || gstin,
           gstin,
-          pan: getRegistrationValue(registration, 'pan', 'vendorPan', 'vendor_pan') || vendor.pan || '',
+          pan: getRegistrationValue(registration, 'pan', 'vendorPan', 'vendor_pan') || safeVendor.pan || '',
         };
       })
       .filter(Boolean)
     : [];
 
-  const vendorLevelGstin = normalizeGstin(vendor.gstin);
+  const vendorLevelGstin = normalizeGstin(safeVendor.gstin);
   if (vendorLevelGstin && !mapped.some((registration) => registration.gstin === vendorLevelGstin)) {
     mapped.unshift({
       id: vendorLevelGstin,
       gstin: vendorLevelGstin,
-      pan: vendor.pan || '',
+      pan: safeVendor.pan || '',
     });
   }
 
@@ -118,9 +123,14 @@ const normalizeScannedLineItem = (item = {}, currency = DEFAULT_CURRENCY) => {
       gst_rate: gstRate,
       gst_tax_label: gstTaxLabel,
       remarks: String(item.remarks ?? '').trim(),
-      taxable_value: readScanNumber(item, 'taxableValue', 'taxable_value'),
+      taxable_value:
+        readScanNumber(item, 'taxableValue', 'taxable_value') ??
+        readScanNumber(item, 'amount', 'amount'),
       tax_amount: readScanNumber(item, 'taxAmount', 'tax_amount'),
-      total_amount: readScanNumber(item, 'totalAmount', 'total_amount'),
+      total_amount:
+        readScanNumber(item, 'totalAmount', 'total_amount') ??
+        readScanNumber(item, 'lineTotal', 'line_total') ??
+        readScanNumber(item, 'amount', 'amount'),
       cgst_amount: readScanNumber(item, 'cgstAmount', 'cgst_amount'),
       sgst_amount: readScanNumber(item, 'sgstAmount', 'sgst_amount'),
       igst_amount: readScanNumber(item, 'igstAmount', 'igst_amount'),
