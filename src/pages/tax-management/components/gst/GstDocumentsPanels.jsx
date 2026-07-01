@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   ArrowLeft,
@@ -98,6 +98,41 @@ const getDocumentHistoryDocs = (entry) => {
 };
 const getGstDocumentsPayload = (response) => response?.currentData ?? response?.data?.currentData ?? response?.data ?? response ?? {};
 const getGstDocuments = (response) => getGstDocumentsPayload(response)?.documents ?? [];
+
+const getHistoryMetaValue = (entry, keys) => {
+  const response = getGstDocumentsPayload(getHistoryEntryResponse(entry));
+  const filters = entry?.filters ?? entry?.request ?? response?.filters ?? response?.request ?? {};
+  for (const key of keys) {
+    const value = entry?.[key] ?? filters?.[key] ?? response?.[key];
+    if (value !== undefined && value !== null && value !== '') return value;
+  }
+  return '';
+};
+
+const getDocumentHistoryVendor = (entry) => {
+  const vendorName = getHistoryMetaValue(entry, ['vendorName', 'vendor_name', 'vendor']);
+  const supplierGstin = getHistoryMetaValue(entry, ['supplierGstin', 'supplier_gstin', 'gstin']);
+  if (vendorName && supplierGstin) return `${vendorName} · ${supplierGstin}`;
+  return vendorName || supplierGstin || 'All Vendors';
+};
+
+const getDocumentHistoryMonth = (entry) =>
+  getHistoryMetaValue(entry, ['month', 'returnMonth', 'return_month']) || '—';
+
+const getDocumentHistoryFy = (entry) =>
+  getHistoryMetaValue(entry, ['financialYear', 'financial_year', 'fy']) || '—';
+
+const getDocumentHistoryType = (entry) =>
+  getHistoryMetaValue(entry, ['documentType', 'document_type', 'docType', 'doc_type']) || 'All Documents';
+
+const getDocumentHistoryItc = (entry) =>
+  getHistoryMetaValue(entry, ['itcEligibility', 'itc_eligibility', 'itcStatus', 'itc_status']) || 'All';
+
+const getDocumentHistoryCount = (entry) => {
+  const count = getHistoryMetaValue(entry, ['documentCount', 'document_count', 'count']);
+  if (count !== '') return Number(count);
+  return getDocumentHistoryDocs(entry).length;
+};
 
 const formatHistoryRequestedAt = (value) => {
   if (!value) return '—';
@@ -1171,6 +1206,7 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
   const [historyTotal, setHistoryTotal] = useState(0);
   const [quickFilter, setQuickFilter] = useState('All Documents');
   const [selected, setSelected] = useState(null);
+  const documentRegisterRef = useRef(null);
   const [fetchGstr2aDocuments] = useFetchGstr2aDocumentsMutation();
   const [fetchGstr2aDocumentsHistory] = useFetchGstr2aDocumentsHistoryMutation();
 
@@ -1195,6 +1231,15 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
   useEffect(() => {
     loadDocumentsHistory();
   }, [loadDocumentsHistory]);
+
+  const showHistoryRun = useCallback((row) => {
+    setDocs(getDocumentHistoryDocs(row));
+    setFetched(true);
+    setQuickFilter('All Documents');
+    requestAnimationFrame(() => {
+      documentRegisterRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, []);
 
   const handleFetch = async () => {
     if (!canFetchWithOrgGst || loading) return;
@@ -1273,14 +1318,43 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
   const historyColumns = [
     {
       key: 'requestedAt',
-      title: 'Fetched On',
+      title: 'Fetch Date',
       render: (row) => formatHistoryRequestedAt(row.requestedAt),
+    },
+    {
+      key: 'fetchedFor',
+      title: 'Fetched For',
+      render: (row) => (
+        <span className="text-xs" title={getDocumentHistoryVendor(row)}>
+          {getDocumentHistoryVendor(row)}
+        </span>
+      ),
+    },
+    {
+      key: 'month',
+      title: 'Month',
+      render: (row) => getDocumentHistoryMonth(row),
+    },
+    {
+      key: 'financialYear',
+      title: 'Financial Year',
+      render: (row) => getDocumentHistoryFy(row),
+    },
+    {
+      key: 'documentType',
+      title: 'Doc Type',
+      render: (row) => getDocumentHistoryType(row),
+    },
+    {
+      key: 'itcEligibility',
+      title: 'ITC Eligibility',
+      render: (row) => getDocumentHistoryItc(row),
     },
     {
       key: 'count',
       title: 'Documents',
       cellClassName: 'text-right font-medium',
-      render: (row) => getDocumentHistoryDocs(row).length,
+      render: (row) => getDocumentHistoryCount(row),
     },
     {
       key: 'actions',
@@ -1293,9 +1367,7 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
           size="sm"
           onClick={(event) => {
             event.stopPropagation();
-            setDocs(getDocumentHistoryDocs(row));
-            setFetched(true);
-            setQuickFilter('All Documents');
+            showHistoryRun(row);
           }}
         >
           <Eye className="mr-1.5 h-3.5 w-3.5" />
@@ -1385,11 +1457,7 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
             rows={history}
             columns={historyColumns}
             getRowKey={(row, index) => row.requestedAt ?? `gstr2a-history-${index}`}
-            onRowClick={(row) => {
-              setDocs(getDocumentHistoryDocs(row));
-              setFetched(true);
-              setQuickFilter('All Documents');
-            }}
+            onRowClick={showHistoryRun}
             emptyMessage="No GSTR-2A document fetch history found."
           />
           <TaxPagination
@@ -1403,7 +1471,7 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
       ) : null}
 
       {fetched && !loading ? (
-        <>
+        <div ref={documentRegisterRef} className="space-y-4 scroll-mt-6">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
             <TaxMiniMetric label="Total Documents" value={String(docs.length)} />
             <TaxMiniMetric label="Taxable Amount" value={formatCurrency(totalTaxable)} />
@@ -1440,7 +1508,7 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
             <TaxCompactTable rows={visible} columns={docColumns} getRowKey={(row) => row.invoiceNumber} onRowClick={setSelected} />
             <TaxPagination />
           </TaxSectionCard>
-        </>
+        </div>
       ) : null}
 
       <TaxDrawer open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)} title="GST Document Details">
@@ -1489,6 +1557,7 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
   const [historyTotal, setHistoryTotal] = useState(0);
   const [quickFilter, setQuickFilter] = useState('All Documents');
   const [selected, setSelected] = useState(null);
+  const documentRegisterRef = useRef(null);
   const [fetchGstr2bDocuments] = useFetchGstr2bDocumentsMutation();
   const [fetchGstr2bDocumentsHistory] = useFetchGstr2bDocumentsHistoryMutation();
 
@@ -1513,6 +1582,15 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
   useEffect(() => {
     loadDocumentsHistory();
   }, [loadDocumentsHistory]);
+
+  const showHistoryRun = useCallback((row) => {
+    setDocs(getDocumentHistoryDocs(row));
+    setFetched(true);
+    setQuickFilter('All Documents');
+    requestAnimationFrame(() => {
+      documentRegisterRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, []);
 
   const handleFetch = async () => {
     if (!canFetchWithOrgGst || loading) return;
@@ -1614,14 +1692,43 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
   const historyColumns = [
     {
       key: 'requestedAt',
-      title: 'Fetched On',
+      title: 'Fetch Date',
       render: (row) => formatHistoryRequestedAt(row.requestedAt),
+    },
+    {
+      key: 'fetchedFor',
+      title: 'Fetched For',
+      render: (row) => (
+        <span className="text-xs" title={getDocumentHistoryVendor(row)}>
+          {getDocumentHistoryVendor(row)}
+        </span>
+      ),
+    },
+    {
+      key: 'month',
+      title: 'Month',
+      render: (row) => getDocumentHistoryMonth(row),
+    },
+    {
+      key: 'financialYear',
+      title: 'Financial Year',
+      render: (row) => getDocumentHistoryFy(row),
+    },
+    {
+      key: 'documentType',
+      title: 'Doc Type',
+      render: (row) => getDocumentHistoryType(row),
+    },
+    {
+      key: 'itcEligibility',
+      title: 'ITC Eligibility',
+      render: (row) => getDocumentHistoryItc(row),
     },
     {
       key: 'count',
       title: 'Documents',
       cellClassName: 'text-right font-medium',
-      render: (row) => getDocumentHistoryDocs(row).length,
+      render: (row) => getDocumentHistoryCount(row),
     },
     {
       key: 'actions',
@@ -1634,9 +1741,7 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
           size="sm"
           onClick={(event) => {
             event.stopPropagation();
-            setDocs(getDocumentHistoryDocs(row));
-            setFetched(true);
-            setQuickFilter('All Documents');
+            showHistoryRun(row);
           }}
         >
           <Eye className="mr-1.5 h-3.5 w-3.5" />
@@ -1726,11 +1831,7 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
             rows={history}
             columns={historyColumns}
             getRowKey={(row, index) => row.requestedAt ?? `gstr2b-history-${index}`}
-            onRowClick={(row) => {
-              setDocs(getDocumentHistoryDocs(row));
-              setFetched(true);
-              setQuickFilter('All Documents');
-            }}
+            onRowClick={showHistoryRun}
             emptyMessage="No GSTR-2B document fetch history found."
           />
           <TaxPagination
@@ -1744,7 +1845,7 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
       ) : null}
 
       {fetched && !loading ? (
-        <>
+        <div ref={documentRegisterRef} className="space-y-4 scroll-mt-6">
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <TaxMiniMetric label="Total Documents" value={String(docs.length)} />
             <TaxMiniMetric label="Total GST" value={formatCurrency(totalGst)} tone="primary" />
@@ -1773,7 +1874,7 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
             <TaxCompactTable rows={visible} columns={b2bColumns} getRowKey={(row) => row.invoiceNumber} onRowClick={setSelected} />
             <TaxPagination />
           </TaxSectionCard>
-        </>
+        </div>
       ) : null}
 
       <TaxDrawer open={Boolean(selected)} onOpenChange={(open) => !open && setSelected(null)} title="GSTR-2B Document Details">

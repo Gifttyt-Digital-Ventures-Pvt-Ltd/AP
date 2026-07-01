@@ -241,7 +241,9 @@ export const buildCreatePurchaseOrderPayload = (form = {}, formatConfig = null) 
 
   return {
     ...(form.po_number ? { poNumber: form.po_number } : {}),
-    vendorId: form.vendor_id,
+    vendorId: form.vendor_id || null,
+    vendorRequestSubmitted: Boolean(form.vendor_request_submitted),
+    vendorName: form.scanned_vendor_name || form.vendor_name || null,
     vendorGstRegistrationId: form.vendor_gst_registration_id || null,
     vendorGstin: form.vendor_gstin || null,
     vendorPan: form.vendor_pan || null,

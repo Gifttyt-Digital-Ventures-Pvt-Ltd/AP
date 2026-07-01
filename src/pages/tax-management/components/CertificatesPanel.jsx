@@ -1,4 +1,4 @@
-import React, { forwardRef, useEffect, useImperativeHandle, useState } from 'react';
+import React, { forwardRef, useImperativeHandle, useState } from 'react';
 import { useGetVendorsQuery } from '../../../Services/apis/invoicesVendorsApi';
 import { useGenerateForm16aMutation } from '../../../Services/apis/taxApi';
 import { Button } from '../../../components/ui/button';
@@ -13,8 +13,6 @@ import Form16ADialog from './Form16ADialog';
 import { useActionGuard } from '../../../hooks/useActionGuard';
 import { formatCurrency, formatDate } from '../utils/taxFormatting';
 import { TaxKpiCard, TaxSectionCard } from './TaxUi';
-
-const CERTIFICATES_STORAGE_KEY = 'ap.tax-management.certificates';
 
 const TDS_CERTIFICATES_TABLE_HEADER = [
   { key: 'certificate_number', title: 'Certificate No.', cellClassName: 'font-medium font-mono' },
@@ -32,17 +30,6 @@ const DEFAULT_FORM16A_FORM = {
   vendor_id: '',
   fiscal_year: '2024-25',
   quarter: 'Q4',
-};
-
-const readStoredCertificates = () => {
-  if (typeof window === 'undefined') return [];
-  try {
-    const raw = sessionStorage.getItem(CERTIFICATES_STORAGE_KEY);
-    const parsed = raw ? JSON.parse(raw) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
 };
 
 const renderTdsCertificateRow = (cert, rowIndex, headers) => (
@@ -85,7 +72,7 @@ const renderTdsCertificateRow = (cert, rowIndex, headers) => (
 
 const CertificatesPanel = forwardRef(({ enabled = true }, ref) => {
   const { guardAction, canPerformAction } = useActionGuard();
-  const [tdsCertificates, setTdsCertificates] = useState(readStoredCertificates);
+  const [tdsCertificates, setTdsCertificates] = useState([]);
   const [showForm16ADialog, setShowForm16ADialog] = useState(false);
   const [calculating, setCalculating] = useState(false);
   const [form16AForm, setForm16AForm] = useState(DEFAULT_FORM16A_FORM);
@@ -102,10 +89,6 @@ const CertificatesPanel = forwardRef(({ enabled = true }, ref) => {
   const canGenerateForm16A = canPerformAction('tax.generateForm16a') && enabled;
   const loading = enabled && vendorsLoading;
   const isFetching = vendorsFetching;
-
-  useEffect(() => {
-    sessionStorage.setItem(CERTIFICATES_STORAGE_KEY, JSON.stringify(tdsCertificates));
-  }, [tdsCertificates]);
 
   const refetch = async () => {
     await refetchVendors();
@@ -159,9 +142,9 @@ const CertificatesPanel = forwardRef(({ enabled = true }, ref) => {
   return (
     <TabsContent value="certificates" className="space-y-6">
       <div className="grid gap-4 md:grid-cols-3">
-        <TaxKpiCard label="Generated certificates" value={String(tdsCertificates.length)} sub="Current browser session" icon={FileCheck} tone="green" />
-        <TaxKpiCard label="Eligible vendors" value={String(vendors.length)} sub="From vendor master" icon={Users} tone="blue" />
-        <TaxKpiCard label="Default period" value={form16AForm.quarter} sub={`FY ${form16AForm.fiscal_year}`} icon={Calendar} tone="default" />
+        <TaxKpiCard label="Generated certificates" value={String(tdsCertificates.length)} sub="Live response only" icon={FileCheck} tone="green" />
+        <TaxKpiCard label="Eligible vendors" value="0" sub="No live data" icon={Users} tone="blue" />
+        <TaxKpiCard label="Default period" value="0" sub="No live data" icon={Calendar} tone="default" />
       </div>
 
       <TaxSectionCard

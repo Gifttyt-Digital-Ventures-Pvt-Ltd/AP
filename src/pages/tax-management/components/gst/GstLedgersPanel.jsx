@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
   BarChart2,
@@ -149,6 +149,7 @@ const GstLedgersPanel = () => {
   const [histMonth, setHistMonth] = useState('all');
   const [histYear, setHistYear] = useState('all');
   const [histStatus, setHistStatus] = useState('all');
+  const ledgerResultRef = useRef(null);
 
   useEffect(() => {
     if (!selectedOrgGst && credentials.length === 1) {
@@ -284,6 +285,9 @@ const GstLedgersPanel = () => {
         },
       });
     }
+    requestAnimationFrame(() => {
+      ledgerResultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
   };
 
   const itcBreakdownRows = rows.filter((row) => row.itcAvail > 0);
@@ -365,7 +369,7 @@ const GstLedgersPanel = () => {
           </Button>
         </TaxEmptyState>
       ) : (
-        <>
+        <div ref={ledgerResultRef} className="space-y-4 scroll-mt-6">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
             <LedgerSummaryCard
               label="Electronic Cash Ledger"
@@ -545,7 +549,7 @@ const GstLedgersPanel = () => {
               Blocked ITC is excluded from Total Available Balance. Grand Total includes blocked ITC for reference.
             </div>
           </TaxSectionCard>
-        </>
+        </div>
       )}
 
       <TaxSectionCard

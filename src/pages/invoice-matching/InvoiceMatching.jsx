@@ -44,7 +44,7 @@ import {
   CheckCheck,
   CheckCircle,
   ChevronDown,
-  ChevronRight,
+  ChevronUp,
   Edit,
   Eye,
   FileText,
@@ -62,6 +62,9 @@ import MeteredActionCostHint from "../../components/credits/MeteredActionCostHin
 import { useMeteredActionEstimate } from "../../hooks/useMeteredActionEstimate";
 import { CREDIT_ACTION_CODES } from "../../constants/creditActions";
 import { useRBAC } from "../../contexts/RBACContext";
+import MatchingGroupExpandedRow from "./components/MatchingGroupExpandedRow";
+import MatchingInvoiceCountBadge from "./components/MatchingInvoiceCountBadge";
+import MatchChecklistPanel from "./components/MatchChecklistPanel";
 
 const STATUS_OPTIONS = [
   { value: "ALL", label: "All Statuses" },
@@ -162,7 +165,7 @@ const normalizeMatchType = (value) => {
 
 const normalizeMatching = (match = {}) => ({
   ...match,
-  id: match.id,
+  id: match.id ?? match.matchId ?? match.match_id,
   matchNumber: match.matchNumber ?? match.match_number ?? "",
   invoiceNumber: match.invoiceNumber ?? match.invoice_number ?? match.invoice?.number ?? "",
   vendorName: match.vendorName ?? match.vendor_name ?? match.invoice?.vendorName ?? "",
@@ -194,6 +197,7 @@ const normalizeMatchingGroup = (group = {}) => {
     const flatMatch = normalizeMatching(group);
     return {
       id: group.poId ?? group.po_id ?? group.purchaseOrderId ?? group.purchase_order_id ?? flatMatch.id,
+      groupId: group.groupId ?? group.group_id ?? group.matchGroupId ?? group.match_group_id ?? "",
       poId: group.poId ?? group.po_id ?? group.purchaseOrderId ?? group.purchase_order_id ?? "",
       poNumber: flatMatch.poNumber,
       vendorName: flatMatch.vendorName,
@@ -221,6 +225,7 @@ const normalizeMatchingGroup = (group = {}) => {
   return {
     ...group,
     id: group.poId ?? group.po_id ?? group.purchaseOrderId ?? group.purchase_order_id ?? group.id ?? latestMatch.id,
+    groupId: group.groupId ?? group.group_id ?? group.matchGroupId ?? group.match_group_id ?? "",
     poId: group.poId ?? group.po_id ?? group.purchaseOrderId ?? group.purchase_order_id ?? "",
     poNumber: group.poNumber ?? group.po_number ?? latestMatch.poNumber ?? "",
     vendorName: group.vendorName ?? group.vendor_name ?? latestMatch.vendorName ?? "",
@@ -330,8 +335,10 @@ const InvoiceMatching = () => {
   const [searchInput, setSearchInput] = useState("");
   const [showMatchDialog, setShowMatchDialog] = useState(false);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
+  const [showGroupChecklistDialog, setShowGroupChecklistDialog] = useState(false);
   const [showExceptionDialog, setShowExceptionDialog] = useState(false);
   const [selectedMatching, setSelectedMatching] = useState(null);
+  const [selectedGroup, setSelectedGroup] = useState(null);
   const [editingMatching, setEditingMatching] = useState(null);
   const [matchForm, setMatchForm] = useState(emptyMatchForm);
   const [exceptionReason, setExceptionReason] = useState("");
@@ -692,7 +699,9 @@ const InvoiceMatching = () => {
   const renderMatchingRow = (group, rowIndex, headers) => {
     const groupId = String(group.id || group.poId || rowIndex);
     const isExpanded = expandedGroupIds.has(groupId);
-    const hasChildren = group.invoiceMatches.length > 0;
+    const invoiceMatches = group.invoiceMatches || [];
+    const hasChildren = invoiceMatches.length > 0;
+    const canExpand = hasChildren;
     const progressValue = group.poAmount > 0
       ? Math.min(100, Math.max(0, (group.cumulativeInvoiceAmount / group.poAmount) * 100))
       : 0;
@@ -701,8 +710,13 @@ const InvoiceMatching = () => {
       : group.requiresReview
         ? "bg-amber-50/70"
         : "bg-white";
+    const invoiceSummary = invoiceMatches
+      .map((match) => match.invoiceNumber)
+      .filter(Boolean)
+      .join(" · ");
 
     const toggleExpanded = () => {
+      if (!canExpand) return;
       setExpandedGroupIds((current) => {
         const next = new Set(current);
         if (next.has(groupId)) next.delete(groupId);
@@ -711,87 +725,145 @@ const InvoiceMatching = () => {
       });
     };
 
+    const handleRowKeyDown = (event) => {
+      if (!canExpand) return;
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        toggleExpanded();
+      }
+    };
+
     return (
       <React.Fragment key={groupId}>
-        <TableRow className={`${rowTone} border-b`} data-testid={`matching-po-row-${groupId}`}>
-          <TableCell>
-            <div className="flex items-start gap-2">
-              <Button
-                variant="ghost"
-                size="sm"
-                className="mt-0.5 h-7 w-7 p-0"
-                onClick={toggleExpanded}
-                disabled={!hasChildren}
-                aria-label={isExpanded ? "Collapse invoice matches" : "Expand invoice matches"}
+        <TableRow
+          className={`${rowTone} border-b ${canExpand ? "cursor-pointer" : ""}`}
+          data-testid={`matching-po-row-${groupId}`}
+          tabIndex={canExpand ? 0 : undefined}
+          onClick={toggleExpanded}
+          onKeyDown={handleRowKeyDown}
+        >
+          {headers.map((header) => {
+            let value;
+
+            switch (header.key) {
+              case "poGroup":
+                value = (
+                  <div className="min-w-0">
+                    <div
+                      className="inline-flex max-w-full items-center gap-1.5 text-left font-semibold"
+                      data-testid={`toggle-matching-group-${groupId}`}
+                    >
+                      {canExpand ? (
+                        isExpanded ? (
+                          <ChevronUp className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        ) : (
+                          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                        )
+                      ) : null}
+                      <span className="truncate">{group.poNumber || "PO -"}</span>
+                    </div>
+                    {hasChildren ? (
+                      <div className="mt-1 space-y-1">
+                        <div className="inline-flex items-center">
+                          <MatchingInvoiceCountBadge count={invoiceMatches.length} />
+                        </div>
+                        {/* {invoiceMatches.length > 1 && !isExpanded && invoiceSummary ? (
+                          <div className="text-xs text-muted-foreground">{invoiceSummary}</div>
+                        ) : null} */}
+                        <div className="text-xs text-muted-foreground">
+                          Latest {formatDate(group.createdAt)}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-xs text-muted-foreground">
+                        Latest {formatDate(group.createdAt)}
+                      </div>
+                    )}
+                    {group.requiresReview ? (
+                      <div className="mt-1 text-xs font-medium text-amber-700">Needs review</div>
+                    ) : null}
+                  </div>
+                );
+                break;
+              case "vendor":
+                value = <div className="font-medium">{group.vendorName || "-"}</div>;
+                break;
+              case "grnNumber":
+                value = group.grnNumber || "-";
+                break;
+              case "matchType":
+                value = (
+                  <Badge variant="outline">{group.matchType === "THREE_WAY" ? "3-Way" : "2-Way"}</Badge>
+                );
+                break;
+              case "poAmount":
+                value = formatCurrency(group.poAmount);
+                break;
+              case "matchedAmount":
+                value = (
+                  <div>
+                    <div className="font-medium">{formatCurrency(group.cumulativeInvoiceAmount)}</div>
+                    <div className="mt-1 h-1.5 w-32 overflow-hidden rounded-full bg-muted">
+                      <div className="h-full rounded-full bg-primary" style={{ width: `${progressValue}%` }} />
+                    </div>
+                  </div>
+                );
+                break;
+              case "variance":
+                value = (
+                  <div>
+                    <div>{formatCurrency(group.varianceAmount)}</div>
+                    <div className="text-xs text-muted-foreground">{formatPercent(group.variancePercentage)}%</div>
+                  </div>
+                );
+                break;
+              case "status":
+                value = renderStatusBadge(group.status);
+                break;
+              case "actions":
+                value = (
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setSelectedGroup(group);
+                        setShowGroupChecklistDialog(true);
+                      }}
+                      data-testid={`view-matching-group-${groupId}`}
+                      title="View cumulative checklist"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                  </div>
+                );
+                break;
+              default:
+                value = group?.[header.key] || "-";
+            }
+
+            return (
+              <TableCell
+                key={header.key}
+                className={header.cellClassName}
+                onClick={header.key === "actions" ? (event) => event.stopPropagation() : undefined}
               >
-                {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
-              </Button>
-              <div className="min-w-0">
-                <div className="font-semibold">{group.poNumber || "PO -"}</div>
-                <div className="text-xs text-muted-foreground">
-                  {group.invoiceMatches.length} invoice{group.invoiceMatches.length === 1 ? "" : "s"} matched · Latest {formatDate(group.createdAt)}
-                </div>
-                {group.requiresReview ? (
-                  <div className="mt-1 text-xs font-medium text-amber-700">Needs review</div>
-                ) : null}
-              </div>
-            </div>
-          </TableCell>
-          <TableCell>
-            <div className="font-medium">{group.vendorName || "-"}</div>
-          </TableCell>
-          <TableCell>
-            {group.grnNumber || "-"}
-          </TableCell>
-          <TableCell>
-            <Badge variant="outline">{group.matchType === "THREE_WAY" ? "3-Way" : "2-Way"}</Badge>
-          </TableCell>
-          <TableCell>{formatCurrency(group.poAmount)}</TableCell>
-          <TableCell>
-            <div className="font-medium">{formatCurrency(group.cumulativeInvoiceAmount)}</div>
-            <div className="mt-1 h-1.5 w-32 overflow-hidden rounded-full bg-muted">
-              <div className="h-full rounded-full bg-primary" style={{ width: `${progressValue}%` }} />
-            </div>
-          </TableCell>
-          <TableCell>
-            <div>{formatCurrency(group.varianceAmount)}</div>
-            <div className="text-xs text-muted-foreground">{formatPercent(group.variancePercentage)}%</div>
-          </TableCell>
-          <TableCell>{renderStatusBadge(group.status)}</TableCell>
-          <TableCell>
-            <span className="text-xs text-muted-foreground">Expand for actions</span>
-          </TableCell>
+                {value}
+              </TableCell>
+            );
+          })}
         </TableRow>
 
-        {isExpanded
-          ? group.invoiceMatches.map((match, matchIndex) => (
-            <TableRow
-              key={match.id || `${groupId}-${matchIndex}`}
-              className="bg-muted/20"
-              data-testid={`matching-row-${match.id}`}
-            >
-              <TableCell className="pl-12">
-                <div className="font-medium">{match.invoiceNumber || "-"}</div>
-                <div className="text-xs text-muted-foreground">
-                  {match.matchNumber || "-"} · {formatDate(match.createdAt)}
-                </div>
-              </TableCell>
-              <TableCell>{match.vendorName || group.vendorName || "-"}</TableCell>
-              <TableCell>{match.grnNumber || group.grnNumber || "-"}</TableCell>
-              <TableCell>
-                <Badge variant="outline">{match.matchType === "THREE_WAY" ? "3-Way" : "2-Way"}</Badge>
-              </TableCell>
-              <TableCell>{formatCurrency(match.poAmount || group.poAmount)}</TableCell>
-              <TableCell>{formatCurrency(match.invoiceAmount)}</TableCell>
-              <TableCell>
-                <div>{formatCurrency(match.varianceAmount)}</div>
-                <div className="text-xs text-muted-foreground">{formatPercent(match.variancePercentage)}%</div>
-              </TableCell>
-              <TableCell>{renderStatusBadge(match.status)}</TableCell>
-              <TableCell>{renderMatchActions(match)}</TableCell>
-            </TableRow>
-          ))
-          : null}
+        {isExpanded && canExpand ? (
+          <MatchingGroupExpandedRow
+            group={group}
+            colSpan={headers.length}
+            formatCurrency={formatCurrency}
+            formatDate={formatDate}
+            formatPercent={formatPercent}
+            renderMatchActions={renderMatchActions}
+          />
+        ) : null}
       </React.Fragment>
     );
   };
@@ -1249,8 +1321,7 @@ const InvoiceMatching = () => {
             </div>
           ) : detail ? (
             <div className="space-y-6">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                {renderStatusBadge(detail.status)}
+              <div className="flex flex-wrap items-center justify-end gap-2">
                 <Badge variant="outline">{detail.matchType === "THREE_WAY" ? "3-Way Match" : "2-Way Match"}</Badge>
               </div>
 
@@ -1305,6 +1376,41 @@ const InvoiceMatching = () => {
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setShowDetailDialog(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={showGroupChecklistDialog}
+        onOpenChange={(open) => {
+          setShowGroupChecklistDialog(open);
+          if (!open) setSelectedGroup(null);
+        }}
+      >
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              Cumulative Checklist
+              {selectedGroup?.poNumber ? (
+                <span className="ml-2 text-sm font-normal text-muted-foreground">
+                  {selectedGroup.poNumber}
+                </span>
+              ) : null}
+            </DialogTitle>
+          </DialogHeader>
+
+          {selectedGroup ? (
+            <MatchChecklistPanel
+              scope="GROUP"
+              groupId={selectedGroup.groupId || selectedGroup.matchGroupId || selectedGroup.poId || selectedGroup.id}
+              group={selectedGroup}
+            />
+          ) : null}
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowGroupChecklistDialog(false)}>
               Close
             </Button>
           </DialogFooter>

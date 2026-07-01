@@ -75,9 +75,9 @@ const REPORT_ICONS = {
 export const TdsOverviewPanels = () => (
   <div className="space-y-4">
     <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-      <TaxKpiCard label="Form 16A Generated" value="82" sub="Certificates (reference)" icon={FileText} />
-      <TaxKpiCard label="Compliance Score" value="91%" sub="Above threshold" icon={Shield} tone="green" />
-      <TaxKpiCard label="Active Vendors" value="24" sub="With TDS liability" icon={Users} tone="blue" />
+      <TaxKpiCard label="Form 16A Generated" value="0" sub="No live data" icon={FileText} />
+      <TaxKpiCard label="Compliance Score" value="0%" sub="Awaiting live data" icon={Shield} tone="green" />
+      <TaxKpiCard label="Active Vendors" value="0" sub="No live data" icon={Users} tone="blue" />
     </div>
 
     <div className="grid gap-4 xl:grid-cols-[1.1fr_1fr_280px]">
@@ -130,7 +130,7 @@ export const TdsCalculatorPanel = ({ onCalculate, disabled }) => {
   const handleLocalCalculate = () => {
     const paymentAmount = parseFloat(amount.replace(/,/g, '')) || 0;
     if (!paymentAmount) return;
-    let rate = TDS_RATES[section]?.rate ?? 1;
+    let rate = TDS_RATES[section]?.rate ?? 0;
     if (panAvail === 'No') rate = Math.min(rate * 2, 20);
     const tdsAmt = paymentAmount * (rate / 100);
     setResult({ rate, tdsAmt, net: paymentAmount - tdsAmt, desc: TDS_RATES[section]?.desc ?? '' });
@@ -241,16 +241,16 @@ export const TdsCalculatorPanel = ({ onCalculate, disabled }) => {
 export const TdsAnalyticsPanel = () => (
   <div className="space-y-4">
     <TaxFilterBar>
-      <TaxSelect value="FY 2023-24" onValueChange={() => {}} options={['FY 2023-24', 'FY 2024-25']} />
+      <TaxSelect value="Current FY" onValueChange={() => {}} options={['Current FY']} />
       <TaxSelect value="All Quarters" onValueChange={() => {}} options={['All Quarters', 'Q1', 'Q2', 'Q3', 'Q4']} />
       <TaxSelect value="All Sections" onValueChange={() => {}} options={['All Sections', ...TDS_SECTIONS]} />
       <TaxSearchInput value="" onChange={() => {}} placeholder="Search vendor…" />
     </TaxFilterBar>
     <div className="grid gap-4 md:grid-cols-4">
-      <TaxKpiCard label="Total Deductions" value="₹38.2L" sub="FY 2023-24" icon={Receipt} tone="default" />
-      <TaxKpiCard label="Unique Vendors" value="24" sub="With TDS records" icon={Users} tone="blue" />
-      <TaxKpiCard label="Average Deduction" value="₹1.59L" sub="Per vendor" icon={BarChart2} tone="green" />
-      <TaxKpiCard label="Compliance Exceptions" value={String(tdsExceptions.length)} sub="Need attention" icon={AlertCircle} tone="amber" />
+      <TaxKpiCard label="Total Deductions" value="₹0" sub="Current FY" icon={Receipt} tone="default" />
+      <TaxKpiCard label="Unique Vendors" value="0" sub="With TDS records" icon={Users} tone="blue" />
+      <TaxKpiCard label="Average Deduction" value="₹0" sub="Per vendor" icon={BarChart2} tone="green" />
+      <TaxKpiCard label="Compliance Exceptions" value="0" sub="No live data" icon={AlertCircle} tone="amber" />
     </div>
     <div className="grid gap-4 xl:grid-cols-2">
       <TaxSectionCard icon={Calendar} title="Monthly Deduction Trend">
@@ -285,17 +285,12 @@ export const TdsReportsPanel = () => {
   const vendorOptions = useVendorNameOptions();
   const [selectedReport, setSelectedReport] = useState(null);
   const [generating, setGenerating] = useState(false);
-  const [reports, setReports] = useState(tdsReports);
+  const reports = tdsReports;
 
   const generate = () => {
     if (!selectedReport) return;
     setGenerating(true);
     window.setTimeout(() => {
-      const reportType = TDS_REPORT_TYPES.find((item) => item.key === selectedReport);
-      setReports((prev) => [
-        { id: `rep-new-${Date.now()}`, name: `${reportType?.label ?? 'Report'} — Q3 FY24`, date: '20 Feb 2024', status: 'Processing' },
-        ...prev,
-      ]);
       setGenerating(false);
     }, 1500);
   };
@@ -309,8 +304,8 @@ export const TdsReportsPanel = () => {
 
       <TaxSectionCard icon={Play} title="Generate Report">
         <div className="mb-4 grid gap-3 md:grid-cols-4">
-          <TaxSelect value="FY 2023-24" onValueChange={() => {}} options={['FY 2023-24', 'FY 2024-25']} />
-          <TaxSelect value="Q3" onValueChange={() => {}} options={['All Quarters', 'Q1', 'Q2', 'Q3', 'Q4']} />
+          <TaxSelect value="Current FY" onValueChange={() => {}} options={['Current FY']} />
+          <TaxSelect value="All Quarters" onValueChange={() => {}} options={['All Quarters', 'Q1', 'Q2', 'Q3', 'Q4']} />
           <TaxSelect value="All Vendors" onValueChange={() => {}} options={['All Vendors', ...vendorOptions]} />
           <Button onClick={generate} disabled={!selectedReport || generating}>
             {generating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Play className="mr-2 h-4 w-4" />}
@@ -365,7 +360,7 @@ export const TdsReportsPanel = () => {
 };
 
 export const TdsForm16aPanel = ({ onOpenCertificates }) => {
-  const [records, setRecords] = useState(tdsForm16aJobs);
+  const records = tdsForm16aJobs;
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
   const [generating, setGenerating] = useState(false);
@@ -373,10 +368,6 @@ export const TdsForm16aPanel = ({ onOpenCertificates }) => {
   const handleGenerate = () => {
     setGenerating(true);
     window.setTimeout(() => {
-      setRecords((prev) => [
-        { id: `JOB-00${prev.length + 1}`, vendor: 'Nova Retail Pvt', quarter: 'Q3', fy: '2023-24', generated: '—', status: 'submitted' },
-        ...prev,
-      ]);
       setGenerating(false);
     }, 1400);
   };
@@ -427,7 +418,7 @@ export const TdsForm16aPanel = ({ onOpenCertificates }) => {
         icon={FileText}
         title="Certificate Records"
         description="Form 16A generation history"
-        meta={<TaxApiMeta synced="Today, 09:42 AM" count={String(records.length)} />}
+        meta={<TaxApiMeta synced="No live data" count={String(records.length)} />}
       >
         <TaxCompactTable
           rows={records}
@@ -467,8 +458,8 @@ export const TdsForm16aPanel = ({ onOpenCertificates }) => {
                 { label: 'Quarter', value: selectedJob.quarter },
                 { label: 'Financial Year', value: selectedJob.fy },
                 { label: 'Generated Date', value: selectedJob.generated },
-                { label: 'TRACES Reference', value: 'ACK/TDS/2024/Q3/88421', mono: true },
-                { label: 'Certificate Pages', value: '2 pages' },
+                { label: 'TRACES Reference', value: '—', mono: true },
+                { label: 'Certificate Pages', value: '0 pages' },
               ]}
             />
             <div className="flex gap-2">
@@ -592,8 +583,8 @@ export const TdsCsiPanel = () => {
               <TaxDetailGrid
                 items={[
                   { label: 'TAN', value: tan, mono: true },
-                  { label: 'Period', value: 'Q3 FY 2023-24' },
-                  { label: 'File Available', value: 'Yes' },
+                  { label: 'Period', value: '—' },
+                  { label: 'File Available', value: 'No' },
                 ]}
               />
               <Button onClick={doAction} disabled={loading}>
@@ -617,8 +608,8 @@ export const TdsCsiPanel = () => {
               <TaxDetailGrid
                 items={[
                   { label: 'TAN', value: tan, mono: true },
-                  { label: 'File Name', value: 'CSI_Q3_FY2024.csi', mono: true },
-                  { label: 'Downloaded', value: '20 Feb 2024, 10:45 AM' },
+                  { label: 'File Name', value: '—', mono: true },
+                  { label: 'Downloaded', value: '—' },
                 ]}
               />
               <Button variant="outline" onClick={() => { setStep(1); setTan(''); setOtp(''); }}>Start New Download</Button>

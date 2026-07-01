@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ChevronLeft, Loader2, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { ChevronLeft, FileWarning, Loader2, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import {
   Dialog,
@@ -19,6 +19,16 @@ const ScanningOverlay = () => (
     <p className="text-sm font-medium text-primary">Extracting PO details...</p>
     <p className="mt-1 text-xs text-muted-foreground">
       Please wait while AI reads your purchase order
+    </p>
+  </div>
+);
+
+const EmptyDataPanel = () => (
+  <div className="flex h-full min-h-[320px] flex-col items-center justify-center bg-white px-6 text-center">
+    <FileWarning className="mb-3 h-9 w-9 text-muted-foreground" />
+    <p className="text-sm font-medium text-foreground">No PO data available yet</p>
+    <p className="mt-1 max-w-sm text-xs text-muted-foreground">
+      The document preview loaded, but extracted fields were not returned in a readable format.
     </p>
   </div>
 );
@@ -92,7 +102,7 @@ const PoUploadSection = ({
                 {!scanning ? (
                   <>
                     <div className="min-h-0 flex-1 overflow-hidden">
-                      {renderPoForm()}
+                      {renderPoForm() || <EmptyDataPanel />}
                     </div>
                     <div className="shrink-0 border-t bg-white px-4 py-4">
                       <MeteredActionCostHint

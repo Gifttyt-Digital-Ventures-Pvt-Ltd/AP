@@ -1,5 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useGetVendorsQuery } from '../../Services/apis/invoicesVendorsApi';
+import {
+  useGetVendorsQuery,
+  useRequestVendorAdditionMutation,
+} from '../../Services/apis/invoicesVendorsApi';
 import {
   useGetPurchaseOrdersQuery,
   useGetPurchaseOrderFormatConfigQuery,
@@ -46,6 +49,11 @@ import PoApprovalDialog from './components/PoApprovalDialog';
 import PoUploadDialog from './components/PoUploadDialog';
 import PoUploadSection from './components/PoUploadSection';
 import { InvoicePdfPreview } from '../invoices/components/InvoicePdfPreview';
+import RequestVendorDialog from '../invoices/components/RequestVendorDialog';
+import {
+  buildVendorRequestForm,
+  createEmptyVendorRequestForm,
+} from '../invoices/utils/invoiceBulkUtils';
 import { getVendorGstRegistrations } from '../vendors/components/VendorGstRegistrationsPanel';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useCreditErrorHandler } from '../../contexts/CreditErrorContext';
@@ -54,6 +62,8 @@ import { useSidebar } from '../../components/Layout';
 import { useMeteredActionEstimate } from '../../hooks/useMeteredActionEstimate';
 import { CREDIT_ACTION_CODES } from '../../constants/creditActions';
 import { extractApiErrorDetail } from '../../utils/approvalWorkflow';
+import { extractVendorIdFromResponse } from '../../Services/utils/payloadMappers';
+import { getInvoiceVendorRequestValidationErrors } from '../../utils/vendorValidation';
 
 const getListData = (response) => {
   if (Array.isArray(response)) return response;
@@ -205,12 +215,31 @@ const areFormatListsEquivalent = (left = [], right = []) => {
   return true;
 };
 
+const extractPurchaseOrderScanData = (response = {}) => {
+  const candidates = [
+    response?.data?.response,
+    response?.data?.data,
+    response?.data?.result,
+    response?.data?.extractedData,
+    response?.data?.extracted_data,
+    response?.data,
+    response?.response,
+    response?.result,
+    response?.extractedData,
+    response?.extracted_data,
+    response,
+  ];
+
+  return candidates.find((candidate) => candidate && typeof candidate === 'object') || null;
+};
+
 const PurchaseOrdersPage = () => {
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
   const { isCorporateSectionEnabled } = useRBAC();
   const { setHideSidebar } = useSidebar();
   const canManagePo = canPerformAction('po.create');
+  const canRequestVendorFromPo = canManagePo || canPerformAction('invoices.addVendor');
   const canUploadPo = canManagePo && (
     isCorporateSectionEnabled('PURCHASE_ORDER_UPLOAD')
     || isCorporateSectionEnabled('PURCHASE_ORDER_ALL')
@@ -260,6 +289,8 @@ const PurchaseOrdersPage = () => {
   const [submitPurchaseOrder] = useSubmitPurchaseOrderMutation();
   const [approvePurchaseOrder] = useApprovePurchaseOrderMutation();
   const [scanPurchaseOrder] = useScanPurchaseOrderMutation();
+  const [requestVendorAddition, { isLoading: requestVendorLoading }] =
+    useRequestVendorAdditionMutation();
 
   const [showUploadPicker, setShowUploadPicker] = useState(false);
   const [uploadFile, setUploadFile] = useState(null);
@@ -268,6 +299,8 @@ const PurchaseOrdersPage = () => {
   const [uploadScanning, setUploadScanning] = useState(false);
   const [uploadSaving, setUploadSaving] = useState(false);
   const [uploadPreviewError, setUploadPreviewError] = useState(false);
+  const [requestVendorOpen, setRequestVendorOpen] = useState(false);
+  const [requestVendorForm, setRequestVendorForm] = useState(createEmptyVendorRequestForm);
   const [pdfZoom, setPdfZoom] = useState(100);
   const uploadInProgressRef = useRef(false);
   const poUploadEstimate = useMeteredActionEstimate(CREDIT_ACTION_CODES.PO_UPLOAD, uploadFile ? 1 : 0);
@@ -320,6 +353,8 @@ const PurchaseOrdersPage = () => {
     setUploadPoForm(null);
     setUploadScanning(false);
     setUploadPreviewError(false);
+    setRequestVendorOpen(false);
+    setRequestVendorForm(createEmptyVendorRequestForm());
     uploadInProgressRef.current = false;
   }, []);
 
@@ -424,7 +459,7 @@ const PurchaseOrdersPage = () => {
       && isInrCurrency(form.currency)
       && isFormatFieldEnabled(selectedFormat, 'TAX_TOTALS', 'is_tds_applicable');
 
-    if (!form.vendor_id) {
+    if (!form.vendor_id && !(isUpload && form.vendor_request_submitted)) {
       toast.error('Please select a vendor');
       return false;
     }
@@ -805,7 +840,7 @@ const PurchaseOrdersPage = () => {
 
     try {
       const response = await scanPurchaseOrder(formDataUpload).unwrap();
-      const extracted = response?.data ?? response?.result ?? response;
+      const extracted = extractPurchaseOrderScanData(response);
       if (!extracted || typeof extracted !== 'object') {
         throw new Error('Scan API returned empty response');
       }
@@ -869,6 +904,98 @@ const PurchaseOrdersPage = () => {
       toast.error(error?.data?.detail || error?.data?.message || 'Failed to save purchase order');
     } finally {
       setUploadSaving(false);
+    }
+  };
+
+  const handleRequestVendorOpenChange = (open) => {
+    setRequestVendorOpen(open);
+    if (!open) setRequestVendorForm(createEmptyVendorRequestForm());
+  };
+
+  const handleRequestVendorFromUpload = () => {
+    if (!canRequestVendorFromPo) {
+      toast.error('You do not have permission to request vendor addition');
+      return;
+    }
+    if (!uploadPoForm?.scanned_vendor_name && !uploadPoForm?.vendor_name) {
+      toast.error('Vendor name is required');
+      return;
+    }
+
+    setRequestVendorForm(
+      buildVendorRequestForm({
+        vendorName: uploadPoForm.scanned_vendor_name || uploadPoForm.vendor_name,
+        vendorGstin: uploadPoForm.scanned_vendor_gstin || uploadPoForm.vendor_gstin,
+        vendor_pan: uploadPoForm.vendor_pan,
+        billingAddress: uploadPoForm.billing_address,
+        shippingAddress: uploadPoForm.shipping_address,
+        currency: uploadPoForm.currency,
+        payment_terms: uploadPoForm.payment_terms,
+        notes: uploadPoForm.remarks,
+      }),
+    );
+    setRequestVendorOpen(true);
+  };
+
+  const handleSubmitVendorRequest = async (event) => {
+    event.preventDefault();
+    if (!canRequestVendorFromPo) {
+      toast.error('You do not have permission to request vendor addition');
+      return;
+    }
+
+    const validationErrors = getInvoiceVendorRequestValidationErrors(requestVendorForm);
+    if (validationErrors.length > 0) {
+      toast.error(validationErrors[0]);
+      return;
+    }
+
+    const vendorName = requestVendorForm.name.trim();
+    const vendorType = requestVendorForm.vendor_type || requestVendorForm.vendorType;
+    const gstin = requestVendorForm.gstin.trim();
+
+    try {
+      const response = await requestVendorAddition({
+        ...requestVendorForm,
+        name: vendorName,
+        vendor_type: vendorType,
+        gstin,
+      }).unwrap();
+      const requestedVendorId = extractVendorIdFromResponse(response);
+      const vendorsResult = await refetchVendors();
+      const freshVendors = Array.isArray(vendorsResult?.data)
+        ? vendorsResult.data
+        : getListData(vendorsResult?.data);
+      const matchedVendor =
+        (requestedVendorId
+          ? freshVendors.find((vendor) => String(vendor.id) === String(requestedVendorId))
+          : null) ||
+        freshVendors.find(
+          (vendor) =>
+            String(vendor.name || '').trim().toLowerCase() ===
+            vendorName.toLowerCase(),
+        );
+      const resolvedVendorId = matchedVendor?.id || requestedVendorId || '';
+
+      setUploadPoForm((prev) =>
+        prev
+          ? {
+              ...prev,
+              vendor_id: resolvedVendorId,
+              vendor_request_submitted: true,
+              scanned_vendor_name: vendorName,
+              scanned_vendor_gstin: gstin || prev.scanned_vendor_gstin,
+            }
+          : prev,
+      );
+      toast.success(
+        resolvedVendorId
+          ? `Vendor "${vendorName}" requested and linked to this PO.`
+          : `Vendor addition requested for "${vendorName}". You can continue while approval is pending.`,
+      );
+      handleRequestVendorOpenChange(false);
+    } catch (error) {
+      toast.error(extractApiErrorDetail(error) || 'Failed to request vendor addition');
     }
   };
 
@@ -1050,7 +1177,7 @@ const PurchaseOrdersPage = () => {
           }}
           scanning={uploadScanning}
           saving={uploadSaving}
-          canSave={Boolean(uploadPoForm?.vendor_id)}
+          canSave={Boolean(uploadPoForm?.vendor_id || uploadPoForm?.vendor_request_submitted)}
           poUploadEstimateDisabled={poUploadEstimate.isDisabled}
           onSaveDraft={() => handleUploadSave({ submitForApproval: false })}
           onSubmitForApproval={() => handleUploadSave({ submitForApproval: true })}
@@ -1087,6 +1214,8 @@ const PurchaseOrdersPage = () => {
               taxMode={getTaxMode(uploadPoForm.currency)}
               handleCreatePO={() => {}}
               createAction={null}
+              onRequestVendor={handleRequestVendorFromUpload}
+              requestingVendor={requestVendorLoading}
               scannedVendorHint={
                 !uploadPoForm.vendor_id && (uploadPoForm.scanned_vendor_name || uploadPoForm.scanned_vendor_gstin)
                   ? {
@@ -1100,6 +1229,15 @@ const PurchaseOrdersPage = () => {
           )}
         />
       ) : null}
+
+      <RequestVendorDialog
+        open={requestVendorOpen}
+        onOpenChange={handleRequestVendorOpenChange}
+        formData={requestVendorForm}
+        setFormData={setRequestVendorForm}
+        onSubmit={handleSubmitVendorRequest}
+        submitting={requestVendorLoading}
+      />
     </div>
   );
 };
