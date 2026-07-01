@@ -485,6 +485,7 @@ const formatB2bDateRange = (dateFrom, dateTo) => {
 
 const createB2bSnapshot = ({
   vendorId,
+  vendorName,
   month,
   fy,
   records,
@@ -502,7 +503,7 @@ const createB2bSnapshot = ({
   return {
     id: existingId ?? `snap-${orgGst}-${vendorId}-${month}-${fy}-${Date.now()}`,
     vendorId,
-    vendorName: vendor?.name ?? 'All Vendors',
+    vendorName: vendor?.name ?? vendorName ?? 'All Vendors',
     gstin: supplierGstin || vendor?.gstin || '—',
     orgGst,
     orgUserName,
@@ -526,6 +527,29 @@ const buildB2bSnapshotFromReconcileData = (responseData, params, fetchedAt) => {
     apCount,
     fetchedAt: fetchedAt ?? new Date().toISOString(),
   });
+};
+
+const buildB2bSnapshotFromReconcileHistoryEntry = (entry, index, getVendor) => {
+  const responseData = entry?.response?.currentData ?? entry?.response ?? {};
+  const rawMonth = entry?.month ?? responseData?.month ?? responseData?.returnMonth ?? '';
+  const numericMonth = Number(rawMonth);
+  const displayMonth = Number.isInteger(numericMonth) && GST_MONTH_NUMBER_LABELS[numericMonth]
+    ? GST_MONTH_NUMBER_LABELS[numericMonth]
+    : String(rawMonth || '');
+
+  return buildB2bSnapshotFromReconcileData(responseData, {
+    vendorId: entry?.vendorId ?? entry?.vendor_id ?? responseData?.vendorId ?? responseData?.vendor_id ?? '',
+    vendorName: entry?.vendorName ?? entry?.vendor_name ?? responseData?.vendorName ?? responseData?.vendor_name ?? 'All Vendors',
+    month: displayMonth,
+    fy: entry?.financialYear ?? entry?.financial_year ?? responseData?.financialYear ?? responseData?.financial_year ?? responseData?.fy ?? '',
+    dateFrom: entry?.dateFrom ?? entry?.startDate ?? responseData?.dateFrom ?? responseData?.startDate ?? '',
+    dateTo: entry?.dateTo ?? entry?.endDate ?? responseData?.dateTo ?? responseData?.endDate ?? '',
+    orgGst: entry?.gstin ?? entry?.orgGst ?? responseData?.orgGst ?? responseData?.gstin ?? responseData?.gstIn ?? '',
+    orgUserName: entry?.username ?? entry?.orgUserName ?? responseData?.orgUserName ?? responseData?.username ?? '',
+    supplierGstin: entry?.supplierGstin ?? entry?.supplier_gstin ?? responseData?.supplierGstin ?? responseData?.supplier_gstin ?? '',
+    existingId: entry?.id ?? `hist-${index}-${entry?.requestedAt ?? index}`,
+    getVendor,
+  }, entry?.requestedAt);
 };
 
 const buildSnapshotsFromReconcileResponse = (result, params) => {
@@ -570,38 +594,24 @@ const B2bReconciliationDetail = ({ snapshot, onBack, getVendor }) => {
 
   const b2bColumns = useMemo(() => [
     {
-      key: 'row_num',
-      title: '#',
-      className: 'w-10',
-      cellClassName: 'text-xs text-muted-foreground',
-      render: (_row, index) => index + 1,
-    },
-    {
-      key: 'invoiceNumber',
-      title: 'Invoice Number',
+      key: 'supplier',
+      title: 'Supplier',
       render: (row) => (
         <div>
-          <p className="font-mono text-xs font-semibold text-primary">{row.invoiceNumber}</p>
-          {isAmendedGstInvoice(row) ? (
-            <p className="mt-0.5 text-[10px] font-semibold text-amber-600">
-              {(row.amendmentHistory?.amendments?.length ?? 0) > 1 ? `${row.amendmentHistory.amendments.length} Amendments` : 'Amended'}
-            </p>
-          ) : null}
+          <p className="font-medium">{row.vendor ?? selectedVendor?.name ?? snapshot.vendorName ?? 'All Vendors'}</p>
+          <p className="font-mono text-xs text-muted-foreground">{row.supplierGstin ?? row.gstin ?? snapshot.gstin ?? '—'}</p>
         </div>
       ),
     },
-    { key: 'vendor', title: 'Vendor', render: (row) => row.vendor ?? selectedVendor?.name ?? snapshot.vendorName ?? 'All Vendors' },
-    { key: 'invoiceDate', title: 'Invoice Date', cellClassName: 'text-muted-foreground' },
-    { key: 'taxableValue', title: 'Taxable Value', render: (row) => formatCurrency(row.taxableValue), cellClassName: 'text-left font-medium' },
-    { key: 'gst', title: 'GST Amount', render: (row) => formatCurrency(docTotalGst(row)), cellClassName: 'text-left font-semibold text-primary' },
-    { key: 'itcEligibility', title: 'ITC Eligibility', render: (row) => <TaxStatusBadge status={row.itcEligibility} /> },
-    { key: 'amendmentStatus', title: 'Amendment Status', render: (row) => <TaxStatusBadge status={row.amendmentStatus} /> },
-    { key: 'matchStatus', title: 'Match Status', render: (row) => <TaxStatusBadge status={row.matchStatus} /> },
+    { key: 'invoiceNumber', title: 'Invoice No.', render: (row) => <span className="font-mono text-xs font-semibold text-primary">{row.invoiceNumber}</span> },
+    { key: 'taxableValue', title: 'Taxable', render: (row) => formatCurrency(row.taxableValue), cellClassName: 'text-right font-medium' },
+    { key: 'gst', title: 'Tax / ITC', render: (row) => formatCurrency(docTotalGst(row)), cellClassName: 'text-right font-semibold text-primary' },
+    { key: 'matchStatus', title: 'Status', render: (row) => <TaxStatusBadge status={row.matchStatus} /> },
     {
       key: 'actions',
       title: 'Actions',
-      className: 'text-left',
-      cellClassName: 'text-left',
+      className: 'text-right',
+      cellClassName: 'text-right',
       render: (row) => (
         <Button
           type="button"
@@ -881,23 +891,9 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
     try {
       const offset = (historyPage - 1) * HISTORY_PAGE_SIZE;
       const history = await fetchReconcileHistory({ limit: HISTORY_PAGE_SIZE, offset }).unwrap();
-      const snapshots = mapHistoryEntriesToSnapshots({
-        history: Array.isArray(history) ? history : [],
-        mapResponseToSnapshot: (response, meta) => {
-          const currentData = response?.currentData ?? response;
-          return buildB2bSnapshotFromReconcileData(currentData, {
-          vendorId: currentData?.vendorId ?? currentData?.vendor_id ?? '',
-          month: currentData?.month ?? '',
-          fy: currentData?.fy ?? currentData?.financialYear ?? currentData?.financial_year ?? '',
-          dateFrom: currentData?.dateFrom ?? currentData?.startDate ?? '',
-          dateTo: currentData?.dateTo ?? currentData?.endDate ?? '',
-          orgGst: currentData?.orgGst ?? currentData?.gstin ?? currentData?.gstIn ?? '',
-          orgUserName: currentData?.orgUserName ?? currentData?.username ?? '',
-          existingId: meta.idSuffix,
-          getVendor,
-        }, meta.fetchedAt);
-        },
-      });
+      const historyEntries = Array.isArray(history) ? history : [];
+      const snapshots = historyEntries.map((entry, index) =>
+        buildB2bSnapshotFromReconcileHistoryEntry(entry, index, getVendor));
       setFetchHistory(snapshots);
       setHistoryTotal(getHistoryTotal(history));
     } catch (error) {
@@ -1003,52 +999,23 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
 
   const historyColumns = useMemo(() => [
     {
-      key: 'row_num',
-      title: '#',
-      className: 'w-10',
-      cellClassName: 'text-xs text-muted-foreground',
-      render: (_row, index) => index + 1,
-    },
-    { key: 'vendor', title: 'Vendor', render: (row) => row.vendorName },
-    // { key: 'org_gst', title: 'Organisation GSTIN', render: (row) => row.orgGst, cellClassName: 'font-mono text-xs' },
-    // { key: 'gstin', title: 'Vendor GSTIN', cellClassName: 'font-mono text-xs' },
-    { key: 'month', title: 'Month' },
-    { key: 'fy', title: 'Financial Year' },
-    // {
-    //   key: 'date_range',
-    //   title: 'Date Range',
-    //   cellClassName: 'text-xs text-muted-foreground',
-    //   render: (row) => formatB2bDateRange(row.dateFrom, row.dateTo),
-    // },
-    { key: 'total', title: 'Total Supplier Invoices', render: (row) => row.totalSupplierInvoices, cellClassName: 'text-right font-medium' },
-    { key: 'amended', title: 'Amended Invoices', render: (row) => row.amendedCount, cellClassName: 'text-right' },
-    { key: 'itc', title: 'Eligible ITC', render: (row) => formatCurrency(row.eligibleItc), cellClassName: 'text-right font-medium text-green-700' },
-    {
-      key: 'review',
-      title: 'Invoices Requiring Review',
-      cellClassName: 'text-right font-medium',
+      key: 'supplier',
+      title: 'Supplier',
       render: (row) => (
-        <span className={row.needsReview > 0 ? 'text-red-600' : 'text-green-700'}>
-          {row.needsReview}
-        </span>
+        <div>
+          <p className="font-medium">{row.vendorName}</p>
+          <p className="font-mono text-xs text-muted-foreground">{row.gstin}</p>
+        </div>
       ),
     },
-    // {
-    //   key: 'match_summary',
-    //   title: 'Match Status Summary',
-    //   cellClassName: 'max-w-[180px] text-xs text-muted-foreground',
-    //   render: (row) => row.matchStatusSummary,
-    // },
+    { key: 'org_gst', title: 'Org GSTIN', render: (row) => row.orgGst, cellClassName: 'font-mono text-xs' },
+    { key: 'period', title: 'Period', render: (row) => `${row.month || '—'} FY ${row.fy || '—'}` },
+    { key: 'total', title: 'Invoices', render: (row) => row.totalSupplierInvoices, cellClassName: 'text-right font-medium' },
+    { key: 'tax', title: 'Tax / ITC', render: (row) => formatCurrency(row.totalGst), cellClassName: 'text-right font-medium text-green-700' },
     {
-      key: 'sync',
-      title: 'Sync Status',
+      key: 'status',
+      title: 'Status',
       render: (row) => <TaxStatusBadge status={row.syncStatus} />,
-    },
-    {
-      key: 'fetched_on',
-      title: 'Fetched On',
-      cellClassName: 'text-xs text-muted-foreground whitespace-nowrap',
-      render: (row) => formatB2bFetchedOn(row.fetchedAt),
     },
     {
       key: 'actions',
