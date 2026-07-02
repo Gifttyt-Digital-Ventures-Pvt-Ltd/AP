@@ -174,21 +174,15 @@ const extractInvoiceIdFromSaveResponse = (response) => {
   return id !== undefined && id !== null ? String(id) : "";
 };
 
-const FINAL_NON_CANCELLABLE_STATUSES = new Set(["PAID", "CANCELLED", "CANCELED"]);
-
 const getInvoiceCancelCapability = (invoice = {}) =>
   invoice.canCancel ??
   invoice.can_cancel ??
   invoice.cancellable ??
   invoice.isCancellable;
 
-const isInvoiceCancellable = (invoice = {}, canCancelByRole = false) => {
+const isInvoiceCancellable = (invoice = {}) => {
   const capability = getInvoiceCancelCapability(invoice);
-  if (capability !== undefined && capability !== null) return capability === true;
-  if (!canCancelByRole) return false;
-
-  const status = String(invoice.status || "").trim().toUpperCase();
-  return !FINAL_NON_CANCELLABLE_STATUSES.has(status);
+  return capability === true;
 };
 
 const baseInvoiceTableHeader = [
@@ -1931,8 +1925,7 @@ const InvoicesPage = () => {
   const canEdit = (invoice) => canEditInvoice(invoice, invoiceEditContext);
   const canDelete = (status) => canDeleteInvoice(status, canDeleteInvoices);
   const canCancel = (invoice) =>
-    Boolean(invoice?.id) &&
-    isInvoiceCancellable(invoice, isCorporateAdmin || isMasterAdmin);
+    Boolean(invoice?.id) && isInvoiceCancellable(invoice);
 
   const getStatusBadgeClass = (status) => getInvoiceStatusBadgeClass(status);
 

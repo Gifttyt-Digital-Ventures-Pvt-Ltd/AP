@@ -84,21 +84,15 @@ const batchInvoiceTableHeader = [
 
 const getPaymentReportResponseData = (response = {}) => response.data ?? response;
 
-const FINAL_NON_CANCELLABLE_STATUSES = new Set(['PAID', 'CANCELLED', 'CANCELED']);
-
 const getInvoiceCancelCapability = (invoice = {}) =>
   invoice.canCancel ??
   invoice.can_cancel ??
   invoice.cancellable ??
   invoice.isCancellable;
 
-const isInvoiceCancellable = (invoice = {}, canCancelByRole = false) => {
+const isInvoiceCancellable = (invoice = {}) => {
   const capability = getInvoiceCancelCapability(invoice);
-  if (capability !== undefined && capability !== null) return capability === true;
-  if (!canCancelByRole) return false;
-
-  const status = String(invoice.status || '').trim().toUpperCase();
-  return !FINAL_NON_CANCELLABLE_STATUSES.has(status);
+  return capability === true;
 };
 
 const downloadSignedReport = async (downloadUrl, fileName) => {
@@ -137,8 +131,6 @@ const Payments = () => {
     isConnectedBankingEnabled,
     isCategoryFeatureEnabled,
     isCampaignFeatureEnabled,
-    isCorporateAdmin,
-    hasPermission,
   } = useRBAC();
   const {
     currencies,
@@ -285,7 +277,6 @@ const Payments = () => {
   ]);
 
   const canManagePayments = canPerformAction('payments.create');
-  const canCancelInvoicesByRole = isCorporateAdmin || hasPermission('master-admin');
   const canBulkRelease = canPerformAction('payments.releaseBulk');
   const canCreateBatch =
     isPaymentBatchesFeatureEnabled && canPerformAction('payments.createBatch');
@@ -517,7 +508,7 @@ const Payments = () => {
   };
 
   const handleCancelInvoice = (invoice) => {
-    if (!isInvoiceCancellable(invoice, canCancelInvoicesByRole)) {
+    if (!isInvoiceCancellable(invoice)) {
       toast.error(
         invoice?.cancelDisabledReason ||
           invoice?.cancel_disabled_reason ||
@@ -978,8 +969,7 @@ const Payments = () => {
             handleViewInvoice={handleViewInvoice}
             handleDownloadInvoice={handleDownloadInvoice}
             canCancelInvoice={(invoice) =>
-              Boolean(invoice?.id) &&
-              isInvoiceCancellable(invoice, canCancelInvoicesByRole)
+              Boolean(invoice?.id) && isInvoiceCancellable(invoice)
             }
             handleCancelInvoice={handleCancelInvoice}
           />
