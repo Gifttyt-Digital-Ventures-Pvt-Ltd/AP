@@ -33,8 +33,6 @@ export const toVendorApiPayload = (vendor = {}) => {
     accountHolderName,
     category,
     currency,
-    payment_terms,
-    paymentTerms,
     contact_person,
     contactPerson,
     website,
@@ -88,7 +86,6 @@ export const toVendorApiPayload = (vendor = {}) => {
     accountHolderName: accountHolderName ?? account_holder_name,
     category,
     currency,
-    paymentTerms: paymentTerms ?? payment_terms,
     contactPerson: contactPerson ?? contact_person,
     website,
     notes,
@@ -102,15 +99,53 @@ export const toVendorApiPayload = (vendor = {}) => {
   };
 };
 
-/** Invoice vendor-request payload — omits blank contact fields so create-vendor mandatory rules are not triggered server-side. */
-export const toVendorRequestApiPayload = (vendor = {}) => {
-  const payload = toVendorApiPayload(vendor);
+const addStringIfPresent = (payload, key, value) => {
+  const nextValue = String(value ?? '').trim();
+  if (nextValue) payload[key] = nextValue;
+};
 
-  ['email', 'mobile', 'phone', 'contactPerson'].forEach((key) => {
-    if (!String(payload[key] ?? '').trim()) {
-      delete payload[key];
-    }
-  });
+/** Vendor addition request payload — only company name and vendor type are mandatory. */
+export const toVendorRequestApiPayload = (vendor = {}) => {
+  const payload = {
+    name: String(vendor.name ?? '').trim(),
+    vendorType: vendor.vendorType ?? vendor.vendor_type,
+  };
+
+  addStringIfPresent(payload, 'tradeName', vendor.tradeName ?? vendor.trade_name);
+  addStringIfPresent(payload, 'email', vendor.email);
+  addStringIfPresent(payload, 'phone', vendor.phone);
+  addStringIfPresent(payload, 'mobile', vendor.mobile);
+  addStringIfPresent(payload, 'pan', vendor.pan);
+  addStringIfPresent(payload, 'gstin', vendor.gstin);
+  addStringIfPresent(payload, 'addressLine1', vendor.addressLine1 ?? vendor.address_line1);
+  addStringIfPresent(payload, 'addressLine2', vendor.addressLine2 ?? vendor.address_line2);
+  addStringIfPresent(payload, 'city', vendor.city);
+  addStringIfPresent(payload, 'state', vendor.state);
+  addStringIfPresent(payload, 'pincode', vendor.pincode);
+  addStringIfPresent(payload, 'country', vendor.country);
+  addStringIfPresent(payload, 'bankName', vendor.bankName ?? vendor.bank_name);
+  addStringIfPresent(payload, 'accountNumber', vendor.accountNumber ?? vendor.account_number);
+  addStringIfPresent(payload, 'ifscCode', vendor.ifscCode ?? vendor.ifsc_code);
+  addStringIfPresent(payload, 'branch', vendor.branch);
+  addStringIfPresent(payload, 'accountHolderName', vendor.accountHolderName ?? vendor.account_holder_name);
+  addStringIfPresent(payload, 'category', vendor.category);
+  addStringIfPresent(payload, 'currency', vendor.currency);
+  addStringIfPresent(payload, 'contactPerson', vendor.contactPerson ?? vendor.contact_person);
+  addStringIfPresent(payload, 'website', vendor.website);
+  addStringIfPresent(payload, 'notes', vendor.notes);
+
+  const resolvedDocuments = vendor.documents ?? vendor.vendorDocuments ?? vendor.vendor_documents;
+  if (resolvedDocuments && Object.keys(resolvedDocuments).length > 0) {
+    payload.documents = resolvedDocuments;
+  }
+
+  const resolvedGstRegistrations =
+    vendor.gstRegistrations ?? vendor.gst_regs ?? vendor.gstRegs ?? vendor.gst_registrations;
+  if (Array.isArray(resolvedGstRegistrations)) {
+    const filledRegistrations = resolvedGstRegistrations.filter((registration) =>
+      String(registration?.gstin ?? '').trim());
+    if (filledRegistrations.length > 0) payload.gstRegistrations = filledRegistrations;
+  }
 
   return payload;
 };

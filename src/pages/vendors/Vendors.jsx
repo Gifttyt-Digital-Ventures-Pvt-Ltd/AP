@@ -1135,7 +1135,7 @@ const Vendors = () => {
               : 'Create Vendor'
         }
         submitting={createVendorLoading || updateVendorLoading}
-        activeVendorFields={effectiveActiveVendorFields}
+        activeVendorFields={activeVendorFields}
         vendorFieldConfiguration={vendorFieldConfiguration}
         testId="vendor-dialog"
       />
