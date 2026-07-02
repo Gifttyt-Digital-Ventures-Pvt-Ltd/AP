@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import InvoiceDueDateCell from '../../invoices/components/InvoiceDueDateCell';
-import { Download, Eye } from 'lucide-react';
+import { Ban, Download, Eye, FileSpreadsheet } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Checkbox } from '../../../components/ui/checkbox';
 import AppDataTable from '../../../components/common/AppDataTable';
@@ -59,10 +59,14 @@ const PendingPaymentsTab = ({
   onToggleInvoice,
   onSelectAllInvoices,
   onOpenRecordPayment,
+  onOpenInvoiceReport,
   canRecordPayment = false,
+  canDownloadInvoiceReport = false,
   safeFormatDate,
   handleViewInvoice,
   handleDownloadInvoice,
+  canCancelInvoice,
+  handleCancelInvoice,
 }) => {
   const { showIntegrationColumn } = useZohoIntegrationActive();
   const pendingPaymentTableHeader = useMemo(
@@ -161,6 +165,18 @@ const PendingPaymentsTab = ({
                 >
                   <Download className="h-4 w-4" />
                 </Button>
+                {canCancelInvoice?.(invoice) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleCancelInvoice?.(invoice)}
+                    data-testid={`cancel-pending-invoice-${invoice.id}`}
+                    title="Cancel Invoice"
+                    className="h-8 w-8 p-0"
+                  >
+                    <Ban className="h-4 w-4 text-destructive" />
+                  </Button>
+                )}
               </div>
             );
             break;
@@ -214,22 +230,36 @@ const PendingPaymentsTab = ({
               )}
             </div>
 
-            {canBulkRelease && (
-              <Button onClick={handleBulkRelease} size="lg" data-testid="pending-tab-bulk-release-button">
-                Release All Payments
-              </Button>
-            )}
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+              {canDownloadInvoiceReport && (
+                <Button
+                  variant="outline"
+                  size="lg"
+                  onClick={onOpenInvoiceReport}
+                  data-testid="open-pending-payment-report-dialog"
+                >
+                  <FileSpreadsheet className="mr-2 h-4 w-4" />
+                  Download report
+                </Button>
+              )}
 
-            {showRecordPaymentSelection && canRecordPayment && (
-              <Button
-                size="lg"
-                onClick={onOpenRecordPayment}
-                disabled={selectedInvoiceIds.length === 0}
-                data-testid="open-record-payment-dialog"
-              >
-                Record Payment
-              </Button>
-            )}
+              {canBulkRelease && (
+                <Button onClick={handleBulkRelease} size="lg" data-testid="pending-tab-bulk-release-button">
+                  Release All Payments
+                </Button>
+              )}
+
+              {showRecordPaymentSelection && canRecordPayment && (
+                <Button
+                  size="lg"
+                  onClick={onOpenRecordPayment}
+                  disabled={selectedInvoiceIds.length === 0}
+                  data-testid="open-record-payment-dialog"
+                >
+                  Record Payment
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       )}

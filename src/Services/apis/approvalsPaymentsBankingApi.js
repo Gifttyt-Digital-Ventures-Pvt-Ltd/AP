@@ -34,6 +34,13 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
       }),
       invalidatesTags: ["Payments", "Invoices", "Dashboard", "Reports", ...CREDIT_INVALIDATION_TAGS],
     }),
+    generatePendingPaymentInvoiceReport: builder.mutation({
+      query: (body) => ({
+        url: "/payments/pending-invoices/report",
+        method: "POST",
+        body,
+      }),
+    }),
     getBankAccounts: builder.query({
       query: () => ({ url: "/bank-accounts", method: "GET" }),
       transformResponse: (response) =>
@@ -59,6 +66,7 @@ export const {
   useCreatePaymentMutation,
   useBulkReleasePaymentsMutation,
   useRecordPaymentsMutation,
+  useGeneratePendingPaymentInvoiceReportMutation,
   useGetBankAccountsQuery,
   useCreateBankAccountMutation,
 } = approvalsPaymentsBankingApi;

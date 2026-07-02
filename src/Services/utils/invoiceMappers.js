@@ -282,6 +282,17 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
       invoice.lineItemsExpanded ??
       invoice.line_items_expanded ??
       true,
+    canCancel:
+      invoice.canCancel ??
+      invoice.can_cancel ??
+      invoice.cancellable ??
+      invoice.isCancellable ??
+      false,
+    cancelDisabledReason:
+      invoice.cancelDisabledReason ??
+      invoice.cancel_disabled_reason ??
+      invoice.cancellationDisabledReason ??
+      "",
     ...normalizeMsmePaymentDue(invoice),
   };
 };

@@ -12,6 +12,7 @@ import {
   useUpdateInvoiceMutation,
   useForwardInvoiceMutation,
   useDeleteInvoiceMutation,
+  useCancelInvoiceMutation,
 } from "../../Services/apis/invoicesVendorsApi";
 import {
   getInvoiceMandatoryFieldValidationMessage,
@@ -95,7 +96,7 @@ import {
 } from "./utils/invoiceAmounts";
 import { getInvoiceDueDateValidationErrorForInvoice } from "./utils/msmePaymentDue";
 import InvoiceDueDateCell from "./components/InvoiceDueDateCell";
-import { Sparkles, Eye, Mail, Pencil, Search, Trash2 } from "lucide-react";
+import { Ban, Sparkles, Eye, Mail, Pencil, Search, Trash2 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import {
@@ -171,6 +172,23 @@ const extractInvoiceIdFromSaveResponse = (response) => {
     response?.invoiceId ??
     response?.invoice_id;
   return id !== undefined && id !== null ? String(id) : "";
+};
+
+const FINAL_NON_CANCELLABLE_STATUSES = new Set(["PAID", "CANCELLED", "CANCELED"]);
+
+const getInvoiceCancelCapability = (invoice = {}) =>
+  invoice.canCancel ??
+  invoice.can_cancel ??
+  invoice.cancellable ??
+  invoice.isCancellable;
+
+const isInvoiceCancellable = (invoice = {}, canCancelByRole = false) => {
+  const capability = getInvoiceCancelCapability(invoice);
+  if (capability !== undefined && capability !== null) return capability === true;
+  if (!canCancelByRole) return false;
+
+  const status = String(invoice.status || "").trim().toUpperCase();
+  return !FINAL_NON_CANCELLABLE_STATUSES.has(status);
 };
 
 const baseInvoiceTableHeader = [
@@ -402,6 +420,8 @@ const InvoicesPage = () => {
   const [forwardInvoice, { isLoading: forwardInvoiceLoading }] =
     useForwardInvoiceMutation();
   const [deleteInvoice] = useDeleteInvoiceMutation();
+  const [cancelInvoice, { isLoading: cancelInvoiceLoading }] =
+    useCancelInvoiceMutation();
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
   const invoices = getInvoiceListItems(invoicesListData);
@@ -539,6 +559,8 @@ const InvoicesPage = () => {
   const [bulkEditFileURL, setBulkEditFileURL] = useState(null);
   const [bulkAddingVendorItemId, setBulkAddingVendorItemId] = useState("");
   const [invoiceDeleteTarget, setInvoiceDeleteTarget] = useState(null);
+  const [invoiceCancelTarget, setInvoiceCancelTarget] = useState(null);
+  const [invoiceCancelReason, setInvoiceCancelReason] = useState("");
   const [requestVendorOpen, setRequestVendorOpen] = useState(false);
   const [invoiceUploadDialogOpen, setInvoiceUploadDialogOpen] = useState(false);
   const [requestVendorContext, setRequestVendorContext] = useState(null);
@@ -1866,8 +1888,51 @@ const InvoicesPage = () => {
     }
   };
 
+  const handleCancelInvoice = (invoice) => {
+    if (!isInvoiceCancellable(invoice)) {
+      toast.error(
+        invoice?.cancelDisabledReason ||
+          invoice?.cancel_disabled_reason ||
+          "This invoice cannot be cancelled",
+      );
+      return;
+    }
+    setInvoiceCancelTarget(invoice);
+    setInvoiceCancelReason("");
+  };
+
+  const confirmCancelInvoice = async () => {
+    if (!invoiceCancelTarget) return;
+    const reason = invoiceCancelReason.trim();
+    if (reason.length < 5) {
+      toast.error("Please enter a cancellation reason");
+      return;
+    }
+
+    try {
+      const response = await cancelInvoice({
+        id: invoiceCancelTarget.id,
+        reason,
+      }).unwrap();
+      toast.success(response?.message || "Invoice cancelled successfully");
+      setViewDialogOpen(false);
+      setInvoiceCancelTarget(null);
+      setInvoiceCancelReason("");
+      await refetchInvoices();
+    } catch (error) {
+      toast.error(
+        extractApiErrorDetail(error) ||
+          error?.data?.message ||
+          "Failed to cancel invoice",
+      );
+    }
+  };
+
   const canEdit = (invoice) => canEditInvoice(invoice, invoiceEditContext);
   const canDelete = (status) => canDeleteInvoice(status, canDeleteInvoices);
+  const canCancel = (invoice) =>
+    Boolean(invoice?.id) &&
+    isInvoiceCancellable(invoice, isCorporateAdmin || isMasterAdmin);
 
   const getStatusBadgeClass = (status) => getInvoiceStatusBadgeClass(status);
 
@@ -2112,6 +2177,18 @@ const InvoicesPage = () => {
                     className="h-8 w-8 p-0"
                   >
                     <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                )}
+                {canCancel(invoice) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleCancelInvoice(invoice)}
+                    data-testid={`cancel-invoice-${invoice.id}`}
+                    title="Cancel Invoice"
+                    className="h-8 w-8 p-0"
+                  >
+                    <Ban className="h-4 w-4 text-destructive" />
                   </Button>
                 )}
               </div>
@@ -2469,6 +2546,8 @@ const InvoicesPage = () => {
         loadingHistory={loadingHistory}
         canEdit={canEdit}
         handleEditInvoice={handleEditInvoice}
+        canCancel={canCancel}
+        handleCancelInvoice={handleCancelInvoice}
         findVendorByName={findVendorByName}
         findVendorById={findVendorById}
         editDialogOpen={editDialogOpen}
@@ -2490,6 +2569,12 @@ const InvoicesPage = () => {
         invoiceDeleteTarget={invoiceDeleteTarget}
         setInvoiceDeleteTarget={setInvoiceDeleteTarget}
         confirmDeleteInvoice={confirmDeleteInvoice}
+        invoiceCancelTarget={invoiceCancelTarget}
+        setInvoiceCancelTarget={setInvoiceCancelTarget}
+        invoiceCancelReason={invoiceCancelReason}
+        setInvoiceCancelReason={setInvoiceCancelReason}
+        confirmCancelInvoice={confirmCancelInvoice}
+        cancelInvoiceLoading={cancelInvoiceLoading}
       />
     </div>
   );

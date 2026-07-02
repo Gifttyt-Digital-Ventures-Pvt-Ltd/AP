@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   useGetInvoicesQuery,
+  useCancelInvoiceMutation,
   useLazyGetInvoiceHistoryQuery,
 } from '../../Services/apis/invoicesVendorsApi';
 import { toInvoiceUiPayload, EMPTY_INVOICE_LIST_RESPONSE, getInvoiceListItems } from '../../Services/utils/payloadMappers';
@@ -9,6 +10,7 @@ import {
   useGetBankAccountsQuery,
   useBulkReleasePaymentsMutation,
   useCreatePaymentMutation,
+  useGeneratePendingPaymentInvoiceReportMutation,
   useRecordPaymentsMutation,
 } from '../../Services/apis/approvalsPaymentsBankingApi';
 import { useCreatePaymentBatchMutation } from '../../Services/apis/paymentBatchesApi';
@@ -45,7 +47,9 @@ import PaymentsHeader from './components/PaymentsHeader';
 import PaymentDialog from './components/PaymentDialog';
 import RecordPaymentDialog from './components/RecordPaymentDialog';
 import PendingPaymentsTab from './components/PendingPaymentsTab';
+import PendingPaymentReportDialog from './components/PendingPaymentReportDialog';
 import ReleasedPaymentsTab from './components/ReleasedPaymentsTab';
+import CancelInvoiceDialog from '../invoices/components/CancelInvoiceDialog';
 import ConnectedBankAccountsPanel from '../../components/banking/ConnectedBankAccountsPanel';
 import BankAccountSelectField from '../../components/banking/BankAccountSelectField';
 import { getDefaultBankAccountId } from '../banking/utils/bankAccounts';
@@ -78,12 +82,63 @@ const batchInvoiceTableHeader = [
   { key: 'status', title: 'Status' },
 ];
 
+const getPaymentReportResponseData = (response = {}) => response.data ?? response;
+
+const FINAL_NON_CANCELLABLE_STATUSES = new Set(['PAID', 'CANCELLED', 'CANCELED']);
+
+const getInvoiceCancelCapability = (invoice = {}) =>
+  invoice.canCancel ??
+  invoice.can_cancel ??
+  invoice.cancellable ??
+  invoice.isCancellable;
+
+const isInvoiceCancellable = (invoice = {}, canCancelByRole = false) => {
+  const capability = getInvoiceCancelCapability(invoice);
+  if (capability !== undefined && capability !== null) return capability === true;
+  if (!canCancelByRole) return false;
+
+  const status = String(invoice.status || '').trim().toUpperCase();
+  return !FINAL_NON_CANCELLABLE_STATUSES.has(status);
+};
+
+const downloadSignedReport = async (downloadUrl, fileName) => {
+  const fallbackName = `pending-payment-invoice-report-${new Date().toISOString().slice(0, 10)}.xlsx`;
+  const resolvedFileName = fileName || fallbackName;
+
+  try {
+    const response = await fetch(downloadUrl);
+    if (!response.ok) throw new Error('Download request failed');
+
+    const blob = await response.blob();
+    const objectUrl = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = objectUrl;
+    anchor.download = resolvedFileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(objectUrl);
+    return;
+  } catch {
+    const anchor = document.createElement('a');
+    anchor.href = downloadUrl;
+    anchor.download = resolvedFileName;
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  }
+};
+
 const Payments = () => {
   const {
     isPaymentBatchesFeatureEnabled,
     isConnectedBankingEnabled,
     isCategoryFeatureEnabled,
     isCampaignFeatureEnabled,
+    isCorporateAdmin,
+    hasPermission,
   } = useRBAC();
   const {
     currencies,
@@ -131,7 +186,9 @@ const Payments = () => {
   const [bulkReleasePayments] = useBulkReleasePaymentsMutation();
   const [createPayment] = useCreatePaymentMutation();
   const [recordPayments] = useRecordPaymentsMutation();
+  const [generatePendingPaymentInvoiceReport] = useGeneratePendingPaymentInvoiceReportMutation();
   const [createPaymentBatch] = useCreatePaymentBatchMutation();
+  const [cancelInvoice, { isLoading: cancelInvoiceLoading }] = useCancelInvoiceMutation();
   const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
@@ -139,10 +196,15 @@ const Payments = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [createBatchDialogOpen, setCreateBatchDialogOpen] = useState(false);
   const [recordPaymentDialogOpen, setRecordPaymentDialogOpen] = useState(false);
+  const [paymentReportDialogOpen, setPaymentReportDialogOpen] = useState(false);
+  const [invoiceCancelTarget, setInvoiceCancelTarget] = useState(null);
+  const [invoiceCancelReason, setInvoiceCancelReason] = useState('');
   const [bulkReleaseConfirmOpen, setBulkReleaseConfirmOpen] = useState(false);
   const [creatingBatch, setCreatingBatch] = useState(false);
   const [recordingPayments, setRecordingPayments] = useState(false);
+  const [downloadingPaymentReport, setDownloadingPaymentReport] = useState(false);
   const [recordPaymentInvoiceIds, setRecordPaymentInvoiceIds] = useState([]);
+  const [paymentReportInvoiceIds, setPaymentReportInvoiceIds] = useState([]);
   const [recordPaymentForm, setRecordPaymentForm] = useState({
     paymentDate: '',
     payment_method: 'Bank Transfer',
@@ -223,6 +285,7 @@ const Payments = () => {
   ]);
 
   const canManagePayments = canPerformAction('payments.create');
+  const canCancelInvoicesByRole = isCorporateAdmin || hasPermission('master-admin');
   const canBulkRelease = canPerformAction('payments.releaseBulk');
   const canCreateBatch =
     isPaymentBatchesFeatureEnabled && canPerformAction('payments.createBatch');
@@ -378,6 +441,115 @@ const Payments = () => {
   const selectedRecordPaymentInvoices = invoices.filter((invoice) =>
     recordPaymentInvoiceIds.includes(invoice.id),
   );
+
+  const openPaymentReportDialog = () => {
+    if (!guardAction('payments.create')) return;
+    if (invoices.length === 0) {
+      toast.error('No pending invoices available for report');
+      return;
+    }
+
+    setPaymentReportInvoiceIds((prev) =>
+      prev.length > 0 ? prev : invoices.map((invoice) => invoice.id),
+    );
+    setPaymentReportDialogOpen(true);
+  };
+
+  const togglePaymentReportInvoice = (invoiceId) => {
+    setPaymentReportInvoiceIds((prev) =>
+      prev.includes(invoiceId)
+        ? prev.filter((id) => id !== invoiceId)
+        : [...prev, invoiceId],
+    );
+  };
+
+  const selectPaymentReportInvoices = (visibleInvoiceIds = []) => {
+    setPaymentReportInvoiceIds((prev) => {
+      const visibleSet = new Set(visibleInvoiceIds);
+      const allVisibleSelected =
+        visibleInvoiceIds.length > 0 && visibleInvoiceIds.every((id) => prev.includes(id));
+
+      if (allVisibleSelected) {
+        return prev.filter((id) => !visibleSet.has(id));
+      }
+
+      return Array.from(new Set([...prev, ...visibleInvoiceIds]));
+    });
+  };
+
+  const handleDownloadPaymentReport = async () => {
+    if (!guardAction('payments.create')) return;
+    if (paymentReportInvoiceIds.length === 0) {
+      toast.error('Please select at least one invoice');
+      return;
+    }
+
+    setDownloadingPaymentReport(true);
+    try {
+      const response = await generatePendingPaymentInvoiceReport({
+        invoiceIds: paymentReportInvoiceIds,
+        format: 'XLSX',
+      }).unwrap();
+      const reportData = getPaymentReportResponseData(response);
+      const downloadUrl =
+        reportData.downloadUrl ||
+        reportData.signedUrl ||
+        reportData.fileUrl ||
+        reportData.url;
+      const fileName =
+        reportData.fileName ||
+        reportData.filename ||
+        reportData.reportFileName;
+
+      if (!downloadUrl) {
+        toast.error('Report link was not returned by the server');
+        return;
+      }
+
+      await downloadSignedReport(downloadUrl, fileName);
+      toast.success('Bank invoice report is downloading');
+      setPaymentReportDialogOpen(false);
+    } catch (error) {
+      toast.error(error?.data?.detail || error?.data?.message || 'Failed to download report');
+    } finally {
+      setDownloadingPaymentReport(false);
+    }
+  };
+
+  const handleCancelInvoice = (invoice) => {
+    if (!isInvoiceCancellable(invoice, canCancelInvoicesByRole)) {
+      toast.error(
+        invoice?.cancelDisabledReason ||
+          invoice?.cancel_disabled_reason ||
+          'This invoice cannot be cancelled',
+      );
+      return;
+    }
+    setInvoiceCancelTarget(invoice);
+    setInvoiceCancelReason('');
+  };
+
+  const confirmCancelInvoice = async () => {
+    if (!invoiceCancelTarget) return;
+    const reason = invoiceCancelReason.trim();
+    if (reason.length < 5) {
+      toast.error('Please enter a cancellation reason');
+      return;
+    }
+
+    try {
+      const response = await cancelInvoice({
+        id: invoiceCancelTarget.id,
+        reason,
+      }).unwrap();
+      toast.success(response?.message || 'Invoice cancelled successfully');
+      setInvoiceCancelTarget(null);
+      setInvoiceCancelReason('');
+      await Promise.all([refetchPendingPaymentInvoices(), refetchAllInvoices()]);
+    } catch (error) {
+      toast.error(error?.data?.detail || error?.data?.message || 'Failed to cancel invoice');
+    }
+  };
 
   const openRecordPaymentDialog = () => {
     if (recordPaymentInvoiceIds.length === 0) {
@@ -799,10 +971,17 @@ const Payments = () => {
             onToggleInvoice={toggleRecordPaymentInvoice}
             onSelectAllInvoices={selectAllRecordPaymentInvoices}
             onOpenRecordPayment={openRecordPaymentDialog}
+            onOpenInvoiceReport={openPaymentReportDialog}
             canRecordPayment={canShowRecordPayment}
+            canDownloadInvoiceReport={canManagePayments}
             safeFormatDate={safeFormatDate}
             handleViewInvoice={handleViewInvoice}
             handleDownloadInvoice={handleDownloadInvoice}
+            canCancelInvoice={(invoice) =>
+              Boolean(invoice?.id) &&
+              isInvoiceCancellable(invoice, canCancelInvoicesByRole)
+            }
+            handleCancelInvoice={handleCancelInvoice}
           />
         </TabsContent>
 
@@ -832,6 +1011,29 @@ const Payments = () => {
           submitting={recordingPayments}
         />
       )}
+
+      <PendingPaymentReportDialog
+        open={paymentReportDialogOpen}
+        onOpenChange={setPaymentReportDialogOpen}
+        invoices={invoices}
+        selectedInvoiceIds={paymentReportInvoiceIds}
+        onToggleInvoice={togglePaymentReportInvoice}
+        onSelectAllInvoices={selectPaymentReportInvoices}
+        onDownload={handleDownloadPaymentReport}
+        downloading={downloadingPaymentReport}
+      />
+
+      <CancelInvoiceDialog
+        open={Boolean(invoiceCancelTarget)}
+        onOpenChange={(open) => {
+          if (!open) setInvoiceCancelTarget(null);
+        }}
+        invoice={invoiceCancelTarget}
+        reason={invoiceCancelReason}
+        onReasonChange={setInvoiceCancelReason}
+        onSubmit={confirmCancelInvoice}
+        submitting={cancelInvoiceLoading}
+      />
 
       <AlertDialog open={bulkReleaseConfirmOpen} onOpenChange={setBulkReleaseConfirmOpen}>
         <AlertDialogContent>

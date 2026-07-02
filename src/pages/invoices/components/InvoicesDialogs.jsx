@@ -15,6 +15,7 @@ import BulkEditDialog from './BulkEditDialog';
 import ViewDialog from './ViewDialog';
 import EditDialog from './EditDialog';
 import RequestVendorDialog from './RequestVendorDialog';
+import CancelInvoiceDialog from './CancelInvoiceDialog';
 
 const InvoicesDialogs = (props) => {
   const {
@@ -65,6 +66,8 @@ const InvoicesDialogs = (props) => {
     loadingHistory,
     canEdit,
     handleEditInvoice,
+    canCancel,
+    handleCancelInvoice,
     findVendorByName,
     findVendorById,
     editDialogOpen,
@@ -84,6 +87,12 @@ const InvoicesDialogs = (props) => {
     invoiceDeleteTarget,
     setInvoiceDeleteTarget,
     confirmDeleteInvoice,
+    invoiceCancelTarget,
+    setInvoiceCancelTarget,
+    invoiceCancelReason,
+    setInvoiceCancelReason,
+    confirmCancelInvoice,
+    cancelInvoiceLoading,
   } = props;
 
   return (
@@ -135,6 +144,8 @@ const InvoicesDialogs = (props) => {
         loadingHistory={loadingHistory}
         canEdit={canEdit}
         handleEditInvoice={handleEditInvoice}
+        canCancel={canCancel}
+        handleCancelInvoice={handleCancelInvoice}
         showCategoryField={isCategoryFeatureEnabled}
         isCategoryFeatureEnabled={isCategoryFeatureEnabled}
         showCampaignField={isCampaignFeatureEnabled}
@@ -169,6 +180,18 @@ const InvoicesDialogs = (props) => {
         setFormData={setRequestVendorForm}
         onSubmit={handleSubmitVendorRequest}
         submitting={requestVendorLoading}
+      />
+
+      <CancelInvoiceDialog
+        open={Boolean(invoiceCancelTarget)}
+        onOpenChange={(open) => {
+          if (!open) setInvoiceCancelTarget(null);
+        }}
+        invoice={invoiceCancelTarget}
+        reason={invoiceCancelReason}
+        onReasonChange={setInvoiceCancelReason}
+        onSubmit={confirmCancelInvoice}
+        submitting={cancelInvoiceLoading}
       />
 
       <AlertDialog
