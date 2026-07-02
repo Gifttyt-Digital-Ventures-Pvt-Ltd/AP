@@ -65,6 +65,13 @@ const getZohoOrganizationId = (organization = {}) =>
   organization.organization_id ||
   organization.id;
 
+const getCreateConnectionResponseData = (response = {}) => response.data || response;
+
+const getAuthorizationUrl = (response = {}) => {
+  const data = getCreateConnectionResponseData(response);
+  return data.authorizationUrl || data.authorization_url || data.authUrl || data.auth_url || "";
+};
+
 const ConnectionWizard = () => {
   const { provider = "ZOHO_BOOKS" } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -172,7 +179,9 @@ const ConnectionWizard = () => {
         clientSecret: clientSecret.trim(),
       };
       const response = await createConnection(payload).unwrap();
-      const nextConnectionId = response.connectionId || response.connection_id || response.id;
+      const responseData = getCreateConnectionResponseData(response);
+      const nextConnectionId =
+        responseData.connectionId || responseData.connection_id || responseData.id;
       if (!nextConnectionId) {
         toast.error("Connection created but no connection ID was returned");
         return;
@@ -182,8 +191,9 @@ const ConnectionWizard = () => {
       const nextParams = new URLSearchParams(searchParams);
       nextParams.set("connectionId", nextConnectionId);
       setSearchParams(nextParams, { replace: true });
-      if (response.authUrl) {
-        window.location.assign(response.authUrl);
+      const authorizationUrl = getAuthorizationUrl(responseData);
+      if (authorizationUrl) {
+        window.location.assign(authorizationUrl);
         return;
       }
       toast.success("Connection created. Waiting for authorization status.");
@@ -383,7 +393,7 @@ const ConnectionWizard = () => {
                 <p className="text-sm text-muted-foreground">
                   Complete Zoho authorization to load organizations for this connection.
                 </p>
-              ) : connectionStatus === "PENDING" || connectionStatus === "AUTHORIZING" ? (
+              ) : shouldPollOAuthStatus(connectionStatus) ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Waiting for Zoho authorization to complete.
