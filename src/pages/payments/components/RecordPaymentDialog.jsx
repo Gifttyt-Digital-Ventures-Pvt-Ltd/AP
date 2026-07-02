@@ -63,26 +63,26 @@ const RecordPaymentDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg" data-testid="record-payment-dialog">
+      <DialogContent className="w-[calc(100vw-2rem)] max-w-lg overflow-hidden" data-testid="record-payment-dialog">
         <DialogHeader>
           <DialogTitle>Record Payment</DialogTitle>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
+        <form onSubmit={handleSubmit} className="min-w-0 space-y-4">
+          <div className="min-w-0">
             <Label>Selected Invoices ({selectedInvoices.length})</Label>
-            <div className="mt-2 max-h-32 overflow-x-hidden overflow-y-auto rounded-md border border-input bg-muted/30 px-3 py-2 text-sm">
+            <div className="mt-2 max-h-32 max-w-full overflow-x-hidden overflow-y-auto rounded-md border border-input bg-muted/30 px-3 py-2 text-sm">
               {selectedInvoices.length > 0 ? (
-                <ul className="space-y-1">
+                <ul className="min-w-0 space-y-1">
                   {selectedInvoices.map((invoice) => (
                     <li
                       key={invoice.id}
-                      className="flex min-w-0 items-center justify-between gap-2"
+                      className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2"
                     >
                       <div className="min-w-0 flex-1">
                         <ClippedInvoiceLabel invoice={invoice} />
                       </div>
-                      <span className="shrink-0 text-muted-foreground">
+                      <span className="shrink-0 whitespace-nowrap text-muted-foreground">
                         ₹{Number(invoice.amount || 0).toLocaleString('en-IN')}
                       </span>
                     </li>
