@@ -64,6 +64,14 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
       query: (id) => ({ url: `/invoices/${id}`, method: "DELETE" }),
       invalidatesTags: ["Invoices", "Dashboard", "Reports"],
     }),
+    cancelInvoice: builder.mutation({
+      query: ({ id, reason }) => ({
+        url: `/invoices/${id}/cancel`,
+        method: "POST",
+        body: { reason },
+      }),
+      invalidatesTags: ["Invoices", "Approvals", "Payments", "Dashboard", "Reports"],
+    }),
     scanInvoice: builder.mutation({
       query: (body) => ({
         url: "/scan/extract-invoice-data",
@@ -215,6 +223,7 @@ export const {
   useUpdateInvoiceMutation,
   useForwardInvoiceMutation,
   useDeleteInvoiceMutation,
+  useCancelInvoiceMutation,
   useScanInvoiceMutation,
   useBulkUploadInvoicesMutation,
   useApproveInvoiceMutation,

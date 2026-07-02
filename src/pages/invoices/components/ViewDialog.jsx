@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { format } from "date-fns";
-import { FileText, History, Pencil, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Ban, FileText, History, Pencil, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import ApprovalHistoryTimeline from "../../../components/common/ApprovalHistoryTimeline";
 import { Button } from "../../../components/ui/button";
 import {
@@ -35,6 +35,8 @@ const ViewDialog = ({
   loadingHistory,
   canEdit,
   handleEditInvoice,
+  canCancel,
+  handleCancelInvoice,
   showCategoryField = true,
   isCategoryFeatureEnabled = true,
   showCampaignField = false,
@@ -196,6 +198,16 @@ const ViewDialog = ({
                   >
                     <Pencil className="h-4 w-4 mr-2" />
                     Edit Invoice
+                  </Button>
+                )}
+                {canCancel?.(selectedInvoice) && (
+                  <Button
+                    variant="destructive"
+                    onClick={() => handleCancelInvoice?.(selectedInvoice)}
+                    className="flex-1"
+                  >
+                    <Ban className="h-4 w-4 mr-2" />
+                    Cancel Invoice
                   </Button>
                 )}
               </div>
