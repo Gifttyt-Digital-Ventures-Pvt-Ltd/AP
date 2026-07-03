@@ -163,6 +163,20 @@ const normalizeGrnOption = (grn = {}) => ({
   currency: grn.currency ?? DEFAULT_CURRENCY,
 });
 
+const getVendorBranchOptionValue = (branch = {}) => {
+  const code = String(branch.branchCode || "").trim();
+  if (code) return code;
+  const name = String(branch.branchName || "").trim();
+  return name ? `name:${name}` : "";
+};
+
+const formatVendorBranchOptionLabel = (branch = {}) => {
+  const name = branch.branchName || "";
+  const code = branch.branchCode || "";
+  if (name && code) return `${name} (${code})`;
+  return name || code || "Branch";
+};
+
 export const InvoiceForm = ({
   formData,
   setFormData,
@@ -247,6 +261,56 @@ export const InvoiceForm = ({
     }
     return null;
   }, [formData?.vendorId, formData?.vendorName, findVendorById, findVendorByName]);
+
+  const vendorBranches = useMemo(() => {
+    const branches =
+      selectedVendor?.vendorBranches ??
+      selectedVendor?.vendor_branches ??
+      selectedVendor?.branchDetails ??
+      selectedVendor?.branch_details ??
+      [];
+    if (!Array.isArray(branches)) return [];
+    return branches
+      .map((branch) => ({
+        branchName: String(branch.branchName ?? branch.branch_name ?? branch.name ?? "").trim(),
+        branchCode: String(branch.branchCode ?? branch.branch_code ?? branch.code ?? "")
+          .trim()
+          .toUpperCase(),
+        gstin: String(
+          branch.gstin ??
+            branch.mappedGstin ??
+            branch.mapped_gstin ??
+            branch.billingGstin ??
+            "",
+        )
+          .trim()
+          .toUpperCase(),
+      }))
+      .filter((branch) => branch.branchName || branch.branchCode);
+  }, [selectedVendor]);
+
+  const vendorBranchOptions = useMemo(
+    () =>
+      vendorBranches.map((branch) => ({
+        value: getVendorBranchOptionValue(branch),
+        label: formatVendorBranchOptionLabel(branch),
+      })),
+    [vendorBranches],
+  );
+
+  const selectedVendorBranchValue = useMemo(() => {
+    const code = String(formData?.vendorBranchCode || "").trim();
+    if (code) {
+      const byCode = vendorBranches.find((branch) => branch.branchCode === code);
+      if (byCode) return getVendorBranchOptionValue(byCode);
+    }
+    const name = String(formData?.vendorBranchName || "").trim();
+    if (name) {
+      const byName = vendorBranches.find((branch) => branch.branchName === name);
+      if (byName) return getVendorBranchOptionValue(byName);
+    }
+    return "";
+  }, [formData?.vendorBranchCode, formData?.vendorBranchName, vendorBranches]);
 
   const msmePaymentDue = normalizeMsmePaymentDue(formData);
   const vendorIsMsme = Boolean(selectedVendor?.msme) || msmePaymentDue.vendorIsMsme;
@@ -412,6 +476,33 @@ export const InvoiceForm = ({
         : prev,
     );
   };
+  const applyVendorBranchSelection = (value) => {
+    const branch = vendorBranches.find(
+      (entry) => getVendorBranchOptionValue(entry) === value,
+    );
+    setFormData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        vendorBranchCode: branch?.branchCode || "",
+        vendorBranchName: branch?.branchName || "",
+        vendorBranchGstin: branch?.gstin || "",
+        ...(branch?.gstin ? { gstin: branch.gstin } : {}),
+      };
+    });
+  };
+  const clearVendorBranchSelection = () => {
+    setFormData((prev) =>
+      prev
+        ? {
+            ...prev,
+            vendorBranchCode: "",
+            vendorBranchName: "",
+            vendorBranchGstin: "",
+          }
+        : prev,
+    );
+  };
   const billingGstSatisfied = !requireBillingGst || Boolean(selectedBillingGst?.gst);
   const isInvoiceLevelDiscount = formData?.discountsLevel === INVOICE_LEVEL;
   const isInvoiceLevelTax = formData?.taxesLevel === INVOICE_LEVEL;
@@ -544,6 +635,9 @@ export const InvoiceForm = ({
       campaignReferenceNumber: "",
       matchingPurchaseOrderId: "",
       matchingGrnId: "",
+      vendorBranchCode: "",
+      vendorBranchName: "",
+      vendorBranchGstin: "",
       ...buildInvoiceTdsStateFromVendor(matched),
     });
   };
@@ -567,6 +661,9 @@ export const InvoiceForm = ({
       tdsSectionId: null,
       tdsSectionCode: null,
       tdsRate: null,
+      vendorBranchCode: "",
+      vendorBranchName: "",
+      vendorBranchGstin: "",
     });
   };
 
@@ -945,6 +1042,32 @@ export const InvoiceForm = ({
                     </div>
                   </PopoverContent>
                 </Popover>
+                {formData.vendorMatched && vendorBranchOptions.length > 0 ? (
+                  <div className="mt-3">
+                    <Label className="text-xs">Vendor Branch (Optional)</Label>
+                    <div className="flex gap-2">
+                      <AppSelect
+                        value={selectedVendorBranchValue}
+                        onChange={(event) => applyVendorBranchSelection(event.target.value)}
+                        options={vendorBranchOptions}
+                        placeholder="Select vendor branch"
+                        className="h-8 text-sm"
+                        data-testid="invoice-vendor-branch-select"
+                      />
+                      {selectedVendorBranchValue ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={clearVendorBranchSelection}
+                          className="h-8 px-2 text-xs"
+                        >
+                          Clear
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
               </div>
                 <div>
                   <RequiredLabel required>Inovoice/Bill Number</RequiredLabel>
@@ -1223,11 +1346,13 @@ export const InvoiceForm = ({
                           <p className="mt-1 text-xs text-muted-foreground">
                             Configure branches in Settings &gt; Organisation Details.
                           </p>
-                        ) : selectedBranch?.billingGstin ? (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Billing GSTIN is mapped from the selected branch.
-                          </p>
-                        ) : null}
+                        ) : 
+                        //selectedBranch?.billingGstin ? (
+                        //   <p className="mt-1 text-xs text-muted-foreground">
+                        //     Billing GSTIN is mapped from the selected branch.
+                        //   </p>
+                        // ) : 
+                         null}
                       </div>
                     ) : null}
 

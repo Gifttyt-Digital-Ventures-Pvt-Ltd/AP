@@ -190,16 +190,19 @@ const validateVendorBranches = (branches = [], gstRegistrations = []) => {
 
   for (const branch of activeBranches) {
     if (!branch.branchName) return "Branch name is required for each vendor branch.";
-    if (!branch.branchCode) return "Branch code is required for each vendor branch.";
     if (branch.gstin && !validGstins.has(branch.gstin)) {
       return "Vendor branch GSTIN must be selected from the vendor's added GST registrations.";
     }
     names.push(branch.branchName.trim().toLowerCase());
-    codes.push(branch.branchCode.trim().toLowerCase());
+    if (branch.branchCode) {
+      codes.push(branch.branchCode.trim().toLowerCase());
+    }
   }
 
   if (new Set(names).size !== names.length) return "Vendor branch names must be unique.";
-  if (new Set(codes).size !== codes.length) return "Vendor branch codes must be unique.";
+  if (codes.length > 0 && new Set(codes).size !== codes.length) {
+    return "Vendor branch codes must be unique.";
+  }
   return "";
 };
 

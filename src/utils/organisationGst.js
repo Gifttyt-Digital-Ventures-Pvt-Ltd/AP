@@ -126,18 +126,19 @@ export function validateOrganisationBranches(branches = []) {
 
   for (const row of activeRows) {
     if (!row.branchName) return 'Branch name is required for each configured branch.';
-    if (!row.branchCode) return 'Branch code is required for each configured branch.';
     if (row.areaSqft !== null && (!Number.isFinite(row.areaSqft) || row.areaSqft < 0)) {
       return 'Branch area must be a valid positive number.';
     }
     branchNames.push(row.branchName.trim().toLowerCase());
-    branchCodes.push(row.branchCode.trim().toLowerCase());
+    if (row.branchCode) {
+      branchCodes.push(row.branchCode.trim().toLowerCase());
+    }
   }
 
   if (new Set(branchNames).size !== branchNames.length) {
     return 'Duplicate branch names are not allowed.';
   }
-  if (new Set(branchCodes).size !== branchCodes.length) {
+  if (branchCodes.length > 0 && new Set(branchCodes).size !== branchCodes.length) {
     return 'Duplicate branch codes are not allowed.';
   }
 
