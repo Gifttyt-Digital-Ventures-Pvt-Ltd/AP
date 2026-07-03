@@ -319,6 +319,7 @@ const Vendors = () => {
     pan: '',
     gstin: '',
     gstRegistrations: [],
+    vendorBranches: [],
     msme: false,
     
     // Address
@@ -605,6 +606,12 @@ const Vendors = () => {
     }
     setEditingVendor(vendor);
     const firstGstin = getFirstVendorGstin(vendor);
+    const vendorBranches =
+      vendor.vendorBranches ??
+      vendor.vendor_branches ??
+      vendor.branchDetails ??
+      vendor.branch_details ??
+      [];
     setFormData({
       name: vendor.name || '',
       trade_name: vendor.trade_name || vendor.tradeName || '',
@@ -615,6 +622,7 @@ const Vendors = () => {
       pan: vendor.pan || '',
       gstin: firstGstin || '',
       gstRegistrations: getVendorGstRegistrations(vendor),
+      vendorBranches: Array.isArray(vendorBranches) ? vendorBranches : [],
       msme: parseMsmeValue(vendor.msme) === true,
       address_line1: vendor.address_line1 || '',
       address_line2: vendor.address_line2 || '',
@@ -703,6 +711,7 @@ const Vendors = () => {
       pan: '',
       gstin: '',
       gstRegistrations: [],
+      vendorBranches: [],
       msme: false,
       address_line1: '',
       address_line2: '',

@@ -77,6 +77,7 @@ import { getInvoiceDueDateValidationErrorForInvoice } from "../utils/msmePayment
 import { useCurrencyFilter } from "../../../hooks/useCurrencyFilter";
 import { CURRENCY_SCREENS } from "../../../utils/currency";
 import { getInvoiceVendorRequestValidationErrors } from "../../../utils/vendorValidation";
+import { isBranchEnabled as isBranchEnabledForCorporate } from "../../../utils/invoiceConfiguration";
 
 const applyPrefillVendor = (formState, prefillVendor, prefillCampaign) => {
   const hasVendor = Boolean(prefillVendor?.vendorId || prefillVendor?.vendorName);
@@ -123,12 +124,19 @@ const InvoiceSingleUploadLayer = ({
   prefillCampaignRef.current = prefillCampaign;
 
   const { user } = useAuth();
-  const { isCategoryFeatureEnabled, isCampaignFeatureEnabled } = useRBAC();
+  const { corporateScreens, isCategoryFeatureEnabled, isCampaignFeatureEnabled } = useRBAC();
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
   const { setHideSidebar } = useSidebar();
   const { data: corporateUserContext = null } = useGetCorporateUserDetailsQuery();
   const { currencyParam } = useCurrencyFilter(CURRENCY_SCREENS.INVOICE);
+  const isBranchEnabled = useMemo(
+    () =>
+      isBranchEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
 
   const invoiceUserEmail =
     corporateUserContext?.employeeDetails?.email ||
@@ -751,6 +759,7 @@ const InvoiceSingleUploadLayer = ({
       TAX_RATES={TAX_RATES}
       showBillingGst={Boolean(uploadedFile)}
       requireBillingGst={Boolean(uploadedFile)}
+      showBranchField={isBranchEnabled}
     />
   );
 

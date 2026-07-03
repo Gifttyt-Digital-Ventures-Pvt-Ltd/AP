@@ -27,6 +27,14 @@ const Reports = () => {
     loading,
     fetchAllData,
     executiveData,
+    branchCostData,
+    branchCostLoading,
+    branchCostPeriod,
+    setBranchCostPeriod,
+    branchCostPage,
+    setBranchCostPage,
+    branchCostPagination,
+    isBranchCostAnalysisEnabled,
     apData,
     vendorData,
     taxData,
@@ -72,7 +80,17 @@ const Reports = () => {
 
         {canViewExecutiveReports && (
           <TabsContent value="executive" className="space-y-6">
-            <ExecutiveTab executiveData={executiveData} {...formatterProps} />
+            <ExecutiveTab
+              executiveData={executiveData}
+              branchCostData={branchCostData}
+              branchCostLoading={branchCostLoading}
+              branchCostPeriod={branchCostPeriod}
+              onBranchCostPeriodChange={setBranchCostPeriod}
+              branchCostPagination={branchCostPagination}
+              onBranchCostPageChange={setBranchCostPage}
+              showBranchCostAnalysis={isBranchCostAnalysisEnabled}
+              {...formatterProps}
+            />
           </TabsContent>
         )}
 

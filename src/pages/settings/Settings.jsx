@@ -20,12 +20,17 @@ import ZohoIntegrationCard from './components/ZohoIntegrationCard';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useRBAC } from '../../contexts/RBACContext';
 import CreditsPage from '../credits/CreditsPage';
+import OrgBranchesSection from './components/OrgBranchesSection';
 import OrgGstRegistrationsSection from './components/OrgGstRegistrationsSection';
+import { isBranchEnabled as isBranchEnabledForCorporate, isBranchSqFtEnabled as isBranchSqFtEnabledForCorporate } from '../../utils/invoiceConfiguration';
 import {
   buildOrganisationSavePayload,
   createEmptyGstRegistration,
+  getConfiguredOrganisationGstins,
   normalizeGstRegistrationsFromApi,
+  normalizeOrganisationBranchesFromApi,
   validateGstRegistrations,
+  validateOrganisationBranches,
 } from '../../utils/organisationGst';
 
 // Tally Logo Component
@@ -48,7 +53,12 @@ const SYNC_DATA_ITEMS = [
 ];
 
 const Settings = () => {
-  const { hasAnyPermission, isCorporateSectionEnabled, isBillingFeatureEnabled } = useRBAC();
+  const {
+    corporateScreens,
+    hasAnyPermission,
+    isCorporateSectionEnabled,
+    isBillingFeatureEnabled,
+  } = useRBAC();
   const canViewBankingSettings =
     hasAnyPermission(['settings-banking', 'banking-full']) &&
     isCorporateSectionEnabled('SETTINGS_CONNECTED_BANKING');
@@ -66,6 +76,20 @@ const Settings = () => {
     'VIEW_LEDGER',
     'MANAGE_BILLING',
   ]) && isBillingFeatureEnabled;
+  const isBranchConfigurationEnabled = useMemo(
+    () =>
+      isBranchEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const isBranchSqFtConfigurationEnabled = useMemo(
+    () =>
+      isBranchSqFtEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
   const availableSettingsTabs = useMemo(() => {
     const tabs = [];
     if (canViewOrganisationSettings) tabs.push('organisation');
@@ -112,6 +136,7 @@ const Settings = () => {
     company_name: '',
     legal_name: '',
     gstin: '',
+    branches: [],
     gst_registrations: [createEmptyGstRegistration()],
     pan: '',
     cin: '',
@@ -152,10 +177,12 @@ const Settings = () => {
         const isFormEmpty = !prev.company_name && !prev.email && !prev.phone;
         if (isFormEmpty || !orgDetails) {
           const gstRegistrations = normalizeGstRegistrationsFromApi(organisationData);
+          const branches = normalizeOrganisationBranchesFromApi(organisationData);
           return {
             company_name: organisationData.company_name || '',
             legal_name: organisationData.legal_name || '',
             gstin: gstRegistrations[0]?.gstin || organisationData.gstin || '',
+            branches,
             gst_registrations: gstRegistrations,
             pan: organisationData.pan || '',
             cin: organisationData.cin || '',
@@ -200,6 +227,7 @@ const Settings = () => {
       company_name: '',
       legal_name: '',
       gstin: '',
+      branches: [],
       gst_registrations: [createEmptyGstRegistration()],
       pan: '',
       cin: '',
@@ -237,6 +265,14 @@ const Settings = () => {
     const gstValidationError = validateGstRegistrations(orgForm.gst_registrations);
     if (gstValidationError) {
       toast.error(gstValidationError);
+      return;
+    }
+
+    const branchValidationError = isBranchConfigurationEnabled
+      ? validateOrganisationBranches(orgForm.branches)
+      : '';
+    if (branchValidationError) {
+      toast.error(branchValidationError);
       return;
     }
 
@@ -437,16 +473,30 @@ const Settings = () => {
                   </div>
                 </div>
 
-                {/* Tax Information */}
-                <div className="space-y-4">
-                  <h4 className="font-semibold text-gray-800 border-b pb-2">Tax & Registration</h4>
+                  {/* Tax Information */}
+                  <div className="space-y-4">
+                    <h4 className="font-semibold text-gray-800 border-b pb-2">Tax & Registration</h4>
+                  {isBranchConfigurationEnabled ? (
+                    <OrgBranchesSection
+                      branches={orgForm.branches}
+                      gstOptions={getConfiguredOrganisationGstins(orgForm.gst_registrations)}
+                      onChange={(branches) => setOrgForm({ ...orgForm, branches })}
+                      showAreaField={isBranchSqFtConfigurationEnabled}
+                    />
+                  ) : null}
                   <OrgGstRegistrationsSection
                     registrations={orgForm.gst_registrations}
                     onChange={(gst_registrations) => {
+                      const configuredGstins = new Set(getConfiguredOrganisationGstins(gst_registrations));
                       setOrgForm({
                         ...orgForm,
                         gst_registrations,
                         gstin: gst_registrations[0]?.gstin ?? '',
+                        branches: orgForm.branches.map((branch) =>
+                          branch.billingGstin && !configuredGstins.has(branch.billingGstin)
+                            ? { ...branch, billingGstin: '' }
+                            : branch,
+                        ),
                       });
                     }}
                   />

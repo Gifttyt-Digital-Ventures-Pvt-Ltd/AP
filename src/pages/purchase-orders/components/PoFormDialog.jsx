@@ -17,7 +17,7 @@ import PoLogo from "./PoLogo";
 import TdsSelectionField from "../../invoices/components/TdsSelectionField";
 import { TAX_RATES } from "../../invoices/constants";
 import { parseTaxRateFromLabel } from "../../invoices/utils/invoiceTax";
-import { buildTdsValue } from "../../invoices/utils/tds";
+import AppSelect from "../../../components/common/AppSelect";
 
 const getPoFormLineItemTableHeader = ({ isInr, fieldOn }) => [
   ...(fieldOn("LINE_ITEM", "item_name") ? [{ key: "item_description", title: "Description *", headerClassName: "w-[220px]" }] : []),
@@ -144,6 +144,8 @@ const PoFormDialog = ({
   scannedVendorHint = null,
   onRequestVendor,
   requestingVendor = false,
+  showBranchField = false,
+  organisationBranches = [],
 }) => {
   const [previewAction, setPreviewAction] = useState(null);
 
@@ -191,6 +193,73 @@ const PoFormDialog = ({
     String(registration.id) === String(poForm.vendor_gst_registration_id) ||
     registration.gstin === normalizeGstin(poForm.vendor_gstin),
   );
+  const vendorBranches = useMemo(() => {
+    const branches =
+      selectedVendor?.vendorBranches ??
+      selectedVendor?.vendor_branches ??
+      selectedVendor?.branchDetails ??
+      selectedVendor?.branch_details ??
+      [];
+    if (!Array.isArray(branches)) return [];
+    return branches
+      .map((branch) => ({
+        branchName: branch.branchName ?? branch.branch_name ?? branch.name ?? '',
+        branchCode: String(branch.branchCode ?? branch.branch_code ?? branch.code ?? '')
+          .trim()
+          .toUpperCase(),
+        gstin: String(
+          branch.gstin ?? branch.mappedGstin ?? branch.mapped_gstin ?? branch.billingGstin ?? '',
+        )
+          .trim()
+          .toUpperCase(),
+      }))
+      .filter((branch) => branch.branchName && branch.branchCode);
+  }, [selectedVendor]);
+  const orgBranchOptions = useMemo(
+    () =>
+      organisationBranches
+        .filter((branch) => branch.branchName && branch.branchCode)
+        .map((branch) => ({
+          value: branch.branchCode,
+          label: `${branch.branchName} (${branch.branchCode})`,
+        })),
+    [organisationBranches],
+  );
+  const vendorBranchOptions = useMemo(
+    () =>
+      vendorBranches.map((branch) => ({
+        value: branch.branchCode,
+        label: `${branch.branchName} (${branch.branchCode})`,
+      })),
+    [vendorBranches],
+  );
+  const applyOrgBranchSelection = (branchCode) => {
+    const branch = organisationBranches.find((entry) => entry.branchCode === branchCode);
+    setPoForm((prev) => ({
+      ...prev,
+      branch_code: branch?.branchCode || '',
+      branch_name: branch?.branchName || '',
+      billing_gstin: branch?.billingGstin || prev.billing_gstin || '',
+    }));
+  };
+  const applyVendorBranchSelection = (branchCode) => {
+    const branch = vendorBranches.find((entry) => entry.branchCode === branchCode);
+    setPoForm((prev) => {
+      const next = {
+        ...prev,
+        vendor_branch_code: branch?.branchCode || '',
+        vendor_branch_name: branch?.branchName || '',
+        vendor_branch_gstin: branch?.gstin || '',
+      };
+      if (branch?.gstin) {
+        const registration = vendorGstRegistrations.find((item) => item.gstin === branch.gstin);
+        next.vendor_gst_registration_id = registration?.id || prev.vendor_gst_registration_id || '';
+        next.vendor_gstin = branch.gstin;
+        next.vendor_pan = registration?.pan || prev.vendor_pan || '';
+      }
+      return next;
+    });
+  };
 
   useEffect(() => {
     if (!showCreateDialog && !embedded) setPreviewAction(null);
@@ -580,6 +649,9 @@ const PoFormDialog = ({
                             vendor_gst_registration_id: "",
                             vendor_gstin: "",
                             vendor_pan: "",
+                            vendor_branch_name: "",
+                            vendor_branch_code: "",
+                            vendor_branch_gstin: "",
                           }))
                         }
                       >
@@ -647,6 +719,31 @@ const PoFormDialog = ({
                             {selectedVendorRegistration.address}
                           </p>
                         ) : null}
+                      </FieldBlock>
+                    ) : null}
+                    {showBranchField && poForm.vendor_id ? (
+                      <FieldBlock label="Organisation Branch (Optional)" className="mt-3">
+                        <AppSelect
+                          value={poForm.branch_code || ''}
+                          onChange={(event) => applyOrgBranchSelection(event.target.value)}
+                          options={orgBranchOptions}
+                          placeholder={orgBranchOptions.length ? 'Select branch' : 'Configure branches in Settings'}
+                          className="h-9 text-sm"
+                          disabled={orgBranchOptions.length === 0}
+                          data-testid="po-org-branch-select"
+                        />
+                      </FieldBlock>
+                    ) : null}
+                    {poForm.vendor_id && vendorBranchOptions.length > 0 ? (
+                      <FieldBlock label="Vendor Branch (Optional)" className="mt-3">
+                        <AppSelect
+                          value={poForm.vendor_branch_code || ''}
+                          onChange={(event) => applyVendorBranchSelection(event.target.value)}
+                          options={vendorBranchOptions}
+                          placeholder="Select vendor branch"
+                          className="h-9 text-sm"
+                          data-testid="po-vendor-branch-select"
+                        />
                       </FieldBlock>
                     ) : null}
                     {isInr && (fieldOn("VENDOR", "vendor_gstin") || fieldOn("VENDOR", "vendor_pan")) && poForm.vendor_id ? (

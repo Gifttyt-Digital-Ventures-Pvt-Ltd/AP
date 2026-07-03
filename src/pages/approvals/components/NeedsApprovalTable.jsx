@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import InvoiceDueDateCell from "../../invoices/components/InvoiceDueDateCell";
 import { Button } from "../../../components/ui/button";
 import { CheckCircle, Eye, RotateCcw, XCircle } from "lucide-react";
@@ -8,11 +8,12 @@ import {
   normalizeWorkflowStatus,
 } from "../../../utils/approvalWorkflow";
 import AppDataTable from "../../../components/common/AppDataTable";
-import ClippedTextWithTooltip from "../../../components/common/ClippedTextWithTooltip";
+import { OrgBranchCell, VendorWithBranchCell } from "../../../components/common/BranchTableCells";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import { formatCurrency } from "../../../utils/currency";
 
-const needsApprovalTableHeader = [
+const baseNeedsApprovalTableHeader = [
+  { key: "orgBranch", title: "Branch", cellClassName: "text-sm" },
   { key: "vendorName", title: "Vendor" },
   { key: "amount", title: "Amount", cellClassName: "  font-semibold" },
   { key: "approval", title: "Approval" },
@@ -45,10 +46,17 @@ const NeedsApprovalTable = ({
   canApproveInvoices,
   canCheckInvoices,
   showApprovalProgress = false,
+  showBranchField = false,
 }) => {
-  const tableHeaders = showApprovalProgress
-    ? needsApprovalTableHeader
-    : needsApprovalTableHeader.filter((header) => header.key !== "approval");
+  const tableHeaders = useMemo(() => {
+    let headers = showApprovalProgress
+      ? baseNeedsApprovalTableHeader
+      : baseNeedsApprovalTableHeader.filter((header) => header.key !== "approval");
+    if (!showBranchField) {
+      headers = headers.filter((header) => header.key !== "orgBranch");
+    }
+    return headers;
+  }, [showApprovalProgress, showBranchField]);
 
   const renderNeedsApprovalRow = (invoice, rowIndex, headers) => {
     const progress = getApprovalProgress(invoice);
@@ -71,7 +79,10 @@ const NeedsApprovalTable = ({
               value = formatCurrency(invoice.amount, invoice.currency);
               break;
             case "vendorName":
-              value = <ClippedTextWithTooltip text={invoice.vendorName} />;
+              value = <VendorWithBranchCell record={invoice} />;
+              break;
+            case "orgBranch":
+              value = <OrgBranchCell record={invoice} />;
               break;
             case "approval":
               value = (

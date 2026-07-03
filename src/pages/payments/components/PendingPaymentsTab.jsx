@@ -13,6 +13,7 @@ import {
   formatInvoiceAmount,
   sumInvoiceAmountsByCurrency,
 } from '../../invoices/utils/invoiceAmounts';
+import { OrgBranchCell, VendorWithBranchCell } from '../../../components/common/BranchTableCells';
 
 const renderCurrencyTotals = (totals, className) => {
   if (totals.length === 0) {
@@ -40,6 +41,7 @@ const renderCurrencyTotals = (totals, className) => {
 
 const basePendingPaymentTableHeader = [
   { key: 'invoiceNumber', title: 'Invoice #', cellClassName: "  font-medium" },
+  { key: 'orgBranch', title: 'Branch', cellClassName: 'text-sm' },
   { key: 'vendorName', title: 'Vendor' },
   { key: 'amount', title: 'Amount', cellClassName: "  font-semibold" },
   { key: 'invoiceDate', title: 'Invoice Date', cellClassName: 'text-sm text-muted-foreground' },
@@ -67,12 +69,15 @@ const PendingPaymentsTab = ({
   handleDownloadInvoice,
   canCancelInvoice,
   handleCancelInvoice,
+  showBranchField = false,
 }) => {
   const { showIntegrationColumn } = useZohoIntegrationActive();
-  const pendingPaymentTableHeader = useMemo(
-    () => withIntegrationTableHeader(basePendingPaymentTableHeader, showIntegrationColumn),
-    [showIntegrationColumn],
-  );
+  const pendingPaymentTableHeader = useMemo(() => {
+    const headers = showBranchField
+      ? basePendingPaymentTableHeader
+      : basePendingPaymentTableHeader.filter((header) => header.key !== 'orgBranch');
+    return withIntegrationTableHeader(headers, showIntegrationColumn);
+  }, [showBranchField, showIntegrationColumn]);
   const selectedInvoices = invoices.filter((invoice) => selectedInvoiceIds.includes(invoice.id));
   const totalPendingByCurrency = useMemo(
     () => sumInvoiceAmountsByCurrency(invoices),
@@ -114,6 +119,12 @@ const PendingPaymentsTab = ({
             ) : (
               invoice.invoiceNumber || '-'
             );
+            break;
+          case 'vendorName':
+            value = <VendorWithBranchCell record={invoice} />;
+            break;
+          case 'orgBranch':
+            value = <OrgBranchCell record={invoice} />;
             break;
           case 'amount':
             value = formatInvoiceAmount(invoice, invoice.amount || 0);

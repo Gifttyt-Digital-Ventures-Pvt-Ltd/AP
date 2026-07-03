@@ -372,6 +372,15 @@ export const syncLineItemLineTotal = (item = {}) => {
   };
 };
 
+export const formatInrTaxPercent = (rate) => {
+  const numeric = Number(rate);
+  if (!Number.isFinite(numeric) || numeric <= 0) return "";
+  const formatted = Number.isInteger(numeric)
+    ? String(numeric)
+    : String(Number(numeric.toFixed(2)));
+  return `${formatted}%`;
+};
+
 export const calculateInvoiceTotals = ({
   lineItems = [],
   currency = DEFAULT_CURRENCY,
@@ -445,6 +454,23 @@ export const calculateInvoiceTotals = ({
     }
   }
 
+  let cgstRate = 0;
+  let sgstRate = 0;
+  let igstRate = 0;
+
+  if (isInrInvoiceCurrency(currency) && invoiceLevelTaxEnabled) {
+    const taxRate = taxRates.find((entry) => entry.value === invoiceTax);
+    if (taxRate) {
+      cgstRate = Number(taxRate.cgst) || 0;
+      sgstRate = Number(taxRate.sgst) || 0;
+      igstRate = Number(taxRate.igst) || 0;
+    }
+  } else if (isInrInvoiceCurrency(currency) && subTotal > 0) {
+    if (cgst > 0) cgstRate = (cgst / subTotal) * 100;
+    if (sgst > 0) sgstRate = (sgst / subTotal) * 100;
+    if (igst > 0) igstRate = (igst / subTotal) * 100;
+  }
+
   let foreignTaxes = [];
   let foreignTax = 0;
 
@@ -513,6 +539,9 @@ export const calculateInvoiceTotals = ({
     cgst,
     sgst,
     igst,
+    cgstRate,
+    sgstRate,
+    igstRate,
     foreignTax,
     foreignTaxes,
     invoiceDiscountAmount: boundedInvoiceDiscountAmount,

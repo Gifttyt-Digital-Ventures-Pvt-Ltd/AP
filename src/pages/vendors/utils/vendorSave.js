@@ -42,16 +42,42 @@ export const sanitizeGstRegistrationsForSave = (registrations = []) =>
     })
     .filter((registration) => String(registration.gstin || '').trim());
 
+export const sanitizeVendorBranchesForSave = (branches = []) =>
+  (Array.isArray(branches) ? branches : [])
+    .map((branch) => {
+      const {
+        isEditing,
+        _clientId,
+        branch_name,
+        branch_code,
+        mappedGstin,
+        mapped_gstin,
+        billingGstin,
+        ...rest
+      } = branch;
+      return {
+        ...rest,
+        branchName: String(branch.branchName ?? branch_name ?? '').trim(),
+        branchCode: String(branch.branchCode ?? branch_code ?? '').trim().toUpperCase(),
+        gstin: String(branch.gstin ?? mappedGstin ?? mapped_gstin ?? billingGstin ?? '').trim().toUpperCase(),
+      };
+    })
+    .filter((branch) => branch.branchName || branch.branchCode || branch.gstin);
+
 export const normalizeVendorForSave = (vendor = {}) => {
   const sanitized = stripVendorLevelAddressAndBank(vendor);
-  const { tdsMappings, ...restSanitized } = sanitized;
+  const { tdsMappings, vendor_branches, branches, ...restSanitized } = sanitized;
   const tdsMapping = sanitizeVendorTdsForSave(restSanitized.tdsMapping ?? tdsMappings);
+  const vendorBranches = sanitizeVendorBranchesForSave(
+    restSanitized.vendorBranches ?? vendor_branches ?? branches,
+  );
 
   if (Array.isArray(restSanitized.gstRegistrations) && restSanitized.gstRegistrations.length > 0) {
     const cleanedRegistrations = sanitizeGstRegistrationsForSave(restSanitized.gstRegistrations);
     return {
       ...restSanitized,
       gstRegistrations: cleanedRegistrations,
+      vendorBranches,
       gstin: cleanedRegistrations[0]?.gstin || restSanitized.gstin || '',
       documents: sanitizeVendorDocumentsForSave(restSanitized.documents),
       tdsMapping,
@@ -62,6 +88,7 @@ export const normalizeVendorForSave = (vendor = {}) => {
   if (!gstin) {
     return {
       ...restSanitized,
+      vendorBranches,
       documents: sanitizeVendorDocumentsForSave(restSanitized.documents),
       tdsMapping,
     };
@@ -71,6 +98,7 @@ export const normalizeVendorForSave = (vendor = {}) => {
     ...restSanitized,
     documents: sanitizeVendorDocumentsForSave(restSanitized.documents),
     tdsMapping,
+    vendorBranches,
     gstRegistrations: [
       {
         gstin,

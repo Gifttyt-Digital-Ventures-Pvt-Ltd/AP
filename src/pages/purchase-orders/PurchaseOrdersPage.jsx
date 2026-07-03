@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   useGetVendorsQuery,
   useRequestVendorAdditionMutation,
@@ -19,6 +19,8 @@ import {
   useScanPurchaseOrderMutation,
 } from '../../Services/apis/purchaseOrdersMasterDataApi';
 import { useGetOrganisationQuery } from '../../Services/apis/settingsApi';
+import { isBranchEnabled as isBranchEnabledForCorporate } from '../../utils/invoiceConfiguration';
+import { normalizeOrganisationBranchesFromApi } from '../../utils/organisationGst';
 import { toast } from 'sonner';
 import { statusColors } from './constants';
 import {
@@ -96,6 +98,12 @@ const createDefaultPoForm = (defaultCurrency = 'INR', formatId = 'default-format
   vendor_gst_registration_id: '',
   vendor_gstin: '',
   vendor_pan: '',
+  branch_name: '',
+  branch_code: '',
+  billing_gstin: '',
+  vendor_branch_name: '',
+  vendor_branch_code: '',
+  vendor_branch_gstin: '',
   po_date: new Date().toISOString().split('T')[0],
   valid_till: '',
   expected_delivery_date: '',
@@ -120,6 +128,12 @@ const buildPoEditForm = (po = {}, fallbackFormatId = 'default-format') => ({
   vendor_gst_registration_id: po.vendor_gst_registration_id || po.vendorGstRegistrationId || po.vendorRegistrationId || '',
   vendor_gstin: po.vendor_gstin || po.vendorGstin || '',
   vendor_pan: po.vendor_pan || po.vendorPan || '',
+  branch_name: po.branch_name || po.branchName || '',
+  branch_code: po.branch_code || po.branchCode || '',
+  billing_gstin: po.billing_gstin || po.billingGstin || '',
+  vendor_branch_name: po.vendor_branch_name || po.vendorBranchName || '',
+  vendor_branch_code: po.vendor_branch_code || po.vendorBranchCode || '',
+  vendor_branch_gstin: po.vendor_branch_gstin || po.vendorBranchGstin || '',
   po_date: String(po.po_date || po.poDate || '').slice(0, 10) || new Date().toISOString().split('T')[0],
   valid_till: String(po.valid_till || po.validTill || '').slice(0, 10),
   expected_delivery_date: String(po.expected_delivery_date || po.expectedDeliveryDate || '').slice(0, 10),
@@ -236,7 +250,7 @@ const extractPurchaseOrderScanData = (response = {}) => {
 const PurchaseOrdersPage = () => {
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
-  const { isCorporateSectionEnabled } = useRBAC();
+  const { isCorporateSectionEnabled, corporateScreens } = useRBAC();
   const { setHideSidebar } = useSidebar();
   const canManagePo = canPerformAction('po.create');
   const canRequestVendorFromPo = canManagePo || canPerformAction('invoices.addVendor');
@@ -267,6 +281,17 @@ const PurchaseOrdersPage = () => {
     refetch: refetchVendors,
   } = useGetVendorsQuery();
   const { data: organisationData } = useGetOrganisationQuery();
+  const isBranchEnabled = useMemo(
+    () =>
+      isBranchEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const organisationBranches = useMemo(
+    () => normalizeOrganisationBranchesFromApi(organisationData),
+    [organisationData],
+  );
 
   const tenantBranding = {
     companyName:
@@ -1088,6 +1113,7 @@ const PurchaseOrdersPage = () => {
         setShowViewDialog={setShowViewDialog}
         canManagePo={canManagePo}
         onEditPO={openEditPoDialog}
+        showBranchField={isBranchEnabled}
       />
 
       <PoFormDialog
@@ -1115,6 +1141,8 @@ const PurchaseOrdersPage = () => {
         handleCreatePO={handleCreatePO}
         onBeforePreview={handlePoPreviewCheck}
         createAction={createAction}
+        showBranchField={isBranchEnabled}
+        organisationBranches={organisationBranches}
       />
 
       <PoFormatBuilderDialog
@@ -1224,6 +1252,8 @@ const PurchaseOrdersPage = () => {
                   }
                   : null
               }
+              showBranchField={isBranchEnabled}
+              organisationBranches={organisationBranches}
             />
             ) : null
           )}

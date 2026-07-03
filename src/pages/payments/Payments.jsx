@@ -66,6 +66,8 @@ import { useMeteredActionEstimate } from '../../hooks/useMeteredActionEstimate';
 import { useRBAC } from '../../contexts/RBACContext';
 import { useCurrencyFilter } from '../../hooks/useCurrencyFilter';
 import { CURRENCY_SCREENS } from '../../utils/currency';
+import { isBranchEnabled as isBranchEnabledForCorporate } from '../../utils/invoiceConfiguration';
+import { OrgBranchCell, VendorWithBranchCell } from '../../components/common/BranchTableCells';
 
 const safeLower = (value) => String(value ?? '').toLowerCase();
 
@@ -75,8 +77,9 @@ const safeFormatDate = (value, pattern = 'dd MMM yy') => {
   return Number.isNaN(date.getTime()) ? '-' : format(date, pattern);
 };
 
-const batchInvoiceTableHeader = [
+const baseBatchInvoiceTableHeader = [
   { key: 'invoiceNumber', title: 'Invoice', cellClassName: 'font-medium' },
+  { key: 'orgBranch', title: 'Branch', cellClassName: 'text-sm' },
   { key: 'vendorName', title: 'Vendor' },
   { key: 'amount', title: 'Amount' },
   { key: 'status', title: 'Status' },
@@ -131,6 +134,7 @@ const Payments = () => {
     isConnectedBankingEnabled,
     isCategoryFeatureEnabled,
     isCampaignFeatureEnabled,
+    corporateScreens,
   } = useRBAC();
   const {
     currencies,
@@ -243,12 +247,16 @@ const Payments = () => {
   });
 
   const payments = Array.isArray(paymentsData) ? paymentsData.map(normalizePayment) : [];
-  const pendingPaymentInvoices = getInvoiceListItems(pendingPaymentInvoicesListData).map(normalizeInvoice);
+  const pendingPaymentInvoices = getInvoiceListItems(pendingPaymentInvoicesListData).map((invoice) =>
+    toInvoiceUiPayload(invoice),
+  );
   const allInvoices = useMemo(
     () => getInvoiceListItems(allInvoicesListData).map((invoice) => toInvoiceUiPayload(invoice)),
     [allInvoicesListData],
   );
-  const pendingApproverInvoices = getInvoiceListItems(pendingApproverInvoicesListData).map(normalizeInvoice);
+  const pendingApproverInvoices = getInvoiceListItems(pendingApproverInvoicesListData).map((invoice) =>
+    toInvoiceUiPayload(invoice),
+  );
   const invoices = pendingPaymentInvoices;
   const bulkPaymentEstimate = useMeteredActionEstimate(
     CREDIT_ACTION_CODES.PAYMENT_PROCESSING,
@@ -256,6 +264,20 @@ const Payments = () => {
   );
   const batchEligibleInvoices = [...pendingPaymentInvoices, ...pendingApproverInvoices];
   const bankAccounts = Array.isArray(bankAccountsData) ? bankAccountsData : [];
+  const isBranchEnabled = useMemo(
+    () =>
+      isBranchEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const batchInvoiceTableHeader = useMemo(
+    () =>
+      isBranchEnabled
+        ? baseBatchInvoiceTableHeader
+        : baseBatchInvoiceTableHeader.filter((header) => header.key !== 'orgBranch'),
+    [isBranchEnabled],
+  );
 
   useEffect(() => {
     if (!createBatchDialogOpen || !isConnectedBankingEnabled || createBatchForm.bank_account_id) {
@@ -772,6 +794,12 @@ const Payments = () => {
           case 'amount':
             value = `₹${Number(invoice.amount || 0).toLocaleString('en-IN')}`;
             break;
+          case 'vendorName':
+            value = <VendorWithBranchCell record={invoice} />;
+            break;
+          case 'orgBranch':
+            value = <OrgBranchCell record={invoice} />;
+            break;
           default:
             value = invoice?.[header.key] || '-';
         }
@@ -972,6 +1000,7 @@ const Payments = () => {
               Boolean(invoice?.id) && isInvoiceCancellable(invoice)
             }
             handleCancelInvoice={handleCancelInvoice}
+            showBranchField={isBranchEnabled}
           />
         </TabsContent>
 
@@ -982,6 +1011,7 @@ const Payments = () => {
             resolvePaymentInvoice={resolvePaymentInvoice}
             handleViewPaymentInvoice={handleViewPaymentInvoice}
             handleDownloadPaymentInvoice={handleDownloadPaymentInvoice}
+            showBranchField={isBranchEnabled}
           />
         </TabsContent>
       </Tabs>

@@ -36,6 +36,7 @@ import {
   normalizePoTemplateCode,
 } from "../utils";
 import PoLogo from "./PoLogo";
+import { OrgBranchDetail, VendorBranchDetail } from "../../../components/common/BranchTableCells";
 
 const PoDetailsDialog = ({
   showViewDialog,
@@ -332,6 +333,8 @@ const PoDetailsDialog = ({
                               PAN: {selectedPO.vendor_pan}
                             </p>
                           )}
+                        <OrgBranchDetail record={selectedPO} label="Organisation Branch" />
+                        <VendorBranchDetail record={selectedPO} label="Vendor Branch" />
                       </section>
                     )}
 

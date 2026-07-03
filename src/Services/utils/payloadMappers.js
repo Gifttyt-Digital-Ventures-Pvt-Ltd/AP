@@ -52,6 +52,10 @@ export const toVendorApiPayload = (vendor = {}) => {
     gst_regs,
     gstRegs,
     gst_registrations,
+    vendorBranches,
+    vendor_branches,
+    branchDetails,
+    branch_details,
   } = vendor;
 
   const resolvedMsme = parseMsmeValue(msme);
@@ -63,6 +67,8 @@ export const toVendorApiPayload = (vendor = {}) => {
   );
   const resolvedGstRegistrations =
     gstRegistrations ?? gst_regs ?? gstRegs ?? gst_registrations ?? undefined;
+  const resolvedVendorBranches =
+    vendorBranches ?? vendor_branches ?? branchDetails ?? branch_details ?? undefined;
   const resolvedDocuments = documents ?? vendorDocuments ?? vendor_documents ?? undefined;
 
   return {
@@ -95,6 +101,9 @@ export const toVendorApiPayload = (vendor = {}) => {
     ...(resolvedDocuments !== undefined ? { documents: resolvedDocuments } : {}),
     ...(resolvedGstRegistrations !== undefined
       ? { gstRegistrations: resolvedGstRegistrations }
+      : {}),
+    ...(resolvedVendorBranches !== undefined
+      ? { vendorBranches: resolvedVendorBranches }
       : {}),
     ...(resolvedTdsMapping ? { tdsMapping: resolvedTdsMapping } : {}),
     ...(status ? { status } : {}),
@@ -141,6 +150,12 @@ export const toVendorUiPayload = (vendor = {}) => ({
   vendor_type: vendor.vendor_type ?? vendor.vendorType,
   gstin: String(vendor.gstin || '').trim().toUpperCase() || vendor.gstin || '',
   gstRegistrations: buildUiVendorGstRegistrations(vendor),
+  vendorBranches:
+    vendor.vendorBranches ??
+    vendor.vendor_branches ??
+    vendor.branchDetails ??
+    vendor.branch_details ??
+    [],
   documents: vendor.documents ?? vendor.vendorDocuments ?? vendor.vendor_documents ?? {},
   tdsMapping:
     vendor.tdsMapping ??

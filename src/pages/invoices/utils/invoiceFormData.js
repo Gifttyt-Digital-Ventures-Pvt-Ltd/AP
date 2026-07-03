@@ -112,6 +112,26 @@ export const buildInvoiceEditFormData = (
       invoice.billingGstin ||
       invoice.billing_gstin ||
       "",
+    branchName:
+      invoice.branchName ||
+      invoice.branch_name ||
+      "",
+    branchCode:
+      invoice.branchCode ||
+      invoice.branch_code ||
+      "",
+    vendorBranchName:
+      invoice.vendorBranchName ||
+      invoice.vendor_branch_name ||
+      "",
+    vendorBranchCode:
+      invoice.vendorBranchCode ||
+      invoice.vendor_branch_code ||
+      "",
+    vendorBranchGstin:
+      invoice.vendorBranchGstin ||
+      invoice.vendor_branch_gstin ||
+      "",
     gstTreatment: invoice.gstTreatment || invoice.gstTreatment || defaultGstTreatment,
     gstin: resolveInvoiceFormGstin(invoice, vendor),
     sourceOfSupply: sourceOfSupply,

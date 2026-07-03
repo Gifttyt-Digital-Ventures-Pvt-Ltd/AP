@@ -6,6 +6,7 @@ import {
   useGetVendorAnalyticsQuery,
   useGetTaxReportsQuery,
   useGetPaymentAnalyticsQuery,
+  useGetBranchCostAnalysisQuery,
 } from "../../../Services/apis/dashboardReportsApi";
 import { useRBAC } from "../../../contexts/RBACContext";
 import { useCurrencyFilter } from "../../../hooks/useCurrencyFilter";
@@ -15,9 +16,18 @@ import {
   formatCurrency as formatCurrencyValue,
   normalizeCurrencyCode,
 } from "../../../utils/currency";
+import {
+  getBranchCostStatuses,
+  isBranchCostAnalysisEnabled as isBranchCostAnalysisEnabledForCorporate,
+} from "../../../utils/invoiceConfiguration";
+import {
+  BRANCH_COST_DEFAULT_PERIOD,
+  BRANCH_COST_PAGE_SIZE,
+  normalizeBranchCostPagination,
+} from "../utils/branchCostAnalysis";
 
 export function useReportsData() {
-  const { isCorporateSectionEnabled } = useRBAC();
+  const { isCorporateSectionEnabled, corporateScreens } = useRBAC();
   const {
     currencies,
     selectedCurrency,
@@ -58,7 +68,10 @@ export function useReportsData() {
   const [activeTab, setActiveTab] = useState("executive");
   const [dateRange, setDateRange] = useState("30");
   const [customDays, setCustomDays] = useState("");
+  const [branchCostPeriod, setBranchCostPeriod] = useState(BRANCH_COST_DEFAULT_PERIOD);
+  const [branchCostPage, setBranchCostPage] = useState(0);
 
+  const isPaymentsEnabled = isCorporateSectionEnabled("PAYMENTS_ALL");
   const canViewExecutiveReports =
     isCorporateSectionEnabled("REPORTS_EXECUTIVE");
   const canViewApReports = isCorporateSectionEnabled("REPORTS_AP");
@@ -106,10 +119,32 @@ export function useReportsData() {
 
   const days = getDays();
   const shouldSkip = !days || Number.isNaN(days) || days <= 0;
+  const activeInvoiceConfiguration =
+    corporateScreens?.activeInvoiceConfiguration ?? [];
+  const isBranchCostAnalysisEnabled = useMemo(
+    () => isBranchCostAnalysisEnabledForCorporate(activeInvoiceConfiguration),
+    [activeInvoiceConfiguration],
+  );
+  const branchCostStatuses = useMemo(
+    () => getBranchCostStatuses(isPaymentsEnabled).join(","),
+    [isPaymentsEnabled],
+  );
+  const branchCostOffset = branchCostPage * BRANCH_COST_PAGE_SIZE;
+  const branchCostQueryArgs = {
+    dateRange: branchCostPeriod,
+    costStatuses: branchCostStatuses,
+    limit: BRANCH_COST_PAGE_SIZE,
+    offset: branchCostOffset,
+    ...(currencyParam ? { currency: currencyParam } : {}),
+  };
   const reportQueryArgs = {
     days,
     ...(currencyParam ? { currency: currencyParam } : {}),
   };
+
+  useEffect(() => {
+    setBranchCostPage(0);
+  }, [branchCostPeriod, currencyParam]);
 
   const {
     data: executiveData = null,
@@ -118,6 +153,14 @@ export function useReportsData() {
     refetch: refetchExecutiveDashboard,
   } = useGetExecutiveDashboardQuery(reportQueryArgs, {
     skip: shouldSkip || !canViewExecutiveReports,
+  });
+  const {
+    data: branchCostData = null,
+    isLoading: branchCostLoading,
+    isFetching: branchCostFetching,
+    refetch: refetchBranchCostAnalysis,
+  } = useGetBranchCostAnalysisQuery(branchCostQueryArgs, {
+    skip: !canViewExecutiveReports || !isBranchCostAnalysisEnabled,
   });
   const {
     data: apData = null,
@@ -152,6 +195,15 @@ export function useReportsData() {
     skip: shouldSkip || !canViewPaymentReports,
   });
 
+  const branchCostPagination = useMemo(
+    () =>
+      normalizeBranchCostPagination(branchCostData, {
+        limit: BRANCH_COST_PAGE_SIZE,
+        offset: branchCostOffset,
+      }),
+    [branchCostData, branchCostOffset],
+  );
+
   const loading =
     (canViewExecutiveReports && (executiveLoading || executiveFetching)) ||
     (canViewApReports && (apLoading || apFetching)) ||
@@ -166,6 +218,9 @@ export function useReportsData() {
       await Promise.all([
         canViewExecutiveReports
           ? refetchExecutiveDashboard()
+          : Promise.resolve(),
+        canViewExecutiveReports && isBranchCostAnalysisEnabled
+          ? refetchBranchCostAnalysis()
           : Promise.resolve(),
         canViewApReports ? refetchApReports() : Promise.resolve(),
         canViewVendorReports ? refetchVendorAnalytics() : Promise.resolve(),
@@ -193,6 +248,14 @@ export function useReportsData() {
     loading,
     fetchAllData,
     executiveData,
+    branchCostData,
+    branchCostLoading: branchCostLoading || branchCostFetching,
+    branchCostPeriod,
+    setBranchCostPeriod,
+    branchCostPage,
+    setBranchCostPage,
+    branchCostPagination,
+    isBranchCostAnalysisEnabled,
     apData,
     vendorData,
     taxData,

@@ -134,10 +134,12 @@ import {
   normalizeCurrencyCode,
 } from "../../utils/currency";
 import {
+  isBranchEnabled as isBranchEnabledForCorporate,
   isCheckerEditEnabled as isCheckerEditEnabledForCorporate,
   isCheckerEditForbiddenError,
   isRefNoEnabled as isRefNoEnabledForCorporate,
 } from "../../utils/invoiceConfiguration";
+import { OrgBranchCell } from "../../components/common/BranchTableCells";
 import {
   buildCurrentUserIdentity,
   canDeleteInvoice,
@@ -488,12 +490,29 @@ const InvoicesPage = () => {
       ),
     [corporateScreens?.activeInvoiceConfiguration],
   );
+  const isBranchEnabled = useMemo(
+    () =>
+      isBranchEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
   const invoiceTableHeader = useMemo(() => {
-    const headers = isRefNoEnabled
+    let headers = isRefNoEnabled
       ? baseInvoiceTableHeader
       : baseInvoiceTableHeader.filter((column) => column.key !== "refNo");
+    if (isBranchEnabled) {
+      const invoiceNumberIndex = headers.findIndex((column) => column.key === "invoiceNumber");
+      if (invoiceNumberIndex !== -1) {
+        headers = [
+          ...headers.slice(0, invoiceNumberIndex + 1),
+          { key: "orgBranch", title: "Branch", cellClassName: "text-sm" },
+          ...headers.slice(invoiceNumberIndex + 1),
+        ];
+      }
+    }
     return withIntegrationTableHeader(headers, showIntegrationColumn);
-  }, [isRefNoEnabled, showIntegrationColumn]);
+  }, [isRefNoEnabled, isBranchEnabled, showIntegrationColumn]);
   const invoiceEditContext = useMemo(
     () => ({
       ...buildCurrentUserIdentity({ user, corporateUserContext }),
@@ -2015,6 +2034,7 @@ const InvoicesPage = () => {
         TAX_RATES={TAX_RATES}
         showBillingGst={isEdit || Boolean(uploadedFile)}
         requireBillingGst={(isEdit && !isSavedDraft) || Boolean(uploadedFile)}
+        showBranchField={isBranchEnabled}
         showInvoiceMatching={showInvoiceMatchingSelection}
         canUseThreeWayMatching={canUseThreeWayMatching}
       />
@@ -2085,6 +2105,9 @@ const InvoicesPage = () => {
             break;
           case "refNo":
             value = invoice.refNo || "-";
+            break;
+          case "orgBranch":
+            value = <OrgBranchCell record={invoice} />;
             break;
           case "grossAmount":
             value = formatInvoiceAmount(

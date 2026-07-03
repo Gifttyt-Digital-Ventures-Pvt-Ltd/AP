@@ -222,6 +222,11 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
     fileCategory: pickInvoiceField(invoice, "fileCategory", "file_category"),
     workItemId: pickInvoiceField(invoice, "workItemId", "work_item_id"),
     branchName: pickInvoiceField(invoice, "branchName", "branch_name"),
+    branchCode: pickInvoiceField(invoice, "branchCode", "branch_code"),
+    branchId: pickInvoiceField(invoice, "branchId", "branch_id"),
+    vendorBranchName: pickInvoiceField(invoice, "vendorBranchName", "vendor_branch_name"),
+    vendorBranchCode: pickInvoiceField(invoice, "vendorBranchCode", "vendor_branch_code"),
+    vendorBranchGstin: pickInvoiceField(invoice, "vendorBranchGstin", "vendor_branch_gstin"),
     poNumber: pickInvoiceField(invoice, "poNumber", "po_number"),
     poId: pickInvoiceField(invoice, "poId", "po_id"),
     grnNumber: pickInvoiceField(invoice, "grnNumber", "grn_number"),
@@ -401,6 +406,11 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
     fileCategory:
       pickInvoiceField(invoice, "fileCategory", "file_category", "Expense Invoice"),
     branchName: pickInvoiceField(invoice, "branchName", "branch_name", ""),
+    branchCode: pickInvoiceField(invoice, "branchCode", "branch_code", ""),
+    branchId: pickInvoiceField(invoice, "branchId", "branch_id", ""),
+    vendorBranchName: pickInvoiceField(invoice, "vendorBranchName", "vendor_branch_name", ""),
+    vendorBranchCode: pickInvoiceField(invoice, "vendorBranchCode", "vendor_branch_code", ""),
+    vendorBranchGstin: pickInvoiceField(invoice, "vendorBranchGstin", "vendor_branch_gstin", ""),
     workItemId: pickInvoiceField(invoice, "workItemId", "work_item_id", ""),
     departmentId: normalizeDepartmentId(
       pickInvoiceField(invoice, "departmentId", "department_id"),

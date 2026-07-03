@@ -6,6 +6,7 @@ import { TAX_RATES } from "../constants";
 import { buildInvoiceEditFormData } from "../utils/invoiceFormData";
 import {
   calculateInvoiceTotals,
+  formatInrTaxPercent,
   INVOICE_LEVEL,
   isInrInvoiceCurrency,
   parseTaxRateFromLabel,
@@ -246,6 +247,14 @@ const InvoiceReadOnlyDetails = ({
 
         <div className="grid grid-cols-2 gap-3">
           <DetailField label="GST Treatment" value={formData.gstTreatment} />
+          <DetailField
+            label="Branch"
+            value={
+              formData.branchName && formData.branchCode
+                ? `${formData.branchName} (${formData.branchCode})`
+                : formData.branchName || formData.branchCode
+            }
+          />
           <DetailField label="Billing GSTIN" value={formData.billingGstin} mono />
           <DetailField label="GSTIN / Tax ID" value={formData.gstin} mono />
           <DetailField label="Source of Supply" value={formData.sourceOfSupply} />
@@ -389,19 +398,28 @@ const InvoiceReadOnlyDetails = ({
         )}
         {useInrTax && totals.cgst > 0 && (
           <div className="flex justify-between text-xs">
-            <span>CGST</span>
+            <span>
+              CGST
+              {totals.cgstRate > 0 ? ` ${formatInrTaxPercent(totals.cgstRate)}` : ""}
+            </span>
             <span className=" ">{formatAmount(totals.cgst)}</span>
           </div>
         )}
         {useInrTax && totals.sgst > 0 && (
           <div className="flex justify-between text-xs">
-            <span>SGST</span>
+            <span>
+              SGST
+              {totals.sgstRate > 0 ? ` ${formatInrTaxPercent(totals.sgstRate)}` : ""}
+            </span>
             <span className=" ">{formatAmount(totals.sgst)}</span>
           </div>
         )}
         {useInrTax && totals.igst > 0 && (
           <div className="flex justify-between text-xs">
-            <span>IGST</span>
+            <span>
+              IGST
+              {totals.igstRate > 0 ? ` ${formatInrTaxPercent(totals.igstRate)}` : ""}
+            </span>
             <span className=" ">{formatAmount(totals.igst)}</span>
           </div>
         )}
