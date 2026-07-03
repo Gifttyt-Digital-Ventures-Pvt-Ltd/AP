@@ -234,6 +234,71 @@ export const getPincodeValidationError = (
 
 const getDigitsOnly = (value) => String(value || '').replace(/\D/g, '');
 
+const GST_REGISTRATION_FIELD_GETTERS = {
+  [VENDOR_FIELD_SECTIONS.ADDRESS_LINE_1]: (registration) =>
+    registration?.location?.addressLine1 ?? registration?.location?.address_line1,
+  [VENDOR_FIELD_SECTIONS.ADDRESS_LINE_2]: (registration) =>
+    registration?.location?.addressLine2 ?? registration?.location?.address_line2,
+  [VENDOR_FIELD_SECTIONS.CITY]: (registration) => registration?.location?.city,
+  [VENDOR_FIELD_SECTIONS.STATE]: (registration) =>
+    registration?.location?.state ?? registration?.state,
+  [VENDOR_FIELD_SECTIONS.PINCODE]: (registration) =>
+    registration?.location?.pincode ?? registration?.location?.postalCode ?? registration?.location?.postal_code,
+  [VENDOR_FIELD_SECTIONS.COUNTRY]: (registration) => registration?.location?.country,
+  [VENDOR_FIELD_SECTIONS.ACCOUNT_NAME]: (registration) =>
+    registration?.bankDetails?.accountHolderName ?? registration?.bankDetails?.account_holder_name,
+  [VENDOR_FIELD_SECTIONS.ACCOUNT_NUMBER]: (registration) =>
+    registration?.bankDetails?.accountNumber ?? registration?.bankDetails?.account_number,
+  [VENDOR_FIELD_SECTIONS.IFSC_CODE]: (registration) =>
+    registration?.bankDetails?.ifscCode ?? registration?.bankDetails?.ifsc_code,
+  [VENDOR_FIELD_SECTIONS.BANK_NAME]: (registration) =>
+    registration?.bankDetails?.bankName ?? registration?.bankDetails?.bank_name,
+  [VENDOR_FIELD_SECTIONS.BRANCH]: (registration) => registration?.bankDetails?.branch,
+};
+
+const GST_REGISTRATION_OWNED_SECTIONS = new Set(Object.keys(GST_REGISTRATION_FIELD_GETTERS));
+
+const hasRegistrationFieldValue = (registration, section) => {
+  const value = GST_REGISTRATION_FIELD_GETTERS[section]?.(registration);
+  return Boolean(String(value ?? '').trim());
+};
+
+const getVendorGstRegistrationValidationErrors = (
+  vendor = {},
+  {
+    activeVendorFields = [],
+    vendorFieldConfiguration = [],
+    prefix = '',
+  } = {},
+) => {
+  const requiredSections = normalizeActiveVendorFields(activeVendorFields)
+    .filter((section) => GST_REGISTRATION_OWNED_SECTIONS.has(section));
+  if (requiredSections.length === 0) return [];
+
+  const registrations =
+    vendor.gstRegistrations ??
+    vendor.gst_regs ??
+    vendor.gstRegs ??
+    vendor.gst_registrations;
+  const filledRegistrations = (Array.isArray(registrations) ? registrations : [])
+    .filter((registration) => String(registration?.gstin ?? registration?.gstIn ?? registration?.gst ?? '').trim());
+
+  if (filledRegistrations.length === 0) return [];
+
+  const errors = [];
+  filledRegistrations.forEach((registration, index) => {
+    requiredSections.forEach((section) => {
+      if (!hasRegistrationFieldValue(registration, section)) {
+        const label = getVendorFieldDisplayName(section, vendorFieldConfiguration);
+        const gstin = String(registration?.gstin ?? registration?.gstIn ?? registration?.gst ?? '').trim();
+        errors.push(`${prefix}GST registration ${gstin || index + 1}: ${label} is required`);
+      }
+    });
+  });
+
+  return errors;
+};
+
 const getVendorFormatValidationErrors = (vendor = {}, { prefix = '' } = {}) => {
   const errors = [];
   const email = String(vendor.email || '').trim();
@@ -329,7 +394,8 @@ export const getVendorValidationErrors = (
 
   const prefix = rowIndex !== null && rowIndex !== undefined ? `Row ${rowIndex + 2}: ` : '';
   const errors = [];
-  const requiredSections = normalizeActiveVendorFields(activeVendorFields);
+  const requiredSections = normalizeActiveVendorFields(activeVendorFields)
+    .filter((section) => !GST_REGISTRATION_OWNED_SECTIONS.has(section));
 
   requiredSections.forEach((section) => {
     if (!hasVendorFieldValue(section, vendor)) {
@@ -338,7 +404,15 @@ export const getVendorValidationErrors = (
     }
   });
 
-  return [...errors, ...getVendorFormatValidationErrors(vendor, { prefix })];
+  return [
+    ...errors,
+    ...getVendorGstRegistrationValidationErrors(vendor, {
+      activeVendorFields,
+      vendorFieldConfiguration,
+      prefix,
+    }),
+    ...getVendorFormatValidationErrors(vendor, { prefix }),
+  ];
 };
 
 /**
