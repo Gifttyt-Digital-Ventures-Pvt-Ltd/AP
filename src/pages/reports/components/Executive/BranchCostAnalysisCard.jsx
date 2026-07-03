@@ -26,10 +26,10 @@ import {
 const tableHeader = [
   { key: 'branchName', title: 'Branch Name', cellClassName: 'font-medium' },
   { key: 'branchCode', title: 'Branch Code', cellClassName: 'text-sm' },
-  { key: 'areaSqft', title: 'Area (sq ft)', cellClassName: 'text-sm text-right' },
-  { key: 'totalCost', title: 'Total Cost', cellClassName: 'text-sm font-semibold text-right' },
-  { key: 'costPerSqft', title: 'Cost / sq ft', cellClassName: 'text-sm text-right' },
-  { key: 'invoiceCount', title: 'No. of Invoices', cellClassName: 'text-sm text-right' },
+  { key: 'areaSqft', title: 'Area (sq ft)', cellClassName: 'text-sm text-left' },
+  { key: 'totalCost', title: 'Total Cost', cellClassName: 'text-sm font-semibold text-left' },
+  { key: 'costPerSqft', title: 'Cost / sq ft', cellClassName: 'text-sm text-left' },
+  { key: 'invoiceCount', title: 'No. of Invoices', cellClassName: 'text-sm text-left' },
 ];
 
 const normalizeBranchCostRow = (row = {}) => {

@@ -255,6 +255,16 @@ const InvoiceReadOnlyDetails = ({
                 : formData.branchName || formData.branchCode
             }
           />
+          {(formData.vendorBranchName || formData.vendorBranchCode) && (
+            <DetailField
+              label="Vendor Branch"
+              value={
+                formData.vendorBranchName && formData.vendorBranchCode
+                  ? `${formData.vendorBranchName} (${formData.vendorBranchCode})`
+                  : formData.vendorBranchName || formData.vendorBranchCode
+              }
+            />
+          )}
           <DetailField label="Billing GSTIN" value={formData.billingGstin} mono />
           <DetailField label="GSTIN / Tax ID" value={formData.gstin} mono />
           <DetailField label="Source of Supply" value={formData.sourceOfSupply} />

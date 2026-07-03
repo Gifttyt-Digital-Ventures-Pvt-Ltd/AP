@@ -725,7 +725,7 @@ const Settings = () => {
                   </div>
                 </div>
 
-                <div className="sticky bottom-0 -mx-6 mt-2 border-t border-border bg-card/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-card/85">
+                <div className="sticky bottom-[-24px] -mx-6 mt-2 border-t border-border bg-card/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-card/85">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <p className="text-sm text-muted-foreground">
                       Review your changes, then {organisationSaveLabel.toLowerCase()}.
