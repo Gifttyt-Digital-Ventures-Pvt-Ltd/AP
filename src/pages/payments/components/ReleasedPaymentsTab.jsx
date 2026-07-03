@@ -8,9 +8,11 @@ import useZohoIntegrationActive from '../../../hooks/useZohoIntegrationActive';
 import { formatCurrency } from '../../../utils/currency';
 import { withIntegrationTableHeader } from '../../../utils/integrationProvenance';
 import { formatInvoiceAmount } from '../../invoices/utils/invoiceAmounts';
+import { OrgBranchCell, VendorWithBranchCell } from '../../../components/common/BranchTableCells';
 
 const baseReleasedPaymentTableHeader = [
   { key: 'invoiceNumber', title: 'Invoice #', cellClassName: "  font-medium" },
+  { key: 'orgBranch', title: 'Branch', cellClassName: 'text-sm' },
   { key: 'vendorName', title: 'Vendor' },
   { key: 'amount', title: 'Amount', cellClassName: "  font-semibold" },
   { key: 'paymentDate', title: 'Payment Date', cellClassName: 'text-sm text-muted-foreground' },
@@ -26,12 +28,15 @@ const ReleasedPaymentsTab = ({
   resolvePaymentInvoice,
   handleViewPaymentInvoice,
   handleDownloadPaymentInvoice,
+  showBranchField = false,
 }) => {
   const { showIntegrationColumn } = useZohoIntegrationActive();
-  const releasedPaymentTableHeader = useMemo(
-    () => withIntegrationTableHeader(baseReleasedPaymentTableHeader, showIntegrationColumn),
-    [showIntegrationColumn],
-  );
+  const releasedPaymentTableHeader = useMemo(() => {
+    const headers = showBranchField
+      ? baseReleasedPaymentTableHeader
+      : baseReleasedPaymentTableHeader.filter((header) => header.key !== 'orgBranch');
+    return withIntegrationTableHeader(headers, showIntegrationColumn);
+  }, [showBranchField, showIntegrationColumn]);
 
   const renderReleasedPaymentRow = (payment, rowIndex, headers) => (
     <TableRow key={payment.id ?? rowIndex} data-testid={`payment-row-${payment.id}`}>
@@ -49,6 +54,16 @@ const ReleasedPaymentsTab = ({
           case 'paymentDate':
             value = safeFormatDate(payment.paymentDate);
             break;
+          case 'vendorName': {
+            const invoice = resolvePaymentInvoice?.(payment);
+            value = <VendorWithBranchCell record={invoice || payment} vendorName={payment.vendorName} />;
+            break;
+          }
+          case 'orgBranch': {
+            const invoice = resolvePaymentInvoice?.(payment);
+            value = <OrgBranchCell record={invoice || payment} />;
+            break;
+          }
           case 'reference_number':
             value = payment.reference_number || '-';
             break;

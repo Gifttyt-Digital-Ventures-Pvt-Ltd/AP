@@ -28,6 +28,7 @@ import { Checkbox } from "../ui/checkbox";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
 import { Input } from "../ui/input";
 import { Label } from "../ui/label";
+import AppSelect from "../common/AppSelect";
 import {
   Popover,
   PopoverAnchor,
@@ -146,6 +147,188 @@ const createEmptyGstRegistration = () => ({
   location: { country: "India" },
   bankDetails: {},
 });
+
+const createEmptyVendorBranch = () => ({
+  id: `vendor-branch-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+  branchName: "",
+  branchCode: "",
+  gstin: "",
+  isEditing: true,
+});
+
+const normalizeVendorBranches = (branches = []) =>
+  (Array.isArray(branches) ? branches : [])
+    .map((branch) => ({
+      ...branch,
+      id:
+        branch.id ||
+        branch.branchId ||
+        branch.branch_id ||
+        branch._clientId ||
+        `vendor-branch-${Math.random().toString(36).slice(2, 9)}`,
+      branchName: branch.branchName ?? branch.branch_name ?? branch.name ?? "",
+      branchCode: String(branch.branchCode ?? branch.branch_code ?? branch.code ?? "")
+        .trim()
+        .toUpperCase(),
+      gstin: String(branch.gstin ?? branch.mappedGstin ?? branch.mapped_gstin ?? branch.billingGstin ?? "")
+        .trim()
+        .toUpperCase(),
+      isEditing: branch.isEditing,
+    }))
+    .filter((branch) => branch.branchName || branch.branchCode || branch.gstin);
+
+const validateVendorBranches = (branches = [], gstRegistrations = []) => {
+  const activeBranches = normalizeVendorBranches(branches);
+  const validGstins = new Set(
+    normalizeFormGstRegistrations(gstRegistrations)
+      .map((registration) => registration.gstin)
+      .filter(Boolean),
+  );
+  const names = [];
+  const codes = [];
+
+  for (const branch of activeBranches) {
+    if (!branch.branchName) return "Branch name is required for each vendor branch.";
+    if (!branch.branchCode) return "Branch code is required for each vendor branch.";
+    if (branch.gstin && !validGstins.has(branch.gstin)) {
+      return "Vendor branch GSTIN must be selected from the vendor's added GST registrations.";
+    }
+    names.push(branch.branchName.trim().toLowerCase());
+    codes.push(branch.branchCode.trim().toLowerCase());
+  }
+
+  if (new Set(names).size !== names.length) return "Vendor branch names must be unique.";
+  if (new Set(codes).size !== codes.length) return "Vendor branch codes must be unique.";
+  return "";
+};
+
+const VendorBranchesEditor = ({ branches = [], gstRegistrations = [], onChange }) => {
+  const rows = normalizeVendorBranches(branches);
+  const gstOptions = normalizeFormGstRegistrations(gstRegistrations)
+    .map((registration) => registration.gstin)
+    .filter(Boolean)
+    .map((gstin) => ({ value: gstin, label: gstin }));
+
+  const updateRow = (id, field, value) => {
+    onChange(
+      rows.map((row) =>
+        row.id === id
+          ? {
+              ...row,
+              [field]:
+                field === "branchCode" || field === "gstin"
+                  ? String(value || "").toUpperCase()
+                  : value,
+            }
+          : row,
+      ),
+    );
+  };
+
+  const toggleEdit = (id) => {
+    onChange(rows.map((row) => (row.id === id ? { ...row, isEditing: !row.isEditing } : row)));
+  };
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+      <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <Label className="text-base font-semibold">Vendor Branches</Label>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Configure vendor branch locations and map each branch to one of the vendor GSTINs.
+          </p>
+        </div>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => onChange([...rows, createEmptyVendorBranch()])}
+          className="gap-2"
+        >
+          <Plus className="h-4 w-4" />
+          Add Vendor Branch
+        </Button>
+      </div>
+
+      <div className="overflow-x-auto rounded-lg border border-border">
+        <div className="min-w-[720px]">
+          <div className="grid grid-cols-[1.2fr_1fr_1.4fr_96px] gap-3 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
+            <div>Branch Name</div>
+            <div>Branch Code</div>
+            <div>GSTIN</div>
+            <div>Actions</div>
+          </div>
+          {rows.length ? (
+            <div className="divide-y divide-border">
+              {rows.map((row, index) => {
+                const disabled = row.isEditing === false;
+                return (
+                  <div
+                    key={row.id}
+                    className="grid grid-cols-[1.2fr_1fr_1.4fr_96px] items-center gap-3 px-3 py-3"
+                    data-testid={`vendor-branch-row-${index}`}
+                  >
+                    <Input
+                      value={row.branchName || ""}
+                      disabled={disabled}
+                      onChange={(event) => updateRow(row.id, "branchName", event.target.value)}
+                      placeholder="Branch name"
+                      className="h-8 text-sm"
+                    />
+                    <Input
+                      value={row.branchCode || ""}
+                      disabled={disabled}
+                      onChange={(event) => updateRow(row.id, "branchCode", event.target.value)}
+                      placeholder="BR-001"
+                      className="h-8 text-sm uppercase"
+                    />
+                    <AppSelect
+                      value={row.gstin || ""}
+                      onChange={(event) => updateRow(row.id, "gstin", event.target.value)}
+                      options={gstOptions}
+                      placeholder={gstOptions.length ? "Select GSTIN" : "Add GSTIN first"}
+                      className="h-8 text-sm"
+                      disabled={disabled || gstOptions.length === 0}
+                    />
+                    <div className="flex items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => toggleEdit(row.id)}
+                        aria-label={`Edit vendor branch ${index + 1}`}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onChange(rows.filter((item) => item.id !== row.id))}
+                        className="text-destructive hover:text-destructive"
+                        aria-label={`Delete vendor branch ${index + 1}`}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="px-3 py-8 text-center text-sm text-muted-foreground">
+              No vendor branches configured yet.
+            </div>
+          )}
+        </div>
+      </div>
+
+      <p className="mt-3 text-xs text-muted-foreground">
+        Multiple vendor branches can share the same GSTIN. Add GSTIN details first, then map them here.
+      </p>
+    </div>
+  );
+};
 
 const GstRegistrationsEditor = ({
   registrations,
@@ -696,6 +879,15 @@ const VendorDetailsDialog = ({
       return;
     }
 
+    const vendorBranchError = validateVendorBranches(
+      formData.vendorBranches,
+      formData.gstRegistrations,
+    );
+    if (vendorBranchError) {
+      toast.error(vendorBranchError);
+      return;
+    }
+
     const tdsErrors = getVendorTdsValidationErrors(formData.tdsMapping ?? null);
     if (tdsErrors.length > 0) {
       toast.error(tdsErrors[0]);
@@ -748,6 +940,14 @@ const VendorDetailsDialog = ({
   if (!formData) return null;
 
   const gstRegistrations = normalizeFormGstRegistrations(formData.gstRegistrations);
+  const vendorBranches = normalizeVendorBranches(formData.vendorBranches);
+
+  const updateVendorBranches = (branches) => {
+    setFormData((prev) => ({
+      ...prev,
+      vendorBranches: normalizeVendorBranches(branches),
+    }));
+  };
 
   const setFetchFeedback = (message, isError = false) => {
     setFetchMessage(message);
@@ -872,6 +1072,10 @@ const VendorDetailsDialog = ({
   const removeGstRegistration = (registrationKey) => {
     if (!registrationKey) return;
 
+    const removed = gstRegistrations.find(
+      (registration) => getRegistrationKey(registration) === registrationKey,
+    );
+
     setFormData((prev) => {
       const remaining = normalizeFormGstRegistrations(prev.gstRegistrations).filter(
         (registration) => getRegistrationKey(registration) !== registrationKey,
@@ -882,12 +1086,12 @@ const VendorDetailsDialog = ({
         ...prev,
         gstin: nextGstin,
         gstRegistrations: remaining,
+        vendorBranches: normalizeVendorBranches(prev.vendorBranches).map((branch) =>
+          branch.gstin === removed?.gstin ? { ...branch, gstin: "" } : branch,
+        ),
       };
     });
 
-    const removed = gstRegistrations.find(
-      (registration) => getRegistrationKey(registration) === registrationKey,
-    );
     if (removed?.gstin && String(formData.gstin || "").trim().toUpperCase() === removed.gstin) {
       setGstVerification({ verified: false, gstin: "", validGstin: null });
     }
@@ -1217,6 +1421,11 @@ const VendorDetailsDialog = ({
                     {isRequired(VENDOR_FIELD_SECTIONS.MSME) ? " *" : ""}
                   </Label>
                 </div>
+                <VendorBranchesEditor
+                  branches={vendorBranches}
+                  gstRegistrations={gstRegistrations}
+                  onChange={updateVendorBranches}
+                />
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-start justify-between gap-2">
                     <div>

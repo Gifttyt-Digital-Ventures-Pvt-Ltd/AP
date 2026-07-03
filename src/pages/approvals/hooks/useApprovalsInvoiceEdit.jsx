@@ -69,6 +69,7 @@ import {
 } from "../../invoices/utils/invoiceBulkUtils";
 import { getInvoiceVendorRequestValidationErrors } from "../../../utils/vendorValidation";
 import {
+  isBranchEnabled as isBranchEnabledForCorporate,
   isCheckerEditEnabled as isCheckerEditEnabledForCorporate,
   isCheckerEditForbiddenError,
 } from "../../../utils/invoiceConfiguration";
@@ -184,6 +185,13 @@ export const useApprovalsInvoiceEdit = ({
   const isCheckerEditEnabled = useMemo(
     () =>
       isCheckerEditEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const isBranchEnabled = useMemo(
+    () =>
+      isBranchEnabledForCorporate(
         corporateScreens?.activeInvoiceConfiguration ?? [],
       ),
     [corporateScreens?.activeInvoiceConfiguration],
@@ -664,6 +672,9 @@ export const useApprovalsInvoiceEdit = ({
         INVOICE_SOURCES={INVOICE_SOURCES}
         LEDGER_OPTIONS={LEDGER_OPTIONS}
         TAX_RATES={TAX_RATES}
+        showBillingGst={isEdit}
+        requireBillingGst={isEdit && !isSavedDraft}
+        showBranchField={isBranchEnabled}
       />
     );
   };

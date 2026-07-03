@@ -1,6 +1,8 @@
 export const INVOICE_CONFIG_SECTIONS = {
   CHECKER: 'CHECKER',
   REF_NO: 'REF_NO',
+  BRANCH: 'BRANCH',
+  SQ_FT: 'SQ_FT',
 };
 
 export const CHECKER_EDIT_DISABLED_MESSAGE =
@@ -16,6 +18,16 @@ export const DEFAULT_INVOICE_CONFIGURATION = [
     displayName: 'Ref No',
     screen: 'INVOICE',
     section: INVOICE_CONFIG_SECTIONS.REF_NO,
+  },
+  {
+    displayName: 'Branch',
+    screen: 'INVOICE',
+    section: INVOICE_CONFIG_SECTIONS.BRANCH,
+  },
+  {
+    displayName: 'Branch Area (Sq ft)',
+    screen: 'INVOICE',
+    section: INVOICE_CONFIG_SECTIONS.SQ_FT,
   },
 ];
 
@@ -66,6 +78,26 @@ export const isRefNoEnabled = (activeInvoiceConfiguration = []) =>
     INVOICE_CONFIG_SECTIONS.REF_NO,
     activeInvoiceConfiguration,
   );
+
+export const isBranchEnabled = (activeInvoiceConfiguration = []) =>
+  isInvoiceConfigurationEnabled(
+    INVOICE_CONFIG_SECTIONS.BRANCH,
+    activeInvoiceConfiguration,
+  );
+
+export const isBranchSqFtEnabled = (activeInvoiceConfiguration = []) =>
+  isInvoiceConfigurationEnabled(
+    INVOICE_CONFIG_SECTIONS.SQ_FT,
+    activeInvoiceConfiguration,
+  );
+
+export const isBranchCostAnalysisEnabled = (activeInvoiceConfiguration = []) =>
+  isBranchEnabled(activeInvoiceConfiguration) &&
+  isBranchSqFtEnabled(activeInvoiceConfiguration);
+
+/** Paid when Payments is subscribed; Approved otherwise (final workflow status). */
+export const getBranchCostStatuses = (isPaymentsEnabled = false) =>
+  isPaymentsEnabled ? ['PAID'] : ['APPROVED'];
 
 export const isCheckerEditForbiddenError = (error) => {
   const detail = String(error?.data?.detail ?? error?.data?.message ?? '').trim();

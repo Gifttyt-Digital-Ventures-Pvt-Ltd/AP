@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { Eye, Pencil, Search } from "lucide-react";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
@@ -7,10 +7,11 @@ import { Input } from "../../../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import AppDataTable from "../../../components/common/AppDataTable";
-import { cn } from "../../../lib/utils";
+import { OrgBranchCell, VendorWithBranchCell } from "../../../components/common/BranchTableCells";
 
-const poTableHeader = [
+const basePoTableHeader = [
   { key: "po_number", title: "PO Number", cellClassName: "font-medium" },
+  { key: "orgBranch", title: "Branch", cellClassName: "text-sm" },
   { key: "vendor_name", title: "Vendor" },
   { key: "po_date", title: "PO Date" },
   { key: "expected_delivery_date", title: "Delivery Date" },
@@ -32,7 +33,16 @@ const PoListTable = ({
   setShowViewDialog,
   canManagePo = false,
   onEditPO,
+  showBranchField = false,
 }) => {
+  const poTableHeader = useMemo(
+    () =>
+      showBranchField
+        ? basePoTableHeader
+        : basePoTableHeader.filter((header) => header.key !== "orgBranch"),
+    [showBranchField],
+  );
+
   const renderPoRow = (po, rowIndex, headers) => (
     <TableRow
       key={po.id ?? rowIndex}
@@ -44,7 +54,10 @@ const PoListTable = ({
 
         switch (header.key) {
           case "vendor_name":
-            value = po.vendor_name || "-";
+            value = <VendorWithBranchCell record={po} vendorName={po.vendor_name} />;
+            break;
+          case "orgBranch":
+            value = <OrgBranchCell record={po} />;
             break;
           case "po_date":
             value = formatDate(po.po_date);

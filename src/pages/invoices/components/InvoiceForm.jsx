@@ -30,6 +30,7 @@ import {
   LINE_ITEM_LEVEL,
   parseTaxRateFromLabel,
   remapLineItemsForCurrencyChange,
+  formatInrTaxPercent,
 } from "../utils/invoiceTax";
 import {
   formatNumericInputValue,
@@ -45,6 +46,8 @@ import {
 import {
   useGetOrganisationGstCredentialsQuery,
 } from "../../../Services/apis/taxApi";
+import { useGetOrganisationQuery } from "../../../Services/apis/settingsApi";
+import { normalizeOrganisationBranchesFromApi } from "../../../utils/organisationGst";
 import {
   useGetAvailableGrnsQuery,
   useGetAvailablePurchaseOrdersQuery,
@@ -201,9 +204,11 @@ export const InvoiceForm = ({
   TAX_RATES,
   showBillingGst = false,
   requireBillingGst = false,
+  showBranchField = false,
   showInvoiceMatching = false,
   canUseThreeWayMatching = false,
 }) => {
+  const canShowBranchField = showBillingGst && showBranchField;
   const {
     data: organisationGstCredentials = [],
     isLoading: organisationGstLoading,
@@ -211,6 +216,12 @@ export const InvoiceForm = ({
     isError: organisationGstError,
   } = useGetOrganisationGstCredentialsQuery(undefined, {
     skip: !showBillingGst,
+  });
+  const {
+    data: organisationData,
+    isFetching: organisationFetching,
+  } = useGetOrganisationQuery(undefined, {
+    skip: !canShowBranchField,
   });
   const [vendorPickerOpen, setVendorPickerOpen] = useState(false);
   const [vendorQuery, setVendorQuery] = useState("");
@@ -301,7 +312,24 @@ export const InvoiceForm = ({
     [organisationGstCredentials],
   );
 
+  const organisationBranches = useMemo(
+    () => normalizeOrganisationBranchesFromApi(organisationData),
+    [organisationData],
+  );
+
+  const branchOptions = useMemo(
+    () =>
+      organisationBranches
+        .filter((branch) => branch.branchName && branch.branchCode)
+        .map((branch) => ({
+          value: branch.branchCode,
+          label: `${branch.branchName} (${branch.branchCode})`,
+        })),
+    [organisationBranches],
+  );
+
   const organisationGstBusy = organisationGstLoading || organisationGstFetching;
+  const branchBusy = organisationFetching;
 
   useEffect(() => {
     if (!showBillingGst || organisationGstBusy || !formData) return;
@@ -357,6 +385,33 @@ export const InvoiceForm = ({
   const selectedBillingGst = organisationGstCredentials.find(
     (entry) => entry.gst === String(formData?.billingGstin || "").trim().toUpperCase(),
   );
+  const selectedBranchCode = String(formData?.branchCode || "").trim();
+  const selectedBranch = organisationBranches.find(
+    (branch) => branch.branchCode === selectedBranchCode,
+  );
+  const applyBranchSelection = (branchCode) => {
+    const branch = organisationBranches.find((entry) => entry.branchCode === branchCode);
+    setFormData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        branchCode: branch?.branchCode || "",
+        branchName: branch?.branchName || "",
+        ...(branch?.billingGstin ? { billingGstin: branch.billingGstin } : {}),
+      };
+    });
+  };
+  const clearBranchSelection = () => {
+    setFormData((prev) =>
+      prev
+        ? {
+            ...prev,
+            branchCode: "",
+            branchName: "",
+          }
+        : prev,
+    );
+  };
   const billingGstSatisfied = !requireBillingGst || Boolean(selectedBillingGst?.gst);
   const isInvoiceLevelDiscount = formData?.discountsLevel === INVOICE_LEVEL;
   const isInvoiceLevelTax = formData?.taxesLevel === INVOICE_LEVEL;
@@ -1137,28 +1192,69 @@ export const InvoiceForm = ({
 
             <div>
               {showBillingGst ? (
-                <div className="mb-3">
-                  <RequiredLabel required={requireBillingGst}>Billing GSTIN</RequiredLabel>
-                  <AppSelect
-                    value={formData.billingGstin || ""}
-                    onChange={(event) => {
-                      const nextGst = event.target.value;
-                      const matched = organisationGstCredentials.find((entry) => entry.gst === nextGst);
-                      setFormData({
-                        ...formData,
-                        billingGstin: matched?.gst || "",
-                      });
-                    }}
-                    options={billingGstOptions}
-                    placeholder={
-                      organisationGstBusy
-                        ? "Loading organisation GSTINs..."
-                        : "Select billing GSTIN"
-                    }
-                    className="h-8 text-sm"
-                    disabled={organisationGstBusy || billingGstOptions.length === 0}
-                    data-testid="invoice-preview-billing-gst-select"
-                  />
+                <div className="mb-3 space-y-3">
+                  <div className={`grid grid-cols-1 gap-3 ${canShowBranchField ? 'md:grid-cols-2' : ''}`}>
+                    {canShowBranchField ? (
+                      <div>
+                        <Label className="text-xs">Branch (Optional)</Label>
+                        <div className="flex gap-2">
+                          <AppSelect
+                            value={selectedBranchCode}
+                            onChange={(event) => applyBranchSelection(event.target.value)}
+                            options={branchOptions}
+                            placeholder={branchBusy ? "Loading branches..." : "Select branch"}
+                            className="h-8 text-sm"
+                            disabled={branchBusy || branchOptions.length === 0}
+                            data-testid="invoice-preview-branch-select"
+                          />
+                          {selectedBranchCode ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={clearBranchSelection}
+                              className="h-8 px-2 text-xs"
+                            >
+                              Clear
+                            </Button>
+                          ) : null}
+                        </div>
+                        {branchOptions.length === 0 && !branchBusy ? (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Configure branches in Settings &gt; Organisation Details.
+                          </p>
+                        ) : selectedBranch?.billingGstin ? (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Billing GSTIN is mapped from the selected branch.
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : null}
+
+                    <div>
+                      <RequiredLabel required={requireBillingGst}>Billing GSTIN</RequiredLabel>
+                      <AppSelect
+                        value={formData.billingGstin || ""}
+                        onChange={(event) => {
+                          const nextGst = event.target.value;
+                          const matched = organisationGstCredentials.find((entry) => entry.gst === nextGst);
+                          setFormData({
+                            ...formData,
+                            billingGstin: matched?.gst || "",
+                          });
+                        }}
+                        options={billingGstOptions}
+                        placeholder={
+                          organisationGstBusy
+                            ? "Loading organisation GSTINs..."
+                            : "Select billing GSTIN"
+                        }
+                        className="h-8 text-sm"
+                        disabled={organisationGstBusy || billingGstOptions.length === 0}
+                        data-testid="invoice-preview-billing-gst-select"
+                      />
+                    </div>
+                  </div>
                   {organisationGstError ? (
                     <p className="mt-1 text-xs text-destructive">
                       Failed to load organisation GSTINs. Add invoice is blocked until this loads.
@@ -1612,19 +1708,34 @@ export const InvoiceForm = ({
             )}
             {useInrTax && totals.cgst > 0 && (
               <div className="flex justify-between text-xs">
-                <span>CGST 9%</span>
+                <span>
+                  CGST
+                  {totals.cgstRate > 0
+                    ? ` ${formatInrTaxPercent(totals.cgstRate)}`
+                    : ""}
+                </span>
                 <span>{formatAmount(totals.cgst)}</span>
               </div>
             )}
             {useInrTax && totals.sgst > 0 && (
               <div className="flex justify-between text-xs">
-                <span>SGST 9%</span>
+                <span>
+                  SGST
+                  {totals.sgstRate > 0
+                    ? ` ${formatInrTaxPercent(totals.sgstRate)}`
+                    : ""}
+                </span>
                 <span>{formatAmount(totals.sgst)}</span>
               </div>
             )}
             {useInrTax && totals.igst > 0 && (
               <div className="flex justify-between text-xs">
-                <span>IGST</span>
+                <span>
+                  IGST
+                  {totals.igstRate > 0
+                    ? ` ${formatInrTaxPercent(totals.igstRate)}`
+                    : ""}
+                </span>
                 <span>{formatAmount(totals.igst)}</span>
               </div>
             )}

@@ -182,6 +182,26 @@ export const initializeInvoiceFormData = (
       extractedData?.billingGstin ||
       extractedData?.billing_gstin ||
       "",
+    branchName:
+      extractedData?.branchName ||
+      extractedData?.branch_name ||
+      "",
+    branchCode:
+      extractedData?.branchCode ||
+      extractedData?.branch_code ||
+      "",
+    vendorBranchName:
+      extractedData?.vendorBranchName ||
+      extractedData?.vendor_branch_name ||
+      "",
+    vendorBranchCode:
+      extractedData?.vendorBranchCode ||
+      extractedData?.vendor_branch_code ||
+      "",
+    vendorBranchGstin:
+      extractedData?.vendorBranchGstin ||
+      extractedData?.vendor_branch_gstin ||
+      "",
     gstTreatment: extractedData?.gstTreatment || extractedData?.gstTreatment || defaultGstTreatment,
     gstin:
       extractedData?.vendorGstin ||

@@ -1,9 +1,7 @@
 import React, { useMemo } from "react";
 import { Eye, Search } from "lucide-react";
 import AppDataTable from "../../../components/common/AppDataTable";
-import ClippedTextWithTooltip from "../../../components/common/ClippedTextWithTooltip";
-import { Button } from "../../../components/ui/button";
-import { Input } from "../../../components/ui/input";
+import { OrgBranchCell, VendorWithBranchCell } from "../../../components/common/BranchTableCells";
 import {
   Pagination,
   PaginationContent,
@@ -20,6 +18,7 @@ const baseAllInvoicesTableHeader = [
   { key: "srNo", title: "Sr. No", cellClassName: "text-sm font-medium" },
   { key: "invoiceNumber", title: "Invoice #", cellClassName: "font-medium" },
   { key: "refNo", title: "Ref No", cellClassName: "font-mono text-sm" },
+  { key: "orgBranch", title: "Branch", cellClassName: "text-sm" },
   { key: "vendorName", title: "Vendor" },
   { key: "approval", title: "Approval" },
   { key: "amount", title: "Amount", cellClassName: "font-semibold" },
@@ -52,6 +51,7 @@ const AllInvoicesTable = ({
   onPageChange,
   isLoading = false,
   showRefNoField = false,
+  showBranchField = false,
   getStatusBadgeClass,
   formatStatus,
   getApprovalProgress,
@@ -69,13 +69,15 @@ const AllInvoicesTable = ({
     hasMore = false,
   } = pagination ?? {};
 
-  const tableHeader = useMemo(
-    () =>
-      showRefNoField
-        ? baseAllInvoicesTableHeader
-        : baseAllInvoicesTableHeader.filter((column) => column.key !== "refNo"),
-    [showRefNoField],
-  );
+  const tableHeader = useMemo(() => {
+    let headers = showRefNoField
+      ? baseAllInvoicesTableHeader
+      : baseAllInvoicesTableHeader.filter((column) => column.key !== "refNo");
+    if (!showBranchField) {
+      headers = headers.filter((column) => column.key !== "orgBranch");
+    }
+    return headers;
+  }, [showRefNoField, showBranchField]);
 
   const renderAllInvoiceRow = (invoice, rowIndex, headers) => {
     const progress = getApprovalProgress(invoice);
@@ -101,7 +103,10 @@ const AllInvoicesTable = ({
               );
               break;
             case "vendorName":
-              value = <ClippedTextWithTooltip text={invoice.vendorName} />;
+              value = <VendorWithBranchCell record={invoice} />;
+              break;
+            case "orgBranch":
+              value = <OrgBranchCell record={invoice} />;
               break;
             case "approval":
               value = (

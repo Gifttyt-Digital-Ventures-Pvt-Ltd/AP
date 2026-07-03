@@ -2,12 +2,13 @@ import React from "react";
 import InvoiceDueDateCell from "../../invoices/components/InvoiceDueDateCell";
 import { Eye } from "lucide-react";
 import AppDataTable from "../../../components/common/AppDataTable";
-import ClippedTextWithTooltip from "../../../components/common/ClippedTextWithTooltip";
+import { OrgBranchCell, VendorWithBranchCell } from "../../../components/common/BranchTableCells";
 import { Button } from "../../../components/ui/button";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import { formatCurrency } from "../../../utils/currency";
 
-const pendingInvoicesTableHeader = [
+const basePendingInvoicesTableHeader = [
+  { key: "orgBranch", title: "Branch", cellClassName: "text-sm" },
   { key: "vendorName", title: "Vendor" },
   { key: "amount", title: "Amount", cellClassName: "  font-semibold" },
   { key: "approval", title: "Approval" },
@@ -34,7 +35,12 @@ const PendingInvoicesTable = ({
   safeFormatDate,
   handleViewInvoice,
   handleOpenInvoiceHistory,
+  showBranchField = false,
 }) => {
+  const tableHeader = showBranchField
+    ? basePendingInvoicesTableHeader
+    : basePendingInvoicesTableHeader.filter((header) => header.key !== "orgBranch");
+
   const renderPendingInvoiceRow = (invoice, rowIndex, headers) => {
     const progress = getApprovalProgress(invoice);
 
@@ -61,7 +67,10 @@ const PendingInvoicesTable = ({
               );
               break;
             case "vendorName":
-              value = <ClippedTextWithTooltip text={invoice.vendorName} />;
+              value = <VendorWithBranchCell record={invoice} />;
+              break;
+            case "orgBranch":
+              value = <OrgBranchCell record={invoice} />;
               break;
             case "status":
               value = (
@@ -116,7 +125,7 @@ const PendingInvoicesTable = ({
   return (
     <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
       <AppDataTable
-        tableHeader={pendingInvoicesTableHeader}
+        tableHeader={tableHeader}
         tableData={otherPendingInvoices}
         renderRow={renderPendingInvoiceRow}
         emptyMessage="No pending invoices"

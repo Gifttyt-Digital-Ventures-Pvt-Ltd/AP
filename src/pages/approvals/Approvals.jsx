@@ -40,6 +40,7 @@ import {
 import { getApprovalProgress } from './utils/approvalProgress';
 import { useApprovalsInvoiceEdit } from './hooks/useApprovalsInvoiceEdit';
 import {
+  isBranchEnabled as isBranchEnabledForCorporate,
   isRefNoEnabled as isRefNoEnabledForCorporate,
 } from '../../utils/invoiceConfiguration';
 
@@ -131,6 +132,13 @@ const Approvals = () => {
   const isRefNoEnabled = useMemo(
     () =>
       isRefNoEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const isBranchEnabled = useMemo(
+    () =>
+      isBranchEnabledForCorporate(
         corporateScreens?.activeInvoiceConfiguration ?? [],
       ),
     [corporateScreens?.activeInvoiceConfiguration],
@@ -421,6 +429,7 @@ const Approvals = () => {
             canApproveInvoices={canApproveInvoices}
             canCheckInvoices={canCheckInvoices}
             showApprovalProgress={canApproveInvoices}
+            showBranchField={isBranchEnabled}
           />
         </TabsContent>
 
@@ -433,6 +442,7 @@ const Approvals = () => {
             safeFormatDate={safeFormatDate}
             handleViewInvoice={handleViewInvoice}
             handleOpenInvoiceHistory={handleOpenInvoiceHistory}
+            showBranchField={isBranchEnabled}
           />
         </TabsContent>
 
@@ -449,6 +459,7 @@ const Approvals = () => {
             onPageChange={goToAllInvoicesPage}
             isLoading={allInvoicesFetching}
             showRefNoField={isRefNoEnabled}
+            showBranchField={isBranchEnabled}
             getStatusBadgeClass={getStatusBadgeClass}
             formatStatus={formatStatus}
             getApprovalProgress={getApprovalProgress}
