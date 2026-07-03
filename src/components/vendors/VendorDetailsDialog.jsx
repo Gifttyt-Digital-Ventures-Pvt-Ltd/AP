@@ -153,32 +153,33 @@ const createEmptyVendorBranch = () => ({
   branchName: "",
   branchCode: "",
   gstin: "",
-  isEditing: true,
 });
 
 const normalizeVendorBranches = (branches = []) =>
-  (Array.isArray(branches) ? branches : [])
-    .map((branch) => ({
-      ...branch,
-      id:
-        branch.id ||
-        branch.branchId ||
-        branch.branch_id ||
-        branch._clientId ||
-        `vendor-branch-${Math.random().toString(36).slice(2, 9)}`,
-      branchName: branch.branchName ?? branch.branch_name ?? branch.name ?? "",
-      branchCode: String(branch.branchCode ?? branch.branch_code ?? branch.code ?? "")
-        .trim()
-        .toUpperCase(),
-      gstin: String(branch.gstin ?? branch.mappedGstin ?? branch.mapped_gstin ?? branch.billingGstin ?? "")
-        .trim()
-        .toUpperCase(),
-      isEditing: branch.isEditing,
-    }))
-    .filter((branch) => branch.branchName || branch.branchCode || branch.gstin);
+  (Array.isArray(branches) ? branches : []).map((branch) => ({
+    ...branch,
+    id:
+      branch.id ||
+      branch.branchId ||
+      branch.branch_id ||
+      branch._clientId ||
+      `vendor-branch-${Math.random().toString(36).slice(2, 9)}`,
+    branchName: branch.branchName ?? branch.branch_name ?? branch.name ?? "",
+    branchCode: String(branch.branchCode ?? branch.branch_code ?? branch.code ?? "")
+      .trim()
+      .toUpperCase(),
+    gstin: String(branch.gstin ?? branch.mappedGstin ?? branch.mapped_gstin ?? branch.billingGstin ?? "")
+      .trim()
+      .toUpperCase(),
+  }));
+
+const getActiveVendorBranches = (branches = []) =>
+  normalizeVendorBranches(branches).filter(
+    (branch) => branch.branchName || branch.branchCode || branch.gstin,
+  );
 
 const validateVendorBranches = (branches = [], gstRegistrations = []) => {
-  const activeBranches = normalizeVendorBranches(branches);
+  const activeBranches = getActiveVendorBranches(branches);
   const validGstins = new Set(
     normalizeFormGstRegistrations(gstRegistrations)
       .map((registration) => registration.gstin)
@@ -225,12 +226,8 @@ const VendorBranchesEditor = ({ branches = [], gstRegistrations = [], onChange }
     );
   };
 
-  const toggleEdit = (id) => {
-    onChange(rows.map((row) => (row.id === id ? { ...row, isEditing: !row.isEditing } : row)));
-  };
-
   return (
-    <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+    <div className="w-full max-w-full overflow-hidden rounded-lg border border-border bg-card p-4 shadow-sm">
       <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <Label className="text-base font-semibold">Vendor Branches</Label>
@@ -250,77 +247,76 @@ const VendorBranchesEditor = ({ branches = [], gstRegistrations = [], onChange }
         </Button>
       </div>
 
-      <div className="overflow-x-auto rounded-lg border border-border">
-        <div className="min-w-[720px]">
-          <div className="grid grid-cols-[1.2fr_1fr_1.4fr_96px] gap-3 border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground">
-            <div>Branch Name</div>
-            <div>Branch Code</div>
-            <div>GSTIN</div>
-            <div>Actions</div>
-          </div>
-          {rows.length ? (
-            <div className="divide-y divide-border">
-              {rows.map((row, index) => {
-                const disabled = row.isEditing === false;
-                return (
-                  <div
-                    key={row.id}
-                    className="grid grid-cols-[1.2fr_1fr_1.4fr_96px] items-center gap-3 px-3 py-3"
-                    data-testid={`vendor-branch-row-${index}`}
-                  >
-                    <Input
-                      value={row.branchName || ""}
-                      disabled={disabled}
-                      onChange={(event) => updateRow(row.id, "branchName", event.target.value)}
-                      placeholder="Branch name"
-                      className="h-8 text-sm"
-                    />
-                    <Input
-                      value={row.branchCode || ""}
-                      disabled={disabled}
-                      onChange={(event) => updateRow(row.id, "branchCode", event.target.value)}
-                      placeholder="BR-001"
-                      className="h-8 text-sm uppercase"
-                    />
-                    <AppSelect
-                      value={row.gstin || ""}
-                      onChange={(event) => updateRow(row.id, "gstin", event.target.value)}
-                      options={gstOptions}
-                      placeholder={gstOptions.length ? "Select GSTIN" : "Add GSTIN first"}
-                      className="h-8 text-sm"
-                      disabled={disabled || gstOptions.length === 0}
-                    />
-                    <div className="flex items-center gap-1">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => toggleEdit(row.id)}
-                        aria-label={`Edit vendor branch ${index + 1}`}
-                      >
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        onClick={() => onChange(rows.filter((item) => item.id !== row.id))}
-                        className="text-destructive hover:text-destructive"
-                        aria-label={`Delete vendor branch ${index + 1}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="px-3 py-8 text-center text-sm text-muted-foreground">
-              No vendor branches configured yet.
-            </div>
-          )}
+      <div className="w-full max-w-full overflow-hidden rounded-lg border border-border">
+        <div className="hidden border-b bg-muted/40 px-3 py-2 text-xs font-medium text-muted-foreground md:grid md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.4fr)_48px] md:gap-3">
+          <div>Branch Name</div>
+          <div>Branch Code</div>
+          <div>GSTIN</div>
+          <div />
         </div>
+        {rows.length ? (
+          <div className="divide-y divide-border">
+            {rows.map((row, index) => (
+              <div
+                key={row.id}
+                className="grid grid-cols-1 gap-3 px-3 py-3 md:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_minmax(0,1.4fr)_48px] md:items-center"
+                data-testid={`vendor-branch-row-${index}`}
+              >
+                <div className="min-w-0 space-y-1">
+                  <span className="text-xs font-medium text-muted-foreground md:sr-only">
+                    Branch Name
+                  </span>
+                  <Input
+                    value={row.branchName || ""}
+                    onChange={(event) => updateRow(row.id, "branchName", event.target.value)}
+                    placeholder="Branch name"
+                    className="h-8 w-full min-w-0 text-sm"
+                  />
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <span className="text-xs font-medium text-muted-foreground md:sr-only">
+                    Branch Code
+                  </span>
+                  <Input
+                    value={row.branchCode || ""}
+                    onChange={(event) => updateRow(row.id, "branchCode", event.target.value)}
+                    placeholder="BR-001"
+                    className="h-8 w-full min-w-0 text-sm uppercase"
+                  />
+                </div>
+                <div className="min-w-0 space-y-1">
+                  <span className="text-xs font-medium text-muted-foreground md:sr-only">
+                    GSTIN
+                  </span>
+                  <AppSelect
+                    value={row.gstin || ""}
+                    onChange={(event) => updateRow(row.id, "gstin", event.target.value)}
+                    options={gstOptions}
+                    placeholder={gstOptions.length ? "Select GSTIN" : "Add GSTIN first"}
+                    className="h-8 w-full min-w-0 text-sm"
+                    disabled={gstOptions.length === 0}
+                  />
+                </div>
+                <div className="flex items-center md:justify-start">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => onChange(rows.filter((item) => item.id !== row.id))}
+                    className="text-destructive hover:text-destructive"
+                    aria-label={`Delete vendor branch ${index + 1}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="px-3 py-8 text-center text-sm text-muted-foreground">
+            No vendor branches configured yet.
+          </div>
+        )}
       </div>
 
       <p className="mt-3 text-xs text-muted-foreground">
@@ -632,7 +628,7 @@ const FetchVendorResultsPreview = ({
                     onToggleGstin(record.gstin);
                   }
                 }}
-                className={`flex w-full cursor-pointer items-center gap-3 border-b border-border px-3 py-2 text-left last:border-b-0 ${
+                className={`flex w-full min-w-0 cursor-pointer items-start gap-3 border-b border-border px-3 py-2 text-left last:border-b-0 sm:items-center ${
                   checked ? "bg-primary/5" : "bg-background hover:bg-muted/30"
                 }`}
               >
@@ -640,11 +636,14 @@ const FetchVendorResultsPreview = ({
                   checked={checked}
                   onCheckedChange={() => onToggleGstin(record.gstin)}
                   onClick={(event) => event.stopPropagation()}
+                  className="mt-0.5 shrink-0 sm:mt-0"
                 />
-                <span className="min-w-[150px] font-mono text-xs font-semibold text-primary">
+                <span className="min-w-0 shrink-0 font-mono text-xs font-semibold text-primary sm:min-w-[9.5rem]">
                   {record.gstin}
                 </span>
-                <span className="flex-1 text-sm text-foreground">{record.state || "—"}</span>
+                <span className="min-w-0 flex-1 break-words text-sm text-foreground">
+                  {record.state || "—"}
+                </span>
               </div>
             );
           })}
@@ -657,10 +656,12 @@ const FetchVendorResultsPreview = ({
           ].map(([label, value]) => (
             <div
               key={label}
-              className="flex gap-3 border-b border-border px-3 py-2 last:border-b-0"
+              className="flex flex-col gap-1 border-b border-border px-3 py-2 last:border-b-0 sm:flex-row sm:gap-3"
             >
-              <span className="min-w-24 text-xs font-semibold text-muted-foreground">{label}</span>
-              <span className="text-foreground">{value || "—"}</span>
+              <span className="shrink-0 text-xs font-semibold text-muted-foreground sm:min-w-24">
+                {label}
+              </span>
+              <span className="min-w-0 break-words text-foreground">{value || "—"}</span>
             </div>
           ))}
         </div>
@@ -1209,7 +1210,7 @@ const VendorDetailsDialog = ({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-w-3xl max-h-[90vh] overflow-y-auto p-0 gap-0"
+        className="w-[calc(100vw-2rem)] max-w-3xl max-h-[90vh] overflow-x-hidden overflow-y-auto p-0 gap-0"
         data-testid={testId}
         onInteractOutside={(event) => event.preventDefault()}
       >
@@ -1220,7 +1221,7 @@ const VendorDetailsDialog = ({
           ) : null}
         </DialogHeader>
 
-        <form onSubmit={handleFormSubmit} noValidate className="px-6 py-6 space-y-8">
+        <form onSubmit={handleFormSubmit} noValidate className="min-w-0 px-6 py-6 space-y-8">
           <FormSection
             title="Vendor identity"
             description="Choose the vendor type and registered name."

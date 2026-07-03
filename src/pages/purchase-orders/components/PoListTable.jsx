@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import { TableCell, TableRow } from "../../../components/ui/table";
 import AppDataTable from "../../../components/common/AppDataTable";
 import { OrgBranchCell, VendorWithBranchCell } from "../../../components/common/BranchTableCells";
+import { cn } from "../../../lib/utils";
 
 const basePoTableHeader = [
   { key: "po_number", title: "PO Number", cellClassName: "font-medium" },
