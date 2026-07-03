@@ -52,6 +52,8 @@ const SYNC_DATA_ITEMS = [
   'Product & Services'
 ];
 
+const ORGANISATION_DETAILS_FORM_ID = 'organisation-details-form';
+
 const Settings = () => {
   const {
     corporateScreens,
@@ -374,6 +376,33 @@ const Settings = () => {
     setTallyConfigOpen(false);
   };
 
+  const organisationSaveLabel = orgDetails ? 'Update Details' : 'Save Details';
+
+  const renderOrganisationSaveButton = ({
+    testId = 'org-save-btn',
+    className = '',
+  } = {}) => (
+    <Button
+      type="submit"
+      form={ORGANISATION_DETAILS_FORM_ID}
+      disabled={orgSaving || !canSaveOrganisation}
+      className={`min-w-[150px] shrink-0 ${className}`}
+      data-testid={testId}
+    >
+      {orgSaving ? (
+        <>
+          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          Saving...
+        </>
+      ) : (
+        <>
+          <Save className="h-4 w-4 mr-2" />
+          {organisationSaveLabel}
+        </>
+      )}
+    </Button>
+  );
+
   return (
     <div data-testid="settings-page">
       <div className="mb-8">
@@ -406,7 +435,11 @@ const Settings = () => {
                 <Building2 className="h-5 w-5 text-primary" />
                 Organisation Details
               </h3>
-              <p className="text-sm text-muted-foreground">Configure your company information for invoices and communications</p>
+              <p className="text-sm text-muted-foreground">
+                Configure your company information for invoices and communications.
+                Use the save action at the bottom of this page after updating branches,
+                GST registrations, or contact details.
+              </p>
             </div>
 
             {orgLoading ? (
@@ -414,7 +447,11 @@ const Settings = () => {
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
             ) : (
-              <form onSubmit={handleOrgSave} className="space-y-6">
+              <form
+                id={ORGANISATION_DETAILS_FORM_ID}
+                onSubmit={handleOrgSave}
+                className="space-y-6"
+              >
                 {/* Platform Email Banner */}
                 {orgDetails?.platform_email && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4" data-testid="platform-email-banner">
@@ -688,26 +725,13 @@ const Settings = () => {
                   </div>
                 </div>
 
-                {/* Save Button */}
-                <div className="flex justify-end pt-4 border-t">
-                  <Button
-                    type="submit"
-                    disabled={orgSaving || !canSaveOrganisation}
-                    className="min-w-[150px]"
-                    data-testid="org-save-btn"
-                  >
-                    {orgSaving ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Saving...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4 mr-2" />
-                        {orgDetails ? 'Update Details' : 'Save Details'}
-                      </>
-                    )}
-                  </Button>
+                <div className="sticky bottom-0 -mx-6 mt-2 border-t border-border bg-card/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-card/85">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm text-muted-foreground">
+                      Review your changes, then {organisationSaveLabel.toLowerCase()}.
+                    </p>
+                    {renderOrganisationSaveButton()}
+                  </div>
                 </div>
               </form>
             )}

@@ -24,7 +24,6 @@ export function createEmptyOrganisationBranch() {
     branchCode: '',
     areaSqft: '',
     billingGstin: '',
-    isEditing: true,
   };
 }
 
@@ -72,7 +71,6 @@ export function normalizeOrganisationBranchesFromApi(data = {}) {
       entry.area_of_branch ??
       '',
     billingGstin: (entry.billingGstin ?? entry.billing_gstin ?? entry.gstin ?? '').toUpperCase(),
-    isEditing: false,
   }));
 }
 
