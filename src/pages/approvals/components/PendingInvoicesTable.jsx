@@ -8,20 +8,21 @@ import { TableCell, TableRow } from "../../../components/ui/table";
 import { formatCurrency } from "../../../utils/currency";
 
 const basePendingInvoicesTableHeader = [
-  { key: "orgBranch", title: "Branch", cellClassName: "text-sm" },
-  { key: "vendorName", title: "Vendor" },
-  { key: "amount", title: "Amount", cellClassName: "  font-semibold" },
-  { key: "approval", title: "Approval" },
-  { key: "status", title: "Status" },
+  { key: "orgBranch", title: "Branch", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm" },
+  { key: "vendorName", title: "Vendor", headerClassName: "bg-muted text-foreground" },
+  { key: "amount", title: "Amount", headerClassName: "bg-muted text-foreground", cellClassName: "  font-semibold" },
+  { key: "approval", title: "Approval", headerClassName: "bg-muted text-foreground" },
+  { key: "status", title: "Status", headerClassName: "bg-muted text-foreground" },
   {
     key: "dueDate",
     title: "Due date",
+    headerClassName: "bg-muted text-foreground",
     cellClassName: "text-sm text-muted-foreground",
   },
   {
     key: "actions",
     title: "Actions",
-    headerClassName: "text-center",
+    headerClassName: "bg-muted text-foreground text-left",
     cellClassName: "text-left",
   },
 ];
@@ -123,13 +124,30 @@ const PendingInvoicesTable = ({
   };
 
   return (
-    <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
-      <AppDataTable
-        tableHeader={tableHeader}
-        tableData={otherPendingInvoices}
-        renderRow={renderPendingInvoiceRow}
-        emptyMessage="No pending invoices"
-      />
+    <div
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm"
+      data-testid="pending-invoices-table"
+    >
+      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-thin-muted">
+        <AppDataTable
+          tableHeader={tableHeader}
+          tableData={otherPendingInvoices}
+          renderRow={renderPendingInvoiceRow}
+          tableClassName="min-w-[900px]"
+          tableContainerClassName="overflow-visible"
+          headClassName="border-b border-border bg-muted shadow-sm"
+          stickyHeader
+          emptyMessage="No pending invoices"
+          emptyTestId="no-pending-invoices"
+        />
+      </div>
+      <div className="mt-auto flex shrink-0 border-t border-border p-4">
+        <p className="text-sm text-muted-foreground" data-testid="pending-invoices-table-summary">
+          {otherPendingInvoices.length === 0
+            ? "No pending invoices"
+            : `Showing ${otherPendingInvoices.length.toLocaleString("en-IN")} pending invoice${otherPendingInvoices.length === 1 ? "" : "s"}`}
+        </p>
+      </div>
     </div>
   );
 };

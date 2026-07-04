@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "../../../components/ui/button";
-import { Calendar } from "../../../components/ui/calendar";
+import DatePicker from "../../../components/common/DatePicker";
 import { Checkbox } from "../../../components/ui/checkbox";
 import {
   Command,
@@ -41,7 +41,6 @@ import {
   calculateCampaignGrossFromNet,
   calculateCampaignNetFromGross,
   formatCurrency,
-  formatDate,
 } from "../utils/campaignFormatters";
 
 const EMPTY_VENDOR_ENTRY = {
@@ -74,24 +73,6 @@ const sanitizeCampaignAmount = (value) =>
 
 const amountsMatch = (left, right) =>
   Math.abs(Number(left || 0) - Number(right || 0)) < 0.005;
-
-const parseDateValue = (value) => {
-  if (!value) return undefined;
-  const [year, month, day] = String(value).split("-").map(Number);
-  if (!year || !month || !day) return undefined;
-  return new Date(year, month - 1, day);
-};
-
-const toDateValue = (date) => {
-  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
-
-const campaignCalendarStartMonth = new Date(new Date().getFullYear() - 10, 0);
-const campaignCalendarEndMonth = new Date(2099, 11);
 
 const CAMPAIGN_GST_OPTIONS = TAX_RATES.map((taxRate) => ({
   value: taxRate.value,
@@ -600,23 +581,17 @@ const CreateCampaignModal = ({
     });
   };
 
-  const handleStartDateSelect = (date) => {
-    if (!date) return;
-    const nextStartDate = toDateValue(date);
+  const handleStartDateChange = (nextStartDate) => {
     setForm((prev) => ({
       ...prev,
       startDate: nextStartDate,
       endDate: "",
     }));
     setErrors((prev) => ({ ...prev, startDate: "", endDate: "" }));
-    setStartDateOpen(false);
-    setEndDateOpen(true);
   };
 
-  const handleEndDateSelect = (date) => {
-    if (!date) return;
-    updateForm("endDate", toDateValue(date));
-    setEndDateOpen(false);
+  const handleEndDateChange = (nextEndDate) => {
+    updateForm("endDate", nextEndDate);
   };
 
   return (
@@ -657,66 +632,28 @@ const CreateCampaignModal = ({
           </div>
           <div className="space-y-2">
             <Label>Start Date *</Label>
-            <Popover open={startDateOpen} onOpenChange={setStartDateOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={cn(
-                    "h-9 w-full justify-start text-left font-normal",
-                    !form.startDate && "text-muted-foreground",
-                  )}
-                >
-                  {form.startDate ? formatDate(form.startDate) : "Select start date"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="z-[60] w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  captionLayout="dropdown"
-                  navLayout="after"
-                  startMonth={campaignCalendarStartMonth}
-                  endMonth={campaignCalendarEndMonth}
-                  selected={parseDateValue(form.startDate)}
-                  onSelect={handleStartDateSelect}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+            <DatePicker
+              value={form.startDate}
+              onChange={handleStartDateChange}
+              onAfterSelect={() => setEndDateOpen(true)}
+              open={startDateOpen}
+              onOpenChange={setStartDateOpen}
+              placeholder="Select start date"
+              popoverClassName="z-[60] w-auto p-0"
+            />
             <FieldError>{errors.startDate}</FieldError>
           </div>
           <div className="space-y-2">
             <Label>End Date *</Label>
-            <Popover open={endDateOpen} onOpenChange={setEndDateOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className={cn(
-                    "h-9 w-full justify-start text-left font-normal",
-                    !form.endDate && "text-muted-foreground",
-                  )}
-                >
-                  {form.endDate ? formatDate(form.endDate) : "Select end date"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="z-[60] w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  captionLayout="dropdown"
-                  navLayout="after"
-                  startMonth={campaignCalendarStartMonth}
-                  endMonth={campaignCalendarEndMonth}
-                  selected={parseDateValue(form.endDate)}
-                  onSelect={handleEndDateSelect}
-                  disabled={(date) => {
-                    const startDate = parseDateValue(form.startDate);
-                    return startDate ? date < startDate : false;
-                  }}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+            <DatePicker
+              value={form.endDate}
+              onChange={handleEndDateChange}
+              open={endDateOpen}
+              onOpenChange={setEndDateOpen}
+              placeholder="Select end date"
+              popoverClassName="z-[60] w-auto p-0"
+              minDate={form.startDate}
+            />
             <FieldError>{errors.endDate}</FieldError>
           </div>
           <div className="md:col-span-2">

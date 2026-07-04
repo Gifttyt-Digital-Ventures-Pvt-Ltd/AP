@@ -2,7 +2,6 @@ import React, { useMemo } from "react";
 import { Eye, Pencil, Search } from "lucide-react";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
-import { Card } from "../../../components/ui/card";
 import { Input } from "../../../components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
 import { TableCell, TableRow } from "../../../components/ui/table";
@@ -11,14 +10,14 @@ import { OrgBranchCell, VendorWithBranchCell } from "../../../components/common/
 import { cn } from "../../../lib/utils";
 
 const basePoTableHeader = [
-  { key: "po_number", title: "PO Number", cellClassName: "font-medium" },
-  { key: "orgBranch", title: "Branch", cellClassName: "text-sm" },
-  { key: "vendor_name", title: "Vendor" },
-  { key: "po_date", title: "PO Date" },
-  { key: "expected_delivery_date", title: "Delivery Date" },
-  { key: "total_amount", title: "Amount" },
-  { key: "status", title: "Status" },
-  { key: "actions", title: "Actions" },
+  { key: "po_number", title: "PO Number", headerClassName: "bg-muted text-foreground", cellClassName: "font-medium" },
+  { key: "orgBranch", title: "Branch", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm" },
+  { key: "vendor_name", title: "Vendor", headerClassName: "bg-muted text-foreground" },
+  { key: "po_date", title: "PO Date", headerClassName: "bg-muted text-foreground" },
+  { key: "expected_delivery_date", title: "Delivery Date", headerClassName: "bg-muted text-foreground" },
+  { key: "total_amount", title: "Amount", headerClassName: "bg-muted text-foreground" },
+  { key: "status", title: "Status", headerClassName: "bg-muted text-foreground" },
+  { key: "actions", title: "Actions", headerClassName: "bg-muted text-foreground" },
 ];
 
 const PoListTable = ({
@@ -27,6 +26,7 @@ const PoListTable = ({
   statusFilter,
   setStatusFilter,
   filteredOrders,
+  totalOrders = 0,
   formatDate,
   formatCurrency,
   statusColors,
@@ -113,8 +113,8 @@ const PoListTable = ({
   );
 
   return (
-    <div className="space-y-4">
-      <div className="flex gap-4 items-center">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
+      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative flex-1 max-w-sm">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -141,15 +141,30 @@ const PoListTable = ({
         </Select>
       </div>
 
-      <div className="mt-0">
-        <Card>
+      <div
+        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm"
+        data-testid="purchase-orders-table"
+      >
+        <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-thin-muted">
           <AppDataTable
             tableHeader={poTableHeader}
             tableData={filteredOrders}
             renderRow={renderPoRow}
+            tableClassName="min-w-[1100px]"
+            tableContainerClassName="overflow-visible"
+            headClassName="border-b border-border bg-muted shadow-sm"
+            stickyHeader
             emptyMessage="No purchase orders found. Create your first PO to get started."
+            emptyTestId="no-purchase-orders"
           />
-        </Card>
+        </div>
+        <div className="mt-auto flex shrink-0 border-t border-border p-4">
+          <p className="text-sm text-muted-foreground" data-testid="po-table-summary">
+            {filteredOrders.length === totalOrders
+              ? `Showing ${filteredOrders.length.toLocaleString("en-IN")} purchase orders`
+              : `Showing ${filteredOrders.length.toLocaleString("en-IN")} of ${totalOrders.toLocaleString("en-IN")} purchase orders`}
+          </p>
+        </div>
       </div>
     </div>
   );

@@ -13,24 +13,26 @@ import { TableCell, TableRow } from "../../../components/ui/table";
 import { formatCurrency } from "../../../utils/currency";
 
 const baseNeedsApprovalTableHeader = [
-  { key: "orgBranch", title: "Branch", cellClassName: "text-sm" },
-  { key: "vendorName", title: "Vendor" },
-  { key: "amount", title: "Amount", cellClassName: "  font-semibold" },
-  { key: "approval", title: "Approval" },
+  { key: "orgBranch", title: "Branch", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm" },
+  { key: "vendorName", title: "Vendor", headerClassName: "bg-muted text-foreground" },
+  { key: "amount", title: "Amount", headerClassName: "bg-muted text-foreground", cellClassName: "  font-semibold" },
+  { key: "approval", title: "Approval", headerClassName: "bg-muted text-foreground" },
   {
     key: "dueDate",
     title: "Due date",
+    headerClassName: "bg-muted text-foreground",
     cellClassName: "text-sm text-muted-foreground",
   },
   {
     key: "invoiceDate",
     title: "Invoice date",
+    headerClassName: "bg-muted text-foreground",
     cellClassName: "text-sm text-muted-foreground",
   },
   {
     key: "action",
     title: "Action",
-    headerClassName: "text-center",
+    headerClassName: "bg-muted text-foreground text-left",
     cellClassName: "text-left",
   },
 ];
@@ -191,16 +193,29 @@ const NeedsApprovalTable = ({
 
   return (
     <div
-      className="bg-card border border-border rounded-lg shadow-sm overflow-hidden"
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm"
       data-testid="needs-approval-table"
     >
-      <AppDataTable
-        tableHeader={tableHeaders}
-        tableData={myPendingInvoices}
-        renderRow={renderNeedsApprovalRow}
-        emptyMessage="No invoices need your approval"
-        emptyTestId="no-approvals"
-      />
+      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-thin-muted">
+        <AppDataTable
+          tableHeader={tableHeaders}
+          tableData={myPendingInvoices}
+          renderRow={renderNeedsApprovalRow}
+          tableClassName="min-w-[1100px]"
+          tableContainerClassName="overflow-visible"
+          headClassName="border-b border-border bg-muted shadow-sm"
+          stickyHeader
+          emptyMessage="No invoices need your approval"
+          emptyTestId="no-approvals"
+        />
+      </div>
+      <div className="mt-auto flex shrink-0 border-t border-border p-4">
+        <p className="text-sm text-muted-foreground" data-testid="needs-approval-table-summary">
+          {myPendingInvoices.length === 0
+            ? "No invoices need your approval"
+            : `Showing ${myPendingInvoices.length.toLocaleString("en-IN")} invoice${myPendingInvoices.length === 1 ? "" : "s"} needing your approval`}
+        </p>
+      </div>
     </div>
   );
 };

@@ -49,18 +49,18 @@ import { buildCampaignAccess } from "./utils/campaignPermissions";
 import { CAMPAIGN_LIST_PAGE_SIZE } from "./constants";
 
 const campaignTableHeader = [
-  { key: "campaign", title: "Campaign" },
-  { key: "created", title: "Created" },
-  { key: "createdBy", title: "Created By" },
-  { key: "approvedBy", title: "Approved By" },
-  { key: "budget", title: "Budget" },
-  { key: "totalCost", title: "Total Cost" },
-  { key: "pendingAmount", title: "Pending Amount" },
-  { key: "status", title: "Status" },
+  { key: "campaign", title: "Campaign", headerClassName: "bg-muted text-foreground" },
+  { key: "created", title: "Created", headerClassName: "bg-muted text-foreground" },
+  { key: "createdBy", title: "Created By", headerClassName: "bg-muted text-foreground" },
+  { key: "approvedBy", title: "Approved By", headerClassName: "bg-muted text-foreground" },
+  { key: "budget", title: "Budget", headerClassName: "bg-muted text-foreground" },
+  { key: "totalCost", title: "Total Cost", headerClassName: "bg-muted text-foreground" },
+  { key: "pendingAmount", title: "Pending Amount", headerClassName: "bg-muted text-foreground" },
+  { key: "status", title: "Status", headerClassName: "bg-muted text-foreground" },
   {
     key: "actions",
     title: "Actions",
-    headerClassName: "text-left",
+    headerClassName: "bg-muted text-foreground text-left",
     cellClassName: "text-left",
   },
 ];
@@ -422,34 +422,38 @@ const CampaignsPage = () => {
         />
       </div>
 
-      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card">
-        <div className="flex shrink-0 flex-col gap-3 border-b border-border p-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h2 className="font-semibold">Campaign List</h2>
-            <p className="text-sm text-muted-foreground">
-              Search by campaign name or creator.
-            </p>
-          </div>
-          <div className="relative md:w-80">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              className="pl-9"
-              placeholder="Search campaigns..."
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
-          </div>
+      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative max-w-sm flex-1 md:max-w-md">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            className="pl-9"
+            placeholder="Search campaigns by name or creator..."
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            data-testid="campaign-search-input"
+          />
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto scrollbar-thin-muted">
+      </div>
+
+      <div
+        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm"
+        data-testid="campaigns-table"
+      >
+        <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-thin-muted">
           <AppDataTable
             tableHeader={campaignTableHeader}
             tableData={campaigns}
             renderRow={renderCampaignRow}
             isLoading={campaignsLoading || campaignsFetching}
             loadingRowCount={8}
+            tableClassName="min-w-[1200px]"
+            tableContainerClassName="overflow-visible"
+            headClassName="border-b border-border bg-muted shadow-sm"
+            stickyHeader
             emptyMessage={
               campaignsLoading ? "Loading campaigns..." : "No campaigns found"
             }
+            emptyTestId="no-campaigns"
           />
         </div>
         <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-border p-4 sm:flex-row sm:items-center sm:justify-between">
