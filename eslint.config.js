@@ -68,6 +68,8 @@ export default [
     rules: {
       // Catches missing imports / undefined identifiers before runtime.
       "no-undef": "error",
+      // Explicitly flags JSX tags that are not imported (e.g. <Button> without import).
+      "react/jsx-no-undef": "error",
       "react/react-in-jsx-scope": "off",
       "react/prop-types": "off",
       "react-hooks/rules-of-hooks": "error",

@@ -2,6 +2,7 @@ import { serviceApi } from "../serviceApi";
 import { normalizeCustomRolePermissionsResponse } from "../../utils/rbacPermissions";
 import {
   DEFAULT_INVOICE_CONFIGURATION,
+  BRANCH_MODULE_SECTION_IDS,
   normalizeActiveInvoiceConfiguration,
   normalizeInvoiceConfigurationCatalog,
 } from "../../utils/invoiceConfiguration";
@@ -297,6 +298,15 @@ const normalizeCorporateScreensResponse = (response = {}) => {
 
   basicSections.forEach(addEnabledSection);
   toArray(response?.additionalSections).forEach(addEnabledSection);
+  toArray(response?.activeModules ?? response?.active_modules).forEach((sectionId) => {
+    const section = normalizeToken(
+      typeof sectionId === "string" ? sectionId : sectionId?.section,
+    );
+    if (!section) return;
+    enabledSections.add(section);
+    const screen = normalizeToken(sectionId?.screen);
+    if (screen) sectionScreens.set(section, screen);
+  });
   explicitSectionEnabled.forEach((isEnabled, section) => {
     if (isEnabled) enabledSections.add(section);
     if (!isEnabled) enabledSections.delete(section);
@@ -378,6 +388,10 @@ const normalizeCorporateScreensResponse = (response = {}) => {
   const activeInvoiceConfiguration = normalizeActiveInvoiceConfiguration(
     response?.activeInvoiceConfiguration,
   );
+  const mergedActiveInvoiceConfiguration = normalizeActiveInvoiceConfiguration([
+    ...activeInvoiceConfiguration,
+    ...enabledSectionList.filter((section) => BRANCH_MODULE_SECTION_IDS.includes(section)),
+  ]);
   const gstConfiguration = normalizeGstConfigurationCatalog(
     toArray(response?.gstConfiguration ?? response?.gst_configuration),
   );
@@ -418,9 +432,11 @@ const normalizeCorporateScreensResponse = (response = {}) => {
     activeVendorVerification,
     invoiceConfiguration:
       invoiceConfiguration.length > 0
-        ? invoiceConfiguration
+        ? invoiceConfiguration.filter(
+            (item) => !BRANCH_MODULE_SECTION_IDS.includes(normalizeToken(item?.section)),
+          )
         : DEFAULT_INVOICE_CONFIGURATION,
-    activeInvoiceConfiguration,
+    activeInvoiceConfiguration: mergedActiveInvoiceConfiguration,
     gstConfiguration:
       gstConfiguration.length > 0 ? gstConfiguration : DEFAULT_GST_CONFIGURATION,
     activeGstConfiguration,

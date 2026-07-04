@@ -18,7 +18,6 @@ import {
 } from "../../../utils/currency";
 import {
   getBranchCostStatuses,
-  isBranchCostAnalysisEnabled as isBranchCostAnalysisEnabledForCorporate,
 } from "../../../utils/invoiceConfiguration";
 import {
   BRANCH_COST_DEFAULT_PERIOD,
@@ -27,7 +26,7 @@ import {
 } from "../utils/branchCostAnalysis";
 
 export function useReportsData() {
-  const { isCorporateSectionEnabled, corporateScreens } = useRBAC();
+  const { isCorporateSectionEnabled, isBranchCostAnalysisEnabled } = useRBAC();
   const {
     currencies,
     selectedCurrency,
@@ -119,12 +118,6 @@ export function useReportsData() {
 
   const days = getDays();
   const shouldSkip = !days || Number.isNaN(days) || days <= 0;
-  const activeInvoiceConfiguration =
-    corporateScreens?.activeInvoiceConfiguration ?? [];
-  const isBranchCostAnalysisEnabled = useMemo(
-    () => isBranchCostAnalysisEnabledForCorporate(activeInvoiceConfiguration),
-    [activeInvoiceConfiguration],
-  );
   const branchCostStatuses = useMemo(
     () => getBranchCostStatuses(isPaymentsEnabled).join(","),
     [isPaymentsEnabled],

@@ -22,7 +22,6 @@ import { useRBAC } from '../../contexts/RBACContext';
 import CreditsPage from '../credits/CreditsPage';
 import OrgBranchesSection from './components/OrgBranchesSection';
 import OrgGstRegistrationsSection from './components/OrgGstRegistrationsSection';
-import { isBranchEnabled as isBranchEnabledForCorporate, isBranchSqFtEnabled as isBranchSqFtEnabledForCorporate } from '../../utils/invoiceConfiguration';
 import {
   buildOrganisationSavePayload,
   createEmptyGstRegistration,
@@ -60,6 +59,8 @@ const Settings = () => {
     hasAnyPermission,
     isCorporateSectionEnabled,
     isBillingFeatureEnabled,
+    isBranchEnabled: isBranchConfigurationEnabled,
+    isBranchSqFtEnabled: isBranchSqFtConfigurationEnabled,
   } = useRBAC();
   const canViewBankingSettings =
     hasAnyPermission(['settings-banking', 'banking-full']) &&
@@ -78,20 +79,6 @@ const Settings = () => {
     'VIEW_LEDGER',
     'MANAGE_BILLING',
   ]) && isBillingFeatureEnabled;
-  const isBranchConfigurationEnabled = useMemo(
-    () =>
-      isBranchEnabledForCorporate(
-        corporateScreens?.activeInvoiceConfiguration ?? [],
-      ),
-    [corporateScreens?.activeInvoiceConfiguration],
-  );
-  const isBranchSqFtConfigurationEnabled = useMemo(
-    () =>
-      isBranchSqFtEnabledForCorporate(
-        corporateScreens?.activeInvoiceConfiguration ?? [],
-      ),
-    [corporateScreens?.activeInvoiceConfiguration],
-  );
   const availableSettingsTabs = useMemo(() => {
     const tabs = [];
     if (canViewOrganisationSettings) tabs.push('organisation');

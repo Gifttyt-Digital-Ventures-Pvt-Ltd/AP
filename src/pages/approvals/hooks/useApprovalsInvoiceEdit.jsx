@@ -69,7 +69,6 @@ import {
 } from "../../invoices/utils/invoiceBulkUtils";
 import { getInvoiceVendorRequestValidationErrors } from "../../../utils/vendorValidation";
 import {
-  isBranchEnabled as isBranchEnabledForCorporate,
   isCheckerEditEnabled as isCheckerEditEnabledForCorporate,
   isCheckerEditForbiddenError,
 } from "../../../utils/invoiceConfiguration";
@@ -100,6 +99,7 @@ export const useApprovalsInvoiceEdit = ({
     isCampaignFeatureEnabled,
     isCorporateAdmin,
     hasPermission,
+    isBranchEnabled,
   } = useRBAC();
   const { guardAction, canPerformAction } = useActionGuard();
 
@@ -185,13 +185,6 @@ export const useApprovalsInvoiceEdit = ({
   const isCheckerEditEnabled = useMemo(
     () =>
       isCheckerEditEnabledForCorporate(
-        corporateScreens?.activeInvoiceConfiguration ?? [],
-      ),
-    [corporateScreens?.activeInvoiceConfiguration],
-  );
-  const isBranchEnabled = useMemo(
-    () =>
-      isBranchEnabledForCorporate(
         corporateScreens?.activeInvoiceConfiguration ?? [],
       ),
     [corporateScreens?.activeInvoiceConfiguration],

@@ -149,7 +149,8 @@ const OrgBranchesSection = ({ branches = [], gstOptions = [], onChange, showArea
       </div>
 
       <p className="mt-3 text-xs text-muted-foreground">
-        Multiple branches can share the same GSTIN. Add a branch-specific GSTIN in Tax & Registration first, then select it here.
+        Billing GSTIN is optional. Add GST registrations below, then select one for each branch.
+        Multiple branches can share the same GSTIN.
       </p>
     </div>
   );

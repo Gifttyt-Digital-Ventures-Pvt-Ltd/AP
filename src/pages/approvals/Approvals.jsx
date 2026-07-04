@@ -40,7 +40,6 @@ import {
 import { getApprovalProgress } from './utils/approvalProgress';
 import { useApprovalsInvoiceEdit } from './hooks/useApprovalsInvoiceEdit';
 import {
-  isBranchEnabled as isBranchEnabledForCorporate,
   isRefNoEnabled as isRefNoEnabledForCorporate,
 } from '../../utils/invoiceConfiguration';
 
@@ -52,7 +51,7 @@ const safeFormatDate = (value, pattern = 'dd MMM yy') => {
 
 const Approvals = () => {
   const { user } = useAuth();
-  const { isCategoryFeatureEnabled, isCampaignFeatureEnabled, corporateScreens } = useRBAC();
+  const { isCategoryFeatureEnabled, isCampaignFeatureEnabled, corporateScreens, isBranchEnabled } = useRBAC();
   const { canPerformAction } = useActionGuard();
   const canCheckInvoices = canPerformAction('invoices.check');
   const canApproveInvoices = canPerformAction('invoices.approve');
@@ -132,13 +131,6 @@ const Approvals = () => {
   const isRefNoEnabled = useMemo(
     () =>
       isRefNoEnabledForCorporate(
-        corporateScreens?.activeInvoiceConfiguration ?? [],
-      ),
-    [corporateScreens?.activeInvoiceConfiguration],
-  );
-  const isBranchEnabled = useMemo(
-    () =>
-      isBranchEnabledForCorporate(
         corporateScreens?.activeInvoiceConfiguration ?? [],
       ),
     [corporateScreens?.activeInvoiceConfiguration],

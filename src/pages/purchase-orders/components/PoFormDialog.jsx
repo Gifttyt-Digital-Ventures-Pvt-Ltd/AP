@@ -17,6 +17,7 @@ import PoLogo from "./PoLogo";
 import TdsSelectionField from "../../invoices/components/TdsSelectionField";
 import { TAX_RATES } from "../../invoices/constants";
 import { parseTaxRateFromLabel } from "../../invoices/utils/invoiceTax";
+import { buildTdsValue } from "../../invoices/utils/tds";
 import AppSelect from "../../../components/common/AppSelect";
 
 const getPoFormLineItemTableHeader = ({ isInr, fieldOn }) => [

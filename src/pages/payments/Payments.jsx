@@ -66,7 +66,6 @@ import { useMeteredActionEstimate } from '../../hooks/useMeteredActionEstimate';
 import { useRBAC } from '../../contexts/RBACContext';
 import { useCurrencyFilter } from '../../hooks/useCurrencyFilter';
 import { CURRENCY_SCREENS } from '../../utils/currency';
-import { isBranchEnabled as isBranchEnabledForCorporate } from '../../utils/invoiceConfiguration';
 import { OrgBranchCell, VendorWithBranchCell } from '../../components/common/BranchTableCells';
 
 const safeLower = (value) => String(value ?? '').toLowerCase();
@@ -134,7 +133,7 @@ const Payments = () => {
     isConnectedBankingEnabled,
     isCategoryFeatureEnabled,
     isCampaignFeatureEnabled,
-    corporateScreens,
+    isBranchEnabled,
   } = useRBAC();
   const {
     currencies,
@@ -264,13 +263,6 @@ const Payments = () => {
   );
   const batchEligibleInvoices = [...pendingPaymentInvoices, ...pendingApproverInvoices];
   const bankAccounts = Array.isArray(bankAccountsData) ? bankAccountsData : [];
-  const isBranchEnabled = useMemo(
-    () =>
-      isBranchEnabledForCorporate(
-        corporateScreens?.activeInvoiceConfiguration ?? [],
-      ),
-    [corporateScreens?.activeInvoiceConfiguration],
-  );
   const batchInvoiceTableHeader = useMemo(
     () =>
       isBranchEnabled
