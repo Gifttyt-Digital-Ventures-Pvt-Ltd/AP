@@ -19,7 +19,6 @@ import {
   useScanPurchaseOrderMutation,
 } from '../../Services/apis/purchaseOrdersMasterDataApi';
 import { useGetOrganisationQuery } from '../../Services/apis/settingsApi';
-import { isBranchEnabled as isBranchEnabledForCorporate } from '../../utils/invoiceConfiguration';
 import { normalizeOrganisationBranchesFromApi } from '../../utils/organisationGst';
 import { toast } from 'sonner';
 import { statusColors } from './constants';
@@ -250,7 +249,7 @@ const extractPurchaseOrderScanData = (response = {}) => {
 const PurchaseOrdersPage = () => {
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
-  const { isCorporateSectionEnabled, corporateScreens } = useRBAC();
+  const { isCorporateSectionEnabled, isBranchEnabled } = useRBAC();
   const { setHideSidebar } = useSidebar();
   const canManagePo = canPerformAction('po.create');
   const canRequestVendorFromPo = canManagePo || canPerformAction('invoices.addVendor');
@@ -281,13 +280,6 @@ const PurchaseOrdersPage = () => {
     refetch: refetchVendors,
   } = useGetVendorsQuery();
   const { data: organisationData } = useGetOrganisationQuery();
-  const isBranchEnabled = useMemo(
-    () =>
-      isBranchEnabledForCorporate(
-        corporateScreens?.activeInvoiceConfiguration ?? [],
-      ),
-    [corporateScreens?.activeInvoiceConfiguration],
-  );
   const organisationBranches = useMemo(
     () => normalizeOrganisationBranchesFromApi(organisationData),
     [organisationData],

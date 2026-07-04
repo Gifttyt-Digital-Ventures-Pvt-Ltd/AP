@@ -13,6 +13,11 @@ import {
   resolveRoutePermissionRule,
 } from "../constants/rbacPolicy";
 import { canAssignRoleSetsPermission } from "../utils/rbacPermissions";
+import {
+  isBranchCostAnalysisEnabledForCorporate,
+  isBranchEnabledForCorporate,
+  isBranchSqFtEnabledForCorporate,
+} from "../utils/invoiceConfiguration";
 
 const RBACContext = createContext({
   isLoaded: false,
@@ -29,6 +34,9 @@ const RBACContext = createContext({
   isCorporateScreenSectionEnabled: () => false,
   isCategoryFeatureEnabled: false,
   isCampaignFeatureEnabled: false,
+  isBranchEnabled: false,
+  isBranchSqFtEnabled: false,
+  isBranchCostAnalysisEnabled: false,
   isPaymentBatchesFeatureEnabled: false,
   isConnectedBankingEnabled: false,
   isBillingFeatureEnabled: false,
@@ -380,6 +388,21 @@ export const RBACProvider = ({ children }) => {
     [enabledSectionsSet, isTokenBasedSubscriptionEnabled],
   );
 
+  const isBranchEnabled = useMemo(
+    () => isBranchEnabledForCorporate(corporateScreens),
+    [corporateScreens],
+  );
+
+  const isBranchSqFtEnabled = useMemo(
+    () => isBranchSqFtEnabledForCorporate(corporateScreens),
+    [corporateScreens],
+  );
+
+  const isBranchCostAnalysisEnabled = useMemo(
+    () => isBranchCostAnalysisEnabledForCorporate(corporateScreens),
+    [corporateScreens],
+  );
+
   const hasAnyPermission = (permissionIds = []) => {
     if (!permissionIds || permissionIds.length === 0) return true;
     return permissionIds.some((permissionId) => hasPermission(permissionId));
@@ -501,6 +524,9 @@ export const RBACProvider = ({ children }) => {
     isCorporateScreenSectionEnabled,
     isCategoryFeatureEnabled,
     isCampaignFeatureEnabled,
+    isBranchEnabled,
+    isBranchSqFtEnabled,
+    isBranchCostAnalysisEnabled,
     isPaymentBatchesFeatureEnabled,
     isConnectedBankingEnabled,
     isBillingFeatureEnabled,

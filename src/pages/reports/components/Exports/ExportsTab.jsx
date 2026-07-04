@@ -41,7 +41,7 @@ import {
 import { useGetVendorsQuery } from "../../../../Services/apis/invoicesVendorsApi";
 import { useGetOrganisationQuery } from "../../../../Services/apis/settingsApi";
 import { useRBAC } from "../../../../contexts/RBACContext";
-import { isBranchEnabled as isBranchEnabledForCorporate, isBranchCostAnalysisEnabled as isBranchCostAnalysisEnabledForCorporate, getBranchCostStatuses } from "../../../../utils/invoiceConfiguration";
+import { getBranchCostStatuses } from "../../../../utils/invoiceConfiguration";
 import {
   getConfiguredOrganisationGstins,
   normalizeOrganisationBranchesFromApi,
@@ -396,7 +396,7 @@ const normalizeFilterOption = (option = {}) => {
 };
 
 const ExportsTab = ({ currencies = [] }) => {
-  const { corporateScreens, isCorporateSectionEnabled } = useRBAC();
+  const { isCorporateSectionEnabled, isBranchEnabled, isBranchCostAnalysisEnabled } = useRBAC();
   const [dateRange, setDateRange] = useState("this_month");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
@@ -410,20 +410,6 @@ const ExportsTab = ({ currencies = [] }) => {
   const [selectedCurrencies, setSelectedCurrencies] = useState([]);
   const [expandedId, setExpandedId] = useState("");
   const searchQuery = searchTerm.trim();
-  const isBranchEnabled = useMemo(
-    () =>
-      isBranchEnabledForCorporate(
-        corporateScreens?.activeInvoiceConfiguration ?? [],
-      ),
-    [corporateScreens?.activeInvoiceConfiguration],
-  );
-  const isBranchCostAnalysisEnabled = useMemo(
-    () =>
-      isBranchCostAnalysisEnabledForCorporate(
-        corporateScreens?.activeInvoiceConfiguration ?? [],
-      ),
-    [corporateScreens?.activeInvoiceConfiguration],
-  );
   const branchCostStatuses = useMemo(
     () =>
       getBranchCostStatuses(isCorporateSectionEnabled("PAYMENTS_ALL")).join(","),

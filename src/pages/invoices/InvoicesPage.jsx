@@ -134,7 +134,6 @@ import {
   normalizeCurrencyCode,
 } from "../../utils/currency";
 import {
-  isBranchEnabled as isBranchEnabledForCorporate,
   isCheckerEditEnabled as isCheckerEditEnabledForCorporate,
   isCheckerEditForbiddenError,
   isRefNoEnabled as isRefNoEnabledForCorporate,
@@ -296,6 +295,7 @@ const InvoicesPage = () => {
     isCorporateScreenAllowed,
     isCorporateSectionEnabled,
     hasPermission,
+    isBranchEnabled,
   } = useRBAC();
   const hasPurchaseOrderSubscription =
     isCorporateScreenAllowed("PURCHASE_ORDER") &&
@@ -486,13 +486,6 @@ const InvoicesPage = () => {
   const isRefNoEnabled = useMemo(
     () =>
       isRefNoEnabledForCorporate(
-        corporateScreens?.activeInvoiceConfiguration ?? [],
-      ),
-    [corporateScreens?.activeInvoiceConfiguration],
-  );
-  const isBranchEnabled = useMemo(
-    () =>
-      isBranchEnabledForCorporate(
         corporateScreens?.activeInvoiceConfiguration ?? [],
       ),
     [corporateScreens?.activeInvoiceConfiguration],
