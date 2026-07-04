@@ -265,6 +265,59 @@ export const toBankAccountUiPayload = (account = {}) => ({
   is_active: account.is_active ?? account.isActive,
 });
 
+export const toPaymentCreateApiPayload = (payment = {}) => {
+  const payload = {};
+  const invoiceId = payment.invoice_id ?? payment.invoiceId;
+  addStringIfPresent(payload, "invoice_id", invoiceId);
+  addStringIfPresent(
+    payload,
+    "payment_date",
+    payment.payment_date ?? payment.paymentDate,
+  );
+  addStringIfPresent(
+    payload,
+    "payment_method",
+    payment.payment_method ?? payment.paymentMethod,
+  );
+  addStringIfPresent(
+    payload,
+    "bank_account_id",
+    payment.bank_account_id ?? payment.bankAccountId,
+  );
+  addStringIfPresent(
+    payload,
+    "reference_number",
+    payment.reference_number ?? payment.referenceNumber,
+  );
+  addStringIfPresent(payload, "notes", payment.notes);
+  return payload;
+};
+
+export const toRecordPaymentsApiPayload = (payment = {}) => {
+  const invoiceNumbers = payment.invoice_numbers ?? payment.invoiceNumbers;
+  const payload = {
+    invoice_numbers: Array.isArray(invoiceNumbers)
+      ? invoiceNumbers.filter(Boolean)
+      : [],
+  };
+  addStringIfPresent(
+    payload,
+    "payment_date",
+    payment.payment_date ?? payment.paymentDate,
+  );
+  addStringIfPresent(
+    payload,
+    "payment_method",
+    payment.payment_method ?? payment.paymentMethod,
+  );
+  addStringIfPresent(
+    payload,
+    "reference_number",
+    payment.reference_number ?? payment.referenceNumber,
+  );
+  return payload;
+};
+
 export {
   buildCreateInvoiceRequestBody,
   buildInvoiceApiPayload,
