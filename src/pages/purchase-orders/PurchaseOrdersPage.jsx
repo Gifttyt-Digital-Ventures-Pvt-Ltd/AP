@@ -1078,19 +1078,21 @@ const PurchaseOrdersPage = () => {
   }
 
   return (
-    <div className="space-y-6" data-testid="purchase-orders-page">
-      <PurchaseOrdersToolbar
-        setShowCreateDialog={setShowCreateDialog}
-        setShowUploadPicker={setShowUploadPicker}
-        setShowBuilderDialog={openBuilderDialog}
-        stats={stats}
-        formatCurrency={formatCurrency}
-        canManagePo={canManagePo}
-        canUploadPo={canUploadPo}
-        activeFormat={activeFormatConfig}
-        onRefresh={fetchData}
-        refreshing={loading}
-      />
+    <div className="flex min-h-0 flex-1 flex-col gap-6" data-testid="purchase-orders-page">
+      <div className="shrink-0">
+        <PurchaseOrdersToolbar
+          setShowCreateDialog={setShowCreateDialog}
+          setShowUploadPicker={setShowUploadPicker}
+          setShowBuilderDialog={openBuilderDialog}
+          stats={stats}
+          formatCurrency={formatCurrency}
+          canManagePo={canManagePo}
+          canUploadPo={canUploadPo}
+          activeFormat={activeFormatConfig}
+          onRefresh={fetchData}
+          refreshing={loading}
+        />
+      </div>
 
       <PoListTable
         searchQuery={searchQuery}
@@ -1098,6 +1100,7 @@ const PurchaseOrdersPage = () => {
         statusFilter={statusFilter}
         setStatusFilter={setStatusFilter}
         filteredOrders={filteredOrders}
+        totalOrders={purchaseOrders.length}
         formatDate={formatDate}
         formatCurrency={formatCurrency}
         statusColors={statusColors}

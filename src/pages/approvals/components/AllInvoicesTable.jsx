@@ -17,29 +17,31 @@ import { formatCurrency } from "../../../utils/currency";
 import InvoiceDueDateCell from "../../invoices/components/InvoiceDueDateCell";
 
 const baseAllInvoicesTableHeader = [
-  { key: "srNo", title: "Sr. No", cellClassName: "text-sm font-medium" },
-  { key: "invoiceNumber", title: "Invoice #", cellClassName: "font-medium" },
-  { key: "refNo", title: "Ref No", cellClassName: "font-mono text-sm" },
-  { key: "orgBranch", title: "Branch", cellClassName: "text-sm" },
-  { key: "vendorName", title: "Vendor" },
-  { key: "approval", title: "Approval" },
-  { key: "amount", title: "Amount", cellClassName: "font-semibold" },
-  { key: "dueDate", title: "Due Date", cellClassName: "text-sm whitespace-nowrap" },
-  { key: "status", title: "Status" },
+  { key: "srNo", title: "Sr. No", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm font-medium" },
+  { key: "invoiceNumber", title: "Invoice #", headerClassName: "bg-muted text-foreground", cellClassName: "font-medium" },
+  { key: "refNo", title: "Ref No", headerClassName: "bg-muted text-foreground", cellClassName: "font-mono text-sm" },
+  { key: "orgBranch", title: "Branch", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm" },
+  { key: "vendorName", title: "Vendor", headerClassName: "bg-muted text-foreground" },
+  { key: "approval", title: "Approval", headerClassName: "bg-muted text-foreground" },
+  { key: "amount", title: "Amount", headerClassName: "bg-muted text-foreground", cellClassName: "font-semibold" },
+  { key: "dueDate", title: "Due Date", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm whitespace-nowrap" },
+  { key: "status", title: "Status", headerClassName: "bg-muted text-foreground" },
   {
     key: "createdByName",
     title: "Created By",
+    headerClassName: "bg-muted text-foreground",
     cellClassName: "text-sm text-muted-foreground",
   },
   {
     key: "paymentDate",
     title: "Payment date",
+    headerClassName: "bg-muted text-foreground",
     cellClassName: "text-sm text-muted-foreground",
   },
   {
     key: "actions",
     title: "Actions",
-    headerClassName: "text-left",
+    headerClassName: "bg-muted text-foreground text-left",
     cellClassName: "text-left",
   },
 ];
@@ -174,7 +176,7 @@ const AllInvoicesTable = ({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <div className="relative w-full shrink-0 sm:w-64 sm:max-w-xs">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -194,6 +196,10 @@ const AllInvoicesTable = ({
             renderRow={renderAllInvoiceRow}
             isLoading={isLoading}
             loadingRowCount={8}
+            tableClassName="min-w-[1500px]"
+            tableContainerClassName="overflow-visible"
+            headClassName="border-b border-border bg-muted shadow-sm"
+            stickyHeader
             emptyMessage="No invoices found"
             emptyTestId="approvals-all-no-invoices"
           />

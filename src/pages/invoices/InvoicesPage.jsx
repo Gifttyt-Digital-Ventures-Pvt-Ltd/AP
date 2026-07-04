@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   useGetInvoicesQuery,
+  useGetInvoiceFilterOptionsQuery,
   useGetInvoiceMandatoryFieldsQuery,
   useGetVendorsQuery,
-  useGetPendingVendorApprovalsQuery,
   useScanInvoiceMutation,
   useBulkUploadInvoicesMutation,
   useRequestVendorAdditionMutation,
@@ -65,6 +65,7 @@ import { syncInvoiceMatchingOnSave } from "./utils/invoiceMatchingFlow";
 import { getInvoiceFileUrl } from "./utils/invoicePreview";
 import {
   EMPTY_INVOICE_LIST_RESPONSE,
+  EMPTY_INVOICE_FILTER_OPTIONS,
   extractVendorIdFromResponse,
   getInvoiceListItems,
   mergeInvoiceVendorOptions,
@@ -113,6 +114,8 @@ import AppDataTable from "../../components/common/AppDataTable";
 import ClippedTextWithTooltip from "../../components/common/ClippedTextWithTooltip";
 import CurrencySelector from "../../components/common/CurrencySelector";
 import RefreshButton from "../../components/common/RefreshButton";
+import TableColumnFilter from "../../components/common/TableColumnFilter";
+import TableSortButton from "../../components/common/TableSortButton";
 import { InvoicePdfPreview } from "./components/InvoicePdfPreview";
 import { InvoiceForm } from "./components/InvoiceForm";
 import UploadSection from "./components/UploadSection";
@@ -185,6 +188,22 @@ const isInvoiceCancellable = (invoice = {}) => {
   const capability = getInvoiceCancelCapability(invoice);
   return capability === true;
 };
+
+const createEmptyInvoiceColumnFilters = () => ({
+  vendorIds: [],
+  branches: [],
+  statuses: [],
+  uploadDateFrom: "",
+  uploadDateTo: "",
+  invoiceDateFrom: "",
+  invoiceDateTo: "",
+});
+
+const invoiceSortOptions = [
+  { value: "uploadDate", label: "Upload date", defaultDirection: "desc" },
+  { value: "invoiceDate", label: "Invoice date", defaultDirection: "desc" },
+  { value: "amount", label: "Amount", defaultDirection: "desc" },
+];
 
 const baseInvoiceTableHeader = [
   {
@@ -332,13 +351,30 @@ const InvoicesPage = () => {
     [currencies],
   );
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState("all");
+  const [invoiceColumnFilters, setInvoiceColumnFilters] = useState(
+    createEmptyInvoiceColumnFilters,
+  );
+  const [invoiceSort, setInvoiceSort] = useState({
+    value: "uploadDate",
+    direction: "desc",
+  });
   const [searchTerm, setSearchTerm] = useState("");
   const [invoicePageOffset, setInvoicePageOffset] = useState(0);
   const debouncedSearchTerm = useDebouncedValue(searchTerm.trim(), 300);
+  const debouncedInvoiceColumnFilters = useDebouncedValue(
+    invoiceColumnFilters,
+    300,
+  );
 
   useEffect(() => {
     setInvoicePageOffset(0);
-  }, [invoiceStatusFilter, debouncedSearchTerm, currencyParam]);
+  }, [
+    invoiceStatusFilter,
+    debouncedSearchTerm,
+    currencyParam,
+    debouncedInvoiceColumnFilters,
+    invoiceSort,
+  ]);
 
   const invoiceQueryArgs = useMemo(
     () => ({
@@ -347,11 +383,36 @@ const InvoicesPage = () => {
       offset: invoicePageOffset,
       ...(invoiceStatusFilter !== "all" ? { filter: invoiceStatusFilter } : {}),
       ...(debouncedSearchTerm ? { search: debouncedSearchTerm } : {}),
+      ...(debouncedInvoiceColumnFilters.vendorIds.length > 0
+        ? { vendorIds: debouncedInvoiceColumnFilters.vendorIds }
+        : {}),
+      ...(debouncedInvoiceColumnFilters.branches.length > 0
+        ? { branches: debouncedInvoiceColumnFilters.branches }
+        : {}),
+      ...(debouncedInvoiceColumnFilters.statuses.length > 0
+        ? { statuses: debouncedInvoiceColumnFilters.statuses }
+        : {}),
+      ...(debouncedInvoiceColumnFilters.uploadDateFrom
+        ? { uploadDateFrom: debouncedInvoiceColumnFilters.uploadDateFrom }
+        : {}),
+      ...(debouncedInvoiceColumnFilters.uploadDateTo
+        ? { uploadDateTo: debouncedInvoiceColumnFilters.uploadDateTo }
+        : {}),
+      ...(debouncedInvoiceColumnFilters.invoiceDateFrom
+        ? { invoiceDateFrom: debouncedInvoiceColumnFilters.invoiceDateFrom }
+        : {}),
+      ...(debouncedInvoiceColumnFilters.invoiceDateTo
+        ? { invoiceDateTo: debouncedInvoiceColumnFilters.invoiceDateTo }
+        : {}),
+      sortBy: invoiceSort.value,
+      sortDirection: invoiceSort.direction,
     }),
     [
       currencyQueryArgs,
       invoiceStatusFilter,
       debouncedSearchTerm,
+      debouncedInvoiceColumnFilters,
+      invoiceSort,
       invoicePageOffset,
     ],
   );
@@ -360,16 +421,22 @@ const InvoicesPage = () => {
     isFetching: invoicesFetching,
     refetch: refetchInvoices,
   } = useGetInvoicesQuery(invoiceQueryArgs);
+  const invoiceFilterOptionsQueryArgs = useMemo(
+    () => ({
+      ...currencyQueryArgs,
+    }),
+    [currencyQueryArgs],
+  );
+  const {
+    data: invoiceFilterOptionsData = EMPTY_INVOICE_FILTER_OPTIONS,
+    isFetching: invoiceFilterOptionsFetching,
+    refetch: refetchInvoiceFilterOptions,
+  } = useGetInvoiceFilterOptionsQuery(invoiceFilterOptionsQueryArgs);
   const {
     data: vendorsData = [],
     isFetching: vendorsFetching,
     refetch: refetchVendors,
   } = useGetVendorsQuery();
-  const {
-    data: pendingVendorsData = [],
-    isFetching: pendingVendorsFetching,
-    refetch: refetchPendingVendors,
-  } = useGetPendingVendorApprovalsQuery();
   const { data: departmentsData = [] } = useGetCorporateDepartmentsQuery();
   const {
     data: invoiceMandatoryFieldsData,
@@ -446,14 +513,20 @@ const InvoicesPage = () => {
     const safePage = Math.max(0, pageIndex);
     setInvoicePageOffset(safePage * INVOICE_LIST_PAGE_SIZE);
   }, []);
-  const approvedVendors = Array.isArray(vendorsData) ? vendorsData : [];
-  const pendingVendors = Array.isArray(pendingVendorsData)
-    ? pendingVendorsData
-    : [];
+  const vendors = Array.isArray(vendorsData) ? vendorsData : [];
   const invoiceVendorOptions = useMemo(
-    () => mergeInvoiceVendorOptions(approvedVendors, pendingVendors),
-    [approvedVendors, pendingVendors],
+    () => mergeInvoiceVendorOptions(vendors),
+    [vendors],
   );
+  const invoiceVendorFilterOptions = invoiceFilterOptionsData.vendors;
+  const branchFilterOptions = invoiceFilterOptionsData.branches;
+  const invoiceStatusFilterOptions = invoiceFilterOptionsData.statuses;
+  const invoiceQuickFilters = useMemo(() => {
+    if (invoiceFilterOptionsData.quickFilters.length > 0) {
+      return invoiceFilterOptionsData.quickFilters;
+    }
+    return INVOICE_LIST_FILTERS;
+  }, [invoiceFilterOptionsData.quickFilters]);
   const departments = Array.isArray(departmentsData) ? departmentsData : [];
   const invoiceCategories =
     isCategoryFeatureEnabled && Array.isArray(invoiceCategoriesData)
@@ -490,6 +563,122 @@ const InvoicesPage = () => {
       ),
     [corporateScreens?.activeInvoiceConfiguration],
   );
+  const updateInvoiceColumnFilter = useCallback((key, value) => {
+    setInvoiceColumnFilters((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  }, []);
+  const renderInvoiceColumnHeader = useCallback(
+    (column) => {
+      switch (column.key) {
+        case "vendorName":
+          return (
+            <TableColumnFilter
+              title={column.title}
+              type="select"
+              value={invoiceColumnFilters.vendorIds}
+              onChange={(value) => updateInvoiceColumnFilter("vendorIds", value)}
+              options={invoiceVendorFilterOptions}
+              allLabel="All vendors"
+              searchable
+              multiple
+              searchPlaceholder="Search vendors"
+            />
+          );
+        case "orgBranch":
+          return (
+            <TableColumnFilter
+              title={column.title}
+              type="select"
+              value={invoiceColumnFilters.branches}
+              onChange={(value) => updateInvoiceColumnFilter("branches", value)}
+              options={branchFilterOptions}
+              allLabel="All branches"
+              searchable
+              multiple
+              searchPlaceholder="Search branches"
+            />
+          );
+        case "createdAt":
+          return (
+            <TableColumnFilter
+              title={column.title}
+              type="dateRange"
+              value={{
+                from: invoiceColumnFilters.uploadDateFrom,
+                to: invoiceColumnFilters.uploadDateTo,
+              }}
+              onChange={(value) =>
+                setInvoiceColumnFilters((prev) => ({
+                  ...prev,
+                  uploadDateFrom: value.from,
+                  uploadDateTo: value.to,
+                }))
+              }
+              fromLabel="Uploaded from"
+              toLabel="Uploaded to"
+              align="end"
+            />
+          );
+        case "invoiceDate":
+          return (
+            <TableColumnFilter
+              title={column.title}
+              type="dateRange"
+              value={{
+                from: invoiceColumnFilters.invoiceDateFrom,
+                to: invoiceColumnFilters.invoiceDateTo,
+              }}
+              onChange={(value) =>
+                setInvoiceColumnFilters((prev) => ({
+                  ...prev,
+                  invoiceDateFrom: value.from,
+                  invoiceDateTo: value.to,
+                }))
+              }
+              fromLabel="Invoice from"
+              toLabel="Invoice to"
+              align="end"
+            />
+          );
+        case "status":
+          return (
+            <TableColumnFilter
+              title={column.title}
+              type="select"
+              value={
+                invoiceColumnFilters.statuses.length > 0
+                  ? invoiceColumnFilters.statuses
+                  : invoiceStatusFilter === "all"
+                    ? []
+                    : [invoiceStatusFilter]
+              }
+              onChange={(value) => {
+                updateInvoiceColumnFilter("statuses", value);
+                setInvoiceStatusFilter("all");
+              }}
+              options={invoiceStatusFilterOptions}
+              allLabel="All statuses"
+              searchable
+              multiple
+              searchPlaceholder="Search statuses"
+              align="end"
+            />
+          );
+        default:
+          return column.title;
+      }
+    },
+    [
+      branchFilterOptions,
+      invoiceColumnFilters,
+      invoiceStatusFilter,
+      invoiceStatusFilterOptions,
+      invoiceVendorFilterOptions,
+      updateInvoiceColumnFilter,
+    ],
+  );
   const invoiceTableHeader = useMemo(() => {
     let headers = isRefNoEnabled
       ? baseInvoiceTableHeader
@@ -504,8 +693,17 @@ const InvoicesPage = () => {
         ];
       }
     }
-    return withIntegrationTableHeader(headers, showIntegrationColumn);
-  }, [isRefNoEnabled, isBranchEnabled, showIntegrationColumn]);
+    return withIntegrationTableHeader(headers, showIntegrationColumn).map((column) => ({
+      ...column,
+      title: renderInvoiceColumnHeader(column),
+      headerClassName: cn(column.headerClassName, "bg-muted text-foreground"),
+    }));
+  }, [
+    isRefNoEnabled,
+    isBranchEnabled,
+    showIntegrationColumn,
+    renderInvoiceColumnHeader,
+  ]);
   const invoiceEditContext = useMemo(
     () => ({
       ...buildCurrentUserIdentity({ user, corporateUserContext }),
@@ -1505,13 +1703,12 @@ const InvoicesPage = () => {
 
       const requestedVendorId = extractVendorIdFromResponse(response);
 
-      const [vendorsResult, pendingResult] = await Promise.all([
+      const [vendorsResult] = await Promise.all([
         refetchVendors(),
-        refetchPendingVendors(),
+        refetchInvoiceFilterOptions(),
       ]);
       const freshVendorOptions = mergeInvoiceVendorOptions(
         vendorsResult?.data || [],
-        pendingResult?.data || [],
       );
       const matchedVendor =
         (requestedVendorId
@@ -1605,7 +1802,7 @@ const InvoicesPage = () => {
       await Promise.all([
         refetchInvoices(),
         refetchVendors(),
-        refetchPendingVendors(),
+        refetchInvoiceFilterOptions(),
       ]);
       toast.success("Invoices refreshed");
     } catch {
@@ -2349,7 +2546,9 @@ const InvoicesPage = () => {
           <RefreshButton
             onClick={handleRefreshInvoices}
             refreshing={
-              invoicesFetching || vendorsFetching || pendingVendorsFetching
+              invoicesFetching ||
+              vendorsFetching ||
+              invoiceFilterOptionsFetching
             }
           >
             Refresh
@@ -2383,16 +2582,19 @@ const InvoicesPage = () => {
 
       <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center">
         <div className="flex flex-wrap gap-2">
-          {INVOICE_LIST_FILTERS.map(({ value, label }) => (
+          {invoiceQuickFilters.map(({ value, label, count }) => (
             <Button
               key={value}
               type="button"
               size="sm"
               variant={invoiceStatusFilter === value ? "default" : "outline"}
-              onClick={() => setInvoiceStatusFilter(value)}
+              onClick={() => {
+                setInvoiceStatusFilter(value);
+                updateInvoiceColumnFilter("statuses", []);
+              }}
               data-testid={`invoice-filter-${value}`}
             >
-              {label}
+              {count != null ? `${label} (${count})` : label}
             </Button>
           ))}
         </div>
@@ -2406,6 +2608,12 @@ const InvoicesPage = () => {
             data-testid="invoice-search-input"
           />
         </div>
+        <TableSortButton
+          options={invoiceSortOptions}
+          value={invoiceSort.value}
+          direction={invoiceSort.direction}
+          onChange={setInvoiceSort}
+        />
       </div>
 
       <div
@@ -2420,7 +2628,9 @@ const InvoicesPage = () => {
             isLoading={invoicesFetching}
             loadingRowCount={8}
             tableClassName="min-w-[1900px]"
-            headClassName="border-b border-border bg-muted/50"
+            tableContainerClassName="overflow-visible"
+            headClassName="border-b border-border bg-muted shadow-sm"
+            stickyHeader
             emptyMessage="No invoices found. Upload your first invoice to get started!"
             emptyTestId="no-invoices"
           />

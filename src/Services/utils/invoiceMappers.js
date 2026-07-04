@@ -481,6 +481,102 @@ export const EMPTY_INVOICE_LIST_RESPONSE = {
   statusCounts: null,
 };
 
+export const EMPTY_INVOICE_FILTER_OPTIONS = {
+  vendors: [],
+  branches: [],
+  statuses: [],
+  quickFilters: [],
+};
+
+const unwrapInvoiceFilterList = (response, keys = []) => {
+  if (Array.isArray(response)) return response;
+  const payload = response?.data ?? response ?? {};
+  if (Array.isArray(payload)) return payload;
+  for (const key of keys) {
+    if (Array.isArray(payload?.[key])) return payload[key];
+  }
+  return [];
+};
+
+const normalizeInvoiceFilterVendorOptions = (vendors = []) =>
+  vendors
+    .map((vendor) => {
+      const value = vendor?.id ?? vendor?.vendorId ?? vendor?.vendor_id;
+      const label = vendor?.name ?? vendor?.vendorName ?? vendor?.vendor_name ?? "";
+      if (value === undefined || value === null || !String(label).trim()) {
+        return null;
+      }
+      return {
+        value: String(value),
+        label: String(label),
+        isPendingApproval: Boolean(
+          vendor?.isPendingApproval ?? vendor?.is_pending_approval,
+        ),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+const normalizeInvoiceFilterBranchOptions = (branches = []) =>
+  branches
+    .map((branch) => {
+      const branchCode = String(
+        branch?.branchCode ?? branch?.branch_code ?? branch?.code ?? "",
+      ).trim();
+      const branchName = String(
+        branch?.branchName ?? branch?.branch_name ?? branch?.name ?? "",
+      ).trim();
+      const value = branchCode || branchName;
+      if (!value) return null;
+      const label =
+        branchName && branchCode
+          ? `${branchName} (${branchCode})`
+          : branchName || branchCode;
+      return { value, label };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+const normalizeInvoiceFilterSelectOptions = (options = []) =>
+  options
+    .map((option) => {
+      if (typeof option === "string") {
+        const value = option.trim();
+        return value ? { value, label: value } : null;
+      }
+      const value = option?.value ?? option?.id ?? option?.status ?? "";
+      const label = option?.label ?? option?.name ?? value;
+      if (!String(value).trim()) return null;
+      return {
+        value: String(value),
+        label: String(label),
+        ...(option?.count !== undefined && option?.count !== null
+          ? { count: Number(option.count) || 0 }
+          : {}),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+export const normalizeInvoiceFilterOptions = (response) => {
+  const payload = response?.data ?? response ?? {};
+
+  return {
+    vendors: normalizeInvoiceFilterVendorOptions(
+      unwrapInvoiceFilterList(payload, ["vendors", "items", "content"]),
+    ),
+    branches: normalizeInvoiceFilterBranchOptions(
+      unwrapInvoiceFilterList(payload, ["branches", "items", "content"]),
+    ),
+    statuses: normalizeInvoiceFilterSelectOptions(
+      unwrapInvoiceFilterList(payload, ["statuses", "items", "content"]),
+    ),
+    quickFilters: normalizeInvoiceFilterSelectOptions(
+      unwrapInvoiceFilterList(payload, ["quickFilters", "quick_filters", "items", "content"]),
+    ),
+  };
+};
+
 const normalizeInvoiceStatusCounts = (statusCounts) => {
   if (!statusCounts || typeof statusCounts !== "object") {
     return null;
@@ -559,17 +655,25 @@ export const getInvoiceListItems = (data) => {
   return [];
 };
 
-export const mergeInvoiceVendorOptions = (approvedVendors = [], pendingVendors = []) => {
+export const mergeInvoiceVendorOptions = (vendors = []) => {
+  const list = Array.isArray(vendors) ? vendors : [];
   const merged = new Map();
 
-  approvedVendors.forEach((vendor) => {
+  list.forEach((vendor) => {
     if (vendor?.id === undefined || vendor?.id === null) return;
-    merged.set(String(vendor.id), { ...vendor, isPendingApproval: false });
-  });
+    const statusKey = String(vendor.status || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[_-]+/g, " ");
+    const isPendingApproval =
+      statusKey === "pending approval" ||
+      statusKey === "create request" ||
+      statusKey === "vendor approval pending";
 
-  pendingVendors.forEach((vendor) => {
-    if (vendor?.id === undefined || vendor?.id === null) return;
-    merged.set(String(vendor.id), { ...vendor, isPendingApproval: true });
+    merged.set(String(vendor.id), {
+      ...vendor,
+      isPendingApproval,
+    });
   });
 
   return Array.from(merged.values());

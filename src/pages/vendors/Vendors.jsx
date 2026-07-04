@@ -836,14 +836,18 @@ const Vendors = () => {
     () =>
       withIntegrationTableHeader(
         [
-          { key: 'vendor', title: 'Vendor' },
-          { key: 'createdAt', title: 'Created Date', cellClassName: 'text-xs text-muted-foreground whitespace-nowrap' },
-          { key: 'status', title: 'Status' },
-          { key: 'contact', title: 'Contact' },
-          { key: 'gstRegistrations', title: 'GSTINs' },
-          { key: 'actions', title: 'Actions', headerClassName: 'text-left' },
+          { key: 'vendor', title: 'Vendor', headerClassName: 'bg-muted text-foreground' },
+          { key: 'createdAt', title: 'Created Date', headerClassName: 'bg-muted text-foreground', cellClassName: 'text-xs text-muted-foreground whitespace-nowrap' },
+          { key: 'status', title: 'Status', headerClassName: 'bg-muted text-foreground' },
+          { key: 'contact', title: 'Contact', headerClassName: 'bg-muted text-foreground' },
+          { key: 'gstRegistrations', title: 'GSTINs', headerClassName: 'bg-muted text-foreground' },
+          { key: 'actions', title: 'Actions', headerClassName: 'bg-muted text-foreground text-left' },
         ],
         showIntegrationColumn,
+      ).map((column) =>
+        column.key === 'integration'
+          ? { ...column, headerClassName: 'bg-muted text-foreground' }
+          : column,
       ),
     [showIntegrationColumn],
   );
@@ -1051,8 +1055,8 @@ const Vendors = () => {
   };
 
   return (
-    <div data-testid="vendors-page">
-      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-4" data-testid="vendors-page">
+      <div className="shrink-0 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-3xl font-bold font-['Manrope'] text-primary md:text-4xl" data-testid="vendors-title">
             Vendors
@@ -1149,7 +1153,7 @@ const Vendors = () => {
         testId="vendor-dialog"
       />
 
-      <div className="mb-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="shrink-0 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
         <VendorMetricCard
           label="Total Vendors"
           value={vendorStats.total}
@@ -1175,7 +1179,7 @@ const Vendors = () => {
         />
       </div>
 
-      <Card className="mb-3 rounded-md border-border shadow-none">
+      <div className="shrink-0 rounded-md border border-border bg-card shadow-none">
         <CardContent className="p-3">
           <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
             <div className="relative min-w-0 flex-1">
@@ -1217,9 +1221,8 @@ const Vendors = () => {
               </Select>
             </div>
           </div>
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-            <span>{vendorFilterSummary}</span>
-            {hasActiveFilters && (
+          {hasActiveFilters && (
+            <div className="mt-2 flex justify-end">
               <Button
                 type="button"
                 variant="ghost"
@@ -1229,21 +1232,38 @@ const Vendors = () => {
               >
                 Clear filters
               </Button>
-            )}
-          </div>
+            </div>
+          )}
         </CardContent>
-      </Card>
+      </div>
 
-      <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
-        <AppDataTable
-          tableHeader={vendorsTableHeader}
-          tableData={filteredVendors}
-          renderRow={renderVendorRow}
-          emptyMessage="No vendors found. Create your first vendor to get started!"
-          emptyTestId="no-vendors"
-          tableClassName="w-full"
-          striped={false}
-        />
+      <div
+        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm"
+        data-testid="vendors-table"
+      >
+        <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-thin-muted">
+          <AppDataTable
+            tableHeader={vendorsTableHeader}
+            tableData={filteredVendors}
+            renderRow={renderVendorRow}
+            isLoading={vendorsFetching}
+            loadingRowCount={8}
+            emptyMessage="No vendors found. Create your first vendor to get started!"
+            emptyTestId="no-vendors"
+            tableClassName="min-w-[1000px]"
+            tableContainerClassName="overflow-visible"
+            headClassName="border-b border-border bg-muted shadow-sm"
+            stickyHeader
+            striped={false}
+          />
+        </div>
+        <div className="mt-auto flex shrink-0 border-t border-border p-4">
+          <p className="text-sm text-muted-foreground" data-testid="vendors-table-summary">
+            {filteredVendors.length === vendors.length
+              ? `Showing ${filteredVendors.length.toLocaleString('en-IN')} vendor${filteredVendors.length === 1 ? '' : 's'}`
+              : `${vendorFilterSummary}`}
+          </p>
+        </div>
       </div>
 
       <DeleteVendorDialog

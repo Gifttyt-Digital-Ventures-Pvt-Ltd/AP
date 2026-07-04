@@ -40,14 +40,14 @@ const renderCurrencyTotals = (totals, className) => {
 };
 
 const basePendingPaymentTableHeader = [
-  { key: 'invoiceNumber', title: 'Invoice #', cellClassName: "  font-medium" },
-  { key: 'orgBranch', title: 'Branch', cellClassName: 'text-sm' },
-  { key: 'vendorName', title: 'Vendor' },
-  { key: 'amount', title: 'Amount', cellClassName: "  font-semibold" },
-  { key: 'invoiceDate', title: 'Invoice Date', cellClassName: 'text-sm text-muted-foreground' },
-  { key: 'dueDate', title: 'Due Date', cellClassName: 'text-sm text-muted-foreground' },
-  { key: 'status', title: 'Status' },
-  { key: 'actions', title: 'Actions', headerClassName: 'text-left', cellClassName: 'text-left' },
+  { key: 'invoiceNumber', title: 'Invoice #', headerClassName: 'bg-muted text-foreground', cellClassName: "  font-medium" },
+  { key: 'orgBranch', title: 'Branch', headerClassName: 'bg-muted text-foreground', cellClassName: 'text-sm' },
+  { key: 'vendorName', title: 'Vendor', headerClassName: 'bg-muted text-foreground' },
+  { key: 'amount', title: 'Amount', headerClassName: 'bg-muted text-foreground', cellClassName: "  font-semibold" },
+  { key: 'invoiceDate', title: 'Invoice Date', headerClassName: 'bg-muted text-foreground', cellClassName: 'text-sm text-muted-foreground' },
+  { key: 'dueDate', title: 'Due Date', headerClassName: 'bg-muted text-foreground', cellClassName: 'text-sm text-muted-foreground' },
+  { key: 'status', title: 'Status', headerClassName: 'bg-muted text-foreground' },
+  { key: 'actions', title: 'Actions', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'text-left' },
 ];
 
 // Pending tab with summary card and pending invoice table.
@@ -76,7 +76,11 @@ const PendingPaymentsTab = ({
     const headers = showBranchField
       ? basePendingPaymentTableHeader
       : basePendingPaymentTableHeader.filter((header) => header.key !== 'orgBranch');
-    return withIntegrationTableHeader(headers, showIntegrationColumn);
+    return withIntegrationTableHeader(headers, showIntegrationColumn).map((column) =>
+      column.key === 'integration'
+        ? { ...column, headerClassName: 'bg-muted text-foreground text-left' }
+        : column,
+    );
   }, [showBranchField, showIntegrationColumn]);
   const selectedInvoices = invoices.filter((invoice) => selectedInvoiceIds.includes(invoice.id));
   const totalPendingByCurrency = useMemo(
@@ -205,9 +209,9 @@ const PendingPaymentsTab = ({
   );
 
   return (
-    <>
+    <div className="flex h-full min-h-0 flex-col gap-4">
       {invoices.length > 0 && (
-        <div className="bg-accent/10 border border-accent/30 rounded-lg p-4 mb-4">
+        <div className="shrink-0 bg-accent/10 border border-accent/30 rounded-lg p-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm font-medium">Total Pending Amount</p>
@@ -276,21 +280,34 @@ const PendingPaymentsTab = ({
       )}
 
       <div
-        className="bg-card border border-border rounded-lg shadow-sm overflow-hidden"
+        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm"
         data-testid="pending-invoices-table"
       >
-        <AppDataTable
-          tableHeader={pendingPaymentTableHeader}
-          tableData={filteredPendingInvoices}
-          renderRow={renderPendingPaymentRow}
-          showCheckbox={showRecordPaymentSelection}
-          isChecked={allSelected}
-          onSelectAllChange={onSelectAllInvoices}
-          emptyMessage="No pending payments. All invoices need approval first."
-          emptyTestId="no-pending-payments"
-        />
+        <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-thin-muted">
+          <AppDataTable
+            tableHeader={pendingPaymentTableHeader}
+            tableData={filteredPendingInvoices}
+            renderRow={renderPendingPaymentRow}
+            showCheckbox={showRecordPaymentSelection}
+            isChecked={allSelected}
+            onSelectAllChange={onSelectAllInvoices}
+            tableClassName="min-w-[1100px]"
+            tableContainerClassName="overflow-visible"
+            headClassName="border-b border-border bg-muted shadow-sm"
+            stickyHeader
+            emptyMessage="No pending payments. All invoices need approval first."
+            emptyTestId="no-pending-payments"
+          />
+        </div>
+        <div className="mt-auto flex shrink-0 border-t border-border p-4">
+          <p className="text-sm text-muted-foreground" data-testid="pending-payments-table-summary">
+            {filteredPendingInvoices.length === invoices.length
+              ? `Showing ${filteredPendingInvoices.length.toLocaleString('en-IN')} pending invoice${filteredPendingInvoices.length === 1 ? '' : 's'}`
+              : `Showing ${filteredPendingInvoices.length.toLocaleString('en-IN')} of ${invoices.length.toLocaleString('en-IN')} pending invoices`}
+          </p>
+        </div>
       </div>
-    </>
+    </div>
   );
 };
 

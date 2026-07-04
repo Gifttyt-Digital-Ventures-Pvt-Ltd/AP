@@ -38,6 +38,7 @@ const AppDataTable = ({
   isChecked = false,
   stickyHeader = true,
   striped = true,
+  tableContainerClassName = "",
 }) => {
   const resolvedColumns =
     tableHeader?.map((header, index) => {
@@ -59,7 +60,10 @@ const AppDataTable = ({
   const selectAllHandler = onSelectAllChange || handleCheckboxChange;
 
   return (
-    <Table className={cn("border-separate border-spacing-0", tableClassName)}>
+    <Table
+      className={cn("border-separate border-spacing-0", tableClassName)}
+      containerClassName={tableContainerClassName}
+    >
       <TableHeader
         className={cn(
           "bg-muted/70",

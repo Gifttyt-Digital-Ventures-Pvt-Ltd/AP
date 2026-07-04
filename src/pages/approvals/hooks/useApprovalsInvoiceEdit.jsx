@@ -13,7 +13,6 @@ import {
 import {
   useGetInvoiceMandatoryFieldsQuery,
   useGetVendorsQuery,
-  useGetPendingVendorApprovalsQuery,
   useRequestVendorAdditionMutation,
   useUpdateInvoiceMutation,
   useCheckInvoiceMutation,
@@ -119,7 +118,6 @@ export const useApprovalsInvoiceEdit = ({
     "";
 
   const { data: vendorsData = [] } = useGetVendorsQuery();
-  const { data: pendingVendorsData = [] } = useGetPendingVendorApprovalsQuery();
   const { data: departmentsData = [] } = useGetCorporateDepartmentsQuery();
   const {
     data: invoiceMandatoryFieldsData,
@@ -160,9 +158,8 @@ export const useApprovalsInvoiceEdit = ({
     () =>
       mergeInvoiceVendorOptions(
         Array.isArray(vendorsData) ? vendorsData : [],
-        Array.isArray(pendingVendorsData) ? pendingVendorsData : [],
       ),
-    [vendorsData, pendingVendorsData],
+    [vendorsData],
   );
   const departments = Array.isArray(departmentsData) ? departmentsData : [];
   const invoiceCategories =

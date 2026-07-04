@@ -3,7 +3,6 @@ import { toast } from "sonner";
 import {
   useCreateInvoiceMutation,
   useGetInvoiceMandatoryFieldsQuery,
-  useGetPendingVendorApprovalsQuery,
   useGetVendorsQuery,
   useRequestVendorAdditionMutation,
   useScanInvoiceMutation,
@@ -151,8 +150,6 @@ const InvoiceSingleUploadLayer = ({
   const uploadedFileRef = useRef(null);
 
   const { data: vendorsData = [], refetch: refetchVendors } = useGetVendorsQuery();
-  const { data: pendingVendorsData = [], refetch: refetchPendingVendors } =
-    useGetPendingVendorApprovalsQuery();
   const { data: departmentsData = [] } = useGetCorporateDepartmentsQuery();
   const { data: invoiceMandatoryFieldsData, isLoading: invoiceMandatoryFieldsLoading } =
     useGetInvoiceMandatoryFieldsQuery(
@@ -185,9 +182,8 @@ const InvoiceSingleUploadLayer = ({
     () =>
       mergeInvoiceVendorOptions(
         Array.isArray(vendorsData) ? vendorsData : [],
-        Array.isArray(pendingVendorsData) ? pendingVendorsData : [],
       ),
-    [vendorsData, pendingVendorsData],
+    [vendorsData],
   );
   const departments = Array.isArray(departmentsData) ? departmentsData : [];
   const invoiceCategories =
@@ -663,13 +659,9 @@ const InvoiceSingleUploadLayer = ({
         gstin,
       }).unwrap();
       const requestedVendorId = extractVendorIdFromResponse(response);
-      const [vendorsResult, pendingResult] = await Promise.all([
-        refetchVendors(),
-        refetchPendingVendors(),
-      ]);
+      const vendorsResult = await refetchVendors();
       const freshVendorOptions = mergeInvoiceVendorOptions(
         vendorsResult?.data || [],
-        pendingResult?.data || [],
       );
       const matchedVendor =
         (requestedVendorId

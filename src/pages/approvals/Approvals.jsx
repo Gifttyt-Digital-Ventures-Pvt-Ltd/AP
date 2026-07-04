@@ -410,56 +410,64 @@ const Approvals = () => {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="needs-approval" className="mt-0 min-h-0 flex-1 focus-visible:outline-none">
-          <NeedsApprovalTable
-            myPendingInvoices={myPendingInvoices}
-            getApprovalProgress={getApprovalProgress}
-            safeFormatDate={safeFormatDate}
-            handleApprovalAction={handleApprovalAction}
-            handleViewInvoice={handleViewInvoice}
-            handleOpenInvoiceHistory={handleOpenInvoiceHistory}
-            canApproveInvoices={canApproveInvoices}
-            canCheckInvoices={canCheckInvoices}
-            showApprovalProgress={canApproveInvoices}
-            showBranchField={isBranchEnabled}
-          />
-        </TabsContent>
+        <div className="relative min-h-0 flex-1">
+          <TabsContent
+            value="needs-approval"
+            className="absolute inset-0 mt-0 flex min-h-0 flex-col focus-visible:outline-none data-[state=inactive]:hidden"
+          >
+            <NeedsApprovalTable
+              myPendingInvoices={myPendingInvoices}
+              getApprovalProgress={getApprovalProgress}
+              safeFormatDate={safeFormatDate}
+              handleApprovalAction={handleApprovalAction}
+              handleViewInvoice={handleViewInvoice}
+              handleOpenInvoiceHistory={handleOpenInvoiceHistory}
+              canApproveInvoices={canApproveInvoices}
+              canCheckInvoices={canCheckInvoices}
+              showApprovalProgress={canApproveInvoices}
+              showBranchField={isBranchEnabled}
+            />
+          </TabsContent>
 
-        <TabsContent value="pending" className="mt-0 min-h-0 flex-1 focus-visible:outline-none">
-          <PendingInvoicesTable
-            otherPendingInvoices={otherPendingInvoices}
-            getStatusBadgeClass={getStatusBadgeClass}
-            formatStatus={formatStatus}
-            getApprovalProgress={getApprovalProgress}
-            safeFormatDate={safeFormatDate}
-            handleViewInvoice={handleViewInvoice}
-            handleOpenInvoiceHistory={handleOpenInvoiceHistory}
-            showBranchField={isBranchEnabled}
-          />
-        </TabsContent>
+          <TabsContent
+            value="pending"
+            className="absolute inset-0 mt-0 flex min-h-0 flex-col focus-visible:outline-none data-[state=inactive]:hidden"
+          >
+            <PendingInvoicesTable
+              otherPendingInvoices={otherPendingInvoices}
+              getStatusBadgeClass={getStatusBadgeClass}
+              formatStatus={formatStatus}
+              getApprovalProgress={getApprovalProgress}
+              safeFormatDate={safeFormatDate}
+              handleViewInvoice={handleViewInvoice}
+              handleOpenInvoiceHistory={handleOpenInvoiceHistory}
+              showBranchField={isBranchEnabled}
+            />
+          </TabsContent>
 
-        <TabsContent
-          value="all"
-          className="mt-0 flex min-h-0 flex-1 flex-col focus-visible:outline-none"
-        >
-          <AllInvoicesTable
-            allInvoices={allInvoices}
-            searchTerm={allTabSearchTerm}
-            setSearchTerm={setAllTabSearchTerm}
-            pagination={allInvoicesPagination}
-            visiblePageNumbers={visibleAllInvoicePageNumbers}
-            onPageChange={goToAllInvoicesPage}
-            isLoading={allInvoicesFetching}
-            showRefNoField={isRefNoEnabled}
-            showBranchField={isBranchEnabled}
-            getStatusBadgeClass={getStatusBadgeClass}
-            formatStatus={formatStatus}
-            getApprovalProgress={getApprovalProgress}
-            safeFormatDate={safeFormatDate}
-            handleOpenInvoiceHistory={handleOpenInvoiceHistory}
-            handleViewInvoice={handleViewInvoice}
-          />
-        </TabsContent>
+          <TabsContent
+            value="all"
+            className="absolute inset-0 mt-0 flex min-h-0 flex-col focus-visible:outline-none data-[state=inactive]:hidden"
+          >
+            <AllInvoicesTable
+              allInvoices={allInvoices}
+              searchTerm={allTabSearchTerm}
+              setSearchTerm={setAllTabSearchTerm}
+              pagination={allInvoicesPagination}
+              visiblePageNumbers={visibleAllInvoicePageNumbers}
+              onPageChange={goToAllInvoicesPage}
+              isLoading={allInvoicesFetching}
+              showRefNoField={isRefNoEnabled}
+              showBranchField={isBranchEnabled}
+              getStatusBadgeClass={getStatusBadgeClass}
+              formatStatus={formatStatus}
+              getApprovalProgress={getApprovalProgress}
+              safeFormatDate={safeFormatDate}
+              handleOpenInvoiceHistory={handleOpenInvoiceHistory}
+              handleViewInvoice={handleViewInvoice}
+            />
+          </TabsContent>
+        </div>
       </Tabs>
 
       <ApprovalDialog

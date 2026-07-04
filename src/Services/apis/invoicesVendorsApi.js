@@ -6,6 +6,7 @@ import {
   toVendorRequestApiPayload,
   toVendorUiPayload,
   normalizeInvoiceListResponse,
+  normalizeInvoiceFilterOptions,
 } from "../utils/payloadMappers";
 import { normalizeApprovalHistoryEntries } from "../../pages/invoices/utils/invoiceHistory";
 import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
@@ -35,6 +36,15 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
       query: (params) => ({ url: "/invoices", method: "GET", params }),
       transformResponse: normalizeInvoiceListResponse,
       providesTags: ["Invoices"],
+    }),
+    getInvoiceFilterOptions: builder.query({
+      query: (params = {}) => ({
+        url: "/invoices/filter-options",
+        method: "GET",
+        params,
+      }),
+      transformResponse: normalizeInvoiceFilterOptions,
+      providesTags: [{ type: "Invoices", id: "FILTER_OPTIONS" }],
     }),
     createInvoice: builder.mutation({
       query: (body) => ({
@@ -218,6 +228,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
 
 export const {
   useGetInvoiceMandatoryFieldsQuery,
+  useGetInvoiceFilterOptionsQuery,
   useGetInvoicesQuery,
   useCreateInvoiceMutation,
   useUpdateInvoiceMutation,

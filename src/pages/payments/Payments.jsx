@@ -806,49 +806,51 @@ const Payments = () => {
   );
 
   return (
-    <div data-testid="payments-page">
-      <PaymentsHeader
-        invoicesCount={invoices.length}
-        handleBulkRelease={handleBulkRelease}
-        canBulkRelease={canShowBulkRelease}
-        currencies={currencies}
-        selectedCurrency={selectedCurrency}
-        onCurrencyChange={setSelectedCurrency}
-        onRefresh={handleRefreshPayments}
-        refreshing={paymentsRefreshing}
-        batchDialogTrigger={canCreateBatch ? (
-          <Button
-            variant="default"
-            onClick={() => setCreateBatchDialogOpen(true)}
-            data-testid="open-create-batch-dialog"
-          >
-            <Plus className="h-4 w-4 mr-2" />
-            Create Batch
-          </Button>
-        ) : null}
-        paymentDialog={
-          canShowSinglePayment ? (
-            <PaymentDialog
-              dialogOpen={dialogOpen}
-              setDialogOpen={setDialogOpen}
-              resetForm={resetForm}
-              formData={formData}
-              setFormData={setFormData}
-              invoices={invoices}
-              bankAccounts={bankAccounts}
-              showBankAccountField={isConnectedBankingEnabled}
-              handleSubmit={handleSubmit}
-              canCreatePayment={canManagePayments}
-            />
-          ) : null
-        }
-      />
+    <div className="flex min-h-0 flex-1 flex-col gap-6" data-testid="payments-page">
+      <div className="shrink-0">
+        <PaymentsHeader
+          invoicesCount={invoices.length}
+          handleBulkRelease={handleBulkRelease}
+          canBulkRelease={canShowBulkRelease}
+          currencies={currencies}
+          selectedCurrency={selectedCurrency}
+          onCurrencyChange={setSelectedCurrency}
+          onRefresh={handleRefreshPayments}
+          refreshing={paymentsRefreshing}
+          batchDialogTrigger={canCreateBatch ? (
+            <Button
+              variant="default"
+              onClick={() => setCreateBatchDialogOpen(true)}
+              data-testid="open-create-batch-dialog"
+            >
+              <Plus className="h-4 w-4 mr-2" />
+              Create Batch
+            </Button>
+          ) : null}
+          paymentDialog={
+            canShowSinglePayment ? (
+              <PaymentDialog
+                dialogOpen={dialogOpen}
+                setDialogOpen={setDialogOpen}
+                resetForm={resetForm}
+                formData={formData}
+                setFormData={setFormData}
+                invoices={invoices}
+                bankAccounts={bankAccounts}
+                showBankAccountField={isConnectedBankingEnabled}
+                handleSubmit={handleSubmit}
+                canCreatePayment={canManagePayments}
+              />
+            ) : null
+          }
+        />
+      </div>
 
       {isConnectedBankingEnabled ? (
         <ConnectedBankAccountsPanel
           accounts={bankAccounts}
           loading={bankAccountsFetching}
-          className="mb-6"
+          className="shrink-0"
         />
       ) : null}
 
@@ -947,22 +949,20 @@ const Payments = () => {
         </Dialog>
       )}
 
-      <div className="mb-6">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-            data-testid="payment-search-input"
-          />
-        </div>
+      <div className="shrink-0 relative max-w-sm">
+        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search by vendor or invoice #..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="pl-10"
+          data-testid="payment-search-input"
+        />
       </div>
 
       {/* Tabs are composed from feature components to keep page orchestration small. */}
-      <Tabs defaultValue="pending" className="space-y-6">
-        <TabsList>
+      <Tabs defaultValue="pending" className="flex min-h-0 flex-1 flex-col gap-6">
+        <TabsList className="shrink-0 w-fit">
           <TabsTrigger value="pending" data-testid="tab-pending-payments">
             Pending Payments ({invoices.length})
           </TabsTrigger>
@@ -971,41 +971,50 @@ const Payments = () => {
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="pending">
-          <PendingPaymentsTab
-            invoices={invoices}
-            filteredPendingInvoices={filteredPendingInvoices}
-            handleBulkRelease={handleBulkRelease}
-            canBulkRelease={canShowBulkRelease}
-            showRecordPaymentSelection={canShowRecordPayment}
-            selectedInvoiceIds={recordPaymentInvoiceIds}
-            onToggleInvoice={toggleRecordPaymentInvoice}
-            onSelectAllInvoices={selectAllRecordPaymentInvoices}
-            onOpenRecordPayment={openRecordPaymentDialog}
-            onOpenInvoiceReport={openPaymentReportDialog}
-            canRecordPayment={canShowRecordPayment}
-            canDownloadInvoiceReport={canManagePayments}
-            safeFormatDate={safeFormatDate}
-            handleViewInvoice={handleViewInvoice}
-            handleDownloadInvoice={handleDownloadInvoice}
-            canCancelInvoice={(invoice) =>
-              Boolean(invoice?.id) && isInvoiceCancellable(invoice)
-            }
-            handleCancelInvoice={handleCancelInvoice}
-            showBranchField={isBranchEnabled}
-          />
-        </TabsContent>
+        <div className="relative min-h-0 flex-1">
+          <TabsContent
+            value="pending"
+            className="absolute inset-0 mt-0 flex min-h-0 flex-col focus-visible:outline-none data-[state=inactive]:hidden"
+          >
+            <PendingPaymentsTab
+              invoices={invoices}
+              filteredPendingInvoices={filteredPendingInvoices}
+              handleBulkRelease={handleBulkRelease}
+              canBulkRelease={canShowBulkRelease}
+              showRecordPaymentSelection={canShowRecordPayment}
+              selectedInvoiceIds={recordPaymentInvoiceIds}
+              onToggleInvoice={toggleRecordPaymentInvoice}
+              onSelectAllInvoices={selectAllRecordPaymentInvoices}
+              onOpenRecordPayment={openRecordPaymentDialog}
+              onOpenInvoiceReport={openPaymentReportDialog}
+              canRecordPayment={canShowRecordPayment}
+              canDownloadInvoiceReport={canManagePayments}
+              safeFormatDate={safeFormatDate}
+              handleViewInvoice={handleViewInvoice}
+              handleDownloadInvoice={handleDownloadInvoice}
+              canCancelInvoice={(invoice) =>
+                Boolean(invoice?.id) && isInvoiceCancellable(invoice)
+              }
+              handleCancelInvoice={handleCancelInvoice}
+              showBranchField={isBranchEnabled}
+            />
+          </TabsContent>
 
-        <TabsContent value="released">
-          <ReleasedPaymentsTab
-            filteredPayments={filteredPayments}
-            safeFormatDate={safeFormatDate}
-            resolvePaymentInvoice={resolvePaymentInvoice}
-            handleViewPaymentInvoice={handleViewPaymentInvoice}
-            handleDownloadPaymentInvoice={handleDownloadPaymentInvoice}
-            showBranchField={isBranchEnabled}
-          />
-        </TabsContent>
+          <TabsContent
+            value="released"
+            className="absolute inset-0 mt-0 flex min-h-0 flex-col focus-visible:outline-none data-[state=inactive]:hidden"
+          >
+            <ReleasedPaymentsTab
+              filteredPayments={filteredPayments}
+              totalPayments={payments.length}
+              safeFormatDate={safeFormatDate}
+              resolvePaymentInvoice={resolvePaymentInvoice}
+              handleViewPaymentInvoice={handleViewPaymentInvoice}
+              handleDownloadPaymentInvoice={handleDownloadPaymentInvoice}
+              showBranchField={isBranchEnabled}
+            />
+          </TabsContent>
+        </div>
       </Tabs>
 
       {canShowRecordPayment && (
