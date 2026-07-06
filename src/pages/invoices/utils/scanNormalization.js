@@ -48,6 +48,13 @@ export const normalizeScannedInvoice = (scanResponse = {}) => {
       invoiceCurrency,
       scannedForeignTaxDefaults,
     );
+    const discountAmount = Number(
+      item?.discountAmount ?? item?.discount_amount ?? item?.discountValue ?? 0,
+    ) || 0;
+    const discountPercent = Number(
+      item?.discountPercent ?? item?.discount_percent ?? item?.discountRate ?? 0,
+    ) || 0;
+    const hasDiscountAmount = discountAmount > 0;
 
     return {
       description: item?.description ?? item?.name ?? "",
@@ -55,6 +62,12 @@ export const normalizeScannedInvoice = (scanResponse = {}) => {
       unitPrice: pricing.unitPrice,
       amount: pricing.amount,
       lineTotal: pricing.lineTotal,
+      discount: hasDiscountAmount ? discountAmount : discountPercent,
+      discountType: hasDiscountAmount
+        ? invoiceCurrency === DEFAULT_CURRENCY
+          ? "₹"
+          : invoiceCurrency
+        : "%",
       hsnSac: item?.hsnSac ?? item?.hsnSac ?? "",
       ...taxFields,
     };

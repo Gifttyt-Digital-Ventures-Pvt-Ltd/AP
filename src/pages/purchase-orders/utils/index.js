@@ -1,7 +1,7 @@
 import { formatCurrency as formatCurrencyAmount } from "../../../utils/currency";
 
 export const SUPPORTED_PO_CURRENCIES = ["INR", "USD", "EUR", "GBP"];
-export const SUPPORTED_PO_TEMPLATES = ["T1", "T2", "T3", "T4", "T5"];
+export const DEFAULT_PO_TEMPLATE_CODE = "T1";
 
 export { formatCurrencyAmount as formatCurrency };
 
@@ -12,7 +12,7 @@ export const DEFAULT_PO_FORMAT_CONFIG = {
   companyName: "Optifii AP",
   poNumberPrefix: "PO-",
   dateFormat: "DD/MM/YYYY",
-  templateCode: "T1",
+  templateCode: DEFAULT_PO_TEMPLATE_CODE,
   sections: [
     {
       section: "HEADER",
@@ -86,11 +86,7 @@ export const getTaxMode = (currency = "INR") => (currency === "INR" ? "GST" : "E
 
 export const isInrCurrency = (currency = "INR") => getTaxMode(currency) === "GST";
 
-export const normalizePoTemplateCode = (templateCode = "T1") => {
-  const raw = String(templateCode || "").trim().toUpperCase();
-  if (!raw || raw === "DEFAULT") return "T1";
-  return SUPPORTED_PO_TEMPLATES.includes(raw) ? raw : "T1";
-};
+export const normalizePoTemplateCode = () => DEFAULT_PO_TEMPLATE_CODE;
 
 export const normalizePoStatus = (status = "") => {
   const normalized = String(status || "")

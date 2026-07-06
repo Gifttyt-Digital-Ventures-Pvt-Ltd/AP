@@ -333,6 +333,11 @@ const normalizeCorporateScreensResponse = (response = {}) => {
     ) {
       addEnabledSection(billingBasicSection);
     }
+
+    // Wallet/billing is intrinsic to token-based subscriptions; do not hide it when
+    // screenSections marks SETTINGS_BILLING as isEnabled:false without removing TOKEN_BASED.
+    enabledSections.add("SETTINGS_BILLING");
+    sectionScreens.set("SETTINGS_BILLING", "SETTINGS");
   } else {
     BILLING_SECTION_IDS.forEach((sectionId) => enabledSections.delete(sectionId));
   }

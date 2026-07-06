@@ -8,6 +8,24 @@ export const INVOICE_LEVEL = "At Invoice Level";
 export const isInrInvoiceCurrency = (currency) =>
   normalizeCurrencyCode(currency) === DEFAULT_CURRENCY;
 
+export const normalizeLineItemDiscountTypeForForm = (
+  discountType = "%",
+  currency = DEFAULT_CURRENCY,
+) => {
+  const normalizedType = String(discountType || "").trim().toLowerCase();
+  if (
+    normalizedType === "amount" ||
+    normalizedType === "flat" ||
+    normalizedType === "currency"
+  ) {
+    return isInrInvoiceCurrency(currency) ? "₹" : normalizeCurrencyCode(currency);
+  }
+  if (normalizedType === "percent" || normalizedType === "percentage") {
+    return "%";
+  }
+  return discountType || "%";
+};
+
 export const formatForeignTaxLabel = (taxName, taxRate) => {
   const name = String(taxName || "Tax").trim() || "Tax";
   const rate = Number(taxRate);
@@ -139,11 +157,21 @@ export const resolveScannedLineItemPricing = (item = {}) => {
   const quantity = Number(item?.quantity ?? item?.qty ?? 1) || 1;
   const listUnitPrice =
     Number(item?.unitPrice ?? item?.unitPrice ?? item?.price ?? 0) || 0;
-  const lineTotal = Number(
+  const scannedLineTotal = Number(
     item?.lineTotal ?? item?.lineTotal ?? item?.amount ?? 0,
   );
-  const amount = lineTotal > 0 ? lineTotal : quantity * listUnitPrice;
-  const effectiveUnitPrice = quantity > 0 ? amount / quantity : listUnitPrice;
+  const discountAmount = Number(
+    item?.discountAmount ?? item?.discount_amount ?? item?.discountValue ?? 0,
+  ) || 0;
+  const grossAmount =
+    listUnitPrice > 0 ? quantity * listUnitPrice : scannedLineTotal + discountAmount;
+  const amount = grossAmount > 0 ? grossAmount : scannedLineTotal;
+  const effectiveUnitPrice =
+    listUnitPrice > 0
+      ? listUnitPrice
+      : quantity > 0 && amount > 0
+        ? amount / quantity
+        : 0;
 
   return {
     quantity,
@@ -326,7 +354,10 @@ export const resolveScannedLineItemTax = (
   };
 };
 
-export const mapExtractedLineItemToForm = (item = {}, { useInrTax = true } = {}) => {
+export const mapExtractedLineItemToForm = (
+  item = {},
+  { useInrTax = true, currency = DEFAULT_CURRENCY } = {},
+) => {
   const quantity = Number(item.quantity || 1);
   const lineTotal = Number(item.lineTotal ?? item.amount ?? item.lineTotal ?? 0);
   const unitPrice = Number(item.unitPrice ?? item.unitRate ?? item.unitPrice ?? 0);
@@ -344,7 +375,10 @@ export const mapExtractedLineItemToForm = (item = {}, { useInrTax = true } = {})
     unitRate: unitRate,
     lineTotal: resolvedLineTotal,
     discount: item.discount || 0,
-    discountType: item.discountType || "%",
+    discountType: normalizeLineItemDiscountTypeForForm(
+      item.discountType ?? item.discount_type ?? "%",
+      currency,
+    ),
     hsnSac: item.hsnSac || "",
     eligibleForItc: item.eligibleForItc ?? true,
   };

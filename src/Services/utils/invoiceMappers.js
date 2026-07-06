@@ -134,6 +134,15 @@ export const normalizeInvoiceLineItem = (item = {}) => {
   };
 };
 
+const toInvoiceLineItemDiscountTypeApiValue = (discountType = "") => {
+  const normalized = String(discountType || "").trim().toLowerCase();
+  if (!normalized || normalized === "%") return "percentage";
+  if (normalized === "percent" || normalized === "percentage") {
+    return "percentage";
+  }
+  return "amount";
+};
+
 const toInvoiceLineItemApiPayload = (item = {}) => {
   const normalized = normalizeInvoiceLineItem(item);
   const gstRate = resolveGstRateFromLineItem(normalized);
@@ -148,6 +157,12 @@ const toInvoiceLineItemApiPayload = (item = {}) => {
     amount: normalized.amount,
   };
 
+  if (normalized.discount > 0) {
+    payload.discount = normalized.discount;
+    payload.discountType = toInvoiceLineItemDiscountTypeApiValue(
+      normalized.discountType,
+    );
+  }
   if (hsnSac) payload.hsnSac = hsnSac;
   if (gstRate !== undefined) payload.gstRate = gstRate;
   if (itemCode) payload.itemCode = itemCode;

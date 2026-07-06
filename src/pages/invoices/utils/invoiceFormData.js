@@ -31,7 +31,10 @@ export const formatInvoiceDateInput = (value) => {
   return format(date, "yyyy-MM-dd");
 };
 
-export const mapInvoiceLineItemToForm = (item = {}, { useInrTax = true } = {}) =>
+export const mapInvoiceLineItemToForm = (
+  item = {},
+  { useInrTax = true, currency = DEFAULT_CURRENCY } = {},
+) =>
   mapExtractedLineItemToForm(
     {
       ...item,
@@ -39,7 +42,7 @@ export const mapInvoiceLineItemToForm = (item = {}, { useInrTax = true } = {}) =
       lineTotal: item.lineTotal ?? item.amount ?? item.lineTotal,
       amount: item.amount ?? item.lineTotal ?? item.lineTotal,
     },
-    { useInrTax },
+    { useInrTax, currency },
   );
 
 export const buildInvoiceEditFormData = (
@@ -159,7 +162,12 @@ export const buildInvoiceEditFormData = (
     lineItemsExpanded: resolveLineItemsExpanded(invoice),
     lineItems:
       invoiceLineItems.length > 0
-        ? invoiceLineItems.map((item) => mapInvoiceLineItemToForm(item, { useInrTax }))
+        ? invoiceLineItems.map((item) =>
+            mapInvoiceLineItemToForm(item, {
+              useInrTax,
+              currency: editCurrency,
+            }),
+          )
         : [createDefaultLineItem(editCurrency)],
     description: invoice.memo || invoice.description || "",
     tds:
