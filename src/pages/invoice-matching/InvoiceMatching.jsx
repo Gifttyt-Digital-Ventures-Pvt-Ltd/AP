@@ -363,10 +363,13 @@ const InvoiceMatching = () => {
   } = useGetInvoiceMatchingDetailQuery(selectedMatching?.id, {
     skip: !selectedMatching?.id || !showDetailDialog,
   });
-  const { data: invoicesData = {}, isLoading: invoicesLoading } =
+  const { data: invoicesData = {}, isFetching: invoicesFetching } =
     useGetAvailableMatchingInvoicesQuery(
       { page: 0, size: 100 },
-      { skip: !showMatchDialog },
+      {
+        skip: !showMatchDialog,
+        refetchOnMountOrArgChange: true,
+      },
     );
   const isEditMode = Boolean(editingMatching);
   const selectedInvoiceIds = isEditMode
@@ -1081,7 +1084,13 @@ const InvoiceMatching = () => {
               {isEditMode ? (
                 <Select value={matchForm.invoiceId} onValueChange={handleInvoiceChange}>
                   <SelectTrigger data-testid="select-invoice">
-                    <SelectValue placeholder={invoicesLoading ? "Loading invoices..." : "Select an invoice"} />
+                    <SelectValue
+                      placeholder={
+                        invoicesFetching && invoices.length === 0
+                          ? "Loading invoices..."
+                          : "Select an invoice"
+                      }
+                    />
                   </SelectTrigger>
                   <SelectContent>
                     {invoices.map((invoice) => (
@@ -1093,7 +1102,7 @@ const InvoiceMatching = () => {
                 </Select>
               ) : (
                 <div className="max-h-64 overflow-y-auto rounded-md border bg-white">
-                  {invoicesLoading ? (
+                  {invoicesFetching && invoices.length === 0 ? (
                     <div className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
                       Loading invoices...
