@@ -410,9 +410,9 @@ const ViewRoleDialog = ({
                       className="flex items-center gap-3 p-3 border border-border rounded-lg"
                     >
                       <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-medium">
-                        {userName.charAt(0).toUpperCase()}
+                        {(userName ?? '?').charAt(0).toUpperCase()}
                       </div>
-                      <span className="text-sm">{userName}</span>
+                      <span className="text-sm">{userName ?? '-'}</span>
                     </div>
                   ))}
                 </div>

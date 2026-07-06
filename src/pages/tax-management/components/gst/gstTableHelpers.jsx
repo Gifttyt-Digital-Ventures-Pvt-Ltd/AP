@@ -23,7 +23,7 @@ export const renderGstEntryRow = (entry, rowIndex, headers) => (
   <TableRow
     key={entry.id ?? rowIndex}
     className={cn(rowIndex % 2 === 1 && 'bg-muted/20')}
-    data-testid={`gst-entry-row-${entry.id}`}
+    data-testid={`gst-entry-row-${entry?.id ?? 'unknown'}`}
   >
     {headers.map((header) => {
       let value;

@@ -48,7 +48,7 @@ const PoListTable = ({
     <TableRow
       key={po.id ?? rowIndex}
       className={cn(rowIndex % 2 === 1 && "bg-muted/20")}
-      data-testid={`po-row-${po.id}`}
+      data-testid={`po-row-${po?.id ?? 'unknown'}`}
     >
       {headers.map((header) => {
         let value;
@@ -82,7 +82,7 @@ const PoListTable = ({
                     setSelectedPO(po);
                     setShowViewDialog(true);
                   }}
-                  data-testid={`view-po-${po.id}`}
+                  data-testid={`view-po-${po?.id ?? 'unknown'}`}
                 >
                   <Eye className="h-4 w-4" />
                 </Button>
@@ -91,7 +91,7 @@ const PoListTable = ({
                     variant="ghost"
                     size="sm"
                     onClick={() => onEditPO?.(po)}
-                    data-testid={`edit-po-${po.id}`}
+                    data-testid={`edit-po-${po?.id ?? 'unknown'}`}
                   >
                     <Pencil className="h-4 w-4" />
                   </Button>

@@ -1,4 +1,5 @@
 import { serviceApi } from "../serviceApi";
+import { extractListResponse } from "../utils/payloadMappers";
 
 export const notificationsApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -8,10 +9,12 @@ export const notificationsApi = serviceApi.injectEndpoints({
         method: "GET",
         params: { limit },
       }),
+      transformResponse: extractListResponse,
       providesTags: ["Notifications"],
     }),
     getPendingNotifications: builder.query({
       query: () => ({ url: "/notifications/pending", method: "GET" }),
+      transformResponse: extractListResponse,
       providesTags: ["Notifications"],
     }),
   }),

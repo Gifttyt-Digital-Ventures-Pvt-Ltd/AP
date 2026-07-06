@@ -1,13 +1,8 @@
 import { GRN_SOURCE, GRN_STATUS } from '../constants';
 import { buildGrnConfigSnapshot } from './grnFormatConfig';
+import { extractListResponse } from '../../../Services/utils/payloadMappers';
 
-export const getListData = (response) => {
-  if (Array.isArray(response)) return response;
-  if (Array.isArray(response?.items)) return response.items;
-  if (Array.isArray(response?.content)) return response.content;
-  if (Array.isArray(response?.data)) return response.data;
-  return [];
-};
+export const getListData = extractListResponse;
 
 export const formatCurrency = (amount, currency = 'INR') =>
   new Intl.NumberFormat('en-IN', {

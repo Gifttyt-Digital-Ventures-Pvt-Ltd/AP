@@ -1,13 +1,8 @@
 import { serviceApi } from "../serviceApi";
 import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
+import { extractListResponse } from "../utils/payloadMappers";
 
-const getListData = (response) => {
-  if (Array.isArray(response)) return response;
-  if (Array.isArray(response?.content)) return response.content;
-  if (Array.isArray(response?.data)) return response.data;
-  if (Array.isArray(response?.items)) return response.items;
-  return [];
-};
+const getListData = extractListResponse;
 
 const getEntityId = (entity) => entity?.id ?? entity?.poId ?? entity?.po_id;
 
@@ -42,6 +37,7 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
         method: "GET",
         params,
       }),
+      transformResponse: extractListResponse,
       providesTags: (result) => provideListTags("PurchaseOrders", result),
     }),
     // GET /purchase-orders/pending-approvals
@@ -51,6 +47,7 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
         url: "/purchase-orders/pending-approvals",
         method: "GET",
       }),
+      transformResponse: extractListResponse,
       providesTags: (result) => [
         { type: "Approvals", id: "LIST" },
         ...provideListTags("PurchaseOrders", result),
@@ -93,6 +90,7 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
     // Lists all active saved formats available for PO creation.
     getPurchaseOrderFormatConfigs: builder.query({
       query: () => ({ url: "/po-format-configs", method: "GET" }),
+      transformResponse: extractListResponse,
       providesTags: (result) => provideListTags("PurchaseOrderFormatConfig", result),
     }),
     // GET /po-format-configs/{id}
@@ -237,12 +235,14 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
     // Future TDS selector source. Current UI accepts free text/percent.
     getPurchaseOrderTdsSections: builder.query({
       query: () => ({ url: "/master/tds-sections", method: "GET" }),
+      transformResponse: extractListResponse,
       providesTags: [{ type: "MasterData", id: "PO_TDS_SECTIONS" }],
     }),
     // GET /master/states
     // Future state selector source for placeOfSupply.
     getPurchaseOrderStates: builder.query({
       query: () => ({ url: "/master/states", method: "GET" }),
+      transformResponse: extractListResponse,
       providesTags: [{ type: "MasterData", id: "PO_STATES" }],
     }),
     // GET /master/hsn-rates?code=...

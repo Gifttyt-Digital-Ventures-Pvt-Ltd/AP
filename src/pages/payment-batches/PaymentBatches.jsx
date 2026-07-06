@@ -269,7 +269,7 @@ const PaymentBatches = () => {
   };
 
   const renderBatchRow = (batch, rowIndex, headers) => (
-    <TableRow key={batch.id ?? rowIndex} data-testid={`batch-row-${batch.id}`}>
+    <TableRow key={batch.id ?? rowIndex} data-testid={`batch-row-${batch?.id ?? 'unknown'}`}>
       {headers.map((header) => {
         let value;
 
@@ -322,7 +322,7 @@ const PaymentBatches = () => {
                   variant="ghost"
                   size="sm"
                   onClick={() => handleViewBatch(batch)}
-                  data-testid={`view-batch-${batch.id}`}
+                  data-testid={`view-batch-${batch?.id ?? 'unknown'}`}
                 >
                   <Eye className="h-4 w-4" />
                 </Button>
@@ -331,7 +331,7 @@ const PaymentBatches = () => {
                     variant="ghost"
                     size="sm"
                     onClick={() => handleGenerateFile(batch.id)}
-                    data-testid={`download-batch-${batch.id}`}
+                    data-testid={`download-batch-${batch?.id ?? 'unknown'}`}
                   >
                     <Download className="h-4 w-4" />
                   </Button>

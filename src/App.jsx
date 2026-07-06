@@ -18,6 +18,7 @@ import {
 } from "./components/ui/alert-dialog";
 import { Layout } from "./components/Layout";
 import AccessDeniedState from "./components/common/AccessDeniedState";
+import AppErrorBoundary from "./components/common/AppErrorBoundary";
 import { redirectToOriginLogin } from "./utils/authRedirect";
 import { resolveDefaultAccessibleRoute } from "./constants/rbacPolicy";
 import Login from "./pages/login/Login";
@@ -217,7 +218,7 @@ function AppContent() {
   }, []);
 
   return (
-    <>
+    <AppErrorBoundary>
       <BrowserBackLogoutGuard />
       <Routes>
         <Route path="/login" element={<Login />} />
@@ -321,7 +322,7 @@ function AppContent() {
         </Route>
       </Routes>
       <Toaster position="top-right" />
-    </>
+    </AppErrorBoundary>
   );
 }
 

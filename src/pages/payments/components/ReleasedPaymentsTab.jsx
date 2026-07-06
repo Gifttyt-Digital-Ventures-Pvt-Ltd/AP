@@ -44,7 +44,7 @@ const ReleasedPaymentsTab = ({
   }, [showBranchField, showIntegrationColumn]);
 
   const renderReleasedPaymentRow = (payment, rowIndex, headers) => (
-    <TableRow key={payment.id ?? rowIndex} data-testid={`payment-row-${payment.id}`}>
+    <TableRow key={payment.id ?? rowIndex} data-testid={`payment-row-${payment?.id ?? 'unknown'}`}>
       {headers.map((header) => {
         let value;
 
@@ -82,7 +82,7 @@ const ReleasedPaymentsTab = ({
                   variant="ghost"
                   size="sm"
                   onClick={() => handleViewPaymentInvoice?.(payment)}
-                  data-testid={`view-payment-invoice-${payment.id}`}
+                  data-testid={`view-payment-invoice-${payment?.id ?? 'unknown'}`}
                   title="View Invoice"
                   className="h-8 w-8 p-0"
                 >
@@ -92,7 +92,7 @@ const ReleasedPaymentsTab = ({
                   variant="ghost"
                   size="sm"
                   onClick={() => handleDownloadPaymentInvoice?.(payment)}
-                  data-testid={`download-payment-invoice-${payment.id}`}
+                  data-testid={`download-payment-invoice-${payment?.id ?? 'unknown'}`}
                   title="Download Invoice"
                   className="h-8 w-8 p-0"
                 >

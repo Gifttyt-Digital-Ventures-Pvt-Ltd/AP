@@ -65,6 +65,7 @@ import { useRBAC } from "../../contexts/RBACContext";
 import MatchingGroupExpandedRow from "./components/MatchingGroupExpandedRow";
 import MatchingInvoiceCountBadge from "./components/MatchingInvoiceCountBadge";
 import MatchChecklistPanel from "./components/MatchChecklistPanel";
+import { extractPageContent } from "../../Services/utils/payloadMappers";
 
 const STATUS_OPTIONS = [
   { value: "ALL", label: "All Statuses" },
@@ -143,12 +144,6 @@ const formatPercent = (value) => {
 
 const getErrorMessage = (error, fallback) =>
   error?.data?.message || error?.data?.detail || error?.error || fallback;
-
-const getPageContent = (data) => {
-  if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.content)) return data.content;
-  return [];
-};
 
 const normalizeStatus = (value) => {
   const raw = String(value || "").trim();
@@ -398,17 +393,17 @@ const InvoiceMatching = () => {
   const [markInvoiceMatchException, { isLoading: markingException }] =
     useMarkInvoiceMatchExceptionMutation();
 
-  const matchingGroups = getPageContent(listData).map(normalizeMatchingGroup);
+  const matchingGroups = extractPageContent(listData).map(normalizeMatchingGroup);
   const invoices = mergeById(
-    getPageContent(invoicesData).map(normalizeInvoice),
+    extractPageContent(invoicesData).map(normalizeInvoice),
     editingMatching?.invoice ? normalizeInvoice(editingMatching.invoice) : null,
   );
   const purchaseOrders = mergeById(
-    getPageContent(purchaseOrdersData).map(normalizePurchaseOrder),
+    extractPageContent(purchaseOrdersData).map(normalizePurchaseOrder),
     editingMatching?.purchaseOrder ? normalizePurchaseOrder(editingMatching.purchaseOrder) : null,
   );
   const grns = mergeById(
-    getPageContent(grnsData).map(normalizeGrn),
+    extractPageContent(grnsData).map(normalizeGrn),
     editingMatching?.grn ? normalizeGrn(editingMatching.grn) : null,
   );
   const detail = detailData ? normalizeMatching(detailData) : selectedMatching;
@@ -668,7 +663,7 @@ const InvoiceMatching = () => {
             setSelectedMatching(match);
             setShowDetailDialog(true);
           }}
-          data-testid={`view-matching-${match.id}`}
+          data-testid={`view-matching-${match?.id ?? 'unknown'}`}
         >
           <Eye className="h-4 w-4" />
         </Button>
@@ -677,7 +672,7 @@ const InvoiceMatching = () => {
             variant="ghost"
             size="sm"
             onClick={() => openEditDialog(match)}
-            data-testid={`edit-matching-${match.id}`}
+            data-testid={`edit-matching-${match?.id ?? 'unknown'}`}
           >
             <Edit className="h-4 w-4" />
           </Button>
@@ -687,7 +682,7 @@ const InvoiceMatching = () => {
             variant="ghost"
             size="sm"
             onClick={() => openExceptionDialog(match)}
-            data-testid={`exception-matching-${match.id}`}
+            data-testid={`exception-matching-${match?.id ?? 'unknown'}`}
           >
             <AlertTriangle className="h-4 w-4" />
           </Button>
@@ -1116,7 +1111,7 @@ const InvoiceMatching = () => {
                           <Checkbox
                             checked={checked}
                             onCheckedChange={(value) => handleInvoiceToggle(invoice.id, Boolean(value))}
-                            data-testid={`select-invoice-${invoice.id}`}
+                            data-testid={`select-invoice-${invoice?.id ?? 'unknown'}`}
                           />
                           <span className="min-w-0 flex-1">
                             <span className="block font-medium">{invoice.invoiceNumber || "-"}</span>

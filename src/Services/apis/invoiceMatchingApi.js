@@ -1,5 +1,6 @@
 import { serviceApi } from "../serviceApi";
 import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
+import { extractListResponse } from "../utils/payloadMappers";
 
 export const invoiceMatchingApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -13,6 +14,7 @@ export const invoiceMatchingApi = serviceApi.injectEndpoints({
         method: "GET",
         params,
       }),
+      transformResponse: extractListResponse,
       providesTags: ["Matching"],
     }),
     getInvoiceMatchingDetail: builder.query({
@@ -49,6 +51,7 @@ export const invoiceMatchingApi = serviceApi.injectEndpoints({
         method: "GET",
         params,
       }),
+      transformResponse: extractListResponse,
       providesTags: ["Matching"],
     }),
     getAvailablePurchaseOrders: builder.query({
@@ -64,6 +67,7 @@ export const invoiceMatchingApi = serviceApi.injectEndpoints({
           params,
         };
       },
+      transformResponse: extractListResponse,
       providesTags: ["Matching"],
     }),
     getAvailableGrns: builder.query({
@@ -72,6 +76,7 @@ export const invoiceMatchingApi = serviceApi.injectEndpoints({
         method: "GET",
         params: { poId },
       }),
+      transformResponse: extractListResponse,
       providesTags: ["Matching"],
     }),
     performInvoiceMatch: builder.mutation({

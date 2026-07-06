@@ -62,7 +62,7 @@ const GrnPoPickerDialog = ({
                 </TableCell>
                 <TableCell className="text-muted-foreground">{formatDate(po.po_date)}</TableCell>
                 <TableCell>
-                  <Button size="sm" onClick={() => onSelect(po.id)} data-testid={`select-po-${po.id}`}>
+                  <Button size="sm" onClick={() => onSelect(po.id)} data-testid={`select-po-${po?.id ?? 'unknown'}`}>
                     Select
                   </Button>
                 </TableCell>

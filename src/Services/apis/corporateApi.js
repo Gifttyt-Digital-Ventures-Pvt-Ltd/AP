@@ -1,4 +1,5 @@
 import { serviceApi } from "../serviceApi";
+import { extractListResponse } from "../utils/payloadMappers";
 import { normalizeCustomRolePermissionsResponse } from "../../utils/rbacPermissions";
 import {
   DEFAULT_INVOICE_CONFIGURATION,
@@ -517,11 +518,7 @@ export const corporateApi = serviceApi.injectEndpoints({
         method: "GET",
       }),
       transformResponse: (response) => {
-        const screens = Array.isArray(response)
-          ? response
-          : Array.isArray(response?.screens)
-            ? response.screens
-            : [];
+        const screens = extractListResponse(response, ['screens']);
         return filterAssignableCreditsPermissions(
           ensureDefaultCustomRoleScreens(
             screens.map(normalizeCustomRoleScreen).filter((screen) => screen.screen),
@@ -543,8 +540,7 @@ export const corporateApi = serviceApi.injectEndpoints({
         url: "/corporate/custom-roles/subscription-modules",
         method: "GET",
       }),
-      transformResponse: (response) =>
-        Array.isArray(response) ? response : [],
+      transformResponse: (response) => extractListResponse(response),
       providesTags: ["Users"],
     }),
     getCustomRoles: builder.query({
@@ -552,12 +548,7 @@ export const corporateApi = serviceApi.injectEndpoints({
         url: "/corporate/custom-roles",
         method: "GET",
       }),
-      transformResponse: (response) => {
-        if (Array.isArray(response)) return response;
-        if (Array.isArray(response?.data)) return response.data;
-        if (Array.isArray(response?.roles)) return response.roles;
-        return [];
-      },
+      transformResponse: (response) => extractListResponse(response, ['roles']),
       providesTags: ["Users"],
     }),
     getCustomRoleById: builder.query({
@@ -685,12 +676,7 @@ export const corporateApi = serviceApi.injectEndpoints({
         method: "GET",
         params: { programType: "VENDOR_PAYMENTS" },
       }),
-      transformResponse: (response) => {
-        if (Array.isArray(response)) return response;
-        if (Array.isArray(response?.data)) return response.data;
-        if (Array.isArray(response?.departments)) return response.departments;
-        return [];
-      },
+      transformResponse: (response) => extractListResponse(response, ['departments']),
       providesTags: ["Users"],
     }),
     addCorporateUsers: builder.mutation({

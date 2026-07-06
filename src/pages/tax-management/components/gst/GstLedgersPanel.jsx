@@ -640,7 +640,9 @@ const GstLedgersPanel = () => {
                 {filteredHistory.map((entry) => (
                   <TableRow key={entry.id}>
                     <TableCell className="text-xs text-muted-foreground">
-                      {entry.dateRetrieved.includes('T') ? formatDate(entry.dateRetrieved) : entry.dateRetrieved}
+                      {entry?.dateRetrieved?.includes('T')
+                        ? formatDate(entry.dateRetrieved)
+                        : (entry?.dateRetrieved ?? '-')}
                     </TableCell>
                     <TableCell className="font-semibold">{entry.month}</TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground">{entry.gstin}</TableCell>

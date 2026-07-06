@@ -1,5 +1,6 @@
 import React from "react";
 import { format } from "date-fns";
+import { parseApiDate } from "@/lib/utils";
 import { FileText, X } from "lucide-react";
 
 const ReviewDialog = ({
@@ -81,13 +82,23 @@ const ReviewDialog = ({
                     {selectedInvoice.invoice_date && (
                       <div>
                         <span className="text-gray-500">Invoice Date</span>
-                        <p className="font-medium">{format(new Date(selectedInvoice.invoice_date), "d MMM yyyy")}</p>
+                        <p className="font-medium">
+                          {(() => {
+                            const parsed = parseApiDate(selectedInvoice?.invoice_date);
+                            return parsed ? format(parsed, "d MMM yyyy") : "-";
+                          })()}
+                        </p>
                       </div>
                     )}
                     {selectedInvoice.due_date && (
                       <div>
                         <span className="text-gray-500">Due Date</span>
-                        <p className="font-medium">{format(new Date(selectedInvoice.due_date), "d MMM yyyy")}</p>
+                        <p className="font-medium">
+                          {(() => {
+                            const parsed = parseApiDate(selectedInvoice?.due_date);
+                            return parsed ? format(parsed, "d MMM yyyy") : "-";
+                          })()}
+                        </p>
                       </div>
                     )}
                   </div>

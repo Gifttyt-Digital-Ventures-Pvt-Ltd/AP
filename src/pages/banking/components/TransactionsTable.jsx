@@ -4,6 +4,19 @@ import { format } from 'date-fns';
 import AppDataTable from '../../../components/common/AppDataTable';
 import { TableCell, TableRow } from '../../../components/ui/table';
 
+const formatTransactionDate = (value) => {
+  if (!value) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+};
+
+const formatAmount = (amount) => {
+  const numeric = Number(amount);
+  if (!Number.isFinite(numeric)) return '-';
+  return `₹${numeric.toLocaleString('en-IN')}`;
+};
+
 const transactionTableHeader = [
   { key: 'vendor', title: 'Vendor/Payer' },
   { key: 'date', title: 'Date', cellClassName: 'text-sm' },
@@ -47,7 +60,7 @@ const transactionTableHeader = [
 // Main transactions table with debit/credit splits and author metadata.
 const TransactionsTable = ({ filteredTransactions }) => {
   const renderTransactionRow = (transaction, rowIndex, headers) => (
-    <TableRow key={transaction.id ?? rowIndex} data-testid={`transaction-row-${transaction.id}`}>
+    <TableRow key={transaction.id ?? rowIndex} data-testid={`transaction-row-${transaction?.id ?? 'unknown'}`}>
       {headers.map((header) => {
         let value;
 
@@ -66,43 +79,51 @@ const TransactionsTable = ({ filteredTransactions }) => {
                       <span className="text-xs">IN</span>
                     </div>
                   ) : (
-                    transaction.vendor.charAt(0).toUpperCase()
+                    (transaction?.vendor ?? '?').charAt(0).toUpperCase()
                   )}
                 </div>
                 <div>
-                  <p className="font-medium">{transaction.vendor}</p>
-                  <p className="text-xs text-muted-foreground">{transaction.ref_number}</p>
+                  <p className="font-medium">{transaction?.vendor ?? '-'}</p>
+                  <p className="text-xs text-muted-foreground">{transaction?.ref_number ?? '-'}</p>
                 </div>
               </div>
             );
             break;
-          case 'date':
-            value = (
+          case 'date': {
+            const parsedDate = formatTransactionDate(transaction?.date);
+            value = parsedDate ? (
               <div>
-                <p>{format(transaction.date, 'd MMM yyyy')}</p>
-                <p className="text-xs text-muted-foreground">{format(transaction.date, 'h:mm a')}</p>
+                <p>{format(parsedDate, 'd MMM yyyy')}</p>
+                <p className="text-xs text-muted-foreground">{format(parsedDate, 'h:mm a')}</p>
               </div>
+            ) : (
+              '-'
             );
             break;
+          }
           case 'withdrawal':
-            value = transaction.withdrawal ? `₹${transaction.withdrawal.toLocaleString('en-IN')}` : '-';
+            value = transaction?.withdrawal != null && transaction.withdrawal !== ''
+              ? formatAmount(transaction.withdrawal)
+              : '-';
             break;
           case 'deposit':
-            value = transaction.deposit ? `+ ₹${transaction.deposit.toLocaleString('en-IN')}` : '-';
+            value = transaction?.deposit != null && transaction.deposit !== ''
+              ? `+ ${formatAmount(transaction.deposit)}`
+              : '-';
             break;
           case 'closing_balance':
-            value = `₹${transaction.closing_balance.toLocaleString('en-IN', {
+            value = `₹${Number(transaction?.closing_balance ?? 0).toLocaleString('en-IN', {
               minimumFractionDigits: 2,
               maximumFractionDigits: 2,
             })}`;
             break;
           case 'authorized_by':
-            value = transaction.authorized_by ? (
+            value = transaction?.authorized_by ? (
               <div className="flex items-center gap-2">
                 <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-xs font-semibold">
-                  {transaction.authorized_by
+                  {(transaction.authorized_by ?? '')
                     .split(' ')
-                    .map((n) => n[0])
+                    .map((n) => n?.[0] ?? '')
                     .join('')}
                 </div>
                 <div className="text-sm">

@@ -1,4 +1,5 @@
 import { serviceApi } from "../serviceApi";
+import { extractListResponse } from "../utils/payloadMappers";
 
 const ZOHO_BASE = "/integration/zoho";
 
@@ -11,10 +12,12 @@ export const integrationsApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getIntegrationProviders: builder.query({
       query: () => ({ url: `${ZOHO_BASE}/providers`, method: "GET" }),
+      transformResponse: (response) => extractListResponse(response, ['providers']),
       providesTags: ["Integrations"],
     }),
     getIntegrationConnections: builder.query({
       query: () => ({ url: `${ZOHO_BASE}/connections`, method: "GET" }),
+      transformResponse: (response) => extractListResponse(response, ['connections']),
       providesTags: ["Integrations"],
     }),
     getIntegrationConnection: builder.query({
@@ -44,6 +47,7 @@ export const integrationsApi = serviceApi.injectEndpoints({
         url: `${ZOHO_BASE}/connections/${connectionId}/organizations`,
         method: "GET",
       }),
+      transformResponse: (response) => extractListResponse(response, ['organizations']),
       providesTags: ["Integrations"],
     }),
     bindZohoOrganization: builder.mutation({
@@ -97,6 +101,7 @@ export const integrationsApi = serviceApi.injectEndpoints({
         method: "GET",
         params: withParams({ object }),
       }),
+      transformResponse: extractListResponse,
       providesTags: ["Integrations"],
     }),
     resolveIntegrationMatch: builder.mutation({
@@ -113,6 +118,7 @@ export const integrationsApi = serviceApi.injectEndpoints({
         method: "GET",
         params: withParams({ object, page, perPage }),
       }),
+      transformResponse: extractListResponse,
       providesTags: ["Integrations"],
     }),
   }),

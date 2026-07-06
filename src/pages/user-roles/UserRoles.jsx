@@ -826,7 +826,7 @@ const UserRoles = () => {
     const seenEmails = new Set();
     const duplicateEmails = new Set();
     normalizedRows.forEach((row) => {
-      const email = row.email.toLowerCase();
+      const email = (row?.email ?? '').toLowerCase();
       if (!email) return;
       if (seenEmails.has(email)) duplicateEmails.add(row.email);
       seenEmails.add(email);

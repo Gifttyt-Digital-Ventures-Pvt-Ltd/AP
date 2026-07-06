@@ -1,4 +1,5 @@
 import { serviceApi } from "../serviceApi";
+import { extractListResponse } from "../utils/payloadMappers";
 
 const toArray = (value) => {
   if (!value) return [];
@@ -6,16 +7,7 @@ const toArray = (value) => {
   return [value];
 };
 
-const unwrapList = (response, keys = []) => {
-  if (Array.isArray(response)) return response;
-  for (const key of keys) {
-    if (Array.isArray(response?.[key])) return response[key];
-  }
-  if (Array.isArray(response?.data)) return response.data;
-  if (Array.isArray(response?.content)) return response.content;
-  if (Array.isArray(response?.items)) return response.items;
-  return [];
-};
+const unwrapList = (response, keys = []) => extractListResponse(response, keys);
 
 const normalizeId = (item = {}) =>
   String(item.uuid ?? item.id ?? item.vendorId ?? item.vendor_id ?? "");

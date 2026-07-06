@@ -1,15 +1,10 @@
 import { serviceApi } from "../serviceApi";
 import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
+import { extractListResponse } from "../utils/payloadMappers";
 
 const grnTags = ["GoodsReceipt"];
 
-const getListData = (response) => {
-  if (Array.isArray(response)) return response;
-  if (Array.isArray(response?.content)) return response.content;
-  if (Array.isArray(response?.data)) return response.data;
-  if (Array.isArray(response?.items)) return response.items;
-  return [];
-};
+const getListData = extractListResponse;
 
 const grnFormatTags = [{ type: "GoodsReceipt", id: "CONFIG" }];
 
@@ -31,6 +26,7 @@ export const goodsReceiptApi = serviceApi.injectEndpoints({
         method: "GET",
         params,
       }),
+      transformResponse: extractListResponse,
       providesTags: grnTags,
     }),
     getGrnById: builder.query({
@@ -47,6 +43,7 @@ export const goodsReceiptApi = serviceApi.injectEndpoints({
     }),
     getGrnFormatConfigs: builder.query({
       query: () => ({ url: "/grn-format-configs", method: "GET" }),
+      transformResponse: extractListResponse,
       providesTags: (result) => provideGrnFormatListTags(result),
     }),
     getGrnFormatConfigById: builder.query({
@@ -87,6 +84,7 @@ export const goodsReceiptApi = serviceApi.injectEndpoints({
         method: "GET",
         params,
       }),
+      transformResponse: extractListResponse,
       providesTags: ["PurchaseOrders"],
     }),
     getPoLinesReceiptState: builder.query({
@@ -97,6 +95,7 @@ export const goodsReceiptApi = serviceApi.injectEndpoints({
     }),
     getEligiblePisForGrn: builder.query({
       query: () => ({ url: "/grn/pi/eligible", method: "GET" }),
+      transformResponse: extractListResponse,
     }),
     createGrn: builder.mutation({
       query: (body) => ({ url: "/grn", method: "POST", body }),

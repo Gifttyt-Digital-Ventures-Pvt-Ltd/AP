@@ -11,6 +11,20 @@ import {
   TableRow,
 } from "../ui/table";
 
+const formatCellValue = (value) => {
+  if (value == null || value === "") return "-";
+  return value;
+};
+
+const safeRenderCell = (render, row, index) => {
+  try {
+    return render(row ?? {}, index);
+  } catch (error) {
+    console.error("Table cell render failed", error);
+    return "-";
+  }
+};
+
 const AppDataTable = ({
   columns = [],
   rows = [],
@@ -53,7 +67,11 @@ const AppDataTable = ({
         render: header.render ?? columnConfig.render,
       };
     }) || columns;
-  const resolvedRows = tableData || rows;
+  const resolvedRows = Array.isArray(tableData)
+    ? tableData
+    : Array.isArray(rows)
+      ? rows
+      : [];
   const resolvedEmptyColSpan = emptyColSpan || resolvedColumns.length || 1;
   const resolvedEmptyMessage = message || emptyMessage;
   const resolvedLoadingRowCount = loadingRowCount || length || 5;
@@ -133,7 +151,23 @@ const AppDataTable = ({
           </TableRow>
         ) : (
           resolvedRows.map((row, index) => {
-            if (renderRow) return renderRow(row, index, resolvedColumns);
+            if (renderRow) {
+              try {
+                return renderRow(row ?? {}, index, resolvedColumns);
+              } catch (error) {
+                console.error("Table row render failed", error);
+                return (
+                  <TableRow key={`row-error-${index}`}>
+                    <TableCell
+                      colSpan={resolvedColumns.length || 1}
+                      className="px-3 py-3 text-sm text-muted-foreground"
+                    >
+                      Unable to display this row
+                    </TableCell>
+                  </TableRow>
+                );
+              }
+            }
 
             const key = typeof rowKey === "function" ? rowKey(row, index) : row?.[rowKey] ?? index;
             const computedClassName = [
@@ -152,7 +186,9 @@ const AppDataTable = ({
                     key={column.key || column.header}
                     className={cn("px-3 py-3", column.cellClassName)}
                   >
-                    {column.render ? column.render(row, index) : row?.[column.key]}
+                    {column.render
+                      ? safeRenderCell(column.render, row, index)
+                      : formatCellValue(row?.[column.key])}
                   </TableCell>
                 ))}
               </TableRow>

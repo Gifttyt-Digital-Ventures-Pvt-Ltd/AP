@@ -1,6 +1,7 @@
 import React from "react";
 import { Eye, Share2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
+import { maskBankAccountNumber } from "../utils/bankAccounts";
 
 // Account identity/header block with copy/share actions.
 const BankingHeader = ({
@@ -17,14 +18,14 @@ const BankingHeader = ({
           className="text-4xl font-bold font-['Manrope'] text-primary mb-4"
           data-testid="bank-account-name"
         >
-          {selectedAccount.account_name}
+          {selectedAccount?.account_name ?? 'Bank account'}
         </h1>
 
         <div className="flex flex-wrap items-center gap-4 text-sm">
           <span className="  bg-secondary/50 px-3 py-1 rounded border border-border">
             {showFullAccount
-              ? selectedAccount.account_number || "-"
-              : `D*************${(selectedAccount.account_number || "").slice(-4)}`}
+              ? selectedAccount?.account_number || '-'
+              : maskBankAccountNumber(selectedAccount?.account_number)}
           </span>
           <Button
             type="button"

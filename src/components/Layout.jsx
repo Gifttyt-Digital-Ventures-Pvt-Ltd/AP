@@ -192,7 +192,7 @@ export const Layout = ({ children }) => {
                           ? "bg-button-primary text-button-primary-foreground"
                           : "hover:bg-button-primary-hover hover:text-primary-foreground"
                       }`}
-                      data-testid={`nav-${item.label.toLowerCase()}`}
+                      data-testid={`nav-${(item?.label ?? 'nav').toLowerCase()}`}
                     >
                       <Icon className="h-6 w-6" />
                       {sidebarOpen && (

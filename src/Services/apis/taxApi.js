@@ -1,4 +1,5 @@
 import { serviceApi } from "../serviceApi";
+import { extractListResponse } from "../utils/payloadMappers";
 import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
 import { normalizeOrganisationGstCredentialsList } from "../../utils/organisationGst";
 import { unwrapGstApiResponse } from "../../pages/tax-management/utils/gstApiMappers";
@@ -203,6 +204,7 @@ export const taxApi = serviceApi.injectEndpoints({
     }),
     getGstEntries: builder.query({
       query: () => ({ url: "/tax/gst/entries", method: "GET" }),
+      transformResponse: (response) => extractListResponse(response, ['entries']),
       providesTags: ["Tax"],
     }),
     createGstEntry: builder.mutation({
@@ -219,6 +221,7 @@ export const taxApi = serviceApi.injectEndpoints({
     }),
     getTdsEntries: builder.query({
       query: () => ({ url: "/tax/tds/entries", method: "GET" }),
+      transformResponse: (response) => extractListResponse(response, ['entries']),
       providesTags: ["Tax"],
     }),
     getTdsSummary: builder.query({
@@ -227,6 +230,7 @@ export const taxApi = serviceApi.injectEndpoints({
     }),
     getTdsSections: builder.query({
       query: () => ({ url: "/tax/tds/sections", method: "GET" }),
+      transformResponse: extractListResponse,
       providesTags: ["Tax"],
     }),
     calculateTds: builder.mutation({
