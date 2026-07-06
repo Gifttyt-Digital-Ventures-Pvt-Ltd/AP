@@ -51,7 +51,6 @@ export const invoiceMatchingApi = serviceApi.injectEndpoints({
         method: "GET",
         params,
       }),
-      transformResponse: extractListResponse,
       providesTags: ["Matching"],
     }),
     getAvailablePurchaseOrders: builder.query({
