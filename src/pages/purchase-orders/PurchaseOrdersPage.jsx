@@ -221,7 +221,6 @@ const areFormatListsEquivalent = (left = [], right = []) => {
     if (leftItem.id !== rightItem.id) return false;
     if (leftItem.name !== rightItem.name) return false;
     if (leftItem.defaultCurrency !== rightItem.defaultCurrency) return false;
-    if (leftItem.templateCode !== rightItem.templateCode) return false;
     if ((leftItem.logoUrl || '') !== (rightItem.logoUrl || '')) return false;
     if ((leftItem.logoS3Key || '') !== (rightItem.logoS3Key || '')) return false;
   }
@@ -405,7 +404,6 @@ const PurchaseOrdersPage = () => {
         prev?.name === nextDraft.name &&
         prev?.companyName === nextDraft.companyName &&
         prev?.defaultCurrency === nextDraft.defaultCurrency &&
-        prev?.templateCode === nextDraft.templateCode &&
         (prev?.logoUrl || '') === (nextDraft.logoUrl || '') &&
         (prev?.logoS3Key || '') === (nextDraft.logoS3Key || '')
       ) {

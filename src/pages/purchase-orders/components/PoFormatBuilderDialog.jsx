@@ -8,7 +8,7 @@ import { Label } from "../../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
 import { Switch } from "../../../components/ui/switch";
 import { useUploadPurchaseOrderTenantLogoMutation } from "../../../Services/apis/purchaseOrdersMasterDataApi";
-import { getTaxMode, isInrCurrency, formatCurrency, normalizePoTemplateCode } from "../utils";
+import { getTaxMode, isInrCurrency, formatCurrency } from "../utils";
 import PoLogo from "./PoLogo";
 
 const SAMPLE_ITEMS = [
@@ -60,9 +60,8 @@ const PoFormatBuilderDialog = ({
   const sampleSubtotal = SAMPLE_ITEMS.reduce((sum, item) => sum + item.quantity * item.unitRate, 0);
   const sampleTax = showGstSummary ? SAMPLE_ITEMS.reduce((sum, item) => sum + (item.quantity * item.unitRate * item.gstRate) / 100, 0) : 0;
   const sampleTotal = sampleSubtotal + sampleTax;
-  const normalizedTemplateCode = normalizePoTemplateCode(draftConfig.templateCode);
-  const documentBorderClass = normalizedTemplateCode === "T3" ? "border-2 border-slate-900" : "border";
-  const headerBorderClass = normalizedTemplateCode === "T4" ? "border-b-4 border-emerald-600" : "border-b";
+  const documentBorderClass = "border";
+  const headerBorderClass = "border-b";
 
   const updateConfig = (patch) => setDraftConfig((prev) => ({ ...prev, ...patch }));
 
@@ -202,7 +201,7 @@ const PoFormatBuilderDialog = ({
                   <SelectContent>
                     {formatOptions.map((format) => (
                       <SelectItem key={format.id} value={format.id}>
-                        {format.name} ({normalizePoTemplateCode(format.templateCode)}, {format.defaultCurrency})
+                        {format.name} ({format.defaultCurrency})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -268,33 +267,13 @@ const PoFormatBuilderDialog = ({
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>PO Prefix</Label>
-                  <Input
-                    value={draftConfig.poNumberPrefix}
-                    onChange={(event) => updateConfig({ poNumberPrefix: event.target.value })}
-                    data-testid="po-builder-prefix"
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label>Template</Label>
-                  <Select
-                    value={normalizePoTemplateCode(draftConfig.templateCode)}
-                    onValueChange={(templateCode) => updateConfig({ templateCode })}
-                  >
-                    <SelectTrigger data-testid="po-builder-template">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="T1">T1 Classic</SelectItem>
-                      <SelectItem value="T2">T2 Compact</SelectItem>
-                      <SelectItem value="T3">T3 Bordered</SelectItem>
-                      <SelectItem value="T4">T4 Modern</SelectItem>
-                      <SelectItem value="T5">T5 Letterhead</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+              <div className="space-y-2">
+                <Label>PO Prefix</Label>
+                <Input
+                  value={draftConfig.poNumberPrefix}
+                  onChange={(event) => updateConfig({ poNumberPrefix: event.target.value })}
+                  data-testid="po-builder-prefix"
+                />
               </div>
 
               <div className="space-y-2">

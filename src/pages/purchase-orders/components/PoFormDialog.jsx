@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from ".
 import AppDataTable from "../../../components/common/AppDataTable";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import { Textarea } from "../../../components/ui/textarea";
-import { isFormatFieldEnabled, isFormatSectionEnabled, normalizePoTemplateCode } from "../utils";
+import { isFormatFieldEnabled, isFormatSectionEnabled } from "../utils";
 import { resolvePoTotals } from "../utils/poTotals";
 import MeteredActionCostHint from "../../../components/credits/MeteredActionCostHint";
 import { CREDIT_ACTION_CODES } from "../../../constants/creditActions";
@@ -162,9 +162,8 @@ const PoFormDialog = ({
   const isPreviewing = Boolean(previewAction);
   const previewSubmitForApproval = previewAction === "submit";
   const poUploadEstimate = useMeteredActionEstimate(CREDIT_ACTION_CODES.PO_UPLOAD, 1);
-  const templateCode = normalizePoTemplateCode(selectedFormat.templateCode || "T1");
-  const documentBorderClass = templateCode === "T3" ? "border-2 border-slate-900" : "border";
-  const headerBorderClass = templateCode === "T4" ? "border-b-4 border-emerald-600" : "border-b";
+  const documentBorderClass = "border";
+  const headerBorderClass = "border-b";
   const showTdsControls = !plainDataMode && isInr && fieldOn("TAX_TOTALS", "is_tds_applicable");
   const showTdsPreview = showTdsControls && Boolean(poForm.tds_applicable);
   const poTaxableSubtotal = (poForm.line_items || []).reduce((sum, item) => {
@@ -525,7 +524,7 @@ const PoFormDialog = ({
                 <SelectContent>
                   {formatConfigs.map((format) => (
                     <SelectItem key={format.id} value={format.id}>
-                      {format.name} ({normalizePoTemplateCode(format.templateCode)}, {format.defaultCurrency})
+                      {format.name} ({format.defaultCurrency})
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -592,7 +591,7 @@ const PoFormDialog = ({
                         <h2 className="text-xl font-bold">{selectedFormat.companyName || "Company Name"}</h2>
                         <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">Purchase Order</p>
                         <p className="mt-2 text-xs text-muted-foreground">
-                          {selectedFormat.name || "PO Format"} - {templateCode}
+                          {selectedFormat.name || "PO Format"}
                         </p>
                       </div>
                     </div>
@@ -1000,7 +999,7 @@ const PoFormDialog = ({
                   ? "Preview before saving in"
                   : isEditMode
                     ? `Revising ${editingStatus || "purchase order"} in`
-                    : "Editing in selected format:"} {selectedFormat.name || "PO Format"} ({templateCode})
+                    : "Editing in selected format:"} {selectedFormat.name || "PO Format"}
               </p>
             </div>
           </div>

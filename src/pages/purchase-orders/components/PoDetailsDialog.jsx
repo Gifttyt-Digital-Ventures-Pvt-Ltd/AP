@@ -33,7 +33,6 @@ import {
 import {
   isFormatFieldEnabled,
   isFormatSectionEnabled,
-  normalizePoTemplateCode,
 } from "../utils";
 import PoLogo from "./PoLogo";
 import { OrgBranchDetail, VendorBranchDetail } from "../../../components/common/BranchTableCells";
@@ -61,13 +60,8 @@ const PoDetailsDialog = ({
   );
   const poCurrency = selectedPO?.currency || "INR";
   const isInr = poCurrency === "INR";
-  const templateCode = normalizePoTemplateCode(
-    selectedPO?.template_code || selectedPO?.templateCode || "T1",
-  );
-  const documentBorderClass =
-    templateCode === "T3" ? "border-2 border-slate-900" : "border";
-  const headerBorderClass =
-    templateCode === "T4" ? "border-b-4 border-emerald-600" : "border-b";
+  const documentBorderClass = "border";
+  const headerBorderClass = "border-b";
 
   const selectedFormat =
     selectedPO?.formatConfigSnapshot ||
@@ -247,8 +241,7 @@ const PoDetailsDialog = ({
                               Purchase Order
                             </p>
                             <p className="mt-2 text-xs text-muted-foreground">
-                              {selectedPO.po_format_name || "PO Format"} -{" "}
-                              {templateCode}
+                              {selectedPO.po_format_name || "PO Format"}
                             </p>
                           </div>
                         </div>
