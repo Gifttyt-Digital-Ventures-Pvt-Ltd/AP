@@ -10,6 +10,7 @@ import {
   isInrInvoiceCurrency,
   LINE_ITEM_LEVEL,
   mapExtractedLineItemToForm,
+  normalizeLineItemDiscountTypeForForm,
   resolveLineItemSubtotal,
 } from "./invoiceTax";
 import { parseNumericInput } from "./numericInput";
@@ -98,7 +99,10 @@ export const mapBulkLineItemToEditForm = (line = {}, currency = DEFAULT_CURRENCY
   taxName: line.taxName || "",
   taxRate: line.taxRate ?? "",
   discount: line.discount || 0,
-  discountType: line.discountType || "%",
+  discountType: normalizeLineItemDiscountTypeForForm(
+    line.discountType ?? line.discount_type ?? "%",
+    currency,
+  ),
   eligibleForItc: line.eligibleForItc ?? true,
 });
 
@@ -262,7 +266,10 @@ export const initializeInvoiceFormData = (
     lineItemsExpanded: true,
     lineItems: extractedData?.lineItems?.length > 0
       ? extractedData.lineItems.map((item) =>
-          mapExtractedLineItemToForm(item, { useInrTax }),
+          mapExtractedLineItemToForm(item, {
+            useInrTax,
+            currency: invoiceCurrency,
+          }),
         )
       : [createDefaultLineItem(invoiceCurrency)],
     description: extractedData?.description || notesText || "",
