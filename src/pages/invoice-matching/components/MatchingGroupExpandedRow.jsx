@@ -32,7 +32,7 @@ const MatchingGroupExpandedRow = ({
               <div
                 key={match.id || `${group.id}-${index}`}
                 className="rounded-lg border border-border bg-background px-3 py-2"
-                data-testid={`matching-row-${match.id}`}
+                data-testid={`matching-row-${match?.id ?? 'unknown'}`}
               >
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
                   <div className="grid min-w-0 flex-1 gap-3 md:grid-cols-[minmax(160px,1.35fr)_minmax(110px,1fr)_minmax(110px,1fr)_minmax(100px,0.85fr)_minmax(140px,1fr)] md:items-center">

@@ -666,7 +666,12 @@ export const normalizeInvoiceListResponse = (response) => {
 
 export const getInvoiceListItems = (data) => {
   if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.items)) return data.items;
+  if (data && typeof data === 'object') {
+    if (Array.isArray(data.content)) return data.content;
+    if (Array.isArray(data.items)) return data.items;
+    if (Array.isArray(data.data)) return data.data;
+    if (Array.isArray(data.invoices)) return data.invoices;
+  }
   return [];
 };
 

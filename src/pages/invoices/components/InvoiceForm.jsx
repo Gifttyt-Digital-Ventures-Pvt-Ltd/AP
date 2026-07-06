@@ -48,6 +48,7 @@ import {
 } from "../../../Services/apis/taxApi";
 import { useGetOrganisationQuery } from "../../../Services/apis/settingsApi";
 import { normalizeOrganisationBranchesFromApi } from "../../../utils/organisationGst";
+import { extractPageContent } from "../../../Services/utils/payloadMappers";
 import {
   useGetAvailableGrnsQuery,
   useGetAvailablePurchaseOrdersQuery,
@@ -136,16 +137,6 @@ const RequiredLabel = ({ children, required = false, className = "" }) => (
 
 const resolveRoundOff = (data = {}) =>
   data.roundOff ?? data.round_off ?? data.roundoff;
-
-const getPageContent = (response) => {
-  if (Array.isArray(response)) return response;
-  if (Array.isArray(response?.content)) return response.content;
-  if (Array.isArray(response?.items)) return response.items;
-  if (Array.isArray(response?.data)) return response.data;
-  if (Array.isArray(response?.purchaseOrders)) return response.purchaseOrders;
-  if (Array.isArray(response?.grns)) return response.grns;
-  return [];
-};
 
 const normalizePurchaseOrderOption = (po = {}) => ({
   ...po,
@@ -556,7 +547,7 @@ export const InvoiceForm = ({
       !selectedMatchingPoId,
   });
   const availablePurchaseOrders = useMemo(() => {
-    const items = getPageContent(availablePurchaseOrdersData).map(normalizePurchaseOrderOption);
+    const items = extractPageContent(availablePurchaseOrdersData).map(normalizePurchaseOrderOption);
     return mergeSelectedMatchingOption(items, selectedMatchingPoId, {
       id: selectedMatchingPoId,
       poNumber: formData?.matchingPoNumber || selectedMatchingPoId,
@@ -568,7 +559,7 @@ export const InvoiceForm = ({
     formData?.matchingPoNumber,
   ]);
   const availableGrns = useMemo(() => {
-    const items = getPageContent(availableGrnsData).map(normalizeGrnOption);
+    const items = extractPageContent(availableGrnsData).map(normalizeGrnOption);
     return mergeSelectedMatchingOption(items, formData?.matchingGrnId, {
       id: formData?.matchingGrnId,
       grnNumber: formData?.matchingGrnNumber || formData?.matchingGrnId,

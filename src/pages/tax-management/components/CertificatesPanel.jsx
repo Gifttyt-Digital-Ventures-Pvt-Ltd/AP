@@ -36,7 +36,7 @@ const renderTdsCertificateRow = (cert, rowIndex, headers) => (
   <TableRow
     key={cert.id ?? rowIndex}
     className={cn(rowIndex % 2 === 1 && 'bg-muted/20')}
-    data-testid={`tds-certificate-row-${cert.id}`}
+    data-testid={`tds-certificate-row-${cert?.id ?? 'unknown'}`}
   >
     {headers.map((header) => {
       let value;

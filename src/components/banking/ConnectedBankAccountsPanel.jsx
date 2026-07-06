@@ -29,11 +29,11 @@ const BankAccountRow = ({
   highlighted = false,
   compact = false,
 }) => {
-  const accountName = account.account_name || account.accountName || 'Connected account';
+  const accountName = account?.account_name || account?.accountName || 'Connected account';
   const bankLine = formatBankAccountSummaryLine(account);
-  const accountType = formatBankAccountType(account.account_type || account.accountType);
-  const currency = account.currency || 'INR';
-  const ifscCode = account.ifsc_code || account.ifscCode || '';
+  const accountType = formatBankAccountType(account?.account_type || account?.accountType);
+  const currency = account?.currency || 'INR';
+  const ifscCode = account?.ifsc_code || account?.ifscCode || '';
   const active = isBankAccountActive(account);
 
   return (
@@ -45,7 +45,7 @@ const BankAccountRow = ({
           : 'border-border bg-background/80',
         compact ? 'py-2' : '',
       )}
-      data-testid={`connected-bank-account-${account.id}`}
+      data-testid={`connected-bank-account-${account?.id ?? 'unknown'}`}
     >
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0 space-y-0.5">
@@ -81,7 +81,7 @@ const ConnectedBankAccountsPanel = ({
   const normalizedAccounts = normalizeBankAccountList(accounts);
   const activeAccounts = getActiveBankAccounts(normalizedAccounts);
   const selectedAccount = selectedAccountId
-    ? normalizedAccounts.find((account) => String(account.id) === String(selectedAccountId))
+    ? normalizedAccounts.find((account) => String(account?.id) === String(selectedAccountId))
     : null;
   const highlightedAccounts = selectedAccount
     ? [selectedAccount]
@@ -91,7 +91,7 @@ const ConnectedBankAccountsPanel = ({
   const otherAccounts = normalizedAccounts.filter(
     (account) =>
       !highlightedAccounts.some(
-        (highlighted) => String(highlighted.id) === String(account.id),
+        (highlighted) => String(highlighted?.id) === String(account?.id),
       ),
   );
 
@@ -181,7 +181,7 @@ const ConnectedBankAccountsPanel = ({
       <div className="space-y-2">
         {highlightedAccounts.map((account) => (
           <BankAccountRow
-            key={account.id}
+            key={account?.id ?? account?.account_number ?? account?.account_name}
             account={account}
             highlighted
             compact={compact}
@@ -194,7 +194,7 @@ const ConnectedBankAccountsPanel = ({
               Other connected accounts
             </p>
             {otherAccounts.map((account) => (
-              <BankAccountRow key={account.id} account={account} compact />
+              <BankAccountRow key={account?.id ?? account?.account_number ?? account?.account_name} account={account} compact />
             ))}
           </div>
         ) : null}
@@ -212,8 +212,8 @@ const ConnectedBankAccountsPanel = ({
 export const SelectedBankAccountPreview = ({ account }) => {
   if (!account) return null;
 
-  const accountName = account.account_name || account.accountName || 'Connected account';
-  const ifscCode = account.ifsc_code || account.ifscCode || '';
+  const accountName = account?.account_name || account?.accountName || 'Connected account';
+  const ifscCode = account?.ifsc_code || account?.ifscCode || '';
 
   return (
     <div
@@ -227,7 +227,7 @@ export const SelectedBankAccountPreview = ({ account }) => {
       <p className="mt-1 text-muted-foreground">{formatBankAccountSummaryLine(account)}</p>
       {ifscCode ? <p className="mt-0.5 text-muted-foreground">IFSC {ifscCode}</p> : null}
       <p className="mt-0.5 text-muted-foreground">
-        Account {maskBankAccountNumber(account.account_number || account.accountNumber, { reveal: false })}
+        Account {maskBankAccountNumber(account?.account_number || account?.accountNumber, { reveal: false })}
       </p>
     </div>
   );

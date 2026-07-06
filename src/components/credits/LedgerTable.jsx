@@ -8,16 +8,18 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import CreditAmount from "./CreditAmount";
+import { parseApiDate } from "@/lib/utils";
 
 const formatDateTime = (value) => {
-  if (!value) return "-";
+  const parsed = parseApiDate(value);
+  if (!parsed) return "-";
   return new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",
     month: "short",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(value));
+  }).format(parsed);
 };
 
 const asArray = (response) => {

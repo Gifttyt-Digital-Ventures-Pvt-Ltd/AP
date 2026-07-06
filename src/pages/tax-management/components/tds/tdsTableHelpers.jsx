@@ -29,7 +29,7 @@ export const renderTdsSectionRow = (section, rowIndex, headers) => (
   <TableRow
     key={section.id ?? rowIndex}
     className={cn(rowIndex % 2 === 1 && 'bg-muted/20')}
-    data-testid={`tds-section-row-${section.id}`}
+    data-testid={`tds-section-row-${section?.id ?? 'unknown'}`}
   >
     {headers.map((header) => {
       let value;
@@ -64,7 +64,7 @@ export const renderTdsEntryRow = (entry, rowIndex, headers) => (
   <TableRow
     key={entry.id ?? rowIndex}
     className={cn(rowIndex % 2 === 1 && 'bg-muted/20')}
-    data-testid={`tds-entry-row-${entry.id}`}
+    data-testid={`tds-entry-row-${entry?.id ?? 'unknown'}`}
   >
     {headers.map((header) => {
       let value;

@@ -63,16 +63,8 @@ import { useSidebar } from '../../components/Layout';
 import { useMeteredActionEstimate } from '../../hooks/useMeteredActionEstimate';
 import { CREDIT_ACTION_CODES } from '../../constants/creditActions';
 import { extractApiErrorDetail } from '../../utils/approvalWorkflow';
-import { extractVendorIdFromResponse } from '../../Services/utils/payloadMappers';
+import { extractVendorIdFromResponse, extractListResponse } from '../../Services/utils/payloadMappers';
 import { getInvoiceVendorRequestValidationErrors } from '../../utils/vendorValidation';
-
-const getListData = (response) => {
-  if (Array.isArray(response)) return response;
-  if (Array.isArray(response?.content)) return response.content;
-  if (Array.isArray(response?.data)) return response.data;
-  if (Array.isArray(response?.items)) return response.items;
-  return [];
-};
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? '';
 
@@ -322,8 +314,8 @@ const PurchaseOrdersPage = () => {
   const poUploadEstimate = useMeteredActionEstimate(CREDIT_ACTION_CODES.PO_UPLOAD, uploadFile ? 1 : 0);
 
   const formatConfig = formatConfigData || DEFAULT_PO_FORMAT_CONFIG;
-  const apiPurchaseOrders = getListData(purchaseOrdersData).map(normalizePurchaseOrder);
-  const vendors = Array.isArray(vendorsData) ? vendorsData : getListData(vendorsData);
+  const apiPurchaseOrders = extractListResponse(purchaseOrdersData).map(normalizePurchaseOrder);
+  const vendors = Array.isArray(vendorsData) ? vendorsData : extractListResponse(vendorsData);
   const loading = purchaseOrdersLoading || vendorsLoading || formatConfigLoading || formatConfigsLoading;
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -375,7 +367,7 @@ const PurchaseOrdersPage = () => {
   }, []);
 
   useEffect(() => {
-    const formatsFromApi = getListData(formatConfigsData).map((config, index) =>
+    const formatsFromApi = extractListResponse(formatConfigsData).map((config, index) =>
       makeFormatConfig(config, index === 0 ? 'default-format' : `format-${index + 1}`, 'Standard GST Format', tenantBranding),
     );
     const nextFormats = formatsFromApi.length
@@ -980,7 +972,7 @@ const PurchaseOrdersPage = () => {
       const vendorsResult = await refetchVendors();
       const freshVendors = Array.isArray(vendorsResult?.data)
         ? vendorsResult.data
-        : getListData(vendorsResult?.data);
+        : extractListResponse(vendorsResult?.data);
       const matchedVendor =
         (requestedVendorId
           ? freshVendors.find((vendor) => String(vendor.id) === String(requestedVendorId))

@@ -1,10 +1,12 @@
 import { serviceApi } from "../serviceApi";
 import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
+import { extractListResponse } from "../utils/payloadMappers";
 
 export const paymentBatchesApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getPaymentBatches: builder.query({
       query: () => ({ url: "/payment-batches", method: "GET" }),
+      transformResponse: (response) => extractListResponse(response, ['batches']),
       providesTags: ["Batches"],
     }),
     getPaymentBatchStats: builder.query({

@@ -119,7 +119,7 @@ const AllInvoicesTable = ({
                   size="sm"
                   className="h-auto p-0 text-sm text-muted-foreground underline underline-offset-4"
                   onClick={() => handleOpenInvoiceHistory?.(invoice)}
-                  data-testid={`all-approval-history-${invoice.id}`}
+                  data-testid={`all-approval-history-${invoice?.id ?? 'unknown'}`}
                 >
                   {progress.approved}/{progress.total} steps
                 </Button>
@@ -152,7 +152,7 @@ const AllInvoicesTable = ({
                     variant="ghost"
                     size="sm"
                     onClick={() => handleViewInvoice?.(invoice)}
-                    data-testid={`view-invoice-${invoice.id}`}
+                    data-testid={`view-invoice-${invoice?.id ?? 'unknown'}`}
                     title="View Invoice"
                     className="h-8 w-8 p-0"
                   >

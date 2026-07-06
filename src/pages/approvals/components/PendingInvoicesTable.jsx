@@ -61,7 +61,7 @@ const PendingInvoicesTable = ({
                   size="sm"
                   className="h-auto p-0 text-sm text-muted-foreground underline underline-offset-4"
                   onClick={() => handleOpenInvoiceHistory?.(invoice)}
-                  data-testid={`pending-approval-history-${invoice.id}`}
+                  data-testid={`pending-approval-history-${invoice?.id ?? 'unknown'}`}
                 >
                   {progress.approved}/{progress.total} steps
                 </Button>
@@ -100,7 +100,7 @@ const PendingInvoicesTable = ({
                     variant="ghost"
                     size="sm"
                     onClick={() => handleViewInvoice?.(invoice)}
-                    data-testid={`view-pending-invoice-${invoice.id}`}
+                    data-testid={`view-pending-invoice-${invoice?.id ?? 'unknown'}`}
                     title="View Invoice"
                     className="h-8 w-8 p-0"
                   >

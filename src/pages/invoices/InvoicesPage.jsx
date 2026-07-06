@@ -2268,7 +2268,7 @@ const InvoicesPage = () => {
         "border-b border-border transition-colors hover:bg-muted/50",
         invoice.isDuplicate && "bg-amber-100 hover:bg-amber-100",
       )}
-      data-testid={`invoice-row-${invoice.id}`}
+      data-testid={`invoice-row-${invoice?.id ?? 'unknown'}`}
     >
       {headers.map((header) => {
         let value;
@@ -2355,7 +2355,7 @@ const InvoicesPage = () => {
                   variant="ghost"
                   size="sm"
                   onClick={() => handleViewInvoice(invoice)}
-                  data-testid={`view-invoice-${invoice.id}`}
+                  data-testid={`view-invoice-${invoice?.id ?? 'unknown'}`}
                   title="View Invoice"
                   className="h-8 w-8 p-0"
                 >
@@ -2366,7 +2366,7 @@ const InvoicesPage = () => {
                     variant="ghost"
                     size="sm"
                     onClick={() => handleEditInvoice(invoice)}
-                    data-testid={`edit-invoice-${invoice.id}`}
+                    data-testid={`edit-invoice-${invoice?.id ?? 'unknown'}`}
                     title="Edit Invoice"
                     className="h-8 w-8 p-0"
                   >
@@ -2378,7 +2378,7 @@ const InvoicesPage = () => {
                     variant="ghost"
                     size="sm"
                     onClick={() => handleDeleteInvoice(invoice)}
-                    data-testid={`delete-invoice-${invoice.id}`}
+                    data-testid={`delete-invoice-${invoice?.id ?? 'unknown'}`}
                     title="Delete Invoice"
                     className="h-8 w-8 p-0"
                   >
@@ -2390,7 +2390,7 @@ const InvoicesPage = () => {
                     variant="ghost"
                     size="sm"
                     onClick={() => handleCancelInvoice(invoice)}
-                    data-testid={`cancel-invoice-${invoice.id}`}
+                    data-testid={`cancel-invoice-${invoice?.id ?? 'unknown'}`}
                     title="Cancel Invoice"
                     className="h-8 w-8 p-0"
                   >

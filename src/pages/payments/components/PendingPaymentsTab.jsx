@@ -96,7 +96,7 @@ const PendingPaymentsTab = ({
   const renderPendingPaymentRow = (invoice, rowIndex, headers) => (
     <TableRow
       key={invoice.id ?? rowIndex}
-      data-testid={`pending-invoice-row-${invoice.id}`}
+      data-testid={`pending-invoice-row-${invoice?.id ?? 'unknown'}`}
       className={
         showRecordPaymentSelection && selectedInvoiceIds.includes(invoice.id) ? 'bg-primary/10' : ''
       }
@@ -115,7 +115,7 @@ const PendingPaymentsTab = ({
                   <Checkbox
                     checked={selectedInvoiceIds.includes(invoice.id)}
                     onCheckedChange={() => onToggleInvoice?.(invoice.id)}
-                    data-testid={`pending-invoice-select-${invoice.id}`}
+                    data-testid={`pending-invoice-select-${invoice?.id ?? 'unknown'}`}
                   />
                 </div>
                 <span>{invoice.invoiceNumber || '-'}</span>
@@ -164,7 +164,7 @@ const PendingPaymentsTab = ({
                   variant="ghost"
                   size="sm"
                   onClick={() => handleViewInvoice?.(invoice)}
-                  data-testid={`view-pending-invoice-${invoice.id}`}
+                  data-testid={`view-pending-invoice-${invoice?.id ?? 'unknown'}`}
                   title="View Invoice"
                   className="h-8 w-8 p-0"
                 >
@@ -174,7 +174,7 @@ const PendingPaymentsTab = ({
                   variant="ghost"
                   size="sm"
                   onClick={() => handleDownloadInvoice?.(invoice)}
-                  data-testid={`download-pending-invoice-${invoice.id}`}
+                  data-testid={`download-pending-invoice-${invoice?.id ?? 'unknown'}`}
                   title="Download Invoice"
                   className="h-8 w-8 p-0"
                 >
@@ -185,7 +185,7 @@ const PendingPaymentsTab = ({
                     variant="ghost"
                     size="sm"
                     onClick={() => handleCancelInvoice?.(invoice)}
-                    data-testid={`cancel-pending-invoice-${invoice.id}`}
+                    data-testid={`cancel-pending-invoice-${invoice?.id ?? 'unknown'}`}
                     title="Cancel Invoice"
                     className="h-8 w-8 p-0"
                   >

@@ -1,5 +1,6 @@
 import { serviceApi } from "../serviceApi";
 import {
+  extractListResponse,
   toBankAccountApiPayload,
   toBankAccountUiPayload,
   toInvoiceUiPayload,
@@ -13,11 +14,12 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
     getPendingApprovals: builder.query({
       query: (params) => ({ url: "/approvals/pending", method: "GET", params }),
       transformResponse: (response) =>
-        Array.isArray(response) ? response.map(toInvoiceUiPayload) : [],
+        extractListResponse(response).map(toInvoiceUiPayload),
       providesTags: ["Approvals"],
     }),
     getPayments: builder.query({
       query: (params) => ({ url: "/payments", method: "GET", params }),
+      transformResponse: extractListResponse,
       providesTags: ["Payments"],
     }),
     createPayment: builder.mutation({
@@ -50,9 +52,7 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
     getBankAccounts: builder.query({
       query: () => ({ url: "/bank-accounts", method: "GET" }),
       transformResponse: (response) =>
-        Array.isArray(response)
-          ? response.map(toBankAccountUiPayload)
-          : toBankAccountUiPayload(response),
+        extractListResponse(response).map(toBankAccountUiPayload),
       providesTags: ["Banking"],
     }),
     createBankAccount: builder.mutation({

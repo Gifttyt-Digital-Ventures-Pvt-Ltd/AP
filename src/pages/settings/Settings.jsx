@@ -31,6 +31,11 @@ import {
   validateGstRegistrations,
   validateOrganisationBranches,
 } from '../../utils/organisationGst';
+import {
+  formatBankAccountType,
+  isBankAccountActive,
+  maskBankAccountNumber,
+} from '../banking/utils/bankAccounts';
 
 // Tally Logo Component
 const TallyLogo = () => (
@@ -104,7 +109,10 @@ const Settings = () => {
   const [createOrganisation] = useCreateOrganisationMutation();
   const [updateOrganisation] = useUpdateOrganisationMutation();
   const { guardAction, canPerformAction } = useActionGuard();
-  const bankAccounts = Array.isArray(bankAccountsData) ? bankAccountsData : [];
+  const bankAccounts = useMemo(
+    () => (Array.isArray(bankAccountsData) ? bankAccountsData : []),
+    [bankAccountsData],
+  );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
     account_name: '',
@@ -746,25 +754,27 @@ const Settings = () => {
             <div className="space-y-4">
               {bankAccounts.map((account) => (
                 <div
-                  key={account.id}
+                  key={account?.id ?? account?.account_number ?? account?.account_name ?? 'unknown'}
                   className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
-                  data-testid={`bank-account-${account.id}`}
+                  data-testid={`bank-account-${account?.id ?? 'unknown'}`}
                 >
                   <div>
-                    <h4 className="font-medium">{account.account_name}</h4>
+                    <h4 className="font-medium">{account?.account_name || 'Bank account'}</h4>
                     <p className="text-sm text-muted-foreground">
-                      {account.bank_name} - {account.account_type}
+                      {[account?.bank_name, formatBankAccountType(account?.account_type)]
+                        .filter(Boolean)
+                        .join(' · ') || '—'}
                     </p>
-                    <p className="text-xs   text-muted-foreground mt-1">
-                      **** {account.account_number.slice(-4)}
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {maskBankAccountNumber(account?.account_number)}
                     </p>
                   </div>
                   <div className="flex items-center gap-4">
-                    <span className="text-sm   font-semibold">{account.currency}</span>
+                    <span className="text-sm font-semibold">{account?.currency || '—'}</span>
                     <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                      account.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-800'
+                      isBankAccountActive(account) ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-800'
                     }`}>
-                      {account.is_active ? 'Active' : 'Inactive'}
+                      {isBankAccountActive(account) ? 'Active' : 'Inactive'}
                     </span>
                   </div>
                 </div>

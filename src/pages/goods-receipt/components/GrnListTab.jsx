@@ -188,7 +188,7 @@ const GrnListTab = ({
               </TableRow>
             ) : (
               pageData.map((grn) => (
-                <TableRow key={grn.id} data-testid={`grn-row-${grn.id}`}>
+                <TableRow key={grn.id} data-testid={`grn-row-${grn?.id ?? 'unknown'}`}>
                   <TableCell className="font-semibold text-primary">{grn.grn_number}</TableCell>
                   <TableCell className="text-muted-foreground">{formatDate(grn.receipt_date)}</TableCell>
                   <TableCell>{grn.vendor_name || '—'}</TableCell>
@@ -212,7 +212,7 @@ const GrnListTab = ({
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => onView(grn)} data-testid={`view-grn-${grn.id}`}>
+                      <Button variant="ghost" size="sm" onClick={() => onView(grn)} data-testid={`view-grn-${grn?.id ?? 'unknown'}`}>
                         <Eye className="mr-1 h-4 w-4" />
                         View
                       </Button>

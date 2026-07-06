@@ -71,7 +71,7 @@ const NeedsApprovalTable = ({
     return (
       <TableRow
         key={invoice.id ?? rowIndex}
-        data-testid={`approval-row-${invoice.id}`}
+        data-testid={`approval-row-${invoice?.id ?? 'unknown'}`}
       >
         {headers.map((header) => {
           let value;
@@ -94,7 +94,7 @@ const NeedsApprovalTable = ({
                     size="sm"
                     className="h-auto p-0 text-sm text-muted-foreground underline underline-offset-4"
                     onClick={() => handleOpenInvoiceHistory?.(invoice)}
-                    data-testid={`approval-history-${invoice.id}`}
+                    data-testid={`approval-history-${invoice?.id ?? 'unknown'}`}
                   >
                     {isChecker
                       ? "History"
@@ -132,7 +132,7 @@ const NeedsApprovalTable = ({
                     variant="ghost"
                     size="sm"
                     onClick={() => handleViewInvoice?.(invoice)}
-                    data-testid={`view-invoice-${invoice.id}`}
+                    data-testid={`view-invoice-${invoice?.id ?? 'unknown'}`}
                     title="View Invoice"
                     className="h-8 w-8 p-0"
                   >
@@ -146,7 +146,7 @@ const NeedsApprovalTable = ({
                         isChecker ? "Checked" : "Approved",
                       )
                     }
-                    data-testid={`approve-button-${invoice.id}`}
+                    data-testid={`approve-button-${invoice?.id ?? 'unknown'}`}
                     disabled={!canAct}
                   >
                     <CheckCircle className="h-4 w-4 mr-2" />
@@ -158,7 +158,7 @@ const NeedsApprovalTable = ({
                     onClick={() =>
                       handleApprovalAction(invoice, NEEDS_CORRECTION_ACTION)
                     }
-                    data-testid={`needs-correction-button-${invoice.id}`}
+                    data-testid={`needs-correction-button-${invoice?.id ?? 'unknown'}`}
                     disabled={!canAct}
                   >
                     <RotateCcw className="h-4 w-4 mr-2" />
@@ -168,7 +168,7 @@ const NeedsApprovalTable = ({
                     size="sm"
                     variant="destructive"
                     onClick={() => handleApprovalAction(invoice, "Rejected")}
-                    data-testid={`reject-button-${invoice.id}`}
+                    data-testid={`reject-button-${invoice?.id ?? 'unknown'}`}
                     disabled={!canAct}
                   >
                     <XCircle className="h-4 w-4 mr-2" />

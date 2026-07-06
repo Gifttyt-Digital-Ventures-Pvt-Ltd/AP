@@ -1,6 +1,7 @@
 import React from "react";
 import { Building2, Calendar, Download, FileText, Search, Trash2, Upload } from "lucide-react";
 import { format } from "date-fns";
+import { parseApiDate } from "@/lib/utils";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { TabsContent } from "../../../components/ui/tabs";
@@ -152,7 +153,14 @@ const StatementsTab = ({
                 .map((stmt) => (
                   <tr key={stmt.id} className="hover:bg-gray-50">
                     <td className="p-3">
-                      <span className="text-gray-800">{format(new Date(stmt.period_start), "d MMM yyyy")} - {format(new Date(stmt.period_end), "d MMM yyyy")}</span>
+                      <span className="text-gray-800">
+                        {(() => {
+                          const start = parseApiDate(stmt?.period_start);
+                          const end = parseApiDate(stmt?.period_end);
+                          if (!start || !end) return '-';
+                          return `${format(start, "d MMM yyyy")} - ${format(end, "d MMM yyyy")}`;
+                        })()}
+                      </span>
                     </td>
                     <td className="p-3"><span className="text-gray-800">{stmt.original_file_name}</span></td>
                     <td className="p-3">

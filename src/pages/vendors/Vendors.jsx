@@ -863,7 +863,7 @@ const Vendors = () => {
       <React.Fragment key={vendorId}>
         <TableRow
           className="border-b border-border hover:bg-muted/50 transition-colors"
-          data-testid={`vendor-row-${vendor.id}`}
+          data-testid={`vendor-row-${vendor?.id ?? 'unknown'}`}
         >
           {headers.map((header) => {
             let value;
@@ -916,7 +916,7 @@ const Vendors = () => {
                   type="button"
                   onClick={() => toggleVendorExpanded(vendorId)}
                   className="inline-flex items-center gap-1.5 text-left"
-                  data-testid={`toggle-vendor-gst-${vendor.id}`}
+                  data-testid={`toggle-vendor-gst-${vendor?.id ?? 'unknown'}`}
                 >
                   <VendorMultiGstBadge count={registrations.length} states={registrationStates} />
                   {canExpand ? (
@@ -956,7 +956,7 @@ const Vendors = () => {
                   className="w-8 h-8 p-0 rounded-md"
                   onClick={() => setViewingVendor(vendor)}
                   title="View"
-                  data-testid={`view-vendor-${vendor.id}`}
+                  data-testid={`view-vendor-${vendor?.id ?? 'unknown'}`}
                 >
                   <Eye className="h-4 w-4" />
                 </Button>
@@ -968,7 +968,7 @@ const Vendors = () => {
                       className="w-8 h-8 p-0 rounded-md"
                       onClick={() => openVendorApprovalDialog(vendor, NEEDS_CORRECTION_ACTION)}
                       title="Needs Correction"
-                      data-testid={`needs-correction-vendor-${vendor.id}`}
+                      data-testid={`needs-correction-vendor-${vendor?.id ?? 'unknown'}`}
                     >
                       <RotateCcw className="h-4 w-4 text-amber-600" />
                     </Button>
@@ -978,7 +978,7 @@ const Vendors = () => {
                       className="w-8 h-8 p-0 rounded-md"
                       onClick={() => openVendorApprovalDialog(vendor, 'Rejected')}
                       title="Reject"
-                      data-testid={`reject-vendor-${vendor.id}`}
+                      data-testid={`reject-vendor-${vendor?.id ?? 'unknown'}`}
                     >
                       <X className="h-4 w-4 text-red-500" />
                     </Button>
@@ -988,7 +988,7 @@ const Vendors = () => {
                       className="w-8 h-8 p-0 rounded-md"
                       onClick={() => openVendorApprovalDialog(vendor, 'Approved')}
                       title="Approve"
-                      data-testid={`approve-vendor-${vendor.id}`}
+                      data-testid={`approve-vendor-${vendor?.id ?? 'unknown'}`}
                     >
                       <Check className="h-4 w-4 text-emerald-700" />
                     </Button>
@@ -1007,7 +1007,7 @@ const Vendors = () => {
                             ? 'Edit vendor (creator)'
                             : 'Edit vendor'
                         }
-                        data-testid={`edit-vendor-${vendor.id}`}
+                        data-testid={`edit-vendor-${vendor?.id ?? 'unknown'}`}
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
@@ -1018,7 +1018,7 @@ const Vendors = () => {
                         size="sm"
                         className="w-8 h-8 p-0 rounded-md"
                         onClick={() => handleDelete(vendor.id)}
-                        data-testid={`delete-vendor-${vendor.id}`}
+                        data-testid={`delete-vendor-${vendor?.id ?? 'unknown'}`}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>

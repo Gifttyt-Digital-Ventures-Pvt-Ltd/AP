@@ -5,23 +5,14 @@ import {
   toVendorApiPayload,
   toVendorRequestApiPayload,
   toVendorUiPayload,
+  extractListResponse,
   normalizeInvoiceListResponse,
   normalizeInvoiceFilterOptions,
 } from "../utils/payloadMappers";
 import { normalizeApprovalHistoryEntries } from "../../pages/invoices/utils/invoiceHistory";
 import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
 
-const unwrapVendorList = (response) => {
-  if (Array.isArray(response)) return response;
-  if (Array.isArray(response?.data)) return response.data;
-  if (Array.isArray(response?.content)) return response.content;
-  if (Array.isArray(response?.items)) return response.items;
-  if (Array.isArray(response?.vendors)) return response.vendors;
-  if (response && (response.id || response.vendorId || response.vendor_id)) {
-    return [response];
-  }
-  return [];
-};
+const unwrapVendorList = extractListResponse;
 
 export const invoicesVendorsApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
@@ -114,7 +105,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
     getPendingCheckerInvoices: builder.query({
       query: (params) => ({ url: "/checker/pending", method: "GET", params }),
       transformResponse: (response) =>
-        Array.isArray(response) ? response.map(toInvoiceUiPayload) : [],
+        extractListResponse(response).map(toInvoiceUiPayload),
       providesTags: ["Invoices", "Approvals"],
     }),
     checkInvoice: builder.mutation({

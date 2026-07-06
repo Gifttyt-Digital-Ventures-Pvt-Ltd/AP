@@ -1,6 +1,98 @@
 import { parseMsmeValue } from '../../utils/vendorValidation';
 import { sanitizeVendorTdsForSave } from '../../pages/vendors/utils/vendorTds';
 
+/** Always returns an array from common API list envelopes. */
+const LIST_RESPONSE_KEYS = [
+  'content',
+  'data',
+  'items',
+  'results',
+  'vendors',
+  'campaigns',
+  'exports',
+  'reports',
+  'types',
+  'reportTypes',
+  'employees',
+  'roles',
+  'users',
+  'categories',
+  'workflows',
+  'batches',
+  'notifications',
+  'logs',
+  'auditLogs',
+  'entries',
+  'sections',
+  'states',
+  'statuses',
+  'branches',
+  'invoices',
+  'purchaseOrders',
+  'purchase_orders',
+  'grns',
+  'screens',
+  'providers',
+  'connections',
+  'organizations',
+  'mappings',
+  'history',
+  'ledgers',
+  'statements',
+  'transactions',
+  'payments',
+  'approvals',
+];
+
+const pickArrayFromObject = (object, keys) => {
+  if (!object || typeof object !== 'object' || Array.isArray(object)) return null;
+  for (const key of keys) {
+    if (Array.isArray(object[key])) return object[key];
+  }
+  return null;
+};
+
+export const extractListResponse = (response, extraKeys = []) => {
+  if (Array.isArray(response)) return response;
+  if (!response || typeof response !== 'object') return [];
+
+  const keys = [...extraKeys, ...LIST_RESPONSE_KEYS];
+  const direct = pickArrayFromObject(response, keys);
+  if (direct) return direct;
+
+  if (response.data && typeof response.data === 'object') {
+    if (Array.isArray(response.data)) return response.data;
+    const nested = pickArrayFromObject(response.data, keys);
+    if (nested) return nested;
+  }
+
+  const entityId =
+    response.id ??
+    response._id ??
+    response.vendorId ??
+    response.vendor_id;
+  if (entityId !== undefined && entityId !== null) return [response];
+
+  return [];
+};
+
+/** Paginated list payloads often expose rows on `content` / `items`. */
+export const extractPageContent = (response) => {
+  if (Array.isArray(response)) return response;
+  if (response && typeof response === 'object') {
+    if (Array.isArray(response.content)) return response.content;
+    if (Array.isArray(response.items)) return response.items;
+    const paginatedData = response.data;
+    if (
+      Array.isArray(paginatedData) &&
+      (response.totalElements != null || response.total != null || response.totalPages != null)
+    ) {
+      return paginatedData;
+    }
+  }
+  return extractListResponse(response);
+};
+
 export const toVendorApiPayload = (vendor = {}) => {
   const {
     name,
@@ -257,11 +349,11 @@ export const toBankAccountApiPayload = (account = {}) => {
 
 export const toBankAccountUiPayload = (account = {}) => ({
   ...account,
-  account_name: account.account_name ?? account.accountName,
-  account_number: account.account_number ?? account.accountNumber,
-  bank_name: account.bank_name ?? account.bankName,
-  account_type: account.account_type ?? account.accountType,
-  ifsc_code: account.ifsc_code ?? account.ifscCode,
+  account_name: account.account_name ?? account.accountName ?? "",
+  account_number: account.account_number ?? account.accountNumber ?? "",
+  bank_name: account.bank_name ?? account.bankName ?? "",
+  account_type: account.account_type ?? account.accountType ?? "",
+  ifsc_code: account.ifsc_code ?? account.ifscCode ?? "",
   is_active: account.is_active ?? account.isActive,
 });
 

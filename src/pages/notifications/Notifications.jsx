@@ -122,7 +122,7 @@ const Notifications = () => {
     const Icon = notificationTypeIcons[notif.notification_type] || Bell;
 
     return (
-      <TableRow key={notif.id ?? rowIndex} data-testid={`notification-row-${notif.id}`}>
+      <TableRow key={notif.id ?? rowIndex} data-testid={`notification-row-${notif?.id ?? 'unknown'}`}>
         {headers.map((header) => {
           let value;
 
