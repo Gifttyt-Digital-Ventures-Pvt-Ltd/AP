@@ -65,6 +65,7 @@ import {
   createDefaultGrnForm,
   createEmptyGrnLineItem,
   getListData,
+  extractPageContent,
   getPoReceiptStateLines,
   normalizeGrn,
   normalizePurchaseOrder,
@@ -236,7 +237,7 @@ const GoodsReceipt = () => {
   }, [uploadGrnFileURL]);
 
   const grns = useMemo(
-    () => getListData(grnsResponse).map(normalizeGrn),
+    () => extractPageContent(grnsResponse).map(normalizeGrn),
     [grnsResponse],
   );
 

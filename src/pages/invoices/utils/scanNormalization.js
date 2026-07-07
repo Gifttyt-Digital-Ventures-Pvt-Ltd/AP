@@ -1,5 +1,6 @@
 import { format } from "date-fns";
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../../utils/currency";
+import { DOCUMENT_TYPE, normalizeDocumentType } from "../constants/proformaInvoice";
 import {
   DEFAULT_INR_TAX,
   LINE_ITEM_LEVEL,
@@ -167,5 +168,8 @@ export const normalizeScannedInvoice = (scanResponse = {}) => {
     fileId: scanResponse?.fileId ?? scanResponse?.fileId ?? null,
     fileHash: scanResponse?.fileHash ?? scanResponse?.fileHash ?? null,
     originalFileName: scanResponse?.originalFileName ?? scanResponse?.originalFileName ?? null,
+    documentType: normalizeDocumentType(
+      scanResponse?.documentType ?? scanResponse?.document_type ?? DOCUMENT_TYPE.TAX_INVOICE,
+    ),
   };
 };

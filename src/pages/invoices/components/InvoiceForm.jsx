@@ -69,7 +69,7 @@ import {
 import InvoiceDocumentTypeFields from "./InvoiceDocumentTypeFields";
 import ProformaInvoicePicker from "./ProformaInvoicePicker";
 import PiLinkValidationCard from "./PiLinkValidationCard";
-import { DOCUMENT_TYPE } from "../constants/proformaInvoice";
+import { DOCUMENT_TYPE, normalizeDocumentType } from "../constants/proformaInvoice";
 import { useGetEligiblePisForGrnQuery } from "../../../Services/apis/goodsReceiptApi";
 import {
   useLazyGetProformaInvoiceSuggestionsQuery,
@@ -693,10 +693,11 @@ export const InvoiceForm = ({
   ]);
 
   const handleDocumentTypeChange = (value) => {
+    const documentType = normalizeDocumentType(value?.target?.value ?? value);
     setFormData((prev) => ({
       ...prev,
-      documentType: value,
-      ...(value === DOCUMENT_TYPE.PROFORMA_INVOICE
+      documentType,
+      ...(documentType === DOCUMENT_TYPE.PROFORMA_INVOICE
         ? { linkedProformaInvoiceId: "", linkedProformaInvoiceNumber: "" }
         : {}),
     }));
@@ -1122,27 +1123,30 @@ export const InvoiceForm = ({
 
           {showProformaInvoiceFields && (
             <div className="space-y-4">
-              <InvoiceDocumentTypeFields
-                documentType={formData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE}
-                onDocumentTypeChange={handleDocumentTypeChange}
-                disabled={isEdit}
-              />
-              {(formData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE) ===
-                DOCUMENT_TYPE.TAX_INVOICE && (
-                <>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <InvoiceDocumentTypeFields
+                  documentType={formData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE}
+                  onDocumentTypeChange={handleDocumentTypeChange}
+                  disabled={isEdit}
+                />
+                {(formData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE) ===
+                  DOCUMENT_TYPE.TAX_INVOICE && (
                   <ProformaInvoicePicker
                     suggestions={piSuggestions}
                     selectedId={formData?.linkedProformaInvoiceId}
                     onSelect={handleSelectProformaInvoice}
                     loading={piSuggestionsLoading}
                   />
-                  <PiLinkValidationCard
-                    validation={piLinkValidation}
-                    selectedPi={selectedProformaInvoice}
-                    currency={formData?.currency}
-                    loading={piLinkValidationLoading}
-                  />
-                </>
+                )}
+              </div>
+              {(formData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE) ===
+                DOCUMENT_TYPE.TAX_INVOICE && (
+                <PiLinkValidationCard
+                  validation={piLinkValidation}
+                  selectedPi={selectedProformaInvoice}
+                  currency={formData?.currency}
+                  loading={piLinkValidationLoading}
+                />
               )}
             </div>
           )}

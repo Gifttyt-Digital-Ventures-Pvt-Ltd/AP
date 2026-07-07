@@ -26,7 +26,6 @@ export const goodsReceiptApi = serviceApi.injectEndpoints({
         method: "GET",
         params,
       }),
-      transformResponse: extractListResponse,
       providesTags: grnTags,
     }),
     getGrnById: builder.query({

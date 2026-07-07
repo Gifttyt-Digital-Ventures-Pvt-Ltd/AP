@@ -486,10 +486,6 @@ const InvoiceSingleUploadLayer = ({
   const handleAddInvoice = async () => {
     if (!guardAction("invoices.create")) return;
     if (!formData) return;
-    if (uploadedFile && !String(formData.billingGstin || "").trim()) {
-      toast.error("Select a billing GSTIN from Organisation Details before adding invoice");
-      return;
-    }
 
     const totals = calculateTotals(formData.lineItems);
     const resolvedVendorId =
@@ -616,7 +612,6 @@ const InvoiceSingleUploadLayer = ({
     canManageInvoices &&
     !invoiceMandatoryFieldsLoading &&
     Boolean(formData) &&
-    (!uploadedFile || Boolean(formData?.billingGstin)) &&
     isInvoiceMandatoryFieldsSatisfied(formData, invoiceMandatoryFields, mandatoryFieldOptions) &&
     (Boolean(formData?.vendorId) ||
       Boolean(prefillRef.current?.vendorId) ||
@@ -744,7 +739,7 @@ const InvoiceSingleUploadLayer = ({
       LEDGER_OPTIONS={LEDGER_OPTIONS}
       TAX_RATES={TAX_RATES}
       showBillingGst={Boolean(uploadedFile)}
-      requireBillingGst={Boolean(uploadedFile)}
+      requireBillingGst={false}
       showBranchField={isBranchEnabled}
       showProformaInvoiceFields={isPiSubscriptionEnabled}
     />
