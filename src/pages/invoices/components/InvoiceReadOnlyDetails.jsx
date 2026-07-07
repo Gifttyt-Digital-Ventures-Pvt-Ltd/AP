@@ -21,6 +21,15 @@ import {
   normalizeMsmePaymentDue,
 } from "../utils/msmePaymentDue";
 import { computeLineItemsSummary, resolveLineItemsExpanded } from "../utils/lineItemsSummary";
+import { Button } from "../../../components/ui/button";
+import { Link2 } from "lucide-react";
+import {
+  canMapTaxInvoiceToProforma,
+  getDocumentTypeLabel,
+  isProformaInvoice,
+} from "../constants/proformaInvoice";
+import { resolveLinkedTaxInvoiceRecords } from "../utils/proformaInvoiceListing";
+import InvoiceLinkedTaxInvoicesPanel from "./InvoiceLinkedTaxInvoicesPanel";
 
 const formatDisplayDate = (value) => {
   if (!value) return "-";
@@ -56,6 +65,13 @@ const InvoiceReadOnlyDetails = ({
   findVendorById,
   isCategoryFeatureEnabled = true,
   isCampaignFeatureEnabled = false,
+  showProformaInvoiceFields = false,
+  onMapTaxInvoice,
+  onViewLinkedInvoice,
+  allInvoices = [],
+  getStatusBadgeClass,
+  canCancelLinkedInvoice = false,
+  onCancelLinkedInvoice,
 }) => {
   const formData = useMemo(
     () =>
@@ -468,6 +484,46 @@ const InvoiceReadOnlyDetails = ({
           </span>
         </div>
       </div>
+
+      {showProformaInvoiceFields && isProformaInvoice(invoice) && (
+        <div className="space-y-3 pt-4 border-t">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold">Linked Tax Invoices</h3>
+            {onMapTaxInvoice && canMapTaxInvoiceToProforma(invoice) && (
+              <Button size="sm" variant="outline" onClick={() => onMapTaxInvoice(invoice)}>
+                <Link2 className="h-4 w-4 mr-2" />
+                Map Tax Invoice
+              </Button>
+            )}
+          </div>
+          {onMapTaxInvoice &&
+            isProformaInvoice(invoice) &&
+            !canMapTaxInvoiceToProforma(invoice) && (
+              <p className="text-sm text-amber-700">
+                This Proforma Invoice must be Approved before you can map tax invoices.
+              </p>
+            )}
+          <InvoiceLinkedTaxInvoicesPanel
+            linkedInvoices={resolveLinkedTaxInvoiceRecords(invoice, allInvoices)}
+            onViewInvoice={onViewLinkedInvoice}
+            onCancelLinkedInvoice={
+              onCancelLinkedInvoice
+                ? (linkedInvoice) => onCancelLinkedInvoice(linkedInvoice)
+                : undefined
+            }
+            canCancelLinkedInvoice={canCancelLinkedInvoice}
+            getStatusBadgeClass={getStatusBadgeClass}
+            title=""
+          />
+          <DetailField label="Document Type" value={getDocumentTypeLabel(invoice)} />
+          {invoice.piRemainingBalance != null && (
+            <DetailField
+              label="Remaining PI Balance"
+              value={formatCurrency(invoice.piRemainingBalance, formData.currency)}
+            />
+          )}
+        </div>
+      )}
 
       {/* <div className="pt-2 border-t">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">

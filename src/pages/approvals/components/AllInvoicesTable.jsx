@@ -14,6 +14,7 @@ import {
 } from "../../../components/ui/pagination";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import { formatCurrency } from "../../../utils/currency";
+import InvoiceDocumentTypeBadge from "../../invoices/components/InvoiceDocumentTypeBadge";
 import InvoiceDueDateCell from "../../invoices/components/InvoiceDueDateCell";
 
 const baseAllInvoicesTableHeader = [
@@ -22,6 +23,7 @@ const baseAllInvoicesTableHeader = [
   { key: "refNo", title: "Ref No", headerClassName: "bg-muted text-foreground", cellClassName: "font-mono text-sm" },
   { key: "orgBranch", title: "Branch", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm" },
   { key: "vendorName", title: "Vendor", headerClassName: "bg-muted text-foreground" },
+  { key: "documentType", title: "Type", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm" },
   { key: "approval", title: "Approval", headerClassName: "bg-muted text-foreground" },
   { key: "amount", title: "Amount", headerClassName: "bg-muted text-foreground", cellClassName: "font-semibold" },
   { key: "dueDate", title: "Due Date", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm whitespace-nowrap" },
@@ -108,6 +110,9 @@ const AllInvoicesTable = ({
               break;
             case "vendorName":
               value = <VendorWithBranchCell record={invoice} />;
+              break;
+            case "documentType":
+              value = <InvoiceDocumentTypeBadge invoice={invoice} />;
               break;
             case "orgBranch":
               value = <OrgBranchCell record={invoice} />;

@@ -66,6 +66,21 @@ import {
   normalizeDueDateForInvoice,
   normalizeMsmePaymentDue,
 } from "../utils/msmePaymentDue";
+import InvoiceDocumentTypeFields from "./InvoiceDocumentTypeFields";
+import ProformaInvoicePicker from "./ProformaInvoicePicker";
+import PiLinkValidationCard from "./PiLinkValidationCard";
+import { DOCUMENT_TYPE } from "../constants/proformaInvoice";
+import { useGetEligiblePisForGrnQuery } from "../../../Services/apis/goodsReceiptApi";
+import {
+  useLazyGetProformaInvoiceSuggestionsQuery,
+  useValidateProformaInvoiceLinkMutation,
+} from "../../../Services/apis/proformaInvoiceApi";
+import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
+import {
+  buildLocalLinkValidation,
+  buildProformaLinkValidateRequest,
+  rankProformaInvoiceSuggestions,
+} from "../utils/proformaInvoiceMatching";
 
 const lineItemTableHeader = [
   {
@@ -212,6 +227,7 @@ export const InvoiceForm = ({
   showBranchField = false,
   showInvoiceMatching = false,
   canUseThreeWayMatching = false,
+  showProformaInvoiceFields = false,
 }) => {
   const canShowBranchField = showBillingGst && showBranchField;
   const {
@@ -518,6 +534,182 @@ export const InvoiceForm = ({
     });
   const formatAmount = (amount) => formatCurrency(amount, invoiceCurrency);
   const totals = calculateTotals(formData?.lineItems || [], invoiceCurrency);
+
+  const { data: eligiblePis = [] } = useGetEligiblePisForGrnQuery(undefined, {
+    skip: !showProformaInvoiceFields,
+  });
+  const [fetchPiSuggestions, { data: apiPiSuggestions = [], isFetching: piSuggestionsLoading }] =
+    useLazyGetProformaInvoiceSuggestionsQuery();
+  const [validatePiLink, { isLoading: piLinkValidationLoading }] =
+    useValidateProformaInvoiceLinkMutation();
+  const [piLinkValidation, setPiLinkValidation] = useState(null);
+
+  useEffect(() => {
+    if (!showProformaInvoiceFields) return undefined;
+    if ((formData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE) !== DOCUMENT_TYPE.TAX_INVOICE) {
+      return undefined;
+    }
+    if (!formData?.vendorId && !formData?.vendorName) return undefined;
+
+    fetchPiSuggestions({
+      vendorId: formData.vendorId,
+      vendorName: formData.vendorName,
+      invoiceAmount: totals?.total,
+      currency: formData.currency,
+      billingGstin: formData.billingGstin,
+      vendorGstin: formData.gstin,
+      poId: formData.matchingPurchaseOrderId,
+      poNumber: formData.matchingPoNumber,
+      invoiceDate: formData.invoiceDate,
+    }).catch(() => undefined);
+
+    return undefined;
+  }, [
+    showProformaInvoiceFields,
+    formData?.documentType,
+    formData?.vendorId,
+    formData?.vendorName,
+    formData?.currency,
+    formData?.billingGstin,
+    formData?.gstin,
+    formData?.matchingPurchaseOrderId,
+    formData?.matchingPoNumber,
+    formData?.invoiceDate,
+    totals?.total,
+    fetchPiSuggestions,
+  ]);
+
+  const piSuggestions = useMemo(() => {
+    const rankingContext = {
+      vendorId: formData?.vendorId,
+      vendorName: formData?.vendorName,
+      invoiceAmount: totals?.total,
+      currency: formData?.currency,
+      billingGstin: formData?.billingGstin,
+      vendorGstin: formData?.gstin,
+      poId: formData?.matchingPurchaseOrderId,
+      poNumber: formData?.matchingPoNumber,
+      invoiceDate: formData?.invoiceDate,
+      lineItems: formData?.lineItems,
+    };
+    if (Array.isArray(apiPiSuggestions) && apiPiSuggestions.length > 0) {
+      return apiPiSuggestions;
+    }
+    return rankProformaInvoiceSuggestions(eligiblePis, rankingContext);
+  }, [apiPiSuggestions, eligiblePis, formData, totals?.total]);
+
+  const selectedProformaInvoice = useMemo(
+    () =>
+      piSuggestions.find(
+        (pi) => String(pi.id) === String(formData?.linkedProformaInvoiceId ?? ""),
+      ) ?? null,
+    [piSuggestions, formData?.linkedProformaInvoiceId],
+  );
+
+  const piLinkValidateKey = useMemo(
+    () =>
+      JSON.stringify(
+        buildProformaLinkValidateRequest({
+          proformaInvoiceId: selectedProformaInvoice?.id,
+          vendorId: formData?.vendorId,
+          vendorName: formData?.vendorName,
+          invoiceAmount: totals?.total,
+          currency: formData?.currency,
+          poId: formData?.matchingPurchaseOrderId,
+          poNumber: formData?.matchingPoNumber,
+          lineItems: formData?.lineItems,
+        }),
+      ),
+    [
+      selectedProformaInvoice?.id,
+      formData?.vendorId,
+      formData?.vendorName,
+      formData?.currency,
+      formData?.matchingPurchaseOrderId,
+      formData?.matchingPoNumber,
+      formData?.lineItems,
+      totals?.total,
+    ],
+  );
+  const debouncedPiLinkValidateKey = useDebouncedValue(piLinkValidateKey, 400);
+
+  useEffect(() => {
+    if (!showProformaInvoiceFields) {
+      setPiLinkValidation(null);
+      return undefined;
+    }
+    if ((formData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE) !== DOCUMENT_TYPE.TAX_INVOICE) {
+      setPiLinkValidation(null);
+      return undefined;
+    }
+    if (!selectedProformaInvoice?.id) {
+      setPiLinkValidation(null);
+      return undefined;
+    }
+
+    const localValidation = () =>
+      buildLocalLinkValidation(selectedProformaInvoice, {
+        vendorId: formData?.vendorId,
+        vendorName: formData?.vendorName,
+        invoiceAmount: totals?.total,
+        poId: formData?.matchingPurchaseOrderId,
+        poNumber: formData?.matchingPoNumber,
+        lineItems: formData?.lineItems,
+      });
+
+    let cancelled = false;
+
+    const runValidation = async () => {
+      const requestBody = buildProformaLinkValidateRequest({
+        proformaInvoiceId: selectedProformaInvoice.id,
+        vendorId: formData?.vendorId,
+        vendorName: formData?.vendorName,
+        invoiceAmount: totals?.total,
+        currency: formData?.currency,
+        poId: formData?.matchingPurchaseOrderId,
+        poNumber: formData?.matchingPoNumber,
+        lineItems: formData?.lineItems,
+      });
+
+      try {
+        const result = await validatePiLink(requestBody).unwrap();
+        if (!cancelled) setPiLinkValidation(result);
+      } catch {
+        if (!cancelled) setPiLinkValidation(localValidation());
+      }
+    };
+
+    runValidation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    showProformaInvoiceFields,
+    formData?.documentType,
+    selectedProformaInvoice,
+    debouncedPiLinkValidateKey,
+    validatePiLink,
+  ]);
+
+  const handleDocumentTypeChange = (value) => {
+    setFormData((prev) => ({
+      ...prev,
+      documentType: value,
+      ...(value === DOCUMENT_TYPE.PROFORMA_INVOICE
+        ? { linkedProformaInvoiceId: "", linkedProformaInvoiceNumber: "" }
+        : {}),
+    }));
+  };
+
+  const handleSelectProformaInvoice = (pi) => {
+    setFormData((prev) => ({
+      ...prev,
+      linkedProformaInvoiceId: pi?.id ?? "",
+      linkedProformaInvoiceNumber: pi?.invoiceNumber ?? "",
+    }));
+  };
+
   const invoiceMatchingPoQuery = useMemo(
     () => ({
       vendorName: String(formData?.vendorName || "").trim(),
@@ -925,6 +1117,33 @@ export const InvoiceForm = ({
                 </span>{" "}
                 "{formData.vendorName}"
               </p>
+            </div>
+          )}
+
+          {showProformaInvoiceFields && (
+            <div className="space-y-4">
+              <InvoiceDocumentTypeFields
+                documentType={formData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE}
+                onDocumentTypeChange={handleDocumentTypeChange}
+                disabled={isEdit}
+              />
+              {(formData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE) ===
+                DOCUMENT_TYPE.TAX_INVOICE && (
+                <>
+                  <ProformaInvoicePicker
+                    suggestions={piSuggestions}
+                    selectedId={formData?.linkedProformaInvoiceId}
+                    onSelect={handleSelectProformaInvoice}
+                    loading={piSuggestionsLoading}
+                  />
+                  <PiLinkValidationCard
+                    validation={piLinkValidation}
+                    selectedPi={selectedProformaInvoice}
+                    currency={formData?.currency}
+                    loading={piLinkValidationLoading}
+                  />
+                </>
+              )}
             </div>
           )}
 

@@ -8,6 +8,7 @@ import { useActionGuard } from '../../hooks/useActionGuard';
 import { useCreditErrorHandler } from '../../contexts/CreditErrorContext';
 import { useRBAC } from '../../contexts/RBACContext';
 import { useMeteredActionEstimate } from '../../hooks/useMeteredActionEstimate';
+import { useProformaInvoiceSubscription } from '../../hooks/useProformaInvoiceSubscription';
 import { CREDIT_ACTION_CODES } from '../../constants/creditActions';
 import { InvoicePdfPreview } from '../invoices/components/InvoicePdfPreview';
 import {
@@ -76,8 +77,7 @@ const GoodsReceipt = () => {
   const { isCorporateScreenAllowed, isCorporateSectionEnabled } = useRBAC();
   const { setHideSidebar } = useSidebar();
 
-  const hasPiSubscription =
-    isCorporateScreenAllowed('PI') && isCorporateSectionEnabled('PI_ALL');
+  const hasPiSubscription = useProformaInvoiceSubscription().isPiSubscriptionEnabled;
 
   const { data: grnsResponse, isLoading: grnsLoading, refetch: refetchGrns } = useGetGrnsQuery();
   const { data: vendorsData = [] } = useGetVendorsQuery();
