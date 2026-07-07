@@ -44,7 +44,7 @@ import { useGetOrganisationQuery } from '../../Services/apis/settingsApi';
 import GrnCreateMenu from './components/GrnCreateMenu';
 import GrnPoPickerDialog from './components/GrnPoPickerDialog';
 import GrnPiPickerDialog from './components/GrnPiPickerDialog';
-import GrnDetailSheet from './components/GrnDetailSheet';
+import GrnDetailDialog from './components/GrnDetailDialog';
 import GrnApprovalDialog from './components/GrnApprovalDialog';
 import { GRN_APPROVAL_ACTION, GRN_SOURCE } from './constants';
 import {
@@ -930,7 +930,7 @@ const GoodsReceipt = () => {
         canApprove={canPostGrn}
       />
 
-      <GrnDetailSheet
+      <GrnDetailDialog
         grn={detailGrn}
         open={Boolean(detailGrn)}
         onOpenChange={(open) => {
