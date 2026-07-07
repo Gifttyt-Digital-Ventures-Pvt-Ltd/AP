@@ -1897,12 +1897,6 @@ const InvoicesPage = () => {
   const handleAddInvoice = async () => {
     if (!guardAction("invoices.create")) return;
     if (!formData) return;
-    if (uploadedFile && !String(formData.billingGstin || "").trim()) {
-      toast.error(
-        "Select a billing GSTIN from Organisation Details before adding invoice",
-      );
-      return;
-    }
 
     const totals = calculateTotals(formData.lineItems);
     const createStatus = resolveInitialInvoiceStatus({
@@ -2337,7 +2331,6 @@ const InvoicesPage = () => {
                     invoiceMandatoryFields,
                     mandatoryFieldOptions,
                   ) &&
-                  Boolean(formData?.billingGstin) &&
                   !invoiceMatchingLoading)
             : canManageInvoices &&
               !invoiceMandatoryFieldsLoading &&
@@ -2346,7 +2339,6 @@ const InvoicesPage = () => {
                 invoiceMandatoryFields,
                 mandatoryFieldOptions,
               ) &&
-              (!uploadedFile || Boolean(formData?.billingGstin)) &&
               (Boolean(formData?.vendorId) ||
                 Boolean(formData?.vendorRequestSubmitted)) &&
               !invoiceMatchingLoading
@@ -2368,7 +2360,7 @@ const InvoicesPage = () => {
         LEDGER_OPTIONS={LEDGER_OPTIONS}
         TAX_RATES={TAX_RATES}
         showBillingGst={isEdit || Boolean(uploadedFile)}
-        requireBillingGst={(isEdit && !isSavedDraft) || Boolean(uploadedFile)}
+        requireBillingGst={isEdit && !isSavedDraft}
         showBranchField={isBranchEnabled}
         showInvoiceMatching={showInvoiceMatchingSelection}
         canUseThreeWayMatching={canUseThreeWayMatching}
@@ -2952,7 +2944,7 @@ const InvoicesPage = () => {
         scanning={scanning}
         renderInvoiceForm={renderInvoiceForm}
         handleAddInvoice={handleAddInvoice}
-        canAddInvoice={Boolean(formData?.billingGstin)}
+        canAddInvoice={Boolean(formData)}
       />
 
       <InvoicesDialogs
