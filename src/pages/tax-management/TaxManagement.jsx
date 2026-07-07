@@ -30,7 +30,7 @@ const TaxManagement = () => {
     if (canViewGst) tabs.push({ value: 'gst', label: 'GST' });
     if (canViewTds) {
       tabs.push({ value: 'tds', label: 'TDS' });
-      tabs.push({ value: 'certificates', label: 'Certificates' });
+      // tabs.push({ value: 'certificates', label: 'Certificates' });
     }
     return tabs;
   }, [canViewGst, canViewTds]);
