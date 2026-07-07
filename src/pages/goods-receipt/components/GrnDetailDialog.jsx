@@ -12,12 +12,12 @@ import { Button } from '../../../components/ui/button';
 import { Label } from '../../../components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import {
-  Sheet,
-  SheetContent,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from '../../../components/ui/sheet';
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../../components/ui/dialog';
 import {
   Table,
   TableBody,
@@ -32,7 +32,7 @@ import GrnLineItemsEditor from './GrnLineItemsEditor';
 import { GRN_STATUS } from '../constants';
 import { formatCurrency, formatDate } from '../utils';
 
-const GrnDetailSheet = ({
+const GrnDetailDialog = ({
   grn,
   open,
   onOpenChange,
@@ -47,19 +47,22 @@ const GrnDetailSheet = ({
   if (!grn) return null;
 
   return (
-    <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="flex w-full flex-col overflow-y-auto sm:max-w-2xl lg:max-w-3xl">
-        <SheetHeader>
-          <SheetTitle className="flex items-center gap-2">
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent
+        className="flex max-h-[92vh] w-[96vw] max-w-4xl flex-col overflow-hidden p-0"
+        data-testid="grn-detail-dialog"
+      >
+        <DialogHeader className="border-b px-6 pb-3 pt-6">
+          <DialogTitle className="flex items-center gap-2">
             <ClipboardCheck className="h-5 w-5" />
-            {grn.grn_number}
-          </SheetTitle>
+            {grn.grn_number || 'Goods Receipt'}
+          </DialogTitle>
           <p className="text-sm text-muted-foreground">
-            {grn.vendor_name} · {formatDate(grn.receipt_date)}
+            {grn.vendor_name || '—'} · {formatDate(grn.receipt_date)}
           </p>
-        </SheetHeader>
+        </DialogHeader>
 
-        <div className="flex-1 space-y-4 py-4">
+        <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
           <div className="flex flex-wrap gap-2">
             <GrnStatusBadge status={grn.status} />
             <GrnSourceBadge source={grn.source_type} />
@@ -211,7 +214,7 @@ const GrnDetailSheet = ({
           )}
         </div>
 
-        <SheetFooter className="gap-2 sm:justify-between">
+        <DialogFooter className="gap-2 border-t px-6 py-4 sm:justify-between">
           <Button variant="outline" onClick={onDownloadPdf}>
             <Download className="mr-2 h-4 w-4" />
             Download PDF
@@ -228,10 +231,10 @@ const GrnDetailSheet = ({
               </Button>
             )}
           </div>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
 
-export default GrnDetailSheet;
+export default GrnDetailDialog;
