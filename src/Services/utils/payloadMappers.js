@@ -46,10 +46,14 @@ const LIST_RESPONSE_KEYS = [
 
 const pickArrayFromObject = (object, keys) => {
   if (!object || typeof object !== 'object' || Array.isArray(object)) return null;
+  let emptyMatch = null;
   for (const key of keys) {
-    if (Array.isArray(object[key])) return object[key];
+    const value = object[key];
+    if (!Array.isArray(value)) continue;
+    if (value.length > 0) return value;
+    if (!emptyMatch) emptyMatch = value;
   }
-  return null;
+  return emptyMatch;
 };
 
 export const extractListResponse = (response, extraKeys = []) => {
@@ -82,6 +86,7 @@ export const extractPageContent = (response) => {
   if (response && typeof response === 'object') {
     if (Array.isArray(response.content)) return response.content;
     if (Array.isArray(response.items)) return response.items;
+    if (Array.isArray(response.grns)) return response.grns;
     const paginatedData = response.data;
     if (
       Array.isArray(paginatedData) &&

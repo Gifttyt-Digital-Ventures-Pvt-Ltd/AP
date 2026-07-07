@@ -1,8 +1,9 @@
 import { GRN_SOURCE, GRN_STATUS } from '../constants';
 import { buildGrnConfigSnapshot } from './grnFormatConfig';
-import { extractListResponse } from '../../../Services/utils/payloadMappers';
+import { extractListResponse, extractPageContent } from '../../../Services/utils/payloadMappers';
 
 export const getListData = extractListResponse;
+export { extractPageContent };
 
 export const formatCurrency = (amount, currency = 'INR') =>
   new Intl.NumberFormat('en-IN', {
