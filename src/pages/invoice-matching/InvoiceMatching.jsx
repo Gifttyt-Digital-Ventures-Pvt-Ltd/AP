@@ -396,7 +396,10 @@ const InvoiceMatching = () => {
   const [markInvoiceMatchException, { isLoading: markingException }] =
     useMarkInvoiceMatchExceptionMutation();
 
-  const matchingGroups = extractPageContent(listData).map(normalizeMatchingGroup);
+  const matchingGroups = useMemo(
+    () => extractPageContent(listData).map(normalizeMatchingGroup),
+    [listData],
+  );
   const invoices = mergeById(
     extractPageContent(invoicesData).map(normalizeInvoice),
     editingMatching?.invoice ? normalizeInvoice(editingMatching.invoice) : null,

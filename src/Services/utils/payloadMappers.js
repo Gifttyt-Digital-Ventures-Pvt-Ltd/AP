@@ -60,7 +60,8 @@ export const extractListResponse = (response, extraKeys = []) => {
   if (Array.isArray(response)) return response;
   if (!response || typeof response !== 'object') return [];
 
-  const keys = [...extraKeys, ...LIST_RESPONSE_KEYS];
+  const additionalKeys = Array.isArray(extraKeys) ? extraKeys : [];
+  const keys = [...additionalKeys, ...LIST_RESPONSE_KEYS];
   const direct = pickArrayFromObject(response, keys);
   if (direct) return direct;
 
