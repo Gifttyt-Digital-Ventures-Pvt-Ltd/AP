@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { format } from "date-fns";
-import { Ban, FileText, History, Pencil, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { Ban, FileText, History, Link2, Pencil, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import ApprovalHistoryTimeline from "../../../components/common/ApprovalHistoryTimeline";
 import { Button } from "../../../components/ui/button";
 import {
@@ -19,6 +19,7 @@ import { formatWorkflowStatus } from "../../../utils/approvalWorkflow";
 import InvoiceReadOnlyDetails from "./InvoiceReadOnlyDetails";
 import InvoiceChecklist from "./InvoiceFormChecklist";
 import { buildInvoiceEditFormData } from "../utils/invoiceFormData";
+import { isProformaInvoice, canMapTaxInvoiceToProforma } from "../constants/proformaInvoice";
 
 const ViewDialog = ({
   viewDialogOpen,
@@ -46,6 +47,12 @@ const ViewDialog = ({
   findVendorById,
   departmentMandatory = false,
   categoryMandatory = false,
+  showProformaInvoiceFields = false,
+  onMapTaxInvoice,
+  onViewLinkedInvoice,
+  allInvoices = [],
+  canCancelLinkedInvoice = false,
+  onCancelLinkedInvoice,
 }) => {
   // Normalize the raw invoice into form-data shape so checklist fields
   // like `vendorMatched` are properly resolved (raw invoice only has `vendorId`).
@@ -159,6 +166,13 @@ const ViewDialog = ({
                           showRefNoField={showRefNoField}
                           findVendorByName={findVendorByName}
                           findVendorById={findVendorById}
+                          showProformaInvoiceFields={showProformaInvoiceFields}
+                          onMapTaxInvoice={onMapTaxInvoice}
+                          onViewLinkedInvoice={onViewLinkedInvoice}
+                          allInvoices={allInvoices}
+                          getStatusBadgeClass={getStatusBadgeClass}
+                          canCancelLinkedInvoice={canCancelLinkedInvoice}
+                          onCancelLinkedInvoice={onCancelLinkedInvoice}
                         />
                       </div>
                       <InvoiceChecklist
@@ -188,6 +202,19 @@ const ViewDialog = ({
                 >
                   Close
                 </Button>
+                {showProformaInvoiceFields &&
+                  isProformaInvoice(selectedInvoice) &&
+                  canMapTaxInvoiceToProforma(selectedInvoice) &&
+                  onMapTaxInvoice && (
+                    <Button
+                      variant="secondary"
+                      onClick={() => onMapTaxInvoice(selectedInvoice)}
+                      className="flex-1"
+                    >
+                      <Link2 className="h-4 w-4 mr-2" />
+                      Map Tax Invoice
+                    </Button>
+                  )}
                 {canEdit(selectedInvoice) && (
                   <Button
                     onClick={() => {

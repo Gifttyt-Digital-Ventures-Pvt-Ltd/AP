@@ -6,6 +6,8 @@ import { CheckCircle, RotateCcw, XCircle } from 'lucide-react';
 import { NEEDS_CORRECTION_ACTION } from '../../../utils/approvalWorkflow';
 import { formatCurrency } from '../../../utils/currency';
 import ClippedTextWithTooltip from '../../../components/common/ClippedTextWithTooltip';
+import InvoiceDocumentTypeBadge from '../../invoices/components/InvoiceDocumentTypeBadge';
+import { getDocumentTypeLabel } from '../../invoices/constants/proformaInvoice';
 
 // Confirmation dialog used for both approve and reject workflows.
 const ApprovalDialog = ({
@@ -22,17 +24,21 @@ const ApprovalDialog = ({
       <DialogHeader>
         <DialogTitle>
           {actionType === 'Approved'
-            ? 'Approve Invoice'
+            ? `Approve ${getDocumentTypeLabel(selectedInvoice ?? {})}`
             : actionType === 'Checked'
-              ? 'Verify Invoice'
+              ? `Verify ${getDocumentTypeLabel(selectedInvoice ?? {})}`
               : actionType === NEEDS_CORRECTION_ACTION
-                ? 'Send for Correction'
-                : 'Reject Invoice'}
+                ? `Send ${getDocumentTypeLabel(selectedInvoice ?? {})} for Correction`
+                : `Reject ${getDocumentTypeLabel(selectedInvoice ?? {})}`}
         </DialogTitle>
       </DialogHeader>
       <div className="space-y-4">
         {selectedInvoice && (
           <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-sm text-muted-foreground">Type</span>
+              <InvoiceDocumentTypeBadge invoice={selectedInvoice} />
+            </div>
             <div className="flex min-w-0 items-center justify-between gap-2">
               <span className="shrink-0 text-sm text-muted-foreground">Vendor:</span>
               <ClippedTextWithTooltip

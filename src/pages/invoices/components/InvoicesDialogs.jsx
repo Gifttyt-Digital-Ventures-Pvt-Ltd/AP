@@ -70,6 +70,12 @@ const InvoicesDialogs = (props) => {
     handleCancelInvoice,
     findVendorByName,
     findVendorById,
+    showProformaInvoiceFields = false,
+    onMapTaxInvoice,
+    onViewLinkedInvoice,
+    allInvoices = [],
+    canCancelLinkedInvoice = false,
+    onCancelLinkedInvoice,
     editDialogOpen,
     setEditDialogOpen,
     formData,
@@ -155,6 +161,12 @@ const InvoicesDialogs = (props) => {
         findVendorById={findVendorById}
         departmentMandatory={invoiceMandatoryFields?.department}
         categoryMandatory={invoiceMandatoryFields?.category}
+        showProformaInvoiceFields={showProformaInvoiceFields}
+        onMapTaxInvoice={onMapTaxInvoice}
+        onViewLinkedInvoice={onViewLinkedInvoice}
+        allInvoices={allInvoices}
+        canCancelLinkedInvoice={canCancelLinkedInvoice}
+        onCancelLinkedInvoice={onCancelLinkedInvoice}
       />
 
       <EditDialog

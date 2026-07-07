@@ -1,5 +1,6 @@
 import { format } from "date-fns";
 import { normalizeDueDateForInvoice, normalizeMsmePaymentDue, resolveVendorIsMsme } from "./msmePaymentDue";
+import { DOCUMENT_TYPE } from "../constants/proformaInvoice";
 import { resolveInvoiceMatchingFormState } from "./invoiceMatchingFlow";
 import { normalizeInvoiceOverdueFields } from "./invoiceDueDate";
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../../utils/currency";
@@ -225,5 +226,10 @@ export const buildInvoiceEditFormData = (
     ...normalizeMsmePaymentDue(invoice),
     ...normalizeInvoiceOverdueFields(invoice),
     ...resolveInvoiceMatchingFormState(invoice),
+    documentType: invoice.documentType ?? invoice.document_type ?? DOCUMENT_TYPE.TAX_INVOICE,
+    linkedProformaInvoiceId:
+      invoice.linkedProformaInvoiceId ?? invoice.linked_proforma_invoice_id ?? "",
+    linkedProformaInvoiceNumber:
+      invoice.linkedProformaInvoiceNumber ?? invoice.linked_proforma_invoice_number ?? "",
   };
 };

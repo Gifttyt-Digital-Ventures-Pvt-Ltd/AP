@@ -6,10 +6,12 @@ import { OrgBranchCell, VendorWithBranchCell } from "../../../components/common/
 import { Button } from "../../../components/ui/button";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import { formatCurrency } from "../../../utils/currency";
+import InvoiceDocumentTypeBadge from "../../invoices/components/InvoiceDocumentTypeBadge";
 
 const basePendingInvoicesTableHeader = [
   { key: "orgBranch", title: "Branch", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm" },
   { key: "vendorName", title: "Vendor", headerClassName: "bg-muted text-foreground" },
+  { key: "documentType", title: "Type", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm" },
   { key: "amount", title: "Amount", headerClassName: "bg-muted text-foreground", cellClassName: "  font-semibold" },
   { key: "approval", title: "Approval", headerClassName: "bg-muted text-foreground" },
   { key: "status", title: "Status", headerClassName: "bg-muted text-foreground" },
@@ -69,6 +71,9 @@ const PendingInvoicesTable = ({
               break;
             case "vendorName":
               value = <VendorWithBranchCell record={invoice} />;
+              break;
+            case "documentType":
+              value = <InvoiceDocumentTypeBadge invoice={invoice} />;
               break;
             case "orgBranch":
               value = <OrgBranchCell record={invoice} />;

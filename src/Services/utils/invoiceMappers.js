@@ -277,6 +277,52 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
     categoryName: invoice.categoryName ?? invoice.category_name ?? category?.name,
     currentFileName: pickInvoiceField(invoice, "currentFileName", "current_file_name"),
     matchingId: pickInvoiceField(invoice, "matchingId", "matching_id"),
+    documentType: pickInvoiceField(invoice, "documentType", "document_type", "TAX_INVOICE"),
+    linkedProformaInvoiceId: pickInvoiceField(
+      invoice,
+      "linkedProformaInvoiceId",
+      "linked_proforma_invoice_id",
+    ),
+    linkedProformaInvoiceNumber: pickInvoiceField(
+      invoice,
+      "linkedProformaInvoiceNumber",
+      "linked_proforma_invoice_number",
+    ),
+    isLinkedToProforma: Boolean(
+      invoice.isLinkedToProforma ??
+        invoice.is_linked_to_proforma ??
+        pickInvoiceField(invoice, "linkedProformaInvoiceId", "linked_proforma_invoice_id"),
+    ),
+    linkedTaxInvoices: Array.isArray(invoice.linkedTaxInvoices)
+      ? invoice.linkedTaxInvoices
+      : Array.isArray(invoice.linked_tax_invoices)
+        ? invoice.linked_tax_invoices
+        : [],
+    linkedTaxInvoiceCount: Number(
+      invoice.linkedTaxInvoiceCount ??
+        invoice.linked_tax_invoice_count ??
+        (Array.isArray(invoice.linkedTaxInvoices)
+          ? invoice.linkedTaxInvoices.length
+          : Array.isArray(invoice.linked_tax_invoices)
+            ? invoice.linked_tax_invoices.length
+            : 0),
+    ),
+    piTotalAmount: Number(
+      invoice.piTotalAmount ?? invoice.pi_total_amount ?? invoice.netAmount ?? invoice.net_amount ?? 0,
+    ),
+    piLinkedAmount: Number(invoice.piLinkedAmount ?? invoice.pi_linked_amount ?? 0),
+    piRemainingBalance: Number(
+      invoice.piRemainingBalance ??
+        invoice.pi_remaining_balance ??
+        invoice.remainingBalance ??
+        invoice.remaining_balance ??
+        0,
+    ),
+    piFullyInvoiced: Boolean(
+      invoice.piFullyInvoiced ??
+        invoice.pi_fully_invoiced ??
+        Number(invoice.piRemainingBalance ?? invoice.pi_remaining_balance ?? 1) <= 0,
+    ),
     workflowId:
       pickInvoiceField(invoice, "workflowId", "workflow_id") ??
       pickInvoiceField(invoice, "approvalWorkflowId", "approval_workflow_id"),
@@ -436,6 +482,16 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
     grnId: pickInvoiceField(invoice, "grnId", "grn_id", ""),
     grnNumber: pickInvoiceField(invoice, "grnNumber", "grn_number", ""),
     matchingId: pickInvoiceField(invoice, "matchingId", "matching_id", ""),
+    documentType: pickInvoiceField(invoice, "documentType", "document_type", "TAX_INVOICE"),
+    ...(pickInvoiceField(invoice, "linkedProformaInvoiceId", "linked_proforma_invoice_id")
+      ? {
+          linkedProformaInvoiceId: pickInvoiceField(
+            invoice,
+            "linkedProformaInvoiceId",
+            "linked_proforma_invoice_id",
+          ),
+        }
+      : {}),
     workflowId:
       pickInvoiceField(invoice, "workflowId", "workflow_id") ??
       pickInvoiceField(invoice, "approvalWorkflowId", "approval_workflow_id"),

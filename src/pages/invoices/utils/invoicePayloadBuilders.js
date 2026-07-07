@@ -2,6 +2,7 @@ import { format } from "date-fns";
 import { buildInvoiceApiPayload } from "../../../Services/utils/payloadMappers";
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../../utils/currency";
 import { TAX_RATES } from "../constants";
+import { DOCUMENT_TYPE } from "../constants/proformaInvoice";
 import {
   calculateInvoiceTotals,
   createDefaultLineItem,
@@ -328,6 +329,9 @@ export const initializeInvoiceFormData = (
     matchingPoNumber: "",
     matchingGrnNumber: "",
     matchingStatus: "",
+    documentType: extractedData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE,
+    linkedProformaInvoiceId: extractedData?.linkedProformaInvoiceId ?? "",
+    linkedProformaInvoiceNumber: extractedData?.linkedProformaInvoiceNumber ?? "",
   };
 };
 

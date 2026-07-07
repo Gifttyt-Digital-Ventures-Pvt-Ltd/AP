@@ -89,6 +89,18 @@ import {
   TAX_RATES,
 } from "./constants";
 import {
+  DOCUMENT_TYPE,
+  INVOICE_DOCUMENT_TYPE_TABS,
+  canMapTaxInvoiceToProforma,
+  isProformaInvoice,
+} from "./constants/proformaInvoice";
+import { useProformaInvoiceSubscription } from "../../hooks/useProformaInvoiceSubscription";
+import {
+  filterInvoicesForDocumentTab,
+  getLinkedTaxInvoiceCount,
+  resolveLinkedTaxInvoiceRecords,
+} from "./utils/proformaInvoiceListing";
+import {
   formatInvoiceAmount,
   getInvoiceGrossAmount,
   getInvoiceNetAmount,
@@ -97,7 +109,16 @@ import {
 } from "./utils/invoiceAmounts";
 import { getInvoiceDueDateValidationErrorForInvoice } from "./utils/msmePaymentDue";
 import InvoiceDueDateCell from "./components/InvoiceDueDateCell";
-import { Ban, Sparkles, Eye, Mail, Pencil, Search, Trash2 } from "lucide-react";
+import {
+  Ban,
+  Sparkles,
+  Eye,
+  Mail,
+  Pencil,
+  Search,
+  Trash2,
+  Link2,
+} from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import {
@@ -121,6 +142,9 @@ import { InvoiceForm } from "./components/InvoiceForm";
 import UploadSection from "./components/UploadSection";
 import InvoicesDialogs from "./components/InvoicesDialogs";
 import InvoiceUploadDialog from "./components/InvoiceUploadDialog";
+import MapTaxInvoiceDialog from "./components/MapTaxInvoiceDialog";
+import InvoiceDocumentTypeBadge from "./components/InvoiceDocumentTypeBadge";
+import InvoiceTableLinkedTaxExpandedRow from "./components/InvoiceTableLinkedTaxExpandedRow";
 import { getInvoiceVendorRequestValidationErrors } from "../../utils/vendorValidation";
 import { useActionGuard } from "../../hooks/useActionGuard";
 import { useCreditErrorHandler } from "../../contexts/CreditErrorContext";
@@ -130,7 +154,10 @@ import IntegrationSourceBadge from "../../components/integrations/IntegrationSou
 import useZohoIntegrationActive from "../../hooks/useZohoIntegrationActive";
 import { withIntegrationTableHeader } from "../../utils/integrationProvenance";
 import { useCurrencyFilter } from "../../hooks/useCurrencyFilter";
-import { usePerformInvoiceMatchMutation, useEditInvoiceMatchMutation } from "../../Services/apis/invoiceMatchingApi";
+import {
+  usePerformInvoiceMatchMutation,
+  useEditInvoiceMatchMutation,
+} from "../../Services/apis/invoiceMatchingApi";
 import {
   CURRENCY_SCREENS,
   DEFAULT_CURRENCY,
@@ -164,10 +191,7 @@ const getApprovalWorkflowName = (invoice) =>
 
 const extractInvoiceIdFromSaveResponse = (response) => {
   const candidate =
-    response?.invoice ??
-    response?.data?.invoice ??
-    response?.data ??
-    response;
+    response?.invoice ?? response?.data?.invoice ?? response?.data ?? response;
   const id =
     candidate?.id ??
     candidate?.invoiceId ??
@@ -233,6 +257,12 @@ const baseInvoiceTableHeader = [
   {
     key: "vendorName",
     title: "Vendor",
+    headerClassName: "p-3 text-left text-xs font-medium",
+    cellClassName: "p-3 text-sm",
+  },
+  {
+    key: "documentType",
+    title: "Type",
     headerClassName: "p-3 text-left text-xs font-medium",
     cellClassName: "p-3 text-sm",
   },
@@ -326,6 +356,8 @@ const InvoicesPage = () => {
   const isInvoiceMatchingEnabled =
     isCorporateScreenAllowed("INVOICE_MATCHING") &&
     isCorporateSectionEnabled("INVOICE_MATCHING_ALL");
+  const { isPiSubscriptionEnabled } = useProformaInvoiceSubscription();
+  const showProformaInvoiceFields = isPiSubscriptionEnabled;
   const showInvoiceMatchingSelection =
     isInvoiceMatchingEnabled && hasPurchaseOrderSubscription;
   const canUseThreeWayMatching =
@@ -351,6 +383,12 @@ const InvoicesPage = () => {
     [currencies],
   );
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState("all");
+  const [invoiceDocumentTypeTab, setInvoiceDocumentTypeTab] = useState("all");
+  const [uploadPiPrefill, setUploadPiPrefill] = useState(null);
+  const [mapTaxInvoiceTarget, setMapTaxInvoiceTarget] = useState(null);
+  const [mapTaxInvoiceDialogOpen, setMapTaxInvoiceDialogOpen] = useState(false);
+  const [expandedPiIds, setExpandedPiIds] = useState(() => new Set());
+
   const [invoiceColumnFilters, setInvoiceColumnFilters] = useState(
     createEmptyInvoiceColumnFilters,
   );
@@ -370,6 +408,7 @@ const InvoicesPage = () => {
     setInvoicePageOffset(0);
   }, [
     invoiceStatusFilter,
+    invoiceDocumentTypeTab,
     debouncedSearchTerm,
     currencyParam,
     debouncedInvoiceColumnFilters,
@@ -487,7 +526,17 @@ const InvoicesPage = () => {
     useCancelInvoiceMutation();
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
-  const invoices = getInvoiceListItems(invoicesListData);
+  const invoices = useMemo(
+    () => getInvoiceListItems(invoicesListData),
+    [invoicesListData],
+  );
+  const displayInvoices = useMemo(
+    () =>
+      showProformaInvoiceFields
+        ? filterInvoicesForDocumentTab(invoices, invoiceDocumentTypeTab)
+        : invoices,
+    [invoices, invoiceDocumentTypeTab, showProformaInvoiceFields],
+  );
   const invoicePagination = useMemo(() => {
     const total = Number(invoicesListData.total ?? 0) || 0;
     const offset = Number(invoicesListData.offset ?? invoicePageOffset) || 0;
@@ -505,9 +554,10 @@ const InvoicesPage = () => {
       currentPage,
       totalPages,
       startRecord: total === 0 ? 0 : offset + 1,
-      endRecord: total === 0 ? 0 : Math.min(offset + invoices.length, total),
+      endRecord:
+        total === 0 ? 0 : Math.min(offset + displayInvoices.length, total),
     };
-  }, [invoicesListData, invoicePageOffset, invoices.length]);
+  }, [invoicesListData, invoicePageOffset, displayInvoices.length]);
 
   const goToInvoicePage = useCallback((pageIndex) => {
     const safePage = Math.max(0, pageIndex);
@@ -578,7 +628,9 @@ const InvoicesPage = () => {
               title={column.title}
               type="select"
               value={invoiceColumnFilters.vendorIds}
-              onChange={(value) => updateInvoiceColumnFilter("vendorIds", value)}
+              onChange={(value) =>
+                updateInvoiceColumnFilter("vendorIds", value)
+              }
               options={invoiceVendorFilterOptions}
               allLabel="All vendors"
               searchable
@@ -684,7 +736,9 @@ const InvoicesPage = () => {
       ? baseInvoiceTableHeader
       : baseInvoiceTableHeader.filter((column) => column.key !== "refNo");
     if (isBranchEnabled) {
-      const invoiceNumberIndex = headers.findIndex((column) => column.key === "invoiceNumber");
+      const invoiceNumberIndex = headers.findIndex(
+        (column) => column.key === "invoiceNumber",
+      );
       if (invoiceNumberIndex !== -1) {
         headers = [
           ...headers.slice(0, invoiceNumberIndex + 1),
@@ -693,11 +747,13 @@ const InvoicesPage = () => {
         ];
       }
     }
-    return withIntegrationTableHeader(headers, showIntegrationColumn).map((column) => ({
-      ...column,
-      title: renderInvoiceColumnHeader(column),
-      headerClassName: cn(column.headerClassName, "bg-muted text-foreground"),
-    }));
+    return withIntegrationTableHeader(headers, showIntegrationColumn).map(
+      (column) => ({
+        ...column,
+        title: renderInvoiceColumnHeader(column),
+        headerClassName: cn(column.headerClassName, "bg-muted text-foreground"),
+      }),
+    );
   }, [
     isRefNoEnabled,
     isBranchEnabled,
@@ -995,7 +1051,23 @@ const InvoicesPage = () => {
 
       const extractedInvoice = normalizeScannedInvoice(normalizedResponse);
       setExtractedData(extractedInvoice);
-      setFormData(initializeFormData(extractedInvoice));
+      const baseForm = initializeFormData(extractedInvoice);
+      setFormData(
+        uploadPiPrefill
+          ? {
+              ...baseForm,
+              documentType:
+                uploadPiPrefill.documentType ?? DOCUMENT_TYPE.TAX_INVOICE,
+              linkedProformaInvoiceId:
+                uploadPiPrefill.linkedProformaInvoiceId ?? "",
+              linkedProformaInvoiceNumber:
+                uploadPiPrefill.linkedProformaInvoiceNumber ?? "",
+              vendorId: uploadPiPrefill.vendorId || baseForm.vendorId,
+              vendorName: uploadPiPrefill.vendorName || baseForm.vendorName,
+            }
+          : baseForm,
+      );
+      setUploadPiPrefill(null);
       toast.success("Invoice scanned successfully!");
     } catch (error) {
       if (handleCreditError(error)) return;
@@ -1554,10 +1626,13 @@ const InvoicesPage = () => {
   };
 
   const validateMandatoryPayload = (payload) => {
-    const msmeDueDateError = getInvoiceDueDateValidationErrorForInvoice(payload, {
-      findVendorById,
-      findVendorByName,
-    });
+    const msmeDueDateError = getInvoiceDueDateValidationErrorForInvoice(
+      payload,
+      {
+        findVendorById,
+        findVendorByName,
+      },
+    );
     if (msmeDueDateError) {
       toast.error(msmeDueDateError);
       return false;
@@ -1575,13 +1650,18 @@ const InvoicesPage = () => {
     return true;
   };
 
-  const validateSavedInvoiceEdit = (payload, { requireBillingGst = false } = {}) => {
+  const validateSavedInvoiceEdit = (
+    payload,
+    { requireBillingGst = false } = {},
+  ) => {
     if (!payload?.vendorName?.trim()) {
       toast.error("Vendor name is required");
       return false;
     }
     if (requireBillingGst && !String(payload.billingGstin || "").trim()) {
-      toast.error("Select a billing GSTIN from Organisation Details before submitting invoice");
+      toast.error(
+        "Select a billing GSTIN from Organisation Details before submitting invoice",
+      );
       return false;
     }
     if (!payload.vendorId && !payload.vendorRequestSubmitted) {
@@ -1642,7 +1722,11 @@ const InvoicesPage = () => {
     );
   };
 
-  const maybePerformInvoiceMatching = async (invoiceId, sourceData, { skip = false } = {}) =>
+  const maybePerformInvoiceMatching = async (
+    invoiceId,
+    sourceData,
+    { skip = false } = {},
+  ) =>
     syncInvoiceMatchingOnSave(invoiceId, sourceData, {
       skip,
       enabled: showInvoiceMatchingSelection,
@@ -1814,7 +1898,9 @@ const InvoicesPage = () => {
     if (!guardAction("invoices.create")) return;
     if (!formData) return;
     if (uploadedFile && !String(formData.billingGstin || "").trim()) {
-      toast.error("Select a billing GSTIN from Organisation Details before adding invoice");
+      toast.error(
+        "Select a billing GSTIN from Organisation Details before adding invoice",
+      );
       return;
     }
 
@@ -1925,6 +2011,42 @@ const InvoicesPage = () => {
     }
   };
 
+  const handleMapTaxInvoice = (piInvoice) => {
+    if (!piInvoice?.id) return;
+    if (!canMapTaxInvoiceToProforma(piInvoice)) {
+      toast.error(
+        "Proforma Invoice must be Approved before mapping a tax invoice.",
+      );
+      return;
+    }
+    setMapTaxInvoiceTarget(piInvoice);
+    setMapTaxInvoiceDialogOpen(true);
+  };
+
+  const handleMapTaxInvoiceUpload = (piInvoice) => {
+    if (!piInvoice?.id) return;
+    setUploadPiPrefill({
+      documentType: DOCUMENT_TYPE.TAX_INVOICE,
+      linkedProformaInvoiceId: piInvoice.id,
+      linkedProformaInvoiceNumber: piInvoice.invoiceNumber,
+      vendorId: piInvoice.vendorId,
+      vendorName: piInvoice.vendorName,
+    });
+    setViewDialogOpen(false);
+    setEditDialogOpen(false);
+    setMapTaxInvoiceDialogOpen(false);
+    setInvoiceUploadDialogOpen(true);
+  };
+
+  const togglePiExpanded = useCallback((piId) => {
+    setExpandedPiIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(piId)) next.delete(piId);
+      else next.add(piId);
+      return next;
+    });
+  }, []);
+
   const handleViewInvoice = async (invoice) => {
     setSelectedInvoice(invoice);
     setViewDialogOpen(true);
@@ -1957,6 +2079,17 @@ const InvoicesPage = () => {
     }
   };
 
+  const handleViewLinkedInvoice = useCallback(
+    (linkedInvoice) => {
+      const fullInvoice =
+        invoices.find(
+          (item) => String(item.id) === String(linkedInvoice?.id),
+        ) ?? linkedInvoice;
+      handleViewInvoice(fullInvoice);
+    },
+    [invoices],
+  );
+
   const handleEditInvoice = (invoice) => {
     if (!canEditInvoice(invoice, invoiceEditContext)) {
       toast.error(getInvoiceEditBlockedMessage(invoice, invoiceEditContext));
@@ -1984,7 +2117,9 @@ const InvoicesPage = () => {
       if (!validateSavedInvoiceEdit(formData)) return;
     } else {
       if (!String(formData.billingGstin || "").trim()) {
-        toast.error("Select a billing GSTIN from Organisation Details before updating invoice");
+        toast.error(
+          "Select a billing GSTIN from Organisation Details before updating invoice",
+        );
         return;
       }
       if (!validateMandatoryPayload(formData)) return;
@@ -2032,14 +2167,17 @@ const InvoicesPage = () => {
     if (!selectedInvoice || !formData) return;
     if (!isSavedInvoiceStatus(selectedInvoice.status)) return;
     if (!String(formData.billingGstin || "").trim()) {
-      toast.error("Select a billing GSTIN from Organisation Details before submitting invoice");
+      toast.error(
+        "Select a billing GSTIN from Organisation Details before submitting invoice",
+      );
       return;
     }
     if (!canForwardSavedInvoice(selectedInvoice, invoiceEditContext)) {
       toast.error("You do not have permission to submit this invoice");
       return;
     }
-    if (!validateSavedInvoiceEdit(formData, { requireBillingGst: true })) return;
+    if (!validateSavedInvoiceEdit(formData, { requireBillingGst: true }))
+      return;
 
     try {
       const updateResponse = await updateInvoice({
@@ -2102,6 +2240,13 @@ const InvoicesPage = () => {
     }
     setInvoiceCancelTarget(invoice);
     setInvoiceCancelReason("");
+  };
+
+  const handleCancelLinkedInvoice = (linkedInvoice) => {
+    const fullInvoice =
+      invoices.find((item) => String(item.id) === String(linkedInvoice?.id)) ??
+      linkedInvoice;
+    handleCancelInvoice(fullInvoice);
   };
 
   const confirmCancelInvoice = async () => {
@@ -2227,6 +2372,7 @@ const InvoicesPage = () => {
         showBranchField={isBranchEnabled}
         showInvoiceMatching={showInvoiceMatchingSelection}
         canUseThreeWayMatching={canUseThreeWayMatching}
+        showProformaInvoiceFields={showProformaInvoiceFields}
       />
     );
   };
@@ -2260,161 +2406,221 @@ const InvoicesPage = () => {
     return Array.from({ length: 5 }, (_, index) => start + index);
   })();
 
-  const renderInvoiceRow = (invoice, rowIndex, headers) => (
-    <TableRow
-      key={invoice.id ?? rowIndex}
-      className={cn(
-        rowIndex % 2 === 1 && "bg-muted/20",
-        "border-b border-border transition-colors hover:bg-muted/50",
-        invoice.isDuplicate && "bg-amber-100 hover:bg-amber-100",
-      )}
-      data-testid={`invoice-row-${invoice?.id ?? 'unknown'}`}
-    >
-      {headers.map((header) => {
-        let value;
+  const renderInvoiceRow = (invoice, rowIndex, headers) => {
+    const invoiceId = invoice.id ?? rowIndex;
+    const linkedCount = getLinkedTaxInvoiceCount(invoice);
+    const canExpandLinked =
+      showProformaInvoiceFields &&
+      isProformaInvoice(invoice) &&
+      linkedCount > 0;
+    const isExpanded = expandedPiIds.has(invoiceId);
+    const linkedRecords = canExpandLinked
+      ? resolveLinkedTaxInvoiceRecords(invoice, invoices)
+      : [];
 
-        switch (header.key) {
-          case "srNo":
-            value = invoiceOffset + rowIndex + 1;
-            break;
-          case "source":
-            value = (
-              <span
-                className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${invoice.source === "Email" ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-green-100 text-green-700 border border-green-200"}`}
-              >
-                {invoice.source === "Email" && <Mail className="h-3 w-3" />}
-                {invoice.source || "Upload"}
-              </span>
-            );
-            break;
-          case "integration":
-            value = <IntegrationSourceBadge record={invoice} />;
-            break;
-          case "originalFileName":
-            value = invoice.originalFileName || "-";
-            break;
-          case "refNo":
-            value = invoice.refNo || "-";
-            break;
-          case "orgBranch":
-            value = <OrgBranchCell record={invoice} />;
-            break;
-          case "grossAmount":
-            value = formatInvoiceAmount(
-              invoice,
-              getInvoiceGrossAmount(invoice),
-            );
-            break;
-          case "taxAmount":
-            value = formatInvoiceAmount(invoice, getInvoiceTaxAmount(invoice));
-            break;
-          case "tdsAmount":
-            value = formatInvoiceAmount(invoice, getInvoiceTdsAmount(invoice));
-            break;
-          case "netAmount":
-            value = formatInvoiceAmount(invoice, getInvoiceNetAmount(invoice));
-            break;
-          case "approvalWorkflowName":
-            value = getApprovalWorkflowName(invoice);
-            break;
-          case "invoiceDate":
-            value = invoice.invoiceDate
-              ? format(new Date(invoice.invoiceDate), "dd MMM yy")
-              : "-";
-            break;
-          case "dueDate":
-            value = (
-              <InvoiceDueDateCell
-                invoice={invoice}
-                formattedDueDate={
-                  invoice.dueDate
-                    ? format(new Date(invoice.dueDate), "dd MMM yy")
-                    : "-"
-                }
-              />
-            );
-            break;
-          case "status":
-            value = (
-              <span
-                className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border whitespace-nowrap ${getStatusBadgeClass(invoice.status)}`}
-              >
-                {formatWorkflowStatus(invoice.status)}
-              </span>
-            );
-            break;
-          case "createdAt":
-            value = invoice.createdAt
-              ? format(new Date(invoice.createdAt), "dd MMM yy, hh:mm a")
-              : "-";
-            break;
-          case "actions":
-            value = (
-              <div className="flex justify-start gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleViewInvoice(invoice)}
-                  data-testid={`view-invoice-${invoice?.id ?? 'unknown'}`}
-                  title="View Invoice"
-                  className="h-8 w-8 p-0"
-                >
-                  <Eye className="h-4 w-4" />
-                </Button>
-                {canEdit(invoice) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleEditInvoice(invoice)}
-                    data-testid={`edit-invoice-${invoice?.id ?? 'unknown'}`}
-                    title="Edit Invoice"
-                    className="h-8 w-8 p-0"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                )}
-                {canDelete(invoice.status) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDeleteInvoice(invoice)}
-                    data-testid={`delete-invoice-${invoice?.id ?? 'unknown'}`}
-                    title="Delete Invoice"
-                    className="h-8 w-8 p-0"
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                )}
-                {canCancel(invoice) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleCancelInvoice(invoice)}
-                    data-testid={`cancel-invoice-${invoice?.id ?? 'unknown'}`}
-                    title="Cancel Invoice"
-                    className="h-8 w-8 p-0"
-                  >
-                    <Ban className="h-4 w-4 text-destructive" />
-                  </Button>
-                )}
-              </div>
-            );
-            break;
-          case "vendorName":
-            value = <ClippedTextWithTooltip text={invoice.vendorName} />;
-            break;
-          default:
-            value = invoice?.[header.key] || "-";
-        }
+    return (
+      <React.Fragment key={invoiceId}>
+        <TableRow
+          className={cn(
+            rowIndex % 2 === 1 && "bg-muted/20",
+            "border-b border-border transition-colors hover:bg-muted/50",
+            invoice.isDuplicate && "bg-amber-100 hover:bg-amber-100",
+          )}
+          data-testid={`invoice-row-${invoice?.id ?? "unknown"}`}
+        >
+          {headers.map((header) => {
+            let value;
 
-        return (
-          <TableCell key={header.key} className={header.cellClassName}>
-            {value}
-          </TableCell>
-        );
-      })}
-    </TableRow>
-  );
+            switch (header.key) {
+              case "srNo":
+                value = invoiceOffset + rowIndex + 1;
+                break;
+              case "source":
+                value = (
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${invoice.source === "Email" ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-green-100 text-green-700 border border-green-200"}`}
+                  >
+                    {invoice.source === "Email" && <Mail className="h-3 w-3" />}
+                    {invoice.source || "Upload"}
+                  </span>
+                );
+                break;
+              case "integration":
+                value = <IntegrationSourceBadge record={invoice} />;
+                break;
+              case "originalFileName":
+                value = invoice.originalFileName || "-";
+                break;
+              case "refNo":
+                value = invoice.refNo || "-";
+                break;
+              case "orgBranch":
+                value = <OrgBranchCell record={invoice} />;
+                break;
+              case "grossAmount":
+                value = formatInvoiceAmount(
+                  invoice,
+                  getInvoiceGrossAmount(invoice),
+                );
+                break;
+              case "taxAmount":
+                value = formatInvoiceAmount(
+                  invoice,
+                  getInvoiceTaxAmount(invoice),
+                );
+                break;
+              case "tdsAmount":
+                value = formatInvoiceAmount(
+                  invoice,
+                  getInvoiceTdsAmount(invoice),
+                );
+                break;
+              case "netAmount":
+                value = formatInvoiceAmount(
+                  invoice,
+                  getInvoiceNetAmount(invoice),
+                );
+                break;
+              case "approvalWorkflowName":
+                value = getApprovalWorkflowName(invoice);
+                break;
+              case "invoiceDate":
+                value = invoice.invoiceDate
+                  ? format(new Date(invoice.invoiceDate), "dd MMM yy")
+                  : "-";
+                break;
+              case "dueDate":
+                value = (
+                  <InvoiceDueDateCell
+                    invoice={invoice}
+                    formattedDueDate={
+                      invoice.dueDate
+                        ? format(new Date(invoice.dueDate), "dd MMM yy")
+                        : "-"
+                    }
+                  />
+                );
+                break;
+              case "status":
+                value = (
+                  <span
+                    className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border whitespace-nowrap ${getStatusBadgeClass(invoice.status)}`}
+                  >
+                    {formatWorkflowStatus(invoice.status)}
+                  </span>
+                );
+                break;
+              case "createdAt":
+                value = invoice.createdAt
+                  ? format(new Date(invoice.createdAt), "dd MMM yy, hh:mm a")
+                  : "-";
+                break;
+              case "actions":
+                value = (
+                  <div className="flex justify-start gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleViewInvoice(invoice)}
+                      data-testid={`view-invoice-${invoice?.id ?? "unknown"}`}
+                      title="View Invoice"
+                      className="h-8 w-8 p-0"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    {showProformaInvoiceFields &&
+                      isProformaInvoice(invoice) &&
+                      canUploadInvoices &&
+                      canMapTaxInvoiceToProforma(invoice) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleMapTaxInvoice(invoice)}
+                          data-testid={`map-tax-invoice-${invoice?.id ?? "unknown"}`}
+                          title="Map Tax Invoice"
+                          className="h-8 w-8 p-0"
+                        >
+                          <Link2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    {canEdit(invoice) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEditInvoice(invoice)}
+                        data-testid={`edit-invoice-${invoice?.id ?? "unknown"}`}
+                        title="Edit Invoice"
+                        className="h-8 w-8 p-0"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {canDelete(invoice.status) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteInvoice(invoice)}
+                        data-testid={`delete-invoice-${invoice?.id ?? "unknown"}`}
+                        title="Delete Invoice"
+                        className="h-8 w-8 p-0"
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    )}
+                    {canCancel(invoice) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleCancelInvoice(invoice)}
+                        data-testid={`cancel-invoice-${invoice?.id ?? "unknown"}`}
+                        title="Cancel Invoice"
+                        className="h-8 w-8 p-0"
+                      >
+                        <Ban className="h-4 w-4 text-destructive" />
+                      </Button>
+                    )}
+                  </div>
+                );
+                break;
+              case "vendorName":
+                value = <ClippedTextWithTooltip text={invoice.vendorName} />;
+                break;
+              case "documentType":
+                value = (
+                  <InvoiceDocumentTypeBadge
+                    invoice={invoice}
+                    showLinkedCount={showProformaInvoiceFields}
+                    expandable={canExpandLinked}
+                    isExpanded={isExpanded}
+                    onToggleExpand={() => togglePiExpanded(invoiceId)}
+                  />
+                );
+                break;
+              default:
+                value = invoice?.[header.key] || "-";
+            }
+
+            return (
+              <TableCell key={header.key} className={header.cellClassName}>
+                {value}
+              </TableCell>
+            );
+          })}
+        </TableRow>
+        {canExpandLinked && isExpanded ? (
+          <InvoiceTableLinkedTaxExpandedRow
+            parentInvoice={invoice}
+            linkedInvoices={linkedRecords}
+            colSpan={headers.length}
+            onViewInvoice={handleViewLinkedInvoice}
+            onCancelLinkedInvoice={handleCancelLinkedInvoice}
+            canCancelLinkedInvoice={canCancel}
+            getStatusBadgeClass={getStatusBadgeClass}
+          />
+        ) : null}
+      </React.Fragment>
+    );
+  };
 
   const renderBulkEditInvoiceForm = () => (
     <InvoiceForm
@@ -2458,8 +2664,12 @@ const InvoicesPage = () => {
           discountsLevel: bulkEditForm?.discountsLevel,
           invoiceDiscount: bulkEditForm?.invoiceDiscount,
           invoiceDiscountType: bulkEditForm?.invoiceDiscountType,
-          roundOff: bulkEditForm?.roundOff ?? bulkEditForm?.round_off ?? bulkEditForm?.roundoff,
-          invoiceTotal: bulkEditForm?.scannedTotal ?? bulkEditForm?.invoiceTotal,
+          roundOff:
+            bulkEditForm?.roundOff ??
+            bulkEditForm?.round_off ??
+            bulkEditForm?.roundoff,
+          invoiceTotal:
+            bulkEditForm?.scannedTotal ?? bulkEditForm?.invoiceTotal,
         })
       }
       findVendorByName={findVendorByName}
@@ -2580,7 +2790,35 @@ const InvoicesPage = () => {
         disabled={scanning || bulkExtracting || !canUploadInvoices}
       />
 
-      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center">
+      <MapTaxInvoiceDialog
+        open={mapTaxInvoiceDialogOpen}
+        onOpenChange={(open) => {
+          setMapTaxInvoiceDialogOpen(open);
+          if (!open) setMapTaxInvoiceTarget(null);
+        }}
+        piInvoice={mapTaxInvoiceTarget}
+        onUploadNew={handleMapTaxInvoiceUpload}
+      />
+
+      <div className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        {showProformaInvoiceFields && (
+          <div className="flex flex-wrap gap-2">
+            {INVOICE_DOCUMENT_TYPE_TABS.map(({ value, label }) => (
+              <Button
+                key={value}
+                type="button"
+                size="sm"
+                variant={
+                  invoiceDocumentTypeTab === value ? "default" : "outline"
+                }
+                onClick={() => setInvoiceDocumentTypeTab(value)}
+                data-testid={`invoice-document-tab-${value}`}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
           {invoiceQuickFilters.map(({ value, label, count }) => (
             <Button
@@ -2597,23 +2835,23 @@ const InvoicesPage = () => {
               {count != null ? `${label} (${count})` : label}
             </Button>
           ))}
-        </div>
-        <div className="relative w-full sm:w-64 sm:max-w-xs">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search vendor, invoice #, ref no, amount..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-            data-testid="invoice-search-input"
+          <div className="relative w-full sm:w-64 sm:max-w-xs">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search vendor, invoice #, ref no, amount..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+              data-testid="invoice-search-input"
+            />
+          </div>
+          <TableSortButton
+            options={invoiceSortOptions}
+            value={invoiceSort.value}
+            direction={invoiceSort.direction}
+            onChange={setInvoiceSort}
           />
         </div>
-        <TableSortButton
-          options={invoiceSortOptions}
-          value={invoiceSort.value}
-          direction={invoiceSort.direction}
-          onChange={setInvoiceSort}
-        />
       </div>
 
       <div
@@ -2623,7 +2861,7 @@ const InvoicesPage = () => {
         <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-thin-muted">
           <AppDataTable
             tableHeader={invoiceTableHeader}
-            tableData={invoices}
+            tableData={displayInvoices}
             renderRow={renderInvoiceRow}
             isLoading={invoicesFetching}
             loadingRowCount={8}
@@ -2769,6 +3007,12 @@ const InvoicesPage = () => {
         handleCancelInvoice={handleCancelInvoice}
         findVendorByName={findVendorByName}
         findVendorById={findVendorById}
+        showProformaInvoiceFields={showProformaInvoiceFields}
+        onMapTaxInvoice={handleMapTaxInvoice}
+        onViewLinkedInvoice={handleViewLinkedInvoice}
+        allInvoices={invoices}
+        onCancelLinkedInvoice={handleCancelLinkedInvoice}
+        canCancelLinkedInvoice={canCancel}
         editDialogOpen={editDialogOpen}
         setEditDialogOpen={setEditDialogOpen}
         formData={formData}
@@ -2776,7 +3020,9 @@ const InvoicesPage = () => {
         handleForwardSavedInvoice={handleForwardSavedInvoice}
         canForwardSavedDraft={canForwardSavedDraft}
         forwardSavedInvoiceLoading={
-          updateInvoiceLoading || forwardInvoiceLoading || invoiceMatchingLoading
+          updateInvoiceLoading ||
+          forwardInvoiceLoading ||
+          invoiceMatchingLoading
         }
         renderInvoiceForm={renderInvoiceForm}
         requestVendorOpen={requestVendorOpen}

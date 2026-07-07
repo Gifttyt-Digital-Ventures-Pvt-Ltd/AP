@@ -76,6 +76,7 @@ import { getInvoiceDueDateValidationErrorForInvoice } from "../utils/msmePayment
 import { useCurrencyFilter } from "../../../hooks/useCurrencyFilter";
 import { CURRENCY_SCREENS } from "../../../utils/currency";
 import { getInvoiceVendorRequestValidationErrors } from "../../../utils/vendorValidation";
+import { useProformaInvoiceSubscription } from "../../../hooks/useProformaInvoiceSubscription";
 
 const applyPrefillVendor = (formState, prefillVendor, prefillCampaign) => {
   const hasVendor = Boolean(prefillVendor?.vendorId || prefillVendor?.vendorName);
@@ -123,6 +124,7 @@ const InvoiceSingleUploadLayer = ({
 
   const { user } = useAuth();
   const { isCategoryFeatureEnabled, isCampaignFeatureEnabled, isBranchEnabled } = useRBAC();
+  const { isPiSubscriptionEnabled } = useProformaInvoiceSubscription();
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
   const { setHideSidebar } = useSidebar();
@@ -744,6 +746,7 @@ const InvoiceSingleUploadLayer = ({
       showBillingGst={Boolean(uploadedFile)}
       requireBillingGst={Boolean(uploadedFile)}
       showBranchField={isBranchEnabled}
+      showProformaInvoiceFields={isPiSubscriptionEnabled}
     />
   );
 
