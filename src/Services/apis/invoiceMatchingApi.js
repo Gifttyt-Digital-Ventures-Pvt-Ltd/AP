@@ -66,7 +66,6 @@ export const invoiceMatchingApi = serviceApi.injectEndpoints({
           params,
         };
       },
-      transformResponse: extractListResponse,
       providesTags: ["Matching"],
     }),
     getAvailableGrns: builder.query({
@@ -75,7 +74,6 @@ export const invoiceMatchingApi = serviceApi.injectEndpoints({
         method: "GET",
         params: { poId },
       }),
-      transformResponse: extractListResponse,
       providesTags: ["Matching"],
     }),
     performInvoiceMatch: builder.mutation({
