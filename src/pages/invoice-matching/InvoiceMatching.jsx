@@ -65,7 +65,7 @@ import { useRBAC } from "../../contexts/RBACContext";
 import MatchingGroupExpandedRow from "./components/MatchingGroupExpandedRow";
 import MatchingInvoiceCountBadge from "./components/MatchingInvoiceCountBadge";
 import MatchChecklistPanel from "./components/MatchChecklistPanel";
-import { extractPageContent } from "../../Services/utils/payloadMappers";
+import { extractPageContent, extractMatchingGrns } from "../../Services/utils/payloadMappers";
 
 const STATUS_OPTIONS = [
   { value: "ALL", label: "All Statuses" },
@@ -406,9 +406,10 @@ const InvoiceMatching = () => {
     editingMatching?.purchaseOrder ? normalizePurchaseOrder(editingMatching.purchaseOrder) : null,
   );
   const grns = mergeById(
-    extractPageContent(grnsData).map(normalizeGrn),
+    extractMatchingGrns(grnsData).items.map(normalizeGrn),
     editingMatching?.grn ? normalizeGrn(editingMatching.grn) : null,
   );
+  const matchingGrnsAvailability = extractMatchingGrns(grnsData);
   const detail = detailData ? normalizeMatching(detailData) : selectedMatching;
   const totalPages = Number(listData?.totalPages ?? 1) || 1;
   const totalElements = Number(listData?.totalElements ?? matchingGroups.length) || 0;
@@ -1243,7 +1244,11 @@ const InvoiceMatching = () => {
                   </SelectContent>
                 </Select>
                 {matchForm.purchaseOrderId && !grnsLoading && grns.length === 0 && (
-                  <p className="text-xs text-red-500">No GRNs are available for this purchase order.</p>
+                  <p className="text-xs text-red-500">
+                    {matchingGrnsAvailability.hasGrns === false
+                      ? "No approved GRNs are available for this purchase order yet."
+                      : "No GRNs are available for this purchase order."}
+                  </p>
                 )}
               </div>
             )}

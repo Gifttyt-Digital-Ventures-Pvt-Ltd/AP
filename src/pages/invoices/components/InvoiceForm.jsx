@@ -48,7 +48,7 @@ import {
 } from "../../../Services/apis/taxApi";
 import { useGetOrganisationQuery } from "../../../Services/apis/settingsApi";
 import { normalizeOrganisationBranchesFromApi } from "../../../utils/organisationGst";
-import { extractPageContent } from "../../../Services/utils/payloadMappers";
+import { extractPageContent, extractMatchingGrns } from "../../../Services/utils/payloadMappers";
 import {
   useGetAvailableGrnsQuery,
   useGetAvailablePurchaseOrdersQuery,
@@ -711,17 +711,32 @@ export const InvoiceForm = ({
     }));
   };
 
+  const invoiceAmountForMatching = Number(
+    formData?.amount ??
+      formData?.invoiceAmount ??
+      totals?.total ??
+      totals?.amount ??
+      totals?.subtotal ??
+      0,
+  );
   const invoiceMatchingPoQuery = useMemo(
     () => ({
       vendorName: String(formData?.vendorName || "").trim(),
-      amount: Number(totals.total || 0),
+      ...(formData?.vendorId ? { vendorId: formData.vendorId } : {}),
+      amount: invoiceAmountForMatching,
       ...(formData?.invoiceId ? { invoiceId: formData.invoiceId } : {}),
     }),
-    [formData?.vendorName, formData?.invoiceId, totals.total],
+    [
+      formData?.vendorId,
+      formData?.vendorName,
+      formData?.invoiceId,
+      invoiceAmountForMatching,
+    ],
   );
   const shouldLoadPurchaseOrders =
     showInvoiceMatching &&
-    Boolean(invoiceMatchingPoQuery.vendorName) &&
+    (Boolean(invoiceMatchingPoQuery.vendorName) ||
+      Boolean(invoiceMatchingPoQuery.vendorId)) &&
     invoiceMatchingPoQuery.amount > 0;
   const {
     data: availablePurchaseOrdersData = {},
@@ -752,8 +767,8 @@ export const InvoiceForm = ({
     formData?.matchingPoNumber,
   ]);
   const availableGrns = useMemo(() => {
-    const items = extractPageContent(availableGrnsData).map(normalizeGrnOption);
-    return mergeSelectedMatchingOption(items, formData?.matchingGrnId, {
+    const { items } = extractMatchingGrns(availableGrnsData);
+    return mergeSelectedMatchingOption(items.map(normalizeGrnOption), formData?.matchingGrnId, {
       id: formData?.matchingGrnId,
       grnNumber: formData?.matchingGrnNumber || formData?.matchingGrnId,
       amount: 0,
@@ -763,6 +778,10 @@ export const InvoiceForm = ({
     formData?.matchingGrnId,
     formData?.matchingGrnNumber,
   ]);
+  const matchingGrnsAvailability = useMemo(
+    () => extractMatchingGrns(availableGrnsData),
+    [availableGrnsData],
+  );
   const roundOffValue = resolveRoundOff(formData || {});
   const totalTax = useInrTax
     ? (Number(totals.cgst) || 0) + (Number(totals.sgst) || 0) + (Number(totals.igst) || 0)
@@ -1678,7 +1697,8 @@ export const InvoiceForm = ({
                         label: `${po.poNumber || "PO"} - ${formatAmount(po.amount)}`,
                       }))}
                       placeholder={
-                        !invoiceMatchingPoQuery.vendorName
+                        !invoiceMatchingPoQuery.vendorName &&
+                        !invoiceMatchingPoQuery.vendorId
                           ? "Select vendor first"
                           : purchaseOrdersLoading
                             ? "Loading purchase orders..."
@@ -1720,7 +1740,9 @@ export const InvoiceForm = ({
                       />
                       {selectedMatchingPoId && !grnsLoading && availableGrns.length === 0 ? (
                         <p className="mt-1 text-xs text-muted-foreground">
-                          No available GRNs found for the selected purchase order.
+                          {matchingGrnsAvailability.hasGrns === false
+                            ? "No approved GRNs are available for this purchase order yet."
+                            : "No available GRNs found for the selected purchase order."}
                         </p>
                       ) : null}
                     </div>

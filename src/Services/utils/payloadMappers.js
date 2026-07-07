@@ -86,6 +86,8 @@ export const extractPageContent = (response) => {
   if (response && typeof response === 'object') {
     if (Array.isArray(response.content)) return response.content;
     if (Array.isArray(response.items)) return response.items;
+    if (Array.isArray(response.purchaseOrders)) return response.purchaseOrders;
+    if (Array.isArray(response.purchase_orders)) return response.purchase_orders;
     if (Array.isArray(response.grns)) return response.grns;
     const paginatedData = response.data;
     if (
@@ -97,6 +99,12 @@ export const extractPageContent = (response) => {
   }
   return extractListResponse(response);
 };
+
+/** Invoice-matching GRN picker: `{ content: [], hasGrns: false }`. */
+export const extractMatchingGrns = (response) => ({
+  items: extractPageContent(response),
+  hasGrns: response?.hasGrns ?? response?.has_grns ?? null,
+});
 
 export const toVendorApiPayload = (vendor = {}) => {
   const {

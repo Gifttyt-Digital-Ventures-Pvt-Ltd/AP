@@ -9,6 +9,7 @@ import {
   useGetTdsEntriesQuery,
   useGetTdsSectionsQuery,
   useGetTdsSummaryQuery,
+  useLazyGetTdsEntriesExportQuery,
 } from "../../../../Services/apis/taxApi";
 import { Button } from "../../../../components/ui/button";
 import {
@@ -35,7 +36,6 @@ import {
   Loader2,
   Receipt,
 } from "lucide-react";
-import * as XLSX from "@e965/xlsx";
 import TdsCalculationDialog from "../TdsCalculationDialog";
 import { useActionGuard } from "../../../../hooks/useActionGuard";
 import { useCreditErrorHandler } from "../../../../contexts/CreditErrorContext";
@@ -75,40 +75,14 @@ const TDS_SUB_TABS = [
 const getTdsSummaryAmount = (summary = {}, snakeKey, camelKey) =>
   summary?.[snakeKey] ?? summary?.[camelKey] ?? 0;
 
-const formatDownloadDate = (value = new Date()) =>
-  value.toISOString().slice(0, 10);
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "";
 
-const getTdsEntryDownloadRows = (entries = []) =>
-  entries.map((entry) => {
-    const invoice = entry.invoice_details ?? entry.invoiceDetails ?? {};
-    const section = entry.section ?? {};
-    return {
-      Section:
-        [section.section_code, section.name].filter(Boolean).join(" - ") ||
-        entry.section_code ||
-        "-",
-      "Invoice No":
-        invoice.invoice_number ??
-        invoice.invoiceNumber ??
-        entry.invoice_number ??
-        entry.invoiceNumber ??
-        "-",
-      Vendor:
-        entry.vendor ??
-        entry.vendor_name ??
-        entry.vendorName ??
-        invoice.vendor_name ??
-        invoice.vendorName ??
-        "-",
-      "Base Amount": Number(entry.base_amount ?? entry.baseAmount ?? 0) || 0,
-      "TDS Rate (%)": Number(entry.tds_rate ?? entry.tdsRate ?? 0) || 0,
-      "TDS Amount": Number(entry.tds_amount ?? entry.tdsAmount ?? 0) || 0,
-      "Total TDS": Number(entry.total_tds ?? entry.totalTds ?? 0) || 0,
-      Currency: invoice.currency ?? entry.currency ?? "INR",
-      "Invoice Date": invoice.invoice_date ?? invoice.invoiceDate ?? "-",
-      Status: invoice.status ?? entry.status ?? "-",
-    };
-  });
+const normalizeDownloadUrl = (url) => {
+  if (!url) return "";
+  if (/^https?:\/\//i.test(url)) return url;
+  const baseUrl = BACKEND_URL || window.location.origin;
+  return new URL(url, baseUrl).toString();
+};
 
 const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
   const { guardAction, canPerformAction } = useActionGuard();
@@ -122,6 +96,8 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
   const [calculating, setCalculating] = useState(false);
   const [tdsForm, setTdsForm] = useState(DEFAULT_TDS_FORM);
   const [calculateTds] = useCalculateTdsMutation();
+  const [exportTdsEntries, { isFetching: exportingTdsEntries }] =
+    useLazyGetTdsEntriesExportQuery();
 
   const overviewActive = enabled && tdsSubTab === "overview";
   const calculatorActive = enabled && tdsSubTab === "calculator";
@@ -230,30 +206,27 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
     />
   );
 
-  const handleDownloadTdsEntries = () => {
-    if (!tdsEntries.length) {
-      toast.error("No TDS entries available to download");
-      return;
+  const handleDownloadTdsEntries = async () => {
+    try {
+      const data = await exportTdsEntries({
+        format: "xlsx",
+        includeInvoiceDetails: true,
+      }).unwrap();
+
+      const downloadUrl = normalizeDownloadUrl(data?.downloadUrl);
+      if (!downloadUrl) {
+        toast.error("Download URL was not returned for TDS entries export");
+        return;
+      }
+
+      window.open(downloadUrl, "_blank", "noopener,noreferrer");
+    } catch (error) {
+      toast.error(
+        error?.data?.message ||
+          error?.data?.detail ||
+          "Failed to export TDS entries",
+      );
     }
-
-    const workbook = XLSX.utils.book_new();
-    const worksheet = XLSX.utils.json_to_sheet(
-      getTdsEntryDownloadRows(tdsEntries),
-    );
-    XLSX.utils.book_append_sheet(workbook, worksheet, "TDS Entries");
-
-    const bytes = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
-    const blob = new Blob([bytes], {
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `tds-entries-${formatDownloadDate()}.xlsx`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    URL.revokeObjectURL(url);
   };
 
   const tdsInvoiceHistory = normalizeInvoiceHistoryEntries(
@@ -384,9 +357,13 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
                     variant="outline"
                     onClick={handleDownloadTdsEntries}
                     data-testid="download-tds-entries-btn"
-                    disabled={!tdsEntries.length}
+                    disabled={exportingTdsEntries}
                   >
-                    <Download className="h-4 w-4 mr-2" />
+                    {exportingTdsEntries ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <Download className="h-4 w-4 mr-2" />
+                    )}
                     Download TDS Excel
                   </Button>
                 </div>

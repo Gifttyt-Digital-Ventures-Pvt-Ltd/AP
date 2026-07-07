@@ -123,7 +123,21 @@ const InvoiceSingleUploadLayer = ({
   prefillCampaignRef.current = prefillCampaign;
 
   const { user } = useAuth();
-  const { isCategoryFeatureEnabled, isCampaignFeatureEnabled, isBranchEnabled } = useRBAC();
+  const { isCategoryFeatureEnabled, isCampaignFeatureEnabled, isBranchEnabled, isCorporateScreenAllowed, isCorporateSectionEnabled } = useRBAC();
+  const hasPurchaseOrderSubscription =
+    isCorporateScreenAllowed("PURCHASE_ORDER") &&
+    (isCorporateSectionEnabled("PURCHASE_ORDER_ALL") ||
+      isCorporateSectionEnabled("PURCHASE_ORDER_CREATE") ||
+      isCorporateSectionEnabled("PURCHASE_ORDER_UPLOAD"));
+  const hasGrnSubscription =
+    isCorporateScreenAllowed("GRN") && isCorporateSectionEnabled("GRN_ALL");
+  const isInvoiceMatchingEnabled =
+    isCorporateScreenAllowed("INVOICE_MATCHING") &&
+    isCorporateSectionEnabled("INVOICE_MATCHING_ALL");
+  const showInvoiceMatchingSelection =
+    isInvoiceMatchingEnabled && hasPurchaseOrderSubscription;
+  const canUseThreeWayMatching =
+    showInvoiceMatchingSelection && hasGrnSubscription;
   const { isPiSubscriptionEnabled } = useProformaInvoiceSubscription();
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
@@ -742,6 +756,8 @@ const InvoiceSingleUploadLayer = ({
       requireBillingGst={false}
       showBranchField={isBranchEnabled}
       showProformaInvoiceFields={isPiSubscriptionEnabled}
+      showInvoiceMatching={showInvoiceMatchingSelection}
+      canUseThreeWayMatching={canUseThreeWayMatching}
     />
   );
 

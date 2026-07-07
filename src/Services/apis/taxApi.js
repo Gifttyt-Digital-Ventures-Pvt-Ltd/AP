@@ -23,6 +23,28 @@ const gstAnalyticsHistoryResponse = (response) => {
   return withHistoryMeta([], response);
 };
 
+const normalizeTdsEntriesExportResponse = (response) => {
+  const payload =
+    response?.downloadUrl || response?.download_url || response?.url
+      ? response
+      : response?.data ?? response;
+
+  return {
+    downloadUrl:
+      payload?.downloadUrl ??
+      payload?.download_url ??
+      payload?.url ??
+      payload?.fileUrl ??
+      payload?.file_url ??
+      null,
+    fileName:
+      payload?.fileName ??
+      payload?.file_name ??
+      payload?.name ??
+      null,
+  };
+};
+
 export const taxApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getOrganisationGstCredentials: builder.query({
@@ -224,6 +246,18 @@ export const taxApi = serviceApi.injectEndpoints({
       transformResponse: (response) => extractListResponse(response, ['entries']),
       providesTags: ["Tax"],
     }),
+    getTdsEntriesExport: builder.query({
+      query: (params = {}) => ({
+        url: "/tax/tds/entries/export",
+        method: "GET",
+        params: {
+          format: params.format ?? "xlsx",
+          includeInvoiceDetails:
+            params.includeInvoiceDetails ?? params.include_invoice_details ?? true,
+        },
+      }),
+      transformResponse: normalizeTdsEntriesExportResponse,
+    }),
     getTdsSummary: builder.query({
       query: () => ({ url: "/tax/tds/summary", method: "GET" }),
       providesTags: ["Tax"],
@@ -273,6 +307,7 @@ export const {
   useCreateGstEntryMutation,
   useGetGstSummaryQuery,
   useGetTdsEntriesQuery,
+  useLazyGetTdsEntriesExportQuery,
   useGetTdsSummaryQuery,
   useGetTdsSectionsQuery,
   useCalculateTdsMutation,
