@@ -24,6 +24,11 @@ import TdsCalculationDialog from '../TdsCalculationDialog';
 import { useActionGuard } from '../../../../hooks/useActionGuard';
 import { useCreditErrorHandler } from '../../../../contexts/CreditErrorContext';
 import { formatCurrency } from '../../utils/taxFormatting';
+import { InvoicePdfPreview } from '../../../invoices/components/InvoicePdfPreview';
+import ViewDialog from '../../../invoices/components/ViewDialog';
+import { getInvoiceFileUrl } from '../../../invoices/utils/invoicePreview';
+import { normalizeInvoiceHistoryEntries } from '../../../invoices/utils/invoiceHistory';
+import { getInvoiceStatusBadgeClass } from '../../../../utils/approvalWorkflow';
 import {
   TdsAnalyticsPanel,
   TdsCalculatorPanel,
@@ -51,11 +56,18 @@ const TDS_SUB_TABS = [
   { value: 'csi', label: 'CSI' },
 ];
 
+const getTdsSummaryAmount = (summary = {}, snakeKey, camelKey) =>
+  summary?.[snakeKey] ?? summary?.[camelKey] ?? 0;
+
 const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
   const [tdsSubTab, setTdsSubTab] = useState('overview');
   const [showTdsCalcDialog, setShowTdsCalcDialog] = useState(false);
+  const [selectedTdsInvoice, setSelectedTdsInvoice] = useState(null);
+  const [tdsInvoiceViewTab, setTdsInvoiceViewTab] = useState('details');
+  const [tdsInvoicePdfZoom, setTdsInvoicePdfZoom] = useState(100);
+  const [tdsInvoicePreviewError, setTdsInvoicePreviewError] = useState(false);
   const [calculating, setCalculating] = useState(false);
   const [tdsForm, setTdsForm] = useState(DEFAULT_TDS_FORM);
   const [calculateTds] = useCalculateTdsMutation();
@@ -137,6 +149,29 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
     }
   };
 
+  const handleViewTdsInvoice = (invoice) => {
+    if (!invoice?.id) {
+      toast.error('Invoice details are unavailable for this TDS entry');
+      return;
+    }
+    setTdsInvoicePreviewError(false);
+    setTdsInvoicePdfZoom(100);
+    setTdsInvoiceViewTab('details');
+    setSelectedTdsInvoice(invoice);
+  };
+
+  const renderTdsInvoicePreview = (props = {}) => (
+    <InvoicePdfPreview
+      {...props}
+      setPdfZoom={setTdsInvoicePdfZoom}
+      getInvoiceFileUrl={getInvoiceFileUrl}
+    />
+  );
+
+  const tdsInvoiceHistory = normalizeInvoiceHistoryEntries(
+    selectedTdsInvoice?.approvalRecords ?? selectedTdsInvoice?.approval_records ?? [],
+  );
+
   if (!enabled) return null;
 
   if (loading) {
@@ -155,24 +190,28 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
   return (
     <TabsContent value="tds" className="space-y-6">
       <Tabs value={tdsSubTab} onValueChange={setTdsSubTab} className="space-y-5">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-7">
+        {/* <TabsList className="grid w-full grid-cols-2 md:grid-cols-7">
           {TDS_SUB_TABS.map((tab) => (
             <TabsTrigger key={tab.value} value={tab.value}>
               {tab.label}
             </TabsTrigger>
           ))}
-        </TabsList>
+        </TabsList> */}
 
         {tdsSubTab === 'overview' ? (
           <div className="space-y-6">
-            {tdsSummary && (
+            {/* {tdsSummary && (
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <Card>
                   <CardContent className="pt-4">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm text-muted-foreground">Total Base Amount</p>
-                        <p className="text-xl font-bold">{formatCurrency(tdsSummary.total_base_amount)}</p>
+                        <p className="text-xl font-bold">
+                          {formatCurrency(
+                            getTdsSummaryAmount(tdsSummary, 'total_base_amount', 'totalBaseAmount'),
+                          )}
+                        </p>
                       </div>
                       <IndianRupee className="h-8 w-8 text-muted-foreground" />
                     </div>
@@ -183,7 +222,11 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm text-muted-foreground">TDS Deducted</p>
-                        <p className="text-xl font-bold">{formatCurrency(tdsSummary.total_tds_deducted)}</p>
+                        <p className="text-xl font-bold">
+                          {formatCurrency(
+                            getTdsSummaryAmount(tdsSummary, 'total_tds_deducted', 'totalTdsDeducted'),
+                          )}
+                        </p>
                       </div>
                       <Receipt className="h-8 w-8 text-blue-500" />
                     </div>
@@ -194,7 +237,11 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm text-muted-foreground">TDS Deposited</p>
-                        <p className="text-xl font-bold">{formatCurrency(tdsSummary.total_tds_deposited)}</p>
+                        <p className="text-xl font-bold">
+                          {formatCurrency(
+                            getTdsSummaryAmount(tdsSummary, 'total_tds_deposited', 'totalTdsDeposited'),
+                          )}
+                        </p>
                       </div>
                       <CheckCircle className="h-8 w-8 text-green-500" />
                     </div>
@@ -205,7 +252,11 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm text-muted-foreground">Pending Deposit</p>
-                        <p className="text-xl font-bold">{formatCurrency(tdsSummary.pending_deposit)}</p>
+                        <p className="text-xl font-bold">
+                          {formatCurrency(
+                            getTdsSummaryAmount(tdsSummary, 'pending_deposit', 'pendingDeposit'),
+                          )}
+                        </p>
                       </div>
                       <Clock className="h-8 w-8 text-yellow-500" />
                     </div>
@@ -221,7 +272,7 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
                 <Calculator className="h-4 w-4 mr-2" />
                 Calculate TDS
               </Button>
-            </div>
+            </div> */}
 
             <Card>
               <CardHeader>
@@ -232,8 +283,12 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
                 <AppDataTable
                   tableHeader={TDS_ENTRIES_TABLE_HEADER}
                   tableData={tdsEntries}
-                  renderRow={renderTdsEntryRow}
-                  emptyMessage="No TDS entries found. Calculate TDS for an invoice to create entries."
+                  renderRow={(entry, rowIndex, headers) =>
+                    renderTdsEntryRow(entry, rowIndex, headers, {
+                      onViewInvoice: handleViewTdsInvoice,
+                    })
+                  }
+                  emptyMessage="No TDS entries found. Entries appear after approved invoices with TDS deduction."
                 />
               </CardContent>
             </Card>
@@ -285,6 +340,32 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
         calculating={calculating}
         handleCalculateTDS={handleCalculateTDS}
         canManageTax={canManageTds}
+      />
+
+      <ViewDialog
+        viewDialogOpen={Boolean(selectedTdsInvoice)}
+        setViewDialogOpen={(open) => {
+          if (!open) setSelectedTdsInvoice(null);
+        }}
+        selectedInvoice={selectedTdsInvoice}
+        renderPdfPreview={renderTdsInvoicePreview}
+        pdfZoom={tdsInvoicePdfZoom}
+        viewPreviewError={tdsInvoicePreviewError}
+        setViewPreviewError={setTdsInvoicePreviewError}
+        getStatusBadgeClass={getInvoiceStatusBadgeClass}
+        viewTab={tdsInvoiceViewTab}
+        setViewTab={setTdsInvoiceViewTab}
+        invoiceHistory={tdsInvoiceHistory}
+        loadingHistory={false}
+        canEdit={() => false}
+        handleEditInvoice={() => {}}
+        canCancel={() => false}
+        handleCancelInvoice={() => {}}
+        showCategoryField
+        isCategoryFeatureEnabled
+        showCampaignField
+        isCampaignFeatureEnabled
+        showRefNoField
       />
     </TabsContent>
   );
