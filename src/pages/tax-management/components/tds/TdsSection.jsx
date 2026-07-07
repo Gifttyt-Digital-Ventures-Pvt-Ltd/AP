@@ -1,34 +1,50 @@
-import React, { forwardRef, useImperativeHandle, useState } from 'react';
-import { useGetInvoicesQuery } from '../../../../Services/apis/invoicesVendorsApi';
-import { EMPTY_INVOICE_LIST_RESPONSE, getInvoiceListItems } from '../../../../Services/utils/payloadMappers';
+import React, { forwardRef, useImperativeHandle, useState } from "react";
+import { useGetInvoicesQuery } from "../../../../Services/apis/invoicesVendorsApi";
+import {
+  EMPTY_INVOICE_LIST_RESPONSE,
+  getInvoiceListItems,
+} from "../../../../Services/utils/payloadMappers";
 import {
   useCalculateTdsMutation,
   useGetTdsEntriesQuery,
   useGetTdsSectionsQuery,
   useGetTdsSummaryQuery,
-} from '../../../../Services/apis/taxApi';
-import { Button } from '../../../../components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../../components/ui/tabs';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../../../components/ui/card';
-import AppDataTable from '../../../../components/common/AppDataTable';
-import { toast } from 'sonner';
+} from "../../../../Services/apis/taxApi";
+import { Button } from "../../../../components/ui/button";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "../../../../components/ui/tabs";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "../../../../components/ui/card";
+import AppDataTable from "../../../../components/common/AppDataTable";
+import { toast } from "sonner";
 import {
   Calculator,
   CheckCircle,
   Clock,
+  Download,
   IndianRupee,
   Loader2,
   Receipt,
-} from 'lucide-react';
-import TdsCalculationDialog from '../TdsCalculationDialog';
-import { useActionGuard } from '../../../../hooks/useActionGuard';
-import { useCreditErrorHandler } from '../../../../contexts/CreditErrorContext';
-import { formatCurrency } from '../../utils/taxFormatting';
-import { InvoicePdfPreview } from '../../../invoices/components/InvoicePdfPreview';
-import ViewDialog from '../../../invoices/components/ViewDialog';
-import { getInvoiceFileUrl } from '../../../invoices/utils/invoicePreview';
-import { normalizeInvoiceHistoryEntries } from '../../../invoices/utils/invoiceHistory';
-import { getInvoiceStatusBadgeClass } from '../../../../utils/approvalWorkflow';
+} from "lucide-react";
+import * as XLSX from "@e965/xlsx";
+import TdsCalculationDialog from "../TdsCalculationDialog";
+import { useActionGuard } from "../../../../hooks/useActionGuard";
+import { useCreditErrorHandler } from "../../../../contexts/CreditErrorContext";
+import { formatCurrency } from "../../utils/taxFormatting";
+import { InvoicePdfPreview } from "../../../invoices/components/InvoicePdfPreview";
+import ViewDialog from "../../../invoices/components/ViewDialog";
+import { getInvoiceFileUrl } from "../../../invoices/utils/invoicePreview";
+import { normalizeInvoiceHistoryEntries } from "../../../invoices/utils/invoiceHistory";
+import { getInvoiceStatusBadgeClass } from "../../../../utils/approvalWorkflow";
 import {
   TdsAnalyticsPanel,
   TdsCalculatorPanel,
@@ -37,43 +53,78 @@ import {
   TdsFvuPanel,
   TdsOverviewPanels,
   TdsReportsPanel,
-} from './TdsReferencePanels';
+} from "./TdsReferencePanels";
 import {
   DEFAULT_TDS_FORM,
   renderTdsEntryRow,
   renderTdsSectionRow,
   TDS_ENTRIES_TABLE_HEADER,
   TDS_SECTIONS_TABLE_HEADER,
-} from './tdsTableHelpers';
+} from "./tdsTableHelpers";
 
 const TDS_SUB_TABS = [
-  { value: 'overview', label: 'Overview' },
-  { value: 'calculator', label: 'Calculator' },
-  { value: 'analytics', label: 'Analytics' },
-  { value: 'reports', label: 'Reports' },
-  { value: 'form16a', label: 'Form 16A' },
-  { value: 'fvu', label: 'FVU' },
-  { value: 'csi', label: 'CSI' },
+  { value: "overview", label: "Overview" },
+  { value: "calculator", label: "Calculator" },
+  { value: "analytics", label: "Analytics" },
+  { value: "reports", label: "Reports" },
+  { value: "form16a", label: "Form 16A" },
+  { value: "fvu", label: "FVU" },
+  { value: "csi", label: "CSI" },
 ];
 
 const getTdsSummaryAmount = (summary = {}, snakeKey, camelKey) =>
   summary?.[snakeKey] ?? summary?.[camelKey] ?? 0;
 
+const formatDownloadDate = (value = new Date()) =>
+  value.toISOString().slice(0, 10);
+
+const getTdsEntryDownloadRows = (entries = []) =>
+  entries.map((entry) => {
+    const invoice = entry.invoice_details ?? entry.invoiceDetails ?? {};
+    const section = entry.section ?? {};
+    return {
+      Section:
+        [section.section_code, section.name].filter(Boolean).join(" - ") ||
+        entry.section_code ||
+        "-",
+      "Invoice No":
+        invoice.invoice_number ??
+        invoice.invoiceNumber ??
+        entry.invoice_number ??
+        entry.invoiceNumber ??
+        "-",
+      Vendor:
+        entry.vendor ??
+        entry.vendor_name ??
+        entry.vendorName ??
+        invoice.vendor_name ??
+        invoice.vendorName ??
+        "-",
+      "Base Amount": Number(entry.base_amount ?? entry.baseAmount ?? 0) || 0,
+      "TDS Rate (%)": Number(entry.tds_rate ?? entry.tdsRate ?? 0) || 0,
+      "TDS Amount": Number(entry.tds_amount ?? entry.tdsAmount ?? 0) || 0,
+      "Total TDS": Number(entry.total_tds ?? entry.totalTds ?? 0) || 0,
+      Currency: invoice.currency ?? entry.currency ?? "INR",
+      "Invoice Date": invoice.invoice_date ?? invoice.invoiceDate ?? "-",
+      Status: invoice.status ?? entry.status ?? "-",
+    };
+  });
+
 const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
-  const [tdsSubTab, setTdsSubTab] = useState('overview');
+  const [tdsSubTab, setTdsSubTab] = useState("overview");
   const [showTdsCalcDialog, setShowTdsCalcDialog] = useState(false);
   const [selectedTdsInvoice, setSelectedTdsInvoice] = useState(null);
-  const [tdsInvoiceViewTab, setTdsInvoiceViewTab] = useState('details');
+  const [tdsInvoiceViewTab, setTdsInvoiceViewTab] = useState("details");
   const [tdsInvoicePdfZoom, setTdsInvoicePdfZoom] = useState(100);
   const [tdsInvoicePreviewError, setTdsInvoicePreviewError] = useState(false);
   const [calculating, setCalculating] = useState(false);
   const [tdsForm, setTdsForm] = useState(DEFAULT_TDS_FORM);
   const [calculateTds] = useCalculateTdsMutation();
 
-  const overviewActive = enabled && tdsSubTab === 'overview';
-  const calculatorActive = enabled && tdsSubTab === 'calculator';
+  const overviewActive = enabled && tdsSubTab === "overview";
+  const calculatorActive = enabled && tdsSubTab === "calculator";
   const dialogDataActive = enabled && showTdsCalcDialog;
 
   const {
@@ -93,7 +144,9 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
     isLoading: tdsSectionsLoading,
     isFetching: tdsSectionsFetching,
     refetch: refetchTdsSections,
-  } = useGetTdsSectionsQuery(undefined, { skip: !calculatorActive && !dialogDataActive });
+  } = useGetTdsSectionsQuery(undefined, {
+    skip: !calculatorActive && !dialogDataActive,
+  });
   const {
     data: invoicesListData = EMPTY_INVOICE_LIST_RESPONSE,
     isLoading: invoicesLoading,
@@ -104,10 +157,13 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
   const tdsEntries = Array.isArray(tdsEntriesData) ? tdsEntriesData : [];
   const tdsSections = Array.isArray(tdsSectionsData) ? tdsSectionsData : [];
   const invoices = getInvoiceListItems(invoicesListData);
-  const canManageTds = canPerformAction('tax.calculateTds') && enabled;
+  const canManageTds = canPerformAction("tax.calculateTds") && enabled;
   const loading = overviewActive && (tdsEntriesLoading || tdsSummaryLoading);
   const isFetching =
-    tdsEntriesFetching || tdsSummaryFetching || tdsSectionsFetching || invoicesFetching;
+    tdsEntriesFetching ||
+    tdsSummaryFetching ||
+    tdsSectionsFetching ||
+    invoicesFetching;
 
   const refetch = async () => {
     const tasks = [];
@@ -126,16 +182,22 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
   useImperativeHandle(ref, () => ({ refetch, isFetching }));
 
   const handleCalculateTDS = async () => {
-    if (!guardAction('tax.calculateTds')) return;
-    if (!tdsForm.invoice_id || !tdsForm.section_code || tdsForm.base_amount <= 0) {
-      toast.error('Please fill in all required fields');
+    if (!guardAction("tax.calculateTds")) return;
+    if (
+      !tdsForm.invoice_id ||
+      !tdsForm.section_code ||
+      tdsForm.base_amount <= 0
+    ) {
+      toast.error("Please fill in all required fields");
       return;
     }
 
     setCalculating(true);
     try {
       const data = await calculateTds(tdsForm).unwrap();
-      toast.success(`TDS calculated: ${formatCurrency(data?.entry?.total_tds)}`);
+      toast.success(
+        `TDS calculated: ${formatCurrency(data?.entry?.total_tds)}`,
+      );
       setShowTdsCalcDialog(false);
       setTdsForm(DEFAULT_TDS_FORM);
       if (overviewActive) {
@@ -143,7 +205,7 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
       }
     } catch (error) {
       if (handleCreditError(error)) return;
-      toast.error(error?.data?.detail || 'Failed to calculate TDS');
+      toast.error(error?.data?.detail || "Failed to calculate TDS");
     } finally {
       setCalculating(false);
     }
@@ -151,12 +213,12 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
 
   const handleViewTdsInvoice = (invoice) => {
     if (!invoice?.id) {
-      toast.error('Invoice details are unavailable for this TDS entry');
+      toast.error("Invoice details are unavailable for this TDS entry");
       return;
     }
     setTdsInvoicePreviewError(false);
     setTdsInvoicePdfZoom(100);
-    setTdsInvoiceViewTab('details');
+    setTdsInvoiceViewTab("details");
     setSelectedTdsInvoice(invoice);
   };
 
@@ -168,8 +230,36 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
     />
   );
 
+  const handleDownloadTdsEntries = () => {
+    if (!tdsEntries.length) {
+      toast.error("No TDS entries available to download");
+      return;
+    }
+
+    const workbook = XLSX.utils.book_new();
+    const worksheet = XLSX.utils.json_to_sheet(
+      getTdsEntryDownloadRows(tdsEntries),
+    );
+    XLSX.utils.book_append_sheet(workbook, worksheet, "TDS Entries");
+
+    const bytes = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([bytes], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `tds-entries-${formatDownloadDate()}.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
   const tdsInvoiceHistory = normalizeInvoiceHistoryEntries(
-    selectedTdsInvoice?.approvalRecords ?? selectedTdsInvoice?.approval_records ?? [],
+    selectedTdsInvoice?.approvalRecords ??
+      selectedTdsInvoice?.approval_records ??
+      [],
   );
 
   if (!enabled) return null;
@@ -180,7 +270,9 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
         <div className="min-h-[40vh] flex items-center justify-center">
           <div className="text-center">
             <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
-            <p className="mt-3 text-sm text-muted-foreground">Loading TDS data...</p>
+            <p className="mt-3 text-sm text-muted-foreground">
+              Loading TDS data...
+            </p>
           </div>
         </div>
       </TabsContent>
@@ -189,7 +281,11 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
 
   return (
     <TabsContent value="tds" className="space-y-6">
-      <Tabs value={tdsSubTab} onValueChange={setTdsSubTab} className="space-y-5">
+      <Tabs
+        value={tdsSubTab}
+        onValueChange={setTdsSubTab}
+        className="space-y-5"
+      >
         {/* <TabsList className="grid w-full grid-cols-2 md:grid-cols-7">
           {TDS_SUB_TABS.map((tab) => (
             <TabsTrigger key={tab.value} value={tab.value}>
@@ -198,7 +294,7 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
           ))}
         </TabsList> */}
 
-        {tdsSubTab === 'overview' ? (
+        {tdsSubTab === "overview" ? (
           <div className="space-y-6">
             {/* {tdsSummary && (
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -268,6 +364,7 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
             <TdsOverviewPanels />
 
             <div className="flex gap-2">
+             
               <Button onClick={() => setShowTdsCalcDialog(true)} data-testid="calc-tds-btn" disabled={!canManageTds}>
                 <Calculator className="h-4 w-4 mr-2" />
                 Calculate TDS
@@ -276,8 +373,23 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
 
             <Card>
               <CardHeader>
-                <CardTitle>TDS Entries</CardTitle>
-                <CardDescription>TDS deductions and deposits</CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>TDS Entries</CardTitle>
+                    <CardDescription>
+                      TDS deductions and deposits
+                    </CardDescription>{" "}
+                  </div>
+                  <Button
+                    variant="outline"
+                    onClick={handleDownloadTdsEntries}
+                    data-testid="download-tds-entries-btn"
+                    disabled={!tdsEntries.length}
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    Download TDS Excel
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 <AppDataTable
@@ -295,13 +407,18 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
           </div>
         ) : null}
 
-        {tdsSubTab === 'calculator' ? (
+        {tdsSubTab === "calculator" ? (
           <div className="space-y-6">
-            <TdsCalculatorPanel onCalculate={() => setShowTdsCalcDialog(true)} disabled={!canManageTds} />
+            <TdsCalculatorPanel
+              onCalculate={() => setShowTdsCalcDialog(true)}
+              disabled={!canManageTds}
+            />
             <Card>
               <CardHeader>
                 <CardTitle>TDS Sections Reference</CardTitle>
-                <CardDescription>Applicable TDS rates by section from API.</CardDescription>
+                <CardDescription>
+                  Applicable TDS rates by section from API.
+                </CardDescription>
               </CardHeader>
               <CardContent>
                 {tdsSectionsLoading ? (
@@ -322,11 +439,13 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
           </div>
         ) : null}
 
-        {tdsSubTab === 'analytics' ? <TdsAnalyticsPanel /> : null}
-        {tdsSubTab === 'reports' ? <TdsReportsPanel /> : null}
-        {tdsSubTab === 'form16a' ? <TdsForm16aPanel onOpenCertificates={onOpenCertificates} /> : null}
-        {tdsSubTab === 'fvu' ? <TdsFvuPanel /> : null}
-        {tdsSubTab === 'csi' ? <TdsCsiPanel /> : null}
+        {tdsSubTab === "analytics" ? <TdsAnalyticsPanel /> : null}
+        {tdsSubTab === "reports" ? <TdsReportsPanel /> : null}
+        {tdsSubTab === "form16a" ? (
+          <TdsForm16aPanel onOpenCertificates={onOpenCertificates} />
+        ) : null}
+        {tdsSubTab === "fvu" ? <TdsFvuPanel /> : null}
+        {tdsSubTab === "csi" ? <TdsCsiPanel /> : null}
       </Tabs>
 
       <TdsCalculationDialog
@@ -371,6 +490,6 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
   );
 });
 
-TdsSection.displayName = 'TdsSection';
+TdsSection.displayName = "TdsSection";
 
 export default TdsSection;
