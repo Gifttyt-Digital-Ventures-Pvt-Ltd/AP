@@ -1,6 +1,7 @@
 import { format } from "date-fns";
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../../utils/currency";
 import { DOCUMENT_TYPE, normalizeDocumentType } from "../constants/proformaInvoice";
+import { normalizeInvoiceSource } from "../constants";
 import {
   DEFAULT_INR_TAX,
   LINE_ITEM_LEVEL,
@@ -149,7 +150,7 @@ export const normalizeScannedInvoice = (scanResponse = {}) => {
       scanResponse?.invoice_tax_rate ??
       taxSummary.invoiceTaxRate ??
       "",
-    source: scanResponse?.source ?? "Upload",
+    source: normalizeInvoiceSource(scanResponse?.source),
     invoiceNumber: scanResponse?.invoiceNumber ?? scanResponse?.invoiceNumber ?? "",
     invoiceDate:
       toDateOnly(scanResponse?.invoiceDate ?? scanResponse?.invoiceDate ?? scanResponse?.datetime) ||

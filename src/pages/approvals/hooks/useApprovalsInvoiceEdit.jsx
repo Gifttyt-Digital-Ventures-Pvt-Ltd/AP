@@ -36,7 +36,7 @@ import { InvoiceForm } from "../../invoices/components/InvoiceForm";
 import {
   GST_TREATMENTS,
   INDIAN_STATES,
-  INVOICE_SOURCES,
+  isGmailInvoiceSource,
   LEDGER_OPTIONS,
   TAX_RATES,
 } from "../../invoices/constants";
@@ -428,7 +428,7 @@ export const useApprovalsInvoiceEdit = ({
           })),
         }),
         memo: data.description,
-        sourceEmail: data.source === "Email" ? data.sourceEmail : null,
+        sourceEmail: isGmailInvoiceSource(data.source) ? data.sourceEmail : null,
         departmentName:
           data.departmentName || getDepartmentNameById(data.departmentId),
         ...(keepSaved ? { action: "saved" } : {}),
@@ -659,7 +659,6 @@ export const useApprovalsInvoiceEdit = ({
         currencyOptions={invoiceCurrencyOptions}
         GST_TREATMENTS={GST_TREATMENTS}
         INDIAN_STATES={INDIAN_STATES}
-        INVOICE_SOURCES={INVOICE_SOURCES}
         LEDGER_OPTIONS={LEDGER_OPTIONS}
         TAX_RATES={TAX_RATES}
         showBillingGst={isEdit}

@@ -1,7 +1,7 @@
 import { format } from "date-fns";
 import { buildInvoiceApiPayload } from "../../../Services/utils/payloadMappers";
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../../utils/currency";
-import { TAX_RATES } from "../constants";
+import { TAX_RATES, isGmailInvoiceSource, normalizeInvoiceSource } from "../constants";
 import { DOCUMENT_TYPE } from "../constants/proformaInvoice";
 import {
   calculateInvoiceTotals,
@@ -262,7 +262,7 @@ export const initializeInvoiceFormData = (
       extractedData?.invoiceTaxRate ??
       extractedData?.invoice_tax_rate ??
       "",
-    source: extractedData?.source || "Upload",
+    source: "Upload",
     sourceEmail: "",
     lineItemsExpanded: true,
     lineItems: extractedData?.lineItems?.length > 0
@@ -387,8 +387,10 @@ export const buildToCreateInvoicePayload = (
         invoiceData.originalFileName ||
         invoiceData.originalFileName ||
         null,
-      source: invoiceData.source || "Upload",
-      sourceEmail: invoiceData.source === "Email" ? invoiceData.sourceEmail : null,
+      source: normalizeInvoiceSource(invoiceData.source),
+      sourceEmail: isGmailInvoiceSource(invoiceData.source)
+        ? invoiceData.sourceEmail || null
+        : null,
       ...(isCampaignFeatureEnabled
         ? {
             campaignId: invoiceData.campaignId || "",

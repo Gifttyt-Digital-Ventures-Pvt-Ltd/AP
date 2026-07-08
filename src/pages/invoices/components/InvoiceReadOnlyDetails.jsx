@@ -289,9 +289,6 @@ const InvoiceReadOnlyDetails = ({
 
         <div className="grid grid-cols-2 gap-3">
           <DetailField label="Source" value={formData.source} />
-          {formData.source === "Email" && (
-            <DetailField label="Source Email" value={formData.sourceEmail} />
-          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">

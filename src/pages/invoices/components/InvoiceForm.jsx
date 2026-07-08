@@ -219,7 +219,6 @@ export const InvoiceForm = ({
   currencyOptions = [],
   GST_TREATMENTS,
   INDIAN_STATES,
-  INVOICE_SOURCES,
   LEDGER_OPTIONS,
   TAX_RATES,
   showBillingGst = false,
@@ -1278,22 +1277,24 @@ export const InvoiceForm = ({
                 {formData.vendorMatched && vendorBranchOptions.length > 0 ? (
                   <div className="mt-3">
                     <Label className="text-xs">Vendor Branch (Optional)</Label>
-                    <div className="flex gap-2">
-                      <AppSelect
-                        value={selectedVendorBranchValue}
-                        onChange={(event) => applyVendorBranchSelection(event.target.value)}
-                        options={vendorBranchOptions}
-                        placeholder="Select vendor branch"
-                        className="h-8 text-sm"
-                        data-testid="invoice-vendor-branch-select"
-                      />
+                    <div className="flex items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        <AppSelect
+                          value={selectedVendorBranchValue}
+                          onChange={(event) => applyVendorBranchSelection(event.target.value)}
+                          options={vendorBranchOptions}
+                          placeholder="Select vendor branch"
+                          className="h-8 text-sm"
+                          data-testid="invoice-vendor-branch-select"
+                        />
+                      </div>
                       {selectedVendorBranchValue ? (
                         <Button
                           type="button"
                           variant="outline"
                           size="sm"
                           onClick={clearVendorBranchSelection}
-                          className="h-8 px-2 text-xs"
+                          className="h-8 shrink-0 px-2 text-xs"
                         >
                           Clear
                         </Button>
@@ -1553,23 +1554,25 @@ export const InvoiceForm = ({
                     {canShowBranchField ? (
                       <div>
                         <Label className="text-xs">Branch (Optional)</Label>
-                        <div className="flex gap-2">
-                          <AppSelect
-                            value={selectedBranchCode}
-                            onChange={(event) => applyBranchSelection(event.target.value)}
-                            options={branchOptions}
-                            placeholder={branchBusy ? "Loading branches..." : "Select branch"}
-                            className="h-8 text-sm"
-                            disabled={branchBusy || branchOptions.length === 0}
-                            data-testid="invoice-preview-branch-select"
-                          />
+                        <div className="flex items-center gap-2">
+                          <div className="min-w-0 flex-1">
+                            <AppSelect
+                              value={selectedBranchCode}
+                              onChange={(event) => applyBranchSelection(event.target.value)}
+                              options={branchOptions}
+                              placeholder={branchBusy ? "Loading branches..." : "Select branch"}
+                              className="h-8 text-sm"
+                              disabled={branchBusy || branchOptions.length === 0}
+                              data-testid="invoice-preview-branch-select"
+                            />
+                          </div>
                           {selectedBranchCode ? (
                             <Button
                               type="button"
                               variant="outline"
                               size="sm"
                               onClick={clearBranchSelection}
-                              className="h-8 px-2 text-xs"
+                              className="h-8 shrink-0 px-2 text-xs"
                             >
                               Clear
                             </Button>
@@ -1848,31 +1851,14 @@ export const InvoiceForm = ({
 
             <div>
               <RequiredLabel required>Source</RequiredLabel>
-              <AppSelect
-                value={formData.source}
-                onChange={(e) =>
-                  setFormData({ ...formData, source: e.target.value })
-                }
-                options={INVOICE_SOURCES}
-                className="h-8 text-sm"
+              <Input
+                value={formData.source || "Upload"}
+                readOnly
+                disabled
+                className="h-8 text-sm bg-muted"
                 data-testid="source-select"
               />
             </div>
-            {formData.source === "Email" && (
-              <div>
-                <RequiredLabel required>Source Email</RequiredLabel>
-                <Input
-                  type="email"
-                  value={formData.sourceEmail}
-                  onChange={(e) =>
-                    setFormData({ ...formData, sourceEmail: e.target.value })
-                  }
-                  placeholder="vendor@example.com"
-                  className="w-full h-8 text-sm"
-                  data-testid="source-email-input"
-                />
-              </div>
-            )}
 
             <div className="flex gap-6 text-xs">
               <div className="flex items-center gap-1.5">
