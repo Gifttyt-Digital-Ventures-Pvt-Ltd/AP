@@ -127,11 +127,13 @@ export const formatDate = (dateStr) => {
 
 export const normalizePoLineItem = (item = {}) => ({
   ...item,
-  item_description: item.item_description ?? item.description ?? "",
+  line_number: item.line_number ?? item.lineNumber ?? "",
+  item_description: item.item_description ?? item.itemDescription ?? item.description ?? "",
   hsn_sac_code: item.hsn_sac_code ?? item.hsnSacCode ?? item.hsnSac ?? "",
   unit_of_measure: item.unit_of_measure ?? item.unitOfMeasure ?? item.uom ?? "NOS",
   unit_price: item.unit_price ?? item.unitRate ?? item.unitPrice ?? 0,
   discount_percent: item.discount_percent ?? item.discountPercent ?? 0,
+  discount_amount: item.discount_amount ?? item.discountAmount ?? 0,
   gst_rate: item.gst_rate ?? item.gstRate ?? 0,
   gst_tax_label: item.gst_tax_label ?? item.gstTaxLabel ?? "",
   gst_tax_type: item.gst_tax_type ?? item.gstTaxType ?? "",
@@ -139,9 +141,15 @@ export const normalizePoLineItem = (item = {}) => ({
   total_amount: item.total_amount ?? item.totalAmount ?? item.lineTotal ?? item.amount ?? 0,
   taxable_value: item.taxable_value ?? item.taxableValue ?? 0,
   cgst_amount: item.cgst_amount ?? item.cgstAmount ?? 0,
+  cgst_percent: item.cgst_percent ?? item.cgstPercent ?? 0,
   sgst_amount: item.sgst_amount ?? item.sgstAmount ?? 0,
+  sgst_percent: item.sgst_percent ?? item.sgstPercent ?? 0,
   igst_amount: item.igst_amount ?? item.igstAmount ?? 0,
+  igst_percent: item.igst_percent ?? item.igstPercent ?? 0,
   cess_amount: item.cess_amount ?? item.cessAmount ?? 0,
+  cess_percent: item.cess_percent ?? item.cessPercent ?? 0,
+  received_quantity: item.received_quantity ?? item.receivedQuantity ?? 0,
+  invoiced_quantity: item.invoiced_quantity ?? item.invoicedQuantity ?? 0,
 });
 
 export const normalizePurchaseOrder = (po = {}) => ({

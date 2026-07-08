@@ -32,6 +32,13 @@ export const goodsReceiptApi = serviceApi.injectEndpoints({
       query: (id) => ({ url: `/grn/${id}`, method: "GET" }),
       providesTags: (_result, _error, id) => [{ type: "GoodsReceipt", id }],
     }),
+    getGrnDownloadUrl: builder.mutation({
+      query: (id) => ({
+        url: `/grn/${id}/download`,
+        method: "GET",
+        params: { format: "pdf" },
+      }),
+    }),
     getGrnFormatConfig: builder.query({
       query: () => ({ url: "/grn/config", method: "GET" }),
       providesTags: grnFormatTags,
@@ -158,6 +165,7 @@ export const {
   useGetGrnsQuery,
   useGetGrnByIdQuery,
   useLazyGetGrnByIdQuery,
+  useGetGrnDownloadUrlMutation,
   useGetGrnFormatConfigQuery,
   useUpdateGrnFormatConfigMutation,
   useGetGrnFormatConfigsQuery,

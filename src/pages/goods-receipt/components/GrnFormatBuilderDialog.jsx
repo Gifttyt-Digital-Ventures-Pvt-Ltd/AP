@@ -24,8 +24,8 @@ import {
 } from '../utils/grnFormatConfig';
 
 const SAMPLE_LINES = [
-  { description: 'Raw Material — Grade A Steel', ordered: 500, received: 300, accepted: 298, rejected: 2 },
-  { description: 'Aluminium Sheets — 2mm', ordered: 100, received: 100, accepted: 100, rejected: 0 },
+  { description: 'Raw Material - Grade A Steel', ordered: 500, received: 300, accepted: 298, rejected: 2, rate: 120, gstRate: 18 },
+  { description: 'Aluminium Sheets - 2mm', ordered: 100, received: 100, accepted: 100, rejected: 0, rate: 240, gstRate: 18 },
 ];
 
 const cloneConfig = (config) => ({
@@ -97,7 +97,35 @@ const GrnFormatBuilderDialog = ({
     });
   };
 
+  const toggleValuation = (checked) => {
+    setDraftConfig((prev) => {
+      const next = cloneConfig({ ...prev, valuation_enabled: checked });
+      const lineSection = next.sections.find((section) => section.section === 'LINE_ITEM');
+      if (lineSection) {
+        ['rate', 'amount', 'gst_rate'].forEach((fieldKey) => {
+          const field = lineSection.fields.find((item) => item.fieldKey === fieldKey);
+          if (field) field.isEnabled = checked;
+        });
+      }
+      return next;
+    });
+  };
+
+  const toggleBillTo = (checked) => {
+    updateConfig({ bill_to_enabled: checked });
+  };
+
   const showQcColumns = Boolean(draftConfig.qc_enabled);
+  const showValuationColumns = Boolean(draftConfig.valuation_enabled);
+  const showBillToBlock = Boolean(draftConfig.bill_to_enabled);
+  const samplePreTaxTotal = SAMPLE_LINES.reduce(
+    (sum, line) => sum + Number(line.received || 0) * Number(line.rate || 0),
+    0,
+  );
+  const sampleTaxTotal = SAMPLE_LINES.reduce(
+    (sum, line) => sum + (Number(line.received || 0) * Number(line.rate || 0) * Number(line.gstRate || 0)) / 100,
+    0,
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -193,6 +221,36 @@ const GrnFormatBuilderDialog = ({
                   </div>
                 </div>
                 <Switch checked={showQcColumns} onCheckedChange={toggleQc} />
+              </div>
+            </div>
+
+            <div className={`rounded-lg border p-4 ${showValuationColumns ? 'border-blue-200 bg-blue-50/60' : 'bg-background'}`}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-blue-600" />
+                  <div>
+                    <p className="text-sm font-semibold">Valuation</p>
+                    <p className="text-xs text-muted-foreground">
+                      Adds Rate / Amount / GST columns and enables financial GRN checks
+                    </p>
+                  </div>
+                </div>
+                <Switch checked={showValuationColumns} onCheckedChange={toggleValuation} />
+              </div>
+            </div>
+
+            <div className={`rounded-lg border p-4 ${showBillToBlock ? 'border-blue-200 bg-blue-50/60' : 'bg-background'}`}>
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <FileText className="h-4 w-4 text-blue-600" />
+                  <div>
+                    <p className="text-sm font-semibold">Bill-to</p>
+                    <p className="text-xs text-muted-foreground">
+                      Adds bill-to address capture and enables the GRN bill-to checkpoint
+                    </p>
+                  </div>
+                </div>
+                <Switch checked={showBillToBlock} onCheckedChange={toggleBillTo} />
               </div>
             </div>
 
@@ -344,6 +402,17 @@ const GrnFormatBuilderDialog = ({
                   </section>
                 )}
 
+                {showBillToBlock && (
+                  <section className="mb-5 rounded border p-4 text-sm">
+                    <h3 className="mb-2 font-semibold">Bill-to</h3>
+                    <div className="grid gap-2 md:grid-cols-2">
+                      <span>Optifii AP Pvt Ltd</span>
+                      <span>GSTIN: 27AAKCG8904C1ZL</span>
+                      <span>Mumbai, Maharashtra 400079</span>
+                    </div>
+                  </section>
+                )}
+
                 {sectionEnabled(draftConfig, 'LINE_ITEM') && (
                   <section>
                     <table className="w-full border-collapse text-sm">
@@ -370,6 +439,15 @@ const GrnFormatBuilderDialog = ({
                           )}
                           {showQcColumns && fieldEnabled(draftConfig, 'LINE_ITEM', 'rejected_qty') && (
                             <th className="px-2 py-2 text-right text-red-600">Rejected</th>
+                          )}
+                          {showValuationColumns && fieldEnabled(draftConfig, 'LINE_ITEM', 'rate') && (
+                            <th className="px-2 py-2 text-right">Rate</th>
+                          )}
+                          {showValuationColumns && fieldEnabled(draftConfig, 'LINE_ITEM', 'amount') && (
+                            <th className="px-2 py-2 text-right">Amount</th>
+                          )}
+                          {showValuationColumns && fieldEnabled(draftConfig, 'LINE_ITEM', 'gst_rate') && (
+                            <th className="px-2 py-2 text-right">GST %</th>
                           )}
                         </tr>
                       </thead>
@@ -406,10 +484,39 @@ const GrnFormatBuilderDialog = ({
                                 {line.rejected}
                               </td>
                             )}
+                            {showValuationColumns && fieldEnabled(draftConfig, 'LINE_ITEM', 'rate') && (
+                              <td className="px-2 py-3 text-right tabular-nums">{line.rate}</td>
+                            )}
+                            {showValuationColumns && fieldEnabled(draftConfig, 'LINE_ITEM', 'amount') && (
+                              <td className="px-2 py-3 text-right tabular-nums">
+                                {(line.received * line.rate).toLocaleString('en-IN')}
+                              </td>
+                            )}
+                            {showValuationColumns && fieldEnabled(draftConfig, 'LINE_ITEM', 'gst_rate') && (
+                              <td className="px-2 py-3 text-right tabular-nums">{line.gstRate}%</td>
+                            )}
                           </tr>
                         ))}
                       </tbody>
                     </table>
+                    {showValuationColumns && (
+                      <div className="mt-4 flex justify-end">
+                        <div className="w-full max-w-xs space-y-1 rounded border p-3 text-sm">
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Pre-tax Total</span>
+                            <span>{samplePreTaxTotal.toLocaleString('en-IN')}</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">GST</span>
+                            <span>{sampleTaxTotal.toLocaleString('en-IN')}</span>
+                          </div>
+                          <div className="flex justify-between border-t pt-1 font-semibold">
+                            <span>Post-tax Total</span>
+                            <span>{(samplePreTaxTotal + sampleTaxTotal).toLocaleString('en-IN')}</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
                   </section>
                 )}
 

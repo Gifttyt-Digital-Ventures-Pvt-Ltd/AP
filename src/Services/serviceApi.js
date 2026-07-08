@@ -63,6 +63,7 @@ export const serviceApi = createApi({
     "GoodsReceipt",
     "Tax",
     "Matching",
+    "Reconciliation",
     "Batches",
     "Notifications",
     "Reports",

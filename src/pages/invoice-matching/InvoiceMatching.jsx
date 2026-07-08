@@ -78,12 +78,12 @@ const STATUS_OPTIONS = [
 
 const MATCH_TYPE_OPTIONS = [
   { value: "ALL", label: "All Types" },
-  { value: "TWO_WAY", label: "2-Way" },
-  { value: "THREE_WAY", label: "3-Way" },
+  { value: "TWO_WAY", label: "2 Way" },
+  { value: "THREE_WAY", label: "3 Way" },
 ];
 
 const matchingTableHeader = [
-  { key: "poGroup", title: "PO / Invoice" },
+  { key: "poGroup", title: "PO / Document" },
   { key: "vendor", title: "Vendor" },
   { key: "grnNumber", title: "GRN" },
   { key: "matchType", title: "Type" },
@@ -153,10 +153,17 @@ const normalizeStatus = (value) => {
 
 const normalizeMatchType = (value) => {
   const raw = String(value || "").trim().toUpperCase();
-  if (raw === "2_WAY") return "TWO_WAY";
+  if (raw === "2_WAY" || raw === "PO_INVOICE" || raw === "PO_PI") return "TWO_WAY";
   if (raw === "3_WAY") return "THREE_WAY";
   return raw || "TWO_WAY";
 };
+
+const getMatchTypeLabel = (value) => {
+  const normalized = normalizeMatchType(value);
+  return MATCH_TYPE_OPTIONS.find((option) => option.value === normalized)?.label || normalized.replace(/_/g, " ");
+};
+
+const usesGrnPool = (matchType) => normalizeMatchType(matchType) === "THREE_WAY";
 
 const normalizeMatching = (match = {}) => ({
   ...match,
@@ -385,7 +392,7 @@ const InvoiceMatching = () => {
     {
       skip:
         !showMatchDialog ||
-        matchForm.matchType !== "THREE_WAY" ||
+        !usesGrnPool(matchForm.matchType) ||
         !matchForm.purchaseOrderId,
     },
   );
@@ -424,7 +431,6 @@ const InvoiceMatching = () => {
   const selectedInvoices = invoices.filter((invoice) => selectedInvoiceIds.includes(invoice.id));
   const selectedInvoice = selectedInvoices[0];
   const selectedPo = purchaseOrders.find((po) => po.id === matchForm.purchaseOrderId);
-  const selectedGrn = grns.find((grn) => grn.id === matchForm.grnId);
   const availableMatchTypeOptions = canUseThreeWayMatching
     ? MATCH_TYPE_OPTIONS
     : MATCH_TYPE_OPTIONS.filter((option) => option.value !== "THREE_WAY");
@@ -530,8 +536,12 @@ const InvoiceMatching = () => {
   const handleMatchSubmit = async () => {
     const action = isEditMode ? "matching.edit" : "matching.perform";
     if (!guardAction(action)) return;
-    if (selectedInvoiceIds.length === 0 || !matchForm.purchaseOrderId) {
-      toast.error("Please select an invoice and purchase order");
+    if (selectedInvoiceIds.length === 0) {
+      toast.error("Please select an invoice");
+      return;
+    }
+    if (!matchForm.purchaseOrderId) {
+      toast.error("Please select a purchase order");
       return;
     }
     if (!isEditMode && selectedInvoices.length > 1) {
@@ -542,14 +552,14 @@ const InvoiceMatching = () => {
         return;
       }
     }
-    if (matchForm.matchType === "THREE_WAY" && !matchForm.grnId) {
-      toast.error("Please select a GRN for 3-way matching");
+    if (usesGrnPool(matchForm.matchType) && matchingGrnsAvailability.items.length === 0) {
+      toast.error("No approved GRNs on this PO yet");
       return;
     }
 
     const body = {
       purchaseOrderId: matchForm.purchaseOrderId,
-      grnId: matchForm.matchType === "THREE_WAY" ? matchForm.grnId : null,
+      grnId: null,
       matchType: matchForm.matchType,
     };
     if (isEditMode || selectedInvoiceIds.length <= 1) {
@@ -605,9 +615,9 @@ const InvoiceMatching = () => {
 
   const getSubmitDisabledReason = () => {
     if (performing || editing) return "Saving match...";
-    if (selectedInvoiceIds.length === 0) return "Select an invoice";
+    if (selectedInvoiceIds.length === 0) return "Select a document";
     if (!matchForm.purchaseOrderId) return "Select a purchase order";
-    if (matchForm.matchType === "THREE_WAY" && !matchForm.grnId) return "Select a GRN";
+    if (usesGrnPool(matchForm.matchType) && !grnsLoading && matchingGrnsAvailability.items.length === 0) return "No approved GRNs on this PO yet";
     return "";
   };
 
@@ -795,7 +805,7 @@ const InvoiceMatching = () => {
                 break;
               case "matchType":
                 value = (
-                  <Badge variant="outline">{group.matchType === "THREE_WAY" ? "3-Way" : "2-Way"}</Badge>
+                  <Badge variant="outline">{getMatchTypeLabel(group.matchType)}</Badge>
                 );
                 break;
               case "poAmount":
@@ -927,7 +937,7 @@ const InvoiceMatching = () => {
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Invoice Matching</h1>
-          <p className="text-muted-foreground">2-way and 3-way invoice matching with POs and GRNs</p>
+          <p className="text-muted-foreground">PO, invoice, PI, and GRN matching with dynamic checklist scoring</p>
         </div>
         <div className="flex gap-2">
           <RefreshButton onClick={refreshData} refreshing={loading}>
@@ -973,13 +983,13 @@ const InvoiceMatching = () => {
         </Card>
         <Card>
           <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">2-Way</p>
+            <p className="text-sm text-muted-foreground">2 Way</p>
             <p className="text-2xl font-bold">{Number(summary.twoWayMatches ?? 0)}</p>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">3-Way</p>
+            <p className="text-sm text-muted-foreground">3 Way</p>
             <p className="text-2xl font-bold">{Number(summary.threeWayMatches ?? 0)}</p>
           </CardContent>
         </Card>
@@ -1084,15 +1094,49 @@ const InvoiceMatching = () => {
 
           <div className="space-y-6">
             <div className="space-y-2">
-              <Label>{isEditMode ? "Select Invoice" : "Select Invoice(s)"}</Label>
+              <Label>Match Type</Label>
+              {canUseThreeWayMatching ? (
+                <Select
+                  value={matchForm.matchType}
+                  onValueChange={(matchType) =>
+                    setMatchForm((current) => ({
+                      ...current,
+                      matchType,
+                      grnId: "",
+                    }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {availableMatchTypeOptions
+                      .filter((option) => option.value !== "ALL")
+                      .map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label} Matching
+                        </SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="flex min-h-10 items-center justify-between rounded-md border bg-muted/40 px-3 text-sm">
+                  <span className="font-medium">2 Way Matching</span>
+                  <Badge variant="outline">Default</Badge>
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>{isEditMode ? "Select Document" : "Select Document(s)"}</Label>
               {isEditMode ? (
                 <Select value={matchForm.invoiceId} onValueChange={handleInvoiceChange}>
                   <SelectTrigger data-testid="select-invoice">
                     <SelectValue
                       placeholder={
                         invoicesFetching && invoices.length === 0
-                          ? "Loading invoices..."
-                          : "Select an invoice"
+                          ? "Loading documents..."
+                          : "Select an invoice or PI"
                       }
                     />
                   </SelectTrigger>
@@ -1109,10 +1153,10 @@ const InvoiceMatching = () => {
                   {invoicesFetching && invoices.length === 0 ? (
                     <div className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading invoices...
+                      Loading documents...
                     </div>
                   ) : invoices.length === 0 ? (
-                    <div className="px-3 py-4 text-sm text-muted-foreground">No available invoices found.</div>
+                    <div className="px-3 py-4 text-sm text-muted-foreground">No available invoice or PI found.</div>
                   ) : (
                     invoices.map((invoice) => {
                       const checked = selectedInvoiceIds.includes(invoice.id);
@@ -1144,7 +1188,7 @@ const InvoiceMatching = () => {
               <Card className="bg-muted">
                 <CardContent className="grid gap-4 pt-4 text-sm md:grid-cols-3">
                   <div>
-                    <p className="text-muted-foreground">Selected Invoice(s)</p>
+                    <p className="text-muted-foreground">Selected Document(s)</p>
                     <p className="font-medium">{selectedInvoices.length}</p>
                   </div>
                   <div>
@@ -1152,7 +1196,7 @@ const InvoiceMatching = () => {
                     <p className="font-medium">{selectedInvoice?.vendorName || "-"}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Total Remaining Amount</p>
+                    <p className="text-muted-foreground">Total Document Amount</p>
                     <p className="font-medium">
                       {formatCurrency(
                         selectedInvoices.reduce((sum, invoice) => sum + Number(invoice.remainingAmount || 0), 0),
@@ -1163,35 +1207,6 @@ const InvoiceMatching = () => {
                 </CardContent>
               </Card>
             )}
-
-            <div className="space-y-2">
-              <Label>Match Type</Label>
-              {canUseThreeWayMatching ? (
-                <Select
-                  value={matchForm.matchType}
-                  onValueChange={(matchType) =>
-                    setMatchForm((current) => ({
-                      ...current,
-                      matchType,
-                      grnId: matchType === "TWO_WAY" ? "" : current.grnId,
-                    }))
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="TWO_WAY">2-Way Matching</SelectItem>
-                    <SelectItem value="THREE_WAY">3-Way Matching</SelectItem>
-                  </SelectContent>
-                </Select>
-              ) : (
-                <div className="flex min-h-10 items-center justify-between rounded-md border bg-muted/40 px-3 text-sm">
-                  <span className="font-medium">2-Way Matching</span>
-                  <Badge variant="outline">Default</Badge>
-                </div>
-              )}
-            </div>
 
             <div className="space-y-2">
               <Label>Select Purchase Order</Label>
@@ -1227,52 +1242,32 @@ const InvoiceMatching = () => {
               </Card>
             )}
 
-            {matchForm.matchType === "THREE_WAY" && (
+            {usesGrnPool(matchForm.matchType) && (
               <div className="space-y-2">
-                <Label>Select GRN</Label>
-                <Select
-                  value={matchForm.grnId}
-                  onValueChange={(grnId) => setMatchForm((current) => ({ ...current, grnId }))}
-                  disabled={!matchForm.purchaseOrderId || grnsLoading}
-                >
-                  <SelectTrigger data-testid="select-grn">
-                    <SelectValue placeholder={grnsLoading ? "Loading GRNs..." : "Select a GRN"} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {grns.map((grn) => (
-                      <SelectItem key={grn.id} value={grn.id}>
-                        {grn.grnNumber} - {formatCurrency(grn.amount, grn.currency)} ({formatDate(grn.receivedDate)})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {matchForm.purchaseOrderId && !grnsLoading && grns.length === 0 && (
-                  <p className="text-xs text-red-500">
+                <Label>Approved GRN Pool</Label>
+                <div className="rounded-md border bg-muted/30 p-3">
+                  {grnsLoading ? (
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Loading approved GRNs...
+                    </div>
+                  ) : grns.length > 0 ? (
+                    <div className="flex flex-wrap gap-2">
+                      {grns.map((grn) => (
+                        <Badge key={grn.id} variant="outline">
+                          {grn.grnNumber || "GRN"} · {formatDate(grn.receivedDate)}
+                        </Badge>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-amber-700">
                     {matchingGrnsAvailability.hasGrns === false
                       ? "No approved GRNs are available for this purchase order yet."
                       : "No GRNs are available for this purchase order."}
                   </p>
-                )}
+                  )}
+                </div>
               </div>
-            )}
-
-            {selectedGrn && (
-              <Card className="bg-muted">
-                <CardContent className="grid gap-4 pt-4 text-sm md:grid-cols-3">
-                  <div>
-                    <p className="text-muted-foreground">GRN Number</p>
-                    <p className="font-medium">{selectedGrn.grnNumber}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Amount</p>
-                    <p className="font-medium">{formatCurrency(selectedGrn.amount, selectedGrn.currency)}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Received</p>
-                    <p className="font-medium">{formatDate(selectedGrn.receivedDate)}</p>
-                  </div>
-                </CardContent>
-              </Card>
             )}
 
             {isEditMode && (
@@ -1334,13 +1329,13 @@ const InvoiceMatching = () => {
           ) : detail ? (
             <div className="space-y-6">
               <div className="flex flex-wrap items-center justify-end gap-2">
-                <Badge variant="outline">{detail.matchType === "THREE_WAY" ? "3-Way Match" : "2-Way Match"}</Badge>
+                <Badge variant="outline">{getMatchTypeLabel(detail.matchType)} Match</Badge>
               </div>
 
               <div className="grid gap-4 md:grid-cols-3">
-                {renderDocumentCard("Invoice", FileText, detailData?.invoice)}
+                {renderDocumentCard("Document", FileText, detailData?.invoice)}
                 {renderDocumentCard("Purchase Order", ShoppingCart, detailData?.purchaseOrder)}
-                {detail.matchType === "THREE_WAY" && renderDocumentCard("GRN", Package, detailData?.grn)}
+                {usesGrnPool(detail.matchType) && renderDocumentCard("GRN", Package, detailData?.grn)}
               </div>
 
               <Card>
