@@ -1,4 +1,8 @@
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../utils/currency";
+import {
+  isGmailInvoiceSource,
+  normalizeInvoiceSource,
+} from "../../pages/invoices/constants";
 import { normalizeMsmePaymentDue } from "../../pages/invoices/utils/msmePaymentDue";
 import { normalizeInvoiceOverdueFields } from "../../pages/invoices/utils/invoiceDueDate";
 
@@ -227,7 +231,7 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
     invoiceTax: pickInvoiceField(invoice, "invoiceTax", "invoice_tax"),
     invoiceTaxName: pickInvoiceField(invoice, "invoiceTaxName", "invoice_tax_name"),
     invoiceTaxRate: pickInvoiceField(invoice, "invoiceTaxRate", "invoice_tax_rate"),
-    source: invoice.source,
+    source: normalizeInvoiceSource(invoice.source),
     sourceEmail: pickInvoiceField(invoice, "sourceEmail", "source_email"),
     fileId: pickInvoiceField(invoice, "fileId", "file_id"),
     fileHash: pickInvoiceField(invoice, "fileHash", "file_hash"),
@@ -415,7 +419,7 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
       parsedTdsSelection.tdsRate,
   };
 
-  const source = invoice.source || "Upload";
+  const source = normalizeInvoiceSource(invoice.source);
   const originalFileName =
     pickInvoiceField(invoice, "originalFileName", "original_file_name") ??
     pickInvoiceField(invoice, "originalFileName", "original_filename") ??
@@ -426,7 +430,7 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
     originalFileName;
 
   const category = categoryEnabled ? resolveInvoiceCategoryPayload(invoice) : undefined;
-  const normalizedSource = source || "Upload";
+  const normalizedSource = source;
   const dueDate = toLocalDateTimeString(pickInvoiceField(invoice, "dueDate", "due_date", ""));
 
   return {
@@ -455,7 +459,7 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
       "",
     source: normalizedSource,
     sourceEmail:
-      normalizedSource === "Email"
+      isGmailInvoiceSource(normalizedSource)
         ? pickInvoiceField(invoice, "sourceEmail", "source_email", null)
         : null,
     fileId: pickInvoiceField(invoice, "fileId", "file_id", null),

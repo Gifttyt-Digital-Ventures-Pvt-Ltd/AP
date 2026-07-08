@@ -84,7 +84,7 @@ import {
   INDIAN_STATES,
   INVOICE_LIST_FILTERS,
   INVOICE_LIST_PAGE_SIZE,
-  INVOICE_SOURCES,
+  isGmailInvoiceSource,
   LEDGER_OPTIONS,
   TAX_RATES,
 } from "./constants";
@@ -1705,7 +1705,7 @@ const InvoicesPage = () => {
           })),
         }),
         memo: data.description,
-        sourceEmail: data.source === "Email" ? data.sourceEmail : null,
+        sourceEmail: isGmailInvoiceSource(data.source) ? data.sourceEmail : null,
         departmentName:
           data.departmentName || getDepartmentNameById(data.departmentId),
         ...(keepSaved ? { action: "saved" } : {}),
@@ -2356,7 +2356,6 @@ const InvoicesPage = () => {
         currencyOptions={invoiceCurrencyOptions}
         GST_TREATMENTS={GST_TREATMENTS}
         INDIAN_STATES={INDIAN_STATES}
-        INVOICE_SOURCES={INVOICE_SOURCES}
         LEDGER_OPTIONS={LEDGER_OPTIONS}
         TAX_RATES={TAX_RATES}
         showBillingGst={isEdit || Boolean(uploadedFile)}
@@ -2430,9 +2429,9 @@ const InvoicesPage = () => {
               case "source":
                 value = (
                   <span
-                    className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${invoice.source === "Email" ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-green-100 text-green-700 border border-green-200"}`}
+                    className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${isGmailInvoiceSource(invoice.source) ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-green-100 text-green-700 border border-green-200"}`}
                   >
-                    {invoice.source === "Email" && <Mail className="h-3 w-3" />}
+                    {isGmailInvoiceSource(invoice.source) && <Mail className="h-3 w-3" />}
                     {invoice.source || "Upload"}
                   </span>
                 );
@@ -2714,7 +2713,6 @@ const InvoicesPage = () => {
       currencyOptions={invoiceCurrencyOptions}
       GST_TREATMENTS={GST_TREATMENTS}
       INDIAN_STATES={INDIAN_STATES}
-      INVOICE_SOURCES={INVOICE_SOURCES}
       LEDGER_OPTIONS={LEDGER_OPTIONS}
       TAX_RATES={TAX_RATES}
     />

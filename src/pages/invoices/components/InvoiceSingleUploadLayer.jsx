@@ -52,7 +52,6 @@ import {
 import {
   GST_TREATMENTS,
   INDIAN_STATES,
-  INVOICE_SOURCES,
   LEDGER_OPTIONS,
   TAX_RATES,
 } from "../constants";
@@ -749,7 +748,6 @@ const InvoiceSingleUploadLayer = ({
       vendorOptions={invoiceVendorOptions}
       GST_TREATMENTS={GST_TREATMENTS}
       INDIAN_STATES={INDIAN_STATES}
-      INVOICE_SOURCES={INVOICE_SOURCES}
       LEDGER_OPTIONS={LEDGER_OPTIONS}
       TAX_RATES={TAX_RATES}
       showBillingGst={Boolean(uploadedFile)}

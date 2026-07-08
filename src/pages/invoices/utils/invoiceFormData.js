@@ -1,6 +1,7 @@
 import { format } from "date-fns";
 import { normalizeDueDateForInvoice, normalizeMsmePaymentDue, resolveVendorIsMsme } from "./msmePaymentDue";
 import { DOCUMENT_TYPE } from "../constants/proformaInvoice";
+import { normalizeInvoiceSource } from "../constants";
 import { resolveInvoiceMatchingFormState } from "./invoiceMatchingFlow";
 import { normalizeInvoiceOverdueFields } from "./invoiceDueDate";
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../../utils/currency";
@@ -158,8 +159,8 @@ export const buildInvoiceEditFormData = (
       invoice.invoiceTaxRate ??
       invoice.invoiceTaxRate ??
       "",
-    source: invoice.source || "Upload",
-    sourceEmail: invoice.sourceEmail || invoice.sourceEmail || "",
+    source: normalizeInvoiceSource(invoice.source),
+    sourceEmail: invoice.sourceEmail || invoice.source_email || "",
     lineItemsExpanded: resolveLineItemsExpanded(invoice),
     lineItems:
       invoiceLineItems.length > 0
