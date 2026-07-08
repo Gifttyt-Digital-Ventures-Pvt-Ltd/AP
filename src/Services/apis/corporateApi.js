@@ -290,6 +290,7 @@ const normalizeCorporateScreensResponse = (response = {}) => {
   const addEnabledSection = (sectionEntry = {}) => {
     const section = normalizeToken(sectionEntry?.section);
     if (!section) return;
+    if (sectionEntry?.isEnabled === false) return;
     const explicitEnabled = explicitSectionEnabled.get(section);
     if (explicitEnabled === false) return;
     enabledSections.add(section);

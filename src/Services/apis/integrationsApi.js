@@ -2,6 +2,7 @@ import { serviceApi } from "../serviceApi";
 import { extractListResponse } from "../utils/payloadMappers";
 
 const ZOHO_BASE = "/integration/zoho";
+const GMAIL_BASE = "/integration/gmail";
 
 const withParams = (params = {}) =>
   Object.fromEntries(
@@ -121,6 +122,39 @@ export const integrationsApi = serviceApi.injectEndpoints({
       transformResponse: extractListResponse,
       providesTags: ["Integrations"],
     }),
+    getGmailConnections: builder.query({
+      query: () => ({ url: `${GMAIL_BASE}/connections`, method: "GET" }),
+      transformResponse: (response) => extractListResponse(response, ["connections"]),
+      providesTags: ["Integrations"],
+    }),
+    getGmailConnection: builder.query({
+      query: (connectionId) => ({
+        url: `${GMAIL_BASE}/connections/${connectionId}`,
+        method: "GET",
+      }),
+      providesTags: ["Integrations"],
+    }),
+    createGmailConnection: builder.mutation({
+      query: () => ({
+        url: `${GMAIL_BASE}/connect`,
+        method: "POST",
+      }),
+      invalidatesTags: ["Integrations"],
+    }),
+    disconnectGmailConnection: builder.mutation({
+      query: (connectionId) => ({
+        url: `${GMAIL_BASE}/connections/${connectionId}/disconnect`,
+        method: "POST",
+      }),
+      invalidatesTags: ["Integrations"],
+    }),
+    syncGmailConnection: builder.mutation({
+      query: (connectionId) => ({
+        url: `${GMAIL_BASE}/connections/${connectionId}/sync`,
+        method: "POST",
+      }),
+      invalidatesTags: ["Integrations"],
+    }),
   }),
 });
 
@@ -140,4 +174,9 @@ export const {
   useGetIntegrationReviewQueueQuery,
   useResolveIntegrationMatchMutation,
   useGetIntegrationLogsQuery,
+  useGetGmailConnectionsQuery,
+  useGetGmailConnectionQuery,
+  useCreateGmailConnectionMutation,
+  useDisconnectGmailConnectionMutation,
+  useSyncGmailConnectionMutation,
 } = integrationsApi;
