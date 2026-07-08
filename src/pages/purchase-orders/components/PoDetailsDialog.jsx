@@ -122,7 +122,7 @@ const PoDetailsDialog = ({
   const renderLineItemRow = (item, rowIndex, headers) => {
     const lineItem = {
       lineNumber: item.line_number ?? item.lineNumber ?? rowIndex + 1,
-      description: item.item_description ?? item.description ?? "-",
+      description: item.item_description ?? item.itemDescription ?? item.description ?? "-",
       hsnSacCode: item.hsn_sac_code ?? item.hsnSacCode ?? item.hsnSac ?? "-",
       quantity: Number(item.quantity ?? 0),
       unitOfMeasure: item.unit_of_measure ?? item.unitOfMeasure ?? item.uom ?? "-",

@@ -9,7 +9,11 @@ import {
   TableHeader,
   TableRow,
 } from '../../../components/ui/table';
-import { isGrnLineColumnEnabled } from '../utils/grnFormatConfig';
+import { formatCurrency } from '../utils';
+import {
+  isGrnLineColumnEnabled,
+  isGrnValuationEnabled,
+} from '../utils/grnFormatConfig';
 
 const GrnLineItemsEditor = ({
   lines = [],
@@ -35,6 +39,10 @@ const GrnLineItemsEditor = ({
           0,
         );
       }
+      if (['received_quantity', 'unit_price'].includes(field)) {
+        updated.line_amount =
+          (Number(updated.received_quantity) || 0) * (Number(updated.unit_price) || 0);
+      }
       return updated;
     });
     onChange(next);
@@ -56,6 +64,9 @@ const GrnLineItemsEditor = ({
         rejected_quantity: 0,
         rejection_reason: '',
         batch_no: '',
+        unit_price: 0,
+        line_amount: 0,
+        gst_rate: 0,
       },
     ]);
   };
@@ -75,6 +86,22 @@ const GrnLineItemsEditor = ({
   const showOrdered = poLinked && isGrnLineColumnEnabled(formatConfig, 'ordered_qty');
   const showAlready = poLinked && isGrnLineColumnEnabled(formatConfig, 'already_received');
   const showBatch = isGrnLineColumnEnabled(formatConfig, 'batch_no');
+  const showValuation = isGrnValuationEnabled(formatConfig);
+  const showRate = showValuation && isGrnLineColumnEnabled(formatConfig, 'rate');
+  const showAmount = showValuation && isGrnLineColumnEnabled(formatConfig, 'amount');
+  const showGstRate = showValuation && isGrnLineColumnEnabled(formatConfig, 'gst_rate');
+  const taxableAmount = lines.reduce((sum, line) => {
+    const amount =
+      Number(line.line_amount) ||
+      (Number(line.received_quantity) || 0) * (Number(line.unit_price) || 0);
+    return sum + amount;
+  }, 0);
+  const taxAmount = lines.reduce((sum, line) => {
+    const amount =
+      Number(line.line_amount) ||
+      (Number(line.received_quantity) || 0) * (Number(line.unit_price) || 0);
+    return sum + (amount * (Number(line.gst_rate) || 0)) / 100;
+  }, 0);
 
   return (
     <div className="space-y-3">
@@ -105,6 +132,9 @@ const GrnLineItemsEditor = ({
               {qcEnabled && <TableHead className="text-green-600">Accepted</TableHead>}
               {qcEnabled && <TableHead className="text-red-600">Rejected</TableHead>}
               {qcEnabled && <TableHead>Rejection Reason</TableHead>}
+              {showRate && <TableHead className="text-right">Rate</TableHead>}
+              {showAmount && <TableHead className="text-right">Amount</TableHead>}
+              {showGstRate && <TableHead className="text-right">GST %</TableHead>}
               {showBatch && <TableHead>Batch</TableHead>}
               {!poLinked && !readOnly && <TableHead className="w-10" />}
             </TableRow>
@@ -114,6 +144,9 @@ const GrnLineItemsEditor = ({
               const received = Number(line.received_quantity) || 0;
               const accepted = Number(line.accepted_quantity) || 0;
               const rejected = Number(line.rejected_quantity) || 0;
+              const lineAmount =
+                Number(line.line_amount) ||
+                received * (Number(line.unit_price) || 0);
               const qcError = qcEnabled && received > 0 && accepted + rejected !== received;
               const overReceived =
                 poLinked && line.pending_quantity > 0 && received > line.pending_quantity;
@@ -231,6 +264,39 @@ const GrnLineItemsEditor = ({
                       )}
                     </TableCell>
                   )}
+                  {showRate && (
+                    <TableCell>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={line.unit_price || ''}
+                        onChange={(e) =>
+                          updateLine(index, 'unit_price', parseFloat(e.target.value) || 0)
+                        }
+                        className="h-8 w-24 text-right"
+                        readOnly={readOnly}
+                      />
+                    </TableCell>
+                  )}
+                  {showAmount && (
+                    <TableCell className="text-right tabular-nums">
+                      {formatCurrency(lineAmount)}
+                    </TableCell>
+                  )}
+                  {showGstRate && (
+                    <TableCell>
+                      <Input
+                        type="number"
+                        min="0"
+                        value={line.gst_rate || ''}
+                        onChange={(e) =>
+                          updateLine(index, 'gst_rate', parseFloat(e.target.value) || 0)
+                        }
+                        className="h-8 w-20 text-right"
+                        readOnly={readOnly}
+                      />
+                    </TableCell>
+                  )}
                   {showBatch && (
                     <TableCell>
                       <Input
@@ -280,6 +346,19 @@ const GrnLineItemsEditor = ({
             <AlertCircle className="h-4 w-4" />
             Accepted + Rejected must equal Received
           </span>
+        )}
+        {showValuation && (
+          <>
+            <span>
+              Taxable: <strong>{formatCurrency(taxableAmount)}</strong>
+            </span>
+            <span>
+              GST: <strong>{formatCurrency(taxAmount)}</strong>
+            </span>
+            <span>
+              Total: <strong>{formatCurrency(taxableAmount + taxAmount)}</strong>
+            </span>
+          </>
         )}
       </div>
     </div>

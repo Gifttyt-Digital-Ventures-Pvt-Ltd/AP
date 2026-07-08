@@ -10,6 +10,7 @@ import {
   isGrnFooterEnabled,
   isGrnFooterFieldEnabled,
   isGrnHeaderFieldEnabled,
+  isGrnBillToEnabled,
 } from '../utils/grnFormatConfig';
 import { formatCurrency } from '../utils';
 
@@ -131,6 +132,41 @@ const GrnCreateFormFields = ({
         poLinked={poLinked}
         formatConfig={formatConfig}
       />
+
+      {isGrnBillToEnabled(formatConfig) && (
+        <div className="rounded-lg border bg-muted/20 p-4">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
+            Bill To
+          </h3>
+          <div className="mt-3 grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Billing Name</Label>
+              <Input
+                value={form.bill_to_name || ''}
+                onChange={(e) => setForm((c) => ({ ...c, bill_to_name: e.target.value }))}
+                placeholder="Company / branch name"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Billing GSTIN</Label>
+              <Input
+                value={form.bill_to_gstin || ''}
+                onChange={(e) => setForm((c) => ({ ...c, bill_to_gstin: e.target.value }))}
+                placeholder="GSTIN"
+              />
+            </div>
+            <div className="space-y-2 sm:col-span-2">
+              <Label>Billing Address</Label>
+              <Textarea
+                value={form.bill_to_address || ''}
+                onChange={(e) => setForm((c) => ({ ...c, bill_to_address: e.target.value }))}
+                rows={2}
+                placeholder="Billing address"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {isGrnFooterEnabled(formatConfig) && (
         <div className="grid gap-4 sm:grid-cols-2">

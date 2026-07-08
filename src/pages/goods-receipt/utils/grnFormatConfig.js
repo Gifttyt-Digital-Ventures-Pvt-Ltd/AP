@@ -7,6 +7,8 @@ export const DEFAULT_GRN_FORMAT_CONFIG = {
   grnNumberPrefix: 'GRN-',
   templateCode: DEFAULT_GRN_TEMPLATE_CODE,
   qc_enabled: true,
+  valuation_enabled: false,
+  bill_to_enabled: false,
   approval_enabled: true,
   sections: [
     {
@@ -49,6 +51,9 @@ export const DEFAULT_GRN_FORMAT_CONFIG = {
         { fieldKey: 'accepted_qty', label: 'Accepted Qty (QC)', isEnabled: true, isSystemField: false },
         { fieldKey: 'rejected_qty', label: 'Rejected Qty (QC)', isEnabled: true, isSystemField: false },
         { fieldKey: 'rejection_reason', label: 'Rejection Reason', isEnabled: true, isSystemField: false },
+        { fieldKey: 'rate', label: 'Rate', isEnabled: false, isSystemField: false },
+        { fieldKey: 'amount', label: 'Amount', isEnabled: false, isSystemField: false },
+        { fieldKey: 'gst_rate', label: 'GST %', isEnabled: false, isSystemField: false },
         { fieldKey: 'batch_no', label: 'Batch / Lot No.', isEnabled: false, isSystemField: false },
         { fieldKey: 'line_remarks', label: 'Line Remarks', isEnabled: false, isSystemField: false },
       ],
@@ -135,6 +140,9 @@ export const fieldEnabled = (config, sectionKey, fieldKey) => {
   if (sectionKey === 'LINE_ITEM' && ['accepted_qty', 'rejected_qty', 'rejection_reason'].includes(fieldKey)) {
     return Boolean(config?.qc_enabled) && field.isEnabled;
   }
+  if (sectionKey === 'LINE_ITEM' && ['rate', 'amount', 'gst_rate'].includes(fieldKey)) {
+    return Boolean(config?.valuation_enabled) && field.isEnabled;
+  }
   return Boolean(field.isEnabled);
 };
 
@@ -149,6 +157,8 @@ export const normalizeGrnFormatConfig = (raw = {}) => {
       name: sanitizeGrnFormatName(raw.name ?? base.name, base.name),
       templateCode: normalizeGrnTemplateCode(raw.templateCode ?? raw.template_code),
       qc_enabled: raw.qc_enabled ?? raw.qcEnabled ?? base.qc_enabled,
+      valuation_enabled: raw.valuation_enabled ?? raw.valuationEnabled ?? base.valuation_enabled,
+      bill_to_enabled: raw.bill_to_enabled ?? raw.billToEnabled ?? base.bill_to_enabled,
       approval_enabled: raw.approval_enabled ?? raw.approvalEnabled ?? base.approval_enabled,
       sections: raw.sections.map((section) => ({
         ...section,
@@ -194,6 +204,8 @@ export const normalizeGrnFormatConfig = (raw = {}) => {
     ...base,
     ...raw,
     qc_enabled: raw.qc_enabled ?? base.qc_enabled,
+    valuation_enabled: raw.valuation_enabled ?? raw.valuationEnabled ?? base.valuation_enabled,
+    bill_to_enabled: raw.bill_to_enabled ?? raw.billToEnabled ?? base.bill_to_enabled,
     approval_enabled: raw.approval_enabled ?? base.approval_enabled,
     templateCode: normalizeGrnTemplateCode(raw.templateCode ?? raw.template_code),
     grnNumberPrefix: raw.grnNumberPrefix ?? raw.grn_number_prefix ?? base.grnNumberPrefix,
@@ -205,6 +217,8 @@ export const normalizeGrnFormatConfig = (raw = {}) => {
 
 export const isGrnDeliveryEnabled = (config) => sectionEnabled(config, 'DELIVERY');
 export const isGrnFooterEnabled = (config) => sectionEnabled(config, 'FOOTER');
+export const isGrnValuationEnabled = (config) => Boolean(config?.valuation_enabled);
+export const isGrnBillToEnabled = (config) => Boolean(config?.bill_to_enabled);
 export const isGrnLineColumnEnabled = (config, key) => fieldEnabled(config, 'LINE_ITEM', key);
 export const isGrnDeliveryFieldEnabled = (config, key) => fieldEnabled(config, 'DELIVERY', key);
 export const isGrnFooterFieldEnabled = (config, key) => fieldEnabled(config, 'FOOTER', key);
@@ -243,6 +257,8 @@ export const buildGrnFormatConfigPayload = (config = {}) => ({
   grnNumberPrefix: config.grnNumberPrefix,
   templateCode: normalizeGrnTemplateCode(config.templateCode),
   qcEnabled: Boolean(config.qc_enabled),
+  valuationEnabled: Boolean(config.valuation_enabled),
+  billToEnabled: Boolean(config.bill_to_enabled),
   approvalEnabled: Boolean(config.approval_enabled),
   isDefault: Boolean(config.isDefault),
   configVersion: config.configVersion || 0,
@@ -265,6 +281,8 @@ export const buildGrnFormatConfigPayload = (config = {}) => ({
 
 export const buildGrnConfigSnapshot = (config = {}) => ({
   qc_enabled: Boolean(config.qc_enabled),
+  valuation_enabled: Boolean(config.valuation_enabled),
+  bill_to_enabled: Boolean(config.bill_to_enabled),
   approval_enabled: Boolean(config.approval_enabled),
   template_code: normalizeGrnTemplateCode(config.templateCode),
   grn_number_prefix: config.grnNumberPrefix || '',

@@ -89,6 +89,7 @@ export const normalizeGrnLineItem = (item = {}) => ({
   batch_no: item.batch_no ?? item.batchNo ?? '',
   line_amount: Number(item.line_amount ?? item.lineAmount ?? item.amount ?? 0),
   unit_price: Number(item.unit_price ?? item.unitPrice ?? 0),
+  gst_rate: Number(item.gst_rate ?? item.gstRate ?? item.gst_percent ?? item.gstPercent ?? 0),
 });
 
 export const normalizeGrn = (grn = {}) => ({
@@ -158,6 +159,10 @@ export const normalizePurchaseOrder = (po = {}) => ({
   total_amount: Number(po.total_amount ?? po.totalAmount ?? 0),
   status: po.status ?? '',
   shipping_address: po.shipping_address ?? po.shippingAddress ?? '',
+  billing_name: po.billing_name ?? po.billingName ?? po.bill_to_name ?? po.billToName ?? '',
+  billing_gstin: po.billing_gstin ?? po.billingGstin ?? po.bill_to_gstin ?? po.billToGstin ?? '',
+  billing_address:
+    po.billing_address ?? po.billingAddress ?? po.bill_to_address ?? po.billToAddress ?? '',
   line_items: Array.isArray(po.line_items)
     ? po.line_items.map(normalizePoLineItem)
     : Array.isArray(po.lineItems)
@@ -235,6 +240,8 @@ export const buildGrnLineItemsFromPo = (po, receiptStateLines = null) => {
       rejected_quantity: 0,
       rejection_reason: '',
       unit_price: line.unit_price,
+      gst_rate: Number(line.gst_rate ?? line.gstRate ?? 0),
+      line_amount: receivedDefault * Number(line.unit_price || 0),
     };
   });
 };
@@ -262,6 +269,8 @@ export const createEmptyGrnLineItem = () => ({
   rejection_reason: '',
   batch_no: '',
   unit_price: 0,
+  line_amount: 0,
+  gst_rate: 0,
 });
 
 export const createDefaultGrnForm = (grnFormatId = '') => ({
@@ -278,6 +287,9 @@ export const createDefaultGrnForm = (grnFormatId = '') => ({
   transporter_name: '',
   lr_number: '',
   received_by: '',
+  bill_to_name: '',
+  bill_to_gstin: '',
+  bill_to_address: '',
   remarks: '',
   requires_vendor: false,
   line_items: [],
@@ -306,20 +318,42 @@ export const validateGrnLineItems = (lineItems, { qcEnabled = true } = {}) => {
 };
 
 export const buildCreateGrnPayload = (form, { formatConfig, qcEnabled = true } = {}) => {
+  const valuationEnabled = Boolean(formatConfig?.valuation_enabled);
+  const billToEnabled = Boolean(formatConfig?.bill_to_enabled);
   const lineItems = form.line_items
     .filter((item) => Number(item.received_quantity) > 0)
-    .map((item) => ({
-      po_line_item_id: item.po_line_item_id || undefined,
-      item_description: item.item_description || undefined,
-      item_code: item.item_code || undefined,
-      hsn_sac: item.hsn_sac || undefined,
-      uom: item.uom || undefined,
-      received_quantity: item.received_quantity,
-      accepted_quantity: qcEnabled ? item.accepted_quantity : item.received_quantity,
-      rejected_quantity: qcEnabled ? item.rejected_quantity : 0,
-      rejection_reason: qcEnabled ? item.rejection_reason : '',
-      batch_no: item.batch_no || undefined,
-    }));
+    .map((item) => {
+      const receivedQuantity = Number(item.received_quantity) || 0;
+      const unitPrice = Number(item.unit_price) || 0;
+      const lineAmount = Number(item.line_amount) || receivedQuantity * unitPrice;
+      const gstRate = Number(item.gst_rate) || 0;
+
+      return {
+        po_line_item_id: item.po_line_item_id || undefined,
+        item_description: item.item_description || undefined,
+        item_code: item.item_code || undefined,
+        hsn_sac: item.hsn_sac || undefined,
+        uom: item.uom || undefined,
+        received_quantity: receivedQuantity,
+        accepted_quantity: qcEnabled ? item.accepted_quantity : receivedQuantity,
+        rejected_quantity: qcEnabled ? item.rejected_quantity : 0,
+        rejection_reason: qcEnabled ? item.rejection_reason : '',
+        batch_no: item.batch_no || undefined,
+        unit_price: valuationEnabled ? unitPrice : undefined,
+        line_amount: valuationEnabled ? lineAmount : undefined,
+        gst_rate: valuationEnabled ? gstRate : undefined,
+      };
+    });
+
+  const taxableAmount = lineItems.reduce(
+    (sum, item) => sum + (Number(item.line_amount) || 0),
+    0,
+  );
+  const taxAmount = lineItems.reduce(
+    (sum, item) =>
+      sum + ((Number(item.line_amount) || 0) * (Number(item.gst_rate) || 0)) / 100,
+    0,
+  );
 
   const resolvedFormatId = form.grn_format_id || formatConfig?.id;
 
@@ -339,6 +373,12 @@ export const buildCreateGrnPayload = (form, { formatConfig, qcEnabled = true } =
     vehicle_number: form.vehicle_number || undefined,
     lr_number: form.lr_number || undefined,
     received_by: form.received_by || undefined,
+    bill_to_name: billToEnabled ? form.bill_to_name || undefined : undefined,
+    bill_to_gstin: billToEnabled ? form.bill_to_gstin || undefined : undefined,
+    bill_to_address: billToEnabled ? form.bill_to_address || undefined : undefined,
+    taxable_amount: valuationEnabled ? taxableAmount : undefined,
+    tax_amount: valuationEnabled ? taxAmount : undefined,
+    total_received_value: valuationEnabled ? taxableAmount + taxAmount : undefined,
     remarks: form.remarks || undefined,
     line_items: lineItems,
   };

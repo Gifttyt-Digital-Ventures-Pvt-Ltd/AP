@@ -32,6 +32,7 @@ import {
   useExtractGrnDocumentMutation,
   useCreateGrnFromPiMutation,
   useLazyGetPoLinesReceiptStateQuery,
+  useGetGrnDownloadUrlMutation,
 } from '../../Services/apis/goodsReceiptApi';
 import GrnListTab from './components/GrnListTab';
 import GrnFormatBuilderDialog from './components/GrnFormatBuilderDialog';
@@ -72,6 +73,21 @@ import {
   validateGrnLineItems,
 } from './utils';
 
+const getGrnId = (grn) => grn?.id || grn?.grn_id || grn?.grnId;
+
+const getDownloadUrl = (response) =>
+  response?.downloadUrl ||
+  response?.download_url ||
+  response?.url ||
+  response?.fileUrl ||
+  response?.file_url;
+
+const normalizeDownloadUrl = (url) => {
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url)) return url;
+  return new URL(url, window.location.origin).toString();
+};
+
 const GoodsReceipt = () => {
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
@@ -111,6 +127,7 @@ const GoodsReceipt = () => {
   const [postGrn, { isLoading: posting }] = usePostGrnMutation();
   const [extractGrnDocument] = useExtractGrnDocumentMutation();
   const [createGrnFromPi] = useCreateGrnFromPiMutation();
+  const [getGrnDownloadUrl, { isLoading: downloadingGrnPdf }] = useGetGrnDownloadUrlMutation();
 
   const [showBuilderDialog, setShowBuilderDialog] = useState(false);
   const [grnCreateOptionOpen, setGrnCreateOptionOpen] = useState(false);
@@ -369,6 +386,9 @@ const GoodsReceipt = () => {
         vendor_id: po.vendor_id,
         vendor_name: po.vendor_name,
         received_at_location: po.shipping_address || current.received_at_location,
+        bill_to_name: po.billing_name || current.bill_to_name,
+        bill_to_gstin: po.billing_gstin || current.bill_to_gstin,
+        bill_to_address: po.billing_address || current.bill_to_address,
         line_items: lineItems,
       }));
 
@@ -496,6 +516,27 @@ const GoodsReceipt = () => {
       refreshAll();
     } catch (error) {
       toast.error(error?.data?.detail || 'Failed to post GRN');
+    }
+  };
+
+  const handleDownloadGrnPdf = async (grn) => {
+    const grnId = getGrnId(grn);
+    if (!grnId) {
+      toast.error('GRN id is missing');
+      return;
+    }
+
+    try {
+      const data = await getGrnDownloadUrl(grnId).unwrap();
+      const downloadUrl = getDownloadUrl(data);
+      if (!downloadUrl) {
+        toast.error('Download URL was not returned for this GRN');
+        return;
+      }
+      window.open(normalizeDownloadUrl(downloadUrl), '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      if (handleCreditError(error)) return;
+      toast.error(error?.data?.detail || error?.data?.message || 'Failed to get GRN download link');
     }
   };
 
@@ -942,9 +983,8 @@ const GoodsReceipt = () => {
         posting={posting}
         onOpenReview={openGrnReview}
         onPost={handlePost}
-        onDownloadPdf={() =>
-          toast.message('PDF download will be available when backend endpoint is ready')
-        }
+        onDownloadPdf={() => handleDownloadGrnPdf(detailGrn)}
+        downloadingPdf={downloadingGrnPdf}
       />
     </div>
   );

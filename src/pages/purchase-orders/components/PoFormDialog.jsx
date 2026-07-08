@@ -40,6 +40,12 @@ const FieldBlock = ({ label, children, className = "" }) => (
 );
 
 const inputClassName = "h-9 bg-white/80 text-sm";
+const numericTextPattern = /^\d*\.?\d*$/;
+
+const isNumericTextInput = (value = "") => {
+  const text = String(value);
+  return text !== "." && numericTextPattern.test(text);
+};
 
 const getRegistrationValue = (registration, ...keys) => {
   for (const key of keys) {
@@ -374,7 +380,9 @@ const PoFormDialog = ({
           case "unit_price":
             value = (
               <Input
-                type="number"
+                type="text"
+                inputMode="decimal"
+                pattern="[0-9]*[.]?[0-9]*"
                 value={item.unit_price ?? ""}
                 onChange={(e) => {
                   const rawValue = e.target.value;
@@ -382,11 +390,9 @@ const PoFormDialog = ({
                     updateLineItem(idx, "unit_price", "");
                     return;
                   }
-                  const parsedValue = Number(rawValue);
-                  if (Number.isNaN(parsedValue)) return;
-                  updateLineItem(idx, "unit_price", parsedValue);
+                  if (!isNumericTextInput(rawValue)) return;
+                  updateLineItem(idx, "unit_price", rawValue);
                 }}
-                min="0"
                 className={`${inputClassName} min-w-[110px]`}
                 data-testid={`line-item-price-${idx}`}
               />

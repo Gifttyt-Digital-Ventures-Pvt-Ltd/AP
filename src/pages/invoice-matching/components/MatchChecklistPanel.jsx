@@ -8,6 +8,7 @@ import {
   useGetInvoiceMatchingGroupChecklistQuery,
   useGetInvoiceMatchingAcceptanceLogQuery,
   useGetInvoiceMatchingChecklistQuery,
+  useGetInvoiceMatchingQtyReconciliationQuery,
 } from "../../../Services/apis/invoiceMatchingApi";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
@@ -37,6 +38,7 @@ import {
   History,
   Info,
   Loader2,
+  MinusCircle,
   ShieldCheck,
   XCircle,
 } from "lucide-react";
@@ -72,6 +74,30 @@ const CRITERION_META = {
   },
   GST_RATE: {
     label: "GST Rate",
+  },
+  GRN_PO_REFERENCE: {
+    label: "GRN -> PO Reference",
+    hint: "PO number on the GRN vs the PO record",
+  },
+  GRN_QTY_RECONCILIATION: {
+    label: "Received Quantity",
+    hint: "Billed quantity must be within received or accepted quantity",
+  },
+  GRN_ITEM_IDENTITY: {
+    label: "Item Identity (GRN)",
+    hint: "Item code, HSN, or description matches the received line",
+  },
+  GRN_DELIVERY_ADDRESS: {
+    label: "Delivery / Ship-to",
+    hint: "Delivery location on the GRN vs ship-to",
+  },
+  GRN_BILLING_ADDRESS: {
+    label: "Bill-to (GRN)",
+    hint: "Bill-to on the GRN vs bill-to, if recorded",
+  },
+  GRN_DATE_SANITY: {
+    label: "Receipt Date",
+    hint: "Goods received date is valid for this match type",
   },
 };
 
@@ -111,6 +137,39 @@ const getApiErrorMessage = (error, fallback) => {
 const formatPercent = (value, digits = 2) => {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric.toFixed(digits) : "0.00";
+};
+
+const normalizeOutcome = (criterion = {}) => {
+  const outcome = String(criterion.outcome || "").trim().toUpperCase();
+  if (outcome === "NOT_APPLICABLE" || outcome === "NA" || outcome === "N_A") return "NOT_APPLICABLE";
+  if (outcome === "PASS" || criterion.passed === true) return "PASS";
+  if (outcome === "FAIL" || criterion.passed === false) return "FAIL";
+  return "FAIL";
+};
+
+const isCriterionSkipped = (criterion = {}) => normalizeOutcome(criterion) === "NOT_APPLICABLE";
+
+const isCriterionPassed = (criterion = {}) =>
+  normalizeOutcome(criterion) === "PASS" || Boolean(criterion.isAccepted ?? criterion.accepted);
+
+const getAccepted = (criterion = {}) => Boolean(criterion.isAccepted ?? criterion.accepted);
+
+const getSkipTitle = (reason = "") => {
+  if (!reason) return "Skipped for this match";
+  return `Skipped - ${titleCase(reason)}`;
+};
+
+const normalizeMatchTypeLabel = (value = "") => {
+  const normalized = String(value || "").toUpperCase();
+  const labels = {
+    TWO_WAY: "PO Invoice",
+    PO_INVOICE: "PO Invoice",
+    PO_PI: "PO PI",
+    THREE_WAY: "3 Way",
+    INVOICE_GRN: "Invoice GRN",
+    PO_GRN: "PO GRN",
+  };
+  return labels[normalized] || titleCase(normalized || "Match");
 };
 
 const formatChecklistValue = (value) => {
@@ -320,19 +379,38 @@ const getAcceptanceLogPayload = (payload, checklistLog = []) => {
   return [];
 };
 
-const ResultBadge = ({ passed, accepted }) => {
-  if (passed) {
+const ResultBadge = ({ criterion, passed, accepted }) => {
+  const skipped = criterion ? isCriterionSkipped(criterion) : false;
+  const resolvedAccepted = criterion ? getAccepted(criterion) : accepted;
+  const resolvedPassed = criterion ? normalizeOutcome(criterion) === "PASS" : passed;
+  const similarity = criterion?.similarityPct;
+
+  if (skipped) {
     return (
-      <Badge className="border border-emerald-200 bg-emerald-100 text-emerald-700">
-        <CheckCircle2 className="mr-1 h-3 w-3" />
-        Pass
+      <Badge
+        variant="outline"
+        className="border-dashed border-slate-300 bg-slate-50 text-slate-600"
+        aria-label={`Not applicable - ${criterion?.skipReason || "skipped"}`}
+        title={getSkipTitle(criterion?.skipReason)}
+      >
+        <MinusCircle className="mr-1 h-3 w-3" />
+        N/A
       </Badge>
     );
   }
 
-  if (accepted) {
+  if (resolvedPassed) {
     return (
-      <Badge className="border border-blue-200 bg-blue-100 text-blue-700">
+      <Badge className="border border-emerald-200 bg-emerald-100 text-emerald-700">
+        <CheckCircle2 className="mr-1 h-3 w-3" />
+        Pass{similarity !== undefined && similarity !== null ? ` · ${formatPercent(similarity, 0)}%` : ""}
+      </Badge>
+    );
+  }
+
+  if (resolvedAccepted) {
+    return (
+      <Badge className="border border-amber-200 bg-amber-50 text-amber-700">
         <ShieldCheck className="mr-1 h-3 w-3" />
         Accepted
       </Badge>
@@ -340,9 +418,9 @@ const ResultBadge = ({ passed, accepted }) => {
   }
 
   return (
-    <Badge className="border border-red-200 bg-red-100 text-red-700">
-      <XCircle className="mr-1 h-3 w-3" />
-      Fail
+      <Badge className="border border-red-200 bg-red-100 text-red-700">
+        <XCircle className="mr-1 h-3 w-3" />
+      Fail{similarity !== undefined && similarity !== null ? ` · ${formatPercent(similarity, 0)}%` : ""}
     </Badge>
   );
 };
@@ -357,6 +435,14 @@ const StatusBadge = ({ status }) => {
 };
 
 const SimilarityCell = ({ criterion }) => {
+  if (isCriterionSkipped(criterion)) {
+    return (
+      <span className="text-sm text-muted-foreground" title={getSkipTitle(criterion.skipReason)}>
+        {criterion.skipReason ? titleCase(criterion.skipReason) : "Not applicable"}
+      </span>
+    );
+  }
+
   const pct = Math.max(0, Math.min(100, Number(criterion.similarityPct || 0)));
   const exact = criterion.comparisonType === "NUMERIC_EXACT";
 
@@ -389,6 +475,75 @@ const SimilarityCell = ({ criterion }) => {
           Threshold {formatPercent(criterion.thresholdApplied, 0)}%
         </div>
       ) : null}
+    </div>
+  );
+};
+
+const formatQty = (value) => {
+  if (value === null || value === undefined || value === "") return "-";
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric.toLocaleString("en-IN") : String(value);
+};
+
+const QtyReconciliationDetail = ({ detail, loading }) => {
+  const lines = Array.isArray(detail?.lines) ? detail.lines : [];
+
+  if (loading) {
+    return (
+      <div className="rounded-lg border border-border bg-muted/30 p-3">
+        <Skeleton className="h-24 w-full" />
+      </div>
+    );
+  }
+
+  if (lines.length === 0) {
+    return (
+      <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+        No quantity reconciliation detail returned.
+      </div>
+    );
+  }
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-background">
+      <Table className="table-fixed">
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-[24%]">Line</TableHead>
+            <TableHead className="w-[10%]">HSN</TableHead>
+            <TableHead className="w-[11%] text-right">Ordered</TableHead>
+            <TableHead className="w-[11%] text-right">Received</TableHead>
+            <TableHead className="w-[11%] text-right">Accepted</TableHead>
+            <TableHead className="w-[11%] text-right">Billed</TableHead>
+            <TableHead className="w-[12%] text-right">Remaining</TableHead>
+            <TableHead className="w-[10%]">Result</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {lines.map((line, index) => {
+            const remaining = Number(line.remainingQty ?? line.remaining_qty);
+            const linePass = Boolean(line.linePass ?? line.line_pass);
+            return (
+              <TableRow key={line.id || line.description || index}>
+                <TableCell className="truncate font-medium" title={line.description}>
+                  {line.description || `Line ${index + 1}`}
+                </TableCell>
+                <TableCell>{line.hsnSac ?? line.hsn_sac ?? "-"}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatQty(line.orderedQty ?? line.ordered_qty)}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatQty(line.receivedQty ?? line.received_qty)}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatQty(line.acceptedQty ?? line.accepted_qty)}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatQty(line.billedQty ?? line.billed_qty)}</TableCell>
+                <TableCell className={`text-right tabular-nums ${remaining < 0 ? "font-semibold text-red-600" : ""}`}>
+                  {formatQty(line.remainingQty ?? line.remaining_qty)}
+                </TableCell>
+                <TableCell>
+                  <ResultBadge passed={linePass} accepted={false} />
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
     </div>
   );
 };
@@ -635,6 +790,16 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
   const refetch = isGroupScope ? refetchGroupChecklist : refetchMatchChecklist;
 
   const checklist = useMemo(() => getChecklistPayload(checklistResponse), [checklistResponse]);
+  const shouldFetchQtyReconciliation =
+    !isGroupScope &&
+    Boolean(matchId) &&
+    expandedCriterion === "GRN_QTY_RECONCILIATION";
+  const {
+    data: qtyReconciliationResponse,
+    isFetching: qtyReconciliationFetching,
+  } = useGetInvoiceMatchingQtyReconciliationQuery(matchId, {
+    skip: !shouldFetchQtyReconciliation,
+  });
 
   const {
     data: matchLogResponse,
@@ -658,7 +823,10 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
 
   const criteria = useMemo(() => {
     const list = Array.isArray(checklist?.criteria) ? checklist.criteria : [];
-    return [...list].sort((left, right) => Number(left.displayOrder || 0) - Number(right.displayOrder || 0));
+    const sorted = [...list].sort((left, right) => Number(left.displayOrder || 0) - Number(right.displayOrder || 0));
+    const evaluable = sorted.filter((item) => !isCriterionSkipped(item));
+    const skipped = sorted.filter((item) => isCriterionSkipped(item));
+    return [...evaluable, ...skipped];
   }, [checklist?.criteria]);
 
   const acceptanceLog = useMemo(
@@ -727,13 +895,30 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
 
   const status = normalizeStatus(checklist.status);
   const isTerminal = TERMINAL_STATUSES.includes(status);
-  const passedCount = Number(checklist.passedCriteriaCount || 0);
-  const totalCount = Number(checklist.totalCriteriaCount || criteria.length || 10);
+  const evaluableCriteria = criteria.filter((item) => !isCriterionSkipped(item));
+  const skippedCriteria = criteria.filter((item) => isCriterionSkipped(item));
+  const passedCount = Number(
+    checklist.passedCriteriaCount ??
+      evaluableCriteria.filter((item) => isCriterionPassed(item)).length,
+  );
+  const totalCount = Number(
+    checklist.evaluableCriteriaCount ??
+      checklist.evaluable_criteria_count ??
+      evaluableCriteria.length,
+  );
+  const maxCriteriaCount = Number(
+    checklist.maxCriteriaCount ??
+      checklist.max_criteria_count ??
+      checklist.totalCriteriaCount ??
+      checklist.total_criteria_count ??
+      criteria.length,
+  );
   const overallPct = Number(checklist.overallMatchPct || 0);
   const hasMinorTextDifferences =
     status === "PARTIAL_MATCH" && totalCount > 0 && passedCount === totalCount && overallPct < 100;
-  const failingOpenCount = criteria.filter((item) => !item.passed && !item.isAccepted).length;
+  const failingOpenCount = evaluableCriteria.filter((item) => !isCriterionPassed(item)).length;
   const canAcceptOverall = !isTerminal && (status === "PARTIAL_MATCH" || status === "MISMATCH");
+  const allCriteriaSkipped = criteria.length > 0 && evaluableCriteria.length === 0;
 
   const refreshChecklist = () => {
     refetch();
@@ -751,7 +936,20 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge status={status} />
-                <Badge variant="outline">{checklist.matchType === "THREE_WAY" ? "3-Way" : "2-Way"}</Badge>
+                <Badge variant="outline">{normalizeMatchTypeLabel(checklist.matchType)}</Badge>
+                {checklist.matchedDocType || checklist.matched_doc_type ? (
+                  <Badge variant="outline">
+                    {String(checklist.matchedDocType || checklist.matched_doc_type) === "PROFORMA_INVOICE"
+                      ? "Proforma Invoice"
+                      : "Tax Invoice"}
+                  </Badge>
+                ) : null}
+                {Number(checklist.grnPoolSize ?? checklist.grn_pool_size ?? 0) > 0 ? (
+                  <Badge variant="outline">
+                    {Number(checklist.grnPoolSize ?? checklist.grn_pool_size)} GRN
+                    {Number(checklist.grnPoolSize ?? checklist.grn_pool_size) === 1 ? "" : "s"}
+                  </Badge>
+                ) : null}
                 {isGroupScope ? (
                   <Badge variant="outline">
                     {Number(checklist.invoiceCount ?? group?.invoiceMatches?.length ?? 0)} invoice
@@ -779,12 +977,24 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
             </div>
             <div>
               <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Criteria Passed</div>
-              <div className="text-2xl font-semibold tabular-nums">
+              <div
+                className="text-2xl font-semibold tabular-nums"
+                title={`${totalCount} of ${maxCriteriaCount} criteria applied. ${skippedCriteria.length} skipped.`}
+              >
                 {passedCount}/{totalCount}
               </div>
             </div>
             {isFetching ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
           </div>
+
+          {allCriteriaSkipped ? (
+            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+              <p className="font-semibold">Nothing to compare</p>
+              <p>
+                Every checklist criterion was marked not applicable. Review the source data and re-run matching when comparable values are available.
+              </p>
+            </div>
+          ) : null}
 
           <div className="overflow-hidden rounded-lg border border-border">
             <Table className="table-fixed">
@@ -799,22 +1009,34 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {criteria.map((criterion) => {
+                {criteria.map((criterion, index) => {
                   const meta = CRITERION_META[criterion.criterionType] || {
                     label: titleCase(criterion.criterionType),
                     hint: "",
                   };
                   const isLineItems = criterion.criterionType === "LINE_ITEMS";
+                  const isQtyReconciliation = criterion.criterionType === "GRN_QTY_RECONCILIATION";
+                  const canExpandCriterion = isLineItems || isQtyReconciliation || Boolean(criterion.detail);
                   const isExpanded = expandedCriterion === criterion.criterionType;
                   const invoiceValue = formatChecklistValue(criterion.invoiceValue);
                   const poValue = formatChecklistValue(criterion.poValue);
+                  const skipped = isCriterionSkipped(criterion);
+                  const accepted = getAccepted(criterion);
+                  const passed = normalizeOutcome(criterion) === "PASS";
 
                   return (
                     <React.Fragment key={criterion.criterionType}>
-                      <TableRow>
+                      {skipped && criteria[index - 1] && !isCriterionSkipped(criteria[index - 1]) ? (
+                        <TableRow className="bg-muted/30 hover:bg-muted/30">
+                          <TableCell colSpan={6} className="py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                            Not applicable to this match
+                          </TableCell>
+                        </TableRow>
+                      ) : null}
+                      <TableRow className={skipped ? "bg-muted/20 text-muted-foreground" : ""}>
                         <TableCell className="min-w-0">
                           <div className="flex items-center gap-2">
-                            {isLineItems ? (
+                            {canExpandCriterion ? (
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -823,7 +1045,7 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
                                 onClick={() =>
                                   setExpandedCriterion(isExpanded ? null : criterion.criterionType)
                                 }
-                                aria-label={isExpanded ? "Collapse line item checks" : "Expand line item checks"}
+                                aria-label={isExpanded ? "Collapse criterion detail" : "Expand criterion detail"}
                               >
                                 <ChevronRight
                                   className={`h-4 w-4 transition-transform ${isExpanded ? "rotate-90" : ""}`}
@@ -834,6 +1056,11 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
                               <div className="truncate font-medium" title={meta.label}>
                                 {meta.label}
                               </div>
+                              {meta.hint ? (
+                                <div className="truncate text-xs text-muted-foreground" title={meta.hint}>
+                                  {meta.hint}
+                                </div>
+                              ) : null}
                             </div>
                           </div>
                         </TableCell>
@@ -847,10 +1074,10 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
                           <SimilarityCell criterion={criterion} />
                         </TableCell>
                         <TableCell className="min-w-0">
-                          <ResultBadge passed={criterion.passed} accepted={criterion.isAccepted} />
+                          <ResultBadge criterion={criterion} passed={passed} accepted={accepted} />
                         </TableCell>
                         <TableCell className="min-w-0 text-right">
-                          {!isTerminal && !criterion.passed && !criterion.isAccepted ? (
+                          {!isTerminal && !skipped && !passed && !accepted ? (
                             <Button
                               variant="outline"
                               size="sm"
@@ -859,7 +1086,7 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
                             >
                               Accept
                             </Button>
-                          ) : criterion.isAccepted ? (
+                          ) : accepted ? (
                             <span
                               className="text-xs text-muted-foreground"
                               title={criterion.acceptanceReason || "Accepted"}
@@ -876,6 +1103,16 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
                         <TableRow className="bg-muted/20 hover:bg-muted/20">
                           <TableCell colSpan={6}>
                             <LineItemsDetail detail={criterion.subDetail || {}} />
+                          </TableCell>
+                        </TableRow>
+                      ) : null}
+                      {isQtyReconciliation && isExpanded ? (
+                        <TableRow className="bg-muted/20 hover:bg-muted/20">
+                          <TableCell colSpan={6}>
+                            <QtyReconciliationDetail
+                              detail={criterion.detail || criterion.subDetail || qtyReconciliationResponse?.data || qtyReconciliationResponse}
+                              loading={qtyReconciliationFetching}
+                            />
                           </TableCell>
                         </TableRow>
                       ) : null}

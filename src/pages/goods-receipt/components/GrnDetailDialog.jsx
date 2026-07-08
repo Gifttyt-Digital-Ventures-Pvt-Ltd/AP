@@ -43,6 +43,7 @@ const GrnDetailDialog = ({
   onOpenReview,
   onPost,
   onDownloadPdf,
+  downloadingPdf = false,
 }) => {
   if (!grn) return null;
 
@@ -215,9 +216,13 @@ const GrnDetailDialog = ({
         </div>
 
         <DialogFooter className="gap-2 border-t px-6 py-4 sm:justify-between">
-          <Button variant="outline" onClick={onDownloadPdf}>
-            <Download className="mr-2 h-4 w-4" />
-            Download PDF
+          <Button variant="outline" onClick={onDownloadPdf} disabled={downloadingPdf}>
+            {downloadingPdf ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-4 w-4" />
+            )}
+            {downloadingPdf ? 'Preparing PDF...' : 'Download PDF'}
           </Button>
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
