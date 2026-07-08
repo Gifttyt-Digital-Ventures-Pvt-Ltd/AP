@@ -440,7 +440,9 @@ export const RBACProvider = ({ children }) => {
       return (
         (hasPermission("settings-org") && isCorporateSectionEnabled("SETTINGS_ORG_DETAILS")) ||
         (hasAnyPermission(["settings-banking", "banking-full"]) && isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING")) ||
-        (hasPermission("settings-interaction") && isCorporateSectionEnabled("SETTINGS_INTEGRATIONS")) ||
+        (hasPermission("settings-interaction") &&
+          (isCorporateSectionEnabled("SETTINGS_INTEGRATIONS") ||
+            isCorporateSectionEnabled("GMAIL_INTEGRATION_ALL"))) ||
         (hasAnyPermission(["credits-view", "credits-ledger", "credits-manage", "VIEW_WALLET", "VIEW_LEDGER", "MANAGE_BILLING"]) &&
           isBillingFeatureEnabled)
       );
@@ -500,6 +502,9 @@ export const RBACProvider = ({ children }) => {
 
     if (actionKey.startsWith("integrations.")) {
       return isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
+    }
+    if (actionKey.startsWith("gmailIntegration.")) {
+      return isCorporateSectionEnabled("GMAIL_INTEGRATION_ALL");
     }
 
     return true;

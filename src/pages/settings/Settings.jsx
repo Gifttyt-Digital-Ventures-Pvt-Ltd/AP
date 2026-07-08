@@ -19,7 +19,9 @@ import TallyConfigDialog from './components/TallyConfigDialog';
 import ZohoIntegrationCard from './components/ZohoIntegrationCard';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useRBAC } from '../../contexts/RBACContext';
+import useGmailIntegrationSubscription from '../../hooks/useGmailIntegrationSubscription';
 import CreditsPage from '../credits/CreditsPage';
+import GmailInvoiceIntegrationCard from '../invoices/components/GmailInvoiceIntegrationCard';
 import OrgBranchesSection from './components/OrgBranchesSection';
 import OrgGstRegistrationsSection from './components/OrgGstRegistrationsSection';
 import {
@@ -67,15 +69,21 @@ const Settings = () => {
     isBranchEnabled: isBranchConfigurationEnabled,
     isBranchSqFtEnabled: isBranchSqFtConfigurationEnabled,
   } = useRBAC();
+  const { isGmailIntegrationEnabled } = useGmailIntegrationSubscription();
   const canViewBankingSettings =
     hasAnyPermission(['settings-banking', 'banking-full']) &&
     isCorporateSectionEnabled('SETTINGS_CONNECTED_BANKING');
   const canViewOrganisationSettings =
     hasAnyPermission(['settings-org']) &&
     isCorporateSectionEnabled('SETTINGS_ORG_DETAILS');
-  const canViewIntegrationsSettings =
+  const canViewErpIntegrationsSettings =
     hasAnyPermission(['settings-interaction']) &&
     isCorporateSectionEnabled('SETTINGS_INTEGRATIONS');
+  const canViewGmailIntegrationSettings =
+    hasAnyPermission(['settings-interaction']) &&
+    isGmailIntegrationEnabled;
+  const canViewIntegrationsSettings =
+    canViewErpIntegrationsSettings || canViewGmailIntegrationSettings;
   const canViewBillingSettings = hasAnyPermission([
     'credits-view',
     'credits-ledger',
@@ -794,114 +802,122 @@ const Settings = () => {
 
         {canViewIntegrationsSettings && <TabsContent value="integrations">
           <div className="space-y-6" data-testid="settings-integrations-gateway">
-            <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
-              <ZohoIntegrationCard />
+            {canViewGmailIntegrationSettings && (
+              <GmailInvoiceIntegrationCard />
+            )}
 
-              <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden" data-testid="tally-integration-card">
-                <div className={`px-6 py-4 flex items-center justify-between border-b ${tallyConnected ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-border'}`}>
-                  <div className="flex items-center gap-3">
-                    <TallyLogo />
-                  </div>
-                  <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${
-                    tallyConnected
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : 'bg-gray-100 text-gray-500'
-                  }`}>
-                    {tallyConnected ? (
-                      <>
-                        <Check className="h-4 w-4" />
-                        Connected
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="h-4 w-4" />
-                        Not Connected
-                      </>
-                    )}
-                  </div>
-                </div>
+            {canViewErpIntegrationsSettings && (
+              <>
+                <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
+                  <ZohoIntegrationCard />
 
-                <div className="p-6">
-                  <h4 className="font-semibold text-gray-800 mb-3">We'll fetch your:</h4>
-                  <ul className="space-y-2 mb-6">
-                    {SYNC_DATA_ITEMS.map((item) => (
-                      <li key={item} className="flex items-center gap-2 text-sm text-gray-600">
-                        <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-
-                  {!tallyConnected ? (
-                    <Button
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                      onClick={handleTallyConnect}
-                      disabled={tallySyncing}
-                      data-testid="tally-connect-button"
-                    >
-                      {tallySyncing ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Connecting...
-                        </>
-                      ) : (
-                        <>
-                          <Plug className="h-4 w-4 mr-2" />
-                          Connect
-                        </>
-                      )}
-                    </Button>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="flex gap-3">
-                        <Button
-                          variant="outline"
-                          className="flex-1"
-                          onClick={handleTallyDisconnect}
-                          data-testid="tally-disconnect-button"
-                        >
-                          <PlugZap className="h-4 w-4 mr-2" />
-                          Disconnect
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="flex-1"
-                          onClick={() => setTallyConfigOpen(true)}
-                          data-testid="tally-configure-button"
-                        >
-                          <SettingsIcon className="h-4 w-4 mr-2" />
-                          Configure
-                        </Button>
+                  <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden" data-testid="tally-integration-card">
+                    <div className={`px-6 py-4 flex items-center justify-between border-b ${tallyConnected ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-border'}`}>
+                      <div className="flex items-center gap-3">
+                        <TallyLogo />
                       </div>
-                      <Button
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                        onClick={handleTallySyncMasters}
-                        disabled={tallySyncing}
-                        data-testid="tally-sync-button"
-                      >
-                        {tallySyncing ? (
+                      <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${
+                        tallyConnected
+                          ? 'bg-emerald-100 text-emerald-700'
+                          : 'bg-gray-100 text-gray-500'
+                      }`}>
+                        {tallyConnected ? (
                           <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Syncing...
+                            <Check className="h-4 w-4" />
+                            Connected
                           </>
                         ) : (
                           <>
-                            <RefreshCw className="h-4 w-4 mr-2" />
-                            Sync Masters
+                            <XCircle className="h-4 w-4" />
+                            Not Connected
                           </>
                         )}
-                      </Button>
+                      </div>
                     </div>
-                  )}
-                </div>
-              </div>
-            </div>
 
-            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-              <p className="text-sm text-blue-800">
-                <strong>Note:</strong> Connect your accounting system to keep vendors, invoices, ledgers, and master data aligned with AP workflows.
-              </p>
-            </div>
+                    <div className="p-6">
+                      <h4 className="font-semibold text-gray-800 mb-3">We'll fetch your:</h4>
+                      <ul className="space-y-2 mb-6">
+                        {SYNC_DATA_ITEMS.map((item) => (
+                          <li key={item} className="flex items-center gap-2 text-sm text-gray-600">
+                            <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
+
+                      {!tallyConnected ? (
+                        <Button
+                          className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                          onClick={handleTallyConnect}
+                          disabled={tallySyncing}
+                          data-testid="tally-connect-button"
+                        >
+                          {tallySyncing ? (
+                            <>
+                              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              Connecting...
+                            </>
+                          ) : (
+                            <>
+                              <Plug className="h-4 w-4 mr-2" />
+                              Connect
+                            </>
+                          )}
+                        </Button>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="flex gap-3">
+                            <Button
+                              variant="outline"
+                              className="flex-1"
+                              onClick={handleTallyDisconnect}
+                              data-testid="tally-disconnect-button"
+                            >
+                              <PlugZap className="h-4 w-4 mr-2" />
+                              Disconnect
+                            </Button>
+                            <Button
+                              variant="outline"
+                              className="flex-1"
+                              onClick={() => setTallyConfigOpen(true)}
+                              data-testid="tally-configure-button"
+                            >
+                              <SettingsIcon className="h-4 w-4 mr-2" />
+                              Configure
+                            </Button>
+                          </div>
+                          <Button
+                            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                            onClick={handleTallySyncMasters}
+                            disabled={tallySyncing}
+                            data-testid="tally-sync-button"
+                          >
+                            {tallySyncing ? (
+                              <>
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                                Syncing...
+                              </>
+                            ) : (
+                              <>
+                                <RefreshCw className="h-4 w-4 mr-2" />
+                                Sync Masters
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                  <p className="text-sm text-blue-800">
+                    <strong>Note:</strong> Connect your accounting system to keep vendors, invoices, ledgers, and master data aligned with AP workflows.
+                  </p>
+                </div>
+              </>
+            )}
           </div>
         </TabsContent>}
 

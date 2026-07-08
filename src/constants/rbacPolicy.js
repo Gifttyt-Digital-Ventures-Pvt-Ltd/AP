@@ -136,6 +136,7 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
       "SETTINGS_ORG_DETAILS",
       "SETTINGS_CONNECTED_BANKING",
       "SETTINGS_INTEGRATIONS",
+      "GMAIL_INTEGRATION_ALL",
       "SETTINGS_BILLING",
       "CREDITS_ALL",
       "WALLET_ALL",
@@ -238,6 +239,9 @@ export const ACTION_PERMISSION_RULES = {
   "integrations.mapping.edit": { anyOf: ["integrations.mapping.edit"] },
   "integrations.sync.trigger": { anyOf: ["integrations.sync.trigger"] },
   "integrations.review.resolve": { anyOf: ["integrations.review.resolve"] },
+  "gmailIntegration.connect": { anyOf: ["settings-interaction"] },
+  "gmailIntegration.disconnect": { anyOf: ["settings-interaction"] },
+  "gmailIntegration.sync": { anyOf: ["settings-interaction"] },
 
   "roles.invite": { anyOf: ["roles-manage-users"] },
   "roles.updateUserRole": { anyOf: ["roles-manage-users"] },
