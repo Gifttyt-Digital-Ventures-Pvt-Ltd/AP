@@ -3,6 +3,7 @@ import { extractListResponse } from "../utils/payloadMappers";
 
 const ZOHO_BASE = "/integration/zoho";
 const GMAIL_BASE = "/integration/gmail";
+const TALLY_BASE = "/integration/tally";
 
 const withParams = (params = {}) =>
   Object.fromEntries(
@@ -155,6 +156,61 @@ export const integrationsApi = serviceApi.injectEndpoints({
       }),
       invalidatesTags: ["Integrations"],
     }),
+    getTallyProviders: builder.query({
+      query: () => ({ url: `${TALLY_BASE}/providers`, method: "GET" }),
+      providesTags: ["Integrations"],
+    }),
+    getTallyConnections: builder.query({
+      query: () => ({ url: `${TALLY_BASE}/connections`, method: "GET" }),
+      providesTags: ["Integrations"],
+    }),
+    getTallyConnection: builder.query({
+      query: (connectionId) => ({
+        url: `${TALLY_BASE}/connections/${connectionId}`,
+        method: "GET",
+      }),
+      providesTags: ["Integrations"],
+    }),
+    createTallyConnection: builder.mutation({
+      query: (body = {}) => ({
+        url: `${TALLY_BASE}/connections`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Integrations"],
+    }),
+    triggerTallySync: builder.mutation({
+      query: ({ connectionId, object = "ALL" } = {}) => ({
+        url: `${TALLY_BASE}/connections/${connectionId}/sync`,
+        method: "POST",
+        body: withParams({ object }),
+      }),
+      invalidatesTags: ["Integrations"],
+    }),
+    getTallySyncStatus: builder.query({
+      query: (connectionId) => ({
+        url: `${TALLY_BASE}/connections/${connectionId}/sync-status`,
+        method: "GET",
+      }),
+      providesTags: ["Integrations"],
+    }),
+    getTallyLogs: builder.query({
+      query: ({ connectionId, object, page = 1, perPage = 50 } = {}) => ({
+        url: `${TALLY_BASE}/connections/${connectionId}/logs`,
+        method: "GET",
+        params: withParams({ object, page, perPage }),
+      }),
+      transformResponse: extractListResponse,
+      providesTags: ["Integrations"],
+    }),
+    downloadTallyWindowsConnector: builder.query({
+      query: () => ({
+        url: "/downloads/windows",
+        method: "GET",
+        responseHandler: async (response) => response.blob(),
+        cache: "no-cache",
+      }),
+    }),
   }),
 });
 
@@ -179,4 +235,12 @@ export const {
   useCreateGmailConnectionMutation,
   useDisconnectGmailConnectionMutation,
   useSyncGmailConnectionMutation,
+  useGetTallyProvidersQuery,
+  useGetTallyConnectionsQuery,
+  useGetTallyConnectionQuery,
+  useCreateTallyConnectionMutation,
+  useTriggerTallySyncMutation,
+  useGetTallySyncStatusQuery,
+  useGetTallyLogsQuery,
+  useLazyDownloadTallyWindowsConnectorQuery,
 } = integrationsApi;

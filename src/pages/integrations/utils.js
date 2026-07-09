@@ -34,6 +34,7 @@ export const formatDateTime = (value) => {
 };
 
 export const getErrorText = (error, fallback = "Something went wrong") =>
+  error?.data?.error ||
   error?.data?.detail ||
   error?.data?.message ||
   error?.error ||
