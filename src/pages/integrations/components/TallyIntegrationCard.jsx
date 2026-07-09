@@ -1,11 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Link } from "react-router-dom";
 import {
+  Activity,
+  ArrowRight,
   Check,
+  Clock,
   ClipboardCopy,
+  Database,
   Download,
-  ExternalLink,
   Loader2,
   Plug,
+  RefreshCw,
+  Settings2,
   TriangleAlert,
   XCircle,
 } from "lucide-react";
@@ -27,7 +33,6 @@ import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { formatDateTime, getErrorText, statusBadgeClass, toArray } from "../../integrations/utils";
 
-const CONNECTOR_URL = "http://localhost:8080";
 const POLL_MS = 4000;
 const PAIRING_TIMEOUT_MS = 10 * 60 * 1000;
 const STALE_HEARTBEAT_MS = 15 * 60 * 1000;
@@ -51,20 +56,30 @@ const SETUP_CHECKLIST = [
   "Only one active ERP connection per corporate (disconnect Zoho Books first if needed).",
 ];
 
-const getConnectionId = (connection = {}) =>
-  connection.connectionId || connection.connection_id || connection.id;
+const getConnectionId = (connection) => {
+  if (!connection) return "";
+  return connection.connectionId || connection.connection_id || connection.id || "";
+};
 
-const getStatus = (connection = {}) =>
-  String(connection.status || "DISCONNECTED").toUpperCase();
+const getStatus = (connection) => {
+  if (!connection) return "DISCONNECTED";
+  return String(connection.status || "DISCONNECTED").toUpperCase();
+};
 
-const getConnectorStatus = (connection = {}) =>
-  String(connection.connectorStatus || connection.connector_status || "").toUpperCase();
+const getConnectorStatus = (connection) => {
+  if (!connection) return "";
+  return String(connection.connectorStatus || connection.connector_status || "").toUpperCase();
+};
 
-const getDisplayName = (connection = {}) =>
-  connection.displayName || connection.display_name || "Office Tally Connector";
+const getDisplayName = (connection) => {
+  if (!connection) return "Office Tally Connector";
+  return connection.displayName || connection.display_name || "Office Tally Connector";
+};
 
-const getHeartbeat = (connection = {}) =>
-  connection.lastHeartbeatAt || connection.last_heartbeat_at || null;
+const getHeartbeat = (connection) => {
+  if (!connection) return null;
+  return connection.lastHeartbeatAt || connection.last_heartbeat_at || null;
+};
 
 const isHeartbeatStale = (lastHeartbeatAt) => {
   if (!lastHeartbeatAt) return true;
@@ -73,7 +88,17 @@ const isHeartbeatStale = (lastHeartbeatAt) => {
   return Date.now() - timestamp > STALE_HEARTBEAT_MS;
 };
 
+const isConnectorActive = (connection) => {
+  if (!connection) return false;
+  const connectorStatus = getConnectorStatus(connection);
+  if (["REVOKED", "DISCONNECTED", "INACTIVE"].includes(connectorStatus)) return false;
+  return getStatus(connection) === "CONNECTED";
+};
+
 const getHeaderStatus = (connection) => {
+  if (!connection) {
+    return { label: "Not Connected", tone: "neutral", icon: "disconnected" };
+  }
   const status = getStatus(connection || {});
   const connectorStatus = getConnectorStatus(connection || {});
   const stale = status === "CONNECTED" && isHeartbeatStale(getHeartbeat(connection || {}));
@@ -81,7 +106,7 @@ const getHeaderStatus = (connection) => {
   if (status === "DISCONNECTED" || connectorStatus === "REVOKED") {
     return { label: "Disconnected", tone: "neutral", icon: "disconnected" };
   }
-  if (status === "CONNECTED" && connectorStatus === "ACTIVE" && !stale) {
+  if (status === "CONNECTED" && isConnectorActive(connection) && !stale) {
     return { label: "Connected to Tally", tone: "success", icon: "connected" };
   }
   if (status === "CONNECTED" && stale) {
@@ -105,27 +130,6 @@ const getPairingErrorMessage = (error) => {
     return "A Tally pairing is already in progress. Complete it in the Connector or ask an admin to reset the pending pairing.";
   }
   return message;
-};
-
-const checkConnectorReachable = async () => {
-  try {
-    const response = await fetch(`${CONNECTOR_URL}/health`, { mode: "cors" });
-    if (!response.ok) return false;
-    const text = await response.text();
-    return text.includes("HEALTHY");
-  } catch {
-    return false;
-  }
-};
-
-const fetchLocalConnectorStatus = async () => {
-  try {
-    const response = await fetch(`${CONNECTOR_URL}/api/connector/status`, { mode: "cors" });
-    if (!response.ok) throw new Error(`Connector request failed (${response.status})`);
-    return response.json();
-  } catch {
-    return null;
-  }
 };
 
 const TallyLogo = () => (
@@ -204,7 +208,9 @@ const getBlobFileName = (blob) => {
   return "optifii-tally-connector-windows.exe";
 };
 
-const TallyIntegrationCard = () => {
+const TallyIntegrationCard = ({ mode = "full" }) => {
+  const showSetup = mode !== "dashboard";
+  const showDashboard = mode !== "setup";
   const { data: providersResponse } = useGetTallyProvidersQuery();
   const {
     data: connectionsResponse,
@@ -219,8 +225,6 @@ const TallyIntegrationCard = () => {
   const [displayName, setDisplayName] = useState("Office Tally Connector");
   const [completedConnectionId, setCompletedConnectionId] = useState("");
   const [pairingTimedOut, setPairingTimedOut] = useState(false);
-  const [connectorReachable, setConnectorReachable] = useState(null);
-  const [localConnectorStatus, setLocalConnectorStatus] = useState(null);
   const [logObjectFilter, setLogObjectFilter] = useState("");
   const pairingStartedAt = useRef(0);
 
@@ -243,24 +247,30 @@ const TallyIntegrationCard = () => {
     (connection) => getStatus(connection) === "DISCONNECTED" || getConnectorStatus(connection) === "REVOKED",
   );
   const currentListConnection = activeConnection || disconnectedConnection || null;
-  const pairingConnectionId = getConnectionId(pairingCredentials || {}) || getConnectionId(currentListConnection || {});
-  const shouldPoll = Boolean(
-    pairingConnectionId && (pairingCredentials || getStatus(currentListConnection || {}) === "PENDING"),
+  const resolvedConnectionId =
+    getConnectionId(pairingCredentials || {}) || getConnectionId(currentListConnection || {});
+  const shouldPollPairing = Boolean(
+    showSetup &&
+      resolvedConnectionId &&
+      (pairingCredentials || getStatus(currentListConnection || {}) === "PENDING"),
   );
 
-  const { data: polledConnection, refetch: refetchPolledConnection } = useGetTallyConnectionQuery(pairingConnectionId, {
-    skip: !pairingConnectionId,
-    pollingInterval: shouldPoll && !pairingTimedOut ? POLL_MS : 0,
-  });
+  const { data: detailConnection, refetch: refetchDetailConnection } = useGetTallyConnectionQuery(
+    resolvedConnectionId,
+    {
+      skip: !resolvedConnectionId,
+      pollingInterval: shouldPollPairing && !pairingTimedOut ? POLL_MS : 0,
+    },
+  );
 
-  const currentConnection = polledConnection || currentListConnection;
-  const currentConnectionId = getConnectionId(currentConnection || {});
+  const currentConnection = detailConnection || currentListConnection || null;
+  const currentConnectionId = getConnectionId(currentConnection);
   const headerStatus = getHeaderStatus(currentConnection);
-  const status = getStatus(currentConnection || {});
-  const connectorStatus = getConnectorStatus(currentConnection || {});
-  const heartbeat = getHeartbeat(currentConnection || {});
+  const status = getStatus(currentConnection);
+  const connectorStatus = getConnectorStatus(currentConnection);
+  const heartbeat = getHeartbeat(currentConnection);
   const heartbeatStale = status === "CONNECTED" && isHeartbeatStale(heartbeat);
-  const isConnected = status === "CONNECTED" && connectorStatus === "ACTIVE";
+  const isConnected = isConnectorActive(currentConnection);
   const isDisconnected = status === "DISCONNECTED" || connectorStatus === "REVOKED";
   const showConnectForm = !isConnected && (isDisconnected || !currentConnection || status === "ERROR");
   const syncDisabled = !isConnected || heartbeatStale;
@@ -269,7 +279,7 @@ const TallyIntegrationCard = () => {
     data: syncStatusResponse,
     refetch: refetchSyncStatus,
   } = useGetTallySyncStatusQuery(currentConnectionId, {
-    skip: !currentConnectionId || !isConnected,
+    skip: !showDashboard || !currentConnectionId || !isConnected,
     pollingInterval: isConnected ? 10000 : 0,
   });
   const {
@@ -277,28 +287,13 @@ const TallyIntegrationCard = () => {
     refetch: refetchLogs,
   } = useGetTallyLogsQuery(
     { connectionId: currentConnectionId, object: logObjectFilter || undefined },
-    { skip: !currentConnectionId || !isConnected },
+    { skip: !showDashboard || !currentConnectionId || !isConnected },
   );
   const syncRows = useMemo(() => normalizeSyncStatusRows(syncStatusResponse), [syncStatusResponse]);
   const logRows = useMemo(() => getLogRows(logsResponse).slice(0, 8), [logsResponse]);
 
-  const refreshLocalConnectorHints = async () => {
-    const reachable = await checkConnectorReachable();
-    setConnectorReachable(reachable);
-    if (!reachable) {
-      setLocalConnectorStatus(null);
-      return;
-    }
-    const connectorStatusResponse = await fetchLocalConnectorStatus();
-    setLocalConnectorStatus(connectorStatusResponse);
-  };
-
   useEffect(() => {
-    refreshLocalConnectorHints();
-  }, []);
-
-  useEffect(() => {
-    if (!pairingOpen || !shouldPoll) {
+    if (!showSetup || !pairingOpen || !shouldPollPairing) {
       pairingStartedAt.current = 0;
       setPairingTimedOut(false);
       return;
@@ -316,19 +311,12 @@ const TallyIntegrationCard = () => {
     }, 1000);
 
     return () => window.clearInterval(timer);
-  }, [pairingOpen, shouldPoll, pairingConnectionId]);
+  }, [pairingOpen, shouldPollPairing, resolvedConnectionId, showSetup]);
 
   useEffect(() => {
-    if (!pairingOpen) return undefined;
-
-    const interval = window.setInterval(refreshLocalConnectorHints, POLL_MS);
-    return () => window.clearInterval(interval);
-  }, [pairingOpen]);
-
-  useEffect(() => {
-    const polledId = getConnectionId(polledConnection || {});
+    const polledId = getConnectionId(detailConnection || {});
     if (!polledId || completedConnectionId === polledId) return;
-    if (getStatus(polledConnection) === "CONNECTED") {
+    if (getStatus(detailConnection) === "CONNECTED") {
       setCompletedConnectionId(polledId);
       setPairingOpen(false);
       setPairingCredentials(null);
@@ -336,7 +324,7 @@ const TallyIntegrationCard = () => {
       refetchConnections();
       toast.success("Tally connected successfully");
     }
-  }, [completedConnectionId, polledConnection, refetchConnections]);
+  }, [completedConnectionId, detailConnection, refetchConnections]);
 
   const startPairing = async () => {
     try {
@@ -347,9 +335,23 @@ const TallyIntegrationCard = () => {
       pairingStartedAt.current = Date.now();
       toast.success("Tally pairing started");
       refetchConnections();
-      refreshLocalConnectorHints();
     } catch (error) {
       toast.error(getPairingErrorMessage(error));
+    }
+  };
+
+  const handleRefreshConnection = async () => {
+    try {
+      await refetchConnections();
+      if (resolvedConnectionId) {
+        await refetchDetailConnection();
+      }
+      if (showDashboard && currentConnectionId && isConnected) {
+        await Promise.all([refetchSyncStatus(), refetchLogs()]);
+      }
+      toast.success(isConnected ? "Tally connection refreshed" : "Tally connection status refreshed");
+    } catch (error) {
+      toast.error(getErrorText(error, "Failed to refresh Tally connection"));
     }
   };
 
@@ -400,6 +402,14 @@ const TallyIntegrationCard = () => {
         <div className={`flex items-center justify-between border-b px-6 py-4 ${headerToneClass(headerStatus.tone)}`}>
           <div className="flex items-center gap-3">
             <TallyLogo />
+            <div>
+              <h3 className="font-semibold text-gray-900">
+                {showDashboard ? "Tally sync dashboard" : "Tally connector setup"}
+              </h3>
+              <p className="text-xs text-muted-foreground">
+                {showDashboard ? "Monitor Tally sync health and queue manual syncs." : "Pair the local connector with Optifii AP."}
+              </p>
+            </div>
           </div>
           <div className={`flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium ${badgeToneClass(headerStatus.tone)}`}>
             <HeaderStatusIcon icon={headerStatus.icon} />
@@ -408,21 +418,40 @@ const TallyIntegrationCard = () => {
         </div>
 
         <div className="space-y-5 p-6">
-          {connectorReachable !== null ? (
-            <div
-              className={`rounded-lg border p-3 text-sm ${
-                connectorReachable
-                  ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                  : "border-slate-200 bg-slate-50 text-slate-700"
-              }`}
-            >
-              {connectorReachable
-                ? "Tally Connector is running on this machine."
-                : "Tally Connector was not detected on this machine (localhost:8080). Install and start it before pairing."}
+          {showDashboard && currentConnection ? (
+            <div className="grid gap-3 md:grid-cols-3">
+              <div className="rounded-lg border border-border bg-white p-4">
+                <div className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-800">
+                  <Activity className="h-4 w-4 text-blue-600" />
+                  Connection
+                </div>
+                <p className="text-lg font-semibold text-gray-900">{getDisplayName(currentConnection)}</p>
+                <p className="text-xs text-muted-foreground">{headerStatus.label}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-white p-4">
+                <div className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-800">
+                  <Database className="h-4 w-4 text-emerald-600" />
+                  Company
+                </div>
+                <p className="text-lg font-semibold text-gray-900">
+                  {currentConnection.organizationName || currentConnection.organization_name || "Pending"}
+                </p>
+                <p className="text-xs text-muted-foreground">{currentConnection.gstin || "GSTIN not available"}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-white p-4">
+                <div className="mb-2 flex items-center gap-2 text-sm font-medium text-gray-800">
+                  <Clock className="h-4 w-4 text-amber-600" />
+                  Last heartbeat
+                </div>
+                <p className={heartbeatStale ? "text-lg font-semibold text-amber-700" : "text-lg font-semibold text-gray-900"}>
+                  {formatDateTime(heartbeat)}
+                </p>
+                <p className="text-xs text-muted-foreground">{heartbeatStale ? "Connector may be offline" : "Connector is reporting normally"}</p>
+              </div>
             </div>
           ) : null}
 
-          {currentConnection ? (
+          {showSetup && currentConnection ? (
             <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3 text-sm">
               <p className="text-gray-800">
                 <span className="font-medium">Connector:</span> {getDisplayName(currentConnection)}
@@ -459,47 +488,57 @@ const TallyIntegrationCard = () => {
             </div>
           ) : null}
 
-          <div className="rounded-lg border border-border bg-muted/20 p-4">
-            <h4 className="mb-2 font-semibold text-gray-800">Before you connect</h4>
-            <ul className="space-y-2">
-              {SETUP_CHECKLIST.map((item) => (
-                <li key={item} className="flex items-start gap-2 text-sm text-gray-600">
-                  <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-                  {item}
-                </li>
-              ))}
-            </ul>
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={handleInstallerDownload} disabled={downloadingConnector}>
-                {downloadingConnector ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-                Download Windows Connector
-              </Button>
-            </div>
-          </div>
+          {showSetup ? (
+            <>
+              <div className="rounded-lg border border-border bg-muted/20 p-4">
+                <h4 className="mb-2 font-semibold text-gray-800">Before you connect</h4>
+                <ul className="space-y-2">
+                  {SETUP_CHECKLIST.map((item) => (
+                    <li key={item} className="flex items-start gap-2 text-sm text-gray-600">
+                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={handleInstallerDownload} disabled={downloadingConnector}>
+                    {downloadingConnector ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                    Download Windows Connector
+                  </Button>
+                </div>
+              </div>
 
-          <div>
-            <h4 className="mb-3 font-semibold text-gray-800">We'll sync your:</h4>
-            <ul className="space-y-2">
-              {TALLY_SYNC_ITEMS.map((item) => (
-                <li key={item} className="flex items-center gap-2 text-sm text-gray-600">
-                  <span className="h-1.5 w-1.5 rounded-full bg-gray-400" />
-                  {item}
-                </li>
-              ))}
-            </ul>
-          </div>
+              <div>
+                <h4 className="mb-3 font-semibold text-gray-800">We'll sync your:</h4>
+                <ul className="space-y-2">
+                  {TALLY_SYNC_ITEMS.map((item) => (
+                    <li key={item} className="flex items-center gap-2 text-sm text-gray-600">
+                      <span className="h-1.5 w-1.5 rounded-full bg-gray-400" />
+                      {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </>
+          ) : null}
 
-          {isConnected ? (
+          {showDashboard && isConnected ? (
             <div className="space-y-4 rounded-lg border border-border bg-muted/10 p-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
                   <h4 className="font-semibold text-gray-800">Sync dashboard</h4>
                   <p className="text-sm text-muted-foreground">Manual sync queues import and export jobs for selected objects.</p>
                 </div>
-                <Button onClick={() => handleSync("ALL")} disabled={syncDisabled || syncing}>
-                  {syncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                  Sync all
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={handleRefreshConnection} disabled={connectionsLoading}>
+                    {connectionsLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+                    Refresh Tally
+                  </Button>
+                  <Button onClick={() => handleSync("ALL")} disabled={syncDisabled || syncing}>
+                    {syncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                    Sync all
+                  </Button>
+                </div>
               </div>
 
               {syncDisabled ? (
@@ -579,11 +618,44 @@ const TallyIntegrationCard = () => {
                 </div>
               </div>
             </div>
-          ) : status === "PENDING" && !pairingCredentials ? (
+          ) : null}
+
+          {showDashboard && !isConnected ? (
+            <div className="rounded-xl border border-dashed border-blue-200 bg-blue-50/80 p-6">
+              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h4 className="font-semibold text-blue-950">Tally is not connected yet</h4>
+                  <p className="mt-1 text-sm text-blue-800">
+                    Pair Tally from Settings → Integrations. Once connected, this page becomes the sync dashboard.
+                  </p>
+                </div>
+                <Button asChild variant="outline" className="border-blue-200 bg-white">
+                  <Link to="/settings?tab=integrations">
+                    <Settings2 className="mr-2 h-4 w-4" />
+                    Open Settings
+                  </Link>
+                </Button>
+              </div>
+            </div>
+          ) : null}
+
+          {showSetup && isConnected ? (
+            <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
+              <p>Tally is connected. Open Integrations to monitor sync health, logs, and manual sync.</p>
+              <Button asChild className="w-full bg-blue-600 text-white hover:bg-blue-700">
+                <Link to="/integrations">
+                  <ArrowRight className="mr-2 h-4 w-4" />
+                  Open Integrations
+                </Link>
+              </Button>
+            </div>
+          ) : null}
+
+          {showSetup && !isConnected && status === "PENDING" && !pairingCredentials ? (
             <div className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
               A Tally pairing is already in progress. Complete pairing in the Connector app, or ask an admin to reset the pending connection before starting again.
             </div>
-          ) : showConnectForm ? (
+          ) : showSetup && !isConnected && showConnectForm ? (
             <div className="space-y-3">
               <div className="space-y-2">
                 <Label htmlFor="tally-display-name">Connector display name</Label>
@@ -606,35 +678,30 @@ const TallyIntegrationCard = () => {
             </div>
           ) : null}
 
-          <div className="flex flex-wrap gap-2">
-            <Button asChild variant="outline" size="sm">
-              <a href={CONNECTOR_URL} target="_blank" rel="noreferrer">
-                <ExternalLink className="mr-2 h-4 w-4" />
-                Open Connector
-              </a>
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                refetchConnections();
-                refreshLocalConnectorHints();
-              }}
-              disabled={connectionsLoading}
-            >
-              {connectionsLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Refresh
-            </Button>
-          </div>
+          {showSetup ? (
+            <>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRefreshConnection}
+                  disabled={connectionsLoading}
+                >
+                  {connectionsLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Refresh
+                </Button>
+              </div>
 
-          <p className="text-xs text-muted-foreground">
-            Pairing is completed by the local Tally Connector. The browser does not activate the connector or store the API key.
-          </p>
-          {provider?.description ? <p className="text-xs text-muted-foreground">{provider.description}</p> : null}
+              <p className="text-xs text-muted-foreground">
+                Pairing is completed by the local Tally Connector. The browser does not activate the connector or store the API key.
+              </p>
+            </>
+          ) : null}
+          {showSetup && provider?.description ? <p className="text-xs text-muted-foreground">{provider.description}</p> : null}
         </div>
       </div>
 
-      <Dialog
+      {showSetup ? <Dialog
         open={pairingOpen}
         onOpenChange={(open) => {
           setPairingOpen(open);
@@ -657,16 +724,6 @@ const TallyIntegrationCard = () => {
             <FieldWithCopy label="Pairing code" value={credentials?.pairingCode} />
             <FieldWithCopy label="API key" value={credentials?.apiKey} sensitive />
 
-            {localConnectorStatus?.paired ? (
-              <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
-                Local Connector reports pairing complete. Waiting for Optifii backend confirmation…
-              </div>
-            ) : localConnectorStatus?.optifii?.status === "PENDING" ? (
-              <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                Connector is waiting for you to paste credentials and click Pair.
-              </div>
-            ) : null}
-
             {pairingTimedOut ? (
               <div className="rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-800">
                 Pairing timed out after 10 minutes. Close this dialog and start pairing again if needed.
@@ -678,19 +735,12 @@ const TallyIntegrationCard = () => {
             )}
 
             <div className="flex gap-3">
-              <Button asChild variant="outline" className="flex-1">
-                <a href={CONNECTOR_URL} target="_blank" rel="noreferrer">
-                  <ExternalLink className="mr-2 h-4 w-4" />
-                  Open Connector
-                </a>
-              </Button>
               <Button
                 type="button"
                 className="flex-1"
                 onClick={() => {
-                  refetchPolledConnection();
+                  refetchDetailConnection();
                   refetchConnections();
-                  refreshLocalConnectorHints();
                 }}
               >
                 Check status
@@ -698,7 +748,7 @@ const TallyIntegrationCard = () => {
             </div>
           </div>
         </DialogContent>
-      </Dialog>
+      </Dialog> : null}
     </>
   );
 };

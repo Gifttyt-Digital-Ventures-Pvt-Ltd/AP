@@ -42,12 +42,14 @@ const loadTaxManagementPage = () => import("./pages/tax-management/TaxManagement
 const loadReportsPage = () => import("./pages/reports/Reports");
 const loadAuditTrailPage = () => import("./pages/audit-trail/AuditTrail");
 const loadIntegrationsPage = () => import("./pages/integrations/IntegrationsPage");
+const loadAccountingPage = () => import("./pages/accounting/Accounting");
 
 const Settings = lazy(loadSettingsPage);
 const TaxManagement = lazy(loadTaxManagementPage);
 const Reports = lazy(loadReportsPage);
 const AuditTrail = lazy(loadAuditTrailPage);
 const IntegrationsPage = lazy(loadIntegrationsPage);
+const Accounting = lazy(loadAccountingPage);
 
 const PageFallback = () => (
   <div className="min-h-[60vh] rounded-xl border border-border bg-card/50 flex items-center justify-center">
@@ -202,6 +204,7 @@ function AppContent() {
       loadReportsPage();
       loadAuditTrailPage();
       loadIntegrationsPage();
+      loadAccountingPage();
     };
 
     if (typeof window !== "undefined" && "requestIdleCallback" in window) {
@@ -283,6 +286,38 @@ function AppContent() {
             element={
               <Suspense fallback={<PageFallback />}>
                 <IntegrationsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/accounting"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <Accounting />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/accounting/chart-of-accounts"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <Accounting />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/accounting/ledger-explorer"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <Accounting />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/accounting/ledger-explorer/:ledgerId"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <Accounting />
               </Suspense>
             }
           />

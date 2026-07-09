@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Building2, Loader2 } from 'lucide-react';
+import { Building2, ChevronDown, Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import {
   formatBankAccountSummaryLine,
@@ -39,20 +39,23 @@ const BankAccountRow = ({
   return (
     <div
       className={cn(
-        'rounded-lg border px-3 py-2.5',
+        'rounded-md border px-2.5 py-2',
         highlighted
           ? 'border-primary/30 bg-primary/5'
-          : 'border-border bg-background/80',
-        compact ? 'py-2' : '',
+          : 'border-border/80 bg-muted/20',
+        compact ? 'py-1.5' : '',
       )}
       data-testid={`connected-bank-account-${account?.id ?? 'unknown'}`}
     >
-      <div className="flex flex-wrap items-start justify-between gap-2">
-        <div className="min-w-0 space-y-0.5">
-          <p className={cn('font-medium truncate', compact ? 'text-sm' : 'text-sm md:text-base')}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <p className={cn('truncate font-medium', compact ? 'text-xs' : 'text-sm')}>
             {accountName}
+            <span className="font-normal text-muted-foreground">
+              {' '}
+              · {bankLine}
+            </span>
           </p>
-          <p className="text-xs text-muted-foreground">{bankLine}</p>
           {!compact ? (
             <p className="text-[11px] text-muted-foreground">
               {accountType}
@@ -60,8 +63,8 @@ const BankAccountRow = ({
             </p>
           ) : null}
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <span className="text-xs font-semibold text-muted-foreground">{currency}</span>
+        <div className="flex shrink-0 items-center gap-1.5">
+          <span className="text-[11px] font-medium text-muted-foreground">{currency}</span>
           <StatusBadge active={active} />
         </div>
       </div>
@@ -77,7 +80,10 @@ const ConnectedBankAccountsPanel = ({
   loading = false,
   title = 'Connected Banking',
   showManageLink = true,
+  maxListHeight,
+  defaultCollapsed = false,
 }) => {
+  const [expanded, setExpanded] = useState(!defaultCollapsed);
   const normalizedAccounts = normalizeBankAccountList(accounts);
   const activeAccounts = getActiveBankAccounts(normalizedAccounts);
   const selectedAccount = selectedAccountId
@@ -86,14 +92,16 @@ const ConnectedBankAccountsPanel = ({
   const highlightedAccounts = selectedAccount
     ? [selectedAccount]
     : activeAccounts.length > 0
-      ? activeAccounts
+      ? [activeAccounts[0]]
       : normalizedAccounts.slice(0, 1);
-  const otherAccounts = normalizedAccounts.filter(
-    (account) =>
-      !highlightedAccounts.some(
-        (highlighted) => String(highlighted?.id) === String(account?.id),
-      ),
-  );
+  const compact = variant === 'compact' || variant === 'preview';
+  const useCompactRows = compact || normalizedAccounts.length > 1;
+  const resolvedMaxListHeight =
+    maxListHeight || (normalizedAccounts.length > 1 ? 'max-h-24' : undefined);
+  const accountSummary = normalizedAccounts
+    .slice(0, 3)
+    .map((account) => account?.account_name || account?.accountName || 'Account')
+    .join(', ');
 
   if (loading) {
     return (
@@ -141,35 +149,42 @@ const ConnectedBankAccountsPanel = ({
     );
   }
 
-  const compact = variant === 'compact' || variant === 'preview';
-
   return (
     <div
       className={cn(
         'rounded-lg border border-border bg-card shadow-sm',
-        compact ? 'p-3' : 'p-4',
+        compact ? 'px-3 py-2' : 'p-4',
         className,
       )}
       data-testid="connected-banking-panel"
     >
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <Building2 className="h-4 w-4 text-primary" />
-          <div>
+      <div className="flex items-center justify-between gap-2">
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+          onClick={() => setExpanded((value) => !value)}
+          aria-expanded={expanded}
+          data-testid="connected-banking-toggle"
+        >
+          <Building2 className="h-4 w-4 shrink-0 text-primary" />
+          <div className="min-w-0">
             <p className="text-sm font-semibold">{title}</p>
-            {!compact ? (
-              <p className="text-xs text-muted-foreground">
-                {activeAccounts.length > 0
-                  ? `${activeAccounts.length} active account${activeAccounts.length === 1 ? '' : 's'} connected`
-                  : 'No active account — activate one in Settings'}
-              </p>
-            ) : null}
+            <p className="truncate text-xs text-muted-foreground">
+              {normalizedAccounts.length} account{normalizedAccounts.length === 1 ? '' : 's'}
+              {!expanded && accountSummary ? ` · ${accountSummary}` : ''}
+            </p>
           </div>
-        </div>
+          <ChevronDown
+            className={cn(
+              'ml-1 h-4 w-4 shrink-0 text-muted-foreground transition-transform',
+              expanded && 'rotate-180',
+            )}
+          />
+        </button>
         {showManageLink ? (
-          <div className="flex items-center gap-3 text-xs">
+          <div className="flex shrink-0 items-center gap-2 text-xs">
             <Link to="/banking" className="font-medium text-primary hover:underline">
-              Open Banking
+              Banking
             </Link>
             <Link to="/settings" className="font-medium text-primary hover:underline">
               Settings
@@ -178,30 +193,29 @@ const ConnectedBankAccountsPanel = ({
         ) : null}
       </div>
 
-      <div className="space-y-2">
-        {highlightedAccounts.map((account) => (
-          <BankAccountRow
-            key={account?.id ?? account?.account_number ?? account?.account_name}
-            account={account}
-            highlighted
-            compact={compact}
-          />
-        ))}
+      {expanded ? (
+        <div
+          className={cn(
+            'mt-2 space-y-1.5',
+            resolvedMaxListHeight,
+            resolvedMaxListHeight && 'overflow-y-auto scrollbar-thin-muted pr-1',
+          )}
+        >
+          {normalizedAccounts.map((account) => (
+            <BankAccountRow
+              key={account?.id ?? account?.account_number ?? account?.account_name}
+              account={account}
+              highlighted={highlightedAccounts.some(
+                (highlighted) => String(highlighted?.id) === String(account?.id),
+              )}
+              compact={useCompactRows}
+            />
+          ))}
+        </div>
+      ) : null}
 
-        {!compact && otherAccounts.length > 0 ? (
-          <div className="space-y-2 pt-1">
-            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              Other connected accounts
-            </p>
-            {otherAccounts.map((account) => (
-              <BankAccountRow key={account?.id ?? account?.account_number ?? account?.account_name} account={account} compact />
-            ))}
-          </div>
-        ) : null}
-      </div>
-
-      {!compact && activeAccounts.length === 0 ? (
-        <p className="mt-3 text-xs text-amber-700 dark:text-amber-300">
+      {expanded && !compact && activeAccounts.length === 0 ? (
+        <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">
           All connected accounts are inactive. Mark one as active in Settings before processing payments.
         </p>
       ) : null}

@@ -32,6 +32,13 @@ export const ROUTE_PERMISSION_RULES = {
     anyOf: ["payment-batches-view", "payment-batches-manage"],
   },
   "/tax-management": { anyOf: ["tax-view", "tax-manage"] },
+  "/accounting": {
+    anyOf: [
+      "integrations.view",
+      "integrations.sync.trigger",
+      "settings-interaction",
+    ],
+  },
   "/reports": { anyOf: ["reports-view", "reports-full"] },
   "/audit-trail": { anyOf: ["audit-trail-view"] },
   "/integrations": {
@@ -101,6 +108,10 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
     screen: "TAX_MANAGEMENT",
     anySections: ["TAX_GST", "TAX_TDS_COMPLIANCE"],
   },
+  "/accounting": {
+    screen: "SETTINGS",
+    anySections: ["SETTINGS_INTEGRATIONS"],
+  },
   "/reports": {
     screen: "REPORTS",
     anySections: [
@@ -157,6 +168,7 @@ export const DEFAULT_ROUTE_PRIORITY = [
   "/payments",
   "/payment-batches",
   "/tax-management",
+  "/accounting",
   "/reports",
   "/audit-trail",
   "/integrations",
