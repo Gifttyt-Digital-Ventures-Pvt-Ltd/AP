@@ -95,10 +95,10 @@ export const integrationsApi = serviceApi.injectEndpoints({
       providesTags: ["Integrations"],
     }),
     triggerIntegrationSync: builder.mutation({
-      query: ({ connectionId, object, direction = "PULL" }) => ({
+      query: ({ connectionId, object }) => ({
         url: `${ZOHO_BASE}/connections/${connectionId}/sync`,
         method: "POST",
-        body: withParams({ object, direction }),
+        body: withParams({ object }),
       }),
       invalidatesTags: ["Integrations"],
     }),
@@ -186,10 +186,10 @@ export const integrationsApi = serviceApi.injectEndpoints({
       invalidatesTags: ["Integrations"],
     }),
     triggerTallySync: builder.mutation({
-      query: ({ connectionId, object = "ALL" } = {}) => ({
+      query: ({ connectionId, object = "ALL", direction = "PULL" } = {}) => ({
         url: `${TALLY_BASE}/connections/${connectionId}/sync`,
         method: "POST",
-        body: withParams({ object }),
+        body: withParams({ object, direction }),
       }),
       invalidatesTags: ["Integrations"],
     }),
