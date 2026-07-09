@@ -8,6 +8,7 @@ import {
   useBulkUploadInvoicesMutation,
   useRequestVendorAdditionMutation,
   useCreateInvoiceMutation,
+  useLazyGetInvoiceQuery,
   useLazyGetInvoiceHistoryQuery,
   useUpdateInvoiceMutation,
   useForwardInvoiceMutation,
@@ -443,12 +444,25 @@ const InvoicesPage = () => {
       ...(debouncedInvoiceColumnFilters.invoiceDateTo
         ? { invoiceDateTo: debouncedInvoiceColumnFilters.invoiceDateTo }
         : {}),
+      ...(showProformaInvoiceFields
+        ? {
+            excludeLinkedTaxInvoices: true,
+            ...(invoiceDocumentTypeTab === "tax"
+              ? { documentType: DOCUMENT_TYPE.TAX_INVOICE }
+              : {}),
+            ...(invoiceDocumentTypeTab === "proforma"
+              ? { documentType: DOCUMENT_TYPE.PROFORMA_INVOICE }
+              : {}),
+          }
+        : {}),
       sortBy: invoiceSort.value,
       sortDirection: invoiceSort.direction,
     }),
     [
       currencyQueryArgs,
       invoiceStatusFilter,
+      invoiceDocumentTypeTab,
+      showProformaInvoiceFields,
       debouncedSearchTerm,
       debouncedInvoiceColumnFilters,
       invoiceSort,
@@ -511,6 +525,7 @@ const InvoicesPage = () => {
     useRequestVendorAdditionMutation();
   const [createInvoice, { isLoading: createInvoiceLoading }] =
     useCreateInvoiceMutation();
+  const [getInvoice] = useLazyGetInvoiceQuery();
   const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
   const [updateInvoice, { isLoading: updateInvoiceLoading }] =
     useUpdateInvoiceMutation();
@@ -2074,14 +2089,31 @@ const InvoicesPage = () => {
   };
 
   const handleViewLinkedInvoice = useCallback(
-    (linkedInvoice) => {
-      const fullInvoice =
-        invoices.find(
-          (item) => String(item.id) === String(linkedInvoice?.id),
-        ) ?? linkedInvoice;
-      handleViewInvoice(fullInvoice);
+    async (linkedInvoice) => {
+      const fullInvoice = invoices.find(
+        (item) => String(item.id) === String(linkedInvoice?.id),
+      );
+
+      if (fullInvoice) {
+        handleViewInvoice(fullInvoice);
+        return;
+      }
+
+      if (!linkedInvoice?.id) {
+        handleViewInvoice(linkedInvoice);
+        return;
+      }
+
+      try {
+        const invoiceDetail = await getInvoice(linkedInvoice.id).unwrap();
+        handleViewInvoice({ ...linkedInvoice, ...invoiceDetail });
+      } catch (error) {
+        console.error("Failed to fetch linked tax invoice detail:", error);
+        toast.error("Could not load full linked tax invoice details");
+        handleViewInvoice(linkedInvoice);
+      }
     },
-    [invoices],
+    [getInvoice, handleViewInvoice, invoices],
   );
 
   const handleEditInvoice = (invoice) => {

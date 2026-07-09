@@ -92,9 +92,9 @@ const ProformaInvoicePicker = ({
                         PO match
                       </span>
                     )}
-                    <span className="rounded bg-primary/10 px-2 py-0.5 text-primary">
+                    {/* <span className="rounded bg-primary/10 px-2 py-0.5 text-primary">
                       {PI_MATCH_LABELS[pi.matchLabel] || 'Match'}
-                    </span>
+                    </span> */}
                   </div>
                 </div>
               </button>

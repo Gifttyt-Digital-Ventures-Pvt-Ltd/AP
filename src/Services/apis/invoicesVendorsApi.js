@@ -28,6 +28,11 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
       transformResponse: normalizeInvoiceListResponse,
       providesTags: ["Invoices"],
     }),
+    getInvoice: builder.query({
+      query: (id) => ({ url: `/invoices/${id}`, method: "GET" }),
+      transformResponse: toInvoiceUiPayload,
+      providesTags: (_result, _error, id) => [{ type: "Invoices", id }],
+    }),
     getInvoiceFilterOptions: builder.query({
       query: (params = {}) => ({
         url: "/invoices/filter-options",
@@ -221,6 +226,8 @@ export const {
   useGetInvoiceMandatoryFieldsQuery,
   useGetInvoiceFilterOptionsQuery,
   useGetInvoicesQuery,
+  useGetInvoiceQuery,
+  useLazyGetInvoiceQuery,
   useCreateInvoiceMutation,
   useUpdateInvoiceMutation,
   useForwardInvoiceMutation,
