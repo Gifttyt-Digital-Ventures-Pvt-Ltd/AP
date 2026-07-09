@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   useGetBankAccountsQuery,
   useCreateBankAccountMutation,
@@ -15,8 +16,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/ta
 import { Building2, CheckCircle, Copy, Globe, Loader2, Mail, MapPin, Phone, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import BankAccountDialog from './components/BankAccountDialog';
-import TallyIntegrationCard from './components/TallyIntegrationCard';
 import ZohoIntegrationCard from './components/ZohoIntegrationCard';
+import TallyIntegrationCard from '../integrations/components/TallyIntegrationCard';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useRBAC } from '../../contexts/RBACContext';
 import useGmailIntegrationSubscription from '../../hooks/useGmailIntegrationSubscription';
@@ -80,6 +81,7 @@ const Settings = () => {
     if (canViewIntegrationsSettings) tabs.push('integrations');
     return tabs;
   }, [canViewBankingSettings, canViewBillingSettings, canViewIntegrationsSettings, canViewOrganisationSettings]);
+  const [searchParams] = useSearchParams();
   const [activeSettingsTab, setActiveSettingsTab] = useState('');
   const {
     data: bankAccountsData = [],
@@ -141,8 +143,15 @@ const Settings = () => {
   const canSaveOrganisation = orgDetails ? canUpdateOrganisationDetails : canCreateOrganisationDetails;
 
   useEffect(() => {
+    const requestedTab = searchParams.get('tab');
+    if (requestedTab && availableSettingsTabs.includes(requestedTab)) {
+      setActiveSettingsTab(requestedTab);
+    }
+  }, [availableSettingsTabs, searchParams]);
+
+  useEffect(() => {
     if (availableSettingsTabs.length === 0) return;
-    if (!availableSettingsTabs.includes(activeSettingsTab)) {
+    if (!activeSettingsTab || !availableSettingsTabs.includes(activeSettingsTab)) {
       setActiveSettingsTab(availableSettingsTabs[0]);
     }
   }, [activeSettingsTab, availableSettingsTabs]);
@@ -744,7 +753,7 @@ const Settings = () => {
               <>
                 <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
                   <ZohoIntegrationCard />
-                  <TallyIntegrationCard />
+                  <TallyIntegrationCard mode="setup" />
                 </div>
 
                 <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">

@@ -209,72 +209,57 @@ const PendingPaymentsTab = ({
   );
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-3">
       {invoices.length > 0 && (
-        <div className="shrink-0 bg-accent/10 border border-accent/30 rounded-lg p-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-medium">Total Pending Amount</p>
-              {renderCurrencyTotals(
-                totalPendingByCurrency,
-                "text-2xl font-bold   text-primary",
-              )}
-              {showRecordPaymentSelection && selectedInvoiceIds.length > 0 && (
-                <div className="mt-1 text-sm text-muted-foreground">
-                  Selected {selectedInvoiceIds.length} invoice
-                  {selectedInvoiceIds.length === 1 ? '' : 's'}
-                  {selectedTotalByCurrency.length === 1 ? (
-                    <>
-                      {' '}
-                      ·{' '}
-                      <span className="  font-medium text-foreground">
-                        {formatCurrency(
-                          selectedTotalByCurrency[0].total,
-                          selectedTotalByCurrency[0].currency,
-                        )}
-                      </span>
-                    </>
-                  ) : (
-                    <div className="mt-1 space-y-0.5   font-medium text-foreground">
-                      {selectedTotalByCurrency.map(({ currency, total }) => (
-                        <p key={currency}>{formatCurrency(total, currency)}</p>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+        <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span className="text-xs font-medium text-muted-foreground">Total Pending</span>
+            {renderCurrencyTotals(totalPendingByCurrency, 'text-lg font-bold text-primary')}
+            {showRecordPaymentSelection && selectedInvoiceIds.length > 0 && (
+              <span className="text-xs text-muted-foreground">
+                · {selectedInvoiceIds.length} selected
+                {selectedTotalByCurrency.length === 1 ? (
+                  <>
+                    {' '}
+                    ({formatCurrency(
+                      selectedTotalByCurrency[0].total,
+                      selectedTotalByCurrency[0].currency,
+                    )})
+                  </>
+                ) : null}
+              </span>
+            )}
+          </div>
 
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-              {canDownloadInvoiceReport && (
-                <Button
-                  variant="outline"
-                  size="lg"
-                  onClick={onOpenInvoiceReport}
-                  data-testid="open-pending-payment-report-dialog"
-                >
-                  <FileSpreadsheet className="mr-2 h-4 w-4" />
-                  Download report
-                </Button>
-              )}
+          <div className="flex flex-wrap items-center gap-2">
+            {canDownloadInvoiceReport && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onOpenInvoiceReport}
+                data-testid="open-pending-payment-report-dialog"
+              >
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Download report
+              </Button>
+            )}
 
-              {canBulkRelease && (
-                <Button onClick={handleBulkRelease} size="lg" data-testid="pending-tab-bulk-release-button">
-                  Release All Payments
-                </Button>
-              )}
+            {canBulkRelease && (
+              <Button onClick={handleBulkRelease} size="sm" data-testid="pending-tab-bulk-release-button">
+                Release All Payments
+              </Button>
+            )}
 
-              {showRecordPaymentSelection && canRecordPayment && (
-                <Button
-                  size="lg"
-                  onClick={onOpenRecordPayment}
-                  disabled={selectedInvoiceIds.length === 0}
-                  data-testid="open-record-payment-dialog"
-                >
-                  Record Payment
-                </Button>
-              )}
-            </div>
+            {showRecordPaymentSelection && canRecordPayment && (
+              <Button
+                size="sm"
+                onClick={onOpenRecordPayment}
+                disabled={selectedInvoiceIds.length === 0}
+                data-testid="open-record-payment-dialog"
+              >
+                Record Payment
+              </Button>
+            )}
           </div>
         </div>
       )}

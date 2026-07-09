@@ -16,9 +16,9 @@ const PaymentsHeader = ({
   onRefresh,
   refreshing = false,
 }) => (
-  <div className="flex flex-col gap-4 mb-8 lg:flex-row lg:items-center lg:justify-between">
+    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
     <div>
-      <h1 className="text-4xl md:text-5xl font-bold font-['Manrope'] text-primary mb-2" data-testid="payments-title">
+      <h1 className="text-3xl md:text-4xl font-bold font-['Manrope'] text-primary mb-1" data-testid="payments-title">
         Payments
       </h1>
       <p className="text-muted-foreground">Track and release payments</p>

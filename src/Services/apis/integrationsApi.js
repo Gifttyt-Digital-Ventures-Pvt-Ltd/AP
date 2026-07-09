@@ -7,19 +7,23 @@ const TALLY_BASE = "/integration/tally";
 
 const withParams = (params = {}) =>
   Object.fromEntries(
-    Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ""),
+    Object.entries(params).filter(
+      ([, value]) => value !== undefined && value !== null && value !== "",
+    ),
   );
 
 export const integrationsApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getIntegrationProviders: builder.query({
       query: () => ({ url: `${ZOHO_BASE}/providers`, method: "GET" }),
-      transformResponse: (response) => extractListResponse(response, ['providers']),
+      transformResponse: (response) =>
+        extractListResponse(response, ["providers"]),
       providesTags: ["Integrations"],
     }),
     getIntegrationConnections: builder.query({
       query: () => ({ url: `${ZOHO_BASE}/connections`, method: "GET" }),
-      transformResponse: (response) => extractListResponse(response, ['connections']),
+      transformResponse: (response) =>
+        extractListResponse(response, ["connections"]),
       providesTags: ["Integrations"],
     }),
     getIntegrationConnection: builder.query({
@@ -49,7 +53,8 @@ export const integrationsApi = serviceApi.injectEndpoints({
         url: `${ZOHO_BASE}/connections/${connectionId}/organizations`,
         method: "GET",
       }),
-      transformResponse: (response) => extractListResponse(response, ['organizations']),
+      transformResponse: (response) =>
+        extractListResponse(response, ["organizations"]),
       providesTags: ["Integrations"],
     }),
     bindZohoOrganization: builder.mutation({
@@ -90,10 +95,10 @@ export const integrationsApi = serviceApi.injectEndpoints({
       providesTags: ["Integrations"],
     }),
     triggerIntegrationSync: builder.mutation({
-      query: ({ connectionId, object } = {}) => ({
+      query: ({ connectionId, object, direction = "PULL" }) => ({
         url: `${ZOHO_BASE}/connections/${connectionId}/sync`,
         method: "POST",
-        body: withParams({ object }),
+        body: withParams({ object, direction }),
       }),
       invalidatesTags: ["Integrations"],
     }),
@@ -125,7 +130,8 @@ export const integrationsApi = serviceApi.injectEndpoints({
     }),
     getGmailConnections: builder.query({
       query: () => ({ url: `${GMAIL_BASE}/connections`, method: "GET" }),
-      transformResponse: (response) => extractListResponse(response, ["connections"]),
+      transformResponse: (response) =>
+        extractListResponse(response, ["connections"]),
       providesTags: ["Integrations"],
     }),
     getGmailConnection: builder.query({

@@ -24,6 +24,7 @@ import {
   titleize,
 } from "../utils";
 import { LoadingState, PageShell, StatusBadge } from "./shared";
+import TallyIntegrationCard from "./TallyIntegrationCard";
 
 const ProviderCard = ({ provider, disabled, activeConnection }) => {
   const providerKey = getProviderKey(provider);
@@ -79,6 +80,8 @@ const ProviderCard = ({ provider, disabled, activeConnection }) => {
   );
 };
 
+const isTallyKey = (value = "") => String(value || "").toUpperCase().includes("TALLY");
+
 const IntegrationLanding = () => {
   const { data: providersResponse, isLoading: providersLoading } = useGetIntegrationProvidersQuery();
   const {
@@ -87,8 +90,14 @@ const IntegrationLanding = () => {
     refetch: refetchConnections,
   } = useGetIntegrationConnectionsQuery();
 
-  const providers = useMemo(() => normalizeProviders(providersResponse), [providersResponse]);
-  const connections = useMemo(() => normalizeConnections(connectionsResponse), [connectionsResponse]);
+  const providers = useMemo(
+    () => normalizeProviders(providersResponse).filter((provider) => !isTallyKey(getProviderKey(provider))),
+    [providersResponse],
+  );
+  const connections = useMemo(
+    () => normalizeConnections(connectionsResponse).filter((connection) => !isTallyKey(getConnectionProvider(connection))),
+    [connectionsResponse],
+  );
   const activeConnection = connections.find((connection) => isBlockingConnection(connection));
   const activeConnectionId = getConnectionId(activeConnection || {});
   const hasBlockingConnection = Boolean(activeConnection);
@@ -155,6 +164,10 @@ const IntegrationLanding = () => {
             activeConnection={activeConnection}
           />
         ))}
+      </div>
+
+      <div className="mt-5">
+        <TallyIntegrationCard mode="dashboard" />
       </div>
     </PageShell>
   );

@@ -806,7 +806,7 @@ const Payments = () => {
   );
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6" data-testid="payments-page">
+    <div className="flex min-h-0 flex-1 flex-col gap-3" data-testid="payments-page">
       <div className="shrink-0">
         <PaymentsHeader
           invoicesCount={invoices.length}
@@ -851,6 +851,8 @@ const Payments = () => {
           accounts={bankAccounts}
           loading={bankAccountsFetching}
           className="shrink-0"
+          variant="compact"
+          defaultCollapsed
         />
       ) : null}
 
@@ -961,7 +963,7 @@ const Payments = () => {
       </div>
 
       {/* Tabs are composed from feature components to keep page orchestration small. */}
-      <Tabs defaultValue="pending" className="flex min-h-0 flex-1 flex-col gap-6">
+      <Tabs defaultValue="pending" className="flex min-h-0 flex-1 flex-col gap-3">
         <TabsList className="shrink-0 w-fit">
           <TabsTrigger value="pending" data-testid="tab-pending-payments">
             Pending Payments ({invoices.length})
