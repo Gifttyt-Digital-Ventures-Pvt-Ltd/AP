@@ -52,7 +52,7 @@ const getHeaderStatus = (connection) => {
   if (status === "ERROR" || status === "FAILED") {
     return { label: "Error", connected: false, tone: "error" };
   }
-  if (status === "PENDING" || status === "AUTHORIZING") {
+  if (status === "PENDING" || status === "PENDING_AUTHORIZATION" || status === "AUTHORIZING") {
     return { label: "Setup in progress", connected: false, tone: "warning" };
   }
   return { label: titleize(status), connected: false, tone: "neutral" };
