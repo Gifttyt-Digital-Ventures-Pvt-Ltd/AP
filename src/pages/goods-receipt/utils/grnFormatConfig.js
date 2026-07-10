@@ -124,10 +124,14 @@ export const getNextGrnFormatName = (formats = []) => {
 };
 
 const getSection = (config, sectionKey) =>
-  (config?.sections || []).find((section) => section.section === sectionKey);
+  (config?.sections || []).find(
+    (section) => String(section.section || '').toUpperCase() === String(sectionKey || '').toUpperCase(),
+  );
 
 const getField = (config, sectionKey, fieldKey) =>
-  getSection(config, sectionKey)?.fields?.find((field) => field.fieldKey === fieldKey);
+  getSection(config, sectionKey)?.fields?.find(
+    (field) => String(field.fieldKey || '').toLowerCase() === String(fieldKey || '').toLowerCase(),
+  );
 
 export const sectionEnabled = (config, sectionKey) =>
   Boolean(getSection(config, sectionKey)?.isEnabled);
@@ -146,6 +150,64 @@ export const fieldEnabled = (config, sectionKey, fieldKey) => {
   return Boolean(field.isEnabled);
 };
 
+const normalizeFieldShape = (field = {}, fallback = {}) => {
+  const fieldKey = field.fieldKey || field.field_key || fallback.fieldKey || '';
+  return {
+    ...fallback,
+    ...field,
+    fieldKey,
+    label: field.label || field.labelOverride || field.label_override || fallback.label || fieldKey,
+    isEnabled: Boolean(field.isEnabled ?? field.is_enabled ?? fallback.isEnabled ?? false),
+    isSystemField: Boolean(
+      field.isSystemField ?? field.is_system_field ?? fallback.isSystemField ?? false,
+    ),
+    isMandatory: Boolean(field.isMandatory ?? field.is_mandatory ?? fallback.isMandatory ?? false),
+    labelOverride: field.labelOverride ?? field.label_override ?? fallback.labelOverride ?? null,
+    displayOrder: field.displayOrder ?? field.display_order ?? fallback.displayOrder,
+  };
+};
+
+const normalizeSectionShape = (section = {}, fallback = {}) => {
+  const sectionKey = String(section.section || section.sectionKey || section.section_key || fallback.section || '')
+    .toUpperCase();
+  const fallbackFields = Array.isArray(fallback.fields) ? fallback.fields : [];
+  const rawFields = Array.isArray(section.fields) ? section.fields : [];
+  const mergedFields = new Map(
+    fallbackFields.map((field) => [field.fieldKey, normalizeFieldShape(field, field)]),
+  );
+
+  rawFields.forEach((field) => {
+    const key = field.fieldKey || field.field_key;
+    if (!key) return;
+    mergedFields.set(key, normalizeFieldShape(field, mergedFields.get(key) || {}));
+  });
+
+  return {
+    ...fallback,
+    ...section,
+    section: sectionKey || fallback.section,
+    label: section.label || fallback.label || sectionKey || fallback.section,
+    isEnabled: Boolean(section.isEnabled ?? section.is_enabled ?? fallback.isEnabled ?? true),
+    displayOrder: section.displayOrder ?? section.display_order ?? fallback.displayOrder,
+    fields: Array.from(mergedFields.values()),
+  };
+};
+
+const mergeSectionsWithDefaults = (rawSections = [], defaultSections = DEFAULT_GRN_FORMAT_CONFIG.sections) => {
+  const defaultsByKey = new Map(defaultSections.map((section) => [section.section, section]));
+  const merged = new Map(
+    defaultSections.map((section) => [section.section, normalizeSectionShape(section, section)]),
+  );
+
+  rawSections.forEach((section) => {
+    const key = String(section.section || section.sectionKey || section.section_key || '').toUpperCase();
+    if (!key) return;
+    merged.set(key, normalizeSectionShape(section, defaultsByKey.get(key) || { section: key, fields: [] }));
+  });
+
+  return Array.from(merged.values());
+};
+
 /** Merge API / legacy flat config into PO-style sections config */
 export const normalizeGrnFormatConfig = (raw = {}) => {
   const base = cloneGrnFormatConfig(DEFAULT_GRN_FORMAT_CONFIG);
@@ -160,10 +222,9 @@ export const normalizeGrnFormatConfig = (raw = {}) => {
       valuation_enabled: raw.valuation_enabled ?? raw.valuationEnabled ?? base.valuation_enabled,
       bill_to_enabled: raw.bill_to_enabled ?? raw.billToEnabled ?? base.bill_to_enabled,
       approval_enabled: raw.approval_enabled ?? raw.approvalEnabled ?? base.approval_enabled,
-      sections: raw.sections.map((section) => ({
-        ...section,
-        fields: (section.fields || []).map((field) => ({ ...field })),
-      })),
+      companyName: raw.companyName ?? raw.company_name ?? base.companyName,
+      grnNumberPrefix: raw.grnNumberPrefix ?? raw.grn_number_prefix ?? base.grnNumberPrefix,
+      sections: mergeSectionsWithDefaults(raw.sections, base.sections),
     };
   }
 
@@ -212,6 +273,7 @@ export const normalizeGrnFormatConfig = (raw = {}) => {
     companyName: raw.companyName ?? raw.company_name ?? base.companyName,
     name: sanitizeGrnFormatName(raw.name ?? base.name, base.name),
     id: raw.id ?? base.id,
+    sections: base.sections,
   };
 };
 
