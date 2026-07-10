@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Eye, Plus, CheckCircle2 } from 'lucide-react';
+import { Edit, Eye, Plus, CheckCircle2 } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Card } from '../../../components/ui/card';
@@ -49,6 +49,7 @@ const GrnListTab = ({
   canApprove = false,
   onCreate,
   onView,
+  onEdit,
   onReview,
 }) => {
   const [search, setSearch] = useState('');
@@ -216,6 +217,12 @@ const GrnListTab = ({
                         <Eye className="mr-1 h-4 w-4" />
                         View
                       </Button>
+                      {[GRN_STATUS.DRAFT, GRN_STATUS.SENT_BACK].includes(grn.status) && (
+                        <Button variant="outline" size="sm" onClick={() => onEdit(grn)} data-testid={`edit-grn-${grn?.id ?? 'unknown'}`}>
+                          <Edit className="mr-1 h-4 w-4" />
+                          Edit
+                        </Button>
+                      )}
                       {canApprove && grn.status === GRN_STATUS.PENDING_APPROVAL && (
                         <Button variant="outline" size="sm" onClick={() => onReview(grn)}>
                           <CheckCircle2 className="mr-1 h-4 w-4" />
