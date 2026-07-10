@@ -141,9 +141,100 @@ const formatPercent = (value, digits = 2) => {
 
 const formatChecklistValue = (value) => {
   if (value === null || value === undefined || value === "") return "-";
-  if (Array.isArray(value)) return value.join(", ");
+  if (Array.isArray(value)) return value.map((entry) => formatChecklistValue(entry)).filter((entry) => entry !== "-").join(", ") || "-";
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
+};
+
+/** Split distinct GST rates that were joined without separators (e.g. "5.0006.000" → ["5.000", "6.000"]). */
+const splitConcatenatedFixedScaleRates = (text, scale = 3) => {
+  const compact = String(text || "").replace(/\s/g, "");
+  if (!compact) return null;
+
+  const parts = [];
+  let index = 0;
+
+  while (index < compact.length) {
+    const start = index;
+    while (index < compact.length && /\d/.test(compact[index])) index += 1;
+    if (index === start || compact[index] !== ".") return null;
+    index += 1;
+
+    const fractionStart = index;
+    let fractionCount = 0;
+    while (index < compact.length && /\d/.test(compact[index]) && fractionCount < scale) {
+      index += 1;
+      fractionCount += 1;
+    }
+    if (fractionCount !== scale) return null;
+    parts.push(compact.slice(start, fractionStart + scale));
+  }
+
+  return parts.length > 1 ? parts : null;
+};
+
+const normalizeGstRateParts = (value) => {
+  if (value === null || value === undefined || value === "") return [];
+  if (Array.isArray(value)) return value.flatMap((entry) => normalizeGstRateParts(entry));
+  if (typeof value === "object") {
+    const nested =
+      value.rates ??
+      value.gstRates ??
+      value.gst_rates ??
+      value.values ??
+      value.invoiceRates ??
+      value.poRates;
+    return nested !== undefined ? normalizeGstRateParts(nested) : [];
+  }
+
+  const text = String(value).trim();
+  if (!text) return [];
+
+  if (/[,;|/]/.test(text)) {
+    return text
+      .split(/[,;|/]+/)
+      .map((part) => part.trim())
+      .filter(Boolean);
+  }
+
+  const spaceParts = text.split(/\s+/).filter(Boolean);
+  if (spaceParts.length > 1 && spaceParts.every((part) => /^\d+(?:\.\d+)?%?$/.test(part))) {
+    return spaceParts;
+  }
+
+  // Backend sometimes concatenates BigDecimal-style rates: "5.000" + "6.000" => "5.0006.000"
+  for (const scale of [3, 4, 2]) {
+    const fixedScaleParts = splitConcatenatedFixedScaleRates(text, scale);
+    if (fixedScaleParts) return fixedScaleParts;
+  }
+
+  return [text];
+};
+
+const formatGstRateChecklistValue = (value) => {
+  const parts = normalizeGstRateParts(value);
+  return parts.length ? parts.join(", ") : "-";
+};
+
+const getGstRateSideValue = (criterion = {}, side) => {
+  const sideKey = String(side || "").toLowerCase();
+  const nestedRates =
+    criterion[`${sideKey}Rates`] ??
+    criterion[`${sideKey}GstRates`] ??
+    criterion[`${sideKey}_rates`] ??
+    criterion[`${sideKey}_gst_rates`] ??
+    criterion.detail?.[`${sideKey}Rates`] ??
+    criterion.detail?.[`${sideKey}GstRates`] ??
+    criterion.detail?.[`${sideKey}_rates`] ??
+    criterion.subDetail?.[`${sideKey}Rates`] ??
+    criterion.subDetail?.[`${sideKey}GstRates`] ??
+    criterion.values?.[`${sideKey}Rates`];
+
+  if (nestedRates !== undefined && nestedRates !== null && nestedRates !== "") {
+    return nestedRates;
+  }
+
+  return getCriterionValue(criterion, sideKey) ?? criterion[`${sideKey}Value`];
 };
 
 const getCriterionOutcome = (criterion = {}) => {
@@ -370,6 +461,21 @@ const getQtyReconciliationPayload = (payload) => {
   if (payload.data?.reconciliation) return payload.data.reconciliation;
   if (payload.data) return payload.data;
   return payload;
+};
+
+const hasQtyReconciliationLines = (detail) => {
+  if (!detail || typeof detail !== "object") return false;
+  return (
+    (Array.isArray(detail.lines) && detail.lines.length > 0) ||
+    (Array.isArray(detail.lineItems) && detail.lineItems.length > 0) ||
+    (Array.isArray(detail.reconciliationLines) && detail.reconciliationLines.length > 0)
+  );
+};
+
+const getCriterionQtyReconciliationDetail = (criterion = {}) => {
+  if (hasQtyReconciliationLines(criterion.subDetail)) return criterion.subDetail;
+  if (hasQtyReconciliationLines(criterion.detail)) return criterion.detail;
+  return null;
 };
 
 const ResultBadge = ({ passed, accepted, outcome, skipReason }) => {
@@ -805,13 +911,20 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
   const refetchLog = isGroupScope ? refetchGroupLog : refetchMatchLog;
 
   const shouldFetchQtyReconciliation = expandedCriterion === "GRN_QTY_RECONCILIATION";
+  const checklistQtyDetail = useMemo(() => {
+    const qtyCriterion = (Array.isArray(checklist?.criteria) ? checklist.criteria : []).find(
+      (criterion) => criterion?.criterionType === "GRN_QTY_RECONCILIATION",
+    );
+    return getCriterionQtyReconciliationDetail(qtyCriterion);
+  }, [checklist?.criteria]);
+  const needsQtyReconciliationFetch = shouldFetchQtyReconciliation && !checklistQtyDetail;
 
   const { data: matchQtyReconciliationResponse } = useGetInvoiceMatchingQtyReconciliationQuery(matchId, {
-    skip: isGroupScope || !matchId || !shouldFetchQtyReconciliation,
+    skip: isGroupScope || !matchId || !needsQtyReconciliationFetch,
   });
 
   const { data: groupQtyReconciliationResponse } = useGetInvoiceMatchingGroupQtyReconciliationQuery(groupId, {
-    skip: !isGroupScope || !groupId || checklist?.matchType !== "THREE_WAY",
+    skip: !isGroupScope || !groupId || !needsQtyReconciliationFetch,
   });
   const qtyReconciliationResponse = isGroupScope
     ? groupQtyReconciliationResponse
@@ -991,13 +1104,19 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
                   const isExpandable = isLineItems || isGrnQtyReconciliation;
                   const isExpanded = expandedCriterion === criterion.criterionType;
                   const outcome = getCriterionOutcome(criterion);
-                  const invoiceValue = formatChecklistValue(getCriterionValue(criterion, "invoice") ?? criterion.invoiceValue);
-                  const poValue = formatChecklistValue(getCriterionValue(criterion, "po") ?? criterion.poValue);
-                  const grnValue = formatChecklistValue(getCriterionValue(criterion, "grn") ?? criterion.grnValue);
+                  const isGstRate = criterion.criterionType === "GST_RATE";
+                  const invoiceValue = isGstRate
+                    ? formatGstRateChecklistValue(getGstRateSideValue(criterion, "invoice"))
+                    : formatChecklistValue(getCriterionValue(criterion, "invoice") ?? criterion.invoiceValue);
+                  const poValue = isGstRate
+                    ? formatGstRateChecklistValue(getGstRateSideValue(criterion, "po"))
+                    : formatChecklistValue(getCriterionValue(criterion, "po") ?? criterion.poValue);
+                  const grnValue = isGstRate
+                    ? formatGstRateChecklistValue(getGstRateSideValue(criterion, "grn"))
+                    : formatChecklistValue(getCriterionValue(criterion, "grn") ?? criterion.grnValue);
                   const grnDetail =
-                    criterion.subDetail?.lines || criterion.subDetail?.lineItems || criterion.detail?.lines
-                      ? criterion.subDetail || criterion.detail
-                      : qtyReconciliation;
+                    getCriterionQtyReconciliationDetail(criterion) ||
+                    (hasQtyReconciliationLines(qtyReconciliation) ? qtyReconciliation : null);
 
                   return (
                     <React.Fragment key={criterion.criterionType}>

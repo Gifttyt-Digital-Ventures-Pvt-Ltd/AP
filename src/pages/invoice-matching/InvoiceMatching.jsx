@@ -1396,8 +1396,12 @@ const InvoiceMatching = () => {
           if (!open) setSelectedGroup(null);
         }}
       >
-        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
+        <DialogContent
+          fullscreen
+          className="flex flex-col"
+          data-testid="cumulative-checklist-dialog"
+        >
+          <DialogHeader className="shrink-0 border-b border-border px-6 py-4 pr-12">
             <DialogTitle>
               Cumulative Checklist
               {selectedGroup?.poNumber ? (
@@ -1408,15 +1412,17 @@ const InvoiceMatching = () => {
             </DialogTitle>
           </DialogHeader>
 
-          {selectedGroup ? (
-            <MatchChecklistPanel
-              scope="GROUP"
-              groupId={selectedGroup.groupId || selectedGroup.matchGroupId || selectedGroup.poId || selectedGroup.id}
-              group={selectedGroup}
-            />
-          ) : null}
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">
+            {selectedGroup ? (
+              <MatchChecklistPanel
+                scope="GROUP"
+                groupId={selectedGroup.groupId || selectedGroup.matchGroupId || selectedGroup.poId || selectedGroup.id}
+                group={selectedGroup}
+              />
+            ) : null}
+          </div>
 
-          <DialogFooter>
+          <DialogFooter className="shrink-0 border-t border-border px-6 py-4">
             <Button variant="outline" onClick={() => setShowGroupChecklistDialog(false)}>
               Close
             </Button>

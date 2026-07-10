@@ -126,6 +126,25 @@ const GrnFormatBuilderDialog = ({
     (sum, line) => sum + (Number(line.received || 0) * Number(line.rate || 0) * Number(line.gstRate || 0)) / 100,
     0,
   );
+  const showHeader = sectionEnabled(draftConfig, 'HEADER');
+  const showDelivery = sectionEnabled(draftConfig, 'DELIVERY');
+  const showLineItems = sectionEnabled(draftConfig, 'LINE_ITEM');
+  const showInspection = sectionEnabled(draftConfig, 'INSPECTION') && showQcColumns;
+  const showFooter = sectionEnabled(draftConfig, 'FOOTER');
+  const showItemCode = fieldEnabled(draftConfig, 'LINE_ITEM', 'item_code');
+  const showHsn = fieldEnabled(draftConfig, 'LINE_ITEM', 'hsn_sac');
+  const showUom = fieldEnabled(draftConfig, 'LINE_ITEM', 'uom');
+  const showOrdered = fieldEnabled(draftConfig, 'LINE_ITEM', 'ordered_qty');
+  const showAlreadyReceived = fieldEnabled(draftConfig, 'LINE_ITEM', 'already_received');
+  const showReceived = fieldEnabled(draftConfig, 'LINE_ITEM', 'received_qty');
+  const showAccepted = fieldEnabled(draftConfig, 'LINE_ITEM', 'accepted_qty');
+  const showRejected = fieldEnabled(draftConfig, 'LINE_ITEM', 'rejected_qty');
+  const showRejectionReason = fieldEnabled(draftConfig, 'LINE_ITEM', 'rejection_reason');
+  const showRate = fieldEnabled(draftConfig, 'LINE_ITEM', 'rate');
+  const showAmount = fieldEnabled(draftConfig, 'LINE_ITEM', 'amount');
+  const showGstRate = fieldEnabled(draftConfig, 'LINE_ITEM', 'gst_rate');
+  const showBatchNo = fieldEnabled(draftConfig, 'LINE_ITEM', 'batch_no');
+  const showLineRemarks = fieldEnabled(draftConfig, 'LINE_ITEM', 'line_remarks');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -294,8 +313,11 @@ const GrnFormatBuilderDialog = ({
                         ['accepted_qty', 'rejected_qty', 'rejection_reason', 'inspected_by'].includes(
                           field.fieldKey,
                         );
+                      const valuationLocked =
+                        !showValuationColumns &&
+                        ['rate', 'amount', 'gst_rate'].includes(field.fieldKey);
                       const disabled =
-                        field.isSystemField || qcLocked || !section.isEnabled;
+                        field.isSystemField || qcLocked || valuationLocked || !section.isEnabled;
                       return (
                         <div
                           key={field.fieldKey}
@@ -308,7 +330,12 @@ const GrnFormatBuilderDialog = ({
                             )}
                           </div>
                           <Switch
-                            checked={field.isEnabled && !qcLocked && section.isEnabled}
+                            checked={
+                              field.isEnabled &&
+                              !qcLocked &&
+                              !valuationLocked &&
+                              section.isEnabled
+                            }
                             disabled={disabled}
                             onCheckedChange={(checked) =>
                               toggleField(section.section, field.fieldKey, checked)
@@ -338,7 +365,7 @@ const GrnFormatBuilderDialog = ({
               </div>
 
               <div className={`min-h-[760px] bg-white p-8 shadow-sm ${documentBorderClass}`}>
-                {sectionEnabled(draftConfig, 'HEADER') && (
+                {showHeader && (
                   <header className={`mb-5 pb-5 ${headerBorderClass}`}>
                     <div className="flex items-start justify-between gap-4">
                       <div>
@@ -349,7 +376,14 @@ const GrnFormatBuilderDialog = ({
                           Goods Received Note
                         </p>
                       </div>
-                      <Package className="h-8 w-8 text-muted-foreground/50" />
+                      <div className="flex flex-col items-end gap-2">
+                        <Package className="h-8 w-8 text-muted-foreground/50" />
+                        {fieldEnabled(draftConfig, 'HEADER', 'source_badge') && (
+                          <span className="rounded-full border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                            Manual
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="mt-4 grid grid-cols-2 gap-3 text-sm md:grid-cols-4">
                       {fieldEnabled(draftConfig, 'HEADER', 'grn_number') && (
@@ -382,12 +416,15 @@ const GrnFormatBuilderDialog = ({
                   </header>
                 )}
 
-                {sectionEnabled(draftConfig, 'DELIVERY') && (
+                {showDelivery && (
                   <section className="mb-5 rounded border p-4 text-sm">
                     <h3 className="mb-2 font-semibold">Delivery Details</h3>
                     <div className="flex flex-wrap gap-4">
                       {fieldEnabled(draftConfig, 'DELIVERY', 'challan') && (
                         <span>Challan: DC-ACM-112</span>
+                      )}
+                      {fieldEnabled(draftConfig, 'DELIVERY', 'challan_date') && (
+                        <span>Challan Date: 04 Nov 2024</span>
                       )}
                       {fieldEnabled(draftConfig, 'DELIVERY', 'eway_bill') && (
                         <span>E-Way: EWB-112233</span>
@@ -397,6 +434,9 @@ const GrnFormatBuilderDialog = ({
                       )}
                       {fieldEnabled(draftConfig, 'DELIVERY', 'transporter') && (
                         <span>Transporter: BlueDart</span>
+                      )}
+                      {fieldEnabled(draftConfig, 'DELIVERY', 'lr_number') && (
+                        <span>LR No: LR-998877</span>
                       )}
                     </div>
                   </section>
@@ -413,93 +453,77 @@ const GrnFormatBuilderDialog = ({
                   </section>
                 )}
 
-                {sectionEnabled(draftConfig, 'LINE_ITEM') && (
+                {showLineItems && (
                   <section>
-                    <table className="w-full border-collapse text-sm">
-                      <thead>
-                        <tr className="border-b bg-slate-50 text-left text-xs uppercase text-muted-foreground">
-                          {fieldEnabled(draftConfig, 'LINE_ITEM', 'item_code') && (
-                            <th className="px-2 py-2">Code</th>
-                          )}
-                          <th className="px-2 py-2">Description</th>
-                          {fieldEnabled(draftConfig, 'LINE_ITEM', 'uom') && (
-                            <th className="px-2 py-2">UOM</th>
-                          )}
-                          {fieldEnabled(draftConfig, 'LINE_ITEM', 'ordered_qty') && (
-                            <th className="px-2 py-2 text-right">Ordered</th>
-                          )}
-                          {fieldEnabled(draftConfig, 'LINE_ITEM', 'already_received') && (
-                            <th className="px-2 py-2 text-right">Rcvd</th>
-                          )}
-                          {fieldEnabled(draftConfig, 'LINE_ITEM', 'received_qty') && (
-                            <th className="px-2 py-2 text-right text-primary">Received</th>
-                          )}
-                          {showQcColumns && fieldEnabled(draftConfig, 'LINE_ITEM', 'accepted_qty') && (
-                            <th className="px-2 py-2 text-right text-green-600">Accepted</th>
-                          )}
-                          {showQcColumns && fieldEnabled(draftConfig, 'LINE_ITEM', 'rejected_qty') && (
-                            <th className="px-2 py-2 text-right text-red-600">Rejected</th>
-                          )}
-                          {showValuationColumns && fieldEnabled(draftConfig, 'LINE_ITEM', 'rate') && (
-                            <th className="px-2 py-2 text-right">Rate</th>
-                          )}
-                          {showValuationColumns && fieldEnabled(draftConfig, 'LINE_ITEM', 'amount') && (
-                            <th className="px-2 py-2 text-right">Amount</th>
-                          )}
-                          {showValuationColumns && fieldEnabled(draftConfig, 'LINE_ITEM', 'gst_rate') && (
-                            <th className="px-2 py-2 text-right">GST %</th>
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {SAMPLE_LINES.map((line) => (
-                          <tr key={line.description} className="border-b">
-                            {fieldEnabled(draftConfig, 'LINE_ITEM', 'item_code') && (
-                              <td className="px-2 py-3">RM-001</td>
-                            )}
-                            <td className="px-2 py-3">{line.description}</td>
-                            {fieldEnabled(draftConfig, 'LINE_ITEM', 'uom') && (
-                              <td className="px-2 py-3">KG</td>
-                            )}
-                            {fieldEnabled(draftConfig, 'LINE_ITEM', 'ordered_qty') && (
-                              <td className="px-2 py-3 text-right text-muted-foreground">
-                                {line.ordered}
-                              </td>
-                            )}
-                            {fieldEnabled(draftConfig, 'LINE_ITEM', 'already_received') && (
-                              <td className="px-2 py-3 text-right text-muted-foreground">200</td>
-                            )}
-                            {fieldEnabled(draftConfig, 'LINE_ITEM', 'received_qty') && (
-                              <td className="px-2 py-3 text-right font-semibold text-primary">
-                                {line.received}
-                              </td>
-                            )}
-                            {showQcColumns && fieldEnabled(draftConfig, 'LINE_ITEM', 'accepted_qty') && (
-                              <td className="px-2 py-3 text-right text-green-600">
-                                {line.accepted}
-                              </td>
-                            )}
-                            {showQcColumns && fieldEnabled(draftConfig, 'LINE_ITEM', 'rejected_qty') && (
-                              <td className="px-2 py-3 text-right text-red-600">
-                                {line.rejected}
-                              </td>
-                            )}
-                            {showValuationColumns && fieldEnabled(draftConfig, 'LINE_ITEM', 'rate') && (
-                              <td className="px-2 py-3 text-right tabular-nums">{line.rate}</td>
-                            )}
-                            {showValuationColumns && fieldEnabled(draftConfig, 'LINE_ITEM', 'amount') && (
-                              <td className="px-2 py-3 text-right tabular-nums">
-                                {(line.received * line.rate).toLocaleString('en-IN')}
-                              </td>
-                            )}
-                            {showValuationColumns && fieldEnabled(draftConfig, 'LINE_ITEM', 'gst_rate') && (
-                              <td className="px-2 py-3 text-right tabular-nums">{line.gstRate}%</td>
-                            )}
+                    <div className="overflow-x-auto">
+                      <table className="w-full min-w-[720px] border-collapse text-sm">
+                        <thead>
+                          <tr className="border-b bg-slate-50 text-left text-xs uppercase text-muted-foreground">
+                            {showItemCode && <th className="px-2 py-2">Code</th>}
+                            <th className="px-2 py-2">Description</th>
+                            {showHsn && <th className="px-2 py-2">HSN</th>}
+                            {showUom && <th className="px-2 py-2">UOM</th>}
+                            {showOrdered && <th className="px-2 py-2 text-right">Ordered</th>}
+                            {showAlreadyReceived && <th className="px-2 py-2 text-right">Already Rcvd</th>}
+                            {showReceived && <th className="px-2 py-2 text-right text-primary">Received</th>}
+                            {showAccepted && <th className="px-2 py-2 text-right text-green-600">Accepted</th>}
+                            {showRejected && <th className="px-2 py-2 text-right text-red-600">Rejected</th>}
+                            {showRejectionReason && <th className="px-2 py-2">Reject Reason</th>}
+                            {showRate && <th className="px-2 py-2 text-right">Rate</th>}
+                            {showAmount && <th className="px-2 py-2 text-right">Amount</th>}
+                            {showGstRate && <th className="px-2 py-2 text-right">GST %</th>}
+                            {showBatchNo && <th className="px-2 py-2">Batch</th>}
+                            {showLineRemarks && <th className="px-2 py-2">Remarks</th>}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {showValuationColumns && (
+                        </thead>
+                        <tbody>
+                          {SAMPLE_LINES.map((line, index) => (
+                            <tr key={line.description} className="border-b">
+                              {showItemCode && <td className="px-2 py-3">RM-00{index + 1}</td>}
+                              <td className="px-2 py-3">{line.description}</td>
+                              {showHsn && <td className="px-2 py-3">7208</td>}
+                              {showUom && <td className="px-2 py-3">KG</td>}
+                              {showOrdered && (
+                                <td className="px-2 py-3 text-right text-muted-foreground">{line.ordered}</td>
+                              )}
+                              {showAlreadyReceived && (
+                                <td className="px-2 py-3 text-right text-muted-foreground">200</td>
+                              )}
+                              {showReceived && (
+                                <td className="px-2 py-3 text-right font-semibold text-primary">
+                                  {line.received}
+                                </td>
+                              )}
+                              {showAccepted && (
+                                <td className="px-2 py-3 text-right text-green-600">{line.accepted}</td>
+                              )}
+                              {showRejected && (
+                                <td className="px-2 py-3 text-right text-red-600">{line.rejected}</td>
+                              )}
+                              {showRejectionReason && (
+                                <td className="px-2 py-3 text-muted-foreground">
+                                  {line.rejected ? 'Damaged' : '-'}
+                                </td>
+                              )}
+                              {showRate && <td className="px-2 py-3 text-right tabular-nums">{line.rate}</td>}
+                              {showAmount && (
+                                <td className="px-2 py-3 text-right tabular-nums">
+                                  {(line.received * line.rate).toLocaleString('en-IN')}
+                                </td>
+                              )}
+                              {showGstRate && (
+                                <td className="px-2 py-3 text-right tabular-nums">{line.gstRate}%</td>
+                              )}
+                              {showBatchNo && <td className="px-2 py-3">BATCH-{index + 1}</td>}
+                              {showLineRemarks && (
+                                <td className="px-2 py-3 text-muted-foreground">OK</td>
+                              )}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {showValuationColumns && (showRate || showAmount || showGstRate) && (
                       <div className="mt-4 flex justify-end">
                         <div className="w-full max-w-xs space-y-1 rounded border p-3 text-sm">
                           <div className="flex justify-between">
@@ -520,7 +544,16 @@ const GrnFormatBuilderDialog = ({
                   </section>
                 )}
 
-                {sectionEnabled(draftConfig, 'FOOTER') && (
+                {showInspection && (
+                  <section className="mt-5 rounded border p-4 text-sm">
+                    <h3 className="mb-2 font-semibold">Inspection (QC)</h3>
+                    {fieldEnabled(draftConfig, 'INSPECTION', 'inspected_by') && (
+                      <p>Inspected by: Priya M.</p>
+                    )}
+                  </section>
+                )}
+
+                {showFooter && (
                   <section className="mt-6 rounded border p-4 text-sm">
                     <h3 className="mb-2 font-semibold">Footer</h3>
                     {fieldEnabled(draftConfig, 'FOOTER', 'received_by') && (
