@@ -1397,8 +1397,7 @@ const InvoiceMatching = () => {
         }}
       >
         <DialogContent
-          fullscreen
-          className="flex flex-col"
+          className="flex h-[90vh] w-[80vw] max-w-[80vw] flex-col gap-0 overflow-hidden p-0"
           data-testid="cumulative-checklist-dialog"
         >
           <DialogHeader className="shrink-0 border-b border-border px-6 py-4 pr-12">
