@@ -79,17 +79,13 @@ const CRITERION_META = {
     label: "GRN → PO Reference",
     hint: "PO number on the GRN vs the PO record",
   },
+  GRN_NUMBER: {
+    label: "GRN Number",
+    hint: "Approved GRN number(s) in the pool for this PO / match",
+  },
   GRN_QTY_RECONCILIATION: {
     label: "Received Quantity",
     hint: "Billed quantity must be within received/accepted quantity across approved GRNs",
-  },
-  GRN_ITEM_IDENTITY: {
-    label: "Item Identity (GRN)",
-    hint: "Item code, HSN, or description matches the received GRN line",
-  },
-  GRN_DELIVERY_ADDRESS: {
-    label: "Delivery / Ship-to",
-    hint: "Delivery location on the GRN vs ship-to",
   },
   GRN_BILLING_ADDRESS: {
     label: "Bill-to (GRN)",
@@ -100,6 +96,12 @@ const CRITERION_META = {
     hint: "Goods received on or before billing",
   },
 };
+
+/** Criteria removed from the product checklist UI — hide even if API still returns them. */
+const HIDDEN_CHECKLIST_CRITERIA = new Set([
+  "GRN_ITEM_IDENTITY",
+  "GRN_DELIVERY_ADDRESS",
+]);
 
 const STATUS_META = {
   MATCHED: "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -936,7 +938,9 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
 
   const criteria = useMemo(() => {
     const list = Array.isArray(checklist?.criteria) ? checklist.criteria : [];
-    return [...list].sort((left, right) => Number(left.displayOrder || 0) - Number(right.displayOrder || 0));
+    return [...list]
+      .filter((criterion) => !HIDDEN_CHECKLIST_CRITERIA.has(criterion?.criterionType))
+      .sort((left, right) => Number(left.displayOrder || 0) - Number(right.displayOrder || 0));
   }, [checklist?.criteria]);
 
   const acceptanceLog = useMemo(
@@ -1085,9 +1089,9 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-[20%]">Criterion</TableHead>
-                  <TableHead className={isThreeWay ? "w-[15%]" : "w-[18%]"}>Invoice Value</TableHead>
-                  <TableHead className={isThreeWay ? "w-[15%]" : "w-[18%]"}>PO Value</TableHead>
-                  {isThreeWay ? <TableHead className="w-[15%]">GRN Value</TableHead> : null}
+                  <TableHead className={isThreeWay ? "w-[15%]" : "w-[18%]"}>Invoice</TableHead>
+                  <TableHead className={isThreeWay ? "w-[15%]" : "w-[18%]"}>PO</TableHead>
+                  {isThreeWay ? <TableHead className="w-[15%]">GRN</TableHead> : null}
                   <TableHead className={isThreeWay ? "w-[17%]" : "w-[21%]"}>Similarity</TableHead>
                   <TableHead className="w-[11%]">Result</TableHead>
                   <TableHead className="w-[10%] text-right">Action</TableHead>
