@@ -45,6 +45,12 @@ export const invoiceMatchingApi = serviceApi.injectEndpoints({
         { type: "Matching", id: `GROUP-ACCEPTANCE-LOG-${groupId}` },
       ],
     }),
+    getInvoiceMatchingGroupQtyReconciliation: builder.query({
+      query: (groupId) => ({ url: `/invoice-matching/groups/${groupId}/qty-reconciliation`, method: "GET" }),
+      providesTags: (_result, _error, groupId) => [
+        { type: "Matching", id: `GROUP-QTY-RECONCILIATION-${groupId}` },
+      ],
+    }),
     getAvailableMatchingInvoices: builder.query({
       query: (params = {}) => ({
         url: "/invoice-matching/invoices/available",
@@ -162,6 +168,7 @@ export const {
   useGetInvoiceMatchingAcceptanceLogQuery,
   useGetInvoiceMatchingGroupChecklistQuery,
   useGetInvoiceMatchingGroupAcceptanceLogQuery,
+  useGetInvoiceMatchingGroupQtyReconciliationQuery,
   useGetAvailableMatchingInvoicesQuery,
   useGetAvailablePurchaseOrdersQuery,
   useGetAvailableGrnsQuery,

@@ -24,6 +24,7 @@ import {
   useDeleteGrnFormatConfigMutation,
   useGetEligiblePisForGrnQuery,
   useCreateGrnMutation,
+  useUpdateGrnMutation,
   useSubmitGrnMutation,
   useApproveGrnMutation,
   useRejectGrnMutation,
@@ -104,6 +105,7 @@ const GoodsReceipt = () => {
   const [updateGrnFormatConfigById] = useUpdateGrnFormatConfigByIdMutation();
   const [deleteGrnFormatConfig] = useDeleteGrnFormatConfigMutation();
   const [createGrn, { isLoading: creating }] = useCreateGrnMutation();
+  const [updateGrn, { isLoading: updatingGrn }] = useUpdateGrnMutation();
   const [submitGrn] = useSubmitGrnMutation();
   const [approveGrn] = useApproveGrnMutation();
   const [rejectGrn] = useRejectGrnMutation();
@@ -146,6 +148,7 @@ const GoodsReceipt = () => {
   const [savingConfig, setSavingConfig] = useState(false);
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [detailGrn, setDetailGrn] = useState(null);
+  const [detailEditMode, setDetailEditMode] = useState(false);
   const [selectedPo, setSelectedPo] = useState(null);
   const [grnForm, setGrnForm] = useState(() => createDefaultGrnForm('default-grn-format'));
   const [createdGrnId, setCreatedGrnId] = useState(null);
@@ -452,6 +455,11 @@ const GoodsReceipt = () => {
     setShowApprovalDialog(true);
   };
 
+  const openGrnDetail = (grn, { edit = false } = {}) => {
+    setDetailEditMode(edit);
+    setDetailGrn(grn);
+  };
+
   const handleGrnApproval = async () => {
     if (!guardAction('grn.post')) return;
     if (!approvalGrn?.id) return;
@@ -490,12 +498,81 @@ const GoodsReceipt = () => {
   const handlePost = async () => {
     if (!detailGrn || !guardAction('grn.post')) return;
     try {
-      await postGrn(detailGrn.id).unwrap();
-      toast.success('GRN posted successfully');
+      if (activeFormatConfig.approval_enabled) {
+        await submitGrn(detailGrn.id).unwrap();
+        toast.success('GRN submitted for approval');
+      } else {
+        await postGrn(detailGrn.id).unwrap();
+        toast.success('GRN posted successfully');
+      }
       setDetailGrn(null);
       refreshAll();
     } catch (error) {
-      toast.error(error?.data?.detail || 'Failed to post GRN');
+      toast.error(error?.data?.detail || error?.data?.message || 'Failed to process GRN');
+    }
+  };
+
+  const updateEditableGrn = async (draftGrn) => {
+    if (!draftGrn?.id) return;
+    if (!guardAction('grn.create')) return;
+
+    const selectedFormat = activeFormatConfig;
+    const validationError = validateGrnLineItems(draftGrn.line_items || [], {
+      qcEnabled: selectedFormat.qc_enabled,
+    });
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
+    const payload = buildCreateGrnPayload(
+      {
+        ...draftGrn,
+        grn_format_id: draftGrn.grn_format_id || draftGrn.grnFormatId || selectedFormat?.id,
+      },
+      {
+        formatConfig: selectedFormat,
+        qcEnabled: selectedFormat.qc_enabled,
+      },
+    );
+
+    try {
+      const response = await updateGrn({ id: draftGrn.id, body: payload }).unwrap();
+      return normalizeGrn(response?.grn || response || draftGrn);
+    } catch (error) {
+      if (handleCreditError(error)) return;
+      toast.error(error?.data?.detail || error?.data?.message || 'Failed to update GRN');
+    }
+  };
+
+  const handleSaveDraftGrn = async (draftGrn) => {
+    const updatedGrn = await updateEditableGrn(draftGrn);
+    if (!updatedGrn) return;
+    setDetailGrn(updatedGrn);
+    setDetailEditMode(false);
+    toast.success('GRN updated');
+    refreshAll();
+  };
+
+  const handleSaveAndSubmitGrn = async (draftGrn) => {
+    if (!guardAction('grn.post')) return;
+
+    const updatedGrn = await updateEditableGrn(draftGrn);
+    if (!updatedGrn?.id) return;
+
+    try {
+      if (activeFormatConfig.approval_enabled) {
+        await submitGrn(updatedGrn.id).unwrap();
+        toast.success('GRN saved and submitted for approval');
+      } else {
+        await postGrn(updatedGrn.id).unwrap();
+        toast.success('GRN saved and posted successfully');
+      }
+      setDetailGrn(null);
+      setDetailEditMode(false);
+      refreshAll();
+    } catch (error) {
+      toast.error(error?.data?.detail || error?.data?.message || 'Failed to submit GRN');
     }
   };
 
@@ -808,7 +885,8 @@ const GoodsReceipt = () => {
         canCreate={canCreateGrn}
         canApprove={canPostGrn}
         onCreate={() => setGrnCreateOptionOpen(true)}
-        onView={setDetailGrn}
+        onView={(grn) => openGrnDetail(grn)}
+        onEdit={(grn) => openGrnDetail(grn, { edit: true })}
         onReview={openGrnReview}
       />
 
@@ -934,14 +1012,22 @@ const GoodsReceipt = () => {
         grn={detailGrn}
         open={Boolean(detailGrn)}
         onOpenChange={(open) => {
-          if (!open) setDetailGrn(null);
+          if (!open) {
+            setDetailGrn(null);
+            setDetailEditMode(false);
+          }
         }}
         formatConfig={activeFormatConfig}
+        vendors={vendorsData}
+        initialEditMode={detailEditMode}
         canApprove={canPostGrn}
         canPost={canPostGrn}
         posting={posting}
+        saving={updatingGrn}
         onOpenReview={openGrnReview}
         onPost={handlePost}
+        onSaveDraft={handleSaveDraftGrn}
+        onSaveAndSubmit={handleSaveAndSubmitGrn}
         onDownloadPdf={() =>
           toast.message('PDF download will be available when backend endpoint is ready')
         }
