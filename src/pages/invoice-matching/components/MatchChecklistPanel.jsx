@@ -7,6 +7,7 @@ import {
   useGetInvoiceMatchingGroupAcceptanceLogQuery,
   useGetInvoiceMatchingGroupChecklistQuery,
   useGetInvoiceMatchingAcceptanceLogQuery,
+  useGetInvoiceMatchingGroupQtyReconciliationQuery,
   useGetInvoiceMatchingChecklistQuery,
   useGetInvoiceMatchingQtyReconciliationQuery,
 } from "../../../Services/apis/invoiceMatchingApi";
@@ -38,7 +39,6 @@ import {
   History,
   Info,
   Loader2,
-  MinusCircle,
   ShieldCheck,
   XCircle,
 } from "lucide-react";
@@ -76,16 +76,16 @@ const CRITERION_META = {
     label: "GST Rate",
   },
   GRN_PO_REFERENCE: {
-    label: "GRN -> PO Reference",
+    label: "GRN → PO Reference",
     hint: "PO number on the GRN vs the PO record",
   },
   GRN_QTY_RECONCILIATION: {
     label: "Received Quantity",
-    hint: "Billed quantity must be within received or accepted quantity",
+    hint: "Billed quantity must be within received/accepted quantity across approved GRNs",
   },
   GRN_ITEM_IDENTITY: {
     label: "Item Identity (GRN)",
-    hint: "Item code, HSN, or description matches the received line",
+    hint: "Item code, HSN, or description matches the received GRN line",
   },
   GRN_DELIVERY_ADDRESS: {
     label: "Delivery / Ship-to",
@@ -97,7 +97,7 @@ const CRITERION_META = {
   },
   GRN_DATE_SANITY: {
     label: "Receipt Date",
-    hint: "Goods received date is valid for this match type",
+    hint: "Goods received on or before billing",
   },
 };
 
@@ -139,45 +139,31 @@ const formatPercent = (value, digits = 2) => {
   return Number.isFinite(numeric) ? numeric.toFixed(digits) : "0.00";
 };
 
-const normalizeOutcome = (criterion = {}) => {
-  const outcome = String(criterion.outcome || "").trim().toUpperCase();
-  if (outcome === "NOT_APPLICABLE" || outcome === "NA" || outcome === "N_A") return "NOT_APPLICABLE";
-  if (outcome === "PASS" || criterion.passed === true) return "PASS";
-  if (outcome === "FAIL" || criterion.passed === false) return "FAIL";
-  return "FAIL";
-};
-
-const isCriterionSkipped = (criterion = {}) => normalizeOutcome(criterion) === "NOT_APPLICABLE";
-
-const isCriterionPassed = (criterion = {}) =>
-  normalizeOutcome(criterion) === "PASS" || Boolean(criterion.isAccepted ?? criterion.accepted);
-
-const getAccepted = (criterion = {}) => Boolean(criterion.isAccepted ?? criterion.accepted);
-
-const getSkipTitle = (reason = "") => {
-  if (!reason) return "Skipped for this match";
-  return `Skipped - ${titleCase(reason)}`;
-};
-
-const normalizeMatchTypeLabel = (value = "") => {
-  const normalized = String(value || "").toUpperCase();
-  const labels = {
-    TWO_WAY: "PO Invoice",
-    PO_INVOICE: "PO Invoice",
-    PO_PI: "PO PI",
-    THREE_WAY: "3 Way",
-    INVOICE_GRN: "Invoice GRN",
-    PO_GRN: "PO GRN",
-  };
-  return labels[normalized] || titleCase(normalized || "Match");
-};
-
 const formatChecklistValue = (value) => {
   if (value === null || value === undefined || value === "") return "-";
   if (Array.isArray(value)) return value.join(", ");
   if (typeof value === "object") return JSON.stringify(value);
   return String(value);
 };
+
+const getCriterionOutcome = (criterion = {}) => {
+  const outcome = normalizeStatus(criterion.outcome || criterion.result || criterion.status);
+  if (outcome === "NOT_APPLICABLE" || outcome === "NA" || outcome === "N_A" || criterion.evaluable === false) {
+    return "NOT_APPLICABLE";
+  }
+  if (criterion.passed) return "PASS";
+  if (criterion.isAccepted) return "ACCEPTED";
+  return "FAIL";
+};
+
+const isCriterionApplicable = (criterion = {}) => getCriterionOutcome(criterion) !== "NOT_APPLICABLE";
+
+const getCriterionValue = (criterion = {}, key) =>
+  criterion[key] ??
+  criterion[`${key}Value`] ??
+  criterion[`${key}_value`] ??
+  criterion.values?.[key] ??
+  criterion.detail?.[key];
 
 const cleanLineMatchKey = (value) =>
   String(value || "-")
@@ -379,38 +365,38 @@ const getAcceptanceLogPayload = (payload, checklistLog = []) => {
   return [];
 };
 
-const ResultBadge = ({ criterion, passed, accepted }) => {
-  const skipped = criterion ? isCriterionSkipped(criterion) : false;
-  const resolvedAccepted = criterion ? getAccepted(criterion) : accepted;
-  const resolvedPassed = criterion ? normalizeOutcome(criterion) === "PASS" : passed;
-  const similarity = criterion?.similarityPct;
+const getQtyReconciliationPayload = (payload) => {
+  if (!payload) return {};
+  if (payload.data?.reconciliation) return payload.data.reconciliation;
+  if (payload.data) return payload.data;
+  return payload;
+};
 
-  if (skipped) {
+const ResultBadge = ({ passed, accepted, outcome, skipReason }) => {
+  if (outcome === "NOT_APPLICABLE") {
     return (
       <Badge
         variant="outline"
-        className="border-dashed border-slate-300 bg-slate-50 text-slate-600"
-        aria-label={`Not applicable - ${criterion?.skipReason || "skipped"}`}
-        title={getSkipTitle(criterion?.skipReason)}
+        className="border-slate-200 bg-slate-50 text-slate-600"
+        title={skipReason ? `Skipped — ${titleCase(skipReason)}` : "Not applicable to this match"}
       >
-        <MinusCircle className="mr-1 h-3 w-3" />
         N/A
       </Badge>
     );
   }
 
-  if (resolvedPassed) {
+  if (passed) {
     return (
       <Badge className="border border-emerald-200 bg-emerald-100 text-emerald-700">
         <CheckCircle2 className="mr-1 h-3 w-3" />
-        Pass{similarity !== undefined && similarity !== null ? ` · ${formatPercent(similarity, 0)}%` : ""}
+        Pass
       </Badge>
     );
   }
 
-  if (resolvedAccepted) {
+  if (accepted) {
     return (
-      <Badge className="border border-amber-200 bg-amber-50 text-amber-700">
+      <Badge className="border border-blue-200 bg-blue-100 text-blue-700">
         <ShieldCheck className="mr-1 h-3 w-3" />
         Accepted
       </Badge>
@@ -418,9 +404,9 @@ const ResultBadge = ({ criterion, passed, accepted }) => {
   }
 
   return (
-      <Badge className="border border-red-200 bg-red-100 text-red-700">
-        <XCircle className="mr-1 h-3 w-3" />
-      Fail{similarity !== undefined && similarity !== null ? ` · ${formatPercent(similarity, 0)}%` : ""}
+    <Badge className="border border-red-200 bg-red-100 text-red-700">
+      <XCircle className="mr-1 h-3 w-3" />
+      Fail
     </Badge>
   );
 };
@@ -435,10 +421,11 @@ const StatusBadge = ({ status }) => {
 };
 
 const SimilarityCell = ({ criterion }) => {
-  if (isCriterionSkipped(criterion)) {
+  const outcome = getCriterionOutcome(criterion);
+  if (outcome === "NOT_APPLICABLE") {
     return (
-      <span className="text-sm text-muted-foreground" title={getSkipTitle(criterion.skipReason)}>
-        {criterion.skipReason ? titleCase(criterion.skipReason) : "Not applicable"}
+      <span className="text-sm text-muted-foreground" title={criterion.skipReason ? titleCase(criterion.skipReason) : ""}>
+        Skipped{criterion.skipReason ? ` — ${titleCase(criterion.skipReason)}` : ""}
       </span>
     );
   }
@@ -475,75 +462,6 @@ const SimilarityCell = ({ criterion }) => {
           Threshold {formatPercent(criterion.thresholdApplied, 0)}%
         </div>
       ) : null}
-    </div>
-  );
-};
-
-const formatQty = (value) => {
-  if (value === null || value === undefined || value === "") return "-";
-  const numeric = Number(value);
-  return Number.isFinite(numeric) ? numeric.toLocaleString("en-IN") : String(value);
-};
-
-const QtyReconciliationDetail = ({ detail, loading }) => {
-  const lines = Array.isArray(detail?.lines) ? detail.lines : [];
-
-  if (loading) {
-    return (
-      <div className="rounded-lg border border-border bg-muted/30 p-3">
-        <Skeleton className="h-24 w-full" />
-      </div>
-    );
-  }
-
-  if (lines.length === 0) {
-    return (
-      <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
-        No quantity reconciliation detail returned.
-      </div>
-    );
-  }
-
-  return (
-    <div className="overflow-hidden rounded-lg border border-border bg-background">
-      <Table className="table-fixed">
-        <TableHeader>
-          <TableRow>
-            <TableHead className="w-[24%]">Line</TableHead>
-            <TableHead className="w-[10%]">HSN</TableHead>
-            <TableHead className="w-[11%] text-right">Ordered</TableHead>
-            <TableHead className="w-[11%] text-right">Received</TableHead>
-            <TableHead className="w-[11%] text-right">Accepted</TableHead>
-            <TableHead className="w-[11%] text-right">Billed</TableHead>
-            <TableHead className="w-[12%] text-right">Remaining</TableHead>
-            <TableHead className="w-[10%]">Result</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {lines.map((line, index) => {
-            const remaining = Number(line.remainingQty ?? line.remaining_qty);
-            const linePass = Boolean(line.linePass ?? line.line_pass);
-            return (
-              <TableRow key={line.id || line.description || index}>
-                <TableCell className="truncate font-medium" title={line.description}>
-                  {line.description || `Line ${index + 1}`}
-                </TableCell>
-                <TableCell>{line.hsnSac ?? line.hsn_sac ?? "-"}</TableCell>
-                <TableCell className="text-right tabular-nums">{formatQty(line.orderedQty ?? line.ordered_qty)}</TableCell>
-                <TableCell className="text-right tabular-nums">{formatQty(line.receivedQty ?? line.received_qty)}</TableCell>
-                <TableCell className="text-right tabular-nums">{formatQty(line.acceptedQty ?? line.accepted_qty)}</TableCell>
-                <TableCell className="text-right tabular-nums">{formatQty(line.billedQty ?? line.billed_qty)}</TableCell>
-                <TableCell className={`text-right tabular-nums ${remaining < 0 ? "font-semibold text-red-600" : ""}`}>
-                  {formatQty(line.remainingQty ?? line.remaining_qty)}
-                </TableCell>
-                <TableCell>
-                  <ResultBadge passed={linePass} accepted={false} />
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
     </div>
   );
 };
@@ -652,6 +570,81 @@ const LineItemsDetail = ({ detail }) => {
       ) : (
         <p className="text-sm text-muted-foreground">No line-level mismatches returned.</p>
       )}
+    </div>
+  );
+};
+
+const GrnQtyReconciliationDetail = ({ detail }) => {
+  const lines = Array.isArray(detail?.lines)
+    ? detail.lines
+    : Array.isArray(detail?.lineItems)
+      ? detail.lineItems
+      : Array.isArray(detail?.reconciliationLines)
+        ? detail.reconciliationLines
+        : [];
+
+  if (lines.length === 0) {
+    return (
+      <div className="rounded-lg border border-border bg-muted/30 p-3 text-sm text-muted-foreground">
+        No GRN quantity reconciliation detail returned.
+      </div>
+    );
+  }
+
+  const formatQty = (value) => {
+    const numeric = Number(value);
+    return Number.isFinite(numeric) ? numeric.toLocaleString("en-IN") : "-";
+  };
+
+  return (
+    <div className="overflow-hidden rounded-lg border border-border bg-background">
+      <Table className="table-fixed">
+        <TableHeader>
+          <TableRow>
+            <TableHead className="w-[18%]">Line</TableHead>
+            <TableHead className="text-right">Ordered</TableHead>
+            <TableHead className="text-right">Received</TableHead>
+            <TableHead className="text-right">Accepted</TableHead>
+            <TableHead className="text-right">Previous billed</TableHead>
+            <TableHead className="text-right">Current billed</TableHead>
+            <TableHead className="text-right">Remaining</TableHead>
+            <TableHead>GRNs</TableHead>
+            <TableHead className="w-[10%]">Result</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {lines.map((line, index) => {
+            const linePass = Boolean(line.linePass ?? line.passed ?? line.pass);
+            const grnNumbers = Array.isArray(line.grnNumbers)
+              ? line.grnNumbers
+              : Array.isArray(line.grns)
+                ? line.grns.map((grn) => grn.grnNumber || grn.number || grn.id).filter(Boolean)
+                : [];
+
+            return (
+              <TableRow key={line.lineId || line.id || index}>
+                <TableCell className="truncate font-medium" title={line.description || line.itemName || line.lineId || `Line ${index + 1}`}>
+                  {line.description || line.itemName || `Line ${index + 1}`}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">{formatQty(line.orderedQty ?? line.ordered)}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatQty(line.receivedQty ?? line.received)}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatQty(line.acceptedQty ?? line.accepted ?? line.receivedQty)}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatQty(line.previouslyBilledQty ?? line.priorBilledQty ?? line.alreadyBilledQty)}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatQty(line.billedQty ?? line.currentBilledQty ?? line.invoiceQty)}</TableCell>
+                <TableCell className={Number(line.remainingQty ?? line.remaining) < 0 ? "text-right tabular-nums text-red-600" : "text-right tabular-nums"}>
+                  {formatQty(line.remainingQty ?? line.remaining)}
+                </TableCell>
+                <TableCell className="truncate" title={grnNumbers.join(", ")}>
+                  {grnNumbers.length ? grnNumbers.join(", ") : "-"}
+                </TableCell>
+                <TableCell>
+                  <ResultBadge passed={linePass} accepted={false} />
+                </TableCell>
+              </TableRow>
+            );
+          })}
+        </TableBody>
+      </Table>
     </div>
   );
 };
@@ -790,16 +783,6 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
   const refetch = isGroupScope ? refetchGroupChecklist : refetchMatchChecklist;
 
   const checklist = useMemo(() => getChecklistPayload(checklistResponse), [checklistResponse]);
-  const shouldFetchQtyReconciliation =
-    !isGroupScope &&
-    Boolean(matchId) &&
-    expandedCriterion === "GRN_QTY_RECONCILIATION";
-  const {
-    data: qtyReconciliationResponse,
-    isFetching: qtyReconciliationFetching,
-  } = useGetInvoiceMatchingQtyReconciliationQuery(matchId, {
-    skip: !shouldFetchQtyReconciliation,
-  });
 
   const {
     data: matchLogResponse,
@@ -821,12 +804,26 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
   const logFetching = isGroupScope ? groupLogFetching : matchLogFetching;
   const refetchLog = isGroupScope ? refetchGroupLog : refetchMatchLog;
 
+  const shouldFetchQtyReconciliation = expandedCriterion === "GRN_QTY_RECONCILIATION";
+
+  const { data: matchQtyReconciliationResponse } = useGetInvoiceMatchingQtyReconciliationQuery(matchId, {
+    skip: isGroupScope || !matchId || !shouldFetchQtyReconciliation,
+  });
+
+  const { data: groupQtyReconciliationResponse } = useGetInvoiceMatchingGroupQtyReconciliationQuery(groupId, {
+    skip: !isGroupScope || !groupId || checklist?.matchType !== "THREE_WAY",
+  });
+  const qtyReconciliationResponse = isGroupScope
+    ? groupQtyReconciliationResponse
+    : matchQtyReconciliationResponse;
+  const qtyReconciliation = useMemo(
+    () => getQtyReconciliationPayload(qtyReconciliationResponse),
+    [qtyReconciliationResponse],
+  );
+
   const criteria = useMemo(() => {
     const list = Array.isArray(checklist?.criteria) ? checklist.criteria : [];
-    const sorted = [...list].sort((left, right) => Number(left.displayOrder || 0) - Number(right.displayOrder || 0));
-    const evaluable = sorted.filter((item) => !isCriterionSkipped(item));
-    const skipped = sorted.filter((item) => isCriterionSkipped(item));
-    return [...evaluable, ...skipped];
+    return [...list].sort((left, right) => Number(left.displayOrder || 0) - Number(right.displayOrder || 0));
   }, [checklist?.criteria]);
 
   const acceptanceLog = useMemo(
@@ -895,30 +892,22 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
 
   const status = normalizeStatus(checklist.status);
   const isTerminal = TERMINAL_STATUSES.includes(status);
-  const evaluableCriteria = criteria.filter((item) => !isCriterionSkipped(item));
-  const skippedCriteria = criteria.filter((item) => isCriterionSkipped(item));
-  const passedCount = Number(
-    checklist.passedCriteriaCount ??
-      evaluableCriteria.filter((item) => isCriterionPassed(item)).length,
-  );
-  const totalCount = Number(
+  const passedCount = Number(checklist.passedCriteriaCount || 0);
+  const evaluableCount = Number(
     checklist.evaluableCriteriaCount ??
       checklist.evaluable_criteria_count ??
-      evaluableCriteria.length,
+      criteria.filter(isCriterionApplicable).length ??
+      0,
   );
-  const maxCriteriaCount = Number(
-    checklist.maxCriteriaCount ??
-      checklist.max_criteria_count ??
-      checklist.totalCriteriaCount ??
-      checklist.total_criteria_count ??
-      criteria.length,
-  );
+  const totalCount = Number(checklist.totalCriteriaCount || criteria.length || 10);
+  const scoreDenominator = evaluableCount || totalCount;
+  const skippedCount = Math.max(0, totalCount - scoreDenominator);
   const overallPct = Number(checklist.overallMatchPct || 0);
   const hasMinorTextDifferences =
-    status === "PARTIAL_MATCH" && totalCount > 0 && passedCount === totalCount && overallPct < 100;
-  const failingOpenCount = evaluableCriteria.filter((item) => !isCriterionPassed(item)).length;
+    status === "PARTIAL_MATCH" && scoreDenominator > 0 && passedCount === scoreDenominator && overallPct < 100;
+  const failingOpenCount = criteria.filter((item) => isCriterionApplicable(item) && !item.passed && !item.isAccepted).length;
   const canAcceptOverall = !isTerminal && (status === "PARTIAL_MATCH" || status === "MISMATCH");
-  const allCriteriaSkipped = criteria.length > 0 && evaluableCriteria.length === 0;
+  const isThreeWay = checklist.matchType === "THREE_WAY";
 
   const refreshChecklist = () => {
     refetch();
@@ -936,15 +925,8 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge status={status} />
-                <Badge variant="outline">{normalizeMatchTypeLabel(checklist.matchType)}</Badge>
-                {checklist.matchedDocType || checklist.matched_doc_type ? (
-                  <Badge variant="outline">
-                    {String(checklist.matchedDocType || checklist.matched_doc_type) === "PROFORMA_INVOICE"
-                      ? "Proforma Invoice"
-                      : "Tax Invoice"}
-                  </Badge>
-                ) : null}
-                {Number(checklist.grnPoolSize ?? checklist.grn_pool_size ?? 0) > 0 ? (
+                <Badge variant="outline">{checklist.matchType === "THREE_WAY" ? "3-Way" : "2-Way"}</Badge>
+                {isThreeWay && Number(checklist.grnPoolSize ?? checklist.grn_pool_size ?? 0) > 0 ? (
                   <Badge variant="outline">
                     {Number(checklist.grnPoolSize ?? checklist.grn_pool_size)} GRN
                     {Number(checklist.grnPoolSize ?? checklist.grn_pool_size) === 1 ? "" : "s"}
@@ -977,66 +959,52 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
             </div>
             <div>
               <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Criteria Passed</div>
-              <div
-                className="text-2xl font-semibold tabular-nums"
-                title={`${totalCount} of ${maxCriteriaCount} criteria applied. ${skippedCriteria.length} skipped.`}
-              >
-                {passedCount}/{totalCount}
+              <div className="text-2xl font-semibold tabular-nums" title={skippedCount > 0 ? `${skippedCount} skipped as not applicable` : undefined}>
+                {passedCount}/{scoreDenominator}
               </div>
+              {skippedCount > 0 ? <div className="text-xs text-muted-foreground">{skippedCount} N/A</div> : null}
             </div>
             {isFetching ? <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" /> : null}
           </div>
-
-          {allCriteriaSkipped ? (
-            <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
-              <p className="font-semibold">Nothing to compare</p>
-              <p>
-                Every checklist criterion was marked not applicable. Review the source data and re-run matching when comparable values are available.
-              </p>
-            </div>
-          ) : null}
 
           <div className="overflow-hidden rounded-lg border border-border">
             <Table className="table-fixed">
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[22%]">Criterion</TableHead>
-                  <TableHead className="w-[18%]">Invoice Value</TableHead>
-                  <TableHead className="w-[18%]">PO Value</TableHead>
-                  <TableHead className="w-[21%]">Similarity</TableHead>
+                  <TableHead className="w-[20%]">Criterion</TableHead>
+                  <TableHead className={isThreeWay ? "w-[15%]" : "w-[18%]"}>Invoice Value</TableHead>
+                  <TableHead className={isThreeWay ? "w-[15%]" : "w-[18%]"}>PO Value</TableHead>
+                  {isThreeWay ? <TableHead className="w-[15%]">GRN Value</TableHead> : null}
+                  <TableHead className={isThreeWay ? "w-[17%]" : "w-[21%]"}>Similarity</TableHead>
                   <TableHead className="w-[11%]">Result</TableHead>
                   <TableHead className="w-[10%] text-right">Action</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {criteria.map((criterion, index) => {
+                {criteria.map((criterion) => {
                   const meta = CRITERION_META[criterion.criterionType] || {
                     label: titleCase(criterion.criterionType),
                     hint: "",
                   };
                   const isLineItems = criterion.criterionType === "LINE_ITEMS";
-                  const isQtyReconciliation = criterion.criterionType === "GRN_QTY_RECONCILIATION";
-                  const canExpandCriterion = isLineItems || isQtyReconciliation || Boolean(criterion.detail);
+                  const isGrnQtyReconciliation = criterion.criterionType === "GRN_QTY_RECONCILIATION";
+                  const isExpandable = isLineItems || isGrnQtyReconciliation;
                   const isExpanded = expandedCriterion === criterion.criterionType;
-                  const invoiceValue = formatChecklistValue(criterion.invoiceValue);
-                  const poValue = formatChecklistValue(criterion.poValue);
-                  const skipped = isCriterionSkipped(criterion);
-                  const accepted = getAccepted(criterion);
-                  const passed = normalizeOutcome(criterion) === "PASS";
+                  const outcome = getCriterionOutcome(criterion);
+                  const invoiceValue = formatChecklistValue(getCriterionValue(criterion, "invoice") ?? criterion.invoiceValue);
+                  const poValue = formatChecklistValue(getCriterionValue(criterion, "po") ?? criterion.poValue);
+                  const grnValue = formatChecklistValue(getCriterionValue(criterion, "grn") ?? criterion.grnValue);
+                  const grnDetail =
+                    criterion.subDetail?.lines || criterion.subDetail?.lineItems || criterion.detail?.lines
+                      ? criterion.subDetail || criterion.detail
+                      : qtyReconciliation;
 
                   return (
                     <React.Fragment key={criterion.criterionType}>
-                      {skipped && criteria[index - 1] && !isCriterionSkipped(criteria[index - 1]) ? (
-                        <TableRow className="bg-muted/30 hover:bg-muted/30">
-                          <TableCell colSpan={6} className="py-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                            Not applicable to this match
-                          </TableCell>
-                        </TableRow>
-                      ) : null}
-                      <TableRow className={skipped ? "bg-muted/20 text-muted-foreground" : ""}>
+                      <TableRow className={outcome === "NOT_APPLICABLE" ? "bg-muted/20 text-muted-foreground" : undefined}>
                         <TableCell className="min-w-0">
                           <div className="flex items-center gap-2">
-                            {canExpandCriterion ? (
+                            {isExpandable ? (
                               <Button
                                 type="button"
                                 variant="ghost"
@@ -1045,7 +1013,7 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
                                 onClick={() =>
                                   setExpandedCriterion(isExpanded ? null : criterion.criterionType)
                                 }
-                                aria-label={isExpanded ? "Collapse criterion detail" : "Expand criterion detail"}
+                                aria-label={isExpanded ? "Collapse criterion details" : "Expand criterion details"}
                               >
                                 <ChevronRight
                                   className={`h-4 w-4 transition-transform ${isExpanded ? "rotate-90" : ""}`}
@@ -1056,11 +1024,7 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
                               <div className="truncate font-medium" title={meta.label}>
                                 {meta.label}
                               </div>
-                              {meta.hint ? (
-                                <div className="truncate text-xs text-muted-foreground" title={meta.hint}>
-                                  {meta.hint}
-                                </div>
-                              ) : null}
+                              {meta.hint ? <div className="truncate text-xs text-muted-foreground" title={meta.hint}>{meta.hint}</div> : null}
                             </div>
                           </div>
                         </TableCell>
@@ -1070,14 +1034,24 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
                         <TableCell className="truncate" title={poValue}>
                           {poValue}
                         </TableCell>
+                        {isThreeWay ? (
+                          <TableCell className="truncate" title={grnValue}>
+                            {grnValue}
+                          </TableCell>
+                        ) : null}
                         <TableCell className="min-w-0">
                           <SimilarityCell criterion={criterion} />
                         </TableCell>
                         <TableCell className="min-w-0">
-                          <ResultBadge criterion={criterion} passed={passed} accepted={accepted} />
+                          <ResultBadge
+                            passed={criterion.passed}
+                            accepted={criterion.isAccepted}
+                            outcome={outcome}
+                            skipReason={criterion.skipReason}
+                          />
                         </TableCell>
                         <TableCell className="min-w-0 text-right">
-                          {!isTerminal && !skipped && !passed && !accepted ? (
+                          {!isTerminal && isCriterionApplicable(criterion) && !criterion.passed && !criterion.isAccepted ? (
                             <Button
                               variant="outline"
                               size="sm"
@@ -1086,7 +1060,7 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
                             >
                               Accept
                             </Button>
-                          ) : accepted ? (
+                          ) : criterion.isAccepted ? (
                             <span
                               className="text-xs text-muted-foreground"
                               title={criterion.acceptanceReason || "Accepted"}
@@ -1099,20 +1073,14 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
                         </TableCell>
                       </TableRow>
 
-                      {isLineItems && isExpanded ? (
+                      {isExpandable && isExpanded ? (
                         <TableRow className="bg-muted/20 hover:bg-muted/20">
-                          <TableCell colSpan={6}>
-                            <LineItemsDetail detail={criterion.subDetail || {}} />
-                          </TableCell>
-                        </TableRow>
-                      ) : null}
-                      {isQtyReconciliation && isExpanded ? (
-                        <TableRow className="bg-muted/20 hover:bg-muted/20">
-                          <TableCell colSpan={6}>
-                            <QtyReconciliationDetail
-                              detail={criterion.detail || criterion.subDetail || qtyReconciliationResponse?.data || qtyReconciliationResponse}
-                              loading={qtyReconciliationFetching}
-                            />
+                          <TableCell colSpan={isThreeWay ? 7 : 6}>
+                            {isGrnQtyReconciliation ? (
+                              <GrnQtyReconciliationDetail detail={grnDetail || {}} />
+                            ) : (
+                              <LineItemsDetail detail={criterion.subDetail || {}} />
+                            )}
                           </TableCell>
                         </TableRow>
                       ) : null}
