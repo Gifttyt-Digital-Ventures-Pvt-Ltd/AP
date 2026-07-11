@@ -87,9 +87,11 @@ const GrnLineItemsEditor = ({
   const showAlready = poLinked && isGrnLineColumnEnabled(formatConfig, 'already_received');
   const showBatch = isGrnLineColumnEnabled(formatConfig, 'batch_no');
   const showValuation = isGrnValuationEnabled(formatConfig);
-  const showRate = showValuation && isGrnLineColumnEnabled(formatConfig, 'rate');
-  const showAmount = showValuation && isGrnLineColumnEnabled(formatConfig, 'amount');
-  const showGstRate = showValuation && isGrnLineColumnEnabled(formatConfig, 'gst_rate');
+  // Master toggle is authoritative — do not also require per-field isEnabled
+  // (API often returns valuation_enabled=true with rate/amount/gst_rate still false).
+  const showRate = showValuation;
+  const showAmount = showValuation;
+  const showGstRate = showValuation;
   const taxableAmount = lines.reduce((sum, line) => {
     const amount =
       Number(line.line_amount) ||

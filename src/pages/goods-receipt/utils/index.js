@@ -1,5 +1,5 @@
 import { GRN_SOURCE, GRN_STATUS } from '../constants';
-import { buildGrnConfigSnapshot } from './grnFormatConfig';
+import { buildGrnConfigSnapshot, isGrnValuationEnabled } from './grnFormatConfig';
 import { extractListResponse, extractPageContent } from '../../../Services/utils/payloadMappers';
 
 export const getListData = extractListResponse;
@@ -276,8 +276,13 @@ export const createEmptyGrnLineItem = () => ({
 export const createDefaultGrnForm = (grnFormatId = '') => ({
   source_type: GRN_SOURCE.PO,
   grn_format_id: grnFormatId,
+  reference_type: 'NONE',
   po_id: '',
+  po_number: '',
+  pi_id: '',
+  pi_number: '',
   vendor_id: '',
+  vendor_name: '',
   receipt_date: new Date().toISOString().split('T')[0],
   received_at_location: '',
   delivery_note_number: '',
@@ -318,7 +323,7 @@ export const validateGrnLineItems = (lineItems, { qcEnabled = true } = {}) => {
 };
 
 export const buildCreateGrnPayload = (form, { formatConfig, qcEnabled = true } = {}) => {
-  const valuationEnabled = Boolean(formatConfig?.valuation_enabled);
+  const valuationEnabled = isGrnValuationEnabled(formatConfig);
   const billToEnabled = Boolean(formatConfig?.bill_to_enabled);
   const lineItems = form.line_items
     .filter((item) => Number(item.received_quantity) > 0)
@@ -363,7 +368,11 @@ export const buildCreateGrnPayload = (form, { formatConfig, qcEnabled = true } =
     template_code: formatConfig?.templateCode || formatConfig?.template_code || undefined,
     config_snapshot: formatConfig ? buildGrnConfigSnapshot(formatConfig) : undefined,
     po_id: form.po_id || undefined,
+    po_number: form.po_number || undefined,
+    pi_id: form.pi_id || undefined,
+    pi_number: form.pi_number || undefined,
     vendor_id: form.vendor_id || undefined,
+    vendor_name: form.vendor_name || undefined,
     receipt_date: form.receipt_date,
     received_at_location: form.received_at_location || undefined,
     delivery_note_number: form.delivery_note_number || form.delivery_challan_no || undefined,
