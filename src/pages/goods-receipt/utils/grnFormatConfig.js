@@ -144,9 +144,6 @@ export const fieldEnabled = (config, sectionKey, fieldKey) => {
   if (sectionKey === 'LINE_ITEM' && ['accepted_qty', 'rejected_qty', 'rejection_reason'].includes(fieldKey)) {
     return Boolean(config?.qc_enabled) && field.isEnabled;
   }
-  if (sectionKey === 'LINE_ITEM' && ['rate', 'amount', 'gst_rate'].includes(fieldKey)) {
-    return Boolean(config?.valuation_enabled) && field.isEnabled;
-  }
   return Boolean(field.isEnabled);
 };
 
@@ -208,12 +205,47 @@ const mergeSectionsWithDefaults = (rawSections = [], defaultSections = DEFAULT_G
   return Array.from(merged.values());
 };
 
+const VALUATION_LINE_FIELDS = ['rate', 'amount', 'gst_rate'];
+const QC_LINE_FIELDS = ['accepted_qty', 'rejected_qty', 'rejection_reason'];
+
+/** Keep master toggles and dependent field flags consistent (API often drifts). */
+export const syncGrnFormatMasterFields = (config = {}) => {
+  const next = cloneGrnFormatConfig(config);
+  const valuationOn = Boolean(next.valuation_enabled);
+  const qcOn = Boolean(next.qc_enabled);
+  const lineSection = next.sections?.find((section) => section.section === 'LINE_ITEM');
+  const inspection = next.sections?.find((section) => section.section === 'INSPECTION');
+
+  if (lineSection?.fields) {
+    lineSection.fields.forEach((field) => {
+      if (VALUATION_LINE_FIELDS.includes(field.fieldKey)) {
+        field.isEnabled = valuationOn;
+      }
+      if (QC_LINE_FIELDS.includes(field.fieldKey)) {
+        field.isEnabled = qcOn;
+      }
+    });
+  }
+
+  if (inspection) {
+    inspection.isEnabled = qcOn;
+    inspection.fields?.forEach((field) => {
+      if (field.fieldKey === 'inspected_by') field.isEnabled = qcOn;
+    });
+  }
+
+  next.valuation_enabled = valuationOn;
+  next.qc_enabled = qcOn;
+  return next;
+};
+
 /** Merge API / legacy flat config into PO-style sections config */
 export const normalizeGrnFormatConfig = (raw = {}) => {
   const base = cloneGrnFormatConfig(DEFAULT_GRN_FORMAT_CONFIG);
 
+  let normalized;
   if (Array.isArray(raw.sections) && raw.sections.length > 0) {
-    return {
+    normalized = {
       ...base,
       ...raw,
       name: sanitizeGrnFormatName(raw.name ?? base.name, base.name),
@@ -226,6 +258,7 @@ export const normalizeGrnFormatConfig = (raw = {}) => {
       grnNumberPrefix: raw.grnNumberPrefix ?? raw.grn_number_prefix ?? base.grnNumberPrefix,
       sections: mergeSectionsWithDefaults(raw.sections, base.sections),
     };
+    return syncGrnFormatMasterFields(normalized);
   }
 
   const legacySections = raw.sections || {};
@@ -261,7 +294,7 @@ export const normalizeGrnFormatConfig = (raw = {}) => {
 
   Object.entries(legacyColumns).forEach(([key, value]) => patchField('LINE_ITEM', key, value));
 
-  return {
+  normalized = {
     ...base,
     ...raw,
     qc_enabled: raw.qc_enabled ?? base.qc_enabled,
@@ -275,6 +308,7 @@ export const normalizeGrnFormatConfig = (raw = {}) => {
     id: raw.id ?? base.id,
     sections: base.sections,
   };
+  return syncGrnFormatMasterFields(normalized);
 };
 
 export const isGrnDeliveryEnabled = (config) => sectionEnabled(config, 'DELIVERY');
@@ -313,18 +347,20 @@ export const makeGrnFormatConfig = (
   };
 };
 
-export const buildGrnFormatConfigPayload = (config = {}) => ({
-  name: sanitizeGrnFormatName(config.name, ''),
-  companyName: config.companyName,
-  grnNumberPrefix: config.grnNumberPrefix,
-  templateCode: normalizeGrnTemplateCode(config.templateCode),
-  qcEnabled: Boolean(config.qc_enabled),
-  valuationEnabled: Boolean(config.valuation_enabled),
-  billToEnabled: Boolean(config.bill_to_enabled),
-  approvalEnabled: Boolean(config.approval_enabled),
-  isDefault: Boolean(config.isDefault),
-  configVersion: config.configVersion || 0,
-  sections: (config.sections || []).map((section, sectionIndex) => ({
+export const buildGrnFormatConfigPayload = (config = {}) => {
+  const synced = syncGrnFormatMasterFields(config);
+  return {
+  name: sanitizeGrnFormatName(synced.name, ''),
+  companyName: synced.companyName,
+  grnNumberPrefix: synced.grnNumberPrefix,
+  templateCode: normalizeGrnTemplateCode(synced.templateCode),
+  qcEnabled: Boolean(synced.qc_enabled),
+  valuationEnabled: Boolean(synced.valuation_enabled),
+  billToEnabled: Boolean(synced.bill_to_enabled),
+  approvalEnabled: Boolean(synced.approval_enabled),
+  isDefault: Boolean(synced.isDefault),
+  configVersion: synced.configVersion || 0,
+  sections: (synced.sections || []).map((section, sectionIndex) => ({
     section: section.section,
     label: section.label,
     isEnabled: Boolean(section.isEnabled),
@@ -339,7 +375,8 @@ export const buildGrnFormatConfigPayload = (config = {}) => ({
       isSystemField: Boolean(field.isSystemField),
     })),
   })),
-});
+  };
+};
 
 export const buildGrnConfigSnapshot = (config = {}) => ({
   qc_enabled: Boolean(config.qc_enabled),

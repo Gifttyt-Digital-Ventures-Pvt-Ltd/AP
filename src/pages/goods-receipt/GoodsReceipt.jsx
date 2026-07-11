@@ -31,6 +31,7 @@ import {
   useSendBackGrnMutation,
   usePostGrnMutation,
   useExtractGrnDocumentMutation,
+  useLazyGetGrnExtractJobQuery,
   useCreateGrnFromPiMutation,
   useLazyGetPoLinesReceiptStateQuery,
   useGetGrnDownloadUrlMutation,
@@ -89,6 +90,100 @@ const normalizeDownloadUrl = (url) => {
   return new URL(url, window.location.origin).toString();
 };
 
+const getUploadedGrnDraft = (payload = {}) => payload?.draft || payload?.data?.draft || null;
+
+const getUploadedGrnExtraction = (payload = {}) =>
+  payload?.extraction || payload?.data?.extraction || payload?.data || payload?.result || payload;
+
+const getUploadedGrnItems = (draft, extraction) => {
+  if (Array.isArray(draft?.line_items)) return draft.line_items;
+  if (Array.isArray(draft?.lineItems)) return draft.lineItems;
+  if (Array.isArray(extraction?.items)) return extraction.items;
+  if (Array.isArray(extraction?.line_items)) return extraction.line_items;
+  if (Array.isArray(extraction?.lineItems)) return extraction.lineItems;
+  return [];
+};
+
+const getExtractJobId = (payload = {}) =>
+  payload?.jobId ||
+  payload?.job_id ||
+  payload?.data?.jobId ||
+  payload?.data?.job_id ||
+  '';
+
+const getExtractStatus = (payload = {}) =>
+  String(
+    payload?.status ||
+      payload?.jobStatus ||
+      payload?.job_status ||
+      payload?.data?.status ||
+      '',
+  )
+    .trim()
+    .toUpperCase();
+
+const isExtractJobPending = (status = '') =>
+  ['PROCESSING', 'PENDING', 'IN_PROGRESS', 'QUEUED', 'RUNNING'].includes(String(status).toUpperCase());
+
+const normalizeUploadedGrnLineItem = (item = {}) => {
+  const receivedQty = Number(
+    item.received_quantity ??
+      item.receivedQuantity ??
+      item.received_qty ??
+      item.receivedQty ??
+      0,
+  );
+  const unitPrice = Number(
+    item.unit_price ?? item.unitPrice ?? item.rate ?? item.price ?? item.unit_rate ?? item.unitRate ?? 0,
+  );
+  const lineAmount = Number(
+    item.line_amount ??
+      item.lineAmount ??
+      item.amount ??
+      item.taxable_amount ??
+      item.taxableAmount ??
+      item.total_amount ??
+      item.totalAmount ??
+      0,
+  );
+  const resolvedUnitPrice =
+    unitPrice || (receivedQty > 0 && lineAmount > 0 ? lineAmount / receivedQty : 0);
+  const resolvedLineAmount =
+    lineAmount || (receivedQty > 0 && resolvedUnitPrice > 0 ? receivedQty * resolvedUnitPrice : 0);
+
+  return {
+    item_code: item.item_code || item.itemCode || '',
+    item_description: item.item_description || item.itemDescription || item.description || '',
+    hsn_sac: item.hsn_sac || item.hsnSac || '',
+    uom: item.uom || 'NOS',
+    ordered_quantity: item.ordered_quantity ?? item.orderedQuantity ?? item.ordered_qty ?? item.orderedQty ?? 0,
+    already_received: item.already_received ?? item.alreadyReceived ?? item.prev_received_qty ?? 0,
+    pending_quantity: item.pending_quantity ?? item.pendingQuantity ?? 0,
+    received_quantity: receivedQty,
+    accepted_quantity:
+      item.accepted_quantity ??
+      item.acceptedQuantity ??
+      item.accepted_qty ??
+      item.acceptedQty ??
+      receivedQty,
+    rejected_quantity: item.rejected_quantity ?? item.rejectedQuantity ?? item.rejected_qty ?? item.rejectedQty ?? 0,
+    rejection_reason: item.rejection_reason || item.rejectionReason || '',
+    batch_no: item.batch_no || item.batchNo || '',
+    unit_price: resolvedUnitPrice,
+    line_amount: resolvedLineAmount,
+    gst_rate:
+      item.gst_rate ??
+      item.gstRate ??
+      item.gst_percent ??
+      item.gstPercent ??
+      item.tax_rate ??
+      item.taxRate ??
+      0,
+  };
+};
+
+const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
 const GoodsReceipt = () => {
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
@@ -128,6 +223,7 @@ const GoodsReceipt = () => {
   const [sendBackGrn] = useSendBackGrnMutation();
   const [postGrn, { isLoading: posting }] = usePostGrnMutation();
   const [extractGrnDocument] = useExtractGrnDocumentMutation();
+  const [getGrnExtractJob] = useLazyGetGrnExtractJobQuery();
   const [createGrnFromPi] = useCreateGrnFromPiMutation();
   const [getGrnDownloadUrl, { isLoading: downloadingGrnPdf }] = useGetGrnDownloadUrlMutation();
 
@@ -139,6 +235,7 @@ const GoodsReceipt = () => {
   const [uploadGrnFile, setUploadGrnFile] = useState(null);
   const [uploadGrnFileURL, setUploadGrnFileURL] = useState(null);
   const [uploadScanning, setUploadScanning] = useState(false);
+  const [uploadExtractionFailed, setUploadExtractionFailed] = useState(false);
   const [uploadPreviewError, setUploadPreviewError] = useState(false);
   const [pdfZoom, setPdfZoom] = useState(100);
   const uploadInProgressRef = useRef(false);
@@ -319,6 +416,7 @@ const GoodsReceipt = () => {
     setUploadGrnFile(null);
     setUploadGrnFileURL(null);
     setUploadScanning(false);
+    setUploadExtractionFailed(false);
     setUploadPreviewError(false);
     setPdfZoom(100);
     uploadInProgressRef.current = false;
@@ -737,6 +835,34 @@ const GoodsReceipt = () => {
     }
   };
 
+  const resolveExtractPayload = useCallback(
+    async (initialResult) => {
+      let payload = initialResult;
+      let status = getExtractStatus(payload);
+      let jobId = getExtractJobId(payload);
+      let attempts = 0;
+
+      while (isExtractJobPending(status) && jobId && attempts < 20) {
+        attempts += 1;
+        await wait(1500);
+        payload = await getGrnExtractJob(jobId).unwrap();
+        status = getExtractStatus(payload);
+        jobId = getExtractJobId(payload) || jobId;
+      }
+
+      if (isExtractJobPending(status)) {
+        throw new Error('GRN extraction is still processing. Please try again in a moment.');
+      }
+
+      if (['FAILED', 'ERROR'].includes(status)) {
+        throw new Error(payload?.message || payload?.detail || 'GRN extraction failed');
+      }
+
+      return payload;
+    },
+    [getGrnExtractJob],
+  );
+
   const applyGrnFormat = (formatId) => {
     const selectedFormat = savedFormatConfigs.find((config) => config.id === formatId);
     if (!selectedFormat) return;
@@ -748,43 +874,135 @@ const GoodsReceipt = () => {
     async (file) => {
       const formData = new FormData();
       formData.append('file', file);
-      const result = await extractGrnDocument(formData).unwrap();
-      const extracted = result?.data ?? result?.result ?? result;
+      if (activeFormatId) {
+        formData.append('grn_format_id', activeFormatId);
+      }
+      const templateCode = activeFormatConfig?.templateCode || activeFormatConfig?.template_code;
+      if (templateCode) {
+        formData.append('template_code', templateCode);
+      }
+      const initialResult = await extractGrnDocument(formData).unwrap();
+      const result = await resolveExtractPayload(initialResult);
+      const draft = getUploadedGrnDraft(result);
+      const extracted = getUploadedGrnExtraction(result);
+      const extractedItems = getUploadedGrnItems(draft, extracted);
+      const suggestedPoId = draft?.po_id || draft?.poId || draft?.suggested_po_id || draft?.suggestedPoId || '';
+      const suggestedPiId = draft?.pi_id || draft?.piId || draft?.suggested_pi_id || draft?.suggestedPiId || '';
+      const suggestedPoNumber =
+        draft?.po_number ||
+        draft?.poNumber ||
+        draft?.po_reference ||
+        draft?.poReference ||
+        extracted?.poReference ||
+        extracted?.po_reference ||
+        extracted?.poNumber ||
+        extracted?.po_number ||
+        '';
+      const suggestedPiNumber =
+        draft?.pi_number ||
+        draft?.piNumber ||
+        draft?.pi_reference ||
+        draft?.piReference ||
+        extracted?.piReference ||
+        extracted?.pi_reference ||
+        extracted?.piNumber ||
+        extracted?.pi_number ||
+        '';
+      const vendorName =
+        draft?.vendor_name ||
+        draft?.vendorName ||
+        extracted?.supplierName ||
+        extracted?.supplier_name ||
+        extracted?.vendorName ||
+        extracted?.vendor_name ||
+        '';
+      const vendorId = draft?.vendor_id || draft?.vendorId || extracted?.vendorId || extracted?.vendor_id || '';
+
       setSelectedPo(null);
+      setUploadExtractionFailed(false);
       setGrnForm((current) => ({
         ...current,
-        source_type: GRN_SOURCE.UPLOAD,
-        po_id: '',
-        requires_vendor: false,
-        receipt_date: extracted?.grn_date || current.receipt_date,
-        delivery_note_number: extracted?.delivery_challan_no || '',
-        delivery_challan_no: extracted?.delivery_challan_no || '',
-        eway_bill_no: extracted?.eway_bill_no || '',
-        vehicle_number: extracted?.vehicle_no || '',
-        transporter_name: extracted?.transporter_name || '',
-        received_at_location: extracted?.received_at_location || '',
-        received_by: extracted?.received_by || '',
-        remarks: extracted?.remarks || '',
-        line_items: (extracted?.items || []).length
-          ? (extracted.items || []).map((item) => ({
-              item_code: item.item_code || '',
-              item_description: item.description || '',
-              hsn_sac: item.hsn_sac || '',
-              uom: item.uom || 'PCS',
-              ordered_quantity: item.ordered_qty || 0,
-              already_received: 0,
-              pending_quantity: 0,
-              received_quantity: item.received_qty || 0,
-              accepted_quantity: item.accepted_qty ?? item.received_qty ?? 0,
-              rejected_quantity: item.rejected_qty || 0,
-              rejection_reason: item.rejection_reason || '',
-              batch_no: item.batch_no || '',
-            }))
+        reference_type: suggestedPiId || suggestedPiNumber
+          ? 'PI'
+          : suggestedPoId || suggestedPoNumber
+            ? 'PO'
+            : 'NONE',
+        source_type: suggestedPiId || suggestedPiNumber
+          ? GRN_SOURCE.FROM_PI
+          : suggestedPoId || suggestedPoNumber
+            ? GRN_SOURCE.PO
+            : draft?.source_type || draft?.sourceType || GRN_SOURCE.UPLOAD,
+        po_id: suggestedPoId,
+        po_number: suggestedPoNumber,
+        pi_id: suggestedPiId,
+        pi_number: suggestedPiNumber,
+        vendor_id: vendorId || current.vendor_id,
+        vendor_name: vendorName || current.vendor_name,
+        requires_vendor: !(vendorId || vendorName),
+        receipt_date:
+          draft?.receipt_date ||
+          draft?.receiptDate ||
+          draft?.grn_date ||
+          draft?.grnDate ||
+          extracted?.grnDate ||
+          extracted?.grn_date ||
+          extracted?.receiptDate ||
+          extracted?.receipt_date ||
+          current.receipt_date,
+        delivery_note_number:
+          draft?.delivery_note_number ||
+          draft?.deliveryNoteNumber ||
+          extracted?.deliveryNoteNumber ||
+          extracted?.delivery_note_number ||
+          extracted?.delivery_challan_no ||
+          extracted?.deliveryChallanNo ||
+          '',
+        delivery_challan_no:
+          draft?.delivery_challan_no ||
+          draft?.deliveryChallanNo ||
+          extracted?.delivery_challan_no ||
+          extracted?.deliveryChallanNo ||
+          extracted?.deliveryNoteNumber ||
+          '',
+        eway_bill_no:
+          draft?.eway_bill_no ||
+          draft?.ewayBillNo ||
+          extracted?.eway_bill_no ||
+          extracted?.ewayBillNo ||
+          '',
+        vehicle_number:
+          draft?.vehicle_number ||
+          draft?.vehicleNumber ||
+          extracted?.vehicle_no ||
+          extracted?.vehicleNo ||
+          extracted?.vehicleNumber ||
+          '',
+        transporter_name:
+          draft?.transporter_name ||
+          draft?.transporterName ||
+          extracted?.transporter_name ||
+          extracted?.transporterName ||
+          '',
+        received_at_location:
+          draft?.received_at_location ||
+          draft?.receivedAtLocation ||
+          extracted?.received_at_location ||
+          extracted?.receivedAtLocation ||
+          '',
+        received_by:
+          draft?.received_by ||
+          draft?.receivedBy ||
+          extracted?.received_by ||
+          extracted?.receivedBy ||
+          '',
+        remarks: draft?.remarks || extracted?.remarks || '',
+        line_items: extractedItems.length
+          ? extractedItems.map(normalizeUploadedGrnLineItem)
           : [createEmptyGrnLineItem()],
       }));
-      return true;
+      return Boolean(draft || extractedItems.length || vendorName || suggestedPoNumber || suggestedPiNumber);
     },
-    [extractGrnDocument],
+    [activeFormatConfig, activeFormatId, extractGrnDocument, resolveExtractPayload],
   );
 
   const processGrnUploadFile = async (file) => {
@@ -797,19 +1015,26 @@ const GoodsReceipt = () => {
     setUploadGrnFileURL(fileURL);
     setUploadGrnFile(file);
     setUploadScanning(true);
+    setUploadExtractionFailed(false);
     setUploadPreviewError(false);
     resetCreateState();
     setGrnForm({ ...createDefaultGrnForm(activeFormatId), source_type: GRN_SOURCE.UPLOAD });
 
     try {
-      await handleExtractUpload(file);
-      toast.success('GRN scanned successfully');
+      const populated = await handleExtractUpload(file);
+      if (populated) {
+        toast.success('GRN scanned successfully');
+      } else {
+        setUploadExtractionFailed(true);
+        toast.warning('Scan completed, but little data was extracted. Review and fill the form.');
+      }
     } catch (error) {
       if (handleCreditError(error)) {
         resetGrnUploadSession();
         return false;
       }
 
+      setUploadExtractionFailed(true);
       setGrnForm({
         ...createDefaultGrnForm(activeFormatId),
         source_type: GRN_SOURCE.UPLOAD,
@@ -820,7 +1045,7 @@ const GoodsReceipt = () => {
         <div className="space-y-2">
           <p className="font-bold text-base">Scan Failed</p>
           <p className="text-sm">
-            {error?.data?.detail || error?.data?.message || 'Failed to scan GRN'}
+            {error?.data?.detail || error?.data?.message || error?.message || 'Failed to scan GRN'}
           </p>
           <p className="text-sm">Enter GRN details manually using the form.</p>
         </div>,
@@ -949,6 +1174,9 @@ const GoodsReceipt = () => {
         open={showGrnUploadPicker && !uploadGrnFile}
         onOpenChange={handleUploadPickerOpenChange}
         onFileSelected={processGrnUploadFile}
+        formatConfigs={savedFormatConfigs}
+        activeFormatId={activeFormatId}
+        onFormatChange={applyGrnFormat}
         disabled={uploadScanning || uploadInProgressRef.current}
       />
 
@@ -984,7 +1212,10 @@ const GoodsReceipt = () => {
               activeFormatId={activeFormatId}
               onFormatChange={applyGrnFormat}
               vendors={vendorsData}
-              extractionFailed={Boolean(grnForm.requires_vendor)}
+              purchaseOrders={purchaseOrders}
+              eligiblePis={eligiblePis}
+              isPiEnabled={hasPiSubscription}
+              extractionFailed={uploadExtractionFailed}
               onRetryUpload={handleRetryGrnUpload}
             />
           )}

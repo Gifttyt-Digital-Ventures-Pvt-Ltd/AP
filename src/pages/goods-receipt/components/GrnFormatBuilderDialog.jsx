@@ -140,9 +140,9 @@ const GrnFormatBuilderDialog = ({
   const showAccepted = fieldEnabled(draftConfig, 'LINE_ITEM', 'accepted_qty');
   const showRejected = fieldEnabled(draftConfig, 'LINE_ITEM', 'rejected_qty');
   const showRejectionReason = fieldEnabled(draftConfig, 'LINE_ITEM', 'rejection_reason');
-  const showRate = fieldEnabled(draftConfig, 'LINE_ITEM', 'rate');
-  const showAmount = fieldEnabled(draftConfig, 'LINE_ITEM', 'amount');
-  const showGstRate = fieldEnabled(draftConfig, 'LINE_ITEM', 'gst_rate');
+  const showRate = showValuationColumns;
+  const showAmount = showValuationColumns;
+  const showGstRate = showValuationColumns;
   const showBatchNo = fieldEnabled(draftConfig, 'LINE_ITEM', 'batch_no');
   const showLineRemarks = fieldEnabled(draftConfig, 'LINE_ITEM', 'line_remarks');
 
@@ -308,16 +308,22 @@ const GrnFormatBuilderDialog = ({
                   </div>
                   <div className="space-y-2 px-3 py-2">
                     {section.fields.map((field) => {
-                      const qcLocked =
-                        !showQcColumns &&
-                        ['accepted_qty', 'rejected_qty', 'rejection_reason', 'inspected_by'].includes(
-                          field.fieldKey,
-                        );
-                      const valuationLocked =
-                        !showValuationColumns &&
-                        ['rate', 'amount', 'gst_rate'].includes(field.fieldKey);
+                      const isQcField = [
+                        'accepted_qty',
+                        'rejected_qty',
+                        'rejection_reason',
+                        'inspected_by',
+                      ].includes(field.fieldKey);
+                      const isValuationField = ['rate', 'amount', 'gst_rate'].includes(field.fieldKey);
+                      const qcLocked = isQcField;
+                      const valuationLocked = isValuationField;
                       const disabled =
                         field.isSystemField || qcLocked || valuationLocked || !section.isEnabled;
+                      const checked = isValuationField
+                        ? showValuationColumns && section.isEnabled
+                        : isQcField
+                          ? showQcColumns && section.isEnabled
+                          : field.isEnabled && section.isEnabled;
                       return (
                         <div
                           key={field.fieldKey}
@@ -330,15 +336,10 @@ const GrnFormatBuilderDialog = ({
                             )}
                           </div>
                           <Switch
-                            checked={
-                              field.isEnabled &&
-                              !qcLocked &&
-                              !valuationLocked &&
-                              section.isEnabled
-                            }
+                            checked={checked}
                             disabled={disabled}
-                            onCheckedChange={(checked) =>
-                              toggleField(section.section, field.fieldKey, checked)
+                            onCheckedChange={(checkedValue) =>
+                              toggleField(section.section, field.fieldKey, checkedValue)
                             }
                             data-testid={`grn-builder-field-${field.fieldKey}`}
                           />

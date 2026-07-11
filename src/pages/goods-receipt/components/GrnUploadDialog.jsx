@@ -9,6 +9,14 @@ import {
   DialogTitle,
 } from '../../../components/ui/dialog';
 import { Button } from '../../../components/ui/button';
+import { Label } from '../../../components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../../components/ui/select';
 import MeteredActionCostHint from '../../../components/credits/MeteredActionCostHint';
 import { CREDIT_ACTION_CODES } from '../../../constants/creditActions';
 import { useRBAC } from '../../../contexts/RBACContext';
@@ -18,6 +26,9 @@ const GrnUploadDialog = ({
   open,
   onOpenChange,
   onFileSelected,
+  formatConfigs = [],
+  activeFormatId = '',
+  onFormatChange,
   disabled = false,
 }) => {
   const { isTokenBasedSubscription } = useRBAC();
@@ -87,6 +98,31 @@ const GrnUploadDialog = ({
         </DialogHeader>
 
         <div className="rounded-lg border border-border bg-muted/20 p-5">
+          {formatConfigs.length > 0 && (
+            <div className="mb-4 space-y-2">
+              <Label>GRN Format</Label>
+              <Select
+                value={activeFormatId}
+                onValueChange={onFormatChange}
+                disabled={disabled}
+              >
+                <SelectTrigger className="bg-background" data-testid="grn-upload-pre-scan-format">
+                  <SelectValue placeholder="Select GRN format" />
+                </SelectTrigger>
+                <SelectContent>
+                  {formatConfigs.map((format) => (
+                    <SelectItem key={format.id} value={format.id}>
+                      {format.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-muted-foreground">
+                The selected format controls extracted fields, including tax columns.
+              </p>
+            </div>
+          )}
+
           <input
             ref={inputRef}
             type="file"
