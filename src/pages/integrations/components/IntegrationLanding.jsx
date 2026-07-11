@@ -29,7 +29,11 @@ import TallyIntegrationCard from "./TallyIntegrationCard";
 const ProviderCard = ({ provider, disabled, activeConnection }) => {
   const providerKey = getProviderKey(provider);
   const name = getProviderName(provider);
-  const objects = normalizeObjects(provider);
+  const objects = normalizeObjects(provider).sort(([leftKey], [rightKey]) => {
+    if (leftKey === "CHART_OF_ACCOUNTS") return -1;
+    if (rightKey === "CHART_OF_ACCOUNTS") return 1;
+    return 0;
+  });
 
   return (
     <Card className="rounded-md">
