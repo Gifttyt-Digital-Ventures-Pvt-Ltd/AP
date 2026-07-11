@@ -23,6 +23,7 @@ import GrnStatusBadge from './GrnStatusBadge';
 import GrnSourceBadge from './GrnSourceBadge';
 import { GRN_PAGE_SIZE, GRN_SOURCE, GRN_STATUS } from '../constants';
 import { formatDate } from '../utils';
+import { isAccountingReadyLocked } from '../../../utils/accountingLock';
 
 const STATUS_FILTER_OPTIONS = [
   { value: 'all', label: 'All Statuses' },
@@ -217,7 +218,8 @@ const GrnListTab = ({
                         <Eye className="mr-1 h-4 w-4" />
                         View
                       </Button>
-                      {[GRN_STATUS.DRAFT, GRN_STATUS.SENT_BACK].includes(grn.status) && (
+                      {[GRN_STATUS.DRAFT, GRN_STATUS.SENT_BACK].includes(grn.status) &&
+                        !isAccountingReadyLocked(grn) && (
                         <Button variant="outline" size="sm" onClick={() => onEdit(grn)} data-testid={`edit-grn-${grn?.id ?? 'unknown'}`}>
                           <Edit className="mr-1 h-4 w-4" />
                           Edit

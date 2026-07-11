@@ -1,6 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Loader2, Settings2 } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  getAccountingReadyBlockedMessage,
+  isAccountingReadyLocked,
+} from '../../utils/accountingLock';
 import { Button } from '../../components/ui/button';
 import RefreshButton from '../../components/common/RefreshButton';
 import { useSidebar } from '../../components/Layout';
@@ -574,6 +578,12 @@ const GoodsReceipt = () => {
   };
 
   const openGrnDetail = (grn, { edit = false } = {}) => {
+    if (edit && isAccountingReadyLocked(grn)) {
+      toast.error(getAccountingReadyBlockedMessage(grn, 'goods receipt'));
+      setDetailEditMode(false);
+      setDetailGrn(grn);
+      return;
+    }
     setDetailEditMode(edit);
     setDetailGrn(grn);
   };

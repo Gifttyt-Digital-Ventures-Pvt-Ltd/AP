@@ -54,10 +54,17 @@ export const getInvoiceGrossAmount = (invoice) => {
 export const getInvoiceTaxAmount = (invoice) =>
   toNumber(
     invoice?.gstAmount ??
+      invoice?.gst_amount ??
       invoice?.taxAmount ??
+      invoice?.tax_amount ??
+      invoice?.totalTaxAmount ??
+      invoice?.total_tax_amount ??
       toNumber(invoice?.cgstAmount) +
+        toNumber(invoice?.cgst_amount) +
         toNumber(invoice?.sgstAmount) +
-        toNumber(invoice?.igstAmount),
+        toNumber(invoice?.sgst_amount) +
+        toNumber(invoice?.igstAmount) +
+        toNumber(invoice?.igst_amount),
   );
 
 export const getInvoiceTdsAmount = (invoice) =>

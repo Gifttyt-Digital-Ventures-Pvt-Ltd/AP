@@ -255,6 +255,33 @@ export const ACTION_PERMISSION_RULES = {
   "gmailIntegration.disconnect": { anyOf: ["settings-interaction"] },
   "gmailIntegration.sync": { anyOf: ["settings-interaction"] },
 
+  "accounting.view": {
+    anyOf: ["integrations.view", "integrations.sync.trigger", "settings-interaction"],
+  },
+  "accounting.ledger.create": {
+    anyOf: ["integrations.sync.trigger", "integrations.mapping.edit"],
+  },
+  "accounting.ledger.edit": {
+    anyOf: ["integrations.sync.trigger", "integrations.mapping.edit"],
+  },
+  "accounting.coa.sync": { anyOf: ["integrations.sync.trigger"] },
+  "accounting.ready.mark": { anyOf: ["integrations.sync.trigger", "integrations.mapping.edit"] },
+  "accounting.ready.sync": { anyOf: ["integrations.sync.trigger"] },
+  "accounting.ready.unlockRequest": {
+    anyOf: [
+      "invoice-maker",
+      "invoice-checker",
+      "pi-manage",
+      "po-manage",
+      "grn-manage",
+      "vendors-manage",
+      "integrations.sync.trigger",
+    ],
+  },
+  "accounting.ready.unlockApprove": { anyOf: ["integrations.sync.trigger", "integrations.review.resolve"] },
+  "accounting.syncLogs.view": { anyOf: ["integrations.view", "integrations.sync.trigger"] },
+  "accounting.syncLogs.download": { anyOf: ["integrations.sync.trigger", "integrations.view"] },
+
   "roles.invite": { anyOf: ["roles-manage-users"] },
   "roles.updateUserRole": { anyOf: ["roles-manage-users"] },
   "roles.updateUserStatus": { anyOf: ["roles-manage-users"] },

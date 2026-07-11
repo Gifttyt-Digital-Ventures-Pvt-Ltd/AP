@@ -49,6 +49,24 @@ export const parseTaxNameFromLabel = (taxLabel = "") => {
   return withoutPercent || "Tax";
 };
 
+const resolveLineItemTaxLabel = (item = {}) =>
+  item?.tax ??
+  item?.invoiceTax ??
+  item?.invoice_tax ??
+  item?.taxLabel ??
+  item?.tax_label ??
+  "";
+
+const resolveLineItemTaxRate = (item = {}) =>
+  [
+    item?.taxRate,
+    item?.tax_rate,
+    item?.gstRate,
+    item?.gst_rate,
+    item?.taxPercentage,
+    item?.tax_percentage,
+  ].find((value) => value !== undefined && value !== null && value !== "");
+
 export const applyForeignLineItemTax = (item, taxName, taxRate) => {
   const rate = Number(taxRate);
   const normalizedRate = Number.isFinite(rate) ? rate : "";
@@ -88,9 +106,10 @@ export const createDefaultLineItem = (currency = DEFAULT_CURRENCY) => {
 };
 
 export const resolveInrTaxLabel = (item, taxesRaw = []) => {
-  if (item?.tax) return item.tax;
+  const explicitTaxLabel = resolveLineItemTaxLabel(item);
+  if (explicitTaxLabel) return explicitTaxLabel;
 
-  const rate = Number(item?.taxRate ?? item?.tax_rate ?? 0);
+  const rate = Number(resolveLineItemTaxRate(item) || 0);
   const hasLineRate = rate > 0;
   const lineTaxAmount = Number(item?.taxAmount ?? item?.tax_amount ?? 0) || 0;
   const totalTaxAmount = taxesRaw.reduce(
@@ -319,10 +338,9 @@ export const resolveScannedLineItemTax = (
 
   const fallbackLabel = fallback?.defaultTaxLabel ?? "";
   const fallbackRateCandidate =
-    item?.taxRate ??
-    item?.tax_rate ??
+    resolveLineItemTaxRate(item) ??
     fallback?.defaultTaxRate ??
-    parseTaxRateFromLabel(item?.tax) ??
+    parseTaxRateFromLabel(resolveLineItemTaxLabel(item)) ??
     parseTaxRateFromLabel(fallbackLabel) ??
     taxesRaw?.[0]?.taxRate ??
     taxesRaw?.[0]?.tax_rate;
@@ -332,7 +350,7 @@ export const resolveScannedLineItemTax = (
   let taxName =
     item?.taxName ??
     item?.tax_name ??
-    parseTaxNameFromLabel(item?.tax) ??
+    parseTaxNameFromLabel(resolveLineItemTaxLabel(item)) ??
     fallback?.defaultTaxName ??
     parseTaxNameFromLabel(fallbackLabel) ??
     "";
@@ -350,7 +368,7 @@ export const resolveScannedLineItemTax = (
   return {
     taxName,
     taxRate: rate,
-    tax: item?.tax || formatForeignTaxLabel(taxName, rate),
+    tax: resolveLineItemTaxLabel(item) || formatForeignTaxLabel(taxName, rate),
   };
 };
 
@@ -368,9 +386,9 @@ export const mapExtractedLineItemToForm = (
   return {
     description: item.description || "",
     ledger: item.ledger || "Cloud Services",
-    tax: item.tax || (useInrTax ? DEFAULT_INR_TAX : ""),
-    taxName: item.taxName || "",
-    taxRate: item.taxRate ?? "",
+    tax: resolveLineItemTaxLabel(item) || (useInrTax ? DEFAULT_INR_TAX : ""),
+    taxName: item.taxName || item.tax_name || "",
+    taxRate: resolveLineItemTaxRate(item) ?? "",
     quantity,
     unitRate: unitRate,
     lineTotal: resolvedLineTotal,

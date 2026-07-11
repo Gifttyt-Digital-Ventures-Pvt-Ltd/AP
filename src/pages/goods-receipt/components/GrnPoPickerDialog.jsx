@@ -56,7 +56,10 @@ const GrnPoPickerDialog = ({
                 <TableCell>{po.vendor_name}</TableCell>
                 <TableCell>{formatCurrency(po.total_amount)}</TableCell>
                 <TableCell>
-                  <Badge className={`${statusColors[po.status] || 'bg-blue-500'} border-0 text-white`}>
+                  <Badge
+                    variant="outline"
+                    className={`border-0 font-semibold ${statusColors[po.status] || statusColors.Draft}`}
+                  >
                     {po.status}
                   </Badge>
                 </TableCell>

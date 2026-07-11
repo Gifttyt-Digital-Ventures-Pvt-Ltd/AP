@@ -38,6 +38,8 @@ import {
 import GrnStatusBadge from './GrnStatusBadge';
 import GrnSourceBadge from './GrnSourceBadge';
 import GrnCreateFormFields from './GrnCreateFormFields';
+import AccountingLockBanner from '../../../components/AccountingLockBanner';
+import { isAccountingReadyLocked } from '../../../utils/accountingLock';
 import { GRN_SOURCE, GRN_STATUS } from '../constants';
 import { formatCurrency, formatDate } from '../utils';
 
@@ -99,7 +101,9 @@ const GrnDetailDialog = ({
     setDraftForm(createEditableGrnForm(grn, formatConfig));
   }, [formatConfig, grn, initialEditMode, open]);
 
-  const isEditable = [GRN_STATUS.DRAFT, GRN_STATUS.SENT_BACK].includes(grn?.status);
+  const isEditable =
+    [GRN_STATUS.DRAFT, GRN_STATUS.SENT_BACK].includes(grn?.status) &&
+    !isAccountingReadyLocked(grn);
   const isPoLinked = draftForm.source_type === GRN_SOURCE.PO || Boolean(draftForm.po_id);
   const canEditVendor = isEditable && !isPoLinked;
   const submitLabel = formatConfig?.approval_enabled ? 'Submit for Approval' : 'Post GRN';
@@ -145,6 +149,13 @@ const GrnDetailDialog = ({
         </DialogHeader>
 
         <div className="flex-1 space-y-4 overflow-y-auto px-6 py-4">
+          <AccountingLockBanner
+            record={grn}
+            objectLabel="goods receipt"
+            objectType="GRN"
+            objectId={grn?.id}
+          />
+
           <div className="flex flex-wrap gap-2">
             <GrnStatusBadge status={grn.status} />
             <GrnSourceBadge source={grn.source_type} />
