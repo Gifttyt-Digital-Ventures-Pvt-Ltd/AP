@@ -36,6 +36,8 @@ import {
 } from "../utils";
 import PoLogo from "./PoLogo";
 import { OrgBranchDetail, VendorBranchDetail } from "../../../components/common/BranchTableCells";
+import AccountingLockBanner from "../../../components/AccountingLockBanner";
+import { isAccountingReadyLocked } from "../../../utils/accountingLock";
 
 const PoDetailsDialog = ({
   showViewDialog,
@@ -211,6 +213,17 @@ const PoDetailsDialog = ({
           </DialogDescription>
         </DialogHeader>
 
+        {selectedPO ? (
+          <div className="px-6 pt-4">
+            <AccountingLockBanner
+              record={selectedPO}
+              objectLabel="purchase order"
+              objectType="PO"
+              objectId={selectedPO?.id}
+            />
+          </div>
+        ) : null}
+
         {selectedPO && (
           <div className="bg-slate-100 px-6 py-5 space-y-6">
             <Tabs value={viewTab} onValueChange={setViewTab}>
@@ -253,7 +266,8 @@ const PoDetailsDialog = ({
                                 Status:
                               </span>{" "}
                               <Badge
-                                className={`${statusColors[selectedPO.status] || "bg-gray-500"} text-white`}
+                                variant="outline"
+                                className={`border-0 font-semibold ${statusColors[selectedPO.status] || statusColors.Draft}`}
                               >
                                 {selectedPO.status}
                               </Badge>
@@ -549,7 +563,9 @@ const PoDetailsDialog = ({
               Download PO
             </Button>
           )}
-          {["Draft", "Sent Back"].includes(selectedPO?.status) && canManagePo && (
+          {["Draft", "Sent Back"].includes(selectedPO?.status) &&
+            canManagePo &&
+            !isAccountingReadyLocked(selectedPO) && (
             <Button
               onClick={() => handleSubmitForApproval(selectedPoId)}
               disabled={submitting}
@@ -560,7 +576,9 @@ const PoDetailsDialog = ({
               Submit for Approval
             </Button>
           )}
-          {["Draft", "Sent Back"].includes(selectedPO?.status) && canManagePo && (
+          {["Draft", "Sent Back"].includes(selectedPO?.status) &&
+            canManagePo &&
+            !isAccountingReadyLocked(selectedPO) && (
             <Button
               variant="outline"
               onClick={() => onEditPO?.(selectedPO)}

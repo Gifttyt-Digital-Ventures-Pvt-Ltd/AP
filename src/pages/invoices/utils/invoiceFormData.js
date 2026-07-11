@@ -93,7 +93,14 @@ export const buildInvoiceEditFormData = (
     dueDate: formatInvoiceDateInput(invoice.dueDate ?? invoice.dueDate),
     vendorIsMsme: resolveVendorIsMsme(invoice, vendor),
   });
-  const gstAmount = Number(invoice.gstAmount ?? invoice.gstAmount);
+  const gstAmount = Number(
+    invoice.gstAmount ??
+      invoice.gst_amount ??
+      invoice.taxAmount ??
+      invoice.tax_amount ??
+      invoice.totalTaxAmount ??
+      invoice.total_tax_amount,
+  );
   const tdsSectionId = invoice.tdsSectionId ?? invoice.tds_section_id ?? null;
   const tdsSectionCode = invoice.tdsSectionCode ?? invoice.tds_section_code ?? null;
   const tdsRate = invoice.tdsRate ?? invoice.tds_rate ?? null;
@@ -153,11 +160,18 @@ export const buildInvoiceEditFormData = (
       invoice.invoiceDiscountType ??
       "%",
     taxesLevel: invoice.taxesLevel || invoice.taxesLevel || LINE_ITEM_LEVEL,
-    invoiceTax: invoice.invoiceTax || invoice.invoiceTax || DEFAULT_INR_TAX,
-    invoiceTaxName: invoice.invoiceTaxName || invoice.invoiceTaxName || "Tax",
+    invoiceTax:
+      invoice.invoiceTax ||
+      invoice.invoice_tax ||
+      invoice.taxLabel ||
+      invoice.tax_label ||
+      DEFAULT_INR_TAX,
+    invoiceTaxName: invoice.invoiceTaxName || invoice.invoice_tax_name || "Tax",
     invoiceTaxRate:
       invoice.invoiceTaxRate ??
-      invoice.invoiceTaxRate ??
+      invoice.invoice_tax_rate ??
+      invoice.gstRate ??
+      invoice.gst_rate ??
       "",
     source: normalizeInvoiceSource(invoice.source),
     sourceEmail: invoice.sourceEmail || invoice.source_email || "",

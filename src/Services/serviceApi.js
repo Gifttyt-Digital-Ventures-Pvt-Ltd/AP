@@ -75,6 +75,7 @@ export const serviceApi = createApi({
     "Campaigns",
     "Integrations",
     "Credits",
+    "Accounting",
   ],
   endpoints: (builder) => ({
     login: builder.mutation({

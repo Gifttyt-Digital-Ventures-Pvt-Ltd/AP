@@ -110,7 +110,7 @@ export const Layout = ({ children }) => {
     { icon: Users, label: "Vendors", path: "/vendors" },
     { icon: Megaphone, label: "Campaigns", path: "/campaigns" },
     { icon: Calculator, label: "Tax Management", path: "/tax-management" },
-    // { icon: BookOpen, label: "Accounting", path: "/accounting" },
+    { icon: BookOpen, label: "Accounting", path: "/accounting" },
     { icon: BarChart3, label: "Reports", path: "/reports" },
     { icon: Plug, label: "Integrations", path: "/integrations" },
     { icon: Building2, label: "Banking", path: "/banking" },

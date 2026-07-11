@@ -1,3 +1,8 @@
+import {
+  getAccountingReadyBlockedMessage,
+  isAccountingReadyLocked,
+} from "./accountingLock";
+
 export const NEEDS_CORRECTION_STATUS = "Needs Correction";
 export const LEGACY_SENT_BACK_STATUS = "Sent Back";
 export const NEEDS_CORRECTION_ACTION = "Needs Correction";
@@ -304,6 +309,8 @@ export const shouldCheckerSubmitOnUpdate = (invoice, identity = {}) => {
 };
 
 export const canEditInvoice = (invoice, identity = {}) => {
+  if (isAccountingReadyLocked(invoice)) return false;
+
   const {
     canUpdateInvoices,
     canManageInvoices,
@@ -334,6 +341,10 @@ export const canEditInvoice = (invoice, identity = {}) => {
 };
 
 export const getInvoiceEditBlockedMessage = (invoice, identity = {}) => {
+  if (isAccountingReadyLocked(invoice)) {
+    return getAccountingReadyBlockedMessage(invoice, "invoice");
+  }
+
   const status = normalizeWorkflowStatus(invoice?.status);
   const {
     canUpdateInvoices,
@@ -375,6 +386,8 @@ const VENDOR_MAKER_EDITABLE_STATUSES = new Set([
 ]);
 
 export const canEditVendor = (vendor, identity = {}) => {
+  if (isAccountingReadyLocked(vendor)) return false;
+
   const { canUpdateVendor, canRequestVendor, isCorporateAdmin } = identity;
   const status = normalizeWorkflowStatus(vendor?.status);
   if (status === "Rejected") return false;
@@ -389,6 +402,18 @@ export const canEditVendor = (vendor, identity = {}) => {
 
   if (!canUpdateVendor) return false;
   return VENDOR_MAKER_EDITABLE_STATUSES.has(status) || status === "";
+};
+
+export const getVendorEditBlockedMessage = (vendor) => {
+  if (isAccountingReadyLocked(vendor)) {
+    return getAccountingReadyBlockedMessage(vendor, "vendor");
+  }
+  const status = normalizeWorkflowStatus(vendor?.status);
+  if (status === "Rejected") return "Rejected vendors cannot be edited";
+  if (status === NEEDS_CORRECTION_STATUS) {
+    return "Only the creator can edit a vendor in Needs Correction status";
+  }
+  return "This vendor cannot be edited in its current status";
 };
 
 export const canSaveVendorEdit = (vendor, identity = {}) => {

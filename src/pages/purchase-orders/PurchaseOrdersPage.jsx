@@ -21,6 +21,10 @@ import {
 import { useGetOrganisationQuery } from '../../Services/apis/settingsApi';
 import { normalizeOrganisationBranchesFromApi } from '../../utils/organisationGst';
 import { toast } from 'sonner';
+import {
+  getAccountingReadyBlockedMessage,
+  isAccountingReadyLocked,
+} from '../../utils/accountingLock';
 import { statusColors } from './constants';
 import {
   DEFAULT_PO_FORMAT_CONFIG,
@@ -642,6 +646,10 @@ const PurchaseOrdersPage = () => {
 
   const openEditPoDialog = (po) => {
     if (!po) return;
+    if (isAccountingReadyLocked(po)) {
+      toast.error(getAccountingReadyBlockedMessage(po, 'purchase order'));
+      return;
+    }
     const selectedFormat =
       savedFormatConfigs.find((config) => config.id === (po.po_format_id || po.poFormatId || po.formatConfigId)) ||
       activeFormatConfig;

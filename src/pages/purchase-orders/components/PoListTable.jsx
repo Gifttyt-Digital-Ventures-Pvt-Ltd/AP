@@ -8,6 +8,9 @@ import { TableCell, TableRow } from "../../../components/ui/table";
 import AppDataTable from "../../../components/common/AppDataTable";
 import { OrgBranchCell, VendorWithBranchCell } from "../../../components/common/BranchTableCells";
 import { cn } from "../../../lib/utils";
+import {
+  isAccountingReadyLocked,
+} from "../../../utils/accountingLock";
 
 const basePoTableHeader = [
   { key: "po_number", title: "PO Number", headerClassName: "bg-muted text-foreground", cellClassName: "font-medium" },
@@ -70,7 +73,14 @@ const PoListTable = ({
             value = formatCurrency(po.total_amount, po.currency);
             break;
           case "status":
-            value = <Badge className={`${statusColors[po.status] || "bg-gray-500"} text-white`}>{po.status}</Badge>;
+            value = (
+              <Badge
+                variant="outline"
+                className={`border-0 font-semibold ${statusColors[po.status] || statusColors.Draft}`}
+              >
+                {po.status}
+              </Badge>
+            );
             break;
           case "actions":
             value = (
@@ -86,7 +96,9 @@ const PoListTable = ({
                 >
                   <Eye className="h-4 w-4" />
                 </Button>
-                {canManagePo && ["Draft", "Sent Back"].includes(po.status) && (
+                {canManagePo &&
+                  ["Draft", "Sent Back"].includes(po.status) &&
+                  !isAccountingReadyLocked(po) && (
                   <Button
                     variant="ghost"
                     size="sm"

@@ -31,6 +31,7 @@ import {
   Trash2,
   X,
   Pencil,
+  Unlock,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
@@ -39,18 +40,25 @@ import { useCreditErrorHandler } from '../../contexts/CreditErrorContext';
 import { useRBAC } from '../../contexts/RBACContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useGetCorporateUserDetailsQuery } from '../../Services/apis/corporateApi';
+import { useRequestAccountingReadyUnlockMutation } from '../../Services/apis/accountingApi';
 import {
   buildCurrentUserIdentity,
   canEditVendor,
   canSaveVendorEdit,
   extractApiErrorDetail,
   formatWorkflowStatus,
+  getVendorEditBlockedMessage,
   isSavedVendorStatus,
   NEEDS_CORRECTION_ACTION,
   NEEDS_CORRECTION_STATUS,
   resolveBulkCreateVendorStatus,
   resolveSavedVendorSubmitStatus,
 } from '../../utils/approvalWorkflow';
+import { getAccountingErrorMessage } from '../accounting/utils/coaUtils';
+import {
+  getAccountingUnlockRequestStatus,
+  isAccountingReadyLocked,
+} from '../../utils/accountingLock';
 import VendorDetailsDialog from '../../components/vendors/VendorDetailsDialog';
 import * as XLSX from '@e965/xlsx';
 import AppDataTable from '../../components/common/AppDataTable';
@@ -251,6 +259,8 @@ const Vendors = () => {
   const [updateVendor, { isLoading: updateVendorLoading }] = useUpdateVendorMutation();
   const [deleteVendor, { isLoading: deleteVendorLoading }] = useDeleteVendorMutation();
   const [approveVendor, { isLoading: approveVendorLoading }] = useApproveVendorMutation();
+  const [requestAccountingUnlock, { isLoading: requestVendorUnlockLoading }] =
+    useRequestAccountingReadyUnlockMutation();
   const { user } = useAuth();
   const { data: corporateUserContext = null } = useGetCorporateUserDetailsQuery();
   const { guardAction, canPerformAction } = useActionGuard();
@@ -594,14 +604,7 @@ const Vendors = () => {
 
   const handleEdit = (vendor) => {
     if (!canEditVendor(vendor, vendorEditContext)) {
-      const status = formatWorkflowStatus(vendor?.status);
-      if (status === 'Rejected') {
-        toast.error('Rejected vendors cannot be edited');
-      } else if (status === NEEDS_CORRECTION_STATUS) {
-        toast.error('Only the creator can edit a vendor in Needs Correction status');
-      } else {
-        toast.error('This vendor cannot be edited in its current status');
-      }
+      toast.error(getVendorEditBlockedMessage(vendor));
       return;
     }
     setEditingVendor(vendor);
@@ -644,6 +647,26 @@ const Vendors = () => {
       tdsMapping: normalizeVendorTds(vendor.tdsMapping ?? vendor.tdsMappings),
     });
     setDialogOpen(true);
+  };
+
+  const handleRequestVendorUnlock = async (vendor) => {
+    if (!canUpdateVendorPermission) {
+      toast.error('You need vendor edit access to request unlock');
+      return;
+    }
+    if (!guardAction('accounting.ready.unlockRequest')) return;
+    try {
+      const result = await requestAccountingUnlock({
+        id: vendor?.accountingReadyId || vendor?.accounting_ready_id || vendor?.readyItemId,
+        objectType: 'VENDOR',
+        objectId: vendor?.id,
+        reason: 'Unlock requested from vendor screen',
+      }).unwrap();
+      toast.success(result?.message || 'Unlock request submitted');
+      await refetchVendors();
+    } catch (error) {
+      toast.error(getAccountingErrorMessage(error, 'Could not raise unlock request'));
+    }
   };
 
   const handleDelete = async (id) => {
@@ -994,7 +1017,9 @@ const Vendors = () => {
                     </Button>
                   </>
                 )}
-                {(canEditVendor(vendor, vendorEditContext) || canDeleteVendor) && (
+                {(canEditVendor(vendor, vendorEditContext) ||
+                  canDeleteVendor ||
+                  (isAccountingReadyLocked(vendor) && canUpdateVendorPermission)) && (
                   <>
                     {canEditVendor(vendor, vendorEditContext) && (
                       <Button
@@ -1012,6 +1037,21 @@ const Vendors = () => {
                         <Pencil className="h-4 w-4" />
                       </Button>
                     )}
+                    {isAccountingReadyLocked(vendor) &&
+                      canUpdateVendorPermission &&
+                      String(getAccountingUnlockRequestStatus(vendor) || '').toUpperCase() !== 'PENDING' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-8 h-8 p-0 rounded-md"
+                          onClick={() => handleRequestVendorUnlock(vendor)}
+                          disabled={requestVendorUnlockLoading}
+                          title="Request accounting unlock"
+                          data-testid={`request-unlock-vendor-${vendor?.id ?? 'unknown'}`}
+                        >
+                          <Unlock className="h-4 w-4 text-amber-700" />
+                        </Button>
+                      )}
                     {canDeleteVendor && (
                       <Button
                         variant="ghost"

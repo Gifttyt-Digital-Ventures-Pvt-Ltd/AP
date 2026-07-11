@@ -16,6 +16,7 @@ import {
   TabsTrigger,
 } from "../../../components/ui/tabs";
 import { formatWorkflowStatus } from "../../../utils/approvalWorkflow";
+import AccountingLockBanner from "../../../components/AccountingLockBanner";
 import InvoiceReadOnlyDetails from "./InvoiceReadOnlyDetails";
 import InvoiceChecklist from "./InvoiceFormChecklist";
 import { buildInvoiceEditFormData } from "../utils/invoiceFormData";
@@ -75,6 +76,9 @@ const ViewDialog = ({
     ],
   );
   const [previewOpen, setPreviewOpen] = useState(true);
+  const selectedIsProformaInvoice = Boolean(selectedInvoice) && isProformaInvoice(selectedInvoice);
+  const accountingObjectType = selectedIsProformaInvoice ? "PI" : "INVOICE";
+  const accountingObjectLabel = selectedIsProformaInvoice ? "proforma invoice" : "invoice";
 
   return (
     <Dialog open={viewDialogOpen} onOpenChange={setViewDialogOpen}>
@@ -137,6 +141,13 @@ const ViewDialog = ({
                     </div>
                   </DialogTitle>
                 </DialogHeader>
+
+                <AccountingLockBanner
+                  record={selectedInvoice}
+                  objectLabel={accountingObjectLabel}
+                  objectType={accountingObjectType}
+                  objectId={selectedInvoice?.id}
+                />
 
                 <Tabs
                   value={viewTab}
