@@ -38,12 +38,14 @@ const PAIRING_TIMEOUT_MS = 10 * 60 * 1000;
 const STALE_HEARTBEAT_MS = 15 * 60 * 1000;
 
 const TALLY_SYNC_ITEMS = [
+  "Chart of Accounts",
   "Vendors",
   "Purchase orders",
   "Bills",
 ];
 
 const TALLY_SYNC_OBJECTS = [
+  { key: "CHART_OF_ACCOUNTS", label: "Chart of Accounts" },
   { key: "VENDORS", label: "Vendors" },
   { key: "PURCHASE_ORDERS", label: "Purchase orders" },
   { key: "BILLS", label: "Bills" },
