@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import {
   useGetVendorsQuery,
   useCreateVendorMutation,
@@ -93,10 +93,12 @@ import {
   normalizeVendorDocuments,
 } from './utils/vendorDocuments';
 import {
+  getVendorTdsCertificateValidationErrors,
   getVendorTdsValidationErrors,
+  hasConfiguredVendorTds,
   normalizeVendorTds,
 } from './utils/vendorTds';
-import { normalizeVendorForSave } from './utils/vendorSave';
+import { buildVendorSaveBody, normalizeVendorForSave } from './utils/vendorSave';
 import { mergeBulkVendorRowsByPan } from './utils/bulkVendorMerge';
 import { isVendorPortalFetchEnabled } from '../../utils/vendorVerificationConfig';
 import VendorApprovalDialog from './components/VendorApprovalDialog';
@@ -192,36 +194,6 @@ const getNormalizedVendorStatusKey = (status) =>
 const isPendingApprovalStatus = (status) =>
   getNormalizedVendorStatusKey(status) === 'pending approval';
 
-const matchesVendorSearch = (vendor, query) => {
-  if (!query) return true;
-  const searchableText = [
-    vendor?.name,
-    vendor?.trade_name,
-    vendor?.tradeName,
-    vendor?.pan,
-    vendor?.gstin,
-    ...getVendorGstRegistrations(vendor).map((registration) =>
-      [
-        registration.gstin,
-        registration.state,
-      ].join(' '),
-    ),
-    vendor?.state,
-    vendor?.city,
-    vendor?.email,
-    vendor?.mobile,
-    vendor?.phone,
-    vendor?.contact_person,
-    vendor?.contactPerson,
-    vendor?.category,
-  ]
-    .filter(Boolean)
-    .join(' ')
-    .toLowerCase();
-
-  return searchableText.includes(query);
-};
-
 const VendorMetricCard = ({ label, value, icon: Icon, tone = 'primary' }) => {
   const toneClasses = {
     primary: 'bg-primary/10 text-primary',
@@ -248,13 +220,6 @@ const VendorMetricCard = ({ label, value, icon: Icon, tone = 'primary' }) => {
 };
 
 const Vendors = () => {
-  const {
-    data: vendorsData = [],
-    isError: vendorsError,
-    isFetching: vendorsFetching,
-    refetch: refetchVendors,
-  } = useGetVendorsQuery();
-
   const [createVendor, { isLoading: createVendorLoading }] = useCreateVendorMutation();
   const [updateVendor, { isLoading: updateVendorLoading }] = useUpdateVendorMutation();
   const [deleteVendor, { isLoading: deleteVendorLoading }] = useDeleteVendorMutation();
@@ -305,6 +270,21 @@ const Vendors = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [vendorSort] = useState({ sortBy: 'createdAt', sortDirection: 'desc' });
+  const deferredSearchTerm = useDeferredValue(searchTerm);
+  const vendorQueryParams = useMemo(() => ({
+    ...(deferredSearchTerm.trim() ? { search: deferredSearchTerm.trim() } : {}),
+    ...(typeFilter !== 'all' ? { type: typeFilter } : {}),
+    ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+    sortBy: vendorSort.sortBy,
+    sortDirection: vendorSort.sortDirection,
+  }), [deferredSearchTerm, typeFilter, statusFilter, vendorSort]);
+  const {
+    data: vendorsData = [],
+    isError: vendorsError,
+    isFetching: vendorsFetching,
+    refetch: refetchVendors,
+  } = useGetVendorsQuery(vendorQueryParams);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [vendorUploadOptionOpen, setVendorUploadOptionOpen] = useState(false);
   const [multipleVendorUploadOpen, setMultipleVendorUploadOpen] = useState(false);
@@ -355,6 +335,8 @@ const Vendors = () => {
     notes: '',
     documents: createEmptyVendorDocuments(),
     tdsMapping: null,
+    tdsCertificates: [],
+    tdsDetailsEdited: false,
   });
 
   const vendors = Array.isArray(vendorsData) ? vendorsData : [];
@@ -381,7 +363,14 @@ const Vendors = () => {
       activeVendorFields: effectiveActiveVendorFields,
       vendorFieldConfiguration,
     });
-    const tdsValidationErrors = getVendorTdsValidationErrors(formData.tdsMapping);
+    const tdsValidationErrors = [
+      ...getVendorTdsValidationErrors(formData.tdsMapping),
+      ...getVendorTdsCertificateValidationErrors(formData.tdsCertificates, {
+        requireCertificate: Boolean(
+          formData.tdsDetailsEdited && hasConfiguredVendorTds(formData.tdsMapping),
+        ),
+      }),
+    ];
     if (validationErrors.length > 0) {
       toast.error(validationErrors[0]);
       return;
@@ -401,15 +390,15 @@ const Vendors = () => {
     }
 
     try {
-      const vendorPayload = normalizeVendorForSave(formData);
-
       if (editingVendor) {
         const submittingSavedVendor = isSavedVendorStatus(editingVendor.status);
+        const vendorPayload = buildVendorSaveBody(
+          formData,
+          submittingSavedVendor ? { status: resolveSavedVendorSubmitStatus() } : {},
+        );
         await updateVendor({
           id: editingVendor.id,
-          body: submittingSavedVendor
-            ? { ...vendorPayload, status: resolveSavedVendorSubmitStatus() }
-            : vendorPayload,
+          body: vendorPayload,
         }).unwrap();
         toast.success(
           submittingSavedVendor
@@ -417,6 +406,7 @@ const Vendors = () => {
             : 'Vendor updated successfully',
         );
       } else {
+        const vendorPayload = buildVendorSaveBody(formData);
         const response = await createVendor(vendorPayload).unwrap();
         const successCount = Number(response?.successCount ?? 0);
         const failedCount = Number(response?.failedCount ?? 0);
@@ -616,6 +606,9 @@ const Vendors = () => {
       vendor.branch_details ??
       [];
     setFormData({
+      id: vendor.id ?? vendor.vendorId,
+      vendorId: vendor.vendorId ?? vendor.id,
+      status: vendor.status,
       name: vendor.name || '',
       trade_name: vendor.trade_name || vendor.tradeName || '',
       vendor_type: vendor.vendor_type || 'Company',
@@ -645,6 +638,8 @@ const Vendors = () => {
       notes: vendor.notes || '',
       documents: normalizeVendorDocuments(vendor.documents),
       tdsMapping: normalizeVendorTds(vendor.tdsMapping ?? vendor.tdsMappings),
+      tdsCertificates: [],
+      tdsDetailsEdited: false,
     });
     setDialogOpen(true);
   };
@@ -660,7 +655,6 @@ const Vendors = () => {
         id: vendor?.accountingReadyId || vendor?.accounting_ready_id || vendor?.readyItemId,
         objectType: 'VENDOR',
         objectId: vendor?.id,
-        reason: 'Unlock requested from vendor screen',
       }).unwrap();
       toast.success(result?.message || 'Unlock request submitted');
       await refetchVendors();
@@ -754,6 +748,8 @@ const Vendors = () => {
       notes: '',
       documents: createEmptyVendorDocuments(),
       tdsMapping: null,
+      tdsCertificates: [],
+      tdsDetailsEdited: false,
     });
   };
 
@@ -787,21 +783,7 @@ const Vendors = () => {
     });
   };
 
-  const filteredVendors = useMemo(() => {
-    const query = searchTerm.trim().toLowerCase();
-
-    return vendors.filter((vendor) => {
-      const vendorType = getVendorType(vendor).toLowerCase();
-      const statusLabel = formatWorkflowStatus(vendor.status) || 'Pending Approval';
-      const statusKey = getNormalizedVendorStatusKey(statusLabel);
-
-      const matchesSearch = matchesVendorSearch(vendor, query);
-      const matchesType = typeFilter === 'all' || vendorType === typeFilter;
-      const matchesStatus = statusFilter === 'all' || statusKey === statusFilter;
-
-      return matchesSearch && matchesType && matchesStatus;
-    });
-  }, [vendors, searchTerm, typeFilter, statusFilter]);
+  const filteredVendors = vendors;
 
   const hasActiveFilters = Boolean(searchTerm.trim()) || typeFilter !== 'all' || statusFilter !== 'all';
 
@@ -811,8 +793,9 @@ const Vendors = () => {
     setStatusFilter('all');
   };
 
-  const vendorFilterSummary = `${filteredVendors.length} of ${vendors.length} vendor${
-    vendors.length === 1 ? '' : 's'
+  const vendorTotal = Number(vendorsData?.total ?? vendors.length);
+  const vendorFilterSummary = `${filteredVendors.length} of ${vendorTotal} vendor${
+    vendorTotal === 1 ? '' : 's'
   } shown`;
 
   const isPendingApprovalVendor = (vendor) => isPendingApprovalStatus(vendor?.status);
@@ -1299,7 +1282,7 @@ const Vendors = () => {
         </div>
         <div className="mt-auto flex shrink-0 border-t border-border p-4">
           <p className="text-sm text-muted-foreground" data-testid="vendors-table-summary">
-            {filteredVendors.length === vendors.length
+            {!hasActiveFilters && filteredVendors.length === vendorTotal
               ? `Showing ${filteredVendors.length.toLocaleString('en-IN')} vendor${filteredVendors.length === 1 ? '' : 's'}`
               : `${vendorFilterSummary}`}
           </p>

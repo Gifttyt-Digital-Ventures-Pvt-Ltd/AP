@@ -185,6 +185,63 @@ export const getVendorTdsValidationErrors = (vendorOrTds = null, { prefix = '' }
   return [];
 };
 
+const REQUIRED_CERTIFICATE_FIELDS = [
+  ['certificateNumber', 'Certificate number'],
+  ['deductorTan', 'Deductor TAN'],
+  ['vendorPan', 'Vendor PAN'],
+  ['sectionCode', 'TDS section'],
+  ['lowerRate', 'Lower/Nil rate'],
+  ['validFrom', 'Valid from date'],
+  ['validTo', 'Valid to date'],
+  ['ceilingAmount', 'Threshold amount'],
+  ['document', 'Certificate document'],
+];
+
+const hasCertificateInput = (certificate = {}) =>
+  REQUIRED_CERTIFICATE_FIELDS.some(([field]) => {
+    const value = certificate?.[field];
+    return value !== null && value !== undefined && String(value).trim?.() !== '';
+  });
+
+export const getVendorTdsCertificateValidationErrors = (
+  certificates = [],
+  { prefix = '', requireCertificate = false } = {},
+) => {
+  const rows = Array.isArray(certificates) ? certificates : [];
+  const rowsWithInput = rows.filter(hasCertificateInput);
+
+  if (requireCertificate && rowsWithInput.length === 0) {
+    return [`${prefix}Add a TDS certificate with all required details before saving TDS details`];
+  }
+
+  for (const [index, certificate] of rowsWithInput.entries()) {
+    const label = rowsWithInput.length > 1 ? `TDS certificate ${index + 1}` : 'TDS certificate';
+
+    for (const [field, fieldLabel] of REQUIRED_CERTIFICATE_FIELDS) {
+      const value = certificate?.[field];
+      if (value === null || value === undefined || String(value).trim?.() === '') {
+        return [`${prefix}${label}: ${fieldLabel} is required`];
+      }
+    }
+
+    const lowerRate = Number(certificate.lowerRate);
+    if (!Number.isFinite(lowerRate) || lowerRate < 0 || lowerRate > 100) {
+      return [`${prefix}${label}: Lower/Nil rate must be between 0 and 100`];
+    }
+
+    const thresholdAmount = Number(certificate.ceilingAmount);
+    if (!Number.isFinite(thresholdAmount) || thresholdAmount <= 0) {
+      return [`${prefix}${label}: Threshold amount must be greater than 0`];
+    }
+
+    if (new Date(certificate.validFrom) > new Date(certificate.validTo)) {
+      return [`${prefix}${label}: Valid-from must be on or before valid-to`];
+    }
+  }
+
+  return [];
+};
+
 export const buildInvoiceTdsStateFromVendor = (vendor = null) => {
   const tdsValue = vendorTdsToSelectionValue(vendor);
   if (!tdsValue) {

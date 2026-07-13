@@ -14,6 +14,18 @@ import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
 
 const unwrapVendorList = extractListResponse;
 
+const normalizeVendorListResponse = (response) => {
+  const vendors = unwrapVendorList(response).map(toVendorUiPayload);
+  const payload = response?.data && !Array.isArray(response.data) ? response.data : response;
+
+  return Object.assign(vendors, {
+    total: Number(payload?.total ?? payload?.totalCount ?? payload?.count ?? vendors.length),
+    limit: Number(payload?.limit ?? payload?.size ?? vendors.length),
+    offset: Number(payload?.offset ?? 0),
+    hasMore: Boolean(payload?.hasMore ?? payload?.has_more ?? false),
+  });
+};
+
 export const invoicesVendorsApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getInvoiceMandatoryFields: builder.query({
@@ -122,9 +134,8 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
       invalidatesTags: ["Invoices", "Approvals", "Dashboard", "Reports"],
     }),
     getVendors: builder.query({
-      query: () => ({ url: "/vendors", method: "GET" }),
-      transformResponse: (response) =>
-        unwrapVendorList(response).map(toVendorUiPayload),
+      query: (params) => ({ url: "/vendors", method: "GET", params }),
+      transformResponse: normalizeVendorListResponse,
       providesTags: (result) => {
         if (Array.isArray(result)) {
           return [
@@ -149,7 +160,9 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
       query: (body) => ({
         url: "/vendors",
         method: "POST",
-        body: Array.isArray(body)
+        body: body instanceof FormData
+          ? body
+          : Array.isArray(body)
           ? body.map(toVendorApiPayload)
           : [toVendorApiPayload(body)],
       }),
@@ -176,7 +189,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
       query: ({ id, body }) => ({
         url: `/vendors/${id}`,
         method: "PUT",
-        body: toVendorApiPayload(body),
+        body: body instanceof FormData ? body : toVendorApiPayload(body),
       }),
       invalidatesTags: (result, error, { id }) => [
         { type: "Vendors", id: "LIST" },
