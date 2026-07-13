@@ -267,6 +267,52 @@ export const taxApi = serviceApi.injectEndpoints({
       transformResponse: extractListResponse,
       providesTags: ["Tax"],
     }),
+    getVendorTdsEffectiveRate: builder.query({
+      query: ({ vendorId, sectionCode } = {}) => ({
+        url: `/vendors/${vendorId}/tds/effective-rate`,
+        method: "GET",
+        params: sectionCode ? { section: sectionCode } : undefined,
+      }),
+      transformResponse: (response) => response?.data ?? response,
+      providesTags: (_result, _error, arg = {}) => [
+        { type: "Tax", id: `VENDOR_TDS_RATE_${arg.vendorId || "UNKNOWN"}` },
+      ],
+    }),
+    getVendorTdsCertificates: builder.query({
+      query: (vendorId) => ({ url: `/vendors/${vendorId}/tds/certificates`, method: "GET" }),
+      transformResponse: (response) => extractListResponse(response, ["certificates"]),
+      providesTags: (_result, _error, vendorId) => [
+        { type: "Tax", id: `VENDOR_TDS_CERTS_${vendorId || "UNKNOWN"}` },
+      ],
+    }),
+    revokeVendorTdsCertificate: builder.mutation({
+      query: ({ vendorId, certificateId }) => ({
+        url: `/vendors/${vendorId}/tds/certificates/${certificateId}/revoke`,
+        method: "POST",
+      }),
+      invalidatesTags: (_result, _error, arg = {}) => [
+        { type: "Tax", id: `VENDOR_TDS_CERTS_${arg.vendorId || "UNKNOWN"}` },
+        { type: "Tax", id: `VENDOR_TDS_RATE_${arg.vendorId || "UNKNOWN"}` },
+        "Tax",
+        "Invoices",
+      ],
+    }),
+    getInvoiceTdsPreview: builder.query({
+      query: ({ invoiceId, sectionCode, rateOverride } = {}) => ({
+        url: `/invoices/${invoiceId}/tds/preview`,
+        method: "GET",
+        params: {
+          ...(sectionCode ? { section: sectionCode } : {}),
+          ...(rateOverride !== undefined && rateOverride !== null && rateOverride !== ""
+            ? { rateOverride }
+            : {}),
+        },
+      }),
+      transformResponse: (response) => response?.data ?? response,
+      providesTags: (_result, _error, arg = {}) => [
+        { type: "Tax", id: `INVOICE_TDS_PREVIEW_${arg.invoiceId || "UNKNOWN"}` },
+      ],
+    }),
     calculateTds: builder.mutation({
       query: (body) => ({
         url: "/tax/tds/calculate",
@@ -310,6 +356,10 @@ export const {
   useLazyGetTdsEntriesExportQuery,
   useGetTdsSummaryQuery,
   useGetTdsSectionsQuery,
+  useGetVendorTdsEffectiveRateQuery,
+  useGetVendorTdsCertificatesQuery,
+  useRevokeVendorTdsCertificateMutation,
+  useGetInvoiceTdsPreviewQuery,
   useCalculateTdsMutation,
   useGenerateForm16aMutation,
 } = taxApi;

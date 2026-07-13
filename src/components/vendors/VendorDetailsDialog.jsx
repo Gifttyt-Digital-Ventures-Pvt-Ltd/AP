@@ -52,7 +52,11 @@ import {
 import {
   isVendorPortalFetchEnabled,
 } from "../../utils/vendorVerificationConfig";
-import { getVendorTdsValidationErrors } from "../../pages/vendors/utils/vendorTds";
+import {
+  getVendorTdsCertificateValidationErrors,
+  getVendorTdsValidationErrors,
+  hasConfiguredVendorTds,
+} from "../../pages/vendors/utils/vendorTds";
 
 const CATEGORY_OPTIONS = [
   "IT Services",
@@ -892,7 +896,14 @@ const VendorDetailsDialog = ({
       return;
     }
 
-    const tdsErrors = getVendorTdsValidationErrors(formData.tdsMapping ?? null);
+    const tdsErrors = [
+      ...getVendorTdsValidationErrors(formData.tdsMapping ?? null),
+      ...getVendorTdsCertificateValidationErrors(formData.tdsCertificates, {
+        requireCertificate: Boolean(
+          formData.tdsDetailsEdited && hasConfiguredVendorTds(formData.tdsMapping),
+        ),
+      }),
+    ];
     if (tdsErrors.length > 0) {
       toast.error(tdsErrors[0]);
       return;
@@ -1641,7 +1652,17 @@ const VendorDetailsDialog = ({
             <FormSection title="TDS">
               <VendorTdsPanel
                 tdsMapping={formData.tdsMapping}
-                onChange={(tdsMapping) => updateField("tdsMapping", tdsMapping)}
+                vendorId={formData.id ?? formData.vendorId}
+                vendorStatus={formData.status}
+                tdsCertificates={formData.tdsCertificates}
+                onCertificatesChange={(tdsCertificates) => {
+                  updateField("tdsDetailsEdited", true);
+                  updateField("tdsCertificates", tdsCertificates);
+                }}
+                onChange={(tdsMapping) => {
+                  updateField("tdsDetailsEdited", true);
+                  updateField("tdsMapping", tdsMapping);
+                }}
                 disabled={submitting}
               />
             </FormSection>

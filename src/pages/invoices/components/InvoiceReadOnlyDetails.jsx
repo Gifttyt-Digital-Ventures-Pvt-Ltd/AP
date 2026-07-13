@@ -2,6 +2,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { Label } from "../../../components/ui/label";
 import { formatCurrency, normalizeCurrencyCode } from "../../../utils/currency";
+import { useGetInvoiceTdsPreviewQuery } from "../../../Services/apis/taxApi";
+import useTdsSubscription from "../../../hooks/useTdsSubscription";
 import { TAX_RATES } from "../constants";
 import { buildInvoiceEditFormData } from "../utils/invoiceFormData";
 import {
@@ -30,6 +32,10 @@ import {
 } from "../constants/proformaInvoice";
 import { resolveLinkedTaxInvoiceRecords } from "../utils/proformaInvoiceListing";
 import InvoiceLinkedTaxInvoicesPanel from "./InvoiceLinkedTaxInvoicesPanel";
+import TdsBreakdownPanel, {
+  getTdsPreviewAmount,
+  getTdsPreviewNetPayable,
+} from "./TdsBreakdownPanel";
 
 const formatDisplayDate = (value) => {
   if (!value) return "-";
@@ -97,6 +103,28 @@ const InvoiceReadOnlyDetails = ({
     setShowLineItems(resolveLineItemsExpanded(formData ?? {}));
   }, [invoice?.id, formData?.lineItemsExpanded]);
 
+  const { isTdsSubscriptionEnabled } = useTdsSubscription();
+  const invoiceIdForTdsPreview = invoice?.id ?? invoice?.invoiceId;
+  const readOnlyTdsSectionCode =
+    invoice?.tdsSectionCode ??
+    invoice?.tds_section_code ??
+    invoice?.sectionCode ??
+    invoice?.section_code;
+  const readOnlyTdsRate = invoice?.tdsRate ?? invoice?.tds_rate;
+  const {
+    data: tdsPreview,
+    isFetching: tdsPreviewLoading,
+    isError: tdsPreviewError,
+    refetch: refetchTdsPreview,
+  } = useGetInvoiceTdsPreviewQuery(
+    {
+      invoiceId: invoiceIdForTdsPreview,
+      sectionCode: readOnlyTdsSectionCode,
+      rateOverride: readOnlyTdsRate,
+    },
+    { skip: !isTdsSubscriptionEnabled || !invoiceIdForTdsPreview || !readOnlyTdsSectionCode },
+  );
+
   if (!formData) return null;
 
   const msmePaymentDue = normalizeMsmePaymentDue(invoice);
@@ -152,10 +180,11 @@ const InvoiceReadOnlyDetails = ({
     isInvoiceLevelDiscount ? totals.subTotalBeforeDiscount : totals.subTotal,
     formData.tdsRate,
   );
-  const tdsAmount =
+  const fallbackTdsAmount =
     tdsAmountFromRate ||
-    Number(invoice.tdsAmount ?? 0) ||
+    Number(invoice.tdsAmount ?? invoice.tds_amount ?? 0) ||
     0;
+  const tdsAmount = getTdsPreviewAmount(tdsPreview, fallbackTdsAmount);
   const totalTax = useInrTax
     ? (Number(totals.cgst) || 0) + (Number(totals.sgst) || 0) + (Number(totals.igst) || 0)
     : (totals.foreignTaxes || []).reduce(
@@ -174,9 +203,10 @@ const InvoiceReadOnlyDetails = ({
     roundOffValue !== null &&
     roundOffValue !== "" &&
     Number.isFinite(Number(roundOffValue));
-  const netPayable =
+  const fallbackNetPayable =
     Number(invoice.netAmount) ||
     Math.max(Math.round((totals.total - tdsAmount) * 100) / 100, 0);
+  const netPayable = getTdsPreviewNetPayable(tdsPreview, fallbackNetPayable);
   const tdsLabel = formatTdsDisplayLabel({
     tds: formData.tds,
     tdsSectionCode: formData.tdsSectionCode,
@@ -470,6 +500,15 @@ const InvoiceReadOnlyDetails = ({
           <span>TDS{tdsLabel ? ` (${tdsLabel})` : ""}</span>
           <span className=" ">{formatAmount(tdsAmount)}</span>
         </div>
+        <TdsBreakdownPanel
+          preview={tdsPreview}
+          currency={invoiceCurrency}
+          loading={isTdsSubscriptionEnabled && tdsPreviewLoading}
+          error={isTdsSubscriptionEnabled && tdsPreviewError}
+          onRetry={isTdsSubscriptionEnabled ? refetchTdsPreview : undefined}
+          fallbackAmount={fallbackTdsAmount}
+          enabled={isTdsSubscriptionEnabled}
+        />
         <div className="flex justify-between text-sm pt-1.5 border-t">
           <span>Total</span>
           <span className=" ">{formatAmount(totals.total)}</span>

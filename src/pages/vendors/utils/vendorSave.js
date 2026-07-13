@@ -1,4 +1,7 @@
-import { sanitizeVendorDocumentsForSave } from './vendorDocuments';
+import {
+  getVendorDocumentFileEntries,
+  sanitizeVendorDocumentsForSave,
+} from './vendorDocuments';
 import { sanitizeVendorTdsForSave } from './vendorTds';
 
 const stripVendorLevelAddressAndBank = (vendor = {}) => {
@@ -67,6 +70,8 @@ export const sanitizeVendorBranchesForSave = (branches = []) =>
 export const normalizeVendorForSave = (vendor = {}) => {
   const sanitized = stripVendorLevelAddressAndBank(vendor);
   const { tdsMappings, vendor_branches, branches, ...restSanitized } = sanitized;
+  delete restSanitized.tdsCertificates;
+  delete restSanitized.tdsDetailsEdited;
   const tdsMapping = sanitizeVendorTdsForSave(restSanitized.tdsMapping ?? tdsMappings);
   const vendorBranches = sanitizeVendorBranchesForSave(
     restSanitized.vendorBranches ?? vendor_branches ?? branches,
@@ -122,3 +127,62 @@ export const normalizeVendorForSave = (vendor = {}) => {
     ],
   };
 };
+
+const normalizePendingTdsCertificates = (certificates = []) =>
+  (Array.isArray(certificates) ? certificates : [])
+    .map((certificate) => {
+      const { document, _clientId, ...rest } = certificate || {};
+      return {
+        ...rest,
+        hasDocument: Boolean(document),
+      };
+    })
+    .filter((certificate) => certificate.certificateNumber || certificate.sectionCode);
+
+const getVendorCertificateFileEntries = (certificates = []) =>
+  (Array.isArray(certificates) ? certificates : [])
+    .map((certificate, index) => ({ certificate, index }))
+    .filter(({ certificate }) => (
+      typeof File !== 'undefined' && certificate?.document instanceof File
+    ));
+
+export const hasVendorMultipartFiles = (vendor = {}) => {
+  const documentFiles = getVendorDocumentFileEntries(vendor.documents);
+  const certificateFiles = getVendorCertificateFileEntries(vendor.tdsCertificates);
+
+  return documentFiles.length > 0 || certificateFiles.length > 0;
+};
+
+const buildVendorJsonPayload = (vendor = {}, overrides = {}) => {
+  const pendingCertificates = normalizePendingTdsCertificates(vendor.tdsCertificates);
+  return {
+    ...normalizeVendorForSave(vendor),
+    ...overrides,
+    ...(pendingCertificates.length > 0 ? { tdsCertificates: pendingCertificates } : {}),
+  };
+};
+
+export const buildVendorMultipartPayload = (vendor = {}, overrides = {}) => {
+  const payload = buildVendorJsonPayload(vendor, overrides);
+  const formData = new FormData();
+
+  formData.append(
+    'vendor',
+    new Blob([JSON.stringify(payload)], { type: 'application/json' }),
+  );
+
+  getVendorDocumentFileEntries(vendor.documents).forEach(({ key, file }) => {
+    formData.append(`documents[${key}]`, file);
+  });
+
+  getVendorCertificateFileEntries(vendor.tdsCertificates).forEach(({ certificate, index }) => {
+    formData.append(`tdsCertificates[${index}].document`, certificate.document);
+  });
+
+  return formData;
+};
+
+export const buildVendorSaveBody = (vendor = {}, overrides = {}) =>
+  hasVendorMultipartFiles(vendor)
+    ? buildVendorMultipartPayload(vendor, overrides)
+    : buildVendorJsonPayload(vendor, overrides);

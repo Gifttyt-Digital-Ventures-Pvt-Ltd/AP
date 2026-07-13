@@ -45,6 +45,7 @@ import {
 } from "../utils/lineItemsSummary";
 import {
   useGetOrganisationGstCredentialsQuery,
+  useGetInvoiceTdsPreviewQuery,
 } from "../../../Services/apis/taxApi";
 import { useGetOrganisationQuery } from "../../../Services/apis/settingsApi";
 import { normalizeOrganisationBranchesFromApi } from "../../../utils/organisationGst";
@@ -60,6 +61,10 @@ import {
 } from "../utils/tds";
 import { buildInvoiceTdsStateFromVendor } from "../../vendors/utils/vendorTds";
 import TdsSelectionField from "./TdsSelectionField";
+import TdsBreakdownPanel, {
+  getTdsPreviewAmount,
+  getTdsPreviewNetPayable,
+} from "./TdsBreakdownPanel";
 import InvoiceDueDateIndicators from "./InvoiceDueDateIndicators";
 import {
   computeMsmeMaxDueDate,
@@ -76,6 +81,7 @@ import {
   useValidateProformaInvoiceLinkMutation,
 } from "../../../Services/apis/proformaInvoiceApi";
 import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
+import useTdsSubscription from "../../../hooks/useTdsSubscription";
 import {
   buildLocalLinkValidation,
   buildProformaLinkValidateRequest,
@@ -243,6 +249,7 @@ export const InvoiceForm = ({
   } = useGetOrganisationQuery(undefined, {
     skip: !canShowBranchField,
   });
+  const { isTdsSubscriptionEnabled } = useTdsSubscription();
   const [vendorPickerOpen, setVendorPickerOpen] = useState(false);
   const [vendorQuery, setVendorQuery] = useState("");
   const vendorAnchorRef = useRef(null);
@@ -799,11 +806,30 @@ export const InvoiceForm = ({
     tdsSectionCode: formData.tdsSectionCode,
     tdsRate: formData.tdsRate,
   });
-  const tdsAmount = Math.round(((totals.subTotal * tdsRate) / 100) * 100) / 100;
-  const netPayable = Math.max(
-    Math.round((totals.total - tdsAmount) * 100) / 100,
+  const invoiceIdForTdsPreview = formData?.id ?? formData?.invoiceId;
+  const debouncedTdsPreviewArgs = useDebouncedValue(
+    {
+      invoiceId: invoiceIdForTdsPreview,
+      sectionCode: formData?.tdsSectionCode,
+      rateOverride: formData?.tdsRate,
+    },
+    400,
+  );
+  const {
+    data: tdsPreview,
+    isFetching: tdsPreviewLoading,
+    isError: tdsPreviewError,
+    refetch: refetchTdsPreview,
+  } = useGetInvoiceTdsPreviewQuery(debouncedTdsPreviewArgs, {
+    skip: !isTdsSubscriptionEnabled || !invoiceIdForTdsPreview || !formData?.tdsSectionCode,
+  });
+  const fallbackTdsAmount = Math.round(((totals.subTotal * tdsRate) / 100) * 100) / 100;
+  const fallbackNetPayable = Math.max(
+    Math.round((totals.total - fallbackTdsAmount) * 100) / 100,
     0,
   );
+  const tdsAmount = getTdsPreviewAmount(tdsPreview, fallbackTdsAmount);
+  const netPayable = getTdsPreviewNetPayable(tdsPreview, fallbackNetPayable);
   const lineItemsSummary = computeLineItemsSummary({
     lineItems: formData?.lineItems || [],
     calculateLineItemSubtotal,
@@ -2127,6 +2153,15 @@ export const InvoiceForm = ({
                   selectClassName="h-6 w-full max-w-[220px] rounded border pl-1 pr-6 text-xs"
                   inputClassName="h-6 w-16 px-1 text-xs"
                   testIdPrefix="invoice-tds"
+                />
+                <TdsBreakdownPanel
+                  preview={tdsPreview}
+                  currency={invoiceCurrency}
+                  loading={isTdsSubscriptionEnabled && tdsPreviewLoading}
+                  error={isTdsSubscriptionEnabled && tdsPreviewError}
+                  onRetry={isTdsSubscriptionEnabled ? refetchTdsPreview : undefined}
+                  fallbackAmount={fallbackTdsAmount}
+                  enabled={isTdsSubscriptionEnabled}
                 />
               </div>
               <span className="shrink-0 pt-1">{formatAmount(tdsAmount)}</span>

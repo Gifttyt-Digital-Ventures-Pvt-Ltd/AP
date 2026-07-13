@@ -292,7 +292,7 @@ const TallyIntegrationCard = ({ mode = "full" }) => {
     { skip: !showDashboard || !currentConnectionId || !isConnected },
   );
   const syncRows = useMemo(() => normalizeSyncStatusRows(syncStatusResponse), [syncStatusResponse]);
-  const logRows = useMemo(() => getLogRows(logsResponse).slice(0, 8), [logsResponse]);
+  const logRows = useMemo(() => getLogRows(logsResponse), [logsResponse]);
 
   useEffect(() => {
     if (!showSetup || !pairingOpen || !shouldPollPairing) {
@@ -594,7 +594,7 @@ const TallyIntegrationCard = ({ mode = "full" }) => {
                     ))}
                   </div>
                 </div>
-                <div className="overflow-hidden rounded-lg border border-border">
+                <div className="max-h-[360px] overflow-y-auto rounded-lg border border-border scrollbar-thin-muted">
                   {logRows.length > 0 ? (
                     <div className="divide-y divide-border">
                       {logRows.map((log, index) => {

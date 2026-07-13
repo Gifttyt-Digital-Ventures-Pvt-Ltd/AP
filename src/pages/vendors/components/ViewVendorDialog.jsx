@@ -98,7 +98,12 @@ const VendorDetailsTab = ({ vendor }) => {
       </div>
       <div className="mt-4">
         <p className="text-muted-foreground mb-2">TDS</p>
-        <VendorTdsPanel tdsMapping={vendor.tdsMapping ?? vendor.tdsMappings} readOnly />
+        <VendorTdsPanel
+          tdsMapping={vendor.tdsMapping ?? vendor.tdsMappings}
+          vendorId={vendor.id ?? vendor.vendorId}
+          vendorStatus={vendor.status}
+          readOnly
+        />
       </div>
     </div>
 

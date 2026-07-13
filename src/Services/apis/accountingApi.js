@@ -68,12 +68,12 @@ export const accountingApi = serviceApi.injectEndpoints({
       invalidatesTags: ["Accounting"],
     }),
     requestAccountingReadyUnlock: builder.mutation({
-      query: ({ id, objectType, objectId, reason = "" } = {}) => ({
+      query: ({ id, objectType, objectId } = {}) => ({
         url: id
           ? `${ACCOUNTING_BASE}/ready/${id}/unlock-request`
           : `${ACCOUNTING_BASE}/ready/unlock-request`,
         method: "POST",
-        body: { reason, objectType, objectId, id },
+        body: id ? undefined : { objectType, objectId },
       }),
       invalidatesTags: ["Accounting"],
     }),

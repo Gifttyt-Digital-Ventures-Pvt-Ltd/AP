@@ -34,6 +34,7 @@ const normalizeDocumentEntry = (entry) => {
     fileSize: Number(entry.fileSize ?? entry.file_size ?? entry.size ?? 0) || 0,
     mimeType: String(entry.mimeType || entry.mime_type || entry.type || '').trim(),
     uploadedAt: entry.uploadedAt || entry.uploaded_at || entry.createdAt || entry.created_at || null,
+    ...(typeof File !== 'undefined' && entry._file instanceof File ? { _file: entry._file } : {}),
   };
 };
 
@@ -91,6 +92,11 @@ export const sanitizeVendorDocumentsForSave = (documents = {}) => {
     }),
   );
 };
+
+export const getVendorDocumentFileEntries = (documents = {}) =>
+  Object.entries(documents || {})
+    .filter(([, value]) => typeof File !== 'undefined' && value?._file instanceof File)
+    .map(([key, value]) => ({ key, file: value._file }));
 
 export const countVendorDocuments = (documents = {}) =>
   Object.values(normalizeVendorDocuments(documents)).filter(Boolean).length;
