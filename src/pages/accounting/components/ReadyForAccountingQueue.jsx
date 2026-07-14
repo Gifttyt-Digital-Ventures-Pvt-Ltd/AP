@@ -515,7 +515,7 @@ const ReadyForAccountingQueue = () => {
 
     if (activeStage === ACCOUNTING_QUEUE_STAGE.NEEDS_APPROVAL) {
       return (
-        <div className="flex flex-wrap justify-end gap-1.5">
+        <div className="flex flex-nowrap justify-start gap-1.5">
           {previewButton}
           {canMarkReadyItem(item) && canMarkReadyAction ? (
             <Button
