@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Eye, Pencil, Search } from "lucide-react";
+import { Eye, Pencil, Search, Unlock } from "lucide-react";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
@@ -9,6 +9,7 @@ import AppDataTable from "../../../components/common/AppDataTable";
 import { OrgBranchCell, VendorWithBranchCell } from "../../../components/common/BranchTableCells";
 import { cn } from "../../../lib/utils";
 import {
+  getAccountingUnlockRequestStatus,
   isAccountingReadyLocked,
 } from "../../../utils/accountingLock";
 
@@ -37,6 +38,8 @@ const PoListTable = ({
   setShowViewDialog,
   canManagePo = false,
   onEditPO,
+  onRequestUnlock,
+  requestingUnlock = false,
   showBranchField = false,
 }) => {
   const poTableHeader = useMemo(
@@ -108,6 +111,20 @@ const PoListTable = ({
                     <Pencil className="h-4 w-4" />
                   </Button>
                 )}
+                {isAccountingReadyLocked(po) &&
+                  canManagePo &&
+                  String(getAccountingUnlockRequestStatus(po) || '').toUpperCase() !== 'PENDING' && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onRequestUnlock?.(po)}
+                      disabled={requestingUnlock}
+                      title="Request accounting unlock"
+                      data-testid={`request-unlock-po-${po?.id ?? 'unknown'}`}
+                    >
+                      <Unlock className="h-4 w-4 text-amber-700" />
+                    </Button>
+                  )}
               </div>
             );
             break;

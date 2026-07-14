@@ -193,6 +193,7 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
   const lineItemsSource = invoice.lineItems ?? invoice.line_items ?? [];
   const category = invoice.category;
   const categoryId = category?.id ?? invoice.categoryId ?? invoice.category_id;
+  const totalAmount = pickInvoiceField(invoice, "totalAmount", "total_amount");
 
   return {
     ...invoice,
@@ -207,7 +208,8 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
     invoiceDate: pickInvoiceField(invoice, "invoiceDate", "invoice_date"),
     dueDate: pickInvoiceField(invoice, "dueDate", "due_date"),
     ...normalizeInvoiceOverdueFields(invoice),
-    amount: invoice.amount ?? invoice.netAmount ?? invoice.net_amount,
+    totalAmount,
+    amount: totalAmount ?? invoice.netAmount ?? invoice.net_amount,
     memo: invoice.memo ?? invoice.description,
     billingAddress:
       pickInvoiceField(invoice, "billingAddress", "billing_address") ??
@@ -394,10 +396,12 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
         (Number(totals.igst) || 0) +
         (Number(totals.foreignTax) || 0)
       : Number(pickInvoiceField(invoice, "gstAmount", "gst_amount", 0));
-  const amount =
+  const totalAmount =
     totals?.total != null
       ? Number(totals.total)
-      : Number(invoice.amount ?? subTotalFromLines + gstAmount) || 0;
+      : Number(
+          invoice.totalAmount ?? invoice.total_amount ?? subTotalFromLines + gstAmount,
+        ) || 0;
   const resolvedTdsAmount =
     tdsAmount !== undefined
       ? tdsAmount === null
@@ -442,7 +446,8 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
       pickInvoiceField(invoice, "invoiceDate", "invoice_date", ""),
     ),
     dueDate: dueDate || null,
-    amount,
+    totalAmount,
+    amount: totalAmount,
     gstAmount,
     tdsAmount: resolvedTdsAmount,
     tdsSectionId: tdsSelection.tdsSectionId,

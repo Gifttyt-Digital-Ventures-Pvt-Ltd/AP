@@ -5,6 +5,7 @@ import {
   getAccountingReadyBlockedMessage,
   isAccountingReadyLocked,
 } from '../../utils/accountingLock';
+import { getAccountingErrorMessage } from '../accounting/utils/coaUtils';
 import { Button } from '../../components/ui/button';
 import RefreshButton from '../../components/common/RefreshButton';
 import { useSidebar } from '../../components/Layout';
@@ -40,6 +41,7 @@ import {
   useLazyGetPoLinesReceiptStateQuery,
   useGetGrnDownloadUrlMutation,
 } from '../../Services/apis/goodsReceiptApi';
+import { useRequestAccountingReadyUnlockMutation } from '../../Services/apis/accountingApi';
 import GrnListTab from './components/GrnListTab';
 import GrnFormatBuilderDialog from './components/GrnFormatBuilderDialog';
 import GrnCreateDialog from './components/GrnCreateDialog';
@@ -230,6 +232,8 @@ const GoodsReceipt = () => {
   const [getGrnExtractJob] = useLazyGetGrnExtractJobQuery();
   const [createGrnFromPi] = useCreateGrnFromPiMutation();
   const [getGrnDownloadUrl, { isLoading: downloadingGrnPdf }] = useGetGrnDownloadUrlMutation();
+  const [requestAccountingUnlock, { isLoading: requestAccountingUnlockLoading }] =
+    useRequestAccountingReadyUnlockMutation();
 
   const [showBuilderDialog, setShowBuilderDialog] = useState(false);
   const [grnCreateOptionOpen, setGrnCreateOptionOpen] = useState(false);
@@ -586,6 +590,25 @@ const GoodsReceipt = () => {
     }
     setDetailEditMode(edit);
     setDetailGrn(grn);
+  };
+
+  const handleRequestGrnUnlock = async (grn) => {
+    if (!canCreateGrn) {
+      toast.error('You need GRN edit access to request unlock');
+      return;
+    }
+    if (!guardAction('accounting.ready.unlockRequest')) return;
+    try {
+      const result = await requestAccountingUnlock({
+        id: grn?.accountingReadyId || grn?.accounting_ready_id || grn?.readyItemId,
+        objectType: 'GRN',
+        objectId: grn?.id || grn?.grn_id || grn?.grnId,
+      }).unwrap();
+      toast.success(result?.message || 'Unlock request submitted');
+      await refetchGrns();
+    } catch (error) {
+      toast.error(getAccountingErrorMessage(error, 'Could not raise unlock request'));
+    }
   };
 
   const handleGrnApproval = async () => {
@@ -1164,6 +1187,8 @@ const GoodsReceipt = () => {
         onView={(grn) => openGrnDetail(grn)}
         onEdit={(grn) => openGrnDetail(grn, { edit: true })}
         onReview={openGrnReview}
+        onRequestUnlock={canCreateGrn ? handleRequestGrnUnlock : undefined}
+        requestingUnlock={requestAccountingUnlockLoading}
       />
 
       <GrnFormatBuilderDialog

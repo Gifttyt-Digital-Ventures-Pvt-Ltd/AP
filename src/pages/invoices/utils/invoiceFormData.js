@@ -197,7 +197,12 @@ export const buildInvoiceEditFormData = (
     tdsSectionId,
     tdsSectionCode,
     tdsRate,
-    amount: invoice.amount ?? invoice.netAmount ?? 0,
+    amount:
+      invoice.totalAmount ??
+      invoice.total_amount ??
+      invoice.netAmount ??
+      invoice.net_amount ??
+      0,
     currency: editCurrency,
     roundOff:
       invoice.roundOff ??
