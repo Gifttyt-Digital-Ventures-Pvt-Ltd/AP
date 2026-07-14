@@ -38,12 +38,45 @@ export const accountingApi = serviceApi.injectEndpoints({
     }),
     getAccountingReadyQueue: builder.query({
       query: (params = {}) => ({
-        url: `${ACCOUNTING_BASE}/ready`,
+        url: `${ACCOUNTING_BASE}/queue`,
         method: "GET",
         params: withParams(params),
       }),
       transformResponse: (response) => normalizeReadyQueueResponse(response),
       providesTags: ["Accounting"],
+    }),
+    getAccountingQueueItemDetail: builder.query({
+      query: ({ objectType, objectId } = {}) => ({
+        url: `${ACCOUNTING_BASE}/queue/item-detail`,
+        method: "GET",
+        params: withParams({ objectType, objectId }),
+      }),
+      transformResponse: (response) =>
+        response?.objectType || response?.accountingMetadata || response?.queue
+          ? response
+          : response?.data ?? response,
+      providesTags: (_result, _error, arg = {}) => [
+        {
+          type: "Accounting",
+          id: `QUEUE_DETAIL_${arg.objectType || "UNKNOWN"}_${arg.objectId || "UNKNOWN"}`,
+        },
+      ],
+    }),
+    markAccountingReadyItem: builder.mutation({
+      query: ({ objectType, objectId } = {}) => ({
+        url: `${ACCOUNTING_BASE}/ready`,
+        method: "POST",
+        body: { objectType, objectId },
+      }),
+      invalidatesTags: ["Accounting"],
+    }),
+    bulkMarkAccountingReadyItems: builder.mutation({
+      query: ({ items = [] } = {}) => ({
+        url: `${ACCOUNTING_BASE}/ready/bulk`,
+        method: "POST",
+        body: { items },
+      }),
+      invalidatesTags: ["Accounting"],
     }),
     syncAccountingReadyItem: builder.mutation({
       query: ({ id }) => ({
@@ -84,17 +117,26 @@ export const accountingApi = serviceApi.injectEndpoints({
       }),
       invalidatesTags: ["Accounting"],
     }),
+    directUnlockAccountingReadyItem: builder.mutation({
+      query: ({ id }) => ({
+        url: `${ACCOUNTING_BASE}/ready/${id}/unlock`,
+        method: "POST",
+      }),
+      invalidatesTags: ["Accounting"],
+    }),
     getAccountingSyncLogs: builder.query({
-      query: () => ({
+      query: (params = {}) => ({
         url: `${ACCOUNTING_BASE}/sync-logs`,
         method: "GET",
+        params: withParams(params),
       }),
       providesTags: ["Accounting"],
     }),
     downloadAccountingSyncLogs: builder.mutation({
-      query: () => ({
+      query: (params = {}) => ({
         url: `${ACCOUNTING_BASE}/sync-logs/export`,
         method: "GET",
+        params: withParams(params),
         responseHandler: async (response) => response.blob(),
       }),
     }),
@@ -107,11 +149,15 @@ export const {
   useGetLedgerQuery,
   useLazyGetLedgerQuery,
   useGetAccountingReadyQueueQuery,
+  useLazyGetAccountingQueueItemDetailQuery,
+  useMarkAccountingReadyItemMutation,
+  useBulkMarkAccountingReadyItemsMutation,
   useSyncAccountingReadyItemMutation,
   useBulkSyncAccountingReadyItemsMutation,
   useRetryAccountingReadyItemMutation,
   useRequestAccountingReadyUnlockMutation,
   useApproveAccountingReadyUnlockMutation,
+  useDirectUnlockAccountingReadyItemMutation,
   useGetAccountingSyncLogsQuery,
   useDownloadAccountingSyncLogsMutation,
 } = accountingApi;

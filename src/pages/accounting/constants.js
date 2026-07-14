@@ -40,6 +40,16 @@ export const ACC_STATUS = {
   FAILED: "Failed",
 };
 
+export const ACCOUNTING_QUEUE_STAGE = {
+  NEEDS_APPROVAL: "NEEDS_APPROVAL",
+  ACCOUNTING_READY: "ACCOUNTING_READY",
+};
+
+export const ACCOUNTING_QUEUE_STAGE_LABELS = {
+  [ACCOUNTING_QUEUE_STAGE.NEEDS_APPROVAL]: "Needs Approval",
+  [ACCOUNTING_QUEUE_STAGE.ACCOUNTING_READY]: "Accounting Ready",
+};
+
 /** ERP push status (queue / transactions). */
 export const ERP_STATUS = {
   NOT_SYNCED: "Not Synced",
