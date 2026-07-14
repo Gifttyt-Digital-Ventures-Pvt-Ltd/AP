@@ -1,5 +1,6 @@
 import {
   ACC_STATUS,
+  ACCOUNTING_QUEUE_STAGE,
   ACCOUNT_STATUS,
   COA_TYPE,
   ERP_SOURCE_LABELS,
@@ -420,6 +421,11 @@ export const resolveQueueTab = (item = {}) => {
 /** Normalize a ready-queue row into PRD QueueDoc (+ action helpers). */
 export const normalizeQueueItem = (item = {}) => {
   const syncStatus = item.syncStatus || item.sync_status;
+  const objectType = item.objectType || item.object_type || OBJECT_TYPE.INVOICE;
+  const objectId = item.objectId || item.object_id;
+  const stage = item.stage || item.queueStage || item.queue_stage || null;
+  const docNo = item.docNo || item.doc_no || item.reference || item.documentNumber || "—";
+  const fallbackId = [objectType, objectId || docNo, stage || "queue"].filter(Boolean).join(":");
   const accStatus = toAccStatus(
     item.accStatus || item.accountingStatus || item.accounting_status || syncStatus,
     item.accountingReady || item.accounting_ready ? ACC_STATUS.READY : ACC_STATUS.NOT_READY,
@@ -429,8 +435,15 @@ export const normalizeQueueItem = (item = {}) => {
   });
 
   return {
-    id: String(item.id),
-    docNo: item.docNo || item.doc_no || item.reference || item.documentNumber || "—",
+    id: String(
+      item.id ||
+        item.queueId ||
+        item.queue_id ||
+        item.accountingReadyId ||
+        item.accounting_ready_id ||
+        fallbackId,
+    ),
+    docNo,
     vendor: item.vendor || item.vendorName || item.vendor_name || "—",
     amount: Number(item.amount || 0),
     bizStatus: item.bizStatus || item.businessStatus || item.finalStatus || item.final_status || "—",
@@ -441,8 +454,9 @@ export const normalizeQueueItem = (item = {}) => {
         ? ERP_STATUS.NONE
         : erpStatus,
     tab: resolveQueueTab(item),
-    objectType: item.objectType || item.object_type || OBJECT_TYPE.INVOICE,
-    objectId: item.objectId || item.object_id,
+    objectType,
+    objectId,
+    stage,
     source: item.source || item.recordSource || item.record_source || "—",
     sourceSystem: item.sourceSystem || item.source_system || item.erpSource || item.erp_source,
     eligibleForSync: Boolean(
@@ -450,23 +464,98 @@ export const normalizeQueueItem = (item = {}) => {
         item.eligible_for_sync ??
         [ACC_STATUS.READY, ACC_STATUS.FAILED].includes(accStatus),
     ),
+    eligibleForAccountingReady: Boolean(
+      item.eligibleForAccountingReady ??
+        item.eligible_for_accounting_ready ??
+        item.eligibleForAccountingReview ??
+        item.eligible_for_accounting_review ??
+        (!item.accountingReady && !item.accounting_ready),
+    ),
     locked: Boolean(item.locked ?? item.isLocked ?? item.is_locked),
     unlockRequestStatus: item.unlockRequestStatus || item.unlock_request_status || null,
     accountingReady: Boolean(item.accountingReady ?? item.accounting_ready),
   };
 };
 
+const dedupeQueueItems = (items = []) => {
+  const seen = new Set();
+  return items.filter((item) => {
+    const key = item.objectId
+      ? [item.objectType, item.objectId, item.stage || "queue"].join(":")
+      : item.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+const pickStageCounts = (payload = {}) => {
+  const source =
+    payload.counts ||
+    payload.tabCounts ||
+    payload.stageCounts ||
+    payload.data?.counts ||
+    payload.data?.tabCounts ||
+    payload.data?.stageCounts ||
+    {};
+  const needsApproval =
+    source.needsApproval ??
+    source.needs_approval ??
+    source.NEEDS_APPROVAL ??
+    source[ACCOUNTING_QUEUE_STAGE.NEEDS_APPROVAL] ??
+    0;
+  const accountingReady =
+    source.accountingReady ??
+    source.accounting_ready ??
+    source.ACCOUNTING_READY ??
+    source[ACCOUNTING_QUEUE_STAGE.ACCOUNTING_READY] ??
+    0;
+
+  return {
+    [ACCOUNTING_QUEUE_STAGE.NEEDS_APPROVAL]: Number(needsApproval) || 0,
+    [ACCOUNTING_QUEUE_STAGE.ACCOUNTING_READY]: Number(accountingReady) || 0,
+  };
+};
+
+const pickDocumentCounts = (payload = {}) =>
+  payload.documentCounts ||
+  payload.document_counts ||
+  payload.objectTypeCounts ||
+  payload.object_type_counts ||
+  payload.data?.documentCounts ||
+  payload.data?.document_counts ||
+  payload.data?.objectTypeCounts ||
+  payload.data?.object_type_counts ||
+  {};
+
 export const normalizeReadyQueueResponse = (payload = {}) => {
   const rawItems = Array.isArray(payload.items)
     ? payload.items
     : Array.isArray(payload.results)
       ? payload.results
+      : Array.isArray(payload.data?.items)
+        ? payload.data.items
+        : Array.isArray(payload.data?.results)
+          ? payload.data.results
       : Array.isArray(payload.data)
         ? payload.data
         : Array.isArray(payload)
           ? payload
           : [];
-  return { items: rawItems.map(normalizeQueueItem) };
+  const data = payload.data && typeof payload.data === "object" && !Array.isArray(payload.data)
+    ? payload.data
+    : payload;
+  const items = dedupeQueueItems(rawItems.map(normalizeQueueItem));
+  const rawTotal = Number(data.total ?? data.totalCount ?? data.count ?? items.length) || 0;
+  return {
+    items,
+    total: rawItems.length > items.length ? items.length : rawTotal,
+    limit: Number(data.limit ?? items.length) || items.length,
+    offset: Number(data.offset ?? 0) || 0,
+    hasMore: Boolean(data.hasMore ?? data.has_more ?? false),
+    counts: pickStageCounts(payload),
+    documentCounts: pickDocumentCounts(payload),
+  };
 };
 
 export const normalizeLedgerDetailResponse = (payload = {}, fallbackLedger = null) => {

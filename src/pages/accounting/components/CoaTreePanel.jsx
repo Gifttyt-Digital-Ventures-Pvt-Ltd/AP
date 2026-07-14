@@ -85,22 +85,22 @@ const TreeNode = ({ node, depth, selectedId, expandedIds, onToggle, onSelect }) 
   );
 };
 
-const CoaTreePanel = ({ tree = [], selectedId, onSelect }) => {
+const CoaTreePanel = ({ tree = [], selectedId, onSelect, autoExpand = false }) => {
   const defaultExpandedIds = useMemo(() => {
+    if (!autoExpand) return [];
+
     const ids = [];
     const walk = (nodes, depth = 0) => {
       nodes.forEach((node) => {
-        if (node.children?.length && depth < 2) {
+        if (node.children?.length) {
           ids.push(node.id);
-          walk(node.children, depth + 1);
-        } else if (node.children?.length) {
           walk(node.children, depth + 1);
         }
       });
     };
     walk(tree);
     return ids;
-  }, [tree]);
+  }, [autoExpand, tree]);
 
   const [expandedIds, setExpandedIds] = useState(() => new Set(defaultExpandedIds));
 

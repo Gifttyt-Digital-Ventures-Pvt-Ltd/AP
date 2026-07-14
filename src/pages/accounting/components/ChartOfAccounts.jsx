@@ -179,6 +179,7 @@ const ChartOfAccounts = () => {
                 tree={filteredTree}
                 selectedId={selectedNode?.id ?? null}
                 onSelect={setSelectedNode}
+                autoExpand={Boolean(search.trim())}
               />
             </div>
           </Card>
