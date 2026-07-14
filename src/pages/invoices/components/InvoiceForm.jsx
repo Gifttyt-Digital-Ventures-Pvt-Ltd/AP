@@ -2162,6 +2162,7 @@ export const InvoiceForm = ({
                   onRetry={isTdsSubscriptionEnabled ? refetchTdsPreview : undefined}
                   fallbackAmount={fallbackTdsAmount}
                   enabled={isTdsSubscriptionEnabled}
+                  hideUnavailableMessage
                 />
               </div>
               <span className="shrink-0 pt-1">{formatAmount(tdsAmount)}</span>

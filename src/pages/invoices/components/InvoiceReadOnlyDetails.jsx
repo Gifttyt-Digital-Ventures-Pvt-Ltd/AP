@@ -171,7 +171,11 @@ const InvoiceReadOnlyDetails = ({
       invoice.roundOff ??
       invoice.round_off ??
       invoice.roundoff,
-    invoiceTotal: formData.scannedTotal ?? formData.invoiceTotal ?? invoice.amount,
+    invoiceTotal:
+      formData.scannedTotal ??
+      formData.invoiceTotal ??
+      invoice.totalAmount ??
+      invoice.total_amount,
   });
 
   const tdsAmountFromRate = computeTdsAmount(
@@ -204,7 +208,12 @@ const InvoiceReadOnlyDetails = ({
     roundOffValue !== "" &&
     Number.isFinite(Number(roundOffValue));
   const fallbackNetPayable =
-    Number(invoice.netAmount) ||
+    Number(
+      invoice.netAmount ??
+        invoice.net_amount ??
+        invoice.totalAmount ??
+        invoice.total_amount,
+    ) ||
     Math.max(Math.round((totals.total - tdsAmount) * 100) / 100, 0);
   const netPayable = getTdsPreviewNetPayable(tdsPreview, fallbackNetPayable);
   const tdsLabel = formatTdsDisplayLabel({

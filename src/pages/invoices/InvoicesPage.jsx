@@ -15,6 +15,7 @@ import {
   useDeleteInvoiceMutation,
   useCancelInvoiceMutation,
 } from "../../Services/apis/invoicesVendorsApi";
+import { useRequestAccountingReadyUnlockMutation } from "../../Services/apis/accountingApi";
 import {
   getInvoiceMandatoryFieldValidationMessage,
   isInvoiceMandatoryFieldsSatisfied,
@@ -119,6 +120,7 @@ import {
   Search,
   Trash2,
   Link2,
+  Unlock,
 } from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
@@ -183,6 +185,11 @@ import {
   resolveBulkCreateInvoiceStatus,
   resolveInitialInvoiceStatus,
 } from "../../utils/approvalWorkflow";
+import {
+  getAccountingUnlockRequestStatus,
+  isAccountingReadyLocked,
+} from "../../utils/accountingLock";
+import { getAccountingErrorMessage } from "../accounting/utils/coaUtils";
 
 const getApprovalWorkflowName = (invoice) =>
   invoice.approvalWorkflowName ??
@@ -539,6 +546,8 @@ const InvoicesPage = () => {
   const [deleteInvoice] = useDeleteInvoiceMutation();
   const [cancelInvoice, { isLoading: cancelInvoiceLoading }] =
     useCancelInvoiceMutation();
+  const [requestAccountingUnlock, { isLoading: requestAccountingUnlockLoading }] =
+    useRequestAccountingReadyUnlockMutation();
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
   const invoices = useMemo(
@@ -2134,6 +2143,28 @@ const InvoicesPage = () => {
     setEditDialogOpen(true);
   };
 
+  const handleRequestInvoiceUnlock = async (invoice) => {
+    if (!canUpdateInvoices) {
+      toast.error("You need invoice edit access to request unlock");
+      return;
+    }
+    if (!guardAction("accounting.ready.unlockRequest")) return;
+    try {
+      const result = await requestAccountingUnlock({
+        id:
+          invoice?.accountingReadyId ||
+          invoice?.accounting_ready_id ||
+          invoice?.readyItemId,
+        objectType: isProformaInvoice(invoice) ? "PI" : "INVOICE",
+        objectId: invoice?.id,
+      }).unwrap();
+      toast.success(result?.message || "Unlock request submitted");
+      await refetchInvoices();
+    } catch (error) {
+      toast.error(getAccountingErrorMessage(error, "Could not raise unlock request"));
+    }
+  };
+
   const handleUpdateInvoice = async () => {
     if (!guardAction("invoices.update")) return;
     if (!selectedInvoice || !formData) return;
@@ -2578,6 +2609,22 @@ const InvoicesPage = () => {
                         <Pencil className="h-4 w-4" />
                       </Button>
                     )}
+                    {isAccountingReadyLocked(invoice) &&
+                      canUpdateInvoices &&
+                      String(getAccountingUnlockRequestStatus(invoice) || "").toUpperCase() !==
+                        "PENDING" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRequestInvoiceUnlock(invoice)}
+                          disabled={requestAccountingUnlockLoading}
+                          data-testid={`request-unlock-invoice-${invoice?.id ?? "unknown"}`}
+                          title="Request accounting unlock"
+                          className="h-8 w-8 p-0"
+                        >
+                          <Unlock className="h-4 w-4 text-amber-700" />
+                        </Button>
+                      )}
                     {canDelete(invoice.status) && (
                       <Button
                         variant="ghost"

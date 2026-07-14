@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Edit, Eye, Plus, CheckCircle2 } from 'lucide-react';
+import { Edit, Eye, Plus, CheckCircle2, Unlock } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Card } from '../../../components/ui/card';
@@ -23,7 +23,10 @@ import GrnStatusBadge from './GrnStatusBadge';
 import GrnSourceBadge from './GrnSourceBadge';
 import { GRN_PAGE_SIZE, GRN_SOURCE, GRN_STATUS } from '../constants';
 import { formatDate } from '../utils';
-import { isAccountingReadyLocked } from '../../../utils/accountingLock';
+import {
+  getAccountingUnlockRequestStatus,
+  isAccountingReadyLocked,
+} from '../../../utils/accountingLock';
 
 const STATUS_FILTER_OPTIONS = [
   { value: 'all', label: 'All Statuses' },
@@ -52,6 +55,8 @@ const GrnListTab = ({
   onView,
   onEdit,
   onReview,
+  onRequestUnlock,
+  requestingUnlock = false,
 }) => {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -223,6 +228,20 @@ const GrnListTab = ({
                         <Button variant="outline" size="sm" onClick={() => onEdit(grn)} data-testid={`edit-grn-${grn?.id ?? 'unknown'}`}>
                           <Edit className="mr-1 h-4 w-4" />
                           Edit
+                        </Button>
+                      )}
+                      {onRequestUnlock &&
+                        isAccountingReadyLocked(grn) &&
+                        String(getAccountingUnlockRequestStatus(grn) || '').toUpperCase() !== 'PENDING' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onRequestUnlock?.(grn)}
+                          disabled={requestingUnlock}
+                          title="Request accounting unlock"
+                          data-testid={`request-unlock-grn-${grn?.id ?? 'unknown'}`}
+                        >
+                          <Unlock className="h-4 w-4 text-amber-700" />
                         </Button>
                       )}
                       {canApprove && grn.status === GRN_STATUS.PENDING_APPROVAL && (

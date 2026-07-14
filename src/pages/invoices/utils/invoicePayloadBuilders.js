@@ -275,7 +275,11 @@ export const initializeInvoiceFormData = (
       : [createDefaultLineItem(invoiceCurrency)],
     description: extractedData?.description || notesText || "",
     tds: "",
-    amount: extractedData?.amount || 0,
+    amount:
+      extractedData?.totalAmount ??
+      extractedData?.total_amount ??
+      extractedData?.invoiceTotal ??
+      0,
     currency: normalizeCurrencyCode(extractedData?.currency) || DEFAULT_CURRENCY,
     roundOff:
       extractedData?.roundOff ??
@@ -292,7 +296,10 @@ export const initializeInvoiceFormData = (
       extractedData?.invoiceTaxName ?? extractedData?.invoice_tax_name,
     scannedTaxRate:
       extractedData?.invoiceTaxRate ?? extractedData?.invoice_tax_rate,
-    scannedTotal: extractedData?.invoiceTotal,
+    scannedTotal:
+      extractedData?.totalAmount ??
+      extractedData?.total_amount ??
+      extractedData?.invoiceTotal,
     fileId: extractedData?.fileId || null,
     fileHash: extractedData?.fileHash || null,
     originalFileName: extractedData?.originalFileName || null,

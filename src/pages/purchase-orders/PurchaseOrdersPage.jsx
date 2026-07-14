@@ -18,6 +18,7 @@ import {
   useApprovePurchaseOrderMutation,
   useScanPurchaseOrderMutation,
 } from '../../Services/apis/purchaseOrdersMasterDataApi';
+import { useRequestAccountingReadyUnlockMutation } from '../../Services/apis/accountingApi';
 import { useGetOrganisationQuery } from '../../Services/apis/settingsApi';
 import { normalizeOrganisationBranchesFromApi } from '../../utils/organisationGst';
 import { toast } from 'sonner';
@@ -25,6 +26,7 @@ import {
   getAccountingReadyBlockedMessage,
   isAccountingReadyLocked,
 } from '../../utils/accountingLock';
+import { getAccountingErrorMessage } from '../accounting/utils/coaUtils';
 import { statusColors } from './constants';
 import {
   DEFAULT_PO_FORMAT_CONFIG,
@@ -303,6 +305,8 @@ const PurchaseOrdersPage = () => {
   const [scanPurchaseOrder] = useScanPurchaseOrderMutation();
   const [requestVendorAddition, { isLoading: requestVendorLoading }] =
     useRequestVendorAdditionMutation();
+  const [requestAccountingUnlock, { isLoading: requestAccountingUnlockLoading }] =
+    useRequestAccountingReadyUnlockMutation();
 
   const [showUploadPicker, setShowUploadPicker] = useState(false);
   const [uploadFile, setUploadFile] = useState(null);
@@ -657,6 +661,25 @@ const PurchaseOrdersPage = () => {
     setPoForm(buildPoEditForm(po, selectedFormat.id));
     setShowViewDialog(false);
     setShowCreateDialog(true);
+  };
+
+  const handleRequestPoUnlock = async (po) => {
+    if (!canManagePo) {
+      toast.error('You need purchase order edit access to request unlock');
+      return;
+    }
+    if (!guardAction('accounting.ready.unlockRequest')) return;
+    try {
+      const result = await requestAccountingUnlock({
+        id: po?.accountingReadyId || po?.accounting_ready_id || po?.readyItemId,
+        objectType: 'PO',
+        objectId: po?.id || po?.po_id || po?.poId,
+      }).unwrap();
+      toast.success(result?.message || 'Unlock request submitted');
+      await refetchPurchaseOrders();
+    } catch (error) {
+      toast.error(getAccountingErrorMessage(error, 'Could not raise unlock request'));
+    }
   };
 
   const openBuilderDialog = (open) => {
@@ -1106,6 +1129,8 @@ const PurchaseOrdersPage = () => {
         setShowViewDialog={setShowViewDialog}
         canManagePo={canManagePo}
         onEditPO={openEditPoDialog}
+        onRequestUnlock={handleRequestPoUnlock}
+        requestingUnlock={requestAccountingUnlockLoading}
         showBranchField={isBranchEnabled}
       />
 
