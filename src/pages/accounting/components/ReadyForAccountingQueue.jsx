@@ -109,7 +109,7 @@ const isConnectedTallyConnection = (connection = {}) =>
 
 const ERP_PUSH_OBJECT_TYPE = {
   PO: "PURCHASE_ORDERS",
-  GRN: "GOODS_RECEIPTS_NOTES",
+  GRN: "GOODS_RECEIPT_NOTES",
   BILLS: "BILLS",
   INVOICE: "BILLS",
   PI: "BILLS",
@@ -269,6 +269,7 @@ const ReadyForAccountingQueue = () => {
   const [pageOffset, setPageOffset] = useState(0);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [showLogs, setShowLogs] = useState(false);
+  const [manualRefreshing, setManualRefreshing] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewDetail, setPreviewDetail] = useState(null);
   const activeObjectType = getPrimaryObjectTypeForTab(activeTab);
@@ -288,6 +289,7 @@ const ReadyForAccountingQueue = () => {
   const {
     data: logsData,
     isLoading: logsLoading,
+    isFetching: logsFetching,
     refetch: refetchLogs,
   } = useGetAccountingSyncLogsQuery(
     { objectType: activeObjectType, limit: PAGE_SIZE, offset: 0 },
@@ -390,6 +392,7 @@ const ReadyForAccountingQueue = () => {
     tallySyncing ||
     retrying ||
     directUnlocking;
+  const refreshBusy = manualRefreshing || isFetching || (showLogs && logsFetching);
   const canMarkReadyAction = canPerformAction("accounting.ready.mark");
   const canSyncAction = canPerformAction("accounting.ready.sync");
   const canSelectInStage =
@@ -433,6 +436,23 @@ const ReadyForAccountingQueue = () => {
     await refetch();
     if (refreshLogs && showLogs) {
       await refetchLogs();
+    }
+  };
+
+  const handleManualRefresh = async () => {
+    setManualRefreshing(true);
+    try {
+      await refetch();
+      if (showLogs) {
+        await refetchLogs();
+      }
+      toast.success("Accounting queue refreshed");
+    } catch (err) {
+      toast.error(
+        getAccountingErrorMessage(err, "Failed to refresh accounting queue"),
+      );
+    } finally {
+      setManualRefreshing(false);
     }
   };
 
@@ -786,13 +806,15 @@ const ReadyForAccountingQueue = () => {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => refetch()}
-                disabled={isFetching}
-                className="h-8"
+                onClick={handleManualRefresh}
+                disabled={refreshBusy}
+                className="h-8 gap-1.5 text-xs"
+                aria-label="Refresh accounting queue"
               >
                 <RefreshCw
-                  className={`h-3.5 w-3.5 ${isFetching ? "animate-spin" : ""}`}
+                  className={`h-3.5 w-3.5 ${refreshBusy ? "animate-spin" : ""}`}
                 />
+                Refresh
               </Button>
               {canPerformAction("accounting.syncLogs.view") ? (
                 <Button
