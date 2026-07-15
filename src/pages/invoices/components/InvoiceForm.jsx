@@ -61,7 +61,7 @@ import {
 } from "../utils/tds";
 import { buildInvoiceTdsStateFromVendor } from "../../vendors/utils/vendorTds";
 import TdsSelectionField from "./TdsSelectionField";
-import TdsBreakdownPanel, {
+import {
   getTdsPreviewAmount,
   getTdsPreviewNetPayable,
 } from "./TdsBreakdownPanel";
@@ -83,10 +83,20 @@ import {
 import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
 import useTdsSubscription from "../../../hooks/useTdsSubscription";
 import {
+  useGetAccountingVoucherTypesQuery,
+  useGetCoaTreeQuery,
+} from "../../../Services/apis/accountingApi";
+import {
   buildLocalLinkValidation,
   buildProformaLinkValidateRequest,
   rankProformaInvoiceSuggestions,
 } from "../utils/proformaInvoiceMatching";
+import {
+  buildGroupBranchOptionsFromCoa,
+  EXPENSE_TYPE_OPTIONS,
+  findAccountingOption,
+  normalizeExpenseType,
+} from "../utils/invoiceAccountingFields";
 
 const lineItemTableHeader = [
   {
@@ -95,7 +105,18 @@ const lineItemTableHeader = [
     headerClassName: "min-w-[190px]",
     cellClassName: "min-w-[190px] align-top",
   },
-  // { key: "ledger", title: "Ledger", headerClassName: "w-[160px]", cellClassName: "w-[200px]" },
+  {
+    key: "accountGroup",
+    title: "Group / Branch",
+    headerClassName: "w-[190px]",
+    cellClassName: "w-[220px] align-top",
+  },
+  {
+    key: "expenseType",
+    title: "Expense Type",
+    headerClassName: "w-[150px]",
+    cellClassName: "w-[150px] align-top",
+  },
   {
     key: "tax",
     title: "Tax",
@@ -147,7 +168,7 @@ const lineItemTableHeader = [
 ];
 
 const lineItemSelectClassName =
-  "h-7 w-full rounded border bg-white pl-2 pr-7 text-xs";
+  "h-7 w-full justify-between rounded border bg-white pl-2 pr-8 text-xs [&>span]:min-w-0 [&>span]:truncate";
 
 const RequiredLabel = ({ children, required = false, className = "" }) => (
   <Label className={cn("text-xs", required && "text-blue-400", className)}>
@@ -211,6 +232,7 @@ export const InvoiceForm = ({
   handleAddInvoice,
   isSubmitting = false,
   canAddVendor = true,
+  canEditNetPayable = false,
   canSubmit = true,
   vendorOptions = [],
   departments = [],
@@ -225,7 +247,6 @@ export const InvoiceForm = ({
   currencyOptions = [],
   GST_TREATMENTS,
   INDIAN_STATES,
-  LEDGER_OPTIONS,
   TAX_RATES,
   showBillingGst = false,
   requireBillingGst = false,
@@ -250,11 +271,15 @@ export const InvoiceForm = ({
     skip: !canShowBranchField,
   });
   const { isTdsSubscriptionEnabled } = useTdsSubscription();
+  const { data: coaData } = useGetCoaTreeQuery();
+  const { data: backendVoucherTypeOptions = [] } = useGetAccountingVoucherTypesQuery();
   const [vendorPickerOpen, setVendorPickerOpen] = useState(false);
   const [vendorQuery, setVendorQuery] = useState("");
   const vendorAnchorRef = useRef(null);
   const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false);
   const [currencyQuery, setCurrencyQuery] = useState("");
+  const [accountGroupSearchByRow, setAccountGroupSearchByRow] = useState({});
+  const [accountGroupPickerOpenByRow, setAccountGroupPickerOpenByRow] = useState({});
 
   const filteredVendorOptions = useMemo(() => {
     const query = String(vendorQuery || "")
@@ -519,6 +544,11 @@ export const InvoiceForm = ({
   const billingGstSatisfied = !requireBillingGst || Boolean(selectedBillingGst?.gst);
   const isInvoiceLevelDiscount = formData?.discountsLevel === INVOICE_LEVEL;
   const isInvoiceLevelTax = formData?.taxesLevel === INVOICE_LEVEL;
+  const accountGroupOptions = useMemo(
+    () => buildGroupBranchOptionsFromCoa(coaData?.tree || []),
+    [coaData?.tree],
+  );
+  const voucherTypeOptions = backendVoucherTypeOptions;
   const lineItemHeaders = lineItemTableHeader
     .filter(
       (column) =>
@@ -829,7 +859,16 @@ export const InvoiceForm = ({
     0,
   );
   const tdsAmount = getTdsPreviewAmount(tdsPreview, fallbackTdsAmount);
-  const netPayable = getTdsPreviewNetPayable(tdsPreview, fallbackNetPayable);
+  const calculatedNetPayable = getTdsPreviewNetPayable(tdsPreview, fallbackNetPayable);
+  const manualNetPayable =
+    formData.netAmount !== undefined && formData.netAmount !== null && formData.netAmount !== ""
+      ? Number(formData.netAmount)
+      : null;
+  const hasManualNetPayableValue = Number.isFinite(manualNetPayable);
+  const netPayable =
+    canEditNetPayable && hasManualNetPayableValue
+      ? manualNetPayable
+      : calculatedNetPayable;
   const lineItemsSummary = computeLineItemsSummary({
     lineItems: formData?.lineItems || [],
     calculateLineItemSubtotal,
@@ -926,14 +965,153 @@ export const InvoiceForm = ({
               </div>
             );
             break;
-          case "ledger":
+          case "accountGroup":
+            {
+              const accountGroupSearch = accountGroupSearchByRow[index] || "";
+              const isAccountGroupPickerOpen = Boolean(accountGroupPickerOpenByRow[index]);
+              const visibleAccountGroupOptions = accountGroupSearch.trim()
+                ? accountGroupOptions.filter((option) => {
+                    const query = accountGroupSearch.trim().toLowerCase();
+                    return (
+                      option.label?.toLowerCase().includes(query) ||
+                      option.accountGroupName?.toLowerCase().includes(query) ||
+                      option.category?.toLowerCase().includes(query) ||
+                      option.expenseType?.toLowerCase().includes(query)
+                    );
+                  })
+                : accountGroupOptions;
+              const selectedAccountGroupValue =
+                item.accountGroupId ||
+                item.groupId ||
+                findAccountingOption(accountGroupOptions, item.accountGroupName || item.groupName)?.value ||
+                "";
+              const selectedAccountGroup = findAccountingOption(
+                accountGroupOptions,
+                selectedAccountGroupValue,
+              );
+              const applyAccountGroupSelection = (selected) => {
+                setFormData((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        lineItems: prev.lineItems.map((lineItem, lineIndex) =>
+                          lineIndex === index
+                            ? {
+                                ...lineItem,
+                                accountGroupId: selected?.accountGroupId || "",
+                                accountGroupName: selected?.accountGroupName || "",
+                                groupId: selected?.groupId || "",
+                                groupName: selected?.groupName || "",
+                                expenseType: selected?.expenseType || lineItem.expenseType || "",
+                              }
+                            : lineItem,
+                        ),
+                      }
+                    : prev,
+                );
+                setAccountGroupSearchByRow((prev) => ({ ...prev, [index]: "" }));
+                setAccountGroupPickerOpenByRow((prev) => ({ ...prev, [index]: false }));
+              };
+              value = (
+                <Popover
+                  open={isAccountGroupPickerOpen}
+                  onOpenChange={(open) =>
+                    setAccountGroupPickerOpenByRow((prev) => ({
+                      ...prev,
+                      [index]: open,
+                    }))
+                  }
+                >
+                  <PopoverAnchor asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        setAccountGroupPickerOpenByRow((prev) => ({
+                          ...prev,
+                          [index]: !isAccountGroupPickerOpen,
+                        }))
+                      }
+                      className="h-7 w-full justify-between px-2 text-left text-xs font-normal"
+                    >
+                      <span className="truncate">
+                        {selectedAccountGroup?.accountGroupName ||
+                          item.accountGroupName ||
+                          item.groupName ||
+                          "Select group"}
+                      </span>
+                      <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 text-muted-foreground" />
+                    </Button>
+                  </PopoverAnchor>
+                  <PopoverContent
+                    className="z-[80] w-72 p-2"
+                    align="start"
+                    onWheel={(event) => event.stopPropagation()}
+                    onTouchMove={(event) => event.stopPropagation()}
+                  >
+                    <Input
+                      value={accountGroupSearch}
+                      onChange={(e) =>
+                        setAccountGroupSearchByRow((prev) => ({
+                          ...prev,
+                          [index]: e.target.value,
+                        }))
+                      }
+                      placeholder="Search group"
+                      className="mb-2 h-8 text-xs"
+                      autoFocus
+                    />
+                    <div
+                      className="max-h-64 overflow-y-auto overscroll-contain pr-1 scrollbar-thin-muted"
+                      onWheel={(event) => event.stopPropagation()}
+                      onTouchMove={(event) => event.stopPropagation()}
+                    >
+                      {visibleAccountGroupOptions.length ? (
+                        visibleAccountGroupOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => applyAccountGroupSelection(option)}
+                            className={cn(
+                              "flex w-full flex-col rounded px-2 py-1.5 text-left text-xs hover:bg-muted",
+                              selectedAccountGroupValue === option.value && "bg-muted",
+                            )}
+                          >
+                            <span className="font-medium">{option.accountGroupName}</span>
+                            {option.category ? (
+                              <span className="text-[10px] text-muted-foreground">
+                                {option.category}
+                              </span>
+                            ) : null}
+                            {option.expenseType ? (
+                              <span className="text-[10px] text-muted-foreground">
+                                {option.expenseType}
+                              </span>
+                            ) : null}
+                          </button>
+                        ))
+                      ) : (
+                        <p className="px-2 py-3 text-xs text-muted-foreground">
+                          {accountGroupOptions.length
+                            ? "No group found."
+                            : "Sync COA to load groups."}
+                        </p>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              );
+            }
+            break;
+          case "expenseType":
             value = (
               <AppSelect
-                value={item.ledger}
+                value={normalizeExpenseType(item.expenseType) || ""}
                 onChange={(e) =>
-                  updateLineItem(index, "ledger", e.target.value)
+                  updateLineItem(index, "expenseType", normalizeExpenseType(e.target.value))
                 }
-                options={LEDGER_OPTIONS}
+                options={EXPENSE_TYPE_OPTIONS}
+                placeholder="Select type"
                 className={lineItemSelectClassName}
               />
             );
@@ -1045,7 +1223,7 @@ export const InvoiceForm = ({
                       ? "₹"
                       : invoiceCurrency,
                   ]}
-                  className="h-7 w-14 rounded border text-xs bg-white pl-2 pr-6"
+                  className="h-7 w-14 justify-between rounded border bg-white pl-2 pr-7 text-xs [&>span]:min-w-0 [&>span]:truncate"
                 />
               </div>
             );
@@ -1886,6 +2064,38 @@ export const InvoiceForm = ({
               />
             </div>
 
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <RequiredLabel>Voucher Type</RequiredLabel>
+                <AppSelect
+                  value={formData.voucherType || ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      voucherType: e.target.value,
+                    })
+                  }
+                  options={voucherTypeOptions}
+                  placeholder="Select voucher type"
+                  className="h-8 text-sm"
+                />
+              </div>
+              <div>
+                <RequiredLabel>Narration</RequiredLabel>
+                <Input
+                  value={formData.tdsNarration || ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      tdsNarration: e.target.value,
+                    })
+                  }
+                  placeholder="Narration for TDS Register"
+                  className="h-8 text-sm"
+                />
+              </div>
+            </div>
+
             <div className="flex gap-6 text-xs">
               <div className="flex items-center gap-1.5">
                 <span className="text-gray-600">Discounts:</span>
@@ -1941,7 +2151,7 @@ export const InvoiceForm = ({
                       tableHeader={lineItemHeaders}
                       tableData={formData.lineItems}
                       renderRow={renderLineItemRow}
-                      tableClassName="min-w-[890px] border-separate border-spacing-0"
+                      tableClassName="min-w-[1240px] border-separate border-spacing-0"
                       headClassName="bg-gray-50 border-b"
                       stickyHeader={false}
                       striped={false}
@@ -2154,16 +2364,6 @@ export const InvoiceForm = ({
                   inputClassName="h-6 w-16 px-1 text-xs"
                   testIdPrefix="invoice-tds"
                 />
-                <TdsBreakdownPanel
-                  preview={tdsPreview}
-                  currency={invoiceCurrency}
-                  loading={isTdsSubscriptionEnabled && tdsPreviewLoading}
-                  error={isTdsSubscriptionEnabled && tdsPreviewError}
-                  onRetry={isTdsSubscriptionEnabled ? refetchTdsPreview : undefined}
-                  fallbackAmount={fallbackTdsAmount}
-                  enabled={isTdsSubscriptionEnabled}
-                  hideUnavailableMessage
-                />
               </div>
               <span className="shrink-0 pt-1">{formatAmount(tdsAmount)}</span>
             </div>
@@ -2173,7 +2373,26 @@ export const InvoiceForm = ({
             </div>
             <div className="flex justify-between text-sm font-bold pt-1.5 border-t">
               <span>Net Payable</span>
-              <span>{formatAmount(netPayable)}</span>
+              {canEditNetPayable ? (
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={hasManualNetPayableValue ? formData.netAmount : formatNumericInputValue(netPayable)}
+                  onChange={(event) =>
+                    setFormData({
+                      ...formData,
+                      netAmount: sanitizeNumericInput(event.target.value, {
+                        allowDecimal: true,
+                      }),
+                    })
+                  }
+                  className="h-8 w-36 text-right font-bold"
+                  data-testid="invoice-net-payable-input"
+                />
+              ) : (
+                <span>{formatAmount(netPayable)}</span>
+              )}
             </div>
           </div>
         </div>

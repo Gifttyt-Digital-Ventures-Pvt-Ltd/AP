@@ -3,6 +3,7 @@ export const INVOICE_CONFIG_SECTIONS = {
   REF_NO: 'REF_NO',
   BRANCH: 'BRANCH',
   SQ_FT: 'SQ_FT',
+  NET_PAYABLE_EDIT: 'NET_PAYABLE_EDIT',
 };
 
 export const CHECKER_EDIT_DISABLED_MESSAGE =
@@ -18,6 +19,11 @@ export const DEFAULT_INVOICE_CONFIGURATION = [
     displayName: 'Ref No',
     screen: 'INVOICE',
     section: INVOICE_CONFIG_SECTIONS.REF_NO,
+  },
+  {
+    displayName: 'Edit Net Payable',
+    screen: 'INVOICE',
+    section: INVOICE_CONFIG_SECTIONS.NET_PAYABLE_EDIT,
   },
 ];
 
@@ -85,6 +91,12 @@ export const isCheckerEditEnabled = (activeInvoiceConfiguration = []) =>
 export const isRefNoEnabled = (activeInvoiceConfiguration = []) =>
   isInvoiceConfigurationEnabled(
     INVOICE_CONFIG_SECTIONS.REF_NO,
+    activeInvoiceConfiguration,
+  );
+
+export const isNetPayableEditEnabled = (activeInvoiceConfiguration = []) =>
+  isInvoiceConfigurationEnabled(
+    INVOICE_CONFIG_SECTIONS.NET_PAYABLE_EDIT,
     activeInvoiceConfiguration,
   );
 

@@ -54,6 +54,7 @@ const ViewDialog = ({
   allInvoices = [],
   canCancelLinkedInvoice = false,
   onCancelLinkedInvoice,
+  showAccountingLockBanner = true,
 }) => {
   // Normalize the raw invoice into form-data shape so checklist fields
   // like `vendorMatched` are properly resolved (raw invoice only has `vendorId`).
@@ -142,12 +143,14 @@ const ViewDialog = ({
                   </DialogTitle>
                 </DialogHeader>
 
-                <AccountingLockBanner
-                  record={selectedInvoice}
-                  objectLabel={accountingObjectLabel}
-                  objectType={accountingObjectType}
-                  objectId={selectedInvoice?.id}
-                />
+                {showAccountingLockBanner && (
+                  <AccountingLockBanner
+                    record={selectedInvoice}
+                    objectLabel={accountingObjectLabel}
+                    objectType={accountingObjectType}
+                    objectId={selectedInvoice?.id}
+                  />
+                )}
 
                 <Tabs
                   value={viewTab}

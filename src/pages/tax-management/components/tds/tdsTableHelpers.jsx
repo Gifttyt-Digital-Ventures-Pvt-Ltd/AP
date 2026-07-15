@@ -4,7 +4,7 @@ import { Badge } from '../../../../components/ui/badge';
 import { Button } from '../../../../components/ui/button';
 import { TableCell, TableRow } from '../../../../components/ui/table';
 import { cn } from '../../../../lib/utils';
-import { formatCurrency } from '../../utils/taxFormatting';
+import { formatCurrency, formatDate } from '../../utils/taxFormatting';
 
 export const TDS_SECTIONS_TABLE_HEADER = [
   { key: 'section_code', title: 'Section', cellClassName: 'font-medium' },
@@ -16,20 +16,22 @@ export const TDS_SECTIONS_TABLE_HEADER = [
 ];
 
 export const TDS_ENTRIES_TABLE_HEADER = [
-  { key: 'section_code', title: 'Section', cellClassName: 'font-medium' },
-  { key: 'invoice_number', title: 'Invoice No' },
-  { key: 'vendor_name', title: 'Vendor' },
-  { key: 'base_amount', title: 'Base Amount' },
-  { key: 'tds_rate', title: 'TDS Rate' },
-  { key: 'tds_amount', title: 'TDS Amount' },
-  { key: 'total_tds', title: 'Total TDS', cellClassName: 'font-medium' },
-  { key: 'actions', title: 'Actions' },
-  // { key: 'status', title: 'Status' },
-  // { key: 'challan_number', title: 'Challan', cellClassName: 'font-mono text-xs' },
-  // { key: 'quarter', title: 'Quarter' },
+  { key: 'sr_no', title: 'Sr. No.', cellClassName: 'w-20 text-muted-foreground' },
+  { key: 'vendor_name', title: 'Vendor', cellClassName: 'min-w-44 max-w-56' },
+  { key: 'invoice_number', title: 'Invoice No.', cellClassName: 'font-medium' },
+  { key: 'invoice_date', title: 'Invoice Date' },
+  { key: 'pan', title: 'PAN' },
+  { key: 'voucher_type', title: 'Voucher Type' },
+  { key: 'narration', title: 'Narration', cellClassName: 'min-w-56 max-w-72' },
+  { key: 'expense_type', title: 'Expense Type' },
+  { key: 'taxable_amount', title: 'Taxable Amount', cellClassName: 'text-right' },
+  { key: 'tds_section', title: 'TDS Section' },
+  { key: 'tds_rate', title: 'TDS Rate (%)', cellClassName: 'text-right' },
+  { key: 'tds_amount', title: 'TDS Amount', cellClassName: 'text-right font-medium' },
+  { key: 'actions', title: 'Action', cellClassName: 'text-right' },
 ];
 
-const getTdsEntryInvoice = (entry = {}) =>
+export const getTdsEntryInvoice = (entry = {}) =>
   entry.invoice_details ?? entry.invoiceDetails ?? {};
 
 const getTdsEntryCurrency = (entry = {}) =>
@@ -93,6 +95,61 @@ const getTdsEntryVendor = (entry = {}) => {
   );
 };
 
+const getNestedValue = (source = {}, keys = []) => {
+  for (const key of keys) {
+    const value = source?.[key];
+    if (value !== undefined && value !== null && value !== '') return value;
+  }
+  return undefined;
+};
+
+export const getTdsEntryFieldValue = (entry = {}, field, rowIndex = 0, options = {}) => {
+  const invoice = getTdsEntryInvoice(entry);
+  const section = entry.section ?? {};
+
+  switch (field) {
+    case 'sr_no':
+      return (Number(options.offset) || 0) + rowIndex + 1;
+    case 'vendor_name':
+      return getTdsEntryVendor(entry);
+    case 'invoice_number':
+      return getTdsEntryInvoiceNumber(entry);
+    case 'invoice_date':
+      return getNestedValue(entry, ['invoiceDate', 'invoice_date']) ??
+        getNestedValue(invoice, ['invoiceDate', 'invoice_date']);
+    case 'pan':
+      return getNestedValue(entry, ['pan', 'panNo', 'pan_no', 'vendorPan', 'vendor_pan']) ??
+        getNestedValue(invoice, ['pan', 'panNo', 'pan_no', 'vendorPan', 'vendor_pan']);
+    case 'voucher_type':
+      return getNestedValue(entry, ['voucherType', 'voucher_type']);
+    case 'narration':
+      return getNestedValue(entry, ['narration', 'description', 'remarks', 'memo']);
+    case 'expense_type':
+      return getNestedValue(entry, ['expenseType', 'expense_type', 'category', 'expenseCategory']);
+    case 'taxable_amount':
+      return getNestedValue(entry, ['taxableAmount', 'taxable_amount', 'baseAmount', 'base_amount']);
+    case 'tds_section':
+      return getNestedValue(entry, ['tdsSection', 'tds_section', 'sectionCode', 'section_code']) ??
+        getNestedValue(section, ['sectionCode', 'section_code']) ??
+        getTdsSectionLabel(entry);
+    case 'tds_rate':
+      return getNestedValue(entry, ['tdsRate', 'tds_rate']);
+    case 'tds_amount':
+      return getNestedValue(entry, ['tdsAmount', 'tds_amount', 'totalTds', 'total_tds']);
+    default:
+      return entry?.[field];
+  }
+};
+
+const TruncatedCell = ({ value, className = '' }) => {
+  const displayValue = value === undefined || value === null || value === '' ? '-' : String(value);
+  return (
+    <span className={cn('block truncate', className)} title={displayValue}>
+      {displayValue}
+    </span>
+  );
+};
+
 export const renderTdsSectionRow = (section, rowIndex, headers) => (
   <TableRow
     key={section.id ?? rowIndex}
@@ -141,26 +198,35 @@ export const renderTdsEntryRow = (entry, rowIndex, headers, options = {}) => (
       let value;
 
       switch (header.key) {
-        case 'section_code':
-          value = getTdsSectionLabel(entry);
-          break;
-        case 'invoice_number':
-          value = getTdsEntryInvoiceNumber(entry);
+        case 'sr_no':
+          value = getTdsEntryFieldValue(entry, 'sr_no', rowIndex, options);
           break;
         case 'vendor_name':
-          value = getTdsEntryVendor(entry);
+          value = <TruncatedCell value={getTdsEntryFieldValue(entry, header.key)} />;
           break;
-        case 'base_amount':
-          value = formatTdsEntryCurrency(entry, entry.base_amount ?? entry.baseAmount);
+        case 'invoice_number':
+        case 'pan':
+        case 'voucher_type':
+        case 'expense_type':
+        case 'tds_section':
+          value = getTdsEntryFieldValue(entry, header.key) ?? '-';
           break;
-        case 'tds_rate':
-          value = `${Number(entry.tds_rate ?? entry.tdsRate ?? 0)}%`;
+        case 'invoice_date':
+          value = formatDate(getTdsEntryFieldValue(entry, header.key));
           break;
+        case 'narration':
+          value = <TruncatedCell value={getTdsEntryFieldValue(entry, header.key)} />;
+          break;
+        case 'taxable_amount':
+          value = formatTdsEntryCurrency(entry, getTdsEntryFieldValue(entry, header.key));
+          break;
+        case 'tds_rate': {
+          const rate = getTdsEntryFieldValue(entry, header.key);
+          value = rate === undefined || rate === null || rate === '' ? '-' : `${Number(rate)}%`;
+          break;
+        }
         case 'tds_amount':
-          value = formatTdsEntryCurrency(entry, entry.tds_amount ?? entry.tdsAmount);
-          break;
-        case 'total_tds':
-          value = formatTdsEntryCurrency(entry, entry.total_tds ?? entry.totalTds);
+          value = formatTdsEntryCurrency(entry, getTdsEntryFieldValue(entry, header.key));
           break;
         case 'actions': {
           const invoice = getTdsEntryInvoice(entry);
@@ -171,8 +237,8 @@ export const renderTdsEntryRow = (entry, rowIndex, headers, options = {}) => (
               onClick={() => options.onViewInvoice?.(invoice, entry)}
               disabled={!invoice?.id}
               data-testid={`view-tds-invoice-${invoice?.id ?? getTdsEntryKey(entry, rowIndex)}`}
-              title={invoice?.id ? 'View Invoice' : 'Invoice details unavailable'}
-              className="h-8 w-8 p-0"
+              title={invoice?.id ? 'View invoice details' : 'Invoice details unavailable'}
+              className="ml-auto h-8 w-8 p-0"
             >
               <Eye className="h-4 w-4" />
             </Button>

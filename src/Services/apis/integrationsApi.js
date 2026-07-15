@@ -186,10 +186,15 @@ export const integrationsApi = serviceApi.injectEndpoints({
       invalidatesTags: ["Integrations"],
     }),
     triggerTallySync: builder.mutation({
-      query: ({ connectionId, object = "ALL", direction = "PULL" } = {}) => ({
+      query: ({
+        connectionId,
+        object = "ALL",
+        direction = "PULL",
+        ids,
+      } = {}) => ({
         url: `${TALLY_BASE}/connections/${connectionId}/sync`,
         method: "POST",
-        body: withParams({ object, direction }),
+        body: withParams({ object, direction, ids }),
       }),
       invalidatesTags: ["Integrations"],
     }),

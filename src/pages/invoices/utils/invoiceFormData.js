@@ -175,6 +175,12 @@ export const buildInvoiceEditFormData = (
       "",
     source: normalizeInvoiceSource(invoice.source),
     sourceEmail: invoice.sourceEmail || invoice.source_email || "",
+    voucherType:
+      invoice.voucherType ||
+      invoice.voucher_type ||
+      invoice.accountingVoucherType ||
+      invoice.accounting_voucher_type ||
+      "",
     lineItemsExpanded: resolveLineItemsExpanded(invoice),
     lineItems:
       invoiceLineItems.length > 0
@@ -186,6 +192,11 @@ export const buildInvoiceEditFormData = (
           )
         : [createDefaultLineItem(editCurrency)],
     description: invoice.memo || invoice.description || "",
+    tdsNarration:
+      invoice.tdsNarration ||
+      invoice.tds_narration ||
+      invoice.narration ||
+      "",
     tds:
       invoice.tds ||
       buildTdsValue({
@@ -203,6 +214,12 @@ export const buildInvoiceEditFormData = (
       invoice.netAmount ??
       invoice.net_amount ??
       0,
+    netAmount:
+      invoice.netAmount ??
+      invoice.net_amount ??
+      invoice.netPayable ??
+      invoice.net_payable ??
+      "",
     currency: editCurrency,
     roundOff:
       invoice.roundOff ??
