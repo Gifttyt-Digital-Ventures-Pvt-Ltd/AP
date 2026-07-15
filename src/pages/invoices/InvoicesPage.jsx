@@ -169,6 +169,7 @@ import {
 import {
   isCheckerEditEnabled as isCheckerEditEnabledForCorporate,
   isCheckerEditForbiddenError,
+  isNetPayableEditEnabled as isNetPayableEditEnabledForCorporate,
   isRefNoEnabled as isRefNoEnabledForCorporate,
 } from "../../utils/invoiceConfiguration";
 import { OrgBranchCell } from "../../components/common/BranchTableCells";
@@ -633,6 +634,13 @@ const InvoicesPage = () => {
   const isRefNoEnabled = useMemo(
     () =>
       isRefNoEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const isNetPayableEditEnabled = useMemo(
+    () =>
+      isNetPayableEditEnabledForCorporate(
         corporateScreens?.activeInvoiceConfiguration ?? [],
       ),
     [corporateScreens?.activeInvoiceConfiguration],
@@ -2382,6 +2390,7 @@ const InvoicesPage = () => {
             : createInvoiceLoading || invoiceMatchingLoading
         }
         canAddVendor={canAddVendors}
+        canEditNetPayable={isNetPayableEditEnabled}
         canSubmit={
           isEdit
             ? selectedInvoice &&

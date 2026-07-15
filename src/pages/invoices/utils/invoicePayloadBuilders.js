@@ -83,7 +83,16 @@ export const calculateInvoiceDataTotals = (
 
 export const mapBulkLineItemToEditForm = (line = {}, currency = DEFAULT_CURRENCY) => ({
   description: line.description || "",
-  ledger: line.ledger || "Cloud Services",
+  ledger: line.ledger || line.ledgerName || line.ledger_name || "",
+  ledgerId: line.ledgerId || line.ledger_id || "",
+  accountGroupId:
+    line.accountGroupId || line.account_group_id || line.groupId || line.group_id || "",
+  accountGroupName:
+    line.accountGroupName || line.account_group_name || line.groupName || line.group_name || "",
+  groupId: line.groupId || line.group_id || line.accountGroupId || line.account_group_id || "",
+  groupName:
+    line.groupName || line.group_name || line.accountGroupName || line.account_group_name || "",
+  expenseType: line.expenseType || line.expense_type || "",
   quantity: Number(line.quantity || 1),
   unitRate: Number(line.unitRate ?? line.unitPrice ?? 0),
   amount: Number(
@@ -95,7 +104,7 @@ export const mapBulkLineItemToEditForm = (line = {}, currency = DEFAULT_CURRENCY
       line.amount ??
       Number(line.quantity || 1) * Number(line.unitRate ?? line.unitPrice ?? 0),
   ),
-  hsnSac: line.hsnSac || "",
+  hsnSac: line.hsnSac || line.hsn_sac || "",
   tax: line.tax || (isInrInvoiceCurrency(currency) ? DEFAULT_INR_TAX : ""),
   taxName: line.taxName || "",
   taxRate: line.taxRate ?? "",
@@ -113,11 +122,21 @@ export const mapBulkLineItemToPayload = (line = {}, currency = DEFAULT_CURRENCY)
   unitRate: parseNumericInput(line.unitRate, 0),
   unitPrice: parseNumericInput(line.unitRate, 0),
   amount: parseNumericInput(line.amount ?? line.lineTotal, 0),
-  hsnSac: line.hsnSac || "",
+  hsnSac: line.hsnSac || line.hsn_sac || "",
   tax: line.tax || (isInrInvoiceCurrency(currency) ? DEFAULT_INR_TAX : ""),
   taxName: line.taxName || "",
   taxRate: line.taxRate ?? "",
-  ledger: line.ledger || "Cloud Services",
+  ledger: line.ledger || line.ledgerName || line.ledger_name || "",
+  ledgerName: line.ledger || line.ledgerName || line.ledger_name || "",
+  ledgerId: line.ledgerId || line.ledger_id || "",
+  accountGroupId:
+    line.accountGroupId || line.account_group_id || line.groupId || line.group_id || "",
+  accountGroupName:
+    line.accountGroupName || line.account_group_name || line.groupName || line.group_name || "",
+  groupId: line.groupId || line.group_id || line.accountGroupId || line.account_group_id || "",
+  groupName:
+    line.groupName || line.group_name || line.accountGroupName || line.account_group_name || "",
+  expenseType: line.expenseType || line.expense_type || "",
   discount: parseNumericInput(line.discount, 0),
   discountType: line.discountType || "%",
   eligibleForItc: line.eligibleForItc ?? true,
@@ -264,6 +283,12 @@ export const initializeInvoiceFormData = (
       "",
     source: "Upload",
     sourceEmail: "",
+    voucherType:
+      extractedData?.voucherType ||
+      extractedData?.voucher_type ||
+      extractedData?.accountingVoucherType ||
+      extractedData?.accounting_voucher_type ||
+      "",
     lineItemsExpanded: true,
     lineItems: extractedData?.lineItems?.length > 0
       ? extractedData.lineItems.map((item) =>
@@ -274,6 +299,11 @@ export const initializeInvoiceFormData = (
         )
       : [createDefaultLineItem(invoiceCurrency)],
     description: extractedData?.description || notesText || "",
+    tdsNarration:
+      extractedData?.tdsNarration ||
+      extractedData?.tds_narration ||
+      extractedData?.narration ||
+      "",
     tds: "",
     amount:
       extractedData?.totalAmount ??

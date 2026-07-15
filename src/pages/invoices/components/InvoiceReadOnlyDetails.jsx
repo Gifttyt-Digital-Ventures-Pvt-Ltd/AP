@@ -32,7 +32,7 @@ import {
 } from "../constants/proformaInvoice";
 import { resolveLinkedTaxInvoiceRecords } from "../utils/proformaInvoiceListing";
 import InvoiceLinkedTaxInvoicesPanel from "./InvoiceLinkedTaxInvoicesPanel";
-import TdsBreakdownPanel, {
+import {
   getTdsPreviewAmount,
   getTdsPreviewNetPayable,
 } from "./TdsBreakdownPanel";
@@ -509,15 +509,6 @@ const InvoiceReadOnlyDetails = ({
           <span>TDS{tdsLabel ? ` (${tdsLabel})` : ""}</span>
           <span className=" ">{formatAmount(tdsAmount)}</span>
         </div>
-        <TdsBreakdownPanel
-          preview={tdsPreview}
-          currency={invoiceCurrency}
-          loading={isTdsSubscriptionEnabled && tdsPreviewLoading}
-          error={isTdsSubscriptionEnabled && tdsPreviewError}
-          onRetry={isTdsSubscriptionEnabled ? refetchTdsPreview : undefined}
-          fallbackAmount={fallbackTdsAmount}
-          enabled={isTdsSubscriptionEnabled}
-        />
         <div className="flex justify-between text-sm pt-1.5 border-t">
           <span>Total</span>
           <span className=" ">{formatAmount(totals.total)}</span>

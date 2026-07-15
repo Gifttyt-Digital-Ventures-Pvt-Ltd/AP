@@ -5,6 +5,7 @@ import {
 } from "../../pages/invoices/constants";
 import { normalizeMsmePaymentDue } from "../../pages/invoices/utils/msmePaymentDue";
 import { normalizeInvoiceOverdueFields } from "../../pages/invoices/utils/invoiceDueDate";
+import { normalizeExpenseType } from "../../pages/invoices/utils/invoiceAccountingFields";
 
 const toLocalDateTimeString = (value) => {
   if (!value) return value;
@@ -131,7 +132,37 @@ export const normalizeInvoiceLineItem = (item = {}) => {
     tax: item.tax ?? inferTaxLabelFromGstRate(gstRate),
     taxName: item.taxName ?? item.tax_name ?? "",
     taxRate: item.taxRate ?? item.tax_rate ?? "",
-    ledger: item.ledger ?? "",
+    ledger:
+      item.ledger ??
+      item.ledgerName ??
+      item.ledger_name ??
+      "",
+    ledgerId: item.ledgerId ?? item.ledger_id ?? item.accountId ?? item.account_id ?? "",
+    accountGroupId:
+      item.accountGroupId ??
+      item.account_group_id ??
+      item.groupId ??
+      item.group_id ??
+      "",
+    accountGroupName:
+      item.accountGroupName ??
+      item.account_group_name ??
+      item.groupName ??
+      item.group_name ??
+      "",
+    groupId:
+      item.groupId ??
+      item.group_id ??
+      item.accountGroupId ??
+      item.account_group_id ??
+      "",
+    groupName:
+      item.groupName ??
+      item.group_name ??
+      item.accountGroupName ??
+      item.account_group_name ??
+      "",
+    expenseType: normalizeExpenseType(item.expenseType ?? item.expense_type ?? ""),
     discount: Number(item.discount ?? 0) || 0,
     discountType: item.discountType ?? item.discount_type ?? "%",
     eligibleForItc: item.eligibleForItc ?? item.eligible_for_itc ?? true,
@@ -171,6 +202,16 @@ const toInvoiceLineItemApiPayload = (item = {}) => {
   if (gstRate !== undefined) payload.gstRate = gstRate;
   if (itemCode) payload.itemCode = itemCode;
   if (uom) payload.uom = uom;
+  if (normalized.ledger) {
+    payload.ledger = normalized.ledger;
+    payload.ledgerName = normalized.ledger;
+  }
+  if (normalized.ledgerId) payload.ledgerId = normalized.ledgerId;
+  if (normalized.accountGroupId) payload.accountGroupId = normalized.accountGroupId;
+  if (normalized.accountGroupName) payload.accountGroupName = normalized.accountGroupName;
+  if (normalized.groupId) payload.groupId = normalized.groupId;
+  if (normalized.groupName) payload.groupName = normalized.groupName;
+  if (normalized.expenseType) payload.expenseType = normalized.expenseType;
 
   return payload;
 };
@@ -235,6 +276,12 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
     invoiceTaxRate: pickInvoiceField(invoice, "invoiceTaxRate", "invoice_tax_rate"),
     source: normalizeInvoiceSource(invoice.source),
     sourceEmail: pickInvoiceField(invoice, "sourceEmail", "source_email"),
+    voucherType:
+      pickInvoiceField(invoice, "voucherType", "voucher_type") ??
+      pickInvoiceField(invoice, "accountingVoucherType", "accounting_voucher_type"),
+    tdsNarration:
+      pickInvoiceField(invoice, "tdsNarration", "tds_narration") ??
+      pickInvoiceField(invoice, "narration", "narration"),
     fileId: pickInvoiceField(invoice, "fileId", "file_id"),
     fileHash: pickInvoiceField(invoice, "fileHash", "file_hash"),
     originalFileName:
@@ -408,6 +455,14 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
         ? null
         : Number(tdsAmount)
       : Number(pickInvoiceField(invoice, "tdsAmount", "tds_amount", 0));
+  const explicitNetAmount = pickInvoiceField(invoice, "netAmount", "net_amount");
+  const explicitNetPayable = pickInvoiceField(invoice, "netPayable", "net_payable");
+  const resolvedNetAmount =
+    explicitNetAmount !== undefined && explicitNetAmount !== null && explicitNetAmount !== ""
+      ? Number(explicitNetAmount)
+      : explicitNetPayable !== undefined && explicitNetPayable !== null && explicitNetPayable !== ""
+        ? Number(explicitNetPayable)
+        : Math.max(totalAmount - (Number(resolvedTdsAmount) || 0), 0);
   const parsedTdsSelection = resolveTdsSelection(
     pickInvoiceField(invoice, "tds", "tds", ""),
   );
@@ -448,11 +503,20 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
     dueDate: dueDate || null,
     totalAmount,
     amount: totalAmount,
+    netAmount: resolvedNetAmount,
+    netPayable: resolvedNetAmount,
     gstAmount,
     tdsAmount: resolvedTdsAmount,
     tdsSectionId: tdsSelection.tdsSectionId,
     tdsSectionCode: tdsSelection.tdsSectionCode,
     tdsRate: tdsSelection.tdsRate,
+    voucherType: pickInvoiceField(invoice, "voucherType", "voucher_type", ""),
+    tdsNarration:
+      pickInvoiceField(invoice, "tdsNarration", "tds_narration") ??
+      pickInvoiceField(invoice, "narration", "narration", ""),
+    narration:
+      pickInvoiceField(invoice, "tdsNarration", "tds_narration") ??
+      pickInvoiceField(invoice, "narration", "narration", ""),
     currency:
       normalizeCurrencyCode(
         pickInvoiceField(invoice, "currency", "currency_code", ""),

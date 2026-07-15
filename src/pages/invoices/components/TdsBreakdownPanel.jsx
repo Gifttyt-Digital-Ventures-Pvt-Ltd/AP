@@ -24,6 +24,8 @@ const TdsBreakdownPanel = ({
   enabled = true,
   hideUnavailableMessage = false,
 }) => {
+  return null;
+
   const invoiceCurrency = normalizeCurrencyCode(currency);
   const formatAmount = (value) => formatCurrency(Number(value) || 0, invoiceCurrency);
 

@@ -38,12 +38,17 @@ import {
   useRetryAccountingReadyItemMutation,
   useSyncAccountingReadyItemMutation,
 } from "../../../Services/apis/accountingApi";
+import {
+  useGetTallyConnectionsQuery,
+  useTriggerTallySyncMutation,
+} from "../../../Services/apis/integrationsApi";
 import AccountingQueuePreviewDialog from "./AccountingQueuePreviewDialog";
 import {
   ACC_STATUS,
   ACCOUNTING_QUEUE_STAGE,
   ACCOUNTING_QUEUE_STAGE_LABELS,
   ERP_STATUS,
+  OBJECT_TYPE,
   QUEUE_TAB,
   TAB_TO_OBJECT_TYPE,
 } from "../constants";
@@ -55,13 +60,22 @@ import {
   statusBadgeClass,
 } from "../utils/coaUtils";
 
+const BILL_QUEUE_TAB = "Invoice/PI";
+const BILL_OBJECT_TYPES = ["BILLS"];
+
 const QUEUE_TABS = [
-  { key: QUEUE_TAB.PO, icon: ShoppingCart },
-  { key: QUEUE_TAB.GRN, icon: Package },
-  { key: QUEUE_TAB.INVOICE, icon: FileText },
-  { key: QUEUE_TAB.PI, icon: FileText },
-  { key: QUEUE_TAB.VENDOR, icon: FileText },
+  { key: QUEUE_TAB.PO, icon: ShoppingCart, objectTypes: [OBJECT_TYPE.PO] },
+  { key: QUEUE_TAB.GRN, icon: Package, objectTypes: [OBJECT_TYPE.GRN] },
+  { key: BILL_QUEUE_TAB, icon: FileText, objectTypes: BILL_OBJECT_TYPES },
+  { key: QUEUE_TAB.VENDOR, icon: FileText, objectTypes: [OBJECT_TYPE.VENDOR] },
 ];
+
+const getObjectTypesForTab = (tab) =>
+  QUEUE_TABS.find((item) => item.key === tab)?.objectTypes || [
+    TAB_TO_OBJECT_TYPE[tab],
+  ];
+
+const getPrimaryObjectTypeForTab = (tab) => getObjectTypesForTab(tab)[0];
 
 const QUEUE_STAGES = [
   ACCOUNTING_QUEUE_STAGE.NEEDS_APPROVAL,
@@ -69,6 +83,51 @@ const QUEUE_STAGES = [
 ];
 
 const PAGE_SIZE = 25;
+const SHOW_ROW_SYNC_ACTION = true;
+
+const toArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.data)) return value.data;
+  if (Array.isArray(value?.connections)) return value.connections;
+  if (Array.isArray(value?.data?.connections)) return value.data.connections;
+  return [];
+};
+
+const getConnectionId = (connection = {}) =>
+  connection.connectionId || connection.connection_id || connection.id || "";
+
+const getConnectionStatus = (connection = {}) =>
+  String(
+    connection.status ||
+      connection.connectionStatus ||
+      connection.connection_status ||
+      "",
+  ).toUpperCase();
+
+const isConnectedTallyConnection = (connection = {}) =>
+  getConnectionId(connection) && getConnectionStatus(connection) === "CONNECTED";
+
+const ERP_PUSH_OBJECT_TYPE = {
+  PO: "PURCHASE_ORDERS",
+  GRN: "GOODS_RECEIPTS_NOTES",
+  BILLS: "BILLS",
+  INVOICE: "BILLS",
+  PI: "BILLS",
+  VENDOR: "VENDORS",
+};
+
+const ERP_PUSH_OBJECT_LABEL = {
+  PURCHASE_ORDERS: "Purchase Orders",
+  GOODS_RECEIPTS_NOTES: "Goods Receipts",
+  BILLS: "Bills",
+  VENDORS: "Vendors",
+};
+
+const getErpPushObjectType = (objectType) =>
+  ERP_PUSH_OBJECT_TYPE[objectType] || objectType;
+
+const getErpPushObjectLabel = (objectType) =>
+  ERP_PUSH_OBJECT_LABEL[getErpPushObjectType(objectType)] || objectType;
 
 const QUEUE_TABLE_HEADER = [
   { key: "select", title: "", headerClassName: "w-10", cellClassName: "w-10" },
@@ -212,15 +271,20 @@ const ReadyForAccountingQueue = () => {
   const [showLogs, setShowLogs] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewDetail, setPreviewDetail] = useState(null);
-  const activeObjectType = TAB_TO_OBJECT_TYPE[activeTab];
+  const activeObjectType = getPrimaryObjectTypeForTab(activeTab);
 
-  const { data, isLoading, isFetching, isError, error, refetch } =
-    useGetAccountingReadyQueueQuery({
+  const primaryQueueQuery = useGetAccountingReadyQueueQuery({
       objectType: activeObjectType,
       stage: activeStage,
       limit: PAGE_SIZE,
       offset: pageOffset,
     });
+  const data = primaryQueueQuery.data;
+  const isLoading = primaryQueueQuery.isLoading;
+  const isFetching = primaryQueueQuery.isFetching;
+  const isError = primaryQueueQuery.isError;
+  const error = primaryQueueQuery.error;
+  const refetch = primaryQueueQuery.refetch;
   const {
     data: logsData,
     isLoading: logsLoading,
@@ -229,6 +293,9 @@ const ReadyForAccountingQueue = () => {
     { objectType: activeObjectType, limit: PAGE_SIZE, offset: 0 },
     { skip: !showLogs },
   );
+  const { data: tallyConnectionsData } = useGetTallyConnectionsQuery(undefined, {
+    skip: activeStage !== ACCOUNTING_QUEUE_STAGE.ACCOUNTING_READY,
+  });
 
   const [markReady, { isLoading: markingReady }] =
     useMarkAccountingReadyItemMutation();
@@ -246,6 +313,8 @@ const ReadyForAccountingQueue = () => {
     useDownloadAccountingSyncLogsMutation();
   const [loadQueueItemDetail, { isFetching: previewFetching }] =
     useLazyGetAccountingQueueItemDetailQuery();
+  const [triggerTallySync, { isLoading: tallySyncing }] =
+    useTriggerTallySyncMutation();
 
   const allItems = data?.items || [];
   const docs = allItems;
@@ -257,12 +326,31 @@ const ReadyForAccountingQueue = () => {
   const totalPages = total > 0 ? Math.ceil(total / limit) : 1;
   const hasPreviousPage = offset > 0;
   const hasNextPage = Boolean(data?.hasMore) || offset + docs.length < total;
+  const activeTallyConnection = useMemo(
+    () => toArray(tallyConnectionsData).find(isConnectedTallyConnection),
+    [tallyConnectionsData],
+  );
+  const activeTallyConnectionId = getConnectionId(activeTallyConnection);
+  const hasTallyConnection = Boolean(activeTallyConnectionId);
+  const activeErpPushObjectLabel = getErpPushObjectLabel(activeObjectType);
+  const activePushButtonLabel = activeTab === BILL_QUEUE_TAB
+    ? BILL_QUEUE_TAB
+    : activeErpPushObjectLabel;
 
   const getDocumentCount = (tab) => {
-    const objectType = TAB_TO_OBJECT_TYPE[tab];
+    const objectTypes = getObjectTypesForTab(tab);
     const counts = data?.documentCounts || {};
-    if (counts[objectType] !== undefined)
-      return Number(counts[objectType]) || 0;
+    const objectTypeCount = objectTypes.reduce(
+      (sum, objectType) => sum + (Number(counts[objectType]) || 0),
+      0,
+    );
+    if (objectTypeCount > 0) return objectTypeCount;
+    if (tab === BILL_QUEUE_TAB) {
+      const splitBillCount =
+        (Number(counts[OBJECT_TYPE.INVOICE]) || 0) +
+        (Number(counts[OBJECT_TYPE.PI]) || 0);
+      if (splitBillCount > 0) return splitBillCount;
+    }
     if (counts[tab] !== undefined) return Number(counts[tab]) || 0;
     return tab === activeTab ? Number(data?.total ?? docs.length) || 0 : 0;
   };
@@ -299,6 +387,7 @@ const ReadyForAccountingQueue = () => {
     bulkMarkingReady ||
     syncing ||
     bulkSyncing ||
+    tallySyncing ||
     retrying ||
     directUnlocking;
   const canMarkReadyAction = canPerformAction("accounting.ready.mark");
@@ -307,6 +396,7 @@ const ReadyForAccountingQueue = () => {
     activeStage === ACCOUNTING_QUEUE_STAGE.NEEDS_APPROVAL
       ? canMarkReadyAction
       : canSyncAction;
+  const pushInProgress = bulkSyncing || tallySyncing;
 
   const toggleOne = (id) => {
     setSelectedIds((prev) => {
@@ -404,6 +494,25 @@ const ReadyForAccountingQueue = () => {
       toast.info("Already synced — no changes since last successful sync");
       return;
     }
+    if (hasTallyConnection) {
+      if (!item.objectId) {
+        toast.error("This row is missing an entity ID for Tally push");
+        return;
+      }
+      try {
+        const result = await triggerTallySync({
+          connectionId: activeTallyConnectionId,
+          object: getErpPushObjectType(item.objectType || activeObjectType),
+          direction: "PUSH",
+          ids: [item.objectId],
+        }).unwrap();
+        toast.success(result?.message || "Selected item queued for Tally push");
+        await refreshAfterAction({ clearSelection: false, refreshLogs: true });
+      } catch (err) {
+        toast.error(getAccountingErrorMessage(err, "Tally push failed"));
+      }
+      return;
+    }
     try {
       const result = await syncItem({ id: item.id }).unwrap();
       toast.success(result?.message || "Synced to ERP successfully");
@@ -426,6 +535,35 @@ const ReadyForAccountingQueue = () => {
 
   const handleBulkPush = async () => {
     if (!guardAction("accounting.ready.sync")) return;
+    const erpPushObjectType = getErpPushObjectType(activeObjectType);
+    if (hasTallyConnection) {
+      const selectedEntityIds = selectedPushable
+        .map((item) => item.objectId)
+        .filter(Boolean);
+      if (selectedPushable.length > 0 && selectedEntityIds.length === 0) {
+        toast.error("Selected rows are missing entity IDs for Tally push");
+        return;
+      }
+      try {
+        const result = await triggerTallySync({
+          connectionId: activeTallyConnectionId,
+          object: erpPushObjectType,
+          direction: "PUSH",
+          ids: selectedEntityIds.length > 0 ? selectedEntityIds : undefined,
+        }).unwrap();
+        toast.success(
+          result?.message ||
+            (selectedEntityIds.length > 0
+              ? `Queued ${selectedEntityIds.length} selected item(s) for Tally push`
+              : `${erpPushObjectType} push to Tally queued`),
+        );
+        await refreshAfterAction({ clearSelection: false, refreshLogs: true });
+      } catch (err) {
+        toast.error(getAccountingErrorMessage(err, "Tally push failed"));
+      }
+      return;
+    }
+
     const ids = selectedPushable.map((item) => item.id);
     if (ids.length === 0) {
       toast.info("Select at least one Ready or Failed item to push");
@@ -556,7 +694,7 @@ const ReadyForAccountingQueue = () => {
             ) : null}
           </>
         ) : null}
-        {canPush && canSyncAction ? (
+        {SHOW_ROW_SYNC_ACTION && canPush && canSyncAction ? (
           <Button
             size="sm"
             variant="outline"
@@ -705,24 +843,31 @@ const ReadyForAccountingQueue = () => {
               </Button>
             ) : null}
 
-            {selectedIds.size > 0 &&
-            activeStage === ACCOUNTING_QUEUE_STAGE.ACCOUNTING_READY &&
+            {activeStage === ACCOUNTING_QUEUE_STAGE.ACCOUNTING_READY &&
             canSyncAction ? (
               <Button
                 size="sm"
-                disabled={busy || selectedPushable.length === 0}
+                disabled={busy}
                 onClick={handleBulkPush}
               >
-                {bulkSyncing ? (
+                {pushInProgress ? (
                   <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <Zap className="mr-1.5 h-3.5 w-3.5" />
                 )}
-                {bulkSyncing
+                {pushInProgress
                   ? "Pushing..."
-                  : selectedPushable.length > 1
+                  : hasTallyConnection
+                    ? selectedPushable.length > 1
+                      ? `Push ${selectedPushable.length} ${activePushButtonLabel} to ERP`
+                      : selectedPushable.length === 1
+                        ? `Push selected ${activePushButtonLabel} to ERP`
+                        : `Push ${activePushButtonLabel} to ERP`
+                    : selectedPushable.length > 1
                     ? `Push ${selectedPushable.length} to ERP`
-                    : "Push selected to ERP"}
+                    : selectedPushable.length === 1
+                      ? "Push selected to ERP"
+                      : "Push to ERP"}
               </Button>
             ) : null}
           </div>

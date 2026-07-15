@@ -4,6 +4,7 @@ import {
   normalizeLedgerDetailResponse,
   normalizeReadyQueueResponse,
 } from "../../pages/accounting/utils/coaUtils";
+import { normalizeVoucherTypeOptions } from "../../pages/invoices/utils/invoiceAccountingFields";
 
 const ACCOUNTING_BASE = "/accounting";
 
@@ -35,6 +36,11 @@ export const accountingApi = serviceApi.injectEndpoints({
       }),
       transformResponse: (response) => normalizeLedgerDetailResponse(response),
       providesTags: (_result, _error, ledgerId) => [{ type: "Accounting", id: ledgerId }],
+    }),
+    getAccountingVoucherTypes: builder.query({
+      query: () => ({ url: `${ACCOUNTING_BASE}/voucher-types`, method: "GET" }),
+      transformResponse: (response) => normalizeVoucherTypeOptions(response),
+      providesTags: [{ type: "Accounting", id: "VOUCHER_TYPES" }],
     }),
     getAccountingReadyQueue: builder.query({
       query: (params = {}) => ({
@@ -148,6 +154,7 @@ export const {
   useSyncCoaMutation,
   useGetLedgerQuery,
   useLazyGetLedgerQuery,
+  useGetAccountingVoucherTypesQuery,
   useGetAccountingReadyQueueQuery,
   useLazyGetAccountingQueueItemDetailQuery,
   useMarkAccountingReadyItemMutation,

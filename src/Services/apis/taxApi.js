@@ -45,6 +45,36 @@ const normalizeTdsEntriesExportResponse = (response) => {
   };
 };
 
+const normalizeTdsEntriesResponse = (response) => {
+  const payload = response?.data ?? response;
+  const items = Array.isArray(payload)
+    ? payload
+    : payload?.items ??
+      payload?.entries ??
+      payload?.data ??
+      [];
+  const list = Array.isArray(items) ? items : [];
+
+  return Object.assign(list, {
+    total: Number(payload?.total ?? payload?.totalCount ?? payload?.count ?? list.length),
+    limit: Number(payload?.limit ?? list.length),
+    offset: Number(payload?.offset ?? 0),
+    fromDate: payload?.fromDate ?? payload?.from_date ?? null,
+    toDate: payload?.toDate ?? payload?.to_date ?? null,
+    hasMore: Boolean(payload?.hasMore ?? payload?.has_more),
+  });
+};
+
+const compactQueryParams = (params = {}) =>
+  Object.fromEntries(
+    Object.entries(params).filter(([, value]) => value !== undefined && value !== null && value !== ""),
+  );
+
+const buildQueryUrl = (url, params = {}) => {
+  const query = new URLSearchParams(compactQueryParams(params)).toString();
+  return query ? `${url}?${query}` : url;
+};
+
 export const taxApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getOrganisationGstCredentials: builder.query({
@@ -242,19 +272,27 @@ export const taxApi = serviceApi.injectEndpoints({
       providesTags: ["Tax"],
     }),
     getTdsEntries: builder.query({
-      query: () => ({ url: "/tax/tds/entries", method: "GET" }),
-      transformResponse: (response) => extractListResponse(response, ['entries']),
+      query: (params = {}) => ({
+        url: buildQueryUrl("/tax/tds/entries", params),
+        method: "GET",
+      }),
+      transformResponse: normalizeTdsEntriesResponse,
       providesTags: ["Tax"],
     }),
     getTdsEntriesExport: builder.query({
       query: (params = {}) => ({
-        url: "/tax/tds/entries/export",
-        method: "GET",
-        params: {
+        url: buildQueryUrl("/tax/tds/entries/export", {
+          rangeType: params.rangeType,
+          fromDate: params.fromDate,
+          toDate: params.toDate,
+          search: params.search,
+          sortBy: params.sortBy,
+          sortDirection: params.sortDirection,
           format: params.format ?? "xlsx",
           includeInvoiceDetails:
             params.includeInvoiceDetails ?? params.include_invoice_details ?? true,
-        },
+        }),
+        method: "GET",
       }),
       transformResponse: normalizeTdsEntriesExportResponse,
     }),

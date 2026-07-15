@@ -1,5 +1,6 @@
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../../utils/currency";
 import { parseNumericInput } from "./numericInput";
+import { normalizeExpenseType } from "./invoiceAccountingFields";
 
 export const DEFAULT_INR_TAX = "CGST + SGST 18%";
 export const LINE_ITEM_LEVEL = "At Line Item Level";
@@ -89,7 +90,13 @@ export const applyInrLineItemTax = (item, tax = DEFAULT_INR_TAX) => ({
 export const createDefaultLineItem = (currency = DEFAULT_CURRENCY) => {
   const base = {
     description: "",
-    ledger: "Cloud Services",
+    ledger: "",
+    ledgerId: "",
+    accountGroupId: "",
+    accountGroupName: "",
+    groupId: "",
+    groupName: "",
+    expenseType: "",
     quantity: 1,
     unitRate: 0,
     discount: 0,
@@ -385,7 +392,16 @@ export const mapExtractedLineItemToForm = (
 
   return {
     description: item.description || "",
-    ledger: item.ledger || "Cloud Services",
+    ledger: item.ledger || item.ledgerName || item.ledger_name || "",
+    ledgerId: item.ledgerId || item.ledger_id || "",
+    accountGroupId:
+      item.accountGroupId || item.account_group_id || item.groupId || item.group_id || "",
+    accountGroupName:
+      item.accountGroupName || item.account_group_name || item.groupName || item.group_name || "",
+    groupId: item.groupId || item.group_id || item.accountGroupId || item.account_group_id || "",
+    groupName:
+      item.groupName || item.group_name || item.accountGroupName || item.account_group_name || "",
+    expenseType: normalizeExpenseType(item.expenseType || item.expense_type || ""),
     tax: resolveLineItemTaxLabel(item) || (useInrTax ? DEFAULT_INR_TAX : ""),
     taxName: item.taxName || item.tax_name || "",
     taxRate: resolveLineItemTaxRate(item) ?? "",
@@ -397,7 +413,7 @@ export const mapExtractedLineItemToForm = (
       item.discountType ?? item.discount_type ?? "%",
       currency,
     ),
-    hsnSac: item.hsnSac || "",
+    hsnSac: item.hsnSac || item.hsn_sac || "",
     eligibleForItc: item.eligibleForItc ?? true,
   };
 };
