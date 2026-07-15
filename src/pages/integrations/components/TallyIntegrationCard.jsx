@@ -62,7 +62,7 @@ const TALLY_SYNC_OBJECTS = [
   { key: "VENDORS", label: "Vendors" },
   { key: "PURCHASE_ORDERS", label: "Purchase orders" },
   { key: "BILLS", label: "Bills" },
-  { key: "GOODS_RECEIPTS_NOTES", label: "Goods Receipts" },
+  { key: "GOODS_RECEIPT_NOTES", label: "Goods Receipts" },
   { key: "PAYMENTS", label: "Payments" },
 ];
 
