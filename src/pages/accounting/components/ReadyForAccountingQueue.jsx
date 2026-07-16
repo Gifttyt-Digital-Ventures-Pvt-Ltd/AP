@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
+  BookOpen,
   Download,
   Eye,
   FileText,
@@ -68,6 +69,7 @@ const QUEUE_TABS = [
   { key: QUEUE_TAB.GRN, icon: Package, objectTypes: [OBJECT_TYPE.GRN] },
   { key: BILL_QUEUE_TAB, icon: FileText, objectTypes: BILL_OBJECT_TYPES },
   { key: QUEUE_TAB.VENDOR, icon: FileText, objectTypes: [OBJECT_TYPE.VENDOR] },
+  { key: QUEUE_TAB.COA, icon: BookOpen, objectTypes: [OBJECT_TYPE.COA] },
 ];
 
 const getObjectTypesForTab = (tab) =>
@@ -114,13 +116,16 @@ const ERP_PUSH_OBJECT_TYPE = {
   INVOICE: "BILLS",
   PI: "BILLS",
   VENDOR: "VENDORS",
+  COA: "CHART_OF_ACCOUNTS",
+  CHART_OF_ACCOUNTS: "CHART_OF_ACCOUNTS",
 };
 
 const ERP_PUSH_OBJECT_LABEL = {
   PURCHASE_ORDERS: "Purchase Orders",
-  GOODS_RECEIPTS_NOTES: "Goods Receipts",
+  GOODS_RECEIPT_NOTES: "Goods Receipts",
   BILLS: "Bills",
   VENDORS: "Vendors",
+  CHART_OF_ACCOUNTS: "COA",
 };
 
 const getErpPushObjectType = (objectType) =>
@@ -343,7 +348,12 @@ const ReadyForAccountingQueue = () => {
     const objectTypes = getObjectTypesForTab(tab);
     const counts = data?.documentCounts || {};
     const objectTypeCount = objectTypes.reduce(
-      (sum, objectType) => sum + (Number(counts[objectType]) || 0),
+      (sum, objectType) => {
+        if (objectType === OBJECT_TYPE.COA) {
+          return sum + (Number(counts[objectType] ?? counts.COA) || 0);
+        }
+        return sum + (Number(counts[objectType]) || 0);
+      },
       0,
     );
     if (objectTypeCount > 0) return objectTypeCount;

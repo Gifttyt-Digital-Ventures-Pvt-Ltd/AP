@@ -218,7 +218,21 @@ export const integrationsApi = serviceApi.injectEndpoints({
       query: () => ({
         url: "/downloads/windows",
         method: "GET",
-        responseHandler: async (response) => response.blob(),
+        responseHandler: async (response) => {
+          const contentType = response.headers.get("content-type") || "";
+          if (contentType.includes("application/json")) {
+            return response.json();
+          }
+          if (contentType.startsWith("text/")) {
+            const text = await response.text();
+            try {
+              return JSON.parse(text);
+            } catch {
+              return { downloadUrl: text };
+            }
+          }
+          return response.blob();
+        },
         cache: "no-cache",
       }),
     }),

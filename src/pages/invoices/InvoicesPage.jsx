@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   useGetInvoicesQuery,
   useGetInvoiceFilterOptionsQuery,
@@ -837,6 +837,7 @@ const InvoicesPage = () => {
   const [bulkExtractTotalFiles, setBulkExtractTotalFiles] = useState(0);
   const [bulkExtractStartedAt, setBulkExtractStartedAt] = useState(null);
   const [bulkExtractProgress, setBulkExtractProgress] = useState(0);
+  const bulkUploadInFlightRef = useRef(false);
   const [bulkProgress, setBulkProgress] = useState({
     total: 0,
     processed: 0,
@@ -1011,6 +1012,7 @@ const InvoicesPage = () => {
         formBase.originalFileName || filename || file?.name || null,
       currentFileName: file?.name || filename || null,
       status: resolveBulkCreateInvoiceStatus(),
+      action: "saved",
     });
   };
 
@@ -1145,8 +1147,10 @@ const InvoicesPage = () => {
 
   const handleBulkInvoiceFiles = async (filesInput, uploadContext = {}) => {
     if (!guardAction("invoices.bulkUpload")) return false;
+    if (bulkUploadInFlightRef.current) return false;
     const files = Array.from(filesInput || []);
     if (!files || files.length === 0) return false;
+    bulkUploadInFlightRef.current = true;
     setBulkProgress({
       total: 0,
       processed: 0,
@@ -1264,6 +1268,7 @@ const InvoicesPage = () => {
     } finally {
       setBulkExtractProgress(100);
       setBulkExtracting(false);
+      bulkUploadInFlightRef.current = false;
     }
     return true;
   };

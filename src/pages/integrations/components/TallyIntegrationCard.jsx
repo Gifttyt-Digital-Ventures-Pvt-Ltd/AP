@@ -103,7 +103,19 @@ const getDisplayName = (connection) => {
 
 const getHeartbeat = (connection) => {
   if (!connection) return null;
-  return connection.lastHeartbeatAt || connection.last_heartbeat_at || null;
+  return (
+    connection.lastHeartbeatAt ||
+    connection.last_heartbeat_at ||
+    connection.lastHeartbeat ||
+    connection.last_heartbeat ||
+    connection.heartbeatAt ||
+    connection.heartbeat_at ||
+    connection.connectorLastSeenAt ||
+    connection.connector_last_seen_at ||
+    connection.lastSeenAt ||
+    connection.last_seen_at ||
+    null
+  );
 };
 
 const isHeartbeatStale = (lastHeartbeatAt) => {
@@ -267,6 +279,88 @@ const getBlobFileName = (blob) => {
   return "optifii-tally-connector-windows.exe";
 };
 
+const TALLY_DOWNLOAD_DEBUG_KEY = "optifii:tally-download-debug";
+
+const isTallyDownloadDebugEnabled = () => {
+  if (typeof window === "undefined") return false;
+  return (
+    import.meta.env.DEV ||
+    window.localStorage.getItem(TALLY_DOWNLOAD_DEBUG_KEY) === "true"
+  );
+};
+
+const debugTallyDownload = (...args) => {
+  if (isTallyDownloadDebugEnabled()) {
+    console.debug("[TallyConnectorDownload]", ...args);
+  }
+};
+
+const isBlobResponse = (value) =>
+  typeof Blob !== "undefined" && value instanceof Blob;
+
+const getConnectorDownloadPayload = (response) =>
+  response?.data && typeof response.data === "object" ? response.data : response;
+
+const getConnectorDownloadUrl = (response) => {
+  const payload = getConnectorDownloadPayload(response);
+  if (!payload || typeof payload !== "object") return "";
+  return (
+    payload.downloadUrl ||
+    payload.download_url ||
+    payload.url ||
+    payload.fileUrl ||
+    payload.file_url ||
+    payload.installerUrl ||
+    payload.installer_url ||
+    ""
+  );
+};
+
+const normalizeDownloadUrl = (url) => {
+  const value = String(url || "").trim();
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value) || value.startsWith("blob:")) return value;
+  const baseUrl = import.meta.env.VITE_BACKEND_URL || window.location.origin;
+  return new URL(value, baseUrl).toString();
+};
+
+const triggerFileDownload = (href, filename) => {
+  const link = document.createElement("a");
+  link.href = href;
+  link.download = filename;
+  link.rel = "noopener noreferrer";
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+};
+
+const downloadUrlAsBlob = async (downloadUrl) => {
+  debugTallyDownload("Fetching returned download URL as Blob", {
+    downloadUrl,
+  });
+  const response = await fetch(downloadUrl);
+  debugTallyDownload("Returned download URL response", {
+    ok: response.ok,
+    status: response.status,
+    redirected: response.redirected,
+    url: response.url,
+    contentType: response.headers.get("content-type"),
+    contentDisposition: response.headers.get("content-disposition"),
+  });
+  if (!response.ok) {
+    throw new Error(`Installer download failed (${response.status})`);
+  }
+  return response.blob();
+};
+
+const getConnectorDownloadError = (error) => {
+  const message = getErrorText(error, "Could not start installer download");
+  if (/abort|aborted/i.test(message)) {
+    return "Installer download timed out or was interrupted. Please try again.";
+  }
+  return message;
+};
+
 const TallyIntegrationCard = ({ mode = "full" }) => {
   const showSetup = mode !== "dashboard";
   const showDashboard = mode !== "setup";
@@ -358,7 +452,7 @@ const TallyIntegrationCard = ({ mode = "full" }) => {
   const { data: syncStatusResponse, refetch: refetchSyncStatus } =
     useGetTallySyncStatusQuery(currentConnectionId, {
       skip: !showDashboard || !currentConnectionId || !isConnected,
-      pollingInterval: isConnected ? 10000 : 0,
+      pollingInterval: isConnected ? 40000 : 0,
     });
   const { data: logsResponse, refetch: refetchLogs } = useGetTallyLogsQuery(
     { connectionId: currentConnectionId, object: logObjectFilter || undefined },
@@ -393,7 +487,14 @@ const TallyIntegrationCard = ({ mode = "full" }) => {
 
   useEffect(() => {
     const polledId = getConnectionId(detailConnection || {});
-    if (!polledId || completedConnectionId === polledId) return;
+    if (
+      !pairingCredentials ||
+      !pairingOpen ||
+      !polledId ||
+      completedConnectionId === polledId
+    ) {
+      return;
+    }
     if (getStatus(detailConnection) === "CONNECTED") {
       setCompletedConnectionId(polledId);
       setPairingOpen(false);
@@ -402,7 +503,13 @@ const TallyIntegrationCard = ({ mode = "full" }) => {
       refetchConnections();
       toast.success("Tally connected successfully");
     }
-  }, [completedConnectionId, detailConnection, refetchConnections]);
+  }, [
+    completedConnectionId,
+    detailConnection,
+    pairingCredentials,
+    pairingOpen,
+    refetchConnections,
+  ]);
 
   const startPairing = async () => {
     try {
@@ -440,19 +547,50 @@ const TallyIntegrationCard = ({ mode = "full" }) => {
   };
 
   const handleInstallerDownload = async () => {
+    let objectUrl = "";
     try {
-      const blob = await downloadConnector().unwrap();
-      const url = URL.createObjectURL(blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = getBlobFileName(blob);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      URL.revokeObjectURL(url);
+      debugTallyDownload("Download clicked");
+      const response = await downloadConnector().unwrap();
+      debugTallyDownload("Initial endpoint response", {
+        isBlob: isBlobResponse(response),
+        blobSize: isBlobResponse(response) ? response.size : undefined,
+        blobType: isBlobResponse(response) ? response.type : undefined,
+        payload: isBlobResponse(response) ? undefined : response,
+      });
+      if (isBlobResponse(response)) {
+        if (!response.size) {
+          throw new Error("Installer file was empty");
+        }
+        debugTallyDownload("Using direct Blob response");
+        objectUrl = URL.createObjectURL(response);
+        triggerFileDownload(objectUrl, getBlobFileName(response));
+      } else {
+        const downloadUrl = normalizeDownloadUrl(
+          getConnectorDownloadUrl(response),
+        );
+        if (!downloadUrl) {
+          throw new Error("Installer download URL was not returned");
+        }
+        debugTallyDownload("Using returned URL response", { downloadUrl });
+        const blob = await downloadUrlAsBlob(downloadUrl);
+        if (!blob.size) {
+          throw new Error("Installer file was empty");
+        }
+        debugTallyDownload("Fetched URL Blob", {
+          blobSize: blob.size,
+          blobType: blob.type,
+        });
+        objectUrl = URL.createObjectURL(blob);
+        triggerFileDownload(objectUrl, getBlobFileName(blob));
+      }
       toast.success("Tally Connector download started");
-    } catch {
-      toast.error("Could not start installer download");
+    } catch (error) {
+      debugTallyDownload("Download failed", error);
+      toast.error(getConnectorDownloadError(error));
+    } finally {
+      if (objectUrl) {
+        window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1000);
+      }
     }
   };
 
@@ -606,8 +744,8 @@ const TallyIntegrationCard = ({ mode = "full" }) => {
               </p>
               {heartbeatStale && isConnected ? (
                 <p className="text-amber-700">
-                  Connector may be offline — last heartbeat is older than 5
-                  minutes.
+                  Connector may be offline — last heartbeat is missing or older
+                  than 15 minutes.
                 </p>
               ) : null}
               {currentConnection.errorMessage ||
