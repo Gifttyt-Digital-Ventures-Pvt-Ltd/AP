@@ -37,6 +37,57 @@ export const accountingApi = serviceApi.injectEndpoints({
       transformResponse: (response) => normalizeLedgerDetailResponse(response),
       providesTags: (_result, _error, ledgerId) => [{ type: "Accounting", id: ledgerId }],
     }),
+    createLedger: builder.mutation({
+      query: (body = {}) => ({
+        url: `${ACCOUNTING_BASE}/ledgers`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Accounting"],
+    }),
+    updateLedger: builder.mutation({
+      query: ({ ledgerId, body } = {}) => ({
+        url: `${ACCOUNTING_BASE}/ledgers/${ledgerId}`,
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: (_result, _error, arg = {}) => [
+        "Accounting",
+        { type: "Accounting", id: arg.ledgerId },
+      ],
+    }),
+    createAccountCategory: builder.mutation({
+      query: (body = {}) => ({
+        url: `${ACCOUNTING_BASE}/categories`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Accounting"],
+    }),
+    updateAccountCategory: builder.mutation({
+      query: ({ categoryId, body } = {}) => ({
+        url: `${ACCOUNTING_BASE}/categories/${categoryId}`,
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: ["Accounting"],
+    }),
+    createAccountGroup: builder.mutation({
+      query: (body = {}) => ({
+        url: `${ACCOUNTING_BASE}/groups`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Accounting"],
+    }),
+    updateAccountGroup: builder.mutation({
+      query: ({ groupId, body } = {}) => ({
+        url: `${ACCOUNTING_BASE}/groups/${groupId}`,
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: ["Accounting"],
+    }),
     getAccountingVoucherTypes: builder.query({
       query: () => ({ url: `${ACCOUNTING_BASE}/voucher-types`, method: "GET" }),
       transformResponse: (response) => normalizeVoucherTypeOptions(response),
@@ -154,6 +205,12 @@ export const {
   useSyncCoaMutation,
   useGetLedgerQuery,
   useLazyGetLedgerQuery,
+  useCreateLedgerMutation,
+  useUpdateLedgerMutation,
+  useCreateAccountCategoryMutation,
+  useUpdateAccountCategoryMutation,
+  useCreateAccountGroupMutation,
+  useUpdateAccountGroupMutation,
   useGetAccountingVoucherTypesQuery,
   useGetAccountingReadyQueueQuery,
   useLazyGetAccountingQueueItemDetailQuery,

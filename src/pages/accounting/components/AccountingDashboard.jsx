@@ -1,10 +1,12 @@
 import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
+  AlertCircle,
   ArrowRight,
   BookOpen,
   Database,
   Loader2,
+  Plug,
   RefreshCw,
   Zap,
 } from "lucide-react";
@@ -19,6 +21,10 @@ import {
   useGetCoaTreeQuery,
   useSyncCoaMutation,
 } from "../../../Services/apis/accountingApi";
+import {
+  useGetIntegrationConnectionsQuery,
+  useGetTallyConnectionsQuery,
+} from "../../../Services/apis/integrationsApi";
 import { ACC_STATUS, ERP_SOURCE_LABELS } from "../constants";
 import {
   flattenLedgersFromTree,
@@ -37,12 +43,98 @@ const WORKFLOW_LEGEND = [
   { label: ACC_STATUS.FAILED, className: "border-rose-200 bg-rose-50 text-rose-800" },
 ];
 
+const toArray = (value) => {
+  if (Array.isArray(value)) return value;
+  if (Array.isArray(value?.data)) return value.data;
+  if (Array.isArray(value?.connections)) return value.connections;
+  if (Array.isArray(value?.data?.connections)) return value.data.connections;
+  return [];
+};
+
+const getConnectionStatus = (connection = {}) =>
+  String(
+    connection.status ||
+      connection.connectionStatus ||
+      connection.connection_status ||
+      "",
+  ).toUpperCase();
+
+const isConnectedErpConnection = (connection = {}) =>
+  getConnectionStatus(connection) === "CONNECTED";
+
+const AccountingQueueErpInactiveState = ({ onOpenIntegrations }) => (
+  <Card
+    className="overflow-hidden border-amber-200 bg-gradient-to-br from-amber-50 via-white to-slate-50 shadow-sm"
+    data-testid="accounting-queue-erp-inactive"
+  >
+    <CardContent className="relative p-6">
+      <div className="pointer-events-none absolute right-0 top-0 h-32 w-32 rounded-bl-full bg-amber-200/30" />
+      <div className="relative flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+        <div className="flex gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 shadow-inner">
+            <AlertCircle className="h-6 w-6" />
+          </div>
+          <div className="max-w-2xl space-y-2">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">
+                ERP connection required
+              </p>
+              <h3 className="text-lg font-semibold text-slate-950">
+                ERP is not active
+              </h3>
+            </div>
+            <p className="text-sm leading-6 text-slate-600">
+              Accounting Queue is available only after an ERP connection is
+              active. Connect Zoho Books or Tally to mark records Accounting
+              Ready, sync eligible items, retry failures, and review sync logs.
+            </p>
+          </div>
+        </div>
+        <Button
+          type="button"
+          className="shrink-0"
+          onClick={onOpenIntegrations}
+          data-testid="accounting-open-integrations-btn"
+        >
+          <Plug className="mr-2 h-4 w-4" />
+          Open Integrations
+        </Button>
+      </div>
+    </CardContent>
+  </Card>
+);
+
 const AccountingDashboard = () => {
   const navigate = useNavigate();
   const { guardAction, canPerformAction } = useActionGuard();
 
   const { data: treeData, isLoading: treeLoading, isError: treeError } = useGetCoaTreeQuery();
-  const { data: queueData, isLoading: queueLoading } = useGetAccountingReadyQueueQuery();
+  const {
+    data: zohoConnectionsData,
+    isLoading: zohoConnectionsLoading,
+    isFetching: zohoConnectionsFetching,
+  } = useGetIntegrationConnectionsQuery();
+  const {
+    data: tallyConnectionsData,
+    isLoading: tallyConnectionsLoading,
+    isFetching: tallyConnectionsFetching,
+  } = useGetTallyConnectionsQuery();
+  const erpConnectionsLoading =
+    zohoConnectionsLoading ||
+    tallyConnectionsLoading ||
+    zohoConnectionsFetching ||
+    tallyConnectionsFetching;
+  const hasActiveErpConnection = useMemo(() => {
+    const zohoConnections = toArray(zohoConnectionsData);
+    const tallyConnections = toArray(tallyConnectionsData);
+    return [...zohoConnections, ...tallyConnections].some(
+      isConnectedErpConnection,
+    );
+  }, [tallyConnectionsData, zohoConnectionsData]);
+  const { data: queueData, isLoading: queueLoading } =
+    useGetAccountingReadyQueueQuery(undefined, {
+      skip: !hasActiveErpConnection,
+    });
   const [syncCoa, { isLoading: syncing }] = useSyncCoaMutation();
 
   const ledgers = useMemo(
@@ -200,7 +292,7 @@ const AccountingDashboard = () => {
                 </p>
               </div>
             </div>
-            {queueLoading ? (
+            {erpConnectionsLoading || queueLoading ? (
               <div className="flex justify-center py-6">
                 <Loader2 className="h-5 w-5 animate-spin" />
               </div>
@@ -235,7 +327,20 @@ const AccountingDashboard = () => {
         ))}
       </div>
 
-      <ReadyForAccountingQueue />
+      {erpConnectionsLoading ? (
+        <Card className="shadow-sm">
+          <CardContent className="flex items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+            Checking ERP connection status...
+          </CardContent>
+        </Card>
+      ) : hasActiveErpConnection ? (
+        <ReadyForAccountingQueue />
+      ) : (
+        <AccountingQueueErpInactiveState
+          onOpenIntegrations={() => navigate("/integrations")}
+        />
+      )}
     </PageShell>
   );
 };

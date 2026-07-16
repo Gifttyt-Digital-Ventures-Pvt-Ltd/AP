@@ -101,9 +101,22 @@ export function normalizeBulkExtractResult(result = {}) {
     result.extractedData ??
     result.extracted_data ??
     null;
+  const filename =
+    result.filename ??
+    result.fileName ??
+    result.file_name ??
+    result.originalFileName ??
+    result.original_filename ??
+    extracted?.filename ??
+    extracted?.fileName ??
+    extracted?.file_name ??
+    extracted?.originalFileName ??
+    extracted?.original_filename ??
+    "";
 
   const normalized = {
     ...result,
+    filename,
     status: String(result.status || '').toLowerCase(),
     extracted,
   };

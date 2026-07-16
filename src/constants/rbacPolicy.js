@@ -129,8 +129,8 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
   },
   "/banking": { anySections: ["SETTINGS_CONNECTED_BANKING"] },
   "/notifications": {
-    screen: "NOTIFICATIONS",
-    anySections: ["NOTIFICATIONS"],
+    screen: "SETTINGS",
+    anySections: ["SETTINGS_NOTIFICATIONS"],
   },
   "/user-roles": {
     screen: "MANAGE_ROLE",

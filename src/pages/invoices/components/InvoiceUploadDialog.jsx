@@ -27,26 +27,39 @@ const InvoiceUploadDialog = ({
   const inputRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
   const [pendingFiles, setPendingFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
+  const uploadInProgressRef = useRef(false);
   const estimate = useMeteredActionEstimate(actionCode, pendingFiles.length);
 
   useEffect(() => {
     if (!open) {
       setPendingFiles([]);
       setIsDragging(false);
+      setUploading(false);
+      uploadInProgressRef.current = false;
     }
   }, [open]);
 
   const uploadFiles = async (files) => {
-    const shouldClose = await onFilesSelected(files);
-    if (shouldClose !== false) {
-      setPendingFiles([]);
-      onOpenChange(false);
+    if (uploadInProgressRef.current || disabled) return false;
+    uploadInProgressRef.current = true;
+    setUploading(true);
+    try {
+      const shouldClose = await onFilesSelected(files);
+      if (shouldClose !== false) {
+        setPendingFiles([]);
+        onOpenChange(false);
+      }
+      return shouldClose;
+    } finally {
+      uploadInProgressRef.current = false;
+      setUploading(false);
     }
   };
 
   const handleFiles = async (fileList) => {
     const files = Array.from(fileList || []).filter(Boolean);
-    if (disabled || files.length === 0) return;
+    if (disabled || uploading || files.length === 0) return;
     if (!isTokenBasedSubscription) {
       await uploadFiles(files);
       return;
@@ -55,14 +68,14 @@ const InvoiceUploadDialog = ({
   };
 
   const handleConfirmUpload = async () => {
-    if (disabled || pendingFiles.length === 0) return;
+    if (disabled || uploading || pendingFiles.length === 0) return;
     if (estimate.isDisabled) return;
 
     await uploadFiles(pendingFiles);
   };
 
   const openFilePicker = () => {
-    if (disabled) return;
+    if (disabled || uploading) return;
     inputRef.current?.click();
   };
 
@@ -74,7 +87,7 @@ const InvoiceUploadDialog = ({
 
   const handleDragOver = (event) => {
     event.preventDefault();
-    if (!disabled) setIsDragging(true);
+    if (!disabled && !uploading) setIsDragging(true);
   };
 
   const handleDragLeave = (event) => {
@@ -115,7 +128,7 @@ const InvoiceUploadDialog = ({
           {pendingFiles.length === 0 ? (
             <div
               role="button"
-              tabIndex={disabled ? -1 : 0}
+              tabIndex={disabled || uploading ? -1 : 0}
               data-testid="invoice-upload-dropzone"
               aria-label="Upload invoice files"
               onClick={openFilePicker}
@@ -133,7 +146,7 @@ const InvoiceUploadDialog = ({
                 isDragging
                   ? "border-primary bg-primary/10"
                   : "border-[#6311CB] bg-[#3725EA26]"
-              } ${disabled ? "pointer-events-none opacity-60" : ""}`}
+              } ${disabled || uploading ? "pointer-events-none opacity-60" : ""}`}
             >
               <Upload className="h-8 w-8 text-primary" />
               <p className="mb-0 text-lg font-medium text-primary">
@@ -160,10 +173,20 @@ const InvoiceUploadDialog = ({
               </div>
               <MeteredActionCostHint actionCode={actionCode} unitCount={pendingFiles.length} />
               <div className="flex flex-wrap gap-2">
-                <Button type="button" variant="outline" onClick={() => setPendingFiles([])}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setPendingFiles([])}
+                  disabled={uploading}
+                >
                   Choose different files
                 </Button>
-                <Button type="button" variant="outline" onClick={openFilePicker}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={openFilePicker}
+                  disabled={uploading}
+                >
                   Add more files
                 </Button>
               </div>
@@ -182,15 +205,21 @@ const InvoiceUploadDialog = ({
 
         {pendingFiles.length > 0 ? (
           <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              disabled={uploading}
+            >
               Cancel
             </Button>
             <Button
               onClick={handleConfirmUpload}
-              disabled={disabled || estimate.isDisabled || estimate.loading}
+              disabled={disabled || uploading || estimate.isDisabled || estimate.loading}
               data-testid="invoice-upload-confirm-button"
             >
-              Upload {pendingFiles.length} file{pendingFiles.length === 1 ? "" : "s"}
+              {uploading
+                ? "Uploading..."
+                : `Upload ${pendingFiles.length} file${pendingFiles.length === 1 ? "" : "s"}`}
             </Button>
           </DialogFooter>
         ) : null}
