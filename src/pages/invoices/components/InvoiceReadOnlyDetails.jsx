@@ -252,6 +252,25 @@ const InvoiceReadOnlyDetails = ({
       : formatAmount(discount);
   };
 
+  const hasLineAmountValue = (value) =>
+    value !== undefined && value !== null && value !== "";
+
+  const getLineItemTaxAmount = (item) => {
+    if (hasLineAmountValue(item.taxAmount)) return parseNumericInput(item.taxAmount, 0);
+    const taxableAmount = calculateLineItemSubtotal(item);
+    const rate = useInrTax
+      ? parseTaxRateFromLabel(item.tax)
+      : (Number(item.taxRate) || parseTaxRateFromLabel(item.tax) || 0);
+    return (taxableAmount * rate) / 100;
+  };
+
+  const getLineItemNetAmount = (item) => {
+    if (hasLineAmountValue(item.netAmount)) return parseNumericInput(item.netAmount, 0);
+    const taxableAmount = calculateLineItemSubtotal(item);
+    const taxAmount = isInvoiceLevelTax ? 0 : getLineItemTaxAmount(item);
+    return taxableAmount + taxAmount;
+  };
+
   const lineItemsSummary = computeLineItemsSummary({
     lineItems: formData.lineItems,
     calculateLineItemSubtotal,
@@ -346,10 +365,12 @@ const InvoiceReadOnlyDetails = ({
           {showLineItems ? (
             <div className="border rounded-lg overflow-hidden">
               <div className="overflow-x-auto scrollbar-thin-muted">
-                <table className="min-w-[760px] w-full text-xs">
+                <table className="min-w-[1120px] w-full text-xs">
                   <thead className="bg-gray-50 border-b">
                     <tr>
                       <th className="p-2 text-left font-medium min-w-[180px]">Item Description</th>
+                      <th className="p-2 text-left font-medium w-[160px]">Group / Branch</th>
+                      <th className="p-2 text-left font-medium w-[130px]">Expense Type</th>
                       {!isInvoiceLevelTax && (
                         <th className="p-2 text-left font-medium w-[130px]">Tax</th>
                       )}
@@ -380,6 +401,10 @@ const InvoiceReadOnlyDetails = ({
                             </p>
                           )}
                         </td>
+                        <td className="p-2">
+                          {item.accountGroupName || item.groupName || item.ledger || "-"}
+                        </td>
+                        <td className="p-2">{item.expenseType || "-"}</td>
                         {!isInvoiceLevelTax && (
                           <td className="p-2">{formatLineItemTax(item)}</td>
                         )}
@@ -395,25 +420,8 @@ const InvoiceReadOnlyDetails = ({
                         </td>
                         {!isInvoiceLevelTax && (
                           <>
-                            <td className="p-2">
-                              {(() => {
-                                const taxableAmount = calculateLineItemSubtotal(item);
-                                const rate = useInrTax
-                                  ? parseTaxRateFromLabel(item.tax)
-                                  : (Number(item.taxRate) || parseTaxRateFromLabel(item.tax) || 0);
-                                return formatAmount((taxableAmount * rate) / 100);
-                              })()}
-                            </td>
-                            <td className="p-2">
-                              {(() => {
-                                const taxableAmount = calculateLineItemSubtotal(item);
-                                const rate = useInrTax
-                                  ? parseTaxRateFromLabel(item.tax)
-                                  : (Number(item.taxRate) || parseTaxRateFromLabel(item.tax) || 0);
-                                const taxAmount = (taxableAmount * rate) / 100;
-                                return formatAmount(taxableAmount + taxAmount);
-                              })()}
-                            </td>
+                            <td className="p-2">{formatAmount(getLineItemTaxAmount(item))}</td>
+                            <td className="p-2">{formatAmount(getLineItemNetAmount(item))}</td>
                           </>
                         )}
                       </tr>

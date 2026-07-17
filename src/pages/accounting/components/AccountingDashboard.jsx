@@ -8,7 +8,6 @@ import {
   Loader2,
   Plug,
   RefreshCw,
-  Zap,
 } from "lucide-react";
 import { toast } from "sonner";
 
@@ -17,19 +16,15 @@ import { Button } from "../../../components/ui/button";
 import { Card, CardContent } from "../../../components/ui/card";
 import { useActionGuard } from "../../../hooks/useActionGuard";
 import {
-  useGetAccountingReadyQueueQuery,
   useGetCoaTreeQuery,
   useSyncCoaMutation,
 } from "../../../Services/apis/accountingApi";
-import {
-  useGetIntegrationConnectionsQuery,
-  useGetTallyConnectionsQuery,
-} from "../../../Services/apis/integrationsApi";
-import { ACC_STATUS, ERP_SOURCE_LABELS } from "../constants";
+import { useGetApIntegrationSummaryQuery } from "../../../Services/apis/integrationsApi";
+import { selectIsErpConnected } from "../../integrations/integrationSummary";
+import { ACC_STATUS } from "../constants";
 import {
   flattenLedgersFromTree,
   formatCurrencyCompact,
-  formatDateTime,
   getAccountingErrorMessage,
 } from "../utils/coaUtils";
 import { PageShell } from "../utils/PageShell";
@@ -42,25 +37,6 @@ const WORKFLOW_LEGEND = [
   { label: ACC_STATUS.SYNCED, className: "border-emerald-200 bg-emerald-50 text-emerald-800" },
   { label: ACC_STATUS.FAILED, className: "border-rose-200 bg-rose-50 text-rose-800" },
 ];
-
-const toArray = (value) => {
-  if (Array.isArray(value)) return value;
-  if (Array.isArray(value?.data)) return value.data;
-  if (Array.isArray(value?.connections)) return value.connections;
-  if (Array.isArray(value?.data?.connections)) return value.data.connections;
-  return [];
-};
-
-const getConnectionStatus = (connection = {}) =>
-  String(
-    connection.status ||
-      connection.connectionStatus ||
-      connection.connection_status ||
-      "",
-  ).toUpperCase();
-
-const isConnectedErpConnection = (connection = {}) =>
-  getConnectionStatus(connection) === "CONNECTED";
 
 const AccountingQueueErpInactiveState = ({ onOpenIntegrations }) => (
   <Card
@@ -104,37 +80,41 @@ const AccountingQueueErpInactiveState = ({ onOpenIntegrations }) => (
   </Card>
 );
 
+const AccountingQueueErpStatusError = ({ onRetry }) => (
+  <Card className="border-rose-200 bg-rose-50/70 shadow-sm">
+    <CardContent className="flex flex-col gap-3 p-6 md:flex-row md:items-center md:justify-between">
+      <div className="flex items-start gap-3">
+        <AlertCircle className="mt-0.5 h-5 w-5 text-rose-700" />
+        <div>
+          <h3 className="font-semibold text-rose-950">Unable to check ERP status</h3>
+          <p className="text-sm text-rose-700">
+            We could not load the integration summary. Retry before opening the Accounting Queue.
+          </p>
+        </div>
+      </div>
+      <Button type="button" variant="outline" onClick={onRetry}>
+        <RefreshCw className="mr-2 h-4 w-4" />
+        Retry
+      </Button>
+    </CardContent>
+  </Card>
+);
+
 const AccountingDashboard = () => {
   const navigate = useNavigate();
   const { guardAction, canPerformAction } = useActionGuard();
 
   const { data: treeData, isLoading: treeLoading, isError: treeError } = useGetCoaTreeQuery();
   const {
-    data: zohoConnectionsData,
-    isLoading: zohoConnectionsLoading,
-    isFetching: zohoConnectionsFetching,
-  } = useGetIntegrationConnectionsQuery();
-  const {
-    data: tallyConnectionsData,
-    isLoading: tallyConnectionsLoading,
-    isFetching: tallyConnectionsFetching,
-  } = useGetTallyConnectionsQuery();
+    data: integrationSummary,
+    isLoading: integrationSummaryLoading,
+    isFetching: integrationSummaryFetching,
+    isError: integrationSummaryError,
+    refetch: refetchIntegrationSummary,
+  } = useGetApIntegrationSummaryQuery();
   const erpConnectionsLoading =
-    zohoConnectionsLoading ||
-    tallyConnectionsLoading ||
-    zohoConnectionsFetching ||
-    tallyConnectionsFetching;
-  const hasActiveErpConnection = useMemo(() => {
-    const zohoConnections = toArray(zohoConnectionsData);
-    const tallyConnections = toArray(tallyConnectionsData);
-    return [...zohoConnections, ...tallyConnections].some(
-      isConnectedErpConnection,
-    );
-  }, [tallyConnectionsData, zohoConnectionsData]);
-  const { data: queueData, isLoading: queueLoading } =
-    useGetAccountingReadyQueueQuery(undefined, {
-      skip: !hasActiveErpConnection,
-    });
+    integrationSummaryLoading || integrationSummaryFetching;
+  const hasActiveErpConnection = selectIsErpConnected(integrationSummary);
   const [syncCoa, { isLoading: syncing }] = useSyncCoaMutation();
 
   const ledgers = useMemo(
@@ -146,25 +126,12 @@ const AccountingDashboard = () => {
     [ledgers],
   );
 
-  const queueItems = queueData?.items || [];
-  const syncCounts = useMemo(
-    () => ({
-      synced: queueItems.filter((item) => item.accStatus === ACC_STATUS.SYNCED).length,
-      queued: queueItems.filter((item) => item.accStatus === ACC_STATUS.QUEUED).length,
-      failed: queueItems.filter((item) => item.accStatus === ACC_STATUS.FAILED).length,
-    }),
-    [queueItems],
-  );
-
-  const connectedLabel =
-    (treeData?.connectedErp || [])
-      .map((source) => ERP_SOURCE_LABELS[source] || source)
-      .join(" + ") || "—";
+  const connectedErpSource = treeData?.connectedErp?.[0] || "";
 
   const handleSync = async () => {
     if (!guardAction("accounting.coa.sync")) return;
     try {
-      const result = await syncCoa().unwrap();
+      const result = await syncCoa({ erpSource: connectedErpSource }).unwrap();
       toast.success(result?.message || "Chart of Accounts sync completed");
     } catch (error) {
       toast.error(getAccountingErrorMessage(error, "Failed to sync Chart of Accounts"));
@@ -188,7 +155,7 @@ const AccountingDashboard = () => {
                 <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
                   Chart of Accounts
                 </p>
-                <p className="text-sm font-semibold text-foreground">{connectedLabel}</p>
+                <p className="text-sm font-semibold text-foreground">COA Explorer</p>
               </div>
             </div>
             {treeLoading ? (
@@ -198,16 +165,10 @@ const AccountingDashboard = () => {
             ) : treeError ? (
               <p className="text-sm text-muted-foreground">Unable to load COA summary.</p>
             ) : (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3">
                 <div>
                   <p className="text-xs text-muted-foreground">Total Accounts</p>
                   <p className="text-sm font-semibold">{treeData?.totalAccounts ?? 0}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted-foreground">Last Sync</p>
-                  <p className="text-sm font-semibold">
-                    {formatDateTime(treeData?.lastSyncAt)}
-                  </p>
                 </div>
               </div>
             )}
@@ -276,44 +237,6 @@ const AccountingDashboard = () => {
           </CardContent>
         </Card>
 
-        {/* ERP Sync Status */}
-        <Card className="border-primary/20 bg-primary text-primary-foreground shadow-sm md:col-span-2 xl:col-span-1">
-          <CardContent className="flex h-full flex-col gap-4 p-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/15">
-                <Zap className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-primary-foreground/70">
-                  ERP Sync Status
-                </p>
-                <p className="text-sm font-semibold">
-                  {connectedLabel !== "—" ? `${connectedLabel} Connected` : "Not connected"}
-                </p>
-              </div>
-            </div>
-            {erpConnectionsLoading || queueLoading ? (
-              <div className="flex justify-center py-6">
-                <Loader2 className="h-5 w-5 animate-spin" />
-              </div>
-            ) : (
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  ["Synced", syncCounts.synced],
-                  ["Queued", syncCounts.queued],
-                  ["Failed", syncCounts.failed],
-                ].map(([label, value]) => (
-                  <div key={label} className="rounded-lg bg-white/10 px-3 py-2.5">
-                    <p className="text-[10px] uppercase tracking-wide text-primary-foreground/70">
-                      {label}
-                    </p>
-                    <p className="text-xl font-bold">{value}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
       </div>
 
       {/* Workflow legend */}
@@ -334,6 +257,8 @@ const AccountingDashboard = () => {
             Checking ERP connection status...
           </CardContent>
         </Card>
+      ) : integrationSummaryError ? (
+        <AccountingQueueErpStatusError onRetry={refetchIntegrationSummary} />
       ) : hasActiveErpConnection ? (
         <ReadyForAccountingQueue />
       ) : (

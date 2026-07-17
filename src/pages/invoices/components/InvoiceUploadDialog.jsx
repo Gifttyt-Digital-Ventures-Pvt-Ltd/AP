@@ -31,6 +31,16 @@ const InvoiceUploadDialog = ({
   const uploadInProgressRef = useRef(false);
   const estimate = useMeteredActionEstimate(actionCode, pendingFiles.length);
 
+  const mergePendingFiles = (existingFiles, incomingFiles) => {
+    const seen = new Set();
+    return [...existingFiles, ...incomingFiles].filter((file) => {
+      const key = `${file.name}-${file.size}-${file.lastModified}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  };
+
   useEffect(() => {
     if (!open) {
       setPendingFiles([]);
@@ -64,7 +74,7 @@ const InvoiceUploadDialog = ({
       await uploadFiles(files);
       return;
     }
-    setPendingFiles(files);
+    setPendingFiles((currentFiles) => mergePendingFiles(currentFiles, files));
   };
 
   const handleConfirmUpload = async () => {

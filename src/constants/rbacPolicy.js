@@ -43,7 +43,28 @@ export const ROUTE_PERMISSION_RULES = {
   "/audit-trail": { anyOf: ["audit-trail-view"] },
   "/integrations": {
     anyOf: [
+      "settings-interaction",
       "integrations.view",
+      "integrations.connect",
+      "integrations.disconnect",
+      "integrations.mapping.edit",
+      "integrations.sync.trigger",
+      "integrations.review.resolve",
+    ],
+  },
+  "/integrations/gmail": { anyOf: ["settings-interaction"] },
+  "/integrations/erp": {
+    anyOf: [
+      "integrations.view",
+      "integrations.connect",
+      "integrations.disconnect",
+      "integrations.mapping.edit",
+      "integrations.sync.trigger",
+      "integrations.review.resolve",
+    ],
+  },
+  "/integrations/connect": {
+    anyOf: [
       "integrations.connect",
       "integrations.disconnect",
       "integrations.mapping.edit",
@@ -68,7 +89,6 @@ export const ROUTE_PERMISSION_RULES = {
     anyOf: [
       "settings-org",
       "settings-banking",
-      "settings-interaction",
       "credits-view",
       "credits-ledger",
       "credits-manage",
@@ -125,6 +145,14 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
   "/audit-trail": { screen: "AUDIT_TRAIL", anySections: ["AUDIT_TRAIL_ALL"] },
   "/integrations": {
     screen: "SETTINGS",
+    anySections: ["SETTINGS_INTEGRATIONS", "GMAIL_INTEGRATION_ALL"],
+  },
+  "/integrations/gmail": {
+    screen: "GMAIL_INTEGRATION",
+    anySections: ["GMAIL_INTEGRATION_ALL"],
+  },
+  "/integrations/erp": {
+    screen: "SETTINGS",
     anySections: ["SETTINGS_INTEGRATIONS"],
   },
   "/banking": { anySections: ["SETTINGS_CONNECTED_BANKING"] },
@@ -146,8 +174,6 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
     anySections: [
       "SETTINGS_ORG_DETAILS",
       "SETTINGS_CONNECTED_BANKING",
-      "SETTINGS_INTEGRATIONS",
-      "GMAIL_INTEGRATION_ALL",
       "SETTINGS_BILLING",
       "CREDITS_ALL",
       "WALLET_ALL",
