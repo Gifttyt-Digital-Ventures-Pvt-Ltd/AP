@@ -452,7 +452,7 @@ const TallyIntegrationCard = ({ mode = "full" }) => {
   const { data: syncStatusResponse, refetch: refetchSyncStatus } =
     useGetTallySyncStatusQuery(currentConnectionId, {
       skip: !showDashboard || !currentConnectionId || !isConnected,
-      pollingInterval: isConnected ? 40000 : 0,
+      pollingInterval: isConnected ? 10000 : 0,
     });
   const { data: logsResponse, refetch: refetchLogs } = useGetTallyLogsQuery(
     { connectionId: currentConnectionId, object: logObjectFilter || undefined },
