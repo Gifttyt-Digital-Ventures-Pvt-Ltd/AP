@@ -2,7 +2,8 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   Activity,
-  ArrowRight,
+  ChevronDown,
+  ChevronUp,
   Check,
   Clock,
   ClipboardCopy,
@@ -13,6 +14,7 @@ import {
   RefreshCw,
   Settings2,
   TriangleAlert,
+  Unplug,
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -25,8 +27,10 @@ import {
   useGetTallyProvidersQuery,
   useGetTallySyncStatusQuery,
   useLazyDownloadTallyWindowsConnectorQuery,
+  useDisconnectTallyConnectionMutation,
   useTriggerTallySyncMutation,
 } from "../../../Services/apis/integrationsApi";
+import { useActionGuard } from "../../../hooks/useActionGuard";
 import { Button } from "../../../components/ui/button";
 import {
   Dialog,
@@ -364,6 +368,7 @@ const getConnectorDownloadError = (error) => {
 const TallyIntegrationCard = ({ mode = "full" }) => {
   const showSetup = mode !== "dashboard";
   const showDashboard = mode !== "setup";
+  const { guardAction, canPerformAction } = useActionGuard();
   const { data: providersResponse } = useGetTallyProvidersQuery();
   const {
     data: connectionsResponse,
@@ -372,6 +377,8 @@ const TallyIntegrationCard = ({ mode = "full" }) => {
   } = useGetTallyConnectionsQuery();
   const [createConnection, { isLoading: creating }] =
     useCreateTallyConnectionMutation();
+  const [disconnectConnection, { isLoading: disconnecting }] =
+    useDisconnectTallyConnectionMutation();
   const [triggerSync, { isLoading: syncing }] = useTriggerTallySyncMutation();
   const [downloadConnector, { isFetching: downloadingConnector }] =
     useLazyDownloadTallyWindowsConnectorQuery();
@@ -381,6 +388,7 @@ const TallyIntegrationCard = ({ mode = "full" }) => {
   const [completedConnectionId, setCompletedConnectionId] = useState("");
   const [pairingTimedOut, setPairingTimedOut] = useState(false);
   const [logObjectFilter, setLogObjectFilter] = useState("");
+  const [setupDetailsOpen, setSetupDetailsOpen] = useState(false);
   const pairingStartedAt = useRef(0);
 
   const provider = useMemo(() => {
@@ -448,6 +456,10 @@ const TallyIntegrationCard = ({ mode = "full" }) => {
     !isConnected &&
     (isDisconnected || !currentConnection || status === "ERROR");
   const syncDisabled = !isConnected || heartbeatStale;
+
+  useEffect(() => {
+    setSetupDetailsOpen(!isConnected);
+  }, [isConnected]);
 
   const { data: syncStatusResponse, refetch: refetchSyncStatus } =
     useGetTallySyncStatusQuery(currentConnectionId, {
@@ -543,6 +555,18 @@ const TallyIntegrationCard = ({ mode = "full" }) => {
       );
     } catch (error) {
       toast.error(getErrorText(error, "Failed to refresh Tally connection"));
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (!currentConnectionId) return;
+    if (!guardAction("integrations.disconnect")) return;
+    try {
+      await disconnectConnection(currentConnectionId).unwrap();
+      toast.success("Tally disconnected");
+      await refetchConnections();
+    } catch (error) {
+      toast.error(getErrorText(error, "Failed to disconnect Tally"));
     }
   };
 
@@ -710,111 +734,138 @@ const TallyIntegrationCard = ({ mode = "full" }) => {
             </div>
           ) : null}
 
-          {showSetup && currentConnection ? (
-            <div className="space-y-2 rounded-lg border border-border bg-muted/30 p-3 text-sm">
-              <p className="text-gray-800">
-                <span className="font-medium">Connector:</span>{" "}
-                {getDisplayName(currentConnection)}
-              </p>
-              {currentConnection.organizationName ||
-              currentConnection.organization_name ? (
-                <p className="text-gray-700">
-                  <span className="font-medium">Company:</span>{" "}
-                  {currentConnection.organizationName ||
-                    currentConnection.organization_name}
-                </p>
+          {showSetup ? (
+            <div className="rounded-lg border border-border bg-muted/20">
+              {isConnected ? (
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
+                  onClick={() => setSetupDetailsOpen((open) => !open)}
+                  aria-expanded={setupDetailsOpen}
+                >
+                  <div>
+                    <h4 className="font-semibold text-gray-800">
+                      Connector setup details
+                    </h4>
+                    <p className="text-sm text-muted-foreground">
+                      View connector details, checklist, installer, and sync scope.
+                    </p>
+                  </div>
+                  {setupDetailsOpen ? (
+                    <ChevronUp className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  )}
+                </button>
               ) : null}
-              {currentConnection.gstin ? (
-                <p className="text-gray-700">
-                  <span className="font-medium">GSTIN:</span>{" "}
-                  {currentConnection.gstin}
-                </p>
-              ) : null}
-              {currentConnection.tallyUrl || currentConnection.tally_url ? (
-                <p className="text-gray-700">
-                  <span className="font-medium">Tally URL:</span>{" "}
-                  {currentConnection.tallyUrl || currentConnection.tally_url}
-                </p>
-              ) : null}
-              <p
-                className={heartbeatStale ? "text-amber-700" : "text-gray-600"}
-              >
-                <span className="font-medium">Last heartbeat:</span>{" "}
-                {formatDateTime(heartbeat)}
-              </p>
-              {heartbeatStale && isConnected ? (
-                <p className="text-amber-700">
-                  Connector may be offline — last heartbeat is missing or older
-                  than 15 minutes.
-                </p>
-              ) : null}
-              {currentConnection.errorMessage ||
-              currentConnection.error_message ? (
-                <p className="text-red-700">
-                  {currentConnection.errorMessage ||
-                    currentConnection.error_message}
-                </p>
-              ) : null}
-              {isDisconnected ? (
-                <p className="text-gray-600">
-                  Disconnected — pair again to reconnect Tally.
-                </p>
+
+              {setupDetailsOpen ? (
+                <div className="space-y-5 border-t border-border p-4 first:border-t-0">
+                  {currentConnection ? (
+                    <div className="space-y-2 rounded-lg border border-border bg-background p-3 text-sm">
+                      <p className="text-gray-800">
+                        <span className="font-medium">Connector:</span>{" "}
+                        {getDisplayName(currentConnection)}
+                      </p>
+                      {currentConnection.organizationName ||
+                      currentConnection.organization_name ? (
+                        <p className="text-gray-700">
+                          <span className="font-medium">Company:</span>{" "}
+                          {currentConnection.organizationName ||
+                            currentConnection.organization_name}
+                        </p>
+                      ) : null}
+                      {currentConnection.gstin ? (
+                        <p className="text-gray-700">
+                          <span className="font-medium">GSTIN:</span>{" "}
+                          {currentConnection.gstin}
+                        </p>
+                      ) : null}
+                      {currentConnection.tallyUrl || currentConnection.tally_url ? (
+                        <p className="text-gray-700">
+                          <span className="font-medium">Tally URL:</span>{" "}
+                          {currentConnection.tallyUrl || currentConnection.tally_url}
+                        </p>
+                      ) : null}
+                      <p
+                        className={heartbeatStale ? "text-amber-700" : "text-gray-600"}
+                      >
+                        <span className="font-medium">Last heartbeat:</span>{" "}
+                        {formatDateTime(heartbeat)}
+                      </p>
+                      {heartbeatStale && isConnected ? (
+                        <p className="text-amber-700">
+                          Connector may be offline — last heartbeat is missing or older
+                          than 15 minutes.
+                        </p>
+                      ) : null}
+                      {currentConnection.errorMessage ||
+                      currentConnection.error_message ? (
+                        <p className="text-red-700">
+                          {currentConnection.errorMessage ||
+                            currentConnection.error_message}
+                        </p>
+                      ) : null}
+                      {isDisconnected ? (
+                        <p className="text-gray-600">
+                          Disconnected — pair again to reconnect Tally.
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  <div>
+                    <h4 className="mb-2 font-semibold text-gray-800">
+                      Before you connect
+                    </h4>
+                    <ul className="space-y-2">
+                      {SETUP_CHECKLIST.map((item) => (
+                        <li
+                          key={item}
+                          className="flex items-start gap-2 text-sm text-gray-600"
+                        >
+                          <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleInstallerDownload}
+                        disabled={downloadingConnector}
+                      >
+                        {downloadingConnector ? (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        ) : (
+                          <Download className="mr-2 h-4 w-4" />
+                        )}
+                        Download Windows Connector
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h4 className="mb-3 font-semibold text-gray-800">
+                      We'll sync your:
+                    </h4>
+                    <ul className="space-y-2">
+                      {TALLY_SYNC_ITEMS.map((item) => (
+                        <li
+                          key={item}
+                          className="flex items-center gap-2 text-sm text-gray-600"
+                        >
+                          <span className="h-1.5 w-1.5 rounded-full bg-gray-400" />
+                          {item}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
               ) : null}
             </div>
-          ) : null}
-
-          {showSetup ? (
-            <>
-              <div className="rounded-lg border border-border bg-muted/20 p-4">
-                <h4 className="mb-2 font-semibold text-gray-800">
-                  Before you connect
-                </h4>
-                <ul className="space-y-2">
-                  {SETUP_CHECKLIST.map((item) => (
-                    <li
-                      key={item}
-                      className="flex items-start gap-2 text-sm text-gray-600"
-                    >
-                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleInstallerDownload}
-                    disabled={downloadingConnector}
-                  >
-                    {downloadingConnector ? (
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    ) : (
-                      <Download className="mr-2 h-4 w-4" />
-                    )}
-                    Download Windows Connector
-                  </Button>
-                </div>
-              </div>
-
-              <div>
-                <h4 className="mb-3 font-semibold text-gray-800">
-                  We'll sync your:
-                </h4>
-                <ul className="space-y-2">
-                  {TALLY_SYNC_ITEMS.map((item) => (
-                    <li
-                      key={item}
-                      className="flex items-center gap-2 text-sm text-gray-600"
-                    >
-                      <span className="h-1.5 w-1.5 rounded-full bg-gray-400" />
-                      {item}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            </>
           ) : null}
 
           {showDashboard && isConnected ? (
@@ -841,6 +892,23 @@ const TallyIntegrationCard = ({ mode = "full" }) => {
                       <RefreshCw className="mr-2 h-4 w-4" />
                     )}
                     Refresh Tally
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={handleDisconnect}
+                    disabled={
+                      !currentConnectionId ||
+                      !canPerformAction("integrations.disconnect") ||
+                      disconnecting
+                    }
+                    className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+                  >
+                    {disconnecting ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Unplug className="mr-2 h-4 w-4" />
+                    )}
+                    Disconnect
                   </Button>
                   <Button
                     onClick={() => handleSync("ALL")}
@@ -986,40 +1054,22 @@ const TallyIntegrationCard = ({ mode = "full" }) => {
                   <h4 className="font-semibold text-blue-950">
                     Tally is not connected yet
                   </h4>
-                  <p className="mt-1 text-sm text-blue-800">
-                    Pair Tally from Settings → Integrations. Once connected,
-                    this page becomes the sync dashboard.
-                  </p>
+	                  <p className="mt-1 text-sm text-blue-800">
+	                    Pair the connector from the Tally integration page.
+	                    Once connected, this section becomes the sync dashboard.
+	                  </p>
                 </div>
                 <Button
                   asChild
                   variant="outline"
                   className="border-blue-200 bg-white"
                 >
-                  <Link to="/settings?tab=integrations">
-                    <Settings2 className="mr-2 h-4 w-4" />
-                    Open Settings
-                  </Link>
+	                  <Link to="/integrations/erp/tally">
+	                    <Settings2 className="mr-2 h-4 w-4" />
+	                    Manage Tally integration
+	                  </Link>
                 </Button>
               </div>
-            </div>
-          ) : null}
-
-          {showSetup && isConnected ? (
-            <div className="space-y-3 rounded-lg border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
-              <p>
-                Tally is connected. Open Integrations to monitor sync health,
-                logs, and manual sync.
-              </p>
-              <Button
-                asChild
-                className="w-full bg-blue-600 text-white hover:bg-blue-700"
-              >
-                <Link to="/integrations">
-                  <ArrowRight className="mr-2 h-4 w-4" />
-                  Open Integrations
-                </Link>
-              </Button>
             </div>
           ) : null}
 

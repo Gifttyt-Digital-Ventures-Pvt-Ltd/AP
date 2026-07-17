@@ -83,10 +83,7 @@ const ChartOfAccounts = () => {
   const transactions = ledgerDetail?.transactions || [];
   const detailLedger = ledgerDetail?.ledger || ledger;
 
-  const connectedLabel =
-    (data?.connectedErp || [])
-      .map((source) => ERP_SOURCE_LABELS[source] || source)
-      .join(" + ") || "—";
+  const connectedErpSource = data?.connectedErp?.[0] || "";
 
   const categoryName = ledger
     ? findCategoryNameForLedger(tree, ledger.id)
@@ -95,7 +92,7 @@ const ChartOfAccounts = () => {
   const handleSync = async () => {
     if (!guardAction("accounting.coa.sync")) return;
     try {
-      const result = await syncCoa().unwrap();
+      const result = await syncCoa({ erpSource: connectedErpSource }).unwrap();
       toast.success(result?.message || "Chart of Accounts sync completed");
       refetch();
     } catch (err) {
@@ -227,13 +224,6 @@ const ChartOfAccounts = () => {
               Chart of Accounts
             </h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              Connected ERP: <span className="font-medium text-foreground">{connectedLabel}</span>
-              {" · "}
-              Last Sync:{" "}
-              <span className="font-medium text-foreground">
-                {formatDateTime(data?.lastSyncAt)}
-              </span>
-              {" · "}
               Total Accounts:{" "}
               <span className="font-medium text-foreground">{data?.totalAccounts ?? 0}</span>
             </p>
@@ -418,7 +408,14 @@ const ChartOfAccounts = () => {
                     <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                       {[
                         ["Ledger Code", detailLedger?.code || ledger.code],
-                        ["ERP", connectedLabel],
+                        [
+                          "ERP",
+                          ERP_SOURCE_LABELS[
+                            detailLedger?.erpSource || ledger.erpSource
+                          ] ||
+                            detailLedger?.erpSource ||
+                            ledger.erpSource,
+                        ],
                         ["ERP ID", detailLedger?.erpId || ledger.erpId],
                         ["Category", categoryName],
                         ["Parent Group", detailLedger?.parentGroup || ledger.parentGroup],

@@ -440,9 +440,6 @@ export const RBACProvider = ({ children }) => {
       return (
         (hasPermission("settings-org") && isCorporateSectionEnabled("SETTINGS_ORG_DETAILS")) ||
         (hasAnyPermission(["settings-banking", "banking-full"]) && isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING")) ||
-        (hasPermission("settings-interaction") &&
-          (isCorporateSectionEnabled("SETTINGS_INTEGRATIONS") ||
-            isCorporateSectionEnabled("GMAIL_INTEGRATION_ALL"))) ||
         (hasAnyPermission(["credits-view", "credits-ledger", "credits-manage", "VIEW_WALLET", "VIEW_LEDGER", "MANAGE_BILLING"]) &&
           isBillingFeatureEnabled)
       );

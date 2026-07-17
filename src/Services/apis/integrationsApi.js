@@ -1,9 +1,11 @@
 import { serviceApi } from "../serviceApi";
 import { extractListResponse } from "../utils/payloadMappers";
+import { normalizeApIntegrationSummary } from "../../pages/integrations/integrationSummary";
 
 const ZOHO_BASE = "/integration/zoho";
 const GMAIL_BASE = "/integration/gmail";
 const TALLY_BASE = "/integration/tally";
+const AP_INTEGRATIONS_BASE = "/accounts-payable/integrations";
 
 const withParams = (params = {}) =>
   Object.fromEntries(
@@ -14,6 +16,14 @@ const withParams = (params = {}) =>
 
 export const integrationsApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
+    getApIntegrationSummary: builder.query({
+      query: () => ({
+        url: `${AP_INTEGRATIONS_BASE}/summary`,
+        method: "GET",
+      }),
+      transformResponse: normalizeApIntegrationSummary,
+      providesTags: ["ApIntegrationSummary"],
+    }),
     getIntegrationProviders: builder.query({
       query: () => ({ url: `${ZOHO_BASE}/providers`, method: "GET" }),
       transformResponse: (response) =>
@@ -39,7 +49,7 @@ export const integrationsApi = serviceApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Integrations"],
+      invalidatesTags: ["Integrations", "ApIntegrationSummary"],
     }),
     getZohoConnectionStatus: builder.query({
       query: (connectionId) => ({
@@ -63,14 +73,14 @@ export const integrationsApi = serviceApi.injectEndpoints({
         method: "POST",
         body: { organizationId },
       }),
-      invalidatesTags: ["Integrations"],
+      invalidatesTags: ["Integrations", "ApIntegrationSummary"],
     }),
     disconnectZohoConnection: builder.mutation({
       query: (connectionId) => ({
         url: `${ZOHO_BASE}/connections/${connectionId}/disconnect`,
         method: "POST",
       }),
-      invalidatesTags: ["Integrations"],
+      invalidatesTags: ["Integrations", "ApIntegrationSummary"],
     }),
     getIntegrationMappings: builder.query({
       query: (connectionId) => ({
@@ -146,21 +156,21 @@ export const integrationsApi = serviceApi.injectEndpoints({
         url: `${GMAIL_BASE}/connect`,
         method: "POST",
       }),
-      invalidatesTags: ["Integrations"],
+      invalidatesTags: ["Integrations", "ApIntegrationSummary"],
     }),
     disconnectGmailConnection: builder.mutation({
       query: (connectionId) => ({
         url: `${GMAIL_BASE}/connections/${connectionId}/disconnect`,
         method: "POST",
       }),
-      invalidatesTags: ["Integrations"],
+      invalidatesTags: ["Integrations", "ApIntegrationSummary"],
     }),
     syncGmailConnection: builder.mutation({
       query: (connectionId) => ({
         url: `${GMAIL_BASE}/connections/${connectionId}/sync`,
         method: "POST",
       }),
-      invalidatesTags: ["Integrations"],
+      invalidatesTags: ["Integrations", "ApIntegrationSummary"],
     }),
     getTallyProviders: builder.query({
       query: () => ({ url: `${TALLY_BASE}/providers`, method: "GET" }),
@@ -183,7 +193,14 @@ export const integrationsApi = serviceApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Integrations"],
+      invalidatesTags: ["Integrations", "ApIntegrationSummary"],
+    }),
+    disconnectTallyConnection: builder.mutation({
+      query: (connectionId) => ({
+        url: `${TALLY_BASE}/connections/${connectionId}/disconnect`,
+        method: "POST",
+      }),
+      invalidatesTags: ["Integrations", "ApIntegrationSummary"],
     }),
     triggerTallySync: builder.mutation({
       query: ({
@@ -196,7 +213,7 @@ export const integrationsApi = serviceApi.injectEndpoints({
         method: "POST",
         body: withParams({ object, direction, ids }),
       }),
-      invalidatesTags: ["Integrations"],
+      invalidatesTags: ["Integrations", "ApIntegrationSummary"],
     }),
     getTallySyncStatus: builder.query({
       query: (connectionId) => ({
@@ -240,6 +257,7 @@ export const integrationsApi = serviceApi.injectEndpoints({
 });
 
 export const {
+  useGetApIntegrationSummaryQuery,
   useGetIntegrationProvidersQuery,
   useGetIntegrationConnectionsQuery,
   useGetIntegrationConnectionQuery,
@@ -264,6 +282,7 @@ export const {
   useGetTallyConnectionsQuery,
   useGetTallyConnectionQuery,
   useCreateTallyConnectionMutation,
+  useDisconnectTallyConnectionMutation,
   useTriggerTallySyncMutation,
   useGetTallySyncStatusQuery,
   useGetTallyLogsQuery,

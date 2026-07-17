@@ -7,6 +7,8 @@ import {
 import { normalizeVoucherTypeOptions } from "../../pages/invoices/utils/invoiceAccountingFields";
 
 const ACCOUNTING_BASE = "/accounting";
+const COA_SYNC_OBJECT = "CHART_OF_ACCOUNTS";
+const COA_SYNC_DIRECTION = "PULL";
 
 const withParams = (params = {}) =>
   Object.fromEntries(
@@ -25,7 +27,15 @@ export const accountingApi = serviceApi.injectEndpoints({
       providesTags: ["Accounting"],
     }),
     syncCoa: builder.mutation({
-      query: () => ({ url: `${ACCOUNTING_BASE}/coa/sync`, method: "POST" }),
+      query: ({ erpSource, direction = COA_SYNC_DIRECTION } = {}) => ({
+        url: `${ACCOUNTING_BASE}/coa/sync`,
+        method: "POST",
+        body: withParams({
+          object: COA_SYNC_OBJECT,
+          direction,
+          erpSource,
+        }),
+      }),
       transformResponse: (response) => normalizeCoaTreeResponse(response),
       invalidatesTags: ["Accounting"],
     }),

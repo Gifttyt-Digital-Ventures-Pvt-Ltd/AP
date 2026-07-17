@@ -79,6 +79,7 @@ export const serviceApi = createApi({
     "AuditLogs",
     "Campaigns",
     "Integrations",
+    "ApIntegrationSummary",
     "Credits",
     "Accounting",
   ],
