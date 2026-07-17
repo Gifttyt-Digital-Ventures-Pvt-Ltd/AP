@@ -143,12 +143,6 @@ const Dashboard = () => {
           bottleneckAnalysis={bottleneck?.stages}
           avgProcessingDays={bottleneck?.avg_processing_days || 0}
         />
-        {showPaymentBatches && (
-          <PaymentBatchesCard
-            paymentBatchStats={paymentBatchStats}
-            formatCompactCurrency={formatCompactCurrency}
-          />
-        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -160,6 +154,12 @@ const Dashboard = () => {
           vendors={charts?.top_vendors}
           formatFullCurrency={formatFullCurrency}
         />
+        {showPaymentBatches && (
+          <PaymentBatchesCard
+            paymentBatchStats={paymentBatchStats}
+            formatCompactCurrency={formatCompactCurrency}
+          />
+        )}
       </div>
 
       {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
