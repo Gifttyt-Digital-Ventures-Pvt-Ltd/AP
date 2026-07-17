@@ -13,9 +13,14 @@ import {
   useGetCorporateUserDetailsQuery,
 } from "../Services/apis/corporateApi";
 import { useGetClientWalletSummaryQuery } from "../Services/apis/creditsApi";
+import {
+  useGetNotificationSettingsQuery,
+  useGetUnreadNotificationCountQuery,
+} from "../Services/apis/notificationsApi";
 import { redirectToOriginLogin } from "../utils/authRedirect";
 import { formatCredits } from "./credits/CreditAmount";
 import CreditBalanceBadge from "./credits/CreditBalanceBadge";
+import { useNotificationStream } from "../pages/notifications/useNotificationStream";
 import { Button } from "./ui/button";
 import {
   Tooltip,
@@ -78,6 +83,19 @@ export const Layout = ({ children }) => {
     refetchOnFocus: false,
     refetchOnMountOrArgChange: false,
   });
+  const { data: notificationSettings = null, isError: notificationSettingsError } =
+    useGetNotificationSettingsQuery(undefined, {
+      skip: !user,
+      refetchOnFocus: true,
+    });
+  const inAppNotificationsEnabled =
+    notificationSettingsError ? true : notificationSettings?.master?.inAppEnabled !== false;
+  useNotificationStream(Boolean(user && inAppNotificationsEnabled));
+  const { data: unreadNotifications = null } = useGetUnreadNotificationCountQuery(undefined, {
+    skip: !user || !inAppNotificationsEnabled,
+    pollingInterval: 60000,
+    refetchOnFocus: true,
+  });
   const navigate = useNavigate();
   const location = useLocation();
   const mainContentRef = useRef(null);
@@ -96,6 +114,9 @@ export const Layout = ({ children }) => {
   const sidebarPrimaryName = corporateName || userName || "User";
   const sidebarSecondaryLabel = userName;
   const tokenBalance = formatCredits(walletSummary?.balance || 0);
+  const unreadNotificationCount = Number(
+    unreadNotifications?.count ?? unreadNotifications?.unreadCount ?? 0,
+  );
 
   const menuItems = [
     { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
@@ -186,17 +207,28 @@ export const Layout = ({ children }) => {
                   if (!canShowNavItem(item.path)) return null;
 
                   const Icon = item.icon;
+                  const isNotificationsItem = item.path === "/notifications";
                   const buttonElement = (
                     <button
                       onClick={() => handleNavigate(item.path)}
-                      className={`w-full flex items-center gap-3 px-2 py-2 rounded-md transition-all ${
+                      className={`relative w-full flex items-center gap-3 px-2 py-2 rounded-md transition-all ${
                         isActive(item.path)
                           ? "bg-button-primary text-button-primary-foreground"
                           : "hover:bg-button-primary-hover hover:text-primary-foreground"
                       }`}
                       data-testid={`nav-${(item?.label ?? 'nav').toLowerCase()}`}
+                      aria-label={
+                        isNotificationsItem && unreadNotificationCount > 0
+                          ? `Notifications, ${unreadNotificationCount} unread`
+                          : item.label
+                      }
                     >
                       <Icon className="h-6 w-6" />
+                      {isNotificationsItem && inAppNotificationsEnabled && unreadNotificationCount > 0 && (
+                        <span className="absolute left-6 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold leading-none text-white">
+                          {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
+                        </span>
+                      )}
                       {sidebarOpen && (
                         <span className="text-sm font-medium">
                           {item.label}

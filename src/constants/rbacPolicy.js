@@ -73,7 +73,6 @@ export const ROUTE_PERMISSION_RULES = {
     ],
   },
   "/banking": { anyOf: ["banking-view", "banking-full"] },
-  "/notifications": { anyOf: ["notifications-view", "notifications-manage"] },
   "/user-roles": {
     anyOf: [
       "roles-view",

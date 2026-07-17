@@ -247,6 +247,10 @@ function AppContent() {
             }
           />
           <Route path="/settings/integrations" element={<Navigate to="/integrations" replace />} />
+          <Route
+            path="/settings/notifications"
+            element={<Navigate to="/settings?tab=notifications" replace />}
+          />
           <Route path="/settings/integrations/gmail" element={<Navigate to="/integrations/gmail" replace />} />
           <Route path="/settings/integrations/zoho" element={<Navigate to="/integrations/erp/zoho" replace />} />
           <Route path="/settings/integrations/tally" element={<Navigate to="/integrations/erp/tally" replace />} />

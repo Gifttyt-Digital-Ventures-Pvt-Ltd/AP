@@ -436,8 +436,13 @@ export const RBACProvider = ({ children }) => {
       );
     }
 
+    if (normalizedPath === "/settings/notifications") {
+      return isCorporateAdmin;
+    }
+
     if (normalizedPath === "/settings" || normalizedPath.startsWith("/settings/")) {
       return (
+        isCorporateAdmin ||
         (hasPermission("settings-org") && isCorporateSectionEnabled("SETTINGS_ORG_DETAILS")) ||
         (hasAnyPermission(["settings-banking", "banking-full"]) && isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING")) ||
         (hasAnyPermission(["credits-view", "credits-ledger", "credits-manage", "VIEW_WALLET", "VIEW_LEDGER", "MANAGE_BILLING"]) &&
