@@ -1,4 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   useGetInvoicesQuery,
   useGetInvoiceFilterOptionsQuery,
@@ -242,8 +249,24 @@ const baseInvoiceTableHeader = [
   {
     key: "srNo",
     title: "Sr. No",
-    headerClassName: "p-3 text-left text-xs font-medium",
-    cellClassName: "p-3 text-sm font-medium",
+    headerClassName: "p-3 text-left text-xs font-medium sticky left-0",
+    cellClassName: "p-3 text-sm font-medium sticky left-0 bg-inherit",
+  },
+  {
+    key: "vendorName",
+    title: "Vendor",
+    headerClassName:
+      "p-3 text-left text-xs font-medium sticky left-[var(--invoice-sticky-col2)] ",
+    cellClassName:
+      "p-3 text-sm sticky left-[var(--invoice-sticky-col2)]  bg-inherit",
+  },
+  {
+    key: "invoiceNumber",
+    title: "Invoice #",
+    headerClassName:
+      "p-3 text-left text-xs font-medium sticky left-[var(--invoice-sticky-col3)] ",
+    cellClassName:
+      "p-3 text-sm font-medium sticky left-[var(--invoice-sticky-col3)] bg-inherit",
   },
   {
     key: "source",
@@ -252,20 +275,8 @@ const baseInvoiceTableHeader = [
     cellClassName: "p-3",
   },
   {
-    key: "invoiceNumber",
-    title: "Invoice #",
-    headerClassName: "p-3 text-left text-xs font-medium",
-    cellClassName: "p-3   text-sm font-medium",
-  },
-  {
     key: "refNo",
     title: "Ref No",
-    headerClassName: "p-3 text-left text-xs font-medium",
-    cellClassName: "p-3 text-sm font-mono",
-  },
-  {
-    key: "vendorName",
-    title: "Vendor",
     headerClassName: "p-3 text-left text-xs font-medium",
     cellClassName: "p-3 text-sm",
   },
@@ -547,8 +558,10 @@ const InvoicesPage = () => {
   const [deleteInvoice] = useDeleteInvoiceMutation();
   const [cancelInvoice, { isLoading: cancelInvoiceLoading }] =
     useCancelInvoiceMutation();
-  const [requestAccountingUnlock, { isLoading: requestAccountingUnlockLoading }] =
-    useRequestAccountingReadyUnlockMutation();
+  const [
+    requestAccountingUnlock,
+    { isLoading: requestAccountingUnlockLoading },
+  ] = useRequestAccountingReadyUnlockMutation();
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
   const invoices = useMemo(
@@ -792,6 +805,37 @@ const InvoicesPage = () => {
     showIntegrationColumn,
     renderInvoiceColumnHeader,
   ]);
+
+  // Keep the sticky Sr No / Vendor / Invoice # columns aligned with the
+  // actual (auto-sized) widths of those columns' header cells.
+  const invoiceTableWrapperRef = useRef(null);
+
+  useLayoutEffect(() => {
+    const wrapperEl = invoiceTableWrapperRef.current;
+    if (!wrapperEl) return undefined;
+
+    const updateStickyColumnOffsets = () => {
+      const headerCells = wrapperEl.querySelectorAll("thead th");
+      const col1Width = headerCells[0]?.getBoundingClientRect().width || 0;
+      const col1And2Width =
+        col1Width + (headerCells[1]?.getBoundingClientRect().width || 0);
+      wrapperEl.style.setProperty("--invoice-sticky-col2", `${col1Width}px`);
+      wrapperEl.style.setProperty(
+        "--invoice-sticky-col3",
+        `${col1And2Width}px`,
+      );
+    };
+
+    updateStickyColumnOffsets();
+
+    const resizeObserver = new window.ResizeObserver(updateStickyColumnOffsets);
+    wrapperEl
+      .querySelectorAll("thead th")
+      .forEach((cell) => resizeObserver.observe(cell));
+
+    return () => resizeObserver.disconnect();
+  }, [invoiceTableHeader, displayInvoices, invoicesFetching]);
+
   const invoiceEditContext = useMemo(
     () => ({
       ...buildCurrentUserIdentity({ user, corporateUserContext }),
@@ -1737,7 +1781,9 @@ const InvoicesPage = () => {
           })),
         }),
         memo: data.description,
-        sourceEmail: isGmailInvoiceSource(data.source) ? data.sourceEmail : null,
+        sourceEmail: isGmailInvoiceSource(data.source)
+          ? data.sourceEmail
+          : null,
         departmentName:
           data.departmentName || getDepartmentNameById(data.departmentId),
         ...(keepSaved ? { action: "saved" } : {}),
@@ -2169,7 +2215,9 @@ const InvoicesPage = () => {
       toast.success(result?.message || "Unlock request submitted");
       await refetchInvoices();
     } catch (error) {
-      toast.error(getAccountingErrorMessage(error, "Could not raise unlock request"));
+      toast.error(
+        getAccountingErrorMessage(error, "Could not raise unlock request"),
+      );
     }
   };
 
@@ -2485,8 +2533,8 @@ const InvoicesPage = () => {
       <React.Fragment key={invoiceId}>
         <TableRow
           className={cn(
-            rowIndex % 2 === 1 && "bg-muted/20",
-            "border-b border-border transition-colors hover:bg-muted/50",
+            rowIndex % 2 === 1 ? "bg-muted" : "bg-card",
+            "border-b border-border transition-colors hover:bg-muted",
             invoice.isDuplicate && "bg-amber-100 hover:bg-amber-100",
           )}
           data-testid={`invoice-row-${invoice?.id ?? "unknown"}`}
@@ -2503,7 +2551,9 @@ const InvoicesPage = () => {
                   <span
                     className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${isGmailInvoiceSource(invoice.source) ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-green-100 text-green-700 border border-green-200"}`}
                   >
-                    {isGmailInvoiceSource(invoice.source) && <Mail className="h-3 w-3" />}
+                    {isGmailInvoiceSource(invoice.source) && (
+                      <Mail className="h-3 w-3" />
+                    )}
                     {invoice.source || "Upload"}
                   </span>
                 );
@@ -2620,8 +2670,9 @@ const InvoicesPage = () => {
                     )}
                     {isAccountingReadyLocked(invoice) &&
                       canUpdateInvoices &&
-                      String(getAccountingUnlockRequestStatus(invoice) || "").toUpperCase() !==
-                        "PENDING" && (
+                      String(
+                        getAccountingUnlockRequestStatus(invoice) || "",
+                      ).toUpperCase() !== "PENDING" && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -2935,6 +2986,7 @@ const InvoicesPage = () => {
       <div
         className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm"
         data-testid="invoices-table"
+        ref={invoiceTableWrapperRef}
       >
         <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-thin-muted">
           <AppDataTable
