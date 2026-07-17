@@ -380,8 +380,8 @@ const UserRoles = () => {
       }
       if (backendEntry.screen === "NOTIFICATIONS") {
         return (
-          isCorporateScreenAllowed("NOTIFICATIONS") &&
-          isCorporateSectionEnabled("NOTIFICATIONS")
+          isCorporateScreenAllowed("SETTINGS") &&
+          isCorporateSectionEnabled("SETTINGS_NOTIFICATIONS")
         );
       }
       return isCorporateScreenAllowed(backendEntry.screen);
@@ -454,8 +454,8 @@ const UserRoles = () => {
     }
 
     if (
-      isCorporateScreenAllowed("NOTIFICATIONS") &&
-      isCorporateSectionEnabled("NOTIFICATIONS")
+      isCorporateScreenAllowed("SETTINGS") &&
+      isCorporateSectionEnabled("SETTINGS_NOTIFICATIONS")
     ) {
       keys.add("NOTIFICATIONS:VIEW");
       keys.add("NOTIFICATIONS:MANAGE");
@@ -519,8 +519,8 @@ const UserRoles = () => {
     }
 
     if (
-      isCorporateScreenAllowed("NOTIFICATIONS") &&
-      isCorporateSectionEnabled("NOTIFICATIONS")
+      isCorporateScreenAllowed("SETTINGS") &&
+      isCorporateSectionEnabled("SETTINGS_NOTIFICATIONS")
     ) {
       keys.add("notifications-view");
       keys.add("notifications-manage");

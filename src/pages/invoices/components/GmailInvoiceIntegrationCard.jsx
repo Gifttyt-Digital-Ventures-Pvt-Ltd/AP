@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React from "react";
 import { toast } from "sonner";
 import {
   AlertCircle,
@@ -12,26 +12,17 @@ import {
 import {
   useCreateGmailConnectionMutation,
   useDisconnectGmailConnectionMutation,
-  useGetGmailConnectionQuery,
-  useGetGmailConnectionsQuery,
+  useGetApIntegrationSummaryQuery,
   useSyncGmailConnectionMutation,
 } from "../../../Services/apis/integrationsApi";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { useActionGuard } from "../../../hooks/useActionGuard";
-
-const getConnectionStatus = (connection = {}) =>
-  String(connection.status || connection.connectionStatus || "UNKNOWN").toUpperCase();
-
-const getConnectionId = (connection) => {
-  const safeConnection = connection || {};
-  return (
-    safeConnection.id ||
-    safeConnection.connectionId ||
-    safeConnection.connection_id ||
-    ""
-  );
-};
+import {
+  INTEGRATION_CONNECTION_STATUS,
+  getIntegrationStatusLabel,
+  selectEmailIntegration,
+} from "../../integrations/integrationSummary";
 
 const formatDateTime = (value) => {
   if (!value) return "Never";
@@ -48,25 +39,17 @@ const formatDateTime = (value) => {
 
 const statusClassName = (status) => {
   switch (status) {
-    case "ACTIVE":
+    case INTEGRATION_CONNECTION_STATUS.CONNECTED:
       return "border-emerald-200 bg-emerald-50 text-emerald-700";
-    case "PENDING":
+    case INTEGRATION_CONNECTION_STATUS.CONNECTING:
+    case INTEGRATION_CONNECTION_STATUS.ACTION_REQUIRED:
       return "border-amber-200 bg-amber-50 text-amber-700";
-    case "DISCONNECTED":
-    case "INACTIVE":
+    case INTEGRATION_CONNECTION_STATUS.DISCONNECTED:
       return "border-slate-200 bg-slate-50 text-slate-600";
+    case INTEGRATION_CONNECTION_STATUS.ERROR:
     default:
       return "border-red-200 bg-red-50 text-red-700";
   }
-};
-
-const statusLabel = (status) => {
-  if (status === "NONE") return "Not Connected";
-  if (status === "ACTIVE") return "Connected";
-  if (status === "PENDING") return "Setup Pending";
-  if (status === "DISCONNECTED") return "Disconnected";
-  if (status === "INACTIVE") return "Inactive";
-  return status;
 };
 
 const getErrorMessage = (error, fallback) =>
@@ -78,45 +61,37 @@ const getErrorMessage = (error, fallback) =>
 
 const GmailInvoiceIntegrationCard = () => {
   const { guardAction } = useActionGuard();
-  const { data: connectionsResponse, isFetching: connectionsLoading, refetch } =
-    useGetGmailConnectionsQuery();
+  const {
+    data: integrationSummary,
+    isFetching: summaryFetching,
+    isLoading: summaryLoading,
+    isError: summaryError,
+    refetch,
+  } = useGetApIntegrationSummaryQuery();
   const [createConnection, { isLoading: creating }] = useCreateGmailConnectionMutation();
   const [disconnectConnection, { isLoading: disconnecting }] =
     useDisconnectGmailConnectionMutation();
   const [syncConnection, { isLoading: syncing }] = useSyncGmailConnectionMutation();
 
-  const connections = useMemo(() => {
-    if (Array.isArray(connectionsResponse)) return connectionsResponse;
-    return (
-      connectionsResponse?.connections ||
-      connectionsResponse?.items ||
-      connectionsResponse?.data ||
-      []
-    );
-  }, [connectionsResponse]);
-
-  const activeConnection =
-    connections.find((connection) => getConnectionStatus(connection) === "ACTIVE") ||
-    connections[0] ||
-    null;
-  const connectionId = getConnectionId(activeConnection);
-  const connectionStatus = activeConnection ? getConnectionStatus(activeConnection) : "NONE";
-  const { data: connectionDetail } = useGetGmailConnectionQuery(connectionId, {
-    skip: !connectionId,
-  });
-  const detail = connectionDetail || activeConnection || {};
-  const lastSync = detail.lastSync || detail.last_sync || null;
-  const gmailEmail = detail.gmailEmail || detail.gmail_email || "";
-  const errorMessage = detail.errorMessage || detail.error_message || "";
+  const emailIntegration = selectEmailIntegration(integrationSummary);
+  const connectionId = emailIntegration.connectionId || "";
+  const connectionStatus = emailIntegration.connectionStatus;
+  const statusLabel = summaryError
+    ? "Status unavailable"
+    : getIntegrationStatusLabel(connectionStatus);
+  const gmailEmail =
+    emailIntegration.details?.email || emailIntegration.displayName || "";
+  const errorMessage = emailIntegration.error?.message || "";
   const isBusy = creating || disconnecting || syncing;
-  const canSync = connectionStatus === "ACTIVE";
-  const canDisconnect = connectionStatus === "ACTIVE";
-  const canReconnect = connectionStatus === "DISCONNECTED" || connectionStatus === "INACTIVE";
-  const canStartConnect = connectionStatus === "NONE";
-  const canCompleteSetup = connectionStatus === "PENDING";
-  const lastSyncLabel = formatDateTime(
-    lastSync?.completedAt || detail.updatedAt || detail.updated_at,
-  );
+  const canSync = connectionStatus === INTEGRATION_CONNECTION_STATUS.CONNECTED;
+  const canDisconnect = connectionStatus === INTEGRATION_CONNECTION_STATUS.CONNECTED;
+  const canReconnect = connectionStatus === INTEGRATION_CONNECTION_STATUS.ERROR;
+  const canStartConnect =
+    connectionStatus === INTEGRATION_CONNECTION_STATUS.DISCONNECTED;
+  const canCompleteSetup =
+    connectionStatus === INTEGRATION_CONNECTION_STATUS.CONNECTING ||
+    connectionStatus === INTEGRATION_CONNECTION_STATUS.ACTION_REQUIRED;
+  const lastSyncLabel = formatDateTime(emailIntegration.lastActivityAt);
 
   const handleConnect = async () => {
     if (!guardAction("gmailIntegration.connect")) return;
@@ -175,7 +150,7 @@ const GmailInvoiceIntegrationCard = () => {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <Badge className={statusClassName(connectionStatus)}>
-                {statusLabel(connectionStatus)}
+                {statusLabel}
               </Badge>
               <span className="text-sm text-muted-foreground">
                 {gmailEmail || "No mailbox connected"}
@@ -218,8 +193,8 @@ const GmailInvoiceIntegrationCard = () => {
                 Disconnect
               </Button>
             ) : null}
-            <Button variant="ghost" onClick={() => refetch()} disabled={connectionsLoading}>
-              {connectionsLoading ? (
+            <Button variant="ghost" onClick={() => refetch()} disabled={summaryFetching}>
+              {summaryFetching ? (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
               ) : (
                 <RefreshCw className="mr-2 h-4 w-4" />
@@ -231,6 +206,16 @@ const GmailInvoiceIntegrationCard = () => {
       </div>
 
       <div className="grid gap-4 px-6 py-5 md:grid-cols-3">
+        {summaryLoading ? (
+          <div className="col-span-full flex items-center justify-center gap-2 rounded-lg border border-border bg-background p-4 text-sm text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            Loading Gmail integration summary...
+          </div>
+        ) : summaryError ? (
+          <div className="col-span-full rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+            Unable to load Gmail integration summary. Use Refresh to retry.
+          </div>
+        ) : null}
         <div className="rounded-lg border border-border bg-background p-4">
           <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Connected Mailbox

@@ -17,6 +17,7 @@ import GrnDetailDialog from "../../goods-receipt/components/GrnDetailDialog";
 import ViewDialog from "../../invoices/components/ViewDialog";
 import PoDetailsDialog from "../../purchase-orders/components/PoDetailsDialog";
 import { statusColors as poStatusColors } from "../../purchase-orders/constants";
+import { normalizePurchaseOrder } from "../../purchase-orders/utils";
 import ViewVendorDialog from "../../vendors/components/ViewVendorDialog";
 import { formatDateTime } from "../utils/coaUtils";
 
@@ -26,6 +27,8 @@ const OBJECT_LABELS = {
   INVOICE: "Invoice",
   PI: "Proforma Invoice",
   VENDOR: "Vendor",
+  COA: "Chart of Accounts",
+  CHART_OF_ACCOUNTS: "Chart of Accounts",
 };
 
 const getPayloadRecord = (detail) =>
@@ -59,6 +62,77 @@ const formatDate = (value) => {
 };
 
 const formatCurrency = (value, currency = "INR") => formatMoney(Number(value) || 0, currency);
+
+const normalizeGrnLineItem = (item = {}) => ({
+  ...item,
+  item_description:
+    item.item_description ||
+    item.itemDescription ||
+    item.description ||
+    item.name ||
+    "—",
+  received_quantity:
+    item.received_quantity ??
+    item.receivedQuantity ??
+    item.quantity ??
+    item.qty ??
+    0,
+  accepted_quantity:
+    item.accepted_quantity ??
+    item.acceptedQuantity ??
+    item.receivedQuantity ??
+    item.received_quantity ??
+    0,
+  rejected_quantity:
+    item.rejected_quantity ?? item.rejectedQuantity ?? 0,
+  rejection_reason: item.rejection_reason ?? item.rejectionReason ?? "",
+  unit_price: item.unit_price ?? item.unitPrice ?? item.rate ?? 0,
+  line_amount: item.line_amount ?? item.amount ?? item.lineTotal ?? 0,
+  gst_rate: item.gst_rate ?? item.gstRate ?? 0,
+  uom: item.uom ?? item.unit ?? "",
+});
+
+const normalizeGrnRecord = (record = {}) => ({
+  ...record,
+  grn_number: record.grn_number || record.grnNumber || record.docNo,
+  source_type: record.source_type || record.sourceType,
+  po_id: record.po_id || record.poId,
+  po_number: record.po_number || record.poNumber,
+  vendor_id: record.vendor_id || record.vendorId,
+  vendor_name: record.vendor_name || record.vendorName,
+  receipt_date: record.receipt_date || record.receiptDate,
+  total_received_value:
+    record.total_received_value ??
+    record.totalReceivedValue ??
+    record.amount ??
+    0,
+  grn_format_id: record.grn_format_id || record.grnFormatId,
+  template_code: record.template_code || record.templateCode,
+  config_snapshot: record.config_snapshot || record.configSnapshot,
+  submitted_by: record.submitted_by || record.submittedBy,
+  approved_by: record.approved_by || record.approvedBy,
+  approved_at: record.approved_at || record.approvedAt,
+  created_at: record.created_at || record.createdAt,
+  created_by: record.created_by || record.createdBy,
+  created_by_name: record.created_by_name || record.createdByName,
+  posted_at: record.posted_at || record.postedAt,
+  posted_by: record.posted_by || record.postedBy,
+  accounting_ready: record.accounting_ready ?? record.accountingReady,
+  accounting_ready_id: record.accounting_ready_id || record.accountingReadyId,
+  eligible_for_sync: record.eligible_for_sync ?? record.eligibleForSync,
+  eligible_for_accounting_ready:
+    record.eligible_for_accounting_ready ?? record.eligibleForAccountingReady,
+  edit_policy: record.edit_policy || record.editPolicy,
+  erp_status: record.erp_status || record.erpStatus,
+  sync_status: record.sync_status || record.syncStatus,
+  changed_after_last_sync:
+    record.changed_after_last_sync ?? record.changedAfterLastSync,
+  line_items: Array.isArray(record.line_items)
+    ? record.line_items.map(normalizeGrnLineItem)
+    : Array.isArray(record.lineItems)
+      ? record.lineItems.map(normalizeGrnLineItem)
+      : [],
+});
 
 const AccountingMetadata = ({ detail }) => {
   const metadata = detail?.accountingMetadata ?? detail?.accounting ?? detail?.queue ?? {};
@@ -151,7 +225,7 @@ const AccountingQueuePreviewDialog = ({ open, onOpenChange, detail }) => {
       <PoDetailsDialog
         showViewDialog={open}
         setShowViewDialog={onOpenChange}
-        selectedPO={record}
+        selectedPO={normalizePurchaseOrder(record)}
         statusColors={poStatusColors}
         formatDate={formatDate}
         formatCurrency={formatCurrency}
@@ -170,7 +244,7 @@ const AccountingQueuePreviewDialog = ({ open, onOpenChange, detail }) => {
   if (objectType === "GRN") {
     return (
       <GrnDetailDialog
-        grn={record}
+        grn={normalizeGrnRecord(record)}
         open={open}
         onOpenChange={onOpenChange}
         canApprove={false}

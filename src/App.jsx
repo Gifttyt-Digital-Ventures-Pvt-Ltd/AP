@@ -86,7 +86,12 @@ const ProtectedRoute = () => {
     return null;
   }
 
-  const canVisitPage = canAccessRoute(location.pathname);
+  const settingsIntegrationRedirect =
+    location.pathname === "/settings" &&
+    new URLSearchParams(location.search).get("tab") === "integrations";
+  const canVisitPage =
+    canAccessRoute(location.pathname) ||
+    (settingsIntegrationRedirect && canAccessRoute("/integrations"));
 
   return (
     <Layout>
@@ -241,6 +246,10 @@ function AppContent() {
               </Suspense>
             }
           />
+          <Route path="/settings/integrations" element={<Navigate to="/integrations" replace />} />
+          <Route path="/settings/integrations/gmail" element={<Navigate to="/integrations/gmail" replace />} />
+          <Route path="/settings/integrations/zoho" element={<Navigate to="/integrations/erp/zoho" replace />} />
+          <Route path="/settings/integrations/tally" element={<Navigate to="/integrations/erp/tally" replace />} />
           <Route path="/user-roles" element={<UserRoles />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/transactions" element={<TransactionsPage />} />
@@ -275,6 +284,30 @@ function AppContent() {
           />
           <Route
             path="/integrations"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <IntegrationsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/integrations/gmail"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <IntegrationsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/integrations/erp/zoho"
+            element={
+              <Suspense fallback={<PageFallback />}>
+                <IntegrationsPage />
+              </Suspense>
+            }
+          />
+          <Route
+            path="/integrations/erp/tally"
             element={
               <Suspense fallback={<PageFallback />}>
                 <IntegrationsPage />

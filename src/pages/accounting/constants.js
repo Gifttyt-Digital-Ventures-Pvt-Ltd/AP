@@ -89,6 +89,7 @@ export const OBJECT_TYPE = {
   PI: "PI",
   GRN: "GRN",
   VENDOR: "VENDOR",
+  COA: "CHART_OF_ACCOUNTS",
 };
 
 export const QUEUE_TAB = {
@@ -97,6 +98,7 @@ export const QUEUE_TAB = {
   INVOICE: "Invoices",
   PI: "Proforma Invoices",
   VENDOR: "Vendors",
+  COA: "COA",
 };
 
 export const OBJECT_TYPE_LABELS = {
@@ -105,6 +107,7 @@ export const OBJECT_TYPE_LABELS = {
   [OBJECT_TYPE.PI]: "Proforma Invoice",
   [OBJECT_TYPE.GRN]: "Goods Receipt",
   [OBJECT_TYPE.VENDOR]: "Vendor",
+  [OBJECT_TYPE.COA]: "Chart of Accounts",
 };
 
 export const OBJECT_TYPE_TO_TAB = {
@@ -113,6 +116,8 @@ export const OBJECT_TYPE_TO_TAB = {
   [OBJECT_TYPE.INVOICE]: QUEUE_TAB.INVOICE,
   [OBJECT_TYPE.PI]: QUEUE_TAB.PI,
   [OBJECT_TYPE.VENDOR]: QUEUE_TAB.VENDOR,
+  [OBJECT_TYPE.COA]: QUEUE_TAB.COA,
+  COA: QUEUE_TAB.COA,
 };
 
 export const TAB_TO_OBJECT_TYPE = {
@@ -121,4 +126,5 @@ export const TAB_TO_OBJECT_TYPE = {
   [QUEUE_TAB.INVOICE]: OBJECT_TYPE.INVOICE,
   [QUEUE_TAB.PI]: OBJECT_TYPE.PI,
   [QUEUE_TAB.VENDOR]: OBJECT_TYPE.VENDOR,
+  [QUEUE_TAB.COA]: OBJECT_TYPE.COA,
 };

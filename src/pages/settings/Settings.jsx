@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   useGetBankAccountsQuery,
   useCreateBankAccountMutation,
@@ -16,13 +16,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/ta
 import { Building2, CheckCircle, Copy, Globe, Loader2, Mail, MapPin, Phone, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import BankAccountDialog from './components/BankAccountDialog';
-import ZohoIntegrationCard from './components/ZohoIntegrationCard';
-import TallyIntegrationCard from '../integrations/components/TallyIntegrationCard';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useRBAC } from '../../contexts/RBACContext';
-import useGmailIntegrationSubscription from '../../hooks/useGmailIntegrationSubscription';
 import CreditsPage from '../credits/CreditsPage';
-import GmailInvoiceIntegrationCard from '../invoices/components/GmailInvoiceIntegrationCard';
 import OrgBranchesSection from './components/OrgBranchesSection';
 import OrgGstRegistrationsSection from './components/OrgGstRegistrationsSection';
 import {
@@ -50,21 +46,13 @@ const Settings = () => {
     isBranchEnabled: isBranchConfigurationEnabled,
     isBranchSqFtEnabled: isBranchSqFtConfigurationEnabled,
   } = useRBAC();
-  const { isGmailIntegrationEnabled } = useGmailIntegrationSubscription();
+  const navigate = useNavigate();
   const canViewBankingSettings =
     hasAnyPermission(['settings-banking', 'banking-full']) &&
     isCorporateSectionEnabled('SETTINGS_CONNECTED_BANKING');
   const canViewOrganisationSettings =
     hasAnyPermission(['settings-org']) &&
     isCorporateSectionEnabled('SETTINGS_ORG_DETAILS');
-  const canViewErpIntegrationsSettings =
-    hasAnyPermission(['settings-interaction']) &&
-    isCorporateSectionEnabled('SETTINGS_INTEGRATIONS');
-  const canViewGmailIntegrationSettings =
-    hasAnyPermission(['settings-interaction']) &&
-    isGmailIntegrationEnabled;
-  const canViewIntegrationsSettings =
-    canViewErpIntegrationsSettings || canViewGmailIntegrationSettings;
   const canViewBillingSettings = hasAnyPermission([
     'credits-view',
     'credits-ledger',
@@ -78,9 +66,8 @@ const Settings = () => {
     if (canViewOrganisationSettings) tabs.push('organisation');
     if (canViewBankingSettings) tabs.push('banking');
     if (canViewBillingSettings) tabs.push('billing');
-    if (canViewIntegrationsSettings) tabs.push('integrations');
     return tabs;
-  }, [canViewBankingSettings, canViewBillingSettings, canViewIntegrationsSettings, canViewOrganisationSettings]);
+  }, [canViewBankingSettings, canViewBillingSettings, canViewOrganisationSettings]);
   const [searchParams] = useSearchParams();
   const [activeSettingsTab, setActiveSettingsTab] = useState('');
   const {
@@ -144,10 +131,14 @@ const Settings = () => {
 
   useEffect(() => {
     const requestedTab = searchParams.get('tab');
+    if (requestedTab === 'integrations') {
+      navigate('/integrations', { replace: true });
+      return;
+    }
     if (requestedTab && availableSettingsTabs.includes(requestedTab)) {
       setActiveSettingsTab(requestedTab);
     }
-  }, [availableSettingsTabs, searchParams]);
+  }, [availableSettingsTabs, navigate, searchParams]);
 
   useEffect(() => {
     if (availableSettingsTabs.length === 0) return;
@@ -355,7 +346,7 @@ const Settings = () => {
         <h1 className="text-4xl md:text-5xl font-bold font-['Manrope'] text-primary mb-2" data-testid="settings-title">
           Settings
         </h1>
-        <p className="text-muted-foreground">Manage your account settings and integrations</p>
+        <p className="text-muted-foreground">Manage your account and organisation settings</p>
       </div>
 
       <Tabs value={activeSettingsTab} onValueChange={setActiveSettingsTab} className="space-y-6" data-testid="settings-tabs">
@@ -368,9 +359,6 @@ const Settings = () => {
           )}
           {canViewBillingSettings && (
             <TabsTrigger value="billing" data-testid="tab-billing">Billing</TabsTrigger>
-          )}
-          {canViewIntegrationsSettings && (
-            <TabsTrigger value="integrations" data-testid="tab-integrations">Integrations</TabsTrigger>
           )}
         </TabsList>
 
@@ -741,29 +729,6 @@ const Settings = () => {
 
         {canViewBillingSettings && <TabsContent value="billing">
           <CreditsPage />
-        </TabsContent>}
-
-        {canViewIntegrationsSettings && <TabsContent value="integrations">
-          <div className="space-y-6" data-testid="settings-integrations-gateway">
-            {canViewGmailIntegrationSettings && (
-              <GmailInvoiceIntegrationCard />
-            )}
-
-            {canViewErpIntegrationsSettings && (
-              <>
-                <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
-                  <ZohoIntegrationCard />
-                  <TallyIntegrationCard mode="setup" />
-                </div>
-
-                <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-                  <p className="text-sm text-blue-800">
-                    <strong>Note:</strong> Connect your accounting system to keep vendors, invoices, ledgers, and master data aligned with AP workflows.
-                  </p>
-                </div>
-              </>
-            )}
-          </div>
         </TabsContent>}
 
       </Tabs>

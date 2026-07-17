@@ -40,6 +40,13 @@ const TdsSelectionField = ({
   const [customRateError, setCustomRateError] = useState("");
 
   useEffect(() => {
+    if (!value || value === NO_TDS_VALUE) {
+      setCustomMode(false);
+      setCustomRateDraft("");
+      setCustomRateError("");
+      return;
+    }
+
     if (isCustomTdsSelection(value)) {
       setCustomMode(true);
       if (value !== CUSTOM_TDS_VALUE) {
@@ -48,11 +55,9 @@ const TdsSelectionField = ({
       return;
     }
 
-    if (value && value !== NO_TDS_VALUE) {
-      setCustomMode(false);
-      setCustomRateDraft("");
-      setCustomRateError("");
-    }
+    setCustomMode(false);
+    setCustomRateDraft("");
+    setCustomRateError("");
   }, [value]);
 
   const tdsOptions = useMemo(() => {

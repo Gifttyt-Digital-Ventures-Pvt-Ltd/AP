@@ -409,10 +409,15 @@ export const mapExtractedLineItemToForm = (
     unitRate: unitRate,
     lineTotal: resolvedLineTotal,
     discount: item.discount || 0,
+    discountAmount: item.discountAmount ?? item.discount_amount ?? "",
+    discountPercent: item.discountPercent ?? item.discount_percent ?? "",
     discountType: normalizeLineItemDiscountTypeForForm(
       item.discountType ?? item.discount_type ?? "%",
       currency,
     ),
+    grossAmount: item.grossAmount ?? item.gross_amount ?? "",
+    taxAmount: item.taxAmount ?? item.tax_amount ?? "",
+    netAmount: item.netAmount ?? item.net_amount ?? "",
     hsnSac: item.hsnSac || item.hsn_sac || "",
     eligibleForItc: item.eligibleForItc ?? true,
   };

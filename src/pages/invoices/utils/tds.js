@@ -215,6 +215,8 @@ export const buildTdsValue = ({ tdsSectionId, tdsSectionCode, tdsRate } = {}) =>
   if (!normalizedRate) return "";
 
   const sectionCode = String(tdsSectionCode || "").trim().toUpperCase();
+  if (!sectionCode && Number(normalizedRate) === 0) return "";
+
   const valueId = tdsSectionId || CUSTOM_TDS_SECTION_ID;
 
   if (sectionCode) {

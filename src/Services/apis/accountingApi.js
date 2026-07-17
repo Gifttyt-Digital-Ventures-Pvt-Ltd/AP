@@ -7,6 +7,8 @@ import {
 import { normalizeVoucherTypeOptions } from "../../pages/invoices/utils/invoiceAccountingFields";
 
 const ACCOUNTING_BASE = "/accounting";
+const COA_SYNC_OBJECT = "CHART_OF_ACCOUNTS";
+const COA_SYNC_DIRECTION = "PULL";
 
 const withParams = (params = {}) =>
   Object.fromEntries(
@@ -25,7 +27,15 @@ export const accountingApi = serviceApi.injectEndpoints({
       providesTags: ["Accounting"],
     }),
     syncCoa: builder.mutation({
-      query: () => ({ url: `${ACCOUNTING_BASE}/coa/sync`, method: "POST" }),
+      query: ({ erpSource, direction = COA_SYNC_DIRECTION } = {}) => ({
+        url: `${ACCOUNTING_BASE}/coa/sync`,
+        method: "POST",
+        body: withParams({
+          object: COA_SYNC_OBJECT,
+          direction,
+          erpSource,
+        }),
+      }),
       transformResponse: (response) => normalizeCoaTreeResponse(response),
       invalidatesTags: ["Accounting"],
     }),
@@ -36,6 +46,57 @@ export const accountingApi = serviceApi.injectEndpoints({
       }),
       transformResponse: (response) => normalizeLedgerDetailResponse(response),
       providesTags: (_result, _error, ledgerId) => [{ type: "Accounting", id: ledgerId }],
+    }),
+    createLedger: builder.mutation({
+      query: (body = {}) => ({
+        url: `${ACCOUNTING_BASE}/ledgers`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Accounting"],
+    }),
+    updateLedger: builder.mutation({
+      query: ({ ledgerId, body } = {}) => ({
+        url: `${ACCOUNTING_BASE}/ledgers/${ledgerId}`,
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: (_result, _error, arg = {}) => [
+        "Accounting",
+        { type: "Accounting", id: arg.ledgerId },
+      ],
+    }),
+    createAccountCategory: builder.mutation({
+      query: (body = {}) => ({
+        url: `${ACCOUNTING_BASE}/categories`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Accounting"],
+    }),
+    updateAccountCategory: builder.mutation({
+      query: ({ categoryId, body } = {}) => ({
+        url: `${ACCOUNTING_BASE}/categories/${categoryId}`,
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: ["Accounting"],
+    }),
+    createAccountGroup: builder.mutation({
+      query: (body = {}) => ({
+        url: `${ACCOUNTING_BASE}/groups`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Accounting"],
+    }),
+    updateAccountGroup: builder.mutation({
+      query: ({ groupId, body } = {}) => ({
+        url: `${ACCOUNTING_BASE}/groups/${groupId}`,
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: ["Accounting"],
     }),
     getAccountingVoucherTypes: builder.query({
       query: () => ({ url: `${ACCOUNTING_BASE}/voucher-types`, method: "GET" }),
@@ -154,6 +215,12 @@ export const {
   useSyncCoaMutation,
   useGetLedgerQuery,
   useLazyGetLedgerQuery,
+  useCreateLedgerMutation,
+  useUpdateLedgerMutation,
+  useCreateAccountCategoryMutation,
+  useUpdateAccountCategoryMutation,
+  useCreateAccountGroupMutation,
+  useUpdateAccountGroupMutation,
   useGetAccountingVoucherTypesQuery,
   useGetAccountingReadyQueueQuery,
   useLazyGetAccountingQueueItemDetailQuery,
