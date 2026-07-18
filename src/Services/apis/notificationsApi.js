@@ -24,7 +24,7 @@ export const notificationsApi = serviceApi.injectEndpoints({
     }),
     getNotificationInbox: builder.query({
       query: ({ filter = "ACTIONABLE", page = 0, size = 20 } = {}) => ({
-        url: "/notifications",
+        url: "/notifications/inbox",
         method: "GET",
         params: { filter, page, size },
       }),
@@ -34,18 +34,18 @@ export const notificationsApi = serviceApi.injectEndpoints({
       ],
     }),
     getUnreadNotificationCount: builder.query({
-      query: () => ({ url: "/notifications/unread-count", method: "GET" }),
+      query: () => ({ url: "/notifications/inbox/unread-count", method: "GET" }),
       providesTags: [{ type: "Notifications", id: "UnreadCount" }],
     }),
     markNotificationRead: builder.mutation({
-      query: (id) => ({ url: `/notifications/${id}/read`, method: "PATCH" }),
+      query: (id) => ({ url: `/notifications/inbox/${id}/mark-read`, method: "PATCH" }),
       invalidatesTags: [
         { type: "Notifications", id: "Inbox" },
         { type: "Notifications", id: "UnreadCount" },
       ],
     }),
     markAllNotificationsRead: builder.mutation({
-      query: () => ({ url: "/notifications/read-all", method: "POST" }),
+      query: () => ({ url: "/notifications/inbox/mark-all-read", method: "POST" }),
       invalidatesTags: [
         { type: "Notifications", id: "Inbox" },
         { type: "Notifications", id: "UnreadCount" },

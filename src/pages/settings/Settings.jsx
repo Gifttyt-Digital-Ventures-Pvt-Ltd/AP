@@ -63,14 +63,16 @@ const Settings = () => {
     'VIEW_LEDGER',
     'MANAGE_BILLING',
   ]) && isBillingFeatureEnabled;
+  const canManageNotificationSettings =
+    isCorporateAdmin || hasAnyPermission(['notifications-manage', 'NOTIFICATIONS MANAGE']);
   const availableSettingsTabs = useMemo(() => {
     const tabs = [];
     if (canViewOrganisationSettings) tabs.push('organisation');
     if (canViewBankingSettings) tabs.push('banking');
-    if (isCorporateAdmin) tabs.push('notifications');
+    if (canManageNotificationSettings) tabs.push('notifications');
     if (canViewBillingSettings) tabs.push('billing');
     return tabs;
-  }, [canViewBankingSettings, canViewBillingSettings, canViewOrganisationSettings, isCorporateAdmin]);
+  }, [canManageNotificationSettings, canViewBankingSettings, canViewBillingSettings, canViewOrganisationSettings]);
   const [searchParams] = useSearchParams();
   const [activeSettingsTab, setActiveSettingsTab] = useState('');
   const {
@@ -360,7 +362,7 @@ const Settings = () => {
           {canViewBankingSettings && (
             <TabsTrigger value="banking" data-testid="tab-banking">Connected Banking</TabsTrigger>
           )}
-          {isCorporateAdmin && (
+          {canManageNotificationSettings && (
             <TabsTrigger value="notifications" data-testid="tab-notifications">Notifications</TabsTrigger>
           )}
           {canViewBillingSettings && (
@@ -737,7 +739,7 @@ const Settings = () => {
           <CreditsPage />
         </TabsContent>}
 
-        {isCorporateAdmin && <TabsContent value="notifications">
+        {canManageNotificationSettings && <TabsContent value="notifications">
           <NotificationSettings />
         </TabsContent>}
 

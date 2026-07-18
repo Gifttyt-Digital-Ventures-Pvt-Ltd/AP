@@ -4,7 +4,7 @@ import { notificationsApi } from "../../Services/apis/notificationsApi";
 
 const getStreamUrl = () => {
   const backendUrl = import.meta.env.VITE_BACKEND_URL ?? "";
-  const streamUrl = new URL(`${backendUrl}/notifications/stream`, window.location.origin);
+  const streamUrl = new URL(`${backendUrl}/notifications/inbox/live-stream`, window.location.origin);
   const token = sessionStorage.getItem("token");
   if (token) streamUrl.searchParams.set("authToken", token);
   return streamUrl.toString();
