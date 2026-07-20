@@ -111,7 +111,7 @@ const EmptyState = ({ filter }) => {
     <div className="flex min-h-[280px] flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white px-6 text-center">
       <Inbox className="h-10 w-10 text-slate-300" />
       <h2 className="mt-4 text-lg font-semibold text-slate-900">
-        {actionable ? "Nothing needs you" : "No notifications"}
+        {actionable ? "No action needed" : "No notifications"}
       </h2>
       <p className="mt-1 max-w-sm text-sm text-slate-500">
         {actionable
