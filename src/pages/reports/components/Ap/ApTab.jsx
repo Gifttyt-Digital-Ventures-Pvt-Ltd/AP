@@ -14,7 +14,7 @@ const ApTab = ({ apData, formatCurrency, formatFullCurrency }) => {
         bottleneckAnalysis={apData.bottleneck_analysis}
       />
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
         <InvoiceAgingChart
           agingReport={apData.aging_report}
           formatCurrency={formatCurrency}
