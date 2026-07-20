@@ -38,7 +38,7 @@ const OrgGstRegistrationsSection = ({ registrations = [], onChange }) => {
       <div>
         <Label>GST Registrations</Label>
         <p className="text-sm text-muted-foreground mt-1">
-          Add each GSTIN with its GST portal username. You can register multiple GSTINs for this organisation.
+          Add each GSTIN for this organisation. GST portal username is optional.
         </p>
       </div>
 
@@ -61,12 +61,12 @@ const OrgGstRegistrationsSection = ({ registrations = [], onChange }) => {
               />
             </div>
             <div>
-              <Label htmlFor={`gst-username-${row.id}`}>GST Portal Username</Label>
+              <Label htmlFor={`gst-username-${row.id}`}>GST Portal Username (Optional)</Label>
               <Input
                 id={`gst-username-${row.id}`}
                 value={row.username}
                 onChange={(e) => updateRow(row.id, 'username', e.target.value)}
-                placeholder="Portal login username"
+                placeholder="Optional portal login username"
                 data-testid={`org-gst-username-input-${index}`}
               />
             </div>

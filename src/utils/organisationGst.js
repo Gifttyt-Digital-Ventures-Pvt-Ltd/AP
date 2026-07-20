@@ -100,11 +100,8 @@ export function validateGstRegistrations(registrations = []) {
   const activeRows = normalizeGstRegistrationsForSave(registrations);
 
   for (const row of activeRows) {
-    // if (row.gstin && !GSTIN_PATTERN.test(row.gstin)) {
-    //   return 'Each GSTIN must be a valid 15-character GST number.';
-    // }
-    if (row.gstin && !row.username) {
-      return 'GST portal username is required for each GSTIN.';
+    if (row.gstin && !GSTIN_PATTERN.test(row.gstin)) {
+      return 'Each GSTIN must be a valid 15-character GST number.';
     }
     if (!row.gstin && row.username) {
       return 'GSTIN is required when a GST portal username is provided.';

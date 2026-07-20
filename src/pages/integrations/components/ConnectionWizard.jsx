@@ -19,6 +19,7 @@ import {
   useGetIntegrationProvidersQuery,
   useGetZohoConnectionStatusQuery,
   useGetZohoOrganizationsQuery,
+  useLazyGetSyncDataCategoriesQuery,
   useTriggerIntegrationSyncMutation,
 } from "../../../Services/apis/integrationsApi";
 import { useActionGuard } from "../../../hooks/useActionGuard";
@@ -56,6 +57,8 @@ import {
   toArray,
   titleize,
 } from "../utils";
+import { isGranularSyncSupported } from "../syncDataUtils";
+import ManageSyncedData from "./ManageSyncedData";
 import { PageShell, StatusBadge } from "./shared";
 
 const getZohoOrganizationId = (organization = {}) =>
@@ -82,6 +85,7 @@ const ConnectionWizard = () => {
   const [createConnection, { isLoading: creating }] = useCreateZohoConnectionMutation();
   const [bindOrganization, { isLoading: bindingOrg }] = useBindZohoOrganizationMutation();
   const [triggerSync] = useTriggerIntegrationSyncMutation();
+  const [checkSyncDataCategories] = useLazyGetSyncDataCategoriesQuery();
   const providers = useMemo(() => normalizeProviders(providersResponse), [providersResponse]);
   const providerManifest =
     providers.find((item) => getProviderKey(item) === provider) || FALLBACK_ZOHO_PROVIDER;
@@ -97,6 +101,7 @@ const ConnectionWizard = () => {
   const [connectionId, setConnectionId] = useState("");
   const [selectedOrg, setSelectedOrg] = useState("");
   const [enabledObjects, setEnabledObjects] = useState(() => new Set(providerManifest.syncOrder || []));
+  const [showGranularSyncStep, setShowGranularSyncStep] = useState(false);
   const model = "B";
 
   const resumedConnectionId = useMemo(() => {
@@ -207,6 +212,18 @@ const ConnectionWizard = () => {
     try {
       await bindOrganization({ connectionId, organizationId: selectedOrg }).unwrap();
       sessionStorage.removeItem(ZOHO_OAUTH_SESSION_KEY);
+
+      try {
+        const summary = await checkSyncDataCategories({ provider, connectionId }).unwrap();
+        if (isGranularSyncSupported(summary)) {
+          setShowGranularSyncStep(true);
+          toast.success("Zoho organization selected. Select ERP data to import.");
+          return;
+        }
+      } catch {
+        // Granular sync is optional during rollout. Keep the existing broad initial sync fallback.
+      }
+
       try {
         await triggerSync({ connectionId }).unwrap();
       } catch {
@@ -227,6 +244,31 @@ const ConnectionWizard = () => {
       return next;
     });
   };
+
+  if (showGranularSyncStep) {
+    return (
+      <PageShell
+        title="Import ERP Data"
+        description="Select ERP master data to import. Already imported items stay locked and cannot be resent."
+        backAction={
+          <Button asChild variant="outline" size="sm">
+            <Link to="/integrations">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back
+            </Link>
+          </Button>
+        }
+      >
+        <ManageSyncedData
+          mode="wizard"
+          connectionId={connectionId}
+          provider={provider}
+          embedded
+          onDone={() => navigate(`/integrations/${connectionId}`)}
+        />
+      </PageShell>
+    );
+  }
 
   return (
     <PageShell
