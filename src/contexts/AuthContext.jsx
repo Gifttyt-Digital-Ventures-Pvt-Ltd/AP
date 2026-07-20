@@ -6,6 +6,7 @@ import {
   useSendCorporateLoginOtpMutation,
 } from '../Services/serviceApi';
 import { redirectToOriginLogin } from '../utils/authRedirect';
+import { AP_HISTORY_INITIALIZED } from '../utils/logoutFlow';
 
 const AuthContext = createContext(null);
 
@@ -170,6 +171,7 @@ export const AuthProvider = ({ children }) => {
     sessionStorage.removeItem('token');
     sessionStorage.removeItem('user');
     sessionStorage.removeItem('tokenExpiry');
+    sessionStorage.removeItem(AP_HISTORY_INITIALIZED);
   };
 
   return (

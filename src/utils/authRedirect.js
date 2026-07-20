@@ -1,4 +1,5 @@
 export const redirectToOriginLogin = () => {
-  const baseUrl = import.meta.env.VITE_BASE_URL || window.location.origin;
-  window.location.assign(`${baseUrl.replace(/\/+$/, "")}/login`);
+  const base = import.meta.env.VITE_BASE_URL?.replace(/\/$/, "");
+  const loginUrl = base ? `${base}/login` : "/login";
+  window.location.replace(loginUrl);
 };

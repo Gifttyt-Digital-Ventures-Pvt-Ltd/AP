@@ -7,6 +7,7 @@ import React, {
 } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useLogoutConfirmation } from "../contexts/LogoutConfirmationContext";
 import { useRBAC } from "../contexts/RBACContext";
 import {
   useGetCorporateDetailsQuery,
@@ -19,6 +20,7 @@ import {
 } from "../Services/apis/notificationsApi";
 import { redirectToOriginLogin } from "../utils/authRedirect";
 import { formatCredits } from "./credits/CreditAmount";
+import { completeApLogout } from "../utils/logoutFlow";
 import CreditBalanceBadge from "./credits/CreditBalanceBadge";
 import { useNotificationStream } from "../pages/notifications/useNotificationStream";
 import { Button } from "./ui/button";
@@ -66,6 +68,7 @@ export const useSidebar = () => useContext(SidebarContext);
 
 export const Layout = ({ children }) => {
   const { user, logout } = useAuth();
+  const { requestLogoutConfirmation } = useLogoutConfirmation();
   const {
     canAccessRoute,
     isLoaded: rbacLoaded,
@@ -141,9 +144,11 @@ export const Layout = ({ children }) => {
     { icon: History, label: "Audit Trail", path: "/audit-trail" },
   ];
 
-  const handleLogout = () => {
-    logout();
-    redirectToOriginLogin();
+  const handleLogout = async () => {
+    const confirmed = await requestLogoutConfirmation();
+    if (confirmed) {
+      completeApLogout(logout);
+    }
   };
 
   const isActive = (path) =>

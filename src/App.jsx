@@ -1,55 +1,52 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef } from "react";
 import "@/App.css";
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { CreditErrorProvider } from "./contexts/CreditErrorContext";
+import {
+  LogoutConfirmationProvider,
+  useLogoutConfirmation,
+} from "./contexts/LogoutConfirmationContext";
 import { RBACProvider, useRBAC } from "./contexts/RBACContext";
 import SessionTimeout from "./components/SessionTimeout";
 import { Toaster } from "./components/ui/sonner";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "./components/ui/alert-dialog";
 import { Layout } from "./components/Layout";
 import AccessDeniedState from "./components/common/AccessDeniedState";
 import AppErrorBoundary from "./components/common/AppErrorBoundary";
 import { redirectToOriginLogin } from "./utils/authRedirect";
+import { AP_HISTORY_INITIALIZED, completeApLogout } from "./utils/logoutFlow";
 import { resolveDefaultAccessibleRoute } from "./constants/rbacPolicy";
-import Login from "./pages/login/Login";
-import Dashboard from "./pages/dashboard/Dashboard";
-import Vendors from "./pages/vendors/Vendors";
-import InvoicesPage from "./pages/invoices/InvoicesPage";
-import Approvals from "./pages/approvals/Approvals";
-import Payments from "./pages/payments/Payments";
-import Banking from "./pages/banking/Banking";
-import UserRoles from "./pages/user-roles/UserRoles";
-import Profile from "./pages/profile/Profile";
-import TransactionsPage from "./pages/transactions/TransactionsPage";
-import PurchaseOrdersPage from "./pages/purchase-orders/PurchaseOrdersPage";
-import GoodsReceipt from "./pages/goods-receipt/GoodsReceipt";
-import InvoiceMatching from "./pages/invoice-matching/InvoiceMatching";
-import PaymentBatches from "./pages/payment-batches/PaymentBatches";
-import Notifications from "./pages/notifications/Notifications";
-import CampaignsPage from "./pages/campaigns/CampaignsPage";
-const loadSettingsPage = () => import("./pages/settings/Settings");
-const loadTaxManagementPage = () => import("./pages/tax-management/TaxManagement");
-const loadReportsPage = () => import("./pages/reports/Reports");
-const loadAuditTrailPage = () => import("./pages/audit-trail/AuditTrail");
-const loadIntegrationsPage = () => import("./pages/integrations/IntegrationsPage");
-const loadAccountingPage = () => import("./pages/accounting/Accounting");
-
-const Settings = lazy(loadSettingsPage);
-const TaxManagement = lazy(loadTaxManagementPage);
-const Reports = lazy(loadReportsPage);
-const AuditTrail = lazy(loadAuditTrailPage);
-const IntegrationsPage = lazy(loadIntegrationsPage);
-const Accounting = lazy(loadAccountingPage);
+const Login = lazy(() => import("./pages/login/Login"));
+const Dashboard = lazy(() => import("./pages/dashboard/Dashboard"));
+const Vendors = lazy(() => import("./pages/vendors/Vendors"));
+const InvoicesPage = lazy(() => import("./pages/invoices/InvoicesPage"));
+const Approvals = lazy(() => import("./pages/approvals/Approvals"));
+const Payments = lazy(() => import("./pages/payments/Payments"));
+const Banking = lazy(() => import("./pages/banking/Banking"));
+const UserRoles = lazy(() => import("./pages/user-roles/UserRoles"));
+const Profile = lazy(() => import("./pages/profile/Profile"));
+const TransactionsPage = lazy(() => import("./pages/transactions/TransactionsPage"));
+const PurchaseOrdersPage = lazy(() => import("./pages/purchase-orders/PurchaseOrdersPage"));
+const GoodsReceipt = lazy(() => import("./pages/goods-receipt/GoodsReceipt"));
+const InvoiceMatching = lazy(() => import("./pages/invoice-matching/InvoiceMatching"));
+const PaymentBatches = lazy(() => import("./pages/payment-batches/PaymentBatches"));
+const Notifications = lazy(() => import("./pages/notifications/Notifications"));
+const CampaignsPage = lazy(() => import("./pages/campaigns/CampaignsPage"));
+const Settings = lazy(() => import("./pages/settings/Settings"));
+const TaxManagement = lazy(() => import("./pages/tax-management/TaxManagement"));
+const Reports = lazy(() => import("./pages/reports/Reports"));
+const AuditTrail = lazy(() => import("./pages/audit-trail/AuditTrail"));
+const ConnectionWizard = lazy(() => import("./pages/integrations/components/ConnectionWizard"));
+const GmailIntegrationPage = lazy(() => import("./pages/integrations/components/GmailIntegrationPage"));
+const IntegrationConnectionHome = lazy(() => import("./pages/integrations/components/IntegrationConnectionHome"));
+const IntegrationLanding = lazy(() => import("./pages/integrations/components/IntegrationLanding"));
+const ManageSyncedDataRoute = lazy(() => import("./pages/integrations/components/ManageSyncedDataRoute"));
+const MappingEditor = lazy(() => import("./pages/integrations/components/MappingEditor"));
+const ObjectReview = lazy(() => import("./pages/integrations/components/ObjectReview"));
+const SyncLogs = lazy(() => import("./pages/integrations/components/SyncLogs"));
+const TallyIntegrationPage = lazy(() => import("./pages/integrations/components/TallyIntegrationPage"));
+const ZohoIntegrationPage = lazy(() => import("./pages/integrations/components/ZohoIntegrationPage"));
+const Accounting = lazy(() => import("./pages/accounting/Accounting"));
 
 const PageFallback = () => (
   <div className="min-h-[60vh] rounded-xl border border-border bg-card/50 flex items-center justify-center">
@@ -58,6 +55,10 @@ const PageFallback = () => (
       <p className="mt-3 text-muted-foreground">Loading page...</p>
     </div>
   </div>
+);
+
+const withPageFallback = (page) => (
+  <Suspense fallback={<PageFallback />}>{page}</Suspense>
 );
 
 const ProtectedRoute = () => {
@@ -117,135 +118,125 @@ const DefaultProtectedRoute = () => {
   return <Navigate to={defaultRoute} replace />;
 };
 
-const getCurrentHistoryPath = () =>
-  `${window.location.pathname}${window.location.search}${window.location.hash}`;
+const AP_EXIT_BOUNDARY_STATE = "apBackLogoutExitBoundary";
+const AP_CURRENT_ENTRY_STATE = "apBackLogoutCurrentEntry";
+
+const LOGOUT_CONFIRMATION_DESCRIPTION =
+  "Going back will take you to the login page and log you out of the AP Portal.";
+
+const getApExitBoundaryState = (state = {}, guardId) => {
+  const {
+    [AP_CURRENT_ENTRY_STATE]: _currentEntry,
+    ...safeState
+  } = state || {};
+
+  return {
+    ...safeState,
+    [AP_EXIT_BOUNDARY_STATE]: guardId,
+  };
+};
+
+const getApCurrentEntryState = (state = {}, guardId) => {
+  const {
+    [AP_EXIT_BOUNDARY_STATE]: _exitBoundary,
+    ...safeState
+  } = state || {};
+
+  return {
+    ...safeState,
+    [AP_CURRENT_ENTRY_STATE]: guardId,
+  };
+};
 
 const BrowserBackLogoutGuard = () => {
   const { user, logout, loading } = useAuth();
-  const location = useLocation();
-  const [showLogoutPrompt, setShowLogoutPrompt] = useState(false);
-  const previousPathRef = useRef("");
+  const { requestLogoutConfirmation } = useLogoutConfirmation();
   const allowingLogoutRef = useRef(false);
   const guardArmedRef = useRef(false);
-
-  useEffect(() => {
-    previousPathRef.current = getCurrentHistoryPath();
-  }, [location.pathname, location.search, location.hash]);
+  const confirmationPendingRef = useRef(false);
+  const guardIdRef = useRef(
+    `ap-logout-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
 
   useEffect(() => {
     if (loading || !user || typeof window === "undefined") return undefined;
 
     if (!guardArmedRef.current) {
-      window.history.pushState(
-        { ...(window.history.state || {}), apBackLogoutGuard: true },
-        "",
-        window.location.href,
-      );
-      previousPathRef.current = getCurrentHistoryPath();
+      const hasInitializedBoundary =
+        sessionStorage.getItem(AP_HISTORY_INITIALIZED) === "true";
+
+      if (!hasInitializedBoundary) {
+        const currentState = window.history.state || {};
+        window.history.replaceState(
+          getApExitBoundaryState(currentState, guardIdRef.current),
+          "",
+          window.location.href,
+        );
+        window.history.pushState(
+          getApCurrentEntryState(currentState, guardIdRef.current),
+          "",
+          window.location.href,
+        );
+        sessionStorage.setItem(AP_HISTORY_INITIALIZED, "true");
+      }
+
       guardArmedRef.current = true;
     }
 
-    const handlePopState = () => {
+    const handlePopState = async (event) => {
       if (allowingLogoutRef.current) return;
 
-      const nextPath = getCurrentHistoryPath();
-      const previousPath = previousPathRef.current;
+      const isApExitBoundary =
+        Boolean(event.state?.[AP_EXIT_BOUNDARY_STATE]);
 
-      if (nextPath !== previousPath) {
-        previousPathRef.current = nextPath;
-        return;
+      if (isApExitBoundary) {
+        window.history.pushState(
+          getApCurrentEntryState(event.state, guardIdRef.current),
+          "",
+          window.location.href,
+        );
+
+        if (confirmationPendingRef.current) return;
+        confirmationPendingRef.current = true;
+
+        const confirmed = await requestLogoutConfirmation({
+          description: LOGOUT_CONFIRMATION_DESCRIPTION,
+        });
+        confirmationPendingRef.current = false;
+
+        if (confirmed) {
+          allowingLogoutRef.current = true;
+          completeApLogout(logout);
+        }
       }
-
-      setShowLogoutPrompt(true);
-      window.history.pushState(
-        { ...(window.history.state || {}), apBackLogoutGuard: true },
-        "",
-        window.location.href,
-      );
     };
 
     window.addEventListener("popstate", handlePopState);
+
     return () => {
       window.removeEventListener("popstate", handlePopState);
     };
-  }, [loading, user]);
+  }, [loading, logout, requestLogoutConfirmation, user]);
 
   if (!user) return null;
-
-  const stayLoggedIn = () => {
-    setShowLogoutPrompt(false);
-    previousPathRef.current = getCurrentHistoryPath();
-  };
-
-  const confirmLogout = () => {
-    allowingLogoutRef.current = true;
-    logout();
-    redirectToOriginLogin();
-  };
-
-  return (
-    <AlertDialog open={showLogoutPrompt} onOpenChange={setShowLogoutPrompt}>
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Log out?</AlertDialogTitle>
-          <AlertDialogDescription>
-            Going back will take you to the login page and log you out of the AP Portal.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel onClick={stayLoggedIn}>Stay logged in</AlertDialogCancel>
-          <AlertDialogAction onClick={confirmLogout}>Log out</AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  );
+  return null;
 };
 
 function AppContent() {
-  useEffect(() => {
-    const preloadRoutes = () => {
-      loadSettingsPage();
-      loadTaxManagementPage();
-      loadReportsPage();
-      loadAuditTrailPage();
-      loadIntegrationsPage();
-      loadAccountingPage();
-    };
-
-    if (typeof window !== "undefined" && "requestIdleCallback" in window) {
-      const idleHandle = window.requestIdleCallback(preloadRoutes, { timeout: 2000 });
-      return () => {
-        window.cancelIdleCallback?.(idleHandle);
-      };
-    }
-
-    const timer = window.setTimeout(preloadRoutes, 1200);
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, []);
-
   return (
     <AppErrorBoundary>
       <BrowserBackLogoutGuard />
       <Routes>
-        <Route path="/login" element={<Login />} />
+        <Route path="/login" element={withPageFallback(<Login />)} />
         <Route element={<ProtectedRoute />}>
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/vendors" element={<Vendors />} />
-          <Route path="/campaigns" element={<CampaignsPage />} />
-          <Route path="/invoices" element={<InvoicesPage />} />
-          <Route path="/approvals" element={<Approvals />} />
-          <Route path="/payments" element={<Payments />} />
-          <Route path="/banking" element={<Banking />} />
-          <Route
-            path="/settings"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <Settings />
-              </Suspense>
-            }
-          />
+          <Route path="/dashboard" element={withPageFallback(<Dashboard />)} />
+          <Route path="/vendors" element={withPageFallback(<Vendors />)} />
+          <Route path="/campaigns" element={withPageFallback(<CampaignsPage />)} />
+          <Route path="/invoices" element={withPageFallback(<InvoicesPage />)} />
+          <Route path="/approvals" element={withPageFallback(<Approvals />)} />
+          <Route path="/payments" element={withPageFallback(<Payments />)} />
+          <Route path="/banking" element={withPageFallback(<Banking />)} />
+          <Route path="/settings" element={withPageFallback(<Settings />)} />
           <Route path="/settings/integrations" element={<Navigate to="/integrations" replace />} />
           <Route
             path="/settings/notifications"
@@ -254,142 +245,32 @@ function AppContent() {
           <Route path="/settings/integrations/gmail" element={<Navigate to="/integrations/gmail" replace />} />
           <Route path="/settings/integrations/zoho" element={<Navigate to="/integrations/erp/zoho" replace />} />
           <Route path="/settings/integrations/tally" element={<Navigate to="/integrations/erp/tally" replace />} />
-          <Route path="/user-roles" element={<UserRoles />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/transactions" element={<TransactionsPage />} />
-          <Route path="/purchase-orders" element={<PurchaseOrdersPage />} />
-          <Route path="/goods-receipt" element={<GoodsReceipt />} />
-          <Route
-            path="/tax-management"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <TaxManagement />
-              </Suspense>
-            }
-          />
-          <Route path="/invoice-matching" element={<InvoiceMatching />} />
-          <Route path="/payment-batches" element={<PaymentBatches />} />
-          <Route path="/notifications" element={<Notifications />} />
-          <Route
-            path="/reports"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <Reports />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/audit-trail"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <AuditTrail />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/integrations"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <IntegrationsPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/integrations/gmail"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <IntegrationsPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/integrations/erp/zoho"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <IntegrationsPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/integrations/erp/tally"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <IntegrationsPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/integrations/connect/:provider"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <IntegrationsPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/accounting"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <Accounting />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/accounting/chart-of-accounts"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <Accounting />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/accounting/ledger-explorer"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <Accounting />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/accounting/ledger-explorer/:ledgerId"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <Accounting />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/integrations/:connectionId"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <IntegrationsPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/integrations/:connectionId/mapping"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <IntegrationsPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/integrations/:connectionId/objects/:object"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <IntegrationsPage />
-              </Suspense>
-            }
-          />
-          <Route
-            path="/integrations/:connectionId/logs"
-            element={
-              <Suspense fallback={<PageFallback />}>
-                <IntegrationsPage />
-              </Suspense>
-            }
-          />
+          <Route path="/user-roles" element={withPageFallback(<UserRoles />)} />
+          <Route path="/profile" element={withPageFallback(<Profile />)} />
+          <Route path="/transactions" element={withPageFallback(<TransactionsPage />)} />
+          <Route path="/purchase-orders" element={withPageFallback(<PurchaseOrdersPage />)} />
+          <Route path="/goods-receipt" element={withPageFallback(<GoodsReceipt />)} />
+          <Route path="/tax-management" element={withPageFallback(<TaxManagement />)} />
+          <Route path="/invoice-matching" element={withPageFallback(<InvoiceMatching />)} />
+          <Route path="/payment-batches" element={withPageFallback(<PaymentBatches />)} />
+          <Route path="/notifications" element={withPageFallback(<Notifications />)} />
+          <Route path="/reports" element={withPageFallback(<Reports />)} />
+          <Route path="/audit-trail" element={withPageFallback(<AuditTrail />)} />
+          <Route path="/integrations" element={withPageFallback(<IntegrationLanding />)} />
+          <Route path="/integrations/gmail" element={withPageFallback(<GmailIntegrationPage />)} />
+          <Route path="/integrations/erp/zoho" element={withPageFallback(<ZohoIntegrationPage />)} />
+          <Route path="/integrations/erp/tally" element={withPageFallback(<TallyIntegrationPage />)} />
+          <Route path="/integrations/connect/:provider" element={withPageFallback(<ConnectionWizard />)} />
+          <Route path="/accounting" element={withPageFallback(<Accounting />)} />
+          <Route path="/accounting/chart-of-accounts" element={withPageFallback(<Accounting />)} />
+          <Route path="/accounting/ledger-explorer" element={withPageFallback(<Accounting />)} />
+          <Route path="/accounting/ledger-explorer/:ledgerId" element={withPageFallback(<Accounting />)} />
+          <Route path="/integrations/:connectionId/sync-data" element={withPageFallback(<ManageSyncedDataRoute />)} />
+          <Route path="/integrations/:connectionId/sync-data/:categoryCode" element={withPageFallback(<ManageSyncedDataRoute />)} />
+          <Route path="/integrations/:connectionId" element={withPageFallback(<IntegrationConnectionHome />)} />
+          <Route path="/integrations/:connectionId/mapping" element={withPageFallback(<MappingEditor />)} />
+          <Route path="/integrations/:connectionId/objects/:object" element={withPageFallback(<ObjectReview />)} />
+          <Route path="/integrations/:connectionId/logs" element={withPageFallback(<SyncLogs />)} />
           <Route path="/" element={<DefaultProtectedRoute />} />
         </Route>
       </Routes>
@@ -410,7 +291,9 @@ function App() {
           <SessionTimeout>
             <RBACProvider>
               <CreditErrorProvider>
-                <AppContent />
+                <LogoutConfirmationProvider>
+                  <AppContent />
+                </LogoutConfirmationProvider>
               </CreditErrorProvider>
             </RBACProvider>
           </SessionTimeout>
