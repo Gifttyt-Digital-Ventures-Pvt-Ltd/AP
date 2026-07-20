@@ -1,351 +1,356 @@
-import React, { useState, useEffect } from 'react';
-import {
-  useGetNotificationsQuery,
-  useGetPendingNotificationsQuery,
-} from '../../Services/apis/notificationsApi';
-import { Button } from '../../components/ui/button';
-import AppDataTable from '../../components/common/AppDataTable';
-import RefreshButton from '../../components/common/RefreshButton';
-import { TableCell, TableRow } from '../../components/ui/table';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
-import { Badge } from '../../components/ui/badge';
-import { toast } from 'sonner';
+import React, { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { formatDistanceToNow } from "date-fns";
 import {
   Bell,
-  Mail,
-  CheckCircle,
-  Clock,
+  CheckCheck,
+  ChevronRight,
+  CircleDot,
+  Inbox,
   Loader2,
-  AlertCircle,
-  ShoppingCart,
-  FileText,
-  CreditCard
-} from 'lucide-react';
+  RefreshCw,
+} from "lucide-react";
+import { toast } from "sonner";
+import {
+  useGetNotificationInboxQuery,
+  useGetNotificationSettingsQuery,
+  useGetUnreadNotificationCountQuery,
+  useMarkAllNotificationsReadMutation,
+  useMarkNotificationReadMutation,
+} from "../../Services/apis/notificationsApi";
+import { Badge } from "../../components/ui/badge";
+import { Button } from "../../components/ui/button";
+import { Skeleton } from "../../components/ui/skeleton";
+import { Tabs, TabsList, TabsTrigger } from "../../components/ui/tabs";
+import { cn } from "../../lib/utils";
 
-const formatDate = (dateStr) => {
-  if (!dateStr) return '-';
-  const date = new Date(dateStr);
-  return date.toLocaleDateString('en-IN', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit'
-  });
+const PAGE_SIZE = 20;
+const FILTERS = {
+  ACTIONABLE: "ACTIONABLE",
+  ALL: "ALL",
 };
 
-const notificationTypeIcons = {
-  'PO Submitted for Approval': ShoppingCart,
-  'PO Approved': CheckCircle,
-  'PO Rejected': AlertCircle,
-  'Invoice Uploaded': FileText,
-  'Invoice Approved': CheckCircle,
-  'Payment Processed': CreditCard,
-  'Payment Batch Created': CreditCard,
-  'Payment Batch Approved': CheckCircle
+const getNotificationKind = (notification) => notification?.kind ?? notification?.type ?? "INFORMATIONAL";
+
+const getNotificationReadState = (notification) =>
+  Boolean(notification?.isRead ?? notification?.read ?? notification?.read_at);
+
+const getNotificationTitle = (notification) =>
+  notification?.title ||
+  notification?.subject ||
+  `${notification?.entityRef || notification?.entity_ref || "Notification"} update`;
+
+const getNotificationBody = (notification) => notification?.body || notification?.message || null;
+
+const getNotificationDeepLink = (notification) =>
+  notification?.deepLink || notification?.deep_link || notification?.link || "";
+
+const getNotificationCreatedAt = (notification) =>
+  notification?.createdAt || notification?.created_at || notification?.createdOn || notification?.created_on;
+
+const getNotificationId = (notification, index = 0) =>
+  notification?.id ||
+  notification?.notificationId ||
+  notification?.notification_id ||
+  `${getNotificationCreatedAt(notification) || "notification"}-${index}`;
+
+const relativeTime = (value) => {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return formatDistanceToNow(date, { addSuffix: true });
 };
 
-const notificationTypeColors = {
-  'PO Submitted for Approval': 'bg-yellow-500',
-  'PO Approved': 'bg-green-500',
-  'PO Rejected': 'bg-red-500',
-  'Invoice Uploaded': 'bg-blue-500',
-  'Invoice Approved': 'bg-green-500',
-  'Payment Processed': 'bg-green-500',
-  'Payment Batch Created': 'bg-yellow-500',
-  'Payment Batch Approved': 'bg-green-500'
+const getPageContent = (pageData) => {
+  if (Array.isArray(pageData)) return pageData;
+  if (Array.isArray(pageData?.content)) return pageData.content;
+  if (Array.isArray(pageData?.data)) return pageData.data;
+  return [];
 };
 
-const notificationTableHeader = [
-  { key: 'notification_type', title: 'Type' },
-  { key: 'recipient', title: 'Recipient' },
-  { key: 'subject', title: 'Subject', cellClassName: 'max-w-[200px] truncate' },
-  { key: 'entity', title: 'Entity' },
-  { key: 'status', title: 'Status' },
-  { key: 'created_at', title: 'Created' },
-];
+const getUnreadCount = (data) => Number(data?.count ?? data?.unreadCount ?? 0);
 
-const pendingNotificationTableHeader = [
-  { key: 'notification_type', title: 'Type' },
-  { key: 'recipient', title: 'Recipient' },
-  { key: 'subject', title: 'Subject' },
-  { key: 'created_at', title: 'Created' },
-];
+const KindBadge = ({ kind }) => {
+  const actionable = kind === "ACTIONABLE";
+  return (
+    <Badge
+      variant="outline"
+      className={cn(
+        "rounded px-2 py-0.5 text-xs font-medium",
+        actionable
+          ? "border-amber-200 bg-amber-100 text-amber-800"
+          : "border-slate-200 bg-slate-100 text-slate-600",
+      )}
+    >
+      {actionable ? "Needs you" : "Update"}
+    </Badge>
+  );
+};
 
-const Notifications = () => {
-  const {
-    data: notificationsData = [],
-    isLoading: notificationsLoading,
-    isFetching: notificationsFetching,
-    isError: notificationsError,
-    refetch: refetchNotifications,
-  } = useGetNotificationsQuery({ limit: 100 });
-  const {
-    data: pendingNotificationsData = [],
-    isLoading: pendingLoading,
-    isFetching: pendingFetching,
-    isError: pendingError,
-    refetch: refetchPendingNotifications,
-  } = useGetPendingNotificationsQuery();
-  const [activeTab, setActiveTab] = useState('all');
-
-  const notifications = Array.isArray(notificationsData) ? notificationsData : [];
-  const pendingNotifications = Array.isArray(pendingNotificationsData)
-    ? pendingNotificationsData
-    : [];
-  const loading = notificationsLoading || pendingLoading;
-  const refreshing = notificationsFetching || pendingFetching;
-
-  const fetchData = async () => {
-    try {
-      await Promise.all([refetchNotifications(), refetchPendingNotifications()]);
-    } catch {
-      // Query errors are handled by error states.
-    }
-  };
-
-  useEffect(() => {
-    if (notificationsError || pendingError) {
-      toast.error('Failed to load notifications');
-    }
-  }, [notificationsError, pendingError]);
-
-  const stats = {
-    total: notifications.length,
-    sent: notifications.filter(n => n.sent).length,
-    pending: notifications.filter(n => !n.sent).length,
-    failed: notifications.filter(n => n.error_message).length
-  };
-
-  const renderNotificationRow = (notif, rowIndex, headers) => {
-    const Icon = notificationTypeIcons[notif.notification_type] || Bell;
-
-    return (
-      <TableRow key={notif.id ?? rowIndex} data-testid={`notification-row-${notif?.id ?? 'unknown'}`}>
-        {headers.map((header) => {
-          let value;
-
-          switch (header.key) {
-            case 'notification_type':
-              value = (
-                <div className="flex items-center gap-2">
-                  <div className={`p-1.5 rounded ${notificationTypeColors[notif.notification_type] || 'bg-gray-500'}`}>
-                    <Icon className="h-3 w-3 text-white" />
-                  </div>
-                  <span className="text-sm">{notif.notification_type}</span>
-                </div>
-              );
-              break;
-            case 'recipient':
-              value = (
-                <div>
-                  <p className="font-medium">{notif.recipient_name}</p>
-                  <p className="text-xs text-muted-foreground">{notif.recipient_email}</p>
-                </div>
-              );
-              break;
-            case 'entity':
-              value = (
-                <Badge variant="outline">
-                  {notif.entity_type}: {notif.entity_number || notif.entity_id?.slice(0, 8)}
-                </Badge>
-              );
-              break;
-            case 'status':
-              value = notif.sent ? (
-                <Badge className="bg-green-500 text-white">Sent</Badge>
-              ) : notif.error_message ? (
-                <Badge variant="destructive">Failed</Badge>
-              ) : (
-                <Badge variant="secondary">Pending</Badge>
-              );
-              break;
-            case 'created_at':
-              value = formatDate(notif.created_at);
-              break;
-            default:
-              value = notif?.[header.key] || '-';
-          }
-
-          return (
-            <TableCell key={header.key} className={header.cellClassName}>
-              {value}
-            </TableCell>
-          );
-        })}
-      </TableRow>
-    );
-  };
-
-  const renderPendingNotificationRow = (notif, rowIndex, headers) => {
-    const Icon = notificationTypeIcons[notif.notification_type] || Bell;
-
-    return (
-      <TableRow key={notif.id ?? rowIndex}>
-        {headers.map((header) => {
-          let value;
-
-          switch (header.key) {
-            case 'notification_type':
-              value = (
-                <div className="flex items-center gap-2">
-                  <Icon className="h-4 w-4" />
-                  <span className="text-sm">{notif.notification_type}</span>
-                </div>
-              );
-              break;
-            case 'recipient':
-              value = (
-                <div>
-                  <p className="font-medium">{notif.recipient_name}</p>
-                  <p className="text-xs text-muted-foreground">{notif.recipient_email}</p>
-                </div>
-              );
-              break;
-            case 'created_at':
-              value = formatDate(notif.created_at);
-              break;
-            default:
-              value = notif?.[header.key] || '-';
-          }
-
-          return (
-            <TableCell key={header.key} className={header.cellClassName}>
-              {value}
-            </TableCell>
-          );
-        })}
-      </TableRow>
-    );
-  };
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+const NotificationSkeleton = () => (
+  <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+    {Array.from({ length: 5 }).map((_, index) => (
+      <div key={index} className="flex min-h-[88px] items-start gap-3 border-b border-slate-100 px-5 py-3.5 last:border-0">
+        <Skeleton className="mt-1 h-3 w-3 rounded-full" />
+        <div className="min-w-0 flex-1 space-y-2">
+          <div className="flex gap-2">
+            <Skeleton className="h-5 w-20" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+          <Skeleton className="h-4 w-3/4" />
+          <Skeleton className="h-3 w-1/2" />
+        </div>
       </div>
-    );
-  }
+    ))}
+  </div>
+);
+
+const EmptyState = ({ filter }) => {
+  const actionable = filter === FILTERS.ACTIONABLE;
+  return (
+    <div className="flex min-h-[280px] flex-col items-center justify-center rounded-lg border border-dashed border-slate-200 bg-white px-6 text-center">
+      <Inbox className="h-10 w-10 text-slate-300" />
+      <h2 className="mt-4 text-lg font-semibold text-slate-900">
+        {actionable ? "No action needed" : "No notifications"}
+      </h2>
+      <p className="mt-1 max-w-sm text-sm text-slate-500">
+        {actionable
+          ? "Approvals will appear here the moment they reach you."
+          : "Activity from the last 90 days shows up here."}
+      </p>
+    </div>
+  );
+};
+
+const ErrorState = ({ onRetry }) => (
+  <div className="flex min-h-[280px] flex-col items-center justify-center rounded-lg border border-slate-200 bg-white px-6 text-center">
+    <Bell className="h-10 w-10 text-slate-300" />
+    <h2 className="mt-4 text-lg font-semibold text-slate-900">Couldn't load notifications</h2>
+    <p className="mt-1 text-sm text-slate-500">Check your connection and try again.</p>
+    <Button type="button" variant="outline" className="mt-4" onClick={onRetry}>
+      <RefreshCw className="mr-2 h-4 w-4" />
+      Retry
+    </Button>
+  </div>
+);
+
+const OffState = () => (
+  <div className="flex min-h-[320px] flex-col items-center justify-center rounded-lg border border-slate-200 bg-white px-6 text-center">
+    <Bell className="h-10 w-10 text-slate-300" />
+    <h2 className="mt-4 text-lg font-semibold text-slate-900">In-app notifications are off</h2>
+    <p className="mt-1 max-w-md text-sm text-slate-500">
+      Your admin has switched off the notification centre for this organisation.
+    </p>
+  </div>
+);
+
+const NotificationRow = ({ notification, onOpen, rowKey }) => {
+  const kind = getNotificationKind(notification);
+  const isRead = getNotificationReadState(notification);
+  const body = getNotificationBody(notification);
+  const createdAt = relativeTime(getNotificationCreatedAt(notification));
 
   return (
-    <div className="space-y-6" data-testid="notifications-page">
-      {/* Header */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold">Email Notifications</h1>
-          <p className="text-muted-foreground">System notification queue and history</p>
+    <button
+      type="button"
+      onClick={() => onOpen(notification)}
+      className={cn(
+        "flex min-h-[88px] w-full items-start gap-3 border-b border-slate-100 px-5 py-3.5 text-left transition-colors last:border-b-0 hover:bg-slate-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500 focus-visible:ring-inset",
+        !isRead && "bg-violet-50",
+      )}
+      data-testid={`notification-row-${rowKey}`}
+    >
+      <div className="mt-1 shrink-0">
+        {!isRead && <CircleDot className="h-3 w-3 text-violet-600" />}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <KindBadge kind={kind} />
+          {createdAt && <span className="text-xs text-slate-400">{createdAt}</span>}
         </div>
-        <RefreshButton onClick={fetchData} refreshing={refreshing}>
-          Refresh
-        </RefreshButton>
+        <p
+          className={cn(
+            "mt-1 truncate text-sm",
+            isRead ? "text-slate-600" : "font-medium text-slate-900",
+          )}
+        >
+          {getNotificationTitle(notification)}
+        </p>
+        {body && <p className="mt-0.5 truncate text-xs text-slate-500">{body}</p>}
+      </div>
+      <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-slate-300" />
+    </button>
+  );
+};
+
+const Notifications = () => {
+  const navigate = useNavigate();
+  const [filter, setFilter] = useState(FILTERS.ACTIONABLE);
+  const [page, setPage] = useState(0);
+  const {
+    data: settings,
+    isError: settingsError,
+  } = useGetNotificationSettingsQuery(undefined, {
+    refetchOnFocus: true,
+  });
+  const inAppEnabled = settingsError ? true : settings?.master?.inAppEnabled !== false;
+  const {
+    data: unreadData,
+  } = useGetUnreadNotificationCountQuery(undefined, {
+    skip: !inAppEnabled,
+    pollingInterval: 60000,
+    refetchOnFocus: true,
+  });
+  const {
+    data: inboxPage,
+    isLoading,
+    isFetching,
+    isError,
+    refetch,
+  } = useGetNotificationInboxQuery(
+    { filter, page, size: PAGE_SIZE },
+    {
+      skip: !inAppEnabled,
+      refetchOnFocus: true,
+      refetchOnMountOrArgChange: true,
+    },
+  );
+  const [markRead] = useMarkNotificationReadMutation();
+  const [markAllRead, { isLoading: markingAllRead }] = useMarkAllNotificationsReadMutation();
+
+  const notifications = useMemo(() => getPageContent(inboxPage), [inboxPage]);
+  const unreadCount = getUnreadCount(unreadData);
+  const totalElements = Number(inboxPage?.totalElements ?? inboxPage?.total ?? notifications.length);
+  const totalPages = Math.max(1, Number(inboxPage?.totalPages ?? 1));
+  const canLoadPrevious = page > 0;
+  const canLoadNext = page + 1 < totalPages;
+
+  useEffect(() => {
+    setPage(0);
+  }, [filter]);
+
+  const handleOpenNotification = (notification) => {
+    if (!notification?.id) return;
+    markRead(notification.id);
+    const deepLink = getNotificationDeepLink(notification);
+    if (deepLink) {
+      navigate(deepLink);
+    }
+  };
+
+  const handleMarkAllRead = async () => {
+    try {
+      await markAllRead().unwrap();
+    } catch {
+      toast.error("Couldn't save that change.");
+    }
+  };
+
+  const handleRetry = () => {
+    refetch();
+  };
+
+  const showListRefreshing = isFetching && !isLoading;
+
+  return (
+    <main className="space-y-6" data-testid="notifications-page">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h1 className="text-4xl md:text-5xl font-bold font-['Manrope'] text-primary">Notifications</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Notifications are kept for 90 days.</p>
+        </div>
+        <Button
+          type="button"
+          onClick={handleMarkAllRead}
+          disabled={!inAppEnabled || unreadCount === 0 || markingAllRead}
+          className="w-full sm:w-auto"
+        >
+          {markingAllRead ? (
+            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+          ) : (
+            <CheckCheck className="mr-2 h-4 w-4" />
+          )}
+          Mark all read
+        </Button>
       </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Notifications</p>
-                <p className="text-2xl font-bold">{stats.total}</p>
-              </div>
-              <Bell className="h-8 w-8 text-muted-foreground" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Sent</p>
-                <p className="text-2xl font-bold text-green-600">{stats.sent}</p>
-              </div>
-              <CheckCircle className="h-8 w-8 text-green-500" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Pending</p>
-                <p className="text-2xl font-bold text-yellow-600">{stats.pending}</p>
-              </div>
-              <Clock className="h-8 w-8 text-yellow-500" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Failed</p>
-                <p className="text-2xl font-bold text-red-600">{stats.failed}</p>
-              </div>
-              <AlertCircle className="h-8 w-8 text-red-500" />
-            </div>
-          </CardContent>
-        </Card>
+      <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <Tabs value={filter} onValueChange={setFilter}>
+            <TabsList>
+              <TabsTrigger value={FILTERS.ACTIONABLE} className="data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                Needs you
+                {unreadCount > 0 && (
+                  <span className="ml-2 rounded-full bg-rose-500 px-2 py-0.5 text-xs font-semibold text-white">
+                    {unreadCount > 99 ? "99+" : unreadCount}
+                  </span>
+                )}
+              </TabsTrigger>
+              <TabsTrigger value={FILTERS.ALL} className="data-[state=active]:bg-slate-900 data-[state=active]:text-white">
+                All
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <div className="min-h-5 text-sm text-muted-foreground">
+            {inAppEnabled && !isLoading && !isError
+              ? `${totalElements} ${totalElements === 1 ? "notification" : "notifications"}`
+              : null}
+            {showListRefreshing ? " · Refreshing" : ""}
+          </div>
+        </div>
       </div>
 
-      {/* Info Card */}
-      <Card className="bg-blue-50 border-blue-200">
-        <CardContent className="pt-4">
-          <div className="flex items-start gap-3">
-            <Mail className="h-5 w-5 text-blue-600 mt-0.5" />
-            <div>
-              <p className="font-medium text-blue-800">Email Sending</p>
-              <p className="text-sm text-blue-600">
-                Notifications are queued here and would be processed by a background email service.
-                In production, integrate with SendGrid, SES, or your preferred email provider.
-              </p>
+      {!inAppEnabled ? (
+        <OffState />
+      ) : isLoading ? (
+        <NotificationSkeleton />
+      ) : isError ? (
+        <ErrorState onRetry={handleRetry} />
+      ) : notifications.length === 0 ? (
+        <EmptyState filter={filter} />
+      ) : (
+        <>
+          <div className="overflow-hidden rounded-lg border border-border bg-card shadow-sm" aria-live="polite">
+            {notifications.map((notification, index) => {
+              const rowKey = getNotificationId(notification, index);
+              return (
+                <NotificationRow
+                  key={rowKey}
+                  rowKey={rowKey}
+                  notification={notification}
+                  onOpen={handleOpenNotification}
+                />
+              );
+            })}
+          </div>
+
+          <div className="flex flex-col items-center justify-between gap-3 rounded-lg border border-border bg-card px-4 py-3 shadow-sm sm:flex-row">
+            <p className="text-sm text-muted-foreground">
+              Page {page + 1} of {totalPages}
+            </p>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPage((current) => Math.max(0, current - 1))}
+                disabled={!canLoadPrevious || isFetching}
+              >
+                Previous
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setPage((current) => current + 1)}
+                disabled={!canLoadNext || isFetching}
+              >
+                {isFetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Next
+              </Button>
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Tabs */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList>
-          <TabsTrigger value="all" data-testid="tab-all">All Notifications</TabsTrigger>
-          <TabsTrigger value="pending" data-testid="tab-pending">
-            Pending
-            {pendingNotifications.length > 0 && (
-              <Badge variant="secondary" className="ml-2">{pendingNotifications.length}</Badge>
-            )}
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="all" className="space-y-4">
-          <Card>
-            <AppDataTable
-              tableHeader={notificationTableHeader}
-              tableData={notifications}
-              renderRow={renderNotificationRow}
-              emptyMessage="No notifications yet. Notifications are created when POs are submitted/approved or payments are processed."
-            />
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="pending" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Pending Notifications</CardTitle>
-              <CardDescription>Notifications waiting to be sent by the email service</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AppDataTable
-                tableHeader={pendingNotificationTableHeader}
-                tableData={pendingNotifications}
-                renderRow={renderPendingNotificationRow}
-                emptyMessage="No pending notifications"
-              />
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
-    </div>
+        </>
+      )}
+    </main>
   );
 };
 

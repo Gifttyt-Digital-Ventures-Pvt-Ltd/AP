@@ -19,6 +19,7 @@ import BankAccountDialog from './components/BankAccountDialog';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useRBAC } from '../../contexts/RBACContext';
 import CreditsPage from '../credits/CreditsPage';
+import NotificationSettings from '../notifications/NotificationSettings';
 import OrgBranchesSection from './components/OrgBranchesSection';
 import OrgGstRegistrationsSection from './components/OrgGstRegistrationsSection';
 import {
@@ -43,6 +44,7 @@ const Settings = () => {
     hasAnyPermission,
     isCorporateSectionEnabled,
     isBillingFeatureEnabled,
+    isCorporateAdmin,
     isBranchEnabled: isBranchConfigurationEnabled,
     isBranchSqFtEnabled: isBranchSqFtConfigurationEnabled,
   } = useRBAC();
@@ -61,13 +63,16 @@ const Settings = () => {
     'VIEW_LEDGER',
     'MANAGE_BILLING',
   ]) && isBillingFeatureEnabled;
+  const canManageNotificationSettings =
+    isCorporateAdmin || hasAnyPermission(['notifications-manage', 'NOTIFICATIONS MANAGE']);
   const availableSettingsTabs = useMemo(() => {
     const tabs = [];
     if (canViewOrganisationSettings) tabs.push('organisation');
     if (canViewBankingSettings) tabs.push('banking');
+    if (canManageNotificationSettings) tabs.push('notifications');
     if (canViewBillingSettings) tabs.push('billing');
     return tabs;
-  }, [canViewBankingSettings, canViewBillingSettings, canViewOrganisationSettings]);
+  }, [canManageNotificationSettings, canViewBankingSettings, canViewBillingSettings, canViewOrganisationSettings]);
   const [searchParams] = useSearchParams();
   const [activeSettingsTab, setActiveSettingsTab] = useState('');
   const {
@@ -356,6 +361,9 @@ const Settings = () => {
           )}
           {canViewBankingSettings && (
             <TabsTrigger value="banking" data-testid="tab-banking">Connected Banking</TabsTrigger>
+          )}
+          {canManageNotificationSettings && (
+            <TabsTrigger value="notifications" data-testid="tab-notifications">Notifications</TabsTrigger>
           )}
           {canViewBillingSettings && (
             <TabsTrigger value="billing" data-testid="tab-billing">Billing</TabsTrigger>
@@ -729,6 +737,10 @@ const Settings = () => {
 
         {canViewBillingSettings && <TabsContent value="billing">
           <CreditsPage />
+        </TabsContent>}
+
+        {canManageNotificationSettings && <TabsContent value="notifications">
+          <NotificationSettings />
         </TabsContent>}
 
       </Tabs>
