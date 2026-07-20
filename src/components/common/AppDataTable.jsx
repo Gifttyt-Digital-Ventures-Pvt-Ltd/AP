@@ -56,15 +56,18 @@ const AppDataTable = ({
 }) => {
   const resolvedColumns =
     tableHeader?.map((header, index) => {
-      const key = header.key || header.id || header.title || `column-${index}`;
+      const isObjectHeader = header && typeof header === "object" && !React.isValidElement(header);
+      const key = isObjectHeader ? header.key || header.id || `column-${index}` : header || `column-${index}`;
       const columnConfig = columns.find((column) => column.key === key) || {};
       return {
         ...columnConfig,
         key,
-        header: header.title ?? header.header ?? header.label ?? header,
-        headerClassName: header.headerClassName ?? columnConfig.headerClassName,
-        cellClassName: header.cellClassName ?? columnConfig.cellClassName,
-        render: header.render ?? columnConfig.render,
+        header: isObjectHeader
+          ? header.title ?? header.header ?? header.label ?? ""
+          : header,
+        headerClassName: isObjectHeader ? header.headerClassName ?? columnConfig.headerClassName : columnConfig.headerClassName,
+        cellClassName: isObjectHeader ? header.cellClassName ?? columnConfig.cellClassName : columnConfig.cellClassName,
+        render: isObjectHeader ? header.render ?? columnConfig.render : columnConfig.render,
       };
     }) || columns;
   const resolvedRows = Array.isArray(tableData)

@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Eye, Pencil, Search, Unlock } from "lucide-react";
+import { Eye, Pencil, Search, Send, ShieldCheck, Unlock } from "lucide-react";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
@@ -21,7 +21,7 @@ const basePoTableHeader = [
   { key: "expected_delivery_date", title: "Delivery Date", headerClassName: "bg-muted text-foreground" },
   { key: "total_amount", title: "Amount", headerClassName: "bg-muted text-foreground" },
   { key: "status", title: "Status", headerClassName: "bg-muted text-foreground" },
-  { key: "actions", title: "Actions", headerClassName: "bg-muted text-foreground" },
+  { key: "actions", title: "Actions", headerClassName: "bg-muted text-left text-foreground", cellClassName: "text-left" },
 ];
 
 const PoListTable = ({
@@ -37,8 +37,13 @@ const PoListTable = ({
   setSelectedPO,
   setShowViewDialog,
   canManagePo = false,
+  canSubmitPo = false,
+  canApprovePo = false,
   onEditPO,
+  onSubmitPO,
+  onReviewPO,
   onRequestUnlock,
+  submitting = false,
   requestingUnlock = false,
   showBranchField = false,
 }) => {
@@ -87,14 +92,17 @@ const PoListTable = ({
             break;
           case "actions":
             value = (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center justify-start gap-1 whitespace-nowrap">
                 <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
+                  variant="outline"
+                  size="icon"
+                  onClick={(event) => {
+                    event.stopPropagation();
                     setSelectedPO(po);
                     setShowViewDialog(true);
                   }}
+                  title="View PO"
+                  aria-label="View PO"
                   data-testid={`view-po-${po?.id ?? 'unknown'}`}
                 >
                   <Eye className="h-4 w-4" />
@@ -104,11 +112,51 @@ const PoListTable = ({
                   !isAccountingReadyLocked(po) && (
                   <Button
                     variant="ghost"
-                    size="sm"
-                    onClick={() => onEditPO?.(po)}
+                    size="icon"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onEditPO?.(po);
+                    }}
+                    title="Edit PO"
+                    aria-label="Edit PO"
                     data-testid={`edit-po-${po?.id ?? 'unknown'}`}
                   >
                     <Pencil className="h-4 w-4" />
+                  </Button>
+                )}
+                {canSubmitPo &&
+                  ["Draft", "Sent Back"].includes(po.status) &&
+                  !isAccountingReadyLocked(po) && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onSubmitPO?.(po);
+                      }}
+                      disabled={submitting}
+                      title="Submit for approval"
+                      aria-label="Submit for approval"
+                      data-testid={`submit-po-${po?.id ?? 'unknown'}`}
+                    >
+                      <Send className="h-4 w-4" />
+                    </Button>
+                  )}
+                {canApprovePo && po.status === "Pending Approval" && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onReviewPO?.(po);
+                    }}
+                    disabled={submitting}
+                    className="text-emerald-700 hover:text-emerald-800"
+                    title="Review PO"
+                    aria-label="Review PO"
+                    data-testid={`review-po-${po?.id ?? 'unknown'}`}
+                  >
+                    <ShieldCheck className="h-4 w-4" />
                   </Button>
                 )}
                 {isAccountingReadyLocked(po) &&
@@ -117,9 +165,13 @@ const PoListTable = ({
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => onRequestUnlock?.(po)}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onRequestUnlock?.(po);
+                      }}
                       disabled={requestingUnlock}
                       title="Request accounting unlock"
+                      aria-label="Request accounting unlock"
                       data-testid={`request-unlock-po-${po?.id ?? 'unknown'}`}
                     >
                       <Unlock className="h-4 w-4 text-amber-700" />

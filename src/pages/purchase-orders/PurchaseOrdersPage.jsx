@@ -91,6 +91,7 @@ const createEmptyLineItem = (currency = 'INR') =>
 
 const createDefaultPoForm = (defaultCurrency = 'INR', formatId = 'default-format') => ({
   po_format_id: formatId,
+  po_number: '',
   vendor_id: '',
   vendor_gst_registration_id: '',
   vendor_gstin: '',
@@ -121,6 +122,7 @@ const createDefaultPoForm = (defaultCurrency = 'INR', formatId = 'default-format
 
 const buildPoEditForm = (po = {}, fallbackFormatId = 'default-format') => ({
   po_format_id: po.po_format_id || po.poFormatId || po.formatConfigId || fallbackFormatId,
+  po_number: po.po_number || po.poNumber || '',
   vendor_id: po.vendor_id || po.vendorId || '',
   vendor_gst_registration_id: po.vendor_gst_registration_id || po.vendorGstRegistrationId || po.vendorRegistrationId || '',
   vendor_gstin: po.vendor_gstin || po.vendorGstin || '',
@@ -161,6 +163,24 @@ const cloneFormatConfig = (config) => ({
   })),
 });
 
+const cloneFormatSections = (sections = []) =>
+  sections.map((section) => ({
+    ...section,
+    fields: (section.fields || []).map((field) => ({ ...field })),
+  }));
+
+const serializeFormatSections = (sections = []) =>
+  JSON.stringify(
+    sections.map((section) => ({
+      section: section.section,
+      isEnabled: Boolean(section.isEnabled),
+      fields: (section.fields || []).map((field) => ({
+        fieldKey: field.fieldKey,
+        isEnabled: Boolean(field.isEnabled),
+      })),
+    })),
+  );
+
 const makeFormatConfig = (
   config,
   fallbackId = 'default-format',
@@ -186,6 +206,7 @@ const buildFormatConfigPayload = (config) => ({
   companyName: config.companyName,
   logoUrl: config.logoUrl || null,
   logoS3Key: config.logoS3Key || null,
+  showLogo: isFormatFieldEnabled(config, 'HEADER', 'h_logo'),
   poNumberPrefix: config.poNumberPrefix,
   dateFormat: config.dateFormat,
   templateCode: config.templateCode,
@@ -221,6 +242,7 @@ const areFormatListsEquivalent = (left = [], right = []) => {
     if (leftItem.defaultCurrency !== rightItem.defaultCurrency) return false;
     if ((leftItem.logoUrl || '') !== (rightItem.logoUrl || '')) return false;
     if ((leftItem.logoS3Key || '') !== (rightItem.logoS3Key || '')) return false;
+    if (serializeFormatSections(leftItem.sections) !== serializeFormatSections(rightItem.sections)) return false;
   }
   return true;
 };
@@ -249,6 +271,7 @@ const PurchaseOrdersPage = () => {
   const { isCorporateSectionEnabled, isBranchEnabled } = useRBAC();
   const { setHideSidebar } = useSidebar();
   const canManagePo = canPerformAction('po.create');
+  const canSubmitPo = canPerformAction('po.submit');
   const canRequestVendorFromPo = canManagePo || canPerformAction('invoices.addVendor');
   const canUploadPo = canManagePo && (
     isCorporateSectionEnabled('PURCHASE_ORDER_UPLOAD')
@@ -341,6 +364,7 @@ const PurchaseOrdersPage = () => {
   const [savedFormatConfigs, setSavedFormatConfigs] = useState(() => [makeFormatConfig(formatConfig)]);
   const [activeFormatId, setActiveFormatId] = useState('default-format');
   const [builderDraftConfig, setBuilderDraftConfig] = useState(() => makeFormatConfig(formatConfig));
+  const localFormatSectionOverridesRef = useRef({});
 
   const purchaseOrders = apiPurchaseOrders;
   const activeFormatConfig =
@@ -377,7 +401,20 @@ const PurchaseOrdersPage = () => {
   useEffect(() => {
     const formatsFromApi = extractListResponse(formatConfigsData).map((config, index) =>
       makeFormatConfig(config, index === 0 ? 'default-format' : `format-${index + 1}`, 'Standard GST Format', tenantBranding),
-    );
+    ).map((config) => {
+      const localSections = localFormatSectionOverridesRef.current[config.id];
+      if (!localSections) return config;
+
+      if (serializeFormatSections(config.sections) === serializeFormatSections(localSections)) {
+        delete localFormatSectionOverridesRef.current[config.id];
+        return config;
+      }
+
+      return {
+        ...config,
+        sections: cloneFormatSections(localSections),
+      };
+    });
     const nextFormats = formatsFromApi.length
       ? formatsFromApi
       : formatConfigData?.defaultCurrency
@@ -663,6 +700,23 @@ const PurchaseOrdersPage = () => {
     setShowCreateDialog(true);
   };
 
+  const openPoApprovalDialog = (po, action = 'Approved') => {
+    if (!po || !guardAction('po.approve')) return;
+    setSelectedPO(po);
+    setApprovalForm({ action, comments: '' });
+    setShowViewDialog(false);
+    setShowApprovalDialog(true);
+  };
+
+  const submitPoFromRow = (po) => {
+    const poId = getPoId(po);
+    if (!poId) {
+      toast.error('Purchase order id is missing');
+      return;
+    }
+    handleSubmitForApproval(poId);
+  };
+
   const handleRequestPoUnlock = async (po) => {
     if (!canManagePo) {
       toast.error('You need purchase order edit access to request unlock');
@@ -705,7 +759,19 @@ const PurchaseOrdersPage = () => {
       const data = isUnsavedFormat(nextConfig.id)
         ? await createPurchaseOrderFormatConfig(payload).unwrap()
         : await updatePurchaseOrderFormatConfig({ id: nextConfig.id, body: payload }).unwrap();
-      const savedConfig = makeFormatConfig(getCreatedPo(data) || nextConfig, nextConfig.id, nextConfig.name, tenantBranding);
+      const responseConfig = getCreatedPo(data) || {};
+      const savedConfig = makeFormatConfig(
+        {
+          ...nextConfig,
+          ...responseConfig,
+          sections: cloneFormatSections(nextConfig.sections),
+          showLogo: payload.showLogo,
+        },
+        nextConfig.id,
+        nextConfig.name,
+        tenantBranding,
+      );
+      localFormatSectionOverridesRef.current[savedConfig.id] = cloneFormatSections(nextConfig.sections);
 
       setSavedFormatConfigs((prev) => {
         const existingId = isUnsavedFormat(nextConfig.id) ? savedConfig.id : nextConfig.id;
@@ -1128,7 +1194,12 @@ const PurchaseOrdersPage = () => {
         setSelectedPO={setSelectedPO}
         setShowViewDialog={setShowViewDialog}
         canManagePo={canManagePo}
+        canSubmitPo={canSubmitPo}
+        canApprovePo={canApprovePo}
         onEditPO={openEditPoDialog}
+        onSubmitPO={submitPoFromRow}
+        onReviewPO={openPoApprovalDialog}
+        submitting={submitting}
         onRequestUnlock={handleRequestPoUnlock}
         requestingUnlock={requestAccountingUnlockLoading}
         showBranchField={isBranchEnabled}
