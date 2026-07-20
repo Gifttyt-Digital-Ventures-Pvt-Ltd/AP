@@ -1,6 +1,16 @@
 import { serviceApi } from "../serviceApi";
 import { extractListResponse } from "../utils/payloadMappers";
 import { normalizeApIntegrationSummary } from "../../pages/integrations/integrationSummary";
+import {
+  buildSyncDataCategoriesPath,
+  buildSyncDataImportPath,
+  buildSyncDataImportPayload,
+  buildSyncDataItemsPath,
+  normalizeSyncDataCategoriesResponse,
+  normalizeSyncDataImportResponse,
+  normalizeSyncDataItemsResponse,
+  SYNC_DATA_LIMIT,
+} from "../../pages/integrations/syncDataUtils";
 
 const ZOHO_BASE = "/integration/zoho";
 const GMAIL_BASE = "/integration/gmail";
@@ -253,6 +263,55 @@ export const integrationsApi = serviceApi.injectEndpoints({
         cache: "no-cache",
       }),
     }),
+    getSyncDataCategories: builder.query({
+      query: ({ provider, connectionId } = {}) => {
+        const url = buildSyncDataCategoriesPath({ provider, connectionId });
+        if (!url) {
+          throw new Error("Granular sync data is unavailable for this provider");
+        }
+        return { url, method: "GET" };
+      },
+      transformResponse: normalizeSyncDataCategoriesResponse,
+      providesTags: ["Integrations"],
+    }),
+    getSyncDataItems: builder.query({
+      query: ({
+        provider,
+        connectionId,
+        categoryCode,
+        search = "",
+        limit = SYNC_DATA_LIMIT,
+        offset = 0,
+        importedOnly = false,
+      } = {}) => {
+        const url = buildSyncDataItemsPath({ provider, connectionId, categoryCode });
+        if (!url) {
+          throw new Error("Granular sync data is unavailable for this provider");
+        }
+        return {
+          url,
+          method: "GET",
+          params: withParams({ search, limit, offset, importedOnly }),
+        };
+      },
+      transformResponse: normalizeSyncDataItemsResponse,
+      providesTags: ["Integrations"],
+    }),
+    importSyncDataItems: builder.mutation({
+      query: ({ provider, connectionId, categoryCode, itemIds } = {}) => {
+        const url = buildSyncDataImportPath({ provider, connectionId, categoryCode });
+        if (!url) {
+          throw new Error("Granular sync data is unavailable for this provider");
+        }
+        return {
+          url,
+          method: "POST",
+          body: buildSyncDataImportPayload(itemIds),
+        };
+      },
+      transformResponse: normalizeSyncDataImportResponse,
+      invalidatesTags: ["Integrations", "ApIntegrationSummary"],
+    }),
   }),
 });
 
@@ -287,4 +346,8 @@ export const {
   useGetTallySyncStatusQuery,
   useGetTallyLogsQuery,
   useLazyDownloadTallyWindowsConnectorQuery,
+  useGetSyncDataCategoriesQuery,
+  useLazyGetSyncDataCategoriesQuery,
+  useGetSyncDataItemsQuery,
+  useImportSyncDataItemsMutation,
 } = integrationsApi;
