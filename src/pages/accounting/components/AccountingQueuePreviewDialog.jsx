@@ -1,8 +1,8 @@
-import React, { useMemo, useState } from "react";
-import { FileText } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
 
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
+import { useLazyGetInvoiceHistoryQuery } from "../../../Services/apis/invoicesVendorsApi";
 import {
   Dialog,
   DialogContent,
@@ -14,7 +14,9 @@ import {
 import { getInvoiceStatusBadgeClass } from "../../../utils/approvalWorkflow";
 import { formatCurrency as formatMoney } from "../../../utils/currency";
 import GrnDetailDialog from "../../goods-receipt/components/GrnDetailDialog";
+import InvoicePdfPreview from "../../invoices/components/InvoicePdfPreview";
 import ViewDialog from "../../invoices/components/ViewDialog";
+import { normalizeInvoiceHistoryEntries } from "../../invoices/utils/invoiceHistory";
 import PoDetailsDialog from "../../purchase-orders/components/PoDetailsDialog";
 import { statusColors as poStatusColors } from "../../purchase-orders/constants";
 import { normalizePurchaseOrder } from "../../purchase-orders/utils";
@@ -34,19 +36,68 @@ const OBJECT_LABELS = {
 const getPayloadRecord = (detail) =>
   detail?.data ?? detail?.record ?? detail?.item ?? detail?.details ?? null;
 
+const getInvoiceHistoryFromRecord = (record = {}) =>
+  record.approvalRecords ??
+  record.approval_records ??
+  record.approvalHistory ??
+  record.approval_history ??
+  record.approvals ??
+  [];
+
+const getInvoiceFileUrl = (invoice = {}) =>
+  invoice.invoiceFileUrl ||
+  invoice.invoice_file_url ||
+  invoice.fileUrl ||
+  invoice.file_url ||
+  invoice.documentUrl ||
+  invoice.document_url ||
+  null;
+
+const normalizeInvoiceQueueRecord = (record = {}, detail = {}) => {
+  const metadata = detail?.accountingMetadata ?? detail?.accounting ?? detail?.queue ?? {};
+  return {
+    ...record,
+    objectType: detail?.objectType || record.objectType,
+    accountingReady: record.accountingReady ?? metadata.accountingReady,
+    locked: record.locked ?? metadata.locked,
+    accountingStatus:
+      record.accountingStatus ??
+      record.accounting_status ??
+      metadata.accountingStatus ??
+      metadata.accStatus,
+    erpStatus:
+      record.erpStatus ??
+      record.erp_status ??
+      metadata.erpStatus,
+    syncStatus:
+      record.syncStatus ??
+      record.sync_status ??
+      metadata.syncStatus,
+    eligibleForSync:
+      record.eligibleForSync ??
+      record.eligible_for_sync ??
+      metadata.eligibleForSync,
+    changedAfterLastSync:
+      record.changedAfterLastSync ??
+      record.changed_after_last_sync ??
+      metadata.changedAfterLastSync,
+    source: record.source || metadata.source || metadata.sourceSystem,
+    lineItems: Array.isArray(record.lineItems)
+      ? record.lineItems
+      : Array.isArray(record.line_items)
+        ? record.line_items
+        : [],
+    invoiceFileUrl: getInvoiceFileUrl(record),
+    approvalRecords: getInvoiceHistoryFromRecord(record),
+  };
+};
+
 const getDisplayValue = (value) => {
   if (value === true) return "Yes";
   if (value === false) return "No";
   if (value === null || value === undefined || value === "") return "-";
   return String(value);
 };
-
-const renderNoDocumentPreview = () => (
-  <div className="flex h-full min-h-[320px] flex-col items-center justify-center gap-2 bg-muted/30 p-6 text-center text-sm text-muted-foreground">
-    <FileText className="h-8 w-8" />
-    <p>Document preview is not included in the accounting queue payload.</p>
-  </div>
-);
 
 const getStatusClass = (status) => getInvoiceStatusBadgeClass(status);
 
@@ -213,8 +264,57 @@ const GenericPreviewDialog = ({ open, onOpenChange, detail }) => {
 
 const AccountingQueuePreviewDialog = ({ open, onOpenChange, detail }) => {
   const [invoiceTab, setInvoiceTab] = useState("details");
+  const [invoiceHistory, setInvoiceHistory] = useState([]);
+  const [loadingInvoiceHistory, setLoadingInvoiceHistory] = useState(false);
+  const [pdfZoom, setPdfZoom] = useState(100);
+  const [fetchInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
   const record = useMemo(() => getPayloadRecord(detail), [detail]);
-  const objectType = detail?.objectType;
+  const objectType = String(detail?.objectType || "").toUpperCase();
+  const invoiceRecord = useMemo(
+    () =>
+      objectType === "INVOICE" || objectType === "PI"
+        ? normalizeInvoiceQueueRecord(record || {}, detail)
+        : null,
+    [detail, objectType, record],
+  );
+
+  useEffect(() => {
+    const isInvoicePreview = objectType === "INVOICE" || objectType === "PI";
+    if (!open || !isInvoicePreview || !invoiceRecord?.id) {
+      setInvoiceHistory([]);
+      setLoadingInvoiceHistory(false);
+      return;
+    }
+
+    let cancelled = false;
+    const fallbackHistory = normalizeInvoiceHistoryEntries(
+      getInvoiceHistoryFromRecord(invoiceRecord),
+    );
+    setInvoiceHistory(fallbackHistory);
+    setLoadingInvoiceHistory(true);
+
+    fetchInvoiceHistory(invoiceRecord.id)
+      .unwrap()
+      .then((response) => {
+        if (cancelled) return;
+        const normalizedHistory = normalizeInvoiceHistoryEntries(response);
+        setInvoiceHistory(
+          normalizedHistory.length > 0 ? normalizedHistory : fallbackHistory,
+        );
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.error("Failed to fetch accounting queue invoice history:", error);
+        setInvoiceHistory(fallbackHistory);
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingInvoiceHistory(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchInvoiceHistory, invoiceRecord, objectType, open]);
 
   if (!record) {
     return <GenericPreviewDialog open={open} onOpenChange={onOpenChange} detail={detail} />;
@@ -260,16 +360,22 @@ const AccountingQueuePreviewDialog = ({ open, onOpenChange, detail }) => {
       <ViewDialog
         viewDialogOpen={open}
         setViewDialogOpen={onOpenChange}
-        selectedInvoice={record}
-        renderPdfPreview={renderNoDocumentPreview}
-        pdfZoom={100}
+        selectedInvoice={invoiceRecord}
+        renderPdfPreview={(props = {}) => (
+          <InvoicePdfPreview
+            {...props}
+            getInvoiceFileUrl={getInvoiceFileUrl}
+            setPdfZoom={setPdfZoom}
+          />
+        )}
+        pdfZoom={pdfZoom}
         viewPreviewError={false}
         setViewPreviewError={() => {}}
         getStatusBadgeClass={getStatusClass}
         viewTab={invoiceTab}
         setViewTab={setInvoiceTab}
-        invoiceHistory={record.approvalHistory ?? record.approval_history ?? record.approvals ?? []}
-        loadingHistory={false}
+        invoiceHistory={invoiceHistory}
+        loadingHistory={loadingInvoiceHistory}
         canEdit={() => false}
         handleEditInvoice={() => {}}
         canCancel={() => false}

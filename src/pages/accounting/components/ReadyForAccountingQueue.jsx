@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   BookOpen,
   Download,
@@ -86,6 +87,23 @@ const QUEUE_STAGES = [
 
 const PAGE_SIZE = 25;
 const SHOW_ROW_SYNC_ACTION = true;
+
+const isValidQueueTab = (tab) => QUEUE_TABS.some((item) => item.key === tab);
+const isValidQueueStage = (stage) => QUEUE_STAGES.includes(stage);
+
+const getInitialQueueState = (searchParams) => {
+  const tab = searchParams.get("queueTab");
+  const stage = searchParams.get("queueStage");
+  const offset = Number(searchParams.get("queueOffset"));
+
+  return {
+    tab: isValidQueueTab(tab) ? tab : QUEUE_TAB.PO,
+    stage: isValidQueueStage(stage)
+      ? stage
+      : ACCOUNTING_QUEUE_STAGE.NEEDS_APPROVAL,
+    offset: Number.isFinite(offset) && offset > 0 ? offset : 0,
+  };
+};
 
 const toArray = (value) => {
   if (Array.isArray(value)) return value;
@@ -270,17 +288,48 @@ const ReadyForAccountingQueue = ({
   erpStatusLoading = false,
 }) => {
   const { guardAction, canPerformAction } = useActionGuard();
-  const [activeTab, setActiveTab] = useState(QUEUE_TAB.PO);
-  const [activeStage, setActiveStage] = useState(
-    ACCOUNTING_QUEUE_STAGE.NEEDS_APPROVAL,
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialQueueState = useMemo(
+    () => getInitialQueueState(searchParams),
+    [searchParams],
   );
-  const [pageOffset, setPageOffset] = useState(0);
+  const [activeTab, setActiveTab] = useState(initialQueueState.tab);
+  const [activeStage, setActiveStage] = useState(initialQueueState.stage);
+  const [pageOffset, setPageOffset] = useState(initialQueueState.offset);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [showLogs, setShowLogs] = useState(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewDetail, setPreviewDetail] = useState(null);
   const activeObjectType = getPrimaryObjectTypeForTab(activeTab);
+
+  const updateQueueUrlState = (nextState = {}) => {
+    setSearchParams((currentParams) => {
+      const params = new URLSearchParams(currentParams);
+      const nextTab = nextState.tab ?? activeTab;
+      const nextStage = nextState.stage ?? activeStage;
+      const nextOffset = Number(nextState.offset ?? pageOffset) || 0;
+
+      params.set("queueTab", nextTab);
+      params.set("queueStage", nextStage);
+      if (nextOffset > 0) {
+        params.set("queueOffset", String(nextOffset));
+      } else {
+        params.delete("queueOffset");
+      }
+      return params;
+    }, { replace: true });
+  };
+
+  useEffect(() => {
+    setActiveTab(initialQueueState.tab);
+    setActiveStage(initialQueueState.stage);
+    setPageOffset(initialQueueState.offset);
+  }, [
+    initialQueueState.offset,
+    initialQueueState.stage,
+    initialQueueState.tab,
+  ]);
 
   const primaryQueueQuery = useGetAccountingReadyQueueQuery({
       objectType: activeObjectType,
@@ -433,15 +482,22 @@ const ReadyForAccountingQueue = ({
 
   const handleDocumentTabChange = (tab) => {
     setActiveTab(tab);
-    setActiveStage(ACCOUNTING_QUEUE_STAGE.NEEDS_APPROVAL);
     setPageOffset(0);
     setSelectedIds(new Set());
+    updateQueueUrlState({ tab, offset: 0 });
   };
 
   const handleStageChange = (stage) => {
     setActiveStage(stage);
     setPageOffset(0);
     setSelectedIds(new Set());
+    updateQueueUrlState({ stage, offset: 0 });
+  };
+
+  const handlePageOffsetChange = (nextOffset) => {
+    const safeOffset = Math.max(Number(nextOffset) || 0, 0);
+    setPageOffset(safeOffset);
+    updateQueueUrlState({ offset: safeOffset });
   };
 
   const refreshAfterAction = async ({
@@ -1039,7 +1095,7 @@ const ReadyForAccountingQueue = ({
                     variant="outline"
                     size="sm"
                     disabled={!hasPreviousPage || isFetching}
-                    onClick={() => setPageOffset(Math.max(offset - limit, 0))}
+                    onClick={() => handlePageOffsetChange(offset - limit)}
                   >
                     Previous
                   </Button>
@@ -1051,7 +1107,7 @@ const ReadyForAccountingQueue = ({
                     variant="outline"
                     size="sm"
                     disabled={!hasNextPage || isFetching}
-                    onClick={() => setPageOffset(offset + limit)}
+                    onClick={() => handlePageOffsetChange(offset + limit)}
                   >
                     Next
                   </Button>

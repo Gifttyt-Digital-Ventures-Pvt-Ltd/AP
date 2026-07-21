@@ -9,15 +9,30 @@ import { formatCurrency } from "../../../utils/currency";
 import InvoiceDocumentTypeBadge from "../../invoices/components/InvoiceDocumentTypeBadge";
 
 const basePendingInvoicesTableHeader = [
+  { key: "srNo", title: "Sr. No", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm font-medium" },
+  { key: "invoiceNumber", title: "Invoice #", headerClassName: "bg-muted text-foreground", cellClassName: "font-medium" },
+  { key: "refNo", title: "Ref No", headerClassName: "bg-muted text-foreground", cellClassName: "font-mono text-sm" },
   { key: "orgBranch", title: "Branch", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm" },
   { key: "vendorName", title: "Vendor", headerClassName: "bg-muted text-foreground" },
   { key: "documentType", title: "Type", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm" },
-  { key: "amount", title: "Amount", headerClassName: "bg-muted text-foreground", cellClassName: "  font-semibold" },
   { key: "approval", title: "Approval", headerClassName: "bg-muted text-foreground" },
-  { key: "status", title: "Status", headerClassName: "bg-muted text-foreground" },
+  { key: "amount", title: "Amount", headerClassName: "bg-muted text-foreground", cellClassName: "font-semibold" },
   {
     key: "dueDate",
-    title: "Due date",
+    title: "Due Date",
+    headerClassName: "bg-muted text-foreground",
+    cellClassName: "text-sm whitespace-nowrap",
+  },
+  { key: "status", title: "Status", headerClassName: "bg-muted text-foreground" },
+  {
+    key: "createdByName",
+    title: "Created By",
+    headerClassName: "bg-muted text-foreground",
+    cellClassName: "text-sm text-muted-foreground",
+  },
+  {
+    key: "paymentDate",
+    title: "Payment date",
     headerClassName: "bg-muted text-foreground",
     cellClassName: "text-sm text-muted-foreground",
   },
@@ -38,11 +53,15 @@ const PendingInvoicesTable = ({
   safeFormatDate,
   handleViewInvoice,
   handleOpenInvoiceHistory,
+  showRefNoField = false,
   showBranchField = false,
 }) => {
-  const tableHeader = showBranchField
+  let tableHeader = showRefNoField
     ? basePendingInvoicesTableHeader
-    : basePendingInvoicesTableHeader.filter((header) => header.key !== "orgBranch");
+    : basePendingInvoicesTableHeader.filter((header) => header.key !== "refNo");
+  if (!showBranchField) {
+    tableHeader = tableHeader.filter((header) => header.key !== "orgBranch");
+  }
 
   const renderPendingInvoiceRow = (invoice, rowIndex, headers) => {
     const progress = getApprovalProgress(invoice);
@@ -53,6 +72,9 @@ const PendingInvoicesTable = ({
           let value;
 
           switch (header.key) {
+            case "srNo":
+              value = rowIndex + 1;
+              break;
             case "amount":
               value = formatCurrency(invoice.amount, invoice.currency);
               break;
@@ -91,9 +113,15 @@ const PendingInvoicesTable = ({
               value = (
                 <InvoiceDueDateCell
                   invoice={invoice}
-                  formattedDueDate={safeFormatDate(invoice.dueDate || invoice.dueDate)}
+                  formattedDueDate={safeFormatDate(invoice.dueDate ?? invoice.due_date)}
                 />
               );
+              break;
+            case "paymentDate":
+              value = safeFormatDate(invoice.paymentDate ?? invoice.payment_date);
+              break;
+            case "refNo":
+              value = invoice.refNo || "-";
               break;
             case "actions":
               value = (
@@ -138,7 +166,7 @@ const PendingInvoicesTable = ({
           tableHeader={tableHeader}
           tableData={otherPendingInvoices}
           renderRow={renderPendingInvoiceRow}
-          tableClassName="min-w-[900px]"
+          tableClassName="min-w-[1500px]"
           tableContainerClassName="overflow-visible"
           headClassName="border-b border-border bg-muted shadow-sm"
           stickyHeader
