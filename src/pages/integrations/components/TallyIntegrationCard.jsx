@@ -894,6 +894,15 @@ const TallyIntegrationCard = ({ mode = "full" }) => {
                     Refresh Tally
                   </Button>
                   <Button
+                    asChild
+                    variant="outline"
+                    disabled={!currentConnectionId}
+                  >
+                    <Link to={`/integrations/${currentConnectionId}/sync-data`}>
+                      Manage Synced Data
+                    </Link>
+                  </Button>
+                  <Button
                     variant="outline"
                     onClick={handleDisconnect}
                     disabled={

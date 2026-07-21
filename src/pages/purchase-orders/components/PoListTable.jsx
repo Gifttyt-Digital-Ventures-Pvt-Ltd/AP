@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { Eye, Pencil, Search, Send, ShieldCheck, Unlock } from "lucide-react";
+import { CheckCircle2, Eye, Pencil, Search, Send, Unlock } from "lucide-react";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
@@ -144,19 +144,19 @@ const PoListTable = ({
                   )}
                 {canApprovePo && po.status === "Pending Approval" && (
                   <Button
-                    variant="ghost"
-                    size="icon"
+                    variant="outline"
+                    size="sm"
                     onClick={(event) => {
                       event.stopPropagation();
                       onReviewPO?.(po);
                     }}
                     disabled={submitting}
-                    className="text-emerald-700 hover:text-emerald-800"
                     title="Review PO"
                     aria-label="Review PO"
                     data-testid={`review-po-${po?.id ?? 'unknown'}`}
                   >
-                    <ShieldCheck className="h-4 w-4" />
+                    <CheckCircle2 className="mr-1 h-4 w-4" />
+                    Review
                   </Button>
                 )}
                 {isAccountingReadyLocked(po) &&
