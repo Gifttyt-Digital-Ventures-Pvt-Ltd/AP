@@ -441,6 +441,7 @@ const Approvals = () => {
               safeFormatDate={safeFormatDate}
               handleViewInvoice={handleViewInvoice}
               handleOpenInvoiceHistory={handleOpenInvoiceHistory}
+              showRefNoField={isRefNoEnabled}
               showBranchField={isBranchEnabled}
             />
           </TabsContent>

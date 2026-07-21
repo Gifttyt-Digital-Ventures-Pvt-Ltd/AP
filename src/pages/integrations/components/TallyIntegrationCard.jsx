@@ -32,6 +32,7 @@ import {
 } from "../../../Services/apis/integrationsApi";
 import { useActionGuard } from "../../../hooks/useActionGuard";
 import { Button } from "../../../components/ui/button";
+import AppDataTable from "../../../components/common/AppDataTable";
 import {
   Dialog,
   DialogContent,
@@ -75,6 +76,61 @@ const SETUP_CHECKLIST = [
   "Tally XML server is enabled (default port 9000).",
   "Organisation GSTIN in Optifii matches the Tally company GSTIN.",
   "Only one active ERP connection per corporate (disconnect Zoho Books first if needed).",
+];
+
+const TALLY_LOG_TABLE_COLUMNS = [
+  {
+    key: "time",
+    header: "Time",
+    cellClassName: "text-sm",
+    render: (log) =>
+      formatDateTime(
+        log.createdAt ||
+          log.created_at ||
+          log.completedAt ||
+          log.completed_at,
+      ),
+  },
+  {
+    key: "object",
+    header: "Object",
+    cellClassName: "text-sm",
+    render: (log) => String(log.object || "-").replace(/_/g, " "),
+  },
+  {
+    key: "event",
+    header: "Event",
+    cellClassName: "text-sm",
+    render: (log) =>
+      String(log.event || log.direction || "-").replace(/_/g, " "),
+  },
+  {
+    key: "status",
+    header: "Status",
+    cellClassName: "text-sm",
+    render: (log) => {
+      const logStatus = String(log.status || "PENDING").toUpperCase();
+      return (
+        <span
+          className={`inline-flex w-fit rounded-full border px-2 py-0.5 text-xs font-medium ${statusBadgeClass(logStatus)}`}
+        >
+          {logStatus.replace(/_/g, " ")}
+        </span>
+      );
+    },
+  },
+  {
+    key: "records",
+    header: "Records",
+    cellClassName: "text-sm text-muted-foreground",
+    render: (log) => (
+      <span>
+        {Number(log.recordsProcessed ?? log.records_processed ?? 0)} processed
+        {" · "}
+        {Number(log.recordsFailed ?? log.records_failed ?? 0)} failed
+      </span>
+    ),
+  },
 ];
 
 const getConnectionId = (connection) => {
@@ -998,59 +1054,17 @@ const TallyIntegrationCard = ({ mode = "full" }) => {
                   </div>
                 </div>
                 <div className="max-h-[360px] overflow-y-auto rounded-lg border border-border scrollbar-thin-muted">
-                  {logRows.length > 0 ? (
-                    <div className="divide-y divide-border">
-                      {logRows.map((log, index) => {
-                        const logStatus = String(
-                          log.status || "PENDING",
-                        ).toUpperCase();
-                        return (
-                          <div
-                            key={log.id || log.syncLogId || index}
-                            className="grid gap-2 p-3 text-sm md:grid-cols-[1.2fr_1fr_1fr_1fr_1.4fr]"
-                          >
-                            <span>
-                              {formatDateTime(
-                                log.createdAt ||
-                                  log.created_at ||
-                                  log.completedAt ||
-                                  log.completed_at,
-                              )}
-                            </span>
-                            <span>
-                              {String(log.object || "-").replace(/_/g, " ")}
-                            </span>
-                            <span>
-                              {String(
-                                log.event || log.direction || "-",
-                              ).replace(/_/g, " ")}
-                            </span>
-                            <span
-                              className={`w-fit rounded-full border px-2 py-0.5 text-xs font-medium ${statusBadgeClass(logStatus)}`}
-                            >
-                              {logStatus.replace(/_/g, " ")}
-                            </span>
-                            <span className="text-muted-foreground">
-                              {Number(
-                                log.recordsProcessed ??
-                                  log.records_processed ??
-                                  0,
-                              )}{" "}
-                              processed ·{" "}
-                              {Number(
-                                log.recordsFailed ?? log.records_failed ?? 0,
-                              )}{" "}
-                              failed
-                            </span>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <div className="p-4 text-sm text-muted-foreground">
-                      No sync activity yet.
-                    </div>
-                  )}
+                  <AppDataTable
+                    columns={TALLY_LOG_TABLE_COLUMNS}
+                    rows={logRows}
+                    rowKey={(log, index) => log.id || log.syncLogId || index}
+                    tableClassName="min-w-[760px]"
+                    tableContainerClassName="overflow-visible"
+                    headClassName="border-b border-border bg-muted"
+                    emptyMessage="No sync activity yet."
+                    emptyTestId="tally-sync-activity-empty"
+                    stickyHeader
+                  />
                 </div>
               </div>
             </div>
