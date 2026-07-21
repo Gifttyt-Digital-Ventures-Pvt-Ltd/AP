@@ -24,6 +24,25 @@ export const GST_LEDGER_MONTHS = [
 
 export const GST_LEDGER_YEARS = ['2026', '2025', '2024', '2023'];
 
+// GST → Overview tab: reconciliation-status list filters (values match backend API contract exactly).
+export const GST_RECON_OVERVIEW_DATE_FILTERS = [
+  { value: 'THIS_MONTH', label: 'This Month' },
+  { value: 'LAST_MONTH', label: 'Last Month' },
+  { value: 'THIS_QUARTER', label: 'Current Quarter' },
+  { value: 'LAST_QUARTER', label: 'Last Quarter' },
+  { value: 'THIS_FY', label: 'This FY' },
+];
+
+export const DEFAULT_GST_RECON_OVERVIEW_DATE_FILTER = GST_RECON_OVERVIEW_DATE_FILTERS[0].value;
+
+export const GST_RECON_OVERVIEW_SOURCE_OPTIONS = [
+  { value: 'EFFECTIVE', label: 'Effective (2B → 2A)' },
+  { value: 'SOURCE_2A', label: '2A' },
+  { value: 'SOURCE_2B', label: '2B' },
+];
+
+export const DEFAULT_GST_RECON_OVERVIEW_SOURCE = GST_RECON_OVERVIEW_SOURCE_OPTIONS[0].value;
+
 export const resolveLedgerHistoryPeriod = (entry) => {
   if (entry?.periodMonth && entry?.periodYear) {
     return { periodMonth: entry.periodMonth, periodYear: entry.periodYear };

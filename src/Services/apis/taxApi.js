@@ -2,7 +2,10 @@ import { serviceApi } from "../serviceApi";
 import { extractListResponse } from "../utils/payloadMappers";
 import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
 import { normalizeOrganisationGstCredentialsList } from "../../utils/organisationGst";
-import { unwrapGstApiResponse } from "../../pages/tax-management/utils/gstApiMappers";
+import {
+  unwrapGstApiResponse,
+  mapReconDetailResponse,
+} from "../../pages/tax-management/utils/gstApiMappers";
 
 const gstMutationResponse = (response) => unwrapGstApiResponse(response);
 const withHistoryMeta = (items, response = {}) => Object.assign(items, {
@@ -64,6 +67,10 @@ const normalizeTdsEntriesResponse = (response) => {
     hasMore: Boolean(payload?.hasMore ?? payload?.has_more),
   });
 };
+
+// Base path for the GST 2A/2B reconciliation engine (Overview list + run status).
+// Centralized so a backend path change only needs to be made in one place.
+const GST_RECON_API_BASE = "/tax/gst/recon";
 
 const compactQueryParams = (params = {}) =>
   Object.fromEntries(
@@ -271,6 +278,42 @@ export const taxApi = serviceApi.injectEndpoints({
       query: () => ({ url: "/tax/gst/summary", method: "GET" }),
       providesTags: ["Tax"],
     }),
+    getReconOverview: builder.query({
+      query: (params = {}) => ({
+        url: buildQueryUrl(`${GST_RECON_API_BASE}/overview`, {
+          dateFilter: params.dateFilter,
+          source: params.source,
+          page: params.page,
+          size: params.size,
+          sort: params.sort,
+        }),
+        method: "GET",
+      }),
+      providesTags: ["Tax"],
+    }),
+    getReconRunStatus: builder.query({
+      query: (runId) => ({
+        url: `${GST_RECON_API_BASE}/run/${runId}`,
+        method: "GET",
+      }),
+      providesTags: ["Tax"],
+    }),
+    // Not yet called anywhere — the caller cannot supply a correct `period` (MMYYYY) value yet.
+    // See useGstReconOverview / GstOverviewPanel for the blocker note. Defined now so the
+    // endpoint is ready to wire up once `period` is available.
+    getReconDetail: builder.query({
+      query: ({ platformInvoiceId, portalInvoiceId, source, period } = {}) => ({
+        url: buildQueryUrl(`${GST_RECON_API_BASE}/detail`, {
+          platformInvoiceId,
+          portalInvoiceId,
+          source,
+          period,
+        }),
+        method: "GET",
+      }),
+      transformResponse: mapReconDetailResponse,
+      providesTags: ["Tax"],
+    }),
     getTdsEntries: builder.query({
       query: (params = {}) => ({
         url: buildQueryUrl("/tax/tds/entries", params),
@@ -390,6 +433,10 @@ export const {
   useGetGstEntriesQuery,
   useCreateGstEntryMutation,
   useGetGstSummaryQuery,
+  useGetReconOverviewQuery,
+  useGetReconRunStatusQuery,
+  useGetReconDetailQuery,
+  useLazyGetReconDetailQuery,
   useGetTdsEntriesQuery,
   useLazyGetTdsEntriesExportQuery,
   useGetTdsSummaryQuery,

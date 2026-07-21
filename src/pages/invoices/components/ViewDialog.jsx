@@ -55,6 +55,9 @@ const ViewDialog = ({
   canCancelLinkedInvoice = false,
   onCancelLinkedInvoice,
   showAccountingLockBanner = true,
+  // Optional — only used by GST Overview's "View" flow. Absent for every other ViewDialog
+  // caller, so this section renders nothing and existing behavior is unchanged.
+  gstReconDetail = null,
 }) => {
   // Normalize the raw invoice into form-data shape so checklist fields
   // like `vendorMatched` are properly resolved (raw invoice only has `vendorId`).
@@ -171,6 +174,16 @@ const ViewDialog = ({
                   <TabsContent value="details" className="mt-0 flex-1 min-h-0">
                     <div className="flex flex-row items-stretch gap-4 w-full h-full min-h-0">
                       <div className="flex-1 min-w-0 overflow-y-auto pr-3 scrollbar-thin-muted">
+                        {gstReconDetail && (
+                          <div className="mb-4 rounded-md border bg-muted/20 p-3">
+                            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                              GST Reconciliation
+                            </p>
+                            <pre className="whitespace-pre-wrap break-words text-xs text-muted-foreground">
+                              {JSON.stringify(gstReconDetail, null, 2)}
+                            </pre>
+                          </div>
+                        )}
                         <InvoiceReadOnlyDetails
                           invoice={selectedInvoice}
                           showCategoryField={showCategoryField}
