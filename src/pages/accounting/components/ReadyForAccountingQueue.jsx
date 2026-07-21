@@ -265,7 +265,10 @@ const SourceBadge = ({ item }) => {
   );
 };
 
-const ReadyForAccountingQueue = () => {
+const ReadyForAccountingQueue = ({
+  erpSyncAvailable = false,
+  erpStatusLoading = false,
+}) => {
   const { guardAction, canPerformAction } = useActionGuard();
   const [activeTab, setActiveTab] = useState(QUEUE_TAB.PO);
   const [activeStage, setActiveStage] = useState(
@@ -408,8 +411,11 @@ const ReadyForAccountingQueue = () => {
   const canSelectInStage =
     activeStage === ACCOUNTING_QUEUE_STAGE.NEEDS_APPROVAL
       ? canMarkReadyAction
-      : canSyncAction;
+      : canSyncAction && erpSyncAvailable;
   const pushInProgress = bulkSyncing || tallySyncing;
+  const syncDisabledReason = erpStatusLoading
+    ? "Checking ERP connection status..."
+    : "Connect an ERP before syncing to ERP.";
 
   const toggleOne = (id) => {
     setSelectedIds((prev) => {
@@ -520,6 +526,10 @@ const ReadyForAccountingQueue = () => {
 
   const handleSync = async (item) => {
     if (!guardAction("accounting.ready.sync")) return;
+    if (!erpSyncAvailable) {
+      toast.info(syncDisabledReason);
+      return;
+    }
     if (item.accStatus === ACC_STATUS.SYNCED && !item.eligibleForSync) {
       toast.info("Already synced — no changes since last successful sync");
       return;
@@ -554,6 +564,10 @@ const ReadyForAccountingQueue = () => {
 
   const handleRetry = async (item) => {
     if (!guardAction("accounting.ready.sync")) return;
+    if (!erpSyncAvailable) {
+      toast.info(syncDisabledReason);
+      return;
+    }
     try {
       const result = await retryItem({ id: item.id }).unwrap();
       toast.success(result?.message || "Retry succeeded");
@@ -565,6 +579,10 @@ const ReadyForAccountingQueue = () => {
 
   const handleBulkPush = async () => {
     if (!guardAction("accounting.ready.sync")) return;
+    if (!erpSyncAvailable) {
+      toast.info(syncDisabledReason);
+      return;
+    }
     const erpPushObjectType = getErpPushObjectType(activeObjectType);
     if (hasTallyConnection) {
       const selectedEntityIds = selectedPushable
@@ -728,7 +746,8 @@ const ReadyForAccountingQueue = () => {
           <Button
             size="sm"
             variant="outline"
-            disabled={busy}
+            disabled={busy || !erpSyncAvailable}
+            title={!erpSyncAvailable ? syncDisabledReason : undefined}
             onClick={() => handleSync(item)}
           >
             Sync
@@ -738,7 +757,8 @@ const ReadyForAccountingQueue = () => {
           <Button
             size="sm"
             variant="outline"
-            disabled={busy}
+            disabled={busy || !erpSyncAvailable}
+            title={!erpSyncAvailable ? syncDisabledReason : undefined}
             onClick={() => handleRetry(item)}
           >
             <RotateCcw className="mr-1 h-3.5 w-3.5" />
@@ -879,7 +899,8 @@ const ReadyForAccountingQueue = () => {
             canSyncAction ? (
               <Button
                 size="sm"
-                disabled={busy}
+                disabled={busy || !erpSyncAvailable}
+                title={!erpSyncAvailable ? syncDisabledReason : undefined}
                 onClick={handleBulkPush}
               >
                 {pushInProgress ? (

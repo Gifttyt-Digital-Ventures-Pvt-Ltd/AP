@@ -1,12 +1,10 @@
 import React, { useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  AlertCircle,
   ArrowRight,
   BookOpen,
   Database,
   Loader2,
-  Plug,
   RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -38,68 +36,6 @@ const WORKFLOW_LEGEND = [
   { label: ACC_STATUS.FAILED, className: "border-rose-200 bg-rose-50 text-rose-800" },
 ];
 
-const AccountingQueueErpInactiveState = ({ onOpenIntegrations }) => (
-  <Card
-    className="overflow-hidden border-amber-200 bg-gradient-to-br from-amber-50 via-white to-slate-50 shadow-sm"
-    data-testid="accounting-queue-erp-inactive"
-  >
-    <CardContent className="relative p-6">
-      <div className="pointer-events-none absolute right-0 top-0 h-32 w-32 rounded-bl-full bg-amber-200/30" />
-      <div className="relative flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-        <div className="flex gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-amber-100 text-amber-700 shadow-inner">
-            <AlertCircle className="h-6 w-6" />
-          </div>
-          <div className="max-w-2xl space-y-2">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">
-                ERP connection required
-              </p>
-              <h3 className="text-lg font-semibold text-slate-950">
-                ERP is not active
-              </h3>
-            </div>
-            <p className="text-sm leading-6 text-slate-600">
-              Accounting Queue is available only after an ERP connection is
-              active. Connect Zoho Books or Tally to mark records Accounting
-              Ready, sync eligible items, retry failures, and review sync logs.
-            </p>
-          </div>
-        </div>
-        <Button
-          type="button"
-          className="shrink-0"
-          onClick={onOpenIntegrations}
-          data-testid="accounting-open-integrations-btn"
-        >
-          <Plug className="mr-2 h-4 w-4" />
-          Open Integrations
-        </Button>
-      </div>
-    </CardContent>
-  </Card>
-);
-
-const AccountingQueueErpStatusError = ({ onRetry }) => (
-  <Card className="border-rose-200 bg-rose-50/70 shadow-sm">
-    <CardContent className="flex flex-col gap-3 p-6 md:flex-row md:items-center md:justify-between">
-      <div className="flex items-start gap-3">
-        <AlertCircle className="mt-0.5 h-5 w-5 text-rose-700" />
-        <div>
-          <h3 className="font-semibold text-rose-950">Unable to check ERP status</h3>
-          <p className="text-sm text-rose-700">
-            We could not load the integration summary. Retry before opening the Accounting Queue.
-          </p>
-        </div>
-      </div>
-      <Button type="button" variant="outline" onClick={onRetry}>
-        <RefreshCw className="mr-2 h-4 w-4" />
-        Retry
-      </Button>
-    </CardContent>
-  </Card>
-);
-
 const AccountingDashboard = () => {
   const navigate = useNavigate();
   const { guardAction, canPerformAction } = useActionGuard();
@@ -109,8 +45,6 @@ const AccountingDashboard = () => {
     data: integrationSummary,
     isLoading: integrationSummaryLoading,
     isFetching: integrationSummaryFetching,
-    isError: integrationSummaryError,
-    refetch: refetchIntegrationSummary,
   } = useGetApIntegrationSummaryQuery();
   const erpConnectionsLoading =
     integrationSummaryLoading || integrationSummaryFetching;
@@ -250,22 +184,10 @@ const AccountingDashboard = () => {
         ))}
       </div>
 
-      {erpConnectionsLoading ? (
-        <Card className="shadow-sm">
-          <CardContent className="flex items-center justify-center gap-2 p-6 text-sm text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin text-primary" />
-            Checking ERP connection status...
-          </CardContent>
-        </Card>
-      ) : integrationSummaryError ? (
-        <AccountingQueueErpStatusError onRetry={refetchIntegrationSummary} />
-      ) : hasActiveErpConnection ? (
-        <ReadyForAccountingQueue />
-      ) : (
-        <AccountingQueueErpInactiveState
-          onOpenIntegrations={() => navigate("/integrations")}
-        />
-      )}
+      <ReadyForAccountingQueue
+        erpSyncAvailable={hasActiveErpConnection}
+        erpStatusLoading={erpConnectionsLoading}
+      />
     </PageShell>
   );
 };

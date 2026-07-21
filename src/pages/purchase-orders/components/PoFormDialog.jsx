@@ -75,6 +75,33 @@ const formatRegistrationLocation = (registration = {}) => {
   return getRegistrationValue(registration, "address", "principalAddress", "principal_address");
 };
 
+const formatAddressFromEntity = (entity = {}) => {
+  const directAddress = getRegistrationValue(
+    entity,
+    "address",
+    "vendorAddress",
+    "vendor_address",
+    "billingAddress",
+    "billing_address",
+    "registeredAddress",
+    "registered_address",
+    "principalAddress",
+    "principal_address",
+  );
+  if (directAddress) return directAddress;
+
+  return [
+    entity.addressLine1 ?? entity.address_line1,
+    entity.addressLine2 ?? entity.address_line2,
+    entity.city,
+    entity.state,
+    entity.pincode ?? entity.postalCode ?? entity.postal_code,
+    entity.country,
+  ]
+    .filter(Boolean)
+    .join(", ");
+};
+
 const getVendorGstRegistrationsForPo = (vendor = {}) => {
   const registrations = vendor.gstRegistrations ?? vendor.gst_regs ?? vendor.gstRegs ?? vendor.gst_registrations;
   const mapped = Array.isArray(registrations)
@@ -218,9 +245,17 @@ const PoFormDialog = ({
         )
           .trim()
           .toUpperCase(),
+        address: formatAddressFromEntity(branch),
       }))
       .filter((branch) => branch.branchName && branch.branchCode);
   }, [selectedVendor]);
+  const selectedVendorBranch = vendorBranches.find(
+    (branch) => branch.branchCode === String(poForm.vendor_branch_code || '').trim().toUpperCase(),
+  );
+  const selectedVendorAddress =
+    selectedVendorRegistration?.address ||
+    selectedVendorBranch?.address ||
+    formatAddressFromEntity(selectedVendor);
   const orgBranchOptions = useMemo(
     () =>
       organisationBranches
@@ -468,7 +503,7 @@ const PoFormDialog = ({
   );
 
   const dialogFooter = (
-    <DialogFooter className="border-t px-6 py-4">
+    <DialogFooter className="shrink-0 border-t bg-background px-6 py-4">
       {isPreviewing ? (
         <>
           <Button variant="outline" onClick={() => setPreviewAction(null)} disabled={isCreating}>
@@ -510,7 +545,7 @@ const PoFormDialog = ({
 
   const formContent = (
     <>
-      <div className={`overflow-y-auto bg-slate-100 ${embedded ? 'px-4 py-4' : 'px-6 py-5'}`}>
+      <div className={`min-h-0 flex-1 overflow-y-auto bg-slate-100 ${embedded ? 'px-4 py-4' : 'px-6 py-5'}`}>
         <div className="mx-auto max-w-5xl space-y-4">
           {!plainDataMode && isPreviewing && (
             <div className="rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
@@ -604,7 +639,13 @@ const PoFormDialog = ({
 
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                       <FieldBlock label="PO No">
-                        <Input value={`${selectedFormat.poNumberPrefix || "PO-"}AUTO`} disabled className={inputClassName} />
+                        <Input
+                          value={poForm.po_number || ""}
+                          onChange={(e) => setPoForm((prev) => ({ ...prev, po_number: e.target.value }))}
+                          placeholder={`${selectedFormat.poNumberPrefix || "PO-"}AUTO if blank`}
+                          className={inputClassName}
+                          data-testid="po-number-input"
+                        />
                       </FieldBlock>
 
                       <FieldBlock label="Currency">
@@ -726,6 +767,16 @@ const PoFormDialog = ({
                           </p>
                         ) : null}
                       </FieldBlock>
+                    ) : null}
+                    {selectedVendorAddress ? (
+                      <div className="mt-3 rounded-md border border-slate-200 bg-white/70 px-3 py-2 text-sm">
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Vendor Address
+                        </p>
+                        <p className="mt-1 whitespace-pre-line text-muted-foreground">
+                          {selectedVendorAddress}
+                        </p>
+                      </div>
                     ) : null}
                     {showBranchField && poForm.vendor_id ? (
                       <FieldBlock label="Organisation Branch (Optional)" className="mt-3">
@@ -995,8 +1046,8 @@ const PoFormDialog = ({
 
   return (
     <Dialog open={showCreateDialog} onOpenChange={handleOpenChange}>
-      <DialogContent className="flex flex-col w-[96vw] max-w-6xl max-h-[92vh] overflow-hidden p-0">
-        <DialogHeader className="border-b px-6 pt-6 pb-3">
+      <DialogContent className="flex w-[96vw] max-w-6xl max-h-[92vh] flex-col overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b px-6 pt-6 pb-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <DialogTitle>{isEditMode ? "Edit Purchase Order" : "Create Purchase Order"}</DialogTitle>

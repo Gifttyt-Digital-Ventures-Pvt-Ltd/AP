@@ -157,6 +157,23 @@ export const normalizePurchaseOrder = (po = {}) => ({
   po_number: po.po_number ?? po.poNumber,
   vendor_id: po.vendor_id ?? po.vendorId,
   vendor_name: po.vendor_name ?? po.vendorName,
+  vendor_address:
+    po.vendor_address ??
+    po.vendorAddress ??
+    po.vendor_billing_address ??
+    po.vendorBillingAddress ??
+    [
+      po.vendorSnapshot?.addressLine1 ?? po.vendorSnapshot?.address_line1,
+      po.vendorSnapshot?.addressLine2 ?? po.vendorSnapshot?.address_line2,
+      po.vendorSnapshot?.city,
+      po.vendorSnapshot?.state,
+      po.vendorSnapshot?.pincode ??
+        po.vendorSnapshot?.postalCode ??
+        po.vendorSnapshot?.postal_code,
+      po.vendorSnapshot?.country,
+    ]
+      .filter(Boolean)
+      .join(", "),
   branch_name: po.branch_name ?? po.branchName ?? '',
   branch_code: po.branch_code ?? po.branchCode ?? '',
   billing_gstin: po.billing_gstin ?? po.billingGstin ?? '',
@@ -241,6 +258,7 @@ export const isFormatFieldEnabled = (formatConfig = {}, sectionKey = "", fieldKe
 export const buildCreatePurchaseOrderPayload = (form = {}, formatConfig = null) => {
   const currency = form.currency || "INR";
   const isInr = isInrCurrency(currency);
+  const poNumber = String(form.po_number || "").trim();
   const headerOn = (key) => !formatConfig || isFormatFieldEnabled(formatConfig, "HEADER", key);
   const shipBillOn = (key) => !formatConfig || isFormatFieldEnabled(formatConfig, "SHIP_BILL", key);
   const paymentOn = (key) => !formatConfig || isFormatFieldEnabled(formatConfig, "PAYMENT", key);
@@ -250,7 +268,7 @@ export const buildCreatePurchaseOrderPayload = (form = {}, formatConfig = null) 
   const includeTotal = (value) => value !== undefined && value !== null && value !== "";
 
   return {
-    ...(form.po_number ? { poNumber: form.po_number } : {}),
+    ...(poNumber ? { poNumber } : {}),
     vendorId: form.vendor_id || null,
     vendorRequestSubmitted: Boolean(form.vendor_request_submitted),
     vendorName: form.scanned_vendor_name || form.vendor_name || null,

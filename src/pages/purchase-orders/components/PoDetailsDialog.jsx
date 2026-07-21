@@ -91,6 +91,23 @@ const PoDetailsDialog = ({
     selectedPO?.logoUrl ||
     selectedPO?.logo_url ||
     null;
+  const vendorAddress =
+    selectedPO?.vendor_address ||
+    selectedPO?.vendorAddress ||
+    selectedPO?.vendor_billing_address ||
+    selectedPO?.vendorBillingAddress ||
+    [
+      selectedPO?.vendorSnapshot?.addressLine1 ?? selectedPO?.vendorSnapshot?.address_line1,
+      selectedPO?.vendorSnapshot?.addressLine2 ?? selectedPO?.vendorSnapshot?.address_line2,
+      selectedPO?.vendorSnapshot?.city,
+      selectedPO?.vendorSnapshot?.state,
+      selectedPO?.vendorSnapshot?.pincode ??
+        selectedPO?.vendorSnapshot?.postalCode ??
+        selectedPO?.vendorSnapshot?.postal_code,
+      selectedPO?.vendorSnapshot?.country,
+    ]
+      .filter(Boolean)
+      .join(", ");
   const hideStatusInDocument = ["Approved", "Issued"].includes(selectedPO?.status);
   const poLineItemTableHeader = [
     { key: "lineNumber", title: "#" },
@@ -201,8 +218,8 @@ const PoDetailsDialog = ({
 
   return (
     <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
-      <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto p-0">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[92vh] max-w-6xl flex-col overflow-hidden p-0">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2 px-6 pt-6 pb-3 border-b">
             <FileText className="h-5 w-5" />
             Purchase Order: {selectedPO?.po_number}
@@ -213,20 +230,21 @@ const PoDetailsDialog = ({
           </DialogDescription>
         </DialogHeader>
 
-        {selectedPO ? (
-          <div className="px-6 pt-4">
-            <AccountingLockBanner
-              record={selectedPO}
-              objectLabel="purchase order"
-              objectType="PO"
-              objectId={selectedPO?.id}
-            />
-          </div>
-        ) : null}
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-100">
+          {selectedPO ? (
+            <div className="bg-background px-6 pt-4">
+              <AccountingLockBanner
+                record={selectedPO}
+                objectLabel="purchase order"
+                objectType="PO"
+                objectId={selectedPO?.id}
+              />
+            </div>
+          ) : null}
 
-        {selectedPO && (
-          <div className="bg-slate-100 px-6 py-5 space-y-6">
-            <Tabs value={viewTab} onValueChange={setViewTab}>
+          {selectedPO && (
+            <div className="px-6 py-5 space-y-6">
+              <Tabs value={viewTab} onValueChange={setViewTab}>
               <TabsList className="grid w-full max-w-sm grid-cols-2">
                 <TabsTrigger value="details">Details</TabsTrigger>
                 <TabsTrigger value="history">
@@ -326,6 +344,11 @@ const PoDetailsDialog = ({
                             {selectedPO.vendor_name || "-"}
                           </p>
                         )}
+                        {vendorAddress ? (
+                          <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">
+                            Address: {vendorAddress}
+                          </p>
+                        ) : null}
                         {isInr &&
                           fieldOn("VENDOR", "vendor_gstin") &&
                           selectedPO.vendor_gstin && (
@@ -540,11 +563,12 @@ const PoDetailsDialog = ({
                   </div>
                 )}
               </TabsContent>
-            </Tabs>
-          </div>
-        )}
+              </Tabs>
+            </div>
+          )}
+        </div>
 
-        <DialogFooter className="px-6 py-4 border-t">
+        <DialogFooter className="shrink-0 border-t bg-background px-6 py-4">
           <Button variant="outline" onClick={() => setShowViewDialog(false)}>
             Close
           </Button>
