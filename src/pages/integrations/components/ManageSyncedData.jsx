@@ -190,7 +190,6 @@ const SyncItemPicker = ({
   importedOnly = false,
   canEdit,
   canImport,
-  onBack,
   onImported,
 }) => {
   const { guardAction } = useActionGuard();
@@ -272,11 +271,7 @@ const SyncItemPicker = ({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <Button type="button" variant="outline" size="sm" onClick={onBack}>
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Back to checklist
-        </Button>
+      <div className="flex justify-end">
         <Badge variant="outline" className="border-slate-200 bg-slate-50">
           {importedOnly ? "Imported items only" : "Select new items"}
         </Badge>
@@ -486,18 +481,24 @@ const ManageSyncedData = ({
     if (!guardAction("integrations.mapping.edit", "You do not have permission to edit ERP sync data")) return;
     setImportedOnly(false);
     setActiveCategoryCode(category.code);
+    if (!embedded && connectionId) {
+      navigate(`/integrations/${connectionId}/${category.code}`);
+    }
   };
 
   const viewImported = (category) => {
     setImportedOnly(true);
     setActiveCategoryCode(category.code);
+    if (!embedded && connectionId) {
+      navigate(`/integrations/${connectionId}/${category.code}`);
+    }
   };
 
   const handleBack = () => {
     setActiveCategoryCode("");
     setImportedOnly(false);
     if (!embedded && categoryCode) {
-      navigate(`/integrations/${connectionId}/sync-data`);
+      navigate(`/integrations/${connectionId}`);
     }
   };
 
@@ -573,7 +574,6 @@ const ManageSyncedData = ({
           importedOnly={importedOnly}
           canEdit={canEdit}
           canImport={canImport}
-          onBack={handleBack}
           onImported={refetch}
         />
       );
@@ -605,12 +605,19 @@ const ManageSyncedData = ({
       title="Manage Synced Data"
       description="Import selected ERP master data by category without resending already imported items."
       backAction={
-        <Button asChild variant="outline" size="sm">
-          <Link to={connectionId ? `/integrations/${connectionId}` : "/integrations"}>
+        activeCategoryCode ? (
+          <Button type="button" variant="outline" size="sm" onClick={handleBack}>
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Back
-          </Link>
-        </Button>
+            Back to checklist
+          </Button>
+        ) : (
+          <Button asChild variant="outline" size="sm">
+            <Link to="/integrations">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back
+            </Link>
+          </Button>
+        )
       }
       actions={summary?.provider ? <StatusBadge status={summary.provider} /> : null}
     >
