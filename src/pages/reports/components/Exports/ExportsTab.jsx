@@ -689,8 +689,11 @@ const ExportsTab = ({ currencies = [] }) => {
   ];
 
   return (
-    <div className="space-y-6">
-      <Card>
+    // Bounded-height flex chain (mirrors Approvals.jsx / GST Overview / Invoice Matching) so
+    // the Recent Exports table can scroll internally with a sticky header, instead of the
+    // whole page scrolling past it.
+    <div className="flex h-full min-h-0 flex-col gap-6">
+      <Card className="shrink-0">
         <CardContent className="space-y-4 p-4">
           <div className="grid gap-3 lg:grid-cols-4">
             <div className="space-y-1">
@@ -908,7 +911,7 @@ const ExportsTab = ({ currencies = [] }) => {
           </Card>
         )}
       </div> */}
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid shrink-0 gap-3 lg:grid-cols-2">
         {[0, 1].map((columnIndex) => (
           <div key={columnIndex} className="flex flex-col gap-3">
             {reportTypes
@@ -1020,24 +1023,31 @@ const ExportsTab = ({ currencies = [] }) => {
         )}
       </div>
 
-      <Card>
-        <CardContent className="space-y-4 p-4">
-          <div>
-            <h3 className="text-base font-semibold">Recent Exports</h3>
-            <p className="text-sm text-muted-foreground">
-              Generated report files available for download.
-            </p>
-          </div>
-          <AppDataTable
-            columns={columns}
-            rows={normalizedExports}
-            rowKey="id"
-            isLoading={exportsFetching}
-            emptyMessage="No reports generated yet"
-            stickyHeader={false}
-          />
-        </CardContent>
-      </Card>
+      {/* Bounded to the remaining height so the table can scroll its rows internally with a
+          sticky header, matching Approvals > All / GST Overview / Invoice Matching. */}
+      <div className="min-h-0 flex-1">
+        <Card className="flex h-full min-h-0 flex-col overflow-hidden">
+          <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4">
+            <div className="shrink-0">
+              <h3 className="text-base font-semibold">Recent Exports</h3>
+              <p className="text-sm text-muted-foreground">
+                Generated report files available for download.
+              </p>
+            </div>
+            <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-thin-muted">
+              <AppDataTable
+                columns={columns}
+                rows={normalizedExports}
+                rowKey="id"
+                isLoading={exportsFetching}
+                emptyMessage="No reports generated yet"
+                tableContainerClassName="overflow-visible"
+                headClassName="[&_th]:sticky [&_th]:top-0 [&_th]:z-10"
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };

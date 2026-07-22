@@ -54,21 +54,27 @@ const Reports = () => {
   const formatterProps = { formatCurrency, formatFullCurrency };
 
   return (
-    <div className="space-y-6" data-testid="reports-page">
-      <ReportsHeader
-        dateRange={dateRange}
-        setDateRange={setDateRange}
-        customDays={customDays}
-        setCustomDays={setCustomDays}
-        fetchAllData={fetchAllData}
-        loading={loading}
-        currencies={currencies}
-        selectedCurrency={selectedCurrency}
-        onCurrencyChange={setSelectedCurrency}
-        hideControls={activeTab === 'exports'}
-      />
+    // Bounded-height flex chain (mirrors Approvals.jsx / GST Overview / Invoice Matching) so
+    // the Exports tab's table can scroll internally with a sticky header. Other tabs are
+    // unaffected: their content just overflows this chain and the page falls back to its
+    // normal whole-page scroll for them, same as before.
+    <div className="flex h-full min-h-0 flex-col gap-6" data-testid="reports-page">
+      <div className="shrink-0">
+        <ReportsHeader
+          dateRange={dateRange}
+          setDateRange={setDateRange}
+          customDays={customDays}
+          setCustomDays={setCustomDays}
+          fetchAllData={fetchAllData}
+          loading={loading}
+          currencies={currencies}
+          selectedCurrency={selectedCurrency}
+          onCurrencyChange={setSelectedCurrency}
+          hideControls={activeTab === 'exports'}
+        />
+      </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col gap-6">
         <ReportsTabsList
           canViewExecutiveReports={canViewExecutiveReports}
           canViewApReports={canViewApReports}
@@ -119,7 +125,7 @@ const Reports = () => {
         )}
 
         {canViewExportReports && (
-          <TabsContent value="exports" className="space-y-6">
+          <TabsContent value="exports" className="flex min-h-0 flex-1 flex-col">
             <ExportsTab currencies={currencies} />
           </TabsContent>
         )}

@@ -14,37 +14,14 @@ const GST_RECON_OVERVIEW_PAGE_SIZE = 20;
 const GST_RECON_STATUS_FILTER_ALL = 'ALL';
 const GST_RECON_RUN_POLL_MS = 5000;
 
-// ---------------------------------------------------------------------------
-// TEMPORARY CLIENT-SIDE FILTERING — remove once the backend supports it.
-// TODO: BE §10.2 does not accept `status`/`search` query params yet. Once the
-// `/recon/overview` endpoint is extended to filter server-side (alongside
-// pagination), delete this block, pass `statusFilter`/`debouncedSearch` into
-// useGetReconOverviewQuery's params instead, and replace the `rows` useMemo
-// below with `mapped.rows` directly. Until then this only filters whatever
-// rows are on the current server-fetched page, not the full dataset.
-// ---------------------------------------------------------------------------
-function applyTemporaryClientSideReconFilters(rows, { statusFilter, search }) {
-  const query = search.trim().toLowerCase();
-  return rows.filter((row) => {
-    const matchesStatus = statusFilter === GST_RECON_STATUS_FILTER_ALL || row.status === statusFilter;
-    const matchesSearch =
-      !query ||
-      row.invoiceNo.toLowerCase().includes(query) ||
-      row.vendorName.toLowerCase().includes(query);
-    return matchesStatus && matchesSearch;
-  });
-}
-// ---------------------------------------------------------------------------
-
 /**
  * Orchestrates GST Overview filter state plus the Overview list API (B2) and run-status
  * API (B3), mapping the response via B4. Purely orchestration — no rendering here; the
  * returned values are meant to drive GstReconFilterBar / GstReconRunBanner /
  * GstReconOverviewTable (B7-B9) from wherever they're composed later.
  *
- * BE §10.2 documents only dateFilter/source/page/size/sort as query params — no status or
- * search param — so status/search filtering is applied client-side on the mapped rows here,
- * not sent to the API.
+ * status/search are sent to the backend as query params (filtered server-side, across the
+ * full dataset) rather than applied client-side on the current page's rows.
  *
  * `runId` is accepted as an optional argument rather than sourced internally, since neither
  * spec defines how the Overview screen itself would obtain an active run id (the run is
@@ -69,6 +46,8 @@ export function useGstReconOverview({ runId } = {}) {
   } = useGetReconOverviewQuery({
     dateFilter,
     source,
+    status: statusFilter === GST_RECON_STATUS_FILTER_ALL ? undefined : statusFilter,
+    search: debouncedSearch || undefined,
     // UI page state is 1-based; the backend's `page` param is 0-based (confirmed in the
     // backend implementation doc, §4.1: default `0`). Convert only at the API-call boundary.
     page: page - 1,
@@ -81,11 +60,7 @@ export function useGstReconOverview({ runId } = {}) {
   });
 
   const mapped = useMemo(() => mapReconOverviewResponse(rawOverview ?? {}), [rawOverview]);
-
-  const rows = useMemo(
-    () => applyTemporaryClientSideReconFilters(mapped.rows, { statusFilter, search: debouncedSearch }),
-    [mapped.rows, statusFilter, debouncedSearch],
-  );
+  const rows = mapped.rows;
 
   const totalPages = Math.max(
     1,

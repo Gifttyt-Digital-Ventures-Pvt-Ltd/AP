@@ -283,6 +283,8 @@ export const taxApi = serviceApi.injectEndpoints({
         url: buildQueryUrl(`${GST_RECON_API_BASE}/overview`, {
           dateFilter: params.dateFilter,
           source: params.source,
+          status: params.status,
+          search: params.search,
           page: params.page,
           size: params.size,
           sort: params.sort,
@@ -298,9 +300,6 @@ export const taxApi = serviceApi.injectEndpoints({
       }),
       providesTags: ["Tax"],
     }),
-    // Not yet called anywhere — the caller cannot supply a correct `period` (MMYYYY) value yet.
-    // See useGstReconOverview / GstOverviewPanel for the blocker note. Defined now so the
-    // endpoint is ready to wire up once `period` is available.
     getReconDetail: builder.query({
       query: ({ platformInvoiceId, portalInvoiceId, source, period } = {}) => ({
         url: buildQueryUrl(`${GST_RECON_API_BASE}/detail`, {
@@ -313,6 +312,40 @@ export const taxApi = serviceApi.injectEndpoints({
       }),
       transformResponse: mapReconDetailResponse,
       providesTags: ["Tax"],
+    }),
+    linkReconInvoice: builder.mutation({
+      query: (body) => ({
+        url: `${GST_RECON_API_BASE}/link`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: gstMutationResponse,
+      invalidatesTags: ["Tax", ...CREDIT_INVALIDATION_TAGS],
+    }),
+    uploadReconInvoice: builder.mutation({
+      query: (formData) => ({
+        url: `${GST_RECON_API_BASE}/upload`,
+        method: "POST",
+        body: formData,
+      }),
+      transformResponse: gstMutationResponse,
+      invalidatesTags: ["Tax", ...CREDIT_INVALIDATION_TAGS],
+    }),
+    getReconUploadJobStatus: builder.query({
+      query: (jobId) => ({
+        url: `${GST_RECON_API_BASE}/upload/${jobId}`,
+        method: "GET",
+      }),
+      providesTags: ["Tax"],
+    }),
+    overrideRecon: builder.mutation({
+      query: (body) => ({
+        url: `${GST_RECON_API_BASE}/override`,
+        method: "POST",
+        body,
+      }),
+      transformResponse: gstMutationResponse,
+      invalidatesTags: ["Tax", ...CREDIT_INVALIDATION_TAGS],
     }),
     getTdsEntries: builder.query({
       query: (params = {}) => ({
@@ -437,6 +470,10 @@ export const {
   useGetReconRunStatusQuery,
   useGetReconDetailQuery,
   useLazyGetReconDetailQuery,
+  useLinkReconInvoiceMutation,
+  useUploadReconInvoiceMutation,
+  useGetReconUploadJobStatusQuery,
+  useOverrideReconMutation,
   useGetTdsEntriesQuery,
   useLazyGetTdsEntriesExportQuery,
   useGetTdsSummaryQuery,

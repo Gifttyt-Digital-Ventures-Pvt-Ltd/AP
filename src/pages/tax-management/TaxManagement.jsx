@@ -76,8 +76,12 @@ const TaxManagement = () => {
   const tabGridClass = MAIN_TAB_GRID[taxTabs.length] || MAIN_TAB_GRID[3];
 
   return (
-    <div className="space-y-6" data-testid="tax-management-page">
-      <div className="flex justify-between items-center">
+    // Bounded-height flex chain (mirrors Approvals.jsx) so GST Overview's table can scroll
+    // internally with a docked, non-scrolling pagination footer instead of the whole page
+    // scrolling past it. Other tabs are unaffected: their content just overflows this chain
+    // and the page falls back to scrolling as it always has, since they don't opt into it.
+    <div className="flex h-full min-h-0 flex-col gap-6" data-testid="tax-management-page">
+      <div className="flex shrink-0 justify-between items-center">
         <div>
           <h1 className="text-2xl font-bold">Tax Management</h1>
           <p className="text-muted-foreground">Manage GST and TDS compliance</p>
@@ -87,8 +91,8 @@ const TaxManagement = () => {
         </RefreshButton>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-5">
-        <TabsList className={`grid w-full ${tabGridClass}`}>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="flex min-h-0 flex-1 flex-col gap-5">
+        <TabsList className={`shrink-0 grid w-full ${tabGridClass}`}>
           {taxTabs.map((tab) => (
             <TabsTrigger key={tab.value} value={tab.value} data-testid={`tab-${tab.value}`}>
               {tab.label}

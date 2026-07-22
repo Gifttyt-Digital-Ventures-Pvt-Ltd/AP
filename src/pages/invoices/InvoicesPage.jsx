@@ -264,9 +264,9 @@ const baseInvoiceTableHeader = [
     key: "invoiceNumber",
     title: "Invoice #",
     headerClassName:
-      "p-3 text-left text-xs font-medium sticky left-[var(--invoice-sticky-col3)] ",
+      "p-3 text-left text-xs font-medium sticky left-[var(--invoice-sticky-col3)] right-0 border-r-2 border-r-shadow-2xl",
     cellClassName:
-      "p-3 text-sm font-medium sticky left-[var(--invoice-sticky-col3)] bg-inherit",
+      "p-3 text-sm font-medium sticky left-[var(--invoice-sticky-col3)] bg-inherit border-r-2 border-r-shadow-2xl",
   },
   {
     key: "source",
@@ -349,8 +349,8 @@ const baseInvoiceTableHeader = [
   {
     key: "actions",
     title: "Actions",
-    headerClassName: "p-3 text-left text-xs font-medium",
-    cellClassName: "p-3 text-left",
+    headerClassName: "p-3 text-left text-xs font-medium sticky right-0 border-l-2 border-l-shadow-2xl",
+    cellClassName: "p-3 text-left sticky right-0 bg-inherit border-l-2 border-l-shadow-2xl",
   },
 ];
 

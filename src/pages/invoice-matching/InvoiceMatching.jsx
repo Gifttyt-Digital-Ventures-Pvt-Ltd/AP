@@ -933,8 +933,11 @@ const InvoiceMatching = () => {
   }
 
   return (
-    <div className="space-y-6" data-testid="invoice-matching-page">
-      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+    // Bounded-height flex chain (mirrors Approvals.jsx / GST Overview) so the matching table
+    // can scroll internally with a sticky header and a docked, non-scrolling pagination
+    // footer, instead of the whole page scrolling past it.
+    <div className="flex h-full min-h-0 flex-col gap-6" data-testid="invoice-matching-page">
+      <div className="flex shrink-0 flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
           <h1 className="text-2xl font-bold">Invoice Matching</h1>
           <p className="text-muted-foreground">PO, invoice, PI, and GRN matching with dynamic checklist scoring</p>
@@ -950,7 +953,7 @@ const InvoiceMatching = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-4 lg:grid-cols-7">
+      <div className="grid shrink-0 grid-cols-1 gap-4 md:grid-cols-4 lg:grid-cols-7">
         <Card>
           <CardContent className="pt-4">
             <p className="text-sm text-muted-foreground">Total</p>
@@ -995,7 +998,7 @@ const InvoiceMatching = () => {
         </Card>
       </div>
 
-      <div className="flex flex-col gap-3 md:flex-row md:items-center">
+      <div className="flex shrink-0 flex-col gap-3 md:flex-row md:items-center">
         <div className="relative flex-1 md:max-w-sm">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -1044,37 +1047,45 @@ const InvoiceMatching = () => {
         </Button>
       </div>
 
-      <Card>
-        <AppDataTable
-          tableHeader={matchingTableHeader}
-          tableData={matchingGroups}
-          renderRow={renderMatchingRow}
-          emptyMessage="No matching records found."
-        />
-      </Card>
+      {/* Bounded to the remaining height so the table can scroll its rows internally with a
+          docked pagination footer, matching Approvals > All / GST Overview. */}
+      <div className="min-h-0 flex-1">
+        <Card className="flex h-full min-h-0 flex-col overflow-hidden">
+          <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-thin-muted">
+            <AppDataTable
+              tableHeader={matchingTableHeader}
+              tableData={matchingGroups}
+              renderRow={renderMatchingRow}
+              emptyMessage="No matching records found."
+              tableContainerClassName="overflow-visible"
+              headClassName="[&_th]:sticky [&_th]:top-0 [&_th]:z-10"
+            />
+          </div>
 
-      <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <span>
-          Page {query.page + 1} of {totalPages} ({totalElements} PO groups)
-        </span>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={query.page <= 0}
-            onClick={() => updateQuery({ page: Math.max(query.page - 1, 0) })}
-          >
-            Previous
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={query.page + 1 >= totalPages}
-            onClick={() => updateQuery({ page: query.page + 1 })}
-          >
-            Next
-          </Button>
-        </div>
+          <div className="mt-auto flex shrink-0 items-center justify-between border-t px-4 py-3 text-sm text-muted-foreground">
+            <span>
+              Page {query.page + 1} of {totalPages} ({totalElements} PO groups)
+            </span>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={query.page <= 0}
+                onClick={() => updateQuery({ page: Math.max(query.page - 1, 0) })}
+              >
+                Previous
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={query.page + 1 >= totalPages}
+                onClick={() => updateQuery({ page: query.page + 1 })}
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        </Card>
       </div>
 
       <Dialog
