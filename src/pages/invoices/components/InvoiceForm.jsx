@@ -1109,9 +1109,9 @@ export const InvoiceForm = ({
                                 <span className="truncate font-medium">
                                   {option.accountGroupName}
                                 </span>
-                                <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] uppercase text-slate-500">
+                                {/* <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] uppercase text-slate-500">
                                   Level {Number(option.hierarchyLevel || 0)}
-                                </span>
+                                </span> */}
                                 {option.status ? (
                                   <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] uppercase text-muted-foreground">
                                     {option.status}
