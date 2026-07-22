@@ -388,7 +388,9 @@ const ERP_STATUS_MAP = {
   [SYNC_STATUS.READY_TO_SYNC]: ERP_STATUS.READY_TO_SYNC,
   READY_TO_SYNC: ERP_STATUS.READY_TO_SYNC,
   "Ready to Sync": ERP_STATUS.READY_TO_SYNC,
-  [SYNC_STATUS.QUEUED]: ERP_STATUS.NOT_SYNCED,
+  [SYNC_STATUS.QUEUED]: ERP_STATUS.QUEUED,
+  QUEUED: ERP_STATUS.QUEUED,
+  Queued: ERP_STATUS.QUEUED,
   [SYNC_STATUS.SYNCED]: ERP_STATUS.SYNCED,
   SYNCED: ERP_STATUS.SYNCED,
   Synced: ERP_STATUS.SYNCED,
@@ -472,6 +474,13 @@ export const normalizeQueueItem = (item = {}) => {
         (!item.accountingReady && !item.accounting_ready),
     ),
     locked: Boolean(item.locked ?? item.isLocked ?? item.is_locked),
+    directUnlockAllowed:
+      item.directUnlockAllowed ??
+      item.direct_unlock_allowed ??
+      item.directUnlock ??
+      item.direct_unlock,
+    syncDisabledReason:
+      item.syncDisabledReason || item.sync_disabled_reason || null,
     unlockRequestStatus: item.unlockRequestStatus || item.unlock_request_status || null,
     accountingReady: Boolean(item.accountingReady ?? item.accounting_ready),
   };

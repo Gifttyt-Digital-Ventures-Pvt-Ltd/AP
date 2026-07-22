@@ -243,6 +243,7 @@ const ErpStatusBadge = ({ status }) => {
     [ERP_STATUS.FAILED]: "border-rose-200 bg-rose-50 text-rose-800",
     [ERP_STATUS.RETRY_REQUIRED]: "border-rose-200 bg-rose-50 text-rose-800",
     [ERP_STATUS.READY_TO_SYNC]: "border-blue-200 bg-blue-50 text-blue-700",
+    [ERP_STATUS.QUEUED]: "border-amber-200 bg-amber-50 text-amber-800",
     [ERP_STATUS.NOT_SYNCED]: "border-slate-200 bg-slate-100 text-slate-600",
   };
   return (
@@ -844,6 +845,7 @@ const ReadyForAccountingQueue = ({
     const canRetry = canRetryItem(item);
     const canDirectUnlock =
       item.locked &&
+      item.directUnlockAllowed !== false &&
       (canPerformAction("accounting.ready.unlock") ||
         canPerformAction("accounting.ready.unlockApprove"));
 
@@ -870,7 +872,10 @@ const ReadyForAccountingQueue = ({
             size="sm"
             variant="outline"
             disabled={busy || rowSyncing || !erpSyncAvailable}
-            title={!erpSyncAvailable ? syncDisabledReason : undefined}
+            title={
+              item.syncDisabledReason ||
+              (!erpSyncAvailable ? syncDisabledReason : undefined)
+            }
             onClick={() => handleSync(item)}
           >
             {rowSyncing ? (

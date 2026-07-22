@@ -54,6 +54,7 @@ export const ACCOUNTING_QUEUE_STAGE_LABELS = {
 export const ERP_STATUS = {
   NOT_SYNCED: "Not Synced",
   READY_TO_SYNC: "Ready to Sync",
+  QUEUED: "Queued",
   SYNCED: "Synced",
   FAILED: "Failed",
   RETRY_REQUIRED: "Retry Required",
