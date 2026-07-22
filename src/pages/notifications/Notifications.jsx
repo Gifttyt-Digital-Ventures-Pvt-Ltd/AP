@@ -82,7 +82,7 @@ const KindBadge = ({ kind }) => {
           : "border-slate-200 bg-slate-100 text-slate-600",
       )}
     >
-      {actionable ? "Needs you" : "Update"}
+      {actionable ? "Action Needed" : "Update"}
     </Badge>
   );
 };
@@ -229,12 +229,16 @@ const Notifications = () => {
     setPage(0);
   }, [filter]);
 
-  const handleOpenNotification = (notification) => {
+  const handleOpenNotification = async (notification) => {
     if (!notification?.id) return;
-    markRead(notification.id);
-    const deepLink = getNotificationDeepLink(notification);
-    if (deepLink) {
-      navigate(deepLink);
+    try {
+      await markRead(notification.id).unwrap();
+      // const deepLink = getNotificationDeepLink(notification);
+      // if (deepLink) {
+      //   navigate(deepLink);
+      // }
+    } catch {
+      toast.error("Couldn't open notification.");
     }
   };
 
