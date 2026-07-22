@@ -279,7 +279,7 @@ const Notifications = () => {
           <Tabs value={filter} onValueChange={setFilter}>
             <TabsList>
               <TabsTrigger value={FILTERS.ACTIONABLE} className="data-[state=active]:bg-slate-900 data-[state=active]:text-white">
-                Needs you
+                Action Needed
                 {unreadCount > 0 && (
                   <span className="ml-2 rounded-full bg-rose-500 px-2 py-0.5 text-xs font-semibold text-white">
                     {unreadCount > 99 ? "99+" : unreadCount}

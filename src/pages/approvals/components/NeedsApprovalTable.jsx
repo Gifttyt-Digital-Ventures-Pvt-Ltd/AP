@@ -14,6 +14,8 @@ import { formatCurrency } from "../../../utils/currency";
 import InvoiceDocumentTypeBadge from "../../invoices/components/InvoiceDocumentTypeBadge";
 
 const baseNeedsApprovalTableHeader = [
+  { key: "invoiceNumber", title: "Invoice #", headerClassName: "bg-muted text-foreground", cellClassName: "font-medium" },
+  { key: "refNo", title: "Ref No", headerClassName: "bg-muted text-foreground", cellClassName: "font-mono text-sm" },
   { key: "orgBranch", title: "Branch", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm" },
   { key: "vendorName", title: "Vendor", headerClassName: "bg-muted text-foreground" },
   { key: "documentType", title: "Type", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm" },
@@ -50,17 +52,21 @@ const NeedsApprovalTable = ({
   canApproveInvoices,
   canCheckInvoices,
   showApprovalProgress = false,
+  showRefNoField = true,
   showBranchField = false,
 }) => {
   const tableHeaders = useMemo(() => {
     let headers = showApprovalProgress
       ? baseNeedsApprovalTableHeader
       : baseNeedsApprovalTableHeader.filter((header) => header.key !== "approval");
+    if (!showRefNoField) {
+      headers = headers.filter((header) => header.key !== "refNo");
+    }
     if (!showBranchField) {
       headers = headers.filter((header) => header.key !== "orgBranch");
     }
     return headers;
-  }, [showApprovalProgress, showBranchField]);
+  }, [showApprovalProgress, showRefNoField, showBranchField]);
 
   const renderNeedsApprovalRow = (invoice, rowIndex, headers) => {
     const progress = getApprovalProgress(invoice);
@@ -81,6 +87,12 @@ const NeedsApprovalTable = ({
           switch (header.key) {
             case "amount":
               value = formatCurrency(invoice.amount, invoice.currency);
+              break;
+            case "invoiceNumber":
+              value = invoice.invoiceNumber || "-";
+              break;
+            case "refNo":
+              value = invoice.refNo || "-";
               break;
             case "vendorName":
               value = <VendorWithBranchCell record={invoice} />;
@@ -206,7 +218,7 @@ const NeedsApprovalTable = ({
           tableHeader={tableHeaders}
           tableData={myPendingInvoices}
           renderRow={renderNeedsApprovalRow}
-          tableClassName="min-w-[1100px]"
+          tableClassName="min-w-[1300px]"
           tableContainerClassName="overflow-visible"
           headClassName="border-b border-border bg-muted shadow-sm"
           stickyHeader

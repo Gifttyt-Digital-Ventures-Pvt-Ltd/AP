@@ -425,6 +425,7 @@ const Approvals = () => {
               canApproveInvoices={canApproveInvoices}
               canCheckInvoices={canCheckInvoices}
               showApprovalProgress={canApproveInvoices}
+              showRefNoField
               showBranchField={isBranchEnabled}
             />
           </TabsContent>
@@ -441,7 +442,7 @@ const Approvals = () => {
               safeFormatDate={safeFormatDate}
               handleViewInvoice={handleViewInvoice}
               handleOpenInvoiceHistory={handleOpenInvoiceHistory}
-              showRefNoField={isRefNoEnabled}
+              showRefNoField
               showBranchField={isBranchEnabled}
             />
           </TabsContent>
