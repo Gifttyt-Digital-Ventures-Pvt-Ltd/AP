@@ -17,7 +17,7 @@ const ReportsTabsList = ({
   canViewPaymentReports,
   canViewExportReports,
 }) => (
-  <TabsList className="flex w-min max-w-4xl ">
+  <TabsList className="flex w-min max-w-4xl shrink-0">
     {canViewExecutiveReports && (
       <TabsTrigger value="executive" data-testid="tab-executive">
         <BarChart3 className="h-4 w-4 mr-2" />

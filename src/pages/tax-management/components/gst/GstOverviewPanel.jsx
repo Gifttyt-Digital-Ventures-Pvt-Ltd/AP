@@ -1,103 +1,127 @@
-import React, { useMemo } from 'react';
-import { TabsContent } from '../../../../components/ui/tabs';
+import React, { useEffect, useState } from 'react';
+import { FileText } from 'lucide-react';
 import { toast } from 'sonner';
-import {
-  Activity,
-  ArrowUpDown,
-  Calendar,
-  CheckCircle2,
-  DollarSign,
-  Download,
-  FileCheck,
-  FileText,
-  Loader2,
-  Receipt,
-  RefreshCw,
-  Zap,
-} from 'lucide-react';
-import {
-  TaxKpiCard,
-  TaxQuickActions,
-  TaxSectionCard,
-} from '../TaxUi';
-import { useGetGstSummaryQuery } from '../../../../Services/apis/taxApi';
-import { mapGstSummaryToOverviewKpis } from '../../utils/gstApiMappers';
-import { GST_TAB_VALUES, isGstTabEnabled } from '../../../../utils/gstConfiguration';
+import { TabsContent } from '../../../../components/ui/tabs';
+import { Button } from '../../../../components/ui/button';
+import { Skeleton } from '../../../../components/ui/skeleton';
+import { TaxEmptyState } from '../TaxUi';
+import GstReconFilterBar from './GstReconFilterBar';
+import GstReconRunBanner from './GstReconRunBanner';
+import GstReconOverviewTable from './GstReconOverviewTable';
+import GstReconViewPanel from './GstReconViewPanel';
+import { useGstReconOverview } from '../../hooks/useGstReconOverview';
+import { GST_RECON_OVERVIEW_DATE_FILTERS } from '../../data/taxStaticData';
 
-const GstOverviewPanel = ({ onGotoTab, activeGstConfiguration = [] }) => {
-  const { data: summary, isLoading, isFetching, isError, refetch } = useGetGstSummaryQuery();
+// FE §2.4 — skeleton row count for the initial-load state.
+const GST_RECON_OVERVIEW_SKELETON_ROWS = 10;
 
-  const kpis = useMemo(() => mapGstSummaryToOverviewKpis(summary ?? {}), [summary]);
-  const loading = isLoading || isFetching;
+const GstOverviewPanel = () => {
+  const {
+    dateFilter,
+    onDateFilterChange,
+    source,
+    onSourceChange,
+    statusFilter,
+    onStatusFilterChange,
+    search,
+    onSearchChange,
+    onRefresh,
+    refreshing,
+    runState,
+    runCounts,
+    rows,
+    page,
+    totalPages,
+    onPreviousPage,
+    onNextPage,
+    isLoading,
+    isError,
+  } = useGstReconOverview();
 
-  const quickActions = useMemo(() => {
-    const actions = [];
+  // FE §2.4 — "Error: retryable toast + inline retry." Fires once per error occurrence.
+  useEffect(() => {
+    if (!isError) return;
+    toast.error('Unable to load GST reconciliation overview.', {
+      action: { label: 'Retry', onClick: onRefresh },
+    });
+  }, [isError, onRefresh]);
 
-    if (isGstTabEnabled(GST_TAB_VALUES.RECONCILIATION, activeGstConfiguration)) {
-      actions.push(
-        { label: 'Run GSTR-2A Reconciliation', icon: ArrowUpDown, onClick: () => onGotoTab?.(GST_TAB_VALUES.RECONCILIATION) },
-        { label: 'Run GSTR-2B Reconciliation', icon: FileCheck, onClick: () => onGotoTab?.(GST_TAB_VALUES.RECONCILIATION) },
-      );
-    }
+  // True only before the first successful load for the current filters — RTK Query keeps
+  // the previous page's rows in place during a refetch, so this doesn't re-trigger on
+  // pagination/refresh once data has loaded at least once.
+  const isInitialLoading = isLoading && rows.length === 0;
 
-    if (isGstTabEnabled(GST_TAB_VALUES.RETURNS, activeGstConfiguration)) {
-      actions.push({ label: 'Track GST Returns', icon: Calendar, onClick: () => onGotoTab?.(GST_TAB_VALUES.RETURNS) });
-    }
+  const dateFilterLabel =
+    GST_RECON_OVERVIEW_DATE_FILTERS.find((option) => option.value === dateFilter)?.label ?? 'the selected period';
 
-    if (isGstTabEnabled(GST_TAB_VALUES.DOCUMENTS, activeGstConfiguration)) {
-      actions.push({ label: 'View Documents', icon: FileText, onClick: () => onGotoTab?.(GST_TAB_VALUES.DOCUMENTS) });
-    }
+  // FE §3 — the View CTA opens the Reconciliation View (checklist/split/no-invoice-found/
+  // override) in place of the list, for any row (platform-linked or portal-only).
+  const [activeRow, setActiveRow] = useState(null);
 
-    actions.push(
-      {
-        label: 'Refresh GST Data',
-        icon: RefreshCw,
-        onClick: async () => {
-          await refetch();
-          toast.success('GST summary refreshed');
-        },
-      },
-      { label: 'Download GST Report', icon: Download, onClick: () => toast.success('GST report download started') },
+  if (activeRow) {
+    return (
+      <TabsContent value="overview" className="flex h-full min-h-0 flex-col gap-6">
+        <GstReconViewPanel row={activeRow} source={source} onBack={() => setActiveRow(null)} />
+      </TabsContent>
     );
-
-    return actions;
-  }, [activeGstConfiguration, onGotoTab, refetch]);
+  }
 
   return (
-    <TabsContent value="overview" className="space-y-6">
-      {loading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" />
-          Loading GST summary…
+    <TabsContent value="overview" className="flex h-full min-h-0 flex-col gap-6">
+      <div className="shrink-0">
+        <GstReconFilterBar
+          dateFilter={dateFilter}
+          onDateFilterChange={onDateFilterChange}
+          source={source}
+          onSourceChange={onSourceChange}
+          statusFilter={statusFilter}
+          onStatusFilterChange={onStatusFilterChange}
+          search={search}
+          onSearchChange={onSearchChange}
+          onRefresh={onRefresh}
+          refreshing={refreshing}
+        />
+      </div>
+
+      <div className="shrink-0">
+        <GstReconRunBanner state={runState} counts={runCounts} />
+      </div>
+
+      {isError ? (
+        <div className="flex shrink-0 items-center justify-between gap-3 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2">
+          <p className="text-sm text-destructive">Unable to load GST reconciliation overview. Try refreshing.</p>
+          <Button type="button" variant="outline" size="sm" onClick={onRefresh}>
+            Retry
+          </Button>
         </div>
       ) : null}
 
-      {isError ? (
-        <p className="text-sm text-destructive">Unable to load GST summary. Try refreshing.</p>
-      ) : null}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <TaxKpiCard label="Total Taxable Amount" value={kpis.totalTaxable} sub={kpis.totalTaxableSub} icon={Receipt} />
-        <TaxKpiCard label="Total GST Collected" value={kpis.totalGstCollected} sub={kpis.totalGstCollectedSub} icon={Zap} />
-        <TaxKpiCard label="Eligible ITC" value={kpis.eligibleItc} sub={kpis.eligibleItcSub} icon={CheckCircle2} tone="green" />
-        <TaxKpiCard label="Cash Ledger Balance" value={kpis.cashLedgerBalance} sub={kpis.cashLedgerSub} icon={DollarSign} tone="blue" />
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <TaxKpiCard label="CGST" value={kpis.cgst} sub="Central tax" icon={Receipt} />
-        <TaxKpiCard label="SGST" value={kpis.sgst} sub="State tax" icon={Receipt} />
-        <TaxKpiCard label="IGST" value={kpis.igst} sub="Integrated tax" icon={Receipt} />
-        <TaxKpiCard label="Reconciliation %" value={kpis.reconciliationPct} sub={kpis.reconciliationSub} icon={ArrowUpDown} tone="amber" />
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[1fr_280px]">
-        <TaxSectionCard icon={Activity} title="Recent GST Activity" description="Latest portal and ITC actions.">
-          <p className="py-8 text-center text-sm text-muted-foreground">Activity feed will appear here once GST workflows run.</p>
-        </TaxSectionCard>
-
-        <TaxSectionCard icon={Zap} title="Quick Actions" description="Jump to common GST workflows.">
-          <TaxQuickActions actions={quickActions} />
-        </TaxSectionCard>
+      {/* Bounded to the remaining height so GstReconOverviewTable can scroll its rows
+          internally with a docked pagination footer, matching Approvals > All. */}
+      <div className="min-h-0 flex-1">
+        {isInitialLoading ? (
+          <div className="space-y-2 rounded-md border p-3">
+            {Array.from({ length: GST_RECON_OVERVIEW_SKELETON_ROWS }).map((_, index) => (
+              <Skeleton key={index} className="h-9 w-full" />
+            ))}
+          </div>
+        ) : isError ? null : rows.length === 0 ? (
+          <TaxEmptyState
+            icon={FileText}
+            title="No invoices found"
+            description={`No invoices for ${dateFilterLabel}. Run a GSTR2A/2B fetch to populate.`}
+          />
+        ) : (
+          <GstReconOverviewTable
+            rows={rows}
+            page={page}
+            totalPages={totalPages}
+            loading={isLoading}
+            onPreviousPage={onPreviousPage}
+            onNextPage={onNextPage}
+            onView={setActiveRow}
+          />
+        )}
       </div>
     </TabsContent>
   );

@@ -97,7 +97,7 @@ const AppDataTable = ({
             <TableHead
               key={column.key || column.header}
               className={cn(
-                "h-10 whitespace-nowrap border-0 bg-muted/70 px-3 text-xs font-medium text-foreground",
+                "h-10 whitespace-nowrap border-0 bg-muted/100 px-3 text-xs font-medium text-foreground",
                 index === 0 && "rounded-l-md",
                 index === resolvedColumns.length - 1 && "rounded-r-md",
                 column.headerClassName,
@@ -172,7 +172,10 @@ const AppDataTable = ({
               }
             }
 
-            const key = typeof rowKey === "function" ? rowKey(row, index) : row?.[rowKey] ?? index;
+            const key =
+              typeof rowKey === "function"
+                ? rowKey(row, index)
+                : (row?.[rowKey] ?? index);
             const computedClassName = [
               striped && index % 2 === 1 ? "bg-muted/20" : "",
               rowClassName,

@@ -61,7 +61,7 @@ const tableHeader = [
   { key: "timestamp", title: "Timestamp", headerClassName: "w-[180px]", cellClassName: "w-[180px]" },
   { key: "userName", title: "User Name", headerClassName: "w-[180px]", cellClassName: "w-[180px]" },
   { key: "action", title: "Action", headerClassName: "w-[200px]", cellClassName: "w-[200px]" },
-  { key: "details", title: "Details", cellClassName: "max-w-[420px]" },
+  { key: "details", title: "Details", headerClassName: "max-w-[420px]", cellClassName: "max-w-[420px]" },
   { key: "status", title: "Status", headerClassName: "w-[120px]", cellClassName: "w-[120px]" },
 ];
 
@@ -595,8 +595,12 @@ const AuditTrail = () => {
   const invalidDateRange = new Date(toDate) < new Date(fromDate);
 
   return (
-    <div className="space-y-6" data-testid="audit-trail-page">
-      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+    // Bounded-height flex chain, desktop-only (mirrors Approvals.jsx / GST Overview / Invoice
+    // Matching / Reports Exports) so the table can scroll internally with a sticky header at
+    // md+. Below md this stays normal space-y block flow — the mobile view swaps to a card
+    // list (see `md:hidden` below) where a bounded scroll box doesn't apply the same way.
+    <div className="space-y-6 md:flex md:h-full md:min-h-0 md:flex-col" data-testid="audit-trail-page">
+      <div className="flex shrink-0 flex-col gap-4 md:flex-row md:items-start md:justify-between">
         <div>
           <h1 className="font-['Manrope'] text-4xl font-bold text-primary md:text-5xl">
             Audit Trail
@@ -626,7 +630,7 @@ const AuditTrail = () => {
         )}
       </div>
 
-      <div className="rounded-lg border border-border bg-card p-4 shadow-sm">
+      <div className="shrink-0 rounded-lg border border-border bg-card p-4 shadow-sm">
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(220px,1.2fr)_repeat(2,minmax(160px,0.65fr))_auto_auto_auto]">
           <div className="relative">
             <Label htmlFor="audit-search" className="sr-only">Search audit logs</Label>
@@ -738,14 +742,14 @@ const AuditTrail = () => {
             goToPage(0);
             refetch();
           }}
-          className="sticky top-2 z-20 w-full rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm font-medium text-yellow-900 shadow-sm"
+          className="sticky top-2 z-20 w-full shrink-0 rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm font-medium text-yellow-900 shadow-sm"
         >
           {newEntriesCount} new entr{newEntriesCount === 1 ? "y" : "ies"} - click to view
         </button>
       )}
 
       {isError && (
-        <div className="flex items-center justify-between gap-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+        <div className="flex shrink-0 items-center justify-between gap-4 rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
           <span className="inline-flex items-center gap-2">
             <AlertCircle className="h-4 w-4" />
             {forbidden
@@ -761,8 +765,11 @@ const AuditTrail = () => {
       )}
 
       {!forbidden && (
-        <div className="rounded-lg border border-border bg-card p-4 shadow-sm md:p-6">
-          <div className="hidden md:block">
+        <div className="min-h-0 rounded-lg border border-border bg-card p-4 shadow-sm md:flex md:h-full md:flex-1 md:flex-col md:overflow-hidden md:p-6">
+          {/* Sticky header + internal scroll only at md+ (mirrors Approvals.jsx / GST
+              Overview / Invoice Matching / Reports Exports). Below md the table is hidden in
+              favor of the card list, so no bounded scroll box is needed there. */}
+          <div className="hidden md:block md:min-h-0 md:flex-1 md:overflow-x-auto md:overflow-y-auto md:scrollbar-thin-muted">
             <AppDataTable
               tableHeader={tableHeader}
               tableData={visibleRows}
@@ -771,6 +778,8 @@ const AuditTrail = () => {
               loadingRowCount={8}
               emptyMessage="No audit records match your filters"
               emptyColSpan={tableHeader.length}
+              tableContainerClassName="overflow-visible"
+              headClassName="[&_th]:sticky [&_th]:top-0 [&_th]:z-10"
             />
           </div>
 
@@ -800,7 +809,7 @@ const AuditTrail = () => {
             )}
           </div>
 
-          <div className="mt-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="mt-5 flex flex-col gap-4 md:mt-auto md:shrink-0 md:flex-row md:items-center md:justify-between md:border-t md:pt-4">
             <p className="text-sm text-muted-foreground">
               Showing {startRecord}-{endRecord} of {totalElements.toLocaleString("en-IN")}
             </p>

@@ -74,9 +74,9 @@ const GstSection = forwardRef(({ enabled = true }, ref) => {
 
   return (
     <GstAnalyticsReconciliationProvider enabled={enabled}>
-      <TabsContent value="gst" className="space-y-5">
-        <Tabs value={gstSubTab} onValueChange={setGstSubTab} className="space-y-5">
-        <TabsList className={`grid w-full ${gridColsClass}`}>
+      <TabsContent value="gst" className="flex min-h-0 flex-1 flex-col">
+        <Tabs value={gstSubTab} onValueChange={setGstSubTab} className="flex min-h-0 flex-1 flex-col gap-5">
+        <TabsList className={`shrink-0 grid w-full ${gridColsClass}`}>
           {visibleTabs.map((tab) => (
             <TabsTrigger key={tab.value} value={tab.value}>
               {tab.label}
@@ -84,16 +84,23 @@ const GstSection = forwardRef(({ enabled = true }, ref) => {
           ))}
         </TabsList>
 
-        {gstSubTab === GST_TAB_VALUES.OVERVIEW ? (
-          <GstOverviewPanel
-            onGotoTab={setGstSubTab}
-            activeGstConfiguration={activeGstConfiguration}
-          />
-        ) : null}
-        {gstSubTab === GST_TAB_VALUES.RECONCILIATION ? <GstReconciliationPanel /> : null}
-        {gstSubTab === GST_TAB_VALUES.RETURNS ? <GstReturnsPanel /> : null}
-        {gstSubTab === GST_TAB_VALUES.DOCUMENTS ? <GstDocumentsPanel /> : null}
-        {gstSubTab === GST_TAB_VALUES.LEDGERS ? <GstLedgersPanel /> : null}
+        {/* Bounds the active sub-tab panel to the remaining height so GstOverviewPanel's
+            table can scroll internally (via h-full). Other sub-tabs aren't written to expect
+            a bounded box, so their content simply overflows this div (no overflow-y-auto set
+            here) and the page falls back to its normal whole-page scroll for them — no change
+            in behavior for Reconciliation/Returns/Documents/Ledgers. */}
+        <div className="min-h-0 flex-1">
+          {gstSubTab === GST_TAB_VALUES.OVERVIEW ? (
+            <GstOverviewPanel
+              onGotoTab={setGstSubTab}
+              activeGstConfiguration={activeGstConfiguration}
+            />
+          ) : null}
+          {gstSubTab === GST_TAB_VALUES.RECONCILIATION ? <GstReconciliationPanel /> : null}
+          {gstSubTab === GST_TAB_VALUES.RETURNS ? <GstReturnsPanel /> : null}
+          {gstSubTab === GST_TAB_VALUES.DOCUMENTS ? <GstDocumentsPanel /> : null}
+          {gstSubTab === GST_TAB_VALUES.LEDGERS ? <GstLedgersPanel /> : null}
+        </div>
         </Tabs>
       </TabsContent>
     </GstAnalyticsReconciliationProvider>

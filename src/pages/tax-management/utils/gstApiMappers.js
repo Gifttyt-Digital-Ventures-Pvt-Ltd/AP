@@ -184,6 +184,50 @@ export function mapGstSummaryToOverviewKpis(summary = {}) {
   };
 }
 
+function mapReconOverviewRow(row = {}, index = 0) {
+  return {
+    id: row.platformInvoiceId ?? row.portalInvoiceId ?? `recon-overview-${index}`,
+    sNo: row.sNo ?? index + 1,
+    platformInvoiceId: row.platformInvoiceId ?? null,
+    portalInvoiceId: row.portalInvoiceId ?? null,
+    invoiceNo: row.invoiceNo ?? '',
+    vendorName: row.vendorName ?? '',
+    invoiceDate: row.invoiceDate ?? '',
+    invoiceAmount: Number(row.invoiceAmount ?? 0),
+    gstAmount: Number(row.gstAmount ?? 0),
+    status: row.status ?? '',
+    statusSource: row.statusSource ?? '',
+    differBadge: Boolean(row.differBadge),
+    valueSource: row.valueSource ?? 'PLATFORM',
+  };
+}
+
+/** Shape GST Overview list API response (§10.2) for the Overview tab UI. */
+export function mapReconOverviewResponse(response = {}) {
+  const payload = unwrapGstApiResponse(response) ?? {};
+  const rows = Array.isArray(payload.rows) ? payload.rows : [];
+
+  return {
+    page: Number(payload.page ?? 1),
+    size: Number(payload.size ?? rows.length),
+    total: Number(payload.total ?? rows.length),
+    rows: rows.map(mapReconOverviewRow),
+  };
+}
+
+/** Shape GST Recon Detail API response (BE §4.2) — passed through with minimal normalization. */
+export function mapReconDetailResponse(response = {}) {
+  const payload = unwrapGstApiResponse(response) ?? {};
+
+  return {
+    header: payload.header ?? {},
+    pairing: payload.pairing ?? {},
+    criteria: Array.isArray(payload.criteria) ? payload.criteria : [],
+    split: payload.split ?? null,
+    slabs: payload.slabs ?? null,
+  };
+}
+
 export function buildReconcileRequestPayload({
   month,
   financialYear,

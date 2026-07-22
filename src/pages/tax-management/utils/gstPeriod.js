@@ -68,6 +68,15 @@ export function uiMonthToApiMonth(monthLabel) {
   return MONTH_LABEL_TO_NUM[key] ?? MONTH_LABEL_TO_NUM[key.slice(0, 3)] ?? '';
 }
 
+// Overview rows (FE §8 OverviewRow) don't carry a `period` field, but the recon detail/link/
+// upload/override endpoints (BE §10.3-10.6) all require one — derived from the invoice's own
+// month since GST recon periods align with the invoice month.
+export function dateToApiPeriod(dateStr) {
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${String(date.getMonth() + 1).padStart(2, '0')}${date.getFullYear()}`;
+}
+
 /** Convert API month number to short UI label. */
 export function apiMonthToUiMonth(monthNum) {
   const num = String(monthNum || '').padStart(2, '0');
