@@ -164,7 +164,7 @@ const QUEUE_TABLE_HEADER = [
   { key: "amount", title: "Amount", cellClassName: "font-semibold" },
   { key: "bizStatus", title: "Business Status" },
   { key: "accStatus", title: "Accounting Status" },
-  { key: "erpStatus", title: "ERP Status" },
+  { key: "erpStatus", title: "Accounting ERP" },
   { key: "unlockStatus", title: "Unlock Status" },
   {
     key: "action",
@@ -194,6 +194,14 @@ const canRetryItem = (item) => {
     erpStatus === "RETRY_REQUIRED"
   );
 };
+
+const toSyncStatusLabel = (status) =>
+  String(status || "")
+    .toLowerCase()
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
 
 const isBulkMarkReadyUnsupported = (error) => {
   const status = Number(
@@ -247,6 +255,26 @@ const ErpStatusBadge = ({ status }) => {
   );
 };
 
+const AccountingErpStatusBadge = ({ item, loading = false }) => {
+  if (loading) {
+    return (
+      <Badge
+        variant="outline"
+        className="border-amber-200 bg-amber-50 text-amber-800"
+      >
+        <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+        Syncing...
+      </Badge>
+    );
+  }
+
+  return (
+    <ErpStatusBadge
+      status={item.erpStatus || toSyncStatusLabel(item.syncStatus)}
+    />
+  );
+};
+
 const UnlockStatus = ({ status }) => {
   if (status !== "PENDING") {
     return <span className="text-sm text-muted-foreground">-</span>;
@@ -297,6 +325,8 @@ const ReadyForAccountingQueue = ({
   const [activeStage, setActiveStage] = useState(initialQueueState.stage);
   const [pageOffset, setPageOffset] = useState(initialQueueState.offset);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [syncingRowIds, setSyncingRowIds] = useState(() => new Set());
+  const [bulkPushing, setBulkPushing] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
@@ -360,8 +390,7 @@ const ReadyForAccountingQueue = ({
     useMarkAccountingReadyItemMutation();
   const [bulkMarkReady, { isLoading: bulkMarkingReady }] =
     useBulkMarkAccountingReadyItemsMutation();
-  const [syncItem, { isLoading: syncing }] =
-    useSyncAccountingReadyItemMutation();
+  const [syncItem] = useSyncAccountingReadyItemMutation();
   const [bulkSync, { isLoading: bulkSyncing }] =
     useBulkSyncAccountingReadyItemsMutation();
   const [retryItem, { isLoading: retrying }] =
@@ -372,8 +401,7 @@ const ReadyForAccountingQueue = ({
     useDownloadAccountingSyncLogsMutation();
   const [loadQueueItemDetail, { isFetching: previewFetching }] =
     useLazyGetAccountingQueueItemDetailQuery();
-  const [triggerTallySync, { isLoading: tallySyncing }] =
-    useTriggerTallySyncMutation();
+  const [triggerTallySync] = useTriggerTallySyncMutation();
 
   const allItems = data?.items || [];
   const docs = allItems;
@@ -429,18 +457,45 @@ const ReadyForAccountingQueue = ({
     setSelectedIds(new Set());
   }, [activeTab, activeStage, pageOffset, data?.items]);
 
+  useEffect(() => {
+    setSyncingRowIds(new Set());
+  }, [activeTab, activeStage, pageOffset]);
+
   const selectedList = useMemo(
     () => docs.filter((item) => selectedIds.has(item.id)),
     [docs, selectedIds],
   );
+  const isAccountingReadyStage =
+    activeStage === ACCOUNTING_QUEUE_STAGE.ACCOUNTING_READY;
+  const tableColumns = useMemo(
+    () =>
+      isAccountingReadyStage
+        ? QUEUE_TABLE_HEADER.filter(
+            (column) =>
+              column.key !== "bizStatus" && column.key !== "accStatus",
+          )
+        : QUEUE_TABLE_HEADER,
+    [isAccountingReadyStage],
+  );
+  const isRowSyncing = (item) => syncingRowIds.has(item.id);
+  const updateRowSyncing = (id, loading) => {
+    setSyncingRowIds((prev) => {
+      const next = new Set(prev);
+      if (loading) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
   const selectedMarkable = selectedList.filter(canMarkReadyItem);
-  const selectedPushable = selectedList.filter(canPushItem);
+  const selectedPushable = selectedList.filter(
+    (item) => canPushItem(item) && !isRowSyncing(item),
+  );
   const selectableDocs = useMemo(
     () =>
       activeStage === ACCOUNTING_QUEUE_STAGE.NEEDS_APPROVAL
         ? docs.filter(canMarkReadyItem)
-        : docs.filter(canPushItem),
-    [activeStage, docs],
+        : docs.filter((item) => canPushItem(item) && !syncingRowIds.has(item.id)),
+    [activeStage, docs, syncingRowIds],
   );
   const allChecked =
     selectableDocs.length > 0 &&
@@ -449,9 +504,8 @@ const ReadyForAccountingQueue = ({
   const busy =
     markingReady ||
     bulkMarkingReady ||
-    syncing ||
+    bulkPushing ||
     bulkSyncing ||
-    tallySyncing ||
     retrying ||
     directUnlocking;
   const refreshBusy = manualRefreshing || isFetching || (showLogs && logsFetching);
@@ -461,7 +515,7 @@ const ReadyForAccountingQueue = ({
     activeStage === ACCOUNTING_QUEUE_STAGE.NEEDS_APPROVAL
       ? canMarkReadyAction
       : canSyncAction && erpSyncAvailable;
-  const pushInProgress = bulkSyncing || tallySyncing;
+  const pushInProgress = bulkSyncing || bulkPushing;
   const syncDisabledReason = erpStatusLoading
     ? "Checking ERP connection status..."
     : "Connect an ERP before syncing to ERP.";
@@ -590,8 +644,10 @@ const ReadyForAccountingQueue = ({
       toast.info("Already synced — no changes since last successful sync");
       return;
     }
+    updateRowSyncing(item.id, true);
     if (hasTallyConnection) {
       if (!item.objectId) {
+        updateRowSyncing(item.id, false);
         toast.error("This row is missing an entity ID for Tally push");
         return;
       }
@@ -606,6 +662,8 @@ const ReadyForAccountingQueue = ({
         await refreshAfterAction({ clearSelection: false, refreshLogs: true });
       } catch (err) {
         toast.error(getAccountingErrorMessage(err, "Tally push failed"));
+      } finally {
+        updateRowSyncing(item.id, false);
       }
       return;
     }
@@ -615,6 +673,8 @@ const ReadyForAccountingQueue = ({
       await refreshAfterAction({ refreshLogs: true });
     } catch (err) {
       toast.error(getAccountingErrorMessage(err, "Sync failed"));
+    } finally {
+      updateRowSyncing(item.id, false);
     }
   };
 
@@ -648,6 +708,7 @@ const ReadyForAccountingQueue = ({
         toast.error("Selected rows are missing entity IDs for Tally push");
         return;
       }
+      setBulkPushing(true);
       try {
         const result = await triggerTallySync({
           connectionId: activeTallyConnectionId,
@@ -664,6 +725,8 @@ const ReadyForAccountingQueue = ({
         await refreshAfterAction({ clearSelection: false, refreshLogs: true });
       } catch (err) {
         toast.error(getAccountingErrorMessage(err, "Tally push failed"));
+      } finally {
+        setBulkPushing(false);
       }
       return;
     }
@@ -673,12 +736,15 @@ const ReadyForAccountingQueue = ({
       toast.info("Select at least one Ready or Failed item to push");
       return;
     }
+    setBulkPushing(true);
     try {
       const result = await bulkSync({ ids, mode: "SYNC" }).unwrap();
       toast.success(result?.message || `Pushed ${ids.length} item(s) to ERP`);
       await refreshAfterAction({ refreshLogs: true });
     } catch (err) {
       toast.error(getAccountingErrorMessage(err, "Bulk sync failed"));
+    } finally {
+      setBulkPushing(false);
     }
   };
 
@@ -743,6 +809,7 @@ const ReadyForAccountingQueue = ({
       : "No items are ready for ERP sync.";
 
   const renderRowActions = (item) => {
+    const rowSyncing = isRowSyncing(item);
     const previewButton = (
       <Button
         size="sm"
@@ -789,7 +856,7 @@ const ReadyForAccountingQueue = ({
               <Button
                 size="sm"
                 variant="outline"
-                disabled={busy}
+                disabled={busy || rowSyncing}
                 onClick={() => handleDirectUnlock(item)}
               >
                 <Unlock className="mr-1 h-3.5 w-3.5" />
@@ -802,18 +869,21 @@ const ReadyForAccountingQueue = ({
           <Button
             size="sm"
             variant="outline"
-            disabled={busy || !erpSyncAvailable}
+            disabled={busy || rowSyncing || !erpSyncAvailable}
             title={!erpSyncAvailable ? syncDisabledReason : undefined}
             onClick={() => handleSync(item)}
           >
-            Sync
+            {rowSyncing ? (
+              <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+            ) : null}
+            {rowSyncing ? "Syncing..." : "Sync"}
           </Button>
         ) : null}
         {canRetry && canSyncAction ? (
           <Button
             size="sm"
             variant="outline"
-            disabled={busy || !erpSyncAvailable}
+            disabled={busy || rowSyncing || !erpSyncAvailable}
             title={!erpSyncAvailable ? syncDisabledReason : undefined}
             onClick={() => handleRetry(item)}
           >
@@ -833,6 +903,7 @@ const ReadyForAccountingQueue = ({
             checked={selectedIds.has(item.id)}
             disabled={
               busy ||
+              isRowSyncing(item) ||
               (activeStage === ACCOUNTING_QUEUE_STAGE.NEEDS_APPROVAL
                 ? !canMarkReadyItem(item)
                 : !canPushItem(item))
@@ -855,7 +926,9 @@ const ReadyForAccountingQueue = ({
       case "accStatus":
         return <AccStatusBadge status={item.accStatus} />;
       case "erpStatus":
-        return <ErpStatusBadge status={item.erpStatus} />;
+        return (
+          <AccountingErpStatusBadge item={item} loading={isRowSyncing(item)} />
+        );
       case "unlockStatus":
         return <UnlockStatus status={item.unlockRequestStatus} />;
       case "action":
@@ -868,7 +941,13 @@ const ReadyForAccountingQueue = ({
   const renderQueueRow = (item, _rowIndex, columns) => (
     <TableRow
       key={item.id}
-      className={selectedIds.has(item.id) ? "bg-primary/[0.03]" : undefined}
+      className={
+        isRowSyncing(item)
+          ? "bg-amber-50/40"
+          : selectedIds.has(item.id)
+            ? "bg-primary/[0.03]"
+            : undefined
+      }
       data-testid={`ready-row-${item.id}`}
     >
       {columns.map((column) => (
@@ -1060,7 +1139,7 @@ const ReadyForAccountingQueue = ({
               <AppDataTable
                 tableHeader={[
                   {
-                    ...QUEUE_TABLE_HEADER[0],
+                    ...tableColumns[0],
                     title: canSelectInStage ? (
                       <Checkbox
                         checked={allChecked}
@@ -1071,12 +1150,12 @@ const ReadyForAccountingQueue = ({
                       />
                     ) : null,
                   },
-                  ...QUEUE_TABLE_HEADER.slice(1),
+                  ...tableColumns.slice(1),
                 ]}
                 tableData={docs}
                 renderRow={renderQueueRow}
                 emptyMessage={emptyMessage}
-                emptyColSpan={QUEUE_TABLE_HEADER.length}
+                emptyColSpan={tableColumns.length}
                 emptyCellClassName="py-10 not-italic"
                 stickyHeader={false}
                 striped={false}

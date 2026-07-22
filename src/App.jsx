@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useRef } from "react";
 import "@/App.css";
-import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation, useParams } from "react-router-dom";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { CreditErrorProvider } from "./contexts/CreditErrorContext";
 import {
@@ -38,7 +38,6 @@ const Reports = lazy(() => import("./pages/reports/Reports"));
 const AuditTrail = lazy(() => import("./pages/audit-trail/AuditTrail"));
 const ConnectionWizard = lazy(() => import("./pages/integrations/components/ConnectionWizard"));
 const GmailIntegrationPage = lazy(() => import("./pages/integrations/components/GmailIntegrationPage"));
-const IntegrationConnectionHome = lazy(() => import("./pages/integrations/components/IntegrationConnectionHome"));
 const IntegrationLanding = lazy(() => import("./pages/integrations/components/IntegrationLanding"));
 const ManageSyncedDataRoute = lazy(() => import("./pages/integrations/components/ManageSyncedDataRoute"));
 const MappingEditor = lazy(() => import("./pages/integrations/components/MappingEditor"));
@@ -60,6 +59,20 @@ const PageFallback = () => (
 const withPageFallback = (page) => (
   <Suspense fallback={<PageFallback />}>{page}</Suspense>
 );
+
+const LegacySyncDataRedirect = () => {
+  const { connectionId, categoryCode } = useParams();
+  return (
+    <Navigate
+      to={
+        categoryCode
+          ? `/integrations/${connectionId}/${categoryCode}`
+          : `/integrations/${connectionId}`
+      }
+      replace
+    />
+  );
+};
 
 const ProtectedRoute = () => {
   const { user, loading } = useAuth();
@@ -265,12 +278,13 @@ function AppContent() {
           <Route path="/accounting/chart-of-accounts" element={withPageFallback(<Accounting />)} />
           <Route path="/accounting/ledger-explorer" element={withPageFallback(<Accounting />)} />
           <Route path="/accounting/ledger-explorer/:ledgerId" element={withPageFallback(<Accounting />)} />
-          <Route path="/integrations/:connectionId/sync-data" element={withPageFallback(<ManageSyncedDataRoute />)} />
-          <Route path="/integrations/:connectionId/sync-data/:categoryCode" element={withPageFallback(<ManageSyncedDataRoute />)} />
-          <Route path="/integrations/:connectionId" element={withPageFallback(<IntegrationConnectionHome />)} />
+          <Route path="/integrations/:connectionId/sync-data" element={<LegacySyncDataRedirect />} />
+          <Route path="/integrations/:connectionId/sync-data/:categoryCode" element={<LegacySyncDataRedirect />} />
           <Route path="/integrations/:connectionId/mapping" element={withPageFallback(<MappingEditor />)} />
           <Route path="/integrations/:connectionId/objects/:object" element={withPageFallback(<ObjectReview />)} />
           <Route path="/integrations/:connectionId/logs" element={withPageFallback(<SyncLogs />)} />
+          <Route path="/integrations/:connectionId" element={withPageFallback(<ManageSyncedDataRoute />)} />
+          <Route path="/integrations/:connectionId/:categoryCode" element={withPageFallback(<ManageSyncedDataRoute />)} />
           <Route path="/" element={<DefaultProtectedRoute />} />
         </Route>
       </Routes>
