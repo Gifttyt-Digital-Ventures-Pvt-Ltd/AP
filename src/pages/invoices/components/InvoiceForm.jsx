@@ -108,8 +108,8 @@ const lineItemTableHeader = [
   {
     key: "accountGroup",
     title: "Group / Branch",
-    headerClassName: "w-[190px]",
-    cellClassName: "w-[220px] align-top",
+    headerClassName: "w-[260px]",
+    cellClassName: "w-[280px] align-top",
   },
   {
     key: "expenseType",
@@ -975,7 +975,10 @@ export const InvoiceForm = ({
                     return (
                       option.label?.toLowerCase().includes(query) ||
                       option.accountGroupName?.toLowerCase().includes(query) ||
+                      option.pathLabel?.toLowerCase().includes(query) ||
+                      option.parentPath?.toLowerCase().includes(query) ||
                       option.category?.toLowerCase().includes(query) ||
+                      option.status?.toLowerCase().includes(query) ||
                       option.expenseType?.toLowerCase().includes(query)
                     );
                   })
@@ -1073,21 +1076,63 @@ export const InvoiceForm = ({
                             type="button"
                             onClick={() => applyAccountGroupSelection(option)}
                             className={cn(
-                              "flex w-full flex-col rounded px-2 py-1.5 text-left text-xs hover:bg-muted",
+                              "flex w-full rounded px-2 py-1.5 text-left text-xs hover:bg-muted",
                               selectedAccountGroupValue === option.value && "bg-muted",
                             )}
                           >
-                            <span className="font-medium">{option.accountGroupName}</span>
-                            {option.category ? (
-                              <span className="text-[10px] text-muted-foreground">
-                                {option.category}
+                            {Number(option.hierarchyLevel || 0) > 0 ? (
+                              <span
+                                className="relative mr-2 shrink-0 self-stretch"
+                                style={{
+                                  width: `${Math.min(Number(option.hierarchyLevel || 0), 6) * 14}px`,
+                                }}
+                              >
+                                <span
+                                  className="absolute bottom-[-6px] top-[-6px] w-px bg-border"
+                                  style={{
+                                    left: `${Math.max(Math.min(Number(option.hierarchyLevel || 0), 6) * 14 - 8, 0)}px`,
+                                  }}
+                                />
+                                <span
+                                  className="absolute top-3 h-px bg-border"
+                                  style={{
+                                    left: `${Math.max(Math.min(Number(option.hierarchyLevel || 0), 6) * 14 - 8, 0)}px`,
+                                    width: "10px",
+                                  }}
+                                />
                               </span>
-                            ) : null}
-                            {option.expenseType ? (
-                              <span className="text-[10px] text-muted-foreground">
-                                {option.expenseType}
+                            ) : (
+                              <span className="mr-2 w-2 shrink-0" />
+                            )}
+                            <span className="block min-w-0 flex-1">
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <span className="truncate font-medium">
+                                  {option.accountGroupName}
+                                </span>
+                                <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] uppercase text-slate-500">
+                                  Level {Number(option.hierarchyLevel || 0)}
+                                </span>
+                                {option.status ? (
+                                  <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] uppercase text-muted-foreground">
+                                    {option.status}
+                                  </span>
+                                ) : null}
                               </span>
-                            ) : null}
+                              {option.parentPath ? (
+                                <span className="block truncate text-[10px] text-muted-foreground">
+                                  Under {option.parentPath}
+                                </span>
+                              ) : (
+                                <span className="block text-[10px] text-muted-foreground">
+                                  Root group
+                                </span>
+                              )}
+                              {option.expenseType ? (
+                                <span className="block truncate text-[10px] text-muted-foreground">
+                                  {option.expenseType}
+                                </span>
+                              ) : null}
+                            </span>
                           </button>
                         ))
                       ) : (

@@ -69,42 +69,60 @@ export const deriveExpenseTypeFromLedger = deriveExpenseTypeFromAccountingNode;
 
 export const buildGroupBranchOptionsFromCoa = (tree = []) => {
   const options = [];
+  const seen = new Set();
 
-  const walk = (nodes = [], category = "") => {
+  const walk = (nodes = [], ancestors = []) => {
     nodes.forEach((node) => {
-      const hasChildren = Array.isArray(node.children) && node.children.length > 0;
       const nodeType = String(node.type || "").toLowerCase();
-      const isGroupOrBranch =
-        hasChildren &&
-        (nodeType.includes("group") ||
-          nodeType.includes("category") ||
-          nodeType.includes("header") ||
-          nodeType === "");
+      const hasChildren = Array.isArray(node.children) && node.children.length > 0;
+      const isSelectableGroup =
+        nodeType.includes("group") ||
+        nodeType.includes("category") ||
+        nodeType.includes("header") ||
+        (nodeType === "" && hasChildren);
+      const name = String(node.name || node.accountName || node.erpId || "").trim();
+      const id = String(node.id || node.erpId || name || "").trim();
+      const nextAncestors = name
+        ? [...ancestors, { id, name, type: nodeType }]
+        : ancestors;
 
-      if (isGroupOrBranch) {
-        const id = String(node.id || node.erpId || node.name || "").trim();
-        const name = String(node.name || node.accountName || id || "").trim();
-        if (id && name) {
-          const effectiveCategory = category || name;
-          const expenseType = deriveExpenseTypeFromAccountingNode({
-            ...node,
-            category: effectiveCategory,
-          });
-          options.push({
-            value: id,
-            label: category && category !== name ? `${category} - ${name}` : name,
-            accountGroupId: id,
-            accountGroupName: name,
-            groupId: id,
-            groupName: name,
-            category,
-            expenseType,
-            raw: node,
-          });
-        }
+      if (isSelectableGroup && id && name && !seen.has(id)) {
+        seen.add(id);
+        const parentPath = ancestors.map((ancestor) => ancestor.name).filter(Boolean);
+        const path = [...parentPath, name];
+        const category =
+          parentPath.find((_, index) => ancestors[index]?.type?.includes("category")) ||
+          parentPath[0] ||
+          "";
+        const hierarchyLevel =
+          Number.isFinite(Number(node.hierarchyLevel))
+            ? Number(node.hierarchyLevel)
+            : Math.max(path.length - 1, 0);
+        const expenseType = deriveExpenseTypeFromAccountingNode({
+          ...node,
+          category,
+        });
+
+        options.push({
+          value: id,
+          label: path.join(" > "),
+          accountGroupId: id,
+          accountGroupName: name,
+          groupId: id,
+          groupName: name,
+          category,
+          parentGroupName: parentPath[parentPath.length - 1] || "",
+          parentPath: parentPath.join(" > "),
+          path,
+          pathLabel: path.join(" > "),
+          hierarchyLevel,
+          status: node.status,
+          expenseType,
+          raw: node,
+        });
       }
 
-      walk(node.children || [], nodeType.includes("category") ? node.name : category);
+      walk(node.children || [], nextAncestors);
     });
   };
 
