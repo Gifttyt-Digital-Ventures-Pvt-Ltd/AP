@@ -6,6 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   useGetInvoicesQuery,
   useGetInvoiceFilterOptionsQuery,
@@ -72,6 +73,7 @@ import {
 import { findVendorByInvoiceName } from "./utils/vendorMatching";
 import { syncInvoiceMatchingOnSave } from "./utils/invoiceMatchingFlow";
 import { getInvoiceFileUrl } from "./utils/invoicePreview";
+import { clearNotificationQueryParams } from "../../utils/notificationQueryParams";
 import {
   EMPTY_INVOICE_LIST_RESPONSE,
   EMPTY_INVOICE_FILTER_OPTIONS,
@@ -355,6 +357,8 @@ const baseInvoiceTableHeader = [
 ];
 
 const InvoicesPage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const handledNotificationRef = useRef(null);
   const { user } = useAuth();
   const {
     corporateScreens,
@@ -2156,6 +2160,62 @@ const InvoicesPage = () => {
     }
   };
 
+  const closeViewDialog = useCallback((open) => {
+    setViewDialogOpen(open);
+    if (!open) {
+      clearNotificationQueryParams(searchParams, setSearchParams);
+    }
+  }, [searchParams, setSearchParams]);
+
+  const notificationSource = searchParams.get("source");
+  const notificationAction = searchParams.get("action");
+  const notificationInvoiceId = searchParams.get("invoiceId");
+  const notificationWeakEntity = searchParams.get("weakEntity") === "1";
+
+  useEffect(() => {
+    if (
+      notificationSource !== "notification" ||
+      notificationAction !== "preview" ||
+      !notificationInvoiceId
+    ) {
+      return;
+    }
+
+    const notificationKey = `${notificationSource}:${notificationAction}:${notificationInvoiceId}`;
+    if (handledNotificationRef.current === notificationKey) return;
+    handledNotificationRef.current = notificationKey;
+    setActiveTab("list");
+
+    const loadedInvoice = invoices.find(
+      (invoice) => String(invoice?.id) === String(notificationInvoiceId),
+    );
+
+    if (loadedInvoice) {
+      handleViewInvoice(loadedInvoice);
+      return;
+    }
+
+    if (notificationWeakEntity) {
+      toast.warning("Could not open the exact item. Showing the related module instead.");
+      return;
+    }
+
+    getInvoice(notificationInvoiceId)
+      .unwrap()
+      .then((invoice) => handleViewInvoice(invoice))
+      .catch(() => {
+        toast.warning("Could not open the exact item. Showing the related module instead.");
+      });
+  }, [
+    getInvoice,
+    handleViewInvoice,
+    invoices,
+    notificationAction,
+    notificationInvoiceId,
+    notificationSource,
+    notificationWeakEntity,
+  ]);
+
   const handleViewLinkedInvoice = useCallback(
     async (linkedInvoice) => {
       const fullInvoice = invoices.find(
@@ -3127,7 +3187,7 @@ const InvoicesPage = () => {
         renderPdfPreview={renderPdfPreview}
         renderBulkEditInvoiceForm={renderBulkEditInvoiceForm}
         viewDialogOpen={viewDialogOpen}
-        setViewDialogOpen={setViewDialogOpen}
+        setViewDialogOpen={closeViewDialog}
         selectedInvoice={selectedInvoice}
         viewPreviewError={viewPreviewError}
         setViewPreviewError={setViewPreviewError}

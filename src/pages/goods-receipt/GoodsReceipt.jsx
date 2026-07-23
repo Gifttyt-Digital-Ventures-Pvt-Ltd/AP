@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Loader2, Settings2 } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -36,6 +37,7 @@ import {
   useSendBackGrnMutation,
   usePostGrnMutation,
   useExtractGrnDocumentMutation,
+  useLazyGetGrnByIdQuery,
   useLazyGetGrnExtractJobQuery,
   useCreateGrnFromPiMutation,
   useLazyGetPoLinesReceiptStateQuery,
@@ -80,6 +82,7 @@ import {
   normalizePurchaseOrder,
   validateGrnLineItems,
 } from './utils';
+import { clearNotificationQueryParams } from '../../utils/notificationQueryParams';
 
 const getGrnId = (grn) => grn?.id || grn?.grn_id || grn?.grnId;
 
@@ -191,6 +194,8 @@ const normalizeUploadedGrnLineItem = (item = {}) => {
 const wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
 
 const GoodsReceipt = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const handledNotificationRef = useRef(null);
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
   const { isCorporateScreenAllowed, isCorporateSectionEnabled } = useRBAC();
@@ -218,6 +223,7 @@ const GoodsReceipt = () => {
 
   const [getPurchaseOrderById] = useLazyGetPurchaseOrderByIdQuery();
   const [getPoLinesReceiptState] = useLazyGetPoLinesReceiptStateQuery();
+  const [getGrnById] = useLazyGetGrnByIdQuery();
   const [createGrnFormatConfig] = useCreateGrnFormatConfigMutation();
   const [updateGrnFormatConfigById] = useUpdateGrnFormatConfigByIdMutation();
   const [deleteGrnFormatConfig] = useDeleteGrnFormatConfigMutation();
@@ -591,6 +597,58 @@ const GoodsReceipt = () => {
     setDetailEditMode(edit);
     setDetailGrn(grn);
   };
+
+  const closeGrnDetailDialog = useCallback((open) => {
+    if (!open) {
+      setDetailGrn(null);
+      setDetailEditMode(false);
+      clearNotificationQueryParams(searchParams, setSearchParams);
+    }
+  }, [searchParams, setSearchParams]);
+
+  const notificationSource = searchParams.get('source');
+  const notificationAction = searchParams.get('action');
+  const notificationGrnId = searchParams.get('grnId');
+  const notificationWeakEntity = searchParams.get('weakEntity') === '1';
+
+  useEffect(() => {
+    if (
+      notificationSource !== 'notification' ||
+      notificationAction !== 'preview' ||
+      !notificationGrnId
+    ) {
+      return;
+    }
+
+    const notificationKey = `grn:${notificationGrnId}`;
+    if (handledNotificationRef.current === notificationKey) return;
+    handledNotificationRef.current = notificationKey;
+
+    const loadedGrn = grns.find((grn) => String(getGrnId(grn)) === String(notificationGrnId));
+    if (loadedGrn) {
+      openGrnDetail(loadedGrn);
+      return;
+    }
+
+    if (notificationWeakEntity) {
+      toast.warning('Goods receipt details are not available yet.');
+      return;
+    }
+
+    getGrnById(notificationGrnId)
+      .unwrap()
+      .then((grn) => openGrnDetail(normalizeGrn(grn)))
+      .catch(() => {
+        toast.warning('Goods receipt details are not available yet.');
+      });
+  }, [
+    getGrnById,
+    grns,
+    notificationAction,
+    notificationGrnId,
+    notificationSource,
+    notificationWeakEntity,
+  ]);
 
   const handleRequestGrnUnlock = async (grn) => {
     if (!canCreateGrn) {
@@ -1318,12 +1376,7 @@ const GoodsReceipt = () => {
       <GrnDetailDialog
         grn={detailGrn}
         open={Boolean(detailGrn)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setDetailGrn(null);
-            setDetailEditMode(false);
-          }
-        }}
+        onOpenChange={closeGrnDetailDialog}
         formatConfig={activeFormatConfig}
         vendors={vendorsData}
         initialEditMode={detailEditMode}

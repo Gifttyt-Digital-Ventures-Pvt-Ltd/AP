@@ -1,4 +1,5 @@
-import React, { useDeferredValue, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   useGetVendorsQuery,
   useCreateVendorMutation,
@@ -41,6 +42,7 @@ import { useRBAC } from '../../contexts/RBACContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useGetCorporateUserDetailsQuery } from '../../Services/apis/corporateApi';
 import { useRequestAccountingReadyUnlockMutation } from '../../Services/apis/accountingApi';
+import { clearNotificationQueryParams } from '../../utils/notificationQueryParams';
 import {
   buildCurrentUserIdentity,
   canEditVendor,
@@ -220,6 +222,8 @@ const VendorMetricCard = ({ label, value, icon: Icon, tone = 'primary' }) => {
 };
 
 const Vendors = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const handledNotificationRef = useRef(null);
   const [createVendor, { isLoading: createVendorLoading }] = useCreateVendorMutation();
   const [updateVendor, { isLoading: updateVendorLoading }] = useUpdateVendorMutation();
   const [deleteVendor, { isLoading: deleteVendorLoading }] = useDeleteVendorMutation();
@@ -783,6 +787,13 @@ const Vendors = () => {
     });
   };
 
+  const closeViewVendorDialog = useCallback((open) => {
+    if (!open) {
+      setViewingVendor(null);
+      clearNotificationQueryParams(searchParams, setSearchParams);
+    }
+  }, [searchParams, setSearchParams]);
+
   const filteredVendors = vendors;
 
   const hasActiveFilters = Boolean(searchTerm.trim()) || typeFilter !== 'all' || statusFilter !== 'all';
@@ -799,6 +810,48 @@ const Vendors = () => {
   } shown`;
 
   const isPendingApprovalVendor = (vendor) => isPendingApprovalStatus(vendor?.status);
+
+  const notificationSource = searchParams.get('source');
+  const notificationAction = searchParams.get('action');
+  const notificationVendorId = searchParams.get('vendorId');
+  const notificationFilter = searchParams.get('filter');
+
+  useEffect(() => {
+    if (notificationSource === 'notification' && notificationFilter === 'pending-approval') {
+      setStatusFilter('pending-approval');
+    }
+  }, [notificationFilter, notificationSource]);
+
+  useEffect(() => {
+    if (
+      notificationSource !== 'notification' ||
+      notificationAction !== 'preview' ||
+      !notificationVendorId
+    ) {
+      return;
+    }
+
+    const notificationKey = `${notificationSource}:${notificationAction}:${notificationVendorId}`;
+    if (handledNotificationRef.current === notificationKey) return;
+    handledNotificationRef.current = notificationKey;
+
+    const loadedVendor = vendors.find(
+      (vendor) => String(vendor?.id ?? vendor?.vendorId) === String(notificationVendorId),
+    );
+
+    if (loadedVendor) {
+      setViewingVendor(loadedVendor);
+      return;
+    }
+
+    // TODO: Use a vendor detail endpoint here if the backend exposes one.
+    toast.warning('Could not open the exact item. Showing the related module instead.');
+  }, [
+    notificationAction,
+    notificationSource,
+    notificationVendorId,
+    vendors,
+  ]);
 
   const vendorTypeOptions = useMemo(() => {
     const options = new Map([
@@ -1300,7 +1353,7 @@ const Vendors = () => {
 
       <ViewVendorDialog
         open={Boolean(viewingVendor)}
-        onOpenChange={(open) => !open && setViewingVendor(null)}
+        onOpenChange={closeViewVendorDialog}
         vendor={viewingVendor}
         canApprove={canApproveVendor}
         isPendingApproval={viewingVendor ? isPendingApprovalVendor(viewingVendor) : false}

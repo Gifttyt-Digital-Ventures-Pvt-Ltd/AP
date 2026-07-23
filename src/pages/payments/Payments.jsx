@@ -1,7 +1,9 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   useGetInvoicesQuery,
   useCancelInvoiceMutation,
+  useLazyGetInvoiceQuery,
   useLazyGetInvoiceHistoryQuery,
 } from '../../Services/apis/invoicesVendorsApi';
 import { toInvoiceUiPayload, EMPTY_INVOICE_LIST_RESPONSE, getInvoiceListItems } from '../../Services/utils/payloadMappers';
@@ -67,6 +69,7 @@ import { useRBAC } from '../../contexts/RBACContext';
 import { useCurrencyFilter } from '../../hooks/useCurrencyFilter';
 import { CURRENCY_SCREENS } from '../../utils/currency';
 import { OrgBranchCell, VendorWithBranchCell } from '../../components/common/BranchTableCells';
+import { clearNotificationQueryParams } from '../../utils/notificationQueryParams';
 
 const safeLower = (value) => String(value ?? '').toLowerCase();
 
@@ -128,6 +131,8 @@ const downloadSignedReport = async (downloadUrl, fileName) => {
 };
 
 const Payments = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const handledNotificationRef = useRef(null);
   const {
     isPaymentBatchesFeatureEnabled,
     isConnectedBankingEnabled,
@@ -184,6 +189,7 @@ const Payments = () => {
   const [generatePendingPaymentInvoiceReport] = useGeneratePendingPaymentInvoiceReportMutation();
   const [createPaymentBatch] = useCreatePaymentBatchMutation();
   const [cancelInvoice, { isLoading: cancelInvoiceLoading }] = useCancelInvoiceMutation();
+  const [getInvoice] = useLazyGetInvoiceQuery();
   const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
@@ -727,6 +733,81 @@ const Payments = () => {
     await handleViewInvoice(invoice, initialTab);
   };
 
+  const closePaymentViewDialog = useCallback((open) => {
+    setViewDialogOpen(open);
+    if (!open) {
+      clearNotificationQueryParams(searchParams, setSearchParams);
+    }
+  }, [searchParams, setSearchParams]);
+
+  const notificationSource = searchParams.get('source');
+  const notificationAction = searchParams.get('action');
+  const notificationInvoiceId = searchParams.get('invoiceId');
+  const notificationPaymentId = searchParams.get('paymentId');
+  const notificationWeakEntity = searchParams.get('weakEntity') === '1';
+
+  useEffect(() => {
+    if (notificationSource !== 'notification' || notificationAction !== 'preview') return;
+
+    const targetId = notificationInvoiceId || notificationPaymentId;
+    if (!targetId) return;
+
+    const notificationKey = notificationInvoiceId
+      ? `payment-invoice:${notificationInvoiceId}`
+      : `payment:${notificationPaymentId}`;
+    if (handledNotificationRef.current === notificationKey) return;
+    handledNotificationRef.current = notificationKey;
+
+    if (notificationInvoiceId) {
+      const loadedInvoice = [
+        ...pendingPaymentInvoices,
+        ...pendingApproverInvoices,
+        ...allInvoices,
+      ].find((invoice) => String(invoice.id) === String(notificationInvoiceId));
+
+      if (loadedInvoice) {
+        handleViewInvoice(loadedInvoice);
+        return;
+      }
+
+      if (notificationWeakEntity) {
+        toast.warning('Invoice details are not available yet.');
+        return;
+      }
+
+      getInvoice(notificationInvoiceId)
+        .unwrap()
+        .then((invoice) => handleViewInvoice(invoice))
+        .catch(() => {
+          toast.warning('Invoice details are not available yet.');
+        });
+      return;
+    }
+
+    const loadedPayment = payments.find((payment) => (
+      String(payment.id ?? payment.paymentId ?? payment.payment_id) === String(notificationPaymentId)
+    ));
+
+    if (loadedPayment) {
+      handleViewPaymentInvoice(loadedPayment);
+      return;
+    }
+
+    // TODO: Use a payment detail endpoint here if the backend exposes one.
+    toast.warning('Payment details are not available yet.');
+  }, [
+    allInvoices,
+    getInvoice,
+    notificationAction,
+    notificationInvoiceId,
+    notificationPaymentId,
+    notificationSource,
+    notificationWeakEntity,
+    payments,
+    pendingApproverInvoices,
+    pendingPaymentInvoices,
+  ]);
+
   const handleDownloadInvoice = (invoice) => {
     const preparedInvoice = toInvoiceUiPayload(invoice);
     if (!openInvoiceFileDownload(preparedInvoice)) {
@@ -1085,7 +1166,7 @@ const Payments = () => {
 
       <ViewDialog
         viewDialogOpen={viewDialogOpen}
-        setViewDialogOpen={setViewDialogOpen}
+        setViewDialogOpen={closePaymentViewDialog}
         selectedInvoice={viewInvoice}
         renderPdfPreview={renderPdfPreview}
         pdfZoom={pdfZoom}
