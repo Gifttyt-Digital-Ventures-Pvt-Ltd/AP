@@ -23,6 +23,7 @@ import { Button } from "../../components/ui/button";
 import { Skeleton } from "../../components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "../../components/ui/tabs";
 import { cn } from "../../lib/utils";
+import { navigateFromNotification } from "../../utils/notificationNavigation";
 
 const PAGE_SIZE = 20;
 const FILTERS = {
@@ -41,9 +42,6 @@ const getNotificationTitle = (notification) =>
   `${notification?.entityRef || notification?.entity_ref || "Notification"} update`;
 
 const getNotificationBody = (notification) => notification?.body || notification?.message || null;
-
-const getNotificationDeepLink = (notification) =>
-  notification?.deepLink || notification?.deep_link || notification?.link || "";
 
 const getNotificationCreatedAt = (notification) =>
   notification?.createdAt || notification?.created_at || notification?.createdOn || notification?.created_on;
@@ -233,13 +231,11 @@ const Notifications = () => {
     if (!notification?.id) return;
     try {
       await markRead(notification.id).unwrap();
-      // const deepLink = getNotificationDeepLink(notification);
-      // if (deepLink) {
-      //   navigate(deepLink);
-      // }
-    } catch {
-      toast.error("Couldn't open notification.");
+    } catch (error) {
+      console.warn("Failed to mark notification as read", error);
+      toast.error("Couldn't mark notification as read.");
     }
+    navigateFromNotification(notification, navigate);
   };
 
   const handleMarkAllRead = async () => {

@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   useGetVendorsQuery,
   useRequestVendorAdditionMutation,
@@ -7,6 +8,7 @@ import {
   useGetPurchaseOrdersQuery,
   useGetPurchaseOrderFormatConfigQuery,
   useGetPurchaseOrderFormatConfigsQuery,
+  useLazyGetPurchaseOrderByIdQuery,
   useLazyGetPurchaseOrderDownloadUrlQuery,
   useCreatePurchaseOrderFormatConfigMutation,
   useUpdatePurchaseOrderFormatConfigMutation,
@@ -71,6 +73,7 @@ import { CREDIT_ACTION_CODES } from '../../constants/creditActions';
 import { extractApiErrorDetail } from '../../utils/approvalWorkflow';
 import { extractVendorIdFromResponse, extractListResponse } from '../../Services/utils/payloadMappers';
 import { getInvoiceVendorRequestValidationErrors } from '../../utils/vendorValidation';
+import { clearNotificationQueryParams } from '../../utils/notificationQueryParams';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? '';
 
@@ -266,6 +269,8 @@ const extractPurchaseOrderScanData = (response = {}) => {
 };
 
 const PurchaseOrdersPage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const handledNotificationRef = useRef(null);
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
   const { isCorporateSectionEnabled, isBranchEnabled } = useRBAC();
@@ -317,6 +322,7 @@ const PurchaseOrdersPage = () => {
   };
 
   const [getPurchaseOrderDownloadUrl] = useLazyGetPurchaseOrderDownloadUrlQuery();
+  const [getPurchaseOrderById] = useLazyGetPurchaseOrderByIdQuery();
   const [createPurchaseOrderFormatConfig] = useCreatePurchaseOrderFormatConfigMutation();
   const [updatePurchaseOrderFormatConfig] = useUpdatePurchaseOrderFormatConfigMutation();
   const [deletePurchaseOrderFormatConfig] = useDeletePurchaseOrderFormatConfigMutation();
@@ -716,6 +722,13 @@ const PurchaseOrdersPage = () => {
     }
     handleSubmitForApproval(poId);
   };
+
+  const closePoViewDialog = useCallback((open) => {
+    setShowViewDialog(open);
+    if (!open) {
+      clearNotificationQueryParams(searchParams, setSearchParams);
+    }
+  }, [searchParams, setSearchParams]);
 
   const handleRequestPoUnlock = async (po) => {
     if (!canManagePo) {
@@ -1156,6 +1169,64 @@ const PurchaseOrdersPage = () => {
     totalValue: purchaseOrders.reduce((sum, p) => sum + (p.total_amount || 0), 0),
   };
 
+  const notificationSource = searchParams.get('source');
+  const notificationAction = searchParams.get('action');
+  const notificationPoId = searchParams.get('poId');
+  const notificationStatus = searchParams.get('status');
+  const notificationWeakEntity = searchParams.get('weakEntity') === '1';
+
+  useEffect(() => {
+    if (notificationSource === 'notification' && notificationStatus === 'pending-approval') {
+      setStatusFilter('Pending Approval');
+    }
+  }, [notificationSource, notificationStatus]);
+
+  useEffect(() => {
+    if (
+      notificationSource !== 'notification' ||
+      notificationAction !== 'preview' ||
+      !notificationPoId
+    ) {
+      return;
+    }
+
+    const notificationKey = `${notificationSource}:${notificationAction}:${notificationPoId}`;
+    if (handledNotificationRef.current === notificationKey) return;
+    handledNotificationRef.current = notificationKey;
+
+    const loadedPo = purchaseOrders.find(
+      (po) => String(po?.id ?? po?.poId ?? po?.po_id) === String(notificationPoId),
+    );
+
+    if (loadedPo) {
+      setSelectedPO(loadedPo);
+      setShowViewDialog(true);
+      return;
+    }
+
+    if (notificationWeakEntity) {
+      toast.warning('Could not open the exact item. Showing the related module instead.');
+      return;
+    }
+
+    getPurchaseOrderById(notificationPoId)
+      .unwrap()
+      .then((po) => {
+        setSelectedPO(normalizePurchaseOrder(po));
+        setShowViewDialog(true);
+      })
+      .catch(() => {
+        toast.warning('Could not open the exact item. Showing the related module instead.');
+      });
+  }, [
+    getPurchaseOrderById,
+    notificationAction,
+    notificationPoId,
+    notificationSource,
+    notificationWeakEntity,
+    purchaseOrders,
+  ]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -1249,7 +1320,7 @@ const PurchaseOrdersPage = () => {
 
       <PoDetailsDialog
         showViewDialog={showViewDialog}
-        setShowViewDialog={setShowViewDialog}
+        setShowViewDialog={closePoViewDialog}
         selectedPO={selectedPO}
         statusColors={statusColors}
         formatDate={formatDate}

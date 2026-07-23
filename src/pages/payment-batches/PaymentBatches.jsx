@@ -1,4 +1,5 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   useGetPaymentBatchesQuery,
   useGetPaymentBatchStatsQuery,
@@ -49,6 +50,7 @@ import {
   CheckCheck,
 } from 'lucide-react';
 import { useActionGuard } from '../../hooks/useActionGuard';
+import { clearNotificationQueryParams } from '../../utils/notificationQueryParams';
 
 const statusColors = {
   'Pending': 'bg-yellow-500',
@@ -128,6 +130,8 @@ const paymentItemTableHeader = [
 ];
 
 const PaymentBatches = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const handledNotificationRef = useRef(null);
   const { isConnectedBankingEnabled } = useRBAC();
   const {
     data: batchesData = [],
@@ -251,6 +255,63 @@ const PaymentBatches = () => {
       toast.error(error?.data?.detail || 'Failed to load payment batch details');
     }
   };
+
+  const closeBatchViewDialog = useCallback((open) => {
+    setShowViewDialog(open);
+    if (!open) {
+      clearNotificationQueryParams(searchParams, setSearchParams);
+    }
+  }, [searchParams, setSearchParams]);
+
+  const notificationSource = searchParams.get('source');
+  const notificationAction = searchParams.get('action');
+  const notificationBatchId = searchParams.get('batchId');
+  const notificationWeakEntity = searchParams.get('weakEntity') === '1';
+
+  useEffect(() => {
+    if (
+      notificationSource !== 'notification' ||
+      notificationAction !== 'preview' ||
+      !notificationBatchId
+    ) {
+      return;
+    }
+
+    const notificationKey = `batch:${notificationBatchId}`;
+    if (handledNotificationRef.current === notificationKey) return;
+    handledNotificationRef.current = notificationKey;
+
+    const loadedBatch = batches.find((batch) => (
+      String(batch.id ?? batch.batchId ?? batch.batch_id) === String(notificationBatchId)
+    ));
+
+    if (loadedBatch) {
+      handleViewBatch(loadedBatch);
+      return;
+    }
+
+    if (notificationWeakEntity) {
+      toast.warning('Payment batch details are not available yet.');
+      return;
+    }
+
+    getPaymentBatch(notificationBatchId)
+      .unwrap()
+      .then((batch) => {
+        setSelectedBatch(normalizeBatch(batch));
+        setShowViewDialog(true);
+      })
+      .catch(() => {
+        toast.warning('Payment batch details are not available yet.');
+      });
+  }, [
+    batches,
+    getPaymentBatch,
+    notificationAction,
+    notificationBatchId,
+    notificationSource,
+    notificationWeakEntity,
+  ]);
 
   const handleDownloadFile = () => {
     if (!generatedFile) return;
@@ -510,7 +571,7 @@ const PaymentBatches = () => {
       </Tabs>
 
       {/* View Batch Dialog */}
-      <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
+      <Dialog open={showViewDialog} onOpenChange={closeBatchViewDialog}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Payment Batch: {selectedBatch?.batchNumber}</DialogTitle>
@@ -597,7 +658,7 @@ const PaymentBatches = () => {
           )}
 
           <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setShowViewDialog(false)}>
+            <Button variant="outline" onClick={() => closeBatchViewDialog(false)}>
               Close
             </Button>
             {selectedBatch?.status === 'Pending' && (
