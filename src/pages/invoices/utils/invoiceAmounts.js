@@ -17,7 +17,13 @@ export const formatInvoiceAmount = (invoice, amount) =>
 
 export const sumInvoiceAmountsByCurrency = (
   invoices = [],
-  getAmount = (invoice) => invoice?.amount ?? 0,
+  getAmount = (invoice) =>
+    invoice?.netAmount ??
+    invoice?.net_amount ??
+    invoice?.totalAmount ??
+    invoice?.total_amount ??
+    invoice?.netPayable ??
+    0,
 ) => {
   const totals = new Map();
 
@@ -42,7 +48,7 @@ export const getInvoiceGrossAmount = (invoice) => {
 
   if (explicitGross > 0) return explicitGross;
 
-  const totalAmount = toNumber(invoice?.amount);
+  const totalAmount = toNumber(invoice?.totalAmount ?? invoice?.total_amount);
   const taxAmount = getInvoiceTaxAmount(invoice);
   if (totalAmount > 0 && taxAmount > 0) {
     return Math.max(totalAmount - taxAmount, 0);
@@ -54,10 +60,17 @@ export const getInvoiceGrossAmount = (invoice) => {
 export const getInvoiceTaxAmount = (invoice) =>
   toNumber(
     invoice?.gstAmount ??
+      invoice?.gst_amount ??
       invoice?.taxAmount ??
+      invoice?.tax_amount ??
+      invoice?.totalTaxAmount ??
+      invoice?.total_tax_amount ??
       toNumber(invoice?.cgstAmount) +
+        toNumber(invoice?.cgst_amount) +
         toNumber(invoice?.sgstAmount) +
-        toNumber(invoice?.igstAmount),
+        toNumber(invoice?.sgst_amount) +
+        toNumber(invoice?.igstAmount) +
+        toNumber(invoice?.igst_amount),
   );
 
 export const getInvoiceTdsAmount = (invoice) =>
@@ -65,13 +78,17 @@ export const getInvoiceTdsAmount = (invoice) =>
 
 export const getInvoiceNetAmount = (invoice) => {
   const explicitNetAmount =
-    invoice?.netAmount ?? invoice?.netPayable;
+    invoice?.netAmount ??
+    invoice?.net_amount ??
+    invoice?.totalAmount ??
+    invoice?.total_amount ??
+    invoice?.netPayable;
 
   if (explicitNetAmount !== undefined && explicitNetAmount !== null && explicitNetAmount !== "") {
     return toNumber(explicitNetAmount);
   }
 
-  const totalAmount = toNumber(invoice?.amount);
+  const totalAmount = toNumber(invoice?.totalAmount ?? invoice?.total_amount);
   const tdsAmount = getInvoiceTdsAmount(invoice);
   if (totalAmount > 0) {
     return Math.max(totalAmount - tdsAmount, 0);

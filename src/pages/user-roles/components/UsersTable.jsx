@@ -4,6 +4,7 @@ import { CheckCircle, Eye, Pencil, ShieldCheck, Trash2, X } from 'lucide-react';
 import { format } from 'date-fns';
 import AppDataTable from '../../../components/common/AppDataTable';
 import { TableCell, TableRow } from '../../../components/ui/table';
+import { cn } from '../../../lib/utils';
 
 const roleBadgeClass = (role) => {
   const palettes = [
@@ -102,7 +103,7 @@ const UsersTable = ({
                   size="sm"
                   onClick={() => handleViewUserDetails?.(user)}
                   title="View Details"
-                  data-testid={`view-user-${user.id}`}
+                  data-testid={`view-user-${user?.id ?? 'unknown'}`}
                 >
                   <Eye className="h-4 w-4 text-slate-700" />
                 </Button>
@@ -114,7 +115,7 @@ const UsersTable = ({
                         size="sm"
                         onClick={() => handleEditUser?.(user)}
                         title="Edit User"
-                        data-testid={`edit-user-${user.id}`}
+                        data-testid={`edit-user-${user?.id ?? 'unknown'}`}
                       >
                         <Pencil className="h-4 w-4 text-blue-600" />
                       </Button>
@@ -125,7 +126,7 @@ const UsersTable = ({
                         size="sm"
                         onClick={() => handleAssignRoles?.(user)}
                         title="Assign Role Sets"
-                        data-testid={`assign-roles-${user.id}`}
+                        data-testid={`assign-roles-${user?.id ?? 'unknown'}`}
                       >
                         <ShieldCheck className="h-4 w-4 text-emerald-600" />
                       </Button>
@@ -136,7 +137,7 @@ const UsersTable = ({
                         size="sm"
                         onClick={() => handleDeleteUser(user.id, user.name)}
                         title="Delete User"
-                        data-testid={`delete-user-${user.id}`}
+                        data-testid={`delete-user-${user?.id ?? 'unknown'}`}
                       >
                         <Trash2 className="h-4 w-4 text-red-500" />
                       </Button>
@@ -155,7 +156,10 @@ const UsersTable = ({
         }
 
         return (
-          <TableCell key={header.key} className={header.cellClassName}>
+          <TableCell
+            key={header.key}
+            className={cn('border border-border', header.cellClassName)}
+          >
             {value}
           </TableCell>
         );
@@ -170,6 +174,7 @@ const UsersTable = ({
         tableData={users}
         renderRow={renderUserRow}
         emptyMessage="No users found"
+        bordered
       />
     </div>
   );

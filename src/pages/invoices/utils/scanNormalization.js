@@ -1,5 +1,7 @@
 import { format } from "date-fns";
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../../utils/currency";
+import { DOCUMENT_TYPE, normalizeDocumentType } from "../constants/proformaInvoice";
+import { normalizeInvoiceSource } from "../constants";
 import {
   DEFAULT_INR_TAX,
   LINE_ITEM_LEVEL,
@@ -48,6 +50,13 @@ export const normalizeScannedInvoice = (scanResponse = {}) => {
       invoiceCurrency,
       scannedForeignTaxDefaults,
     );
+    const discountAmount = Number(
+      item?.discountAmount ?? item?.discount_amount ?? item?.discountValue ?? 0,
+    ) || 0;
+    const discountPercent = Number(
+      item?.discountPercent ?? item?.discount_percent ?? item?.discountRate ?? 0,
+    ) || 0;
+    const hasDiscountAmount = discountAmount > 0;
 
     return {
       description: item?.description ?? item?.name ?? "",
@@ -55,6 +64,12 @@ export const normalizeScannedInvoice = (scanResponse = {}) => {
       unitPrice: pricing.unitPrice,
       amount: pricing.amount,
       lineTotal: pricing.lineTotal,
+      discount: hasDiscountAmount ? discountAmount : discountPercent,
+      discountType: hasDiscountAmount
+        ? invoiceCurrency === DEFAULT_CURRENCY
+          ? "₹"
+          : invoiceCurrency
+        : "%",
       hsnSac: item?.hsnSac ?? item?.hsnSac ?? "",
       ...taxFields,
     };
@@ -83,7 +98,10 @@ export const normalizeScannedInvoice = (scanResponse = {}) => {
   return {
     vendorName: scanResponse?.vendorName ?? scanResponse?.vendorName ?? scanResponse?.merchant ?? "",
     vendorGstin: vendorGstin,
-    billingGstin: scanResponse?.billingGstin ?? scanResponse?.billingGstin ?? "",
+    billingGstin:
+      scanResponse?.billingGstin ??
+      scanResponse?.billing_gstin ??
+      "",
     gstin: vendorGstin,
     vendorAddress: vendorAddress,
     billingAddress:
@@ -132,7 +150,7 @@ export const normalizeScannedInvoice = (scanResponse = {}) => {
       scanResponse?.invoice_tax_rate ??
       taxSummary.invoiceTaxRate ??
       "",
-    source: scanResponse?.source ?? "Upload",
+    source: normalizeInvoiceSource(scanResponse?.source),
     invoiceNumber: scanResponse?.invoiceNumber ?? scanResponse?.invoiceNumber ?? "",
     invoiceDate:
       toDateOnly(scanResponse?.invoiceDate ?? scanResponse?.invoiceDate ?? scanResponse?.datetime) ||
@@ -151,5 +169,8 @@ export const normalizeScannedInvoice = (scanResponse = {}) => {
     fileId: scanResponse?.fileId ?? scanResponse?.fileId ?? null,
     fileHash: scanResponse?.fileHash ?? scanResponse?.fileHash ?? null,
     originalFileName: scanResponse?.originalFileName ?? scanResponse?.originalFileName ?? null,
+    documentType: normalizeDocumentType(
+      scanResponse?.documentType ?? scanResponse?.document_type ?? DOCUMENT_TYPE.TAX_INVOICE,
+    ),
   };
 };

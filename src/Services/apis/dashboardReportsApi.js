@@ -58,6 +58,26 @@ export const dashboardReportsApi = serviceApi.injectEndpoints({
       }),
       providesTags: ["Reports"],
     }),
+    getBranchCostAnalysis: builder.query({
+      query: ({
+        dateRange,
+        currency,
+        costStatuses,
+        limit,
+        offset,
+      } = {}) => ({
+        url: "/analytics/branch-cost-analysis",
+        method: "GET",
+        params: {
+          ...(dateRange ? { dateRange } : {}),
+          ...(currency ? { currency } : {}),
+          ...(costStatuses ? { costStatuses } : {}),
+          ...(limit != null ? { limit } : {}),
+          ...(offset != null ? { offset } : {}),
+        },
+      }),
+      providesTags: ["Reports"],
+    }),
   }),
 });
 
@@ -69,4 +89,5 @@ export const {
   useGetVendorAnalyticsQuery,
   useGetTaxReportsQuery,
   useGetPaymentAnalyticsQuery,
+  useGetBranchCostAnalysisQuery,
 } = dashboardReportsApi;

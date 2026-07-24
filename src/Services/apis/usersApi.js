@@ -1,13 +1,16 @@
 import { serviceApi } from "../serviceApi";
+import { extractListResponse } from "../utils/payloadMappers";
 
 export const usersApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getUsers: builder.query({
       query: () => ({ url: "/users", method: "GET" }),
+      transformResponse: extractListResponse,
       providesTags: ["Users"],
     }),
     getRoles: builder.query({
       query: () => ({ url: "/roles", method: "GET" }),
+      transformResponse: (response) => extractListResponse(response, ['roles']),
       providesTags: ["Users"],
     }),
     inviteUser: builder.mutation({

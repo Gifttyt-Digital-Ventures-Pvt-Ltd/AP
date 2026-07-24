@@ -63,8 +63,7 @@ export const buildInvoiceFormChecklist = (
 
   const useInrTax = isInrInvoiceCurrency(formData.currency);
   const isGstinRequired = useInrTax && formData.gstTreatment !== "N/A";
-  const isInvoiceLevelTax = formData.taxesLevel === INVOICE_LEVEL;
-  const isSourceEmailRequired = formData.source === "Email"; 
+  const isInvoiceLevelTax = formData.taxesLevel === INVOICE_LEVEL; 
 
   const vendorChecklistItems = [
     item({
@@ -180,11 +179,13 @@ export const buildInvoiceFormChecklist = (
           done: !!(formData.currency || DEFAULT_CURRENCY).trim(),
           required: true,
         }),
+        /* Department checklist hidden during create/edit — restore when needed
         item({
           label: "Department",
           done: !!formData.departmentId,
           required: departmentMandatory,
         }),
+        */
         item({
           label: "Category",
           done: !!(formData.categoryId || formData.category?.id),
@@ -204,12 +205,6 @@ export const buildInvoiceFormChecklist = (
           label: "Source",
           done: !!formData.source,
           required: true,
-        }),
-        item({
-          label: "Source email",
-          done: !!formData.sourceEmail?.trim(),
-          required: isSourceEmailRequired,
-          hidden: !isSourceEmailRequired,
         }),
       ],
     },

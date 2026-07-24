@@ -1,7 +1,9 @@
 import { serviceApi } from "../serviceApi";
+import { extractListResponse } from "../utils/payloadMappers";
 import { normalizeCustomRolePermissionsResponse } from "../../utils/rbacPermissions";
 import {
   DEFAULT_INVOICE_CONFIGURATION,
+  BRANCH_MODULE_SECTION_IDS,
   normalizeActiveInvoiceConfiguration,
   normalizeInvoiceConfigurationCatalog,
 } from "../../utils/invoiceConfiguration";
@@ -9,7 +11,23 @@ import {
   DEFAULT_VENDOR_FIELD_CATALOG,
   normalizeActiveVendorFields,
   normalizeVendorFieldCatalog,
+  normalizeVendorFieldSection,
+  VENDOR_VERIFICATION_SECTION_IDS,
 } from "../../utils/vendorFieldConfig";
+import {
+  normalizeActiveVendorDocuments,
+  normalizeVendorDocumentCatalog,
+} from "../../utils/vendorDocumentConfig";
+import {
+  normalizeVendorVerificationCatalog,
+  resolveActiveVendorVerification,
+} from "../../utils/vendorVerificationConfig";
+import {
+  DEFAULT_GST_CONFIGURATION,
+  normalizeActiveGstConfiguration,
+  normalizeGstConfigurationCatalog,
+  resolveActiveGstConfiguration,
+} from "../../utils/gstConfiguration";
 import {
   isTokenBasedSubscription,
   normalizeSubscriptionModel,
@@ -34,6 +52,9 @@ const resolveCorporatePayload = (response) => {
     null
   );
 };
+
+const toBoolean = (value) =>
+  value === true || value === "true" || value === 1 || value === "1";
 
 const normalizeCorporateSubscription = (corporate) => {
   if (!corporate || typeof corporate !== "object") {
@@ -269,6 +290,7 @@ const normalizeCorporateScreensResponse = (response = {}) => {
   const addEnabledSection = (sectionEntry = {}) => {
     const section = normalizeToken(sectionEntry?.section);
     if (!section) return;
+    if (sectionEntry?.isEnabled === false) return;
     const explicitEnabled = explicitSectionEnabled.get(section);
     if (explicitEnabled === false) return;
     enabledSections.add(section);
@@ -278,6 +300,15 @@ const normalizeCorporateScreensResponse = (response = {}) => {
 
   basicSections.forEach(addEnabledSection);
   toArray(response?.additionalSections).forEach(addEnabledSection);
+  toArray(response?.activeModules ?? response?.active_modules).forEach((sectionId) => {
+    const section = normalizeToken(
+      typeof sectionId === "string" ? sectionId : sectionId?.section,
+    );
+    if (!section) return;
+    enabledSections.add(section);
+    const screen = normalizeToken(sectionId?.screen);
+    if (screen) sectionScreens.set(section, screen);
+  });
   explicitSectionEnabled.forEach((isEnabled, section) => {
     if (isEnabled) enabledSections.add(section);
     if (!isEnabled) enabledSections.delete(section);
@@ -304,6 +335,11 @@ const normalizeCorporateScreensResponse = (response = {}) => {
     ) {
       addEnabledSection(billingBasicSection);
     }
+
+    // Wallet/billing is intrinsic to token-based subscriptions; do not hide it when
+    // screenSections marks SETTINGS_BILLING as isEnabled:false without removing TOKEN_BASED.
+    enabledSections.add("SETTINGS_BILLING");
+    sectionScreens.set("SETTINGS_BILLING", "SETTINGS");
   } else {
     BILLING_SECTION_IDS.forEach((sectionId) => enabledSections.delete(sectionId));
   }
@@ -323,12 +359,58 @@ const normalizeCorporateScreensResponse = (response = {}) => {
   const activeVendorFields = normalizeActiveVendorFields(
     response?.activeVendorFields,
   );
+  const vendorDocumentConfiguration = normalizeVendorDocumentCatalog(
+    toArray(response?.vendorDocumentConfiguration),
+  );
+  const activeVendorDocuments =
+    response && 'activeVendorDocuments' in response
+      ? normalizeActiveVendorDocuments(response.activeVendorDocuments)
+      : undefined;
+  const vendorVerificationConfigurationFromApi = normalizeVendorVerificationCatalog(
+    toArray(response?.vendorVerificationConfiguration ?? response?.vendor_verification_configuration),
+  );
+  const vendorVerificationConfigurationFromFields = normalizeVendorVerificationCatalog(
+    vendorFieldConfiguration.filter((item) =>
+      VENDOR_VERIFICATION_SECTION_IDS.has(normalizeVendorFieldSection(item?.section)),
+    ),
+  );
+  const vendorVerificationConfiguration =
+    vendorVerificationConfigurationFromApi.length > 0
+      ? vendorVerificationConfigurationFromApi
+      : vendorVerificationConfigurationFromFields.length > 0
+        ? vendorVerificationConfigurationFromFields
+        : undefined;
+  const hasExplicitActiveVendorVerification = Boolean(
+    response &&
+      ('activeVendorVerification' in response || 'active_vendor_verification' in response),
+  );
+  const activeVendorVerification = resolveActiveVendorVerification({
+    activeVendorVerification:
+      response?.activeVendorVerification ?? response?.active_vendor_verification,
+    hasExplicitActiveVendorVerification,
+  });
   const invoiceConfiguration = normalizeInvoiceConfigurationCatalog(
     toArray(response?.invoiceConfiguration),
   );
   const activeInvoiceConfiguration = normalizeActiveInvoiceConfiguration(
     response?.activeInvoiceConfiguration,
   );
+  const mergedActiveInvoiceConfiguration = normalizeActiveInvoiceConfiguration([
+    ...activeInvoiceConfiguration,
+    ...enabledSectionList.filter((section) => BRANCH_MODULE_SECTION_IDS.includes(section)),
+  ]);
+  const gstConfiguration = normalizeGstConfigurationCatalog(
+    toArray(response?.gstConfiguration ?? response?.gst_configuration),
+  );
+  const hasExplicitActiveGstConfiguration = Boolean(
+    response &&
+      ('activeGstConfiguration' in response || 'active_gst_configuration' in response),
+  );
+  const activeGstConfiguration = resolveActiveGstConfiguration({
+    activeGstConfiguration:
+      response?.activeGstConfiguration ?? response?.active_gst_configuration,
+    hasExplicitActiveGstConfiguration,
+  });
 
   return {
     raw: response ?? null,
@@ -345,11 +427,27 @@ const normalizeCorporateScreensResponse = (response = {}) => {
         ? vendorFieldConfiguration
         : DEFAULT_VENDOR_FIELD_CATALOG,
     activeVendorFields,
+    vendorDocumentConfiguration:
+      vendorDocumentConfiguration.length > 0
+        ? vendorDocumentConfiguration
+        : undefined,
+    activeVendorDocuments,
+    vendorVerificationConfiguration:
+      vendorVerificationConfiguration?.length > 0
+        ? vendorVerificationConfiguration
+        : undefined,
+    activeVendorVerification,
     invoiceConfiguration:
       invoiceConfiguration.length > 0
-        ? invoiceConfiguration
+        ? invoiceConfiguration.filter(
+            (item) => !BRANCH_MODULE_SECTION_IDS.includes(normalizeToken(item?.section)),
+          )
         : DEFAULT_INVOICE_CONFIGURATION,
-    activeInvoiceConfiguration,
+    activeInvoiceConfiguration: mergedActiveInvoiceConfiguration,
+    gstConfiguration:
+      gstConfiguration.length > 0 ? gstConfiguration : DEFAULT_GST_CONFIGURATION,
+    activeGstConfiguration,
+    hasExplicitActiveGstConfiguration,
   };
 };
 
@@ -421,11 +519,7 @@ export const corporateApi = serviceApi.injectEndpoints({
         method: "GET",
       }),
       transformResponse: (response) => {
-        const screens = Array.isArray(response)
-          ? response
-          : Array.isArray(response?.screens)
-            ? response.screens
-            : [];
+        const screens = extractListResponse(response, ['screens']);
         return filterAssignableCreditsPermissions(
           ensureDefaultCustomRoleScreens(
             screens.map(normalizeCustomRoleScreen).filter((screen) => screen.screen),
@@ -447,8 +541,7 @@ export const corporateApi = serviceApi.injectEndpoints({
         url: "/corporate/custom-roles/subscription-modules",
         method: "GET",
       }),
-      transformResponse: (response) =>
-        Array.isArray(response) ? response : [],
+      transformResponse: (response) => extractListResponse(response),
       providesTags: ["Users"],
     }),
     getCustomRoles: builder.query({
@@ -456,12 +549,7 @@ export const corporateApi = serviceApi.injectEndpoints({
         url: "/corporate/custom-roles",
         method: "GET",
       }),
-      transformResponse: (response) => {
-        if (Array.isArray(response)) return response;
-        if (Array.isArray(response?.data)) return response.data;
-        if (Array.isArray(response?.roles)) return response.roles;
-        return [];
-      },
+      transformResponse: (response) => extractListResponse(response, ['roles']),
       providesTags: ["Users"],
     }),
     getCustomRoleById: builder.query({
@@ -589,18 +677,16 @@ export const corporateApi = serviceApi.injectEndpoints({
         method: "GET",
         params: { programType: "VENDOR_PAYMENTS" },
       }),
-      transformResponse: (response) => {
-        if (Array.isArray(response)) return response;
-        if (Array.isArray(response?.data)) return response.data;
-        if (Array.isArray(response?.departments)) return response.departments;
-        return [];
-      },
+      transformResponse: (response) => extractListResponse(response, ['departments']),
       providesTags: ["Users"],
     }),
     addCorporateUsers: builder.mutation({
       query: (body) => ({
         url: "/corporate/user/add",
         method: "POST",
+        headers: {
+          "X-Giftryt-Portal": "VENDOR_PAYMENTS",
+        },
         body,
       }),
       invalidatesTags: ["Users", "Categories"],

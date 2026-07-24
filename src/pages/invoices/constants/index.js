@@ -56,10 +56,26 @@ export const TAX_RATES = [
   { value: "Exempt", label: "Exempt", cgst: 0, sgst: 0 },
 ];
 
+export const INVOICE_SOURCE_UPLOAD = "Upload";
+export const INVOICE_SOURCE_GMAIL = "Gmail";
+
 export const INVOICE_SOURCES = [
-  { value: "Upload", label: "Upload" },
-  { value: "Email", label: "Email" },
+  { value: INVOICE_SOURCE_UPLOAD, label: "Upload" },
+  { value: INVOICE_SOURCE_GMAIL, label: "Gmail" },
 ];
+
+/** Portal uploads are always Upload; mail-fetched invoices are Gmail (legacy Email → Gmail). */
+export const normalizeInvoiceSource = (source) => {
+  const value = String(source ?? "").trim();
+  if (!value) return INVOICE_SOURCE_UPLOAD;
+  const lower = value.toLowerCase();
+  if (lower === "email" || lower === "gmail") return INVOICE_SOURCE_GMAIL;
+  if (lower === "upload") return INVOICE_SOURCE_UPLOAD;
+  return value;
+};
+
+export const isGmailInvoiceSource = (source) =>
+  normalizeInvoiceSource(source) === INVOICE_SOURCE_GMAIL;
 export const LEDGER_OPTIONS = [
   "Cloud Services",
   "Software Subscription",

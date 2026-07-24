@@ -1,14 +1,7 @@
 import { serviceApi } from "../serviceApi";
+import { extractListResponse } from "../utils/payloadMappers";
 
-const unwrapList = (response, keys = []) => {
-  if (Array.isArray(response)) return response;
-  const payload = response?.data ?? response ?? {};
-  if (Array.isArray(payload)) return payload;
-  for (const key of keys) {
-    if (Array.isArray(payload?.[key])) return payload[key];
-  }
-  return [];
-};
+const unwrapList = (response, keys = []) => extractListResponse(response, keys);
 
 const normalizeReportExportResponse = (response) => {
   const payload = response?.data ?? response ?? {};

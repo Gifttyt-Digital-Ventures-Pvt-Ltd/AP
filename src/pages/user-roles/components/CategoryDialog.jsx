@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -122,7 +123,7 @@ const CategoryDialog = ({
             )
           ) : (
             <div className="py-10 text-center text-sm text-muted-foreground">
-              {employeesError ? "Unable to load users. You can still save this category." : emptyText}
+              {employeesError ? "Unable to load users. Assignments are required before saving." : emptyText}
             </div>
           )}
         </div>
@@ -134,6 +135,16 @@ const CategoryDialog = ({
     event.preventDefault();
     const trimmedName = name.trim();
     if (!trimmedName) return;
+
+    if (makerAssignedUserIds.length === 0) {
+      toast.error("Select at least one invoice maker");
+      return;
+    }
+
+    if (checkerAssignedUserIds.length === 0) {
+      toast.error("Select at least one invoice checker");
+      return;
+    }
 
     const uniqueAssignedUserIds = Array.from(
       new Set([...makerAssignedUserIds, ...checkerAssignedUserIds]),
@@ -198,7 +209,7 @@ const CategoryDialog = ({
                 "Assigned Invoice Makers",
                 "Select users who can create invoices in this category",
                 makerEmployees,
-                "No invoice makers available. You can still save this category.",
+                "No invoice makers available. Add an invoice maker before saving.",
                 makerAssignedUserIds,
                 handleMakerToggle,
                 "category-maker-user",
@@ -207,7 +218,7 @@ const CategoryDialog = ({
                 "Assigned Invoice Checkers",
                 "Select users who can check invoices in this category",
                 checkerEmployees,
-                "No invoice checkers available. You can still save this category.",
+                "No invoice checkers available. Add an invoice checker before saving.",
                 checkerAssignedUserIds,
                 handleCheckerToggle,
                 "category-checker-user",

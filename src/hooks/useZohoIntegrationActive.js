@@ -1,24 +1,24 @@
-import { useMemo } from "react";
-import { useGetIntegrationConnectionsQuery } from "../Services/apis/integrationsApi";
+import { useGetApIntegrationSummaryQuery } from "../Services/apis/integrationsApi";
 import { useRBAC } from "../contexts/RBACContext";
 import {
-  getConnectionStatus,
-  normalizeConnections,
-} from "../pages/integrations/utils";
+  ERP_PROVIDER,
+  INTEGRATION_CONNECTION_STATUS,
+  selectErpIntegration,
+} from "../pages/integrations/integrationSummary";
 
 const useZohoIntegrationActive = () => {
   const { isCorporateSectionEnabled } = useRBAC();
   const isIntegrationsEnabled = isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
-  const { data: connectionsResponse, isLoading, isFetching } = useGetIntegrationConnectionsQuery(
+  const { data: integrationSummary, isLoading, isFetching } = useGetApIntegrationSummaryQuery(
     undefined,
     { skip: !isIntegrationsEnabled },
   );
 
-  const hasConnectedZoho = useMemo(() => {
-    if (!isIntegrationsEnabled) return false;
-    const connections = normalizeConnections(connectionsResponse);
-    return connections.some((connection) => getConnectionStatus(connection) === "CONNECTED");
-  }, [connectionsResponse, isIntegrationsEnabled]);
+  const erpIntegration = selectErpIntegration(integrationSummary);
+  const hasConnectedZoho =
+    isIntegrationsEnabled &&
+    erpIntegration.provider === ERP_PROVIDER.ZOHO_BOOKS &&
+    erpIntegration.connectionStatus === INTEGRATION_CONNECTION_STATUS.CONNECTED;
 
   return {
     isIntegrationsEnabled,

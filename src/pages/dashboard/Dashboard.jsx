@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useMemo } from "react";
 import { useDashboardData } from "./hooks/useDashboardData";
 import DashboardLoadingState from "./components/DashboardLoadingState";
 import DashboardHeader from "./components/DashboardHeader";
@@ -12,6 +12,7 @@ import PaymentBatchesCard from "./components/PaymentBatchesCard";
 import RecentInvoicesCard from "./components/RecentInvoicesCard";
 import TopVendorsCard from "./components/TopVendorsCard";
 import PendingApprovalsAlert from "./components/PendingApprovalsAlert";
+import OverdueInvoicesAlert from "./components/OverdueInvoicesAlert";
 import InvoiceStatusSummaryCard from "./components/InvoiceStatusSummaryCard";
 import PaymentSummaryCard from "./components/PaymentSummaryCard";
 
@@ -22,6 +23,8 @@ const Dashboard = () => {
     bottleneck,
     recentInvoices,
     pendingApprovals,
+    overdueInvoices,
+    overdueSummary,
     paymentBatchStats,
     showPaymentBatches,
     loading,
@@ -41,6 +44,18 @@ const Dashboard = () => {
     formatFullCurrency,
     formatCompactCurrency,
   } = useDashboardData();
+
+  const showOverdueAlert = useMemo(() => {
+    const count = overdueSummary?.count ?? overdueInvoices?.length ?? 0;
+    return count > 0 && overdueInvoices.length > 0;
+  }, [overdueInvoices, overdueSummary]);
+
+  const showPendingApprovalsAlert = pendingApprovals.length > 0;
+
+  const alertGridClassName =
+    showOverdueAlert && showPendingApprovalsAlert
+      ? "grid grid-cols-1 gap-4 lg:grid-cols-2"
+      : "grid grid-cols-1 gap-4";
 
   if (loading) {
     return <DashboardLoadingState />;
@@ -86,10 +101,23 @@ const Dashboard = () => {
         formatCompactCurrency={formatCompactCurrency}
       />
 
-      <PendingApprovalsAlert
-        pendingApprovals={pendingApprovals}
-        formatFullCurrency={formatFullCurrency}
-      />
+      {(showOverdueAlert || showPendingApprovalsAlert) && (
+        <div className={alertGridClassName}>
+          {showOverdueAlert ? (
+            <OverdueInvoicesAlert
+              overdueInvoices={overdueInvoices}
+              overdueSummary={overdueSummary}
+              formatFullCurrency={formatFullCurrency}
+            />
+          ) : null}
+          {showPendingApprovalsAlert ? (
+            <PendingApprovalsAlert
+              pendingApprovals={pendingApprovals}
+              formatFullCurrency={formatFullCurrency}
+            />
+          ) : null}
+        </div>
+      )}
       <PaymentProgressCard
         paidValue={paidValue}
         totalValue={totalValue}
@@ -115,12 +143,6 @@ const Dashboard = () => {
           bottleneckAnalysis={bottleneck?.stages}
           avgProcessingDays={bottleneck?.avg_processing_days || 0}
         />
-        {showPaymentBatches && (
-          <PaymentBatchesCard
-            paymentBatchStats={paymentBatchStats}
-            formatCompactCurrency={formatCompactCurrency}
-          />
-        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -132,6 +154,12 @@ const Dashboard = () => {
           vendors={charts?.top_vendors}
           formatFullCurrency={formatFullCurrency}
         />
+        {showPaymentBatches && (
+          <PaymentBatchesCard
+            paymentBatchStats={paymentBatchStats}
+            formatCompactCurrency={formatCompactCurrency}
+          />
+        )}
       </div>
 
       {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

@@ -9,7 +9,14 @@ import {
   DialogTitle,
 } from "../../../components/ui/dialog";
 
-const BulkUploadReviewDialog = ({ open, onOpenChange, data }) => (
+const BulkUploadReviewDialog = ({ open, onOpenChange, data }) => {
+  const successfulItems = Array.isArray(data?.success)
+    ? data.success
+    : Array.isArray(data?.successful)
+      ? data.successful
+      : [];
+
+  return (
   <Dialog open={open} onOpenChange={onOpenChange}>
     <DialogContent
       className="max-w-3xl max-h-[85vh] overflow-y-auto"
@@ -19,21 +26,30 @@ const BulkUploadReviewDialog = ({ open, onOpenChange, data }) => (
       <DialogHeader>
         <DialogTitle>Bulk Upload Review</DialogTitle>
         <DialogDescription>
-          Review uploaded vendor results including failed records and validation
-          errors.
+          {data?.savedAsDraft
+            ? 'Imported vendors are saved as drafts. Open each vendor, complete GSTIN and documents, then submit for approval.'
+            : 'Review uploaded vendor results including failed records and validation errors.'}
         </DialogDescription>
       </DialogHeader>
       {data && (
         <div className="space-y-4">
+          {data.savedAsDraft ? (
+            <div className="rounded-md border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+              Vendors imported from spreadsheet start in <strong>Saved</strong> status. They are not
+              sent for approval until you edit and submit each one.
+            </div>
+          ) : null}
           <div className="grid grid-cols-3 gap-3">
             <div className="rounded-md border p-3">
               <p className="text-xs text-muted-foreground">Total Received</p>
-              <p className="text-lg font-semibold">{data.totalReceived ?? 0}</p>
+              <p className="text-lg font-semibold">
+                {data.totalReceived ?? data.successCount ?? successfulItems.length ?? 0}
+              </p>
             </div>
             <div className="rounded-md border p-3">
-              <p className="text-xs text-muted-foreground">Success</p>
+              <p className="text-xs text-muted-foreground">{data.savedAsDraft ? 'Saved' : 'Success'}</p>
               <p className="text-lg font-semibold text-emerald-700">
-                {data.successCount ?? 0}
+                {data.successCount ?? successfulItems.length ?? 0}
               </p>
             </div>
             <div className="rounded-md border p-3">
@@ -44,11 +60,13 @@ const BulkUploadReviewDialog = ({ open, onOpenChange, data }) => (
             </div>
           </div>
 
-          {Array.isArray(data.success) && data.success.length > 0 && (
+          {successfulItems.length > 0 && (
             <div className="space-y-2">
-              <p className="text-sm font-medium">Successful Vendors</p>
+              <p className="text-sm font-medium">
+                {data.savedAsDraft ? 'Saved Vendors' : 'Successful Vendors'}
+              </p>
               <div className="rounded-md border">
-                {data.success.map((item, index) => (
+                {successfulItems.map((item, index) => (
                   <div
                     key={`${item?.id || item?.name || "success"}-${index}`}
                     className="flex items-center justify-between border-b px-3 py-2 last:border-b-0"
@@ -56,6 +74,7 @@ const BulkUploadReviewDialog = ({ open, onOpenChange, data }) => (
                     <span className="text-sm">{item?.name || "-"}</span>
                     <span className="text-xs text-muted-foreground">
                       {item?.vendorType || item?.vendor_type || "-"}
+                      {data.savedAsDraft ? ' · Saved' : ''}
                     </span>
                   </div>
                 ))}
@@ -96,6 +115,7 @@ const BulkUploadReviewDialog = ({ open, onOpenChange, data }) => (
       </DialogFooter>
     </DialogContent>
   </Dialog>
-);
+  );
+};
 
 export default BulkUploadReviewDialog;

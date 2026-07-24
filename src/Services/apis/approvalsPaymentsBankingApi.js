@@ -1,8 +1,11 @@
 import { serviceApi } from "../serviceApi";
 import {
+  extractListResponse,
   toBankAccountApiPayload,
   toBankAccountUiPayload,
   toInvoiceUiPayload,
+  toPaymentCreateApiPayload,
+  toRecordPaymentsApiPayload,
 } from "../utils/payloadMappers";
 import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
 
@@ -11,15 +14,25 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
     getPendingApprovals: builder.query({
       query: (params) => ({ url: "/approvals/pending", method: "GET", params }),
       transformResponse: (response) =>
-        Array.isArray(response) ? response.map(toInvoiceUiPayload) : [],
+        extractListResponse(response).map(toInvoiceUiPayload),
       providesTags: ["Approvals"],
     }),
     getPayments: builder.query({
       query: (params) => ({ url: "/payments", method: "GET", params }),
+      transformResponse: extractListResponse,
       providesTags: ["Payments"],
     }),
+    getPayment: builder.query({
+      query: (id) => ({ url: `/payments/${id}`, method: "GET" }),
+      transformResponse: (response) => response?.payment ?? response?.data ?? response,
+      providesTags: (_result, _error, id) => [{ type: "Payments", id }],
+    }),
     createPayment: builder.mutation({
-      query: (body) => ({ url: "/payments", method: "POST", body }),
+      query: (body) => ({
+        url: "/payments",
+        method: "POST",
+        body: toPaymentCreateApiPayload(body),
+      }),
       invalidatesTags: ["Payments", "Invoices", "Dashboard", "Reports", ...CREDIT_INVALIDATION_TAGS],
     }),
     bulkReleasePayments: builder.mutation({
@@ -30,16 +43,21 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
       query: (body) => ({
         url: "/payments/record",
         method: "POST",
-        body,
+        body: toRecordPaymentsApiPayload(body),
       }),
       invalidatesTags: ["Payments", "Invoices", "Dashboard", "Reports", ...CREDIT_INVALIDATION_TAGS],
+    }),
+    generatePendingPaymentInvoiceReport: builder.mutation({
+      query: (body) => ({
+        url: "/payments/pending-invoices/report",
+        method: "POST",
+        body,
+      }),
     }),
     getBankAccounts: builder.query({
       query: () => ({ url: "/bank-accounts", method: "GET" }),
       transformResponse: (response) =>
-        Array.isArray(response)
-          ? response.map(toBankAccountUiPayload)
-          : toBankAccountUiPayload(response),
+        extractListResponse(response).map(toBankAccountUiPayload),
       providesTags: ["Banking"],
     }),
     createBankAccount: builder.mutation({
@@ -56,9 +74,12 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
 export const {
   useGetPendingApprovalsQuery,
   useGetPaymentsQuery,
+  useGetPaymentQuery,
+  useLazyGetPaymentQuery,
   useCreatePaymentMutation,
   useBulkReleasePaymentsMutation,
   useRecordPaymentsMutation,
+  useGeneratePendingPaymentInvoiceReportMutation,
   useGetBankAccountsQuery,
   useCreateBankAccountMutation,
 } = approvalsPaymentsBankingApi;

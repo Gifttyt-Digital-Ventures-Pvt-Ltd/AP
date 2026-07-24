@@ -1,9 +1,11 @@
 import { serviceApi } from "../serviceApi";
+import { extractListResponse } from "../utils/payloadMappers";
 
 export const transactionsApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getStatements: builder.query({
       query: () => ({ url: "/statements", method: "GET" }),
+      transformResponse: extractListResponse,
       providesTags: ["Transactions"],
     }),
     uploadStatement: builder.mutation({
@@ -23,10 +25,12 @@ export const transactionsApi = serviceApi.injectEndpoints({
     }),
     getLedgers: builder.query({
       query: () => ({ url: "/ledgers", method: "GET" }),
+      transformResponse: extractListResponse,
       providesTags: ["Transactions"],
     }),
     getTransactions: builder.query({
       query: (params) => ({ url: "/transactions", method: "GET", params }),
+      transformResponse: extractListResponse,
       providesTags: ["Transactions"],
     }),
     getTransactionInvoice: builder.query({

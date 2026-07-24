@@ -1,12 +1,15 @@
-import React from "react";
-import { Eye, FileText, Lock, Save, Trash2 } from "lucide-react";
+import React, { useRef } from "react";
+import { Eye, FileText, ImageIcon, Loader2, Lock, Save, Trash2, Upload } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "../../../components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../../../components/ui/dialog";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
 import { Switch } from "../../../components/ui/switch";
-import { getTaxMode, isInrCurrency, formatCurrency, normalizePoTemplateCode } from "../utils";
+import { useUploadPurchaseOrderTenantLogoMutation } from "../../../Services/apis/purchaseOrdersMasterDataApi";
+import { getTaxMode, isInrCurrency, formatCurrency } from "../utils";
+import PoLogo from "./PoLogo";
 
 const SAMPLE_ITEMS = [
   { description: "Industrial switch 48-port", hsn: "851762", uom: "NOS", quantity: 10, unitRate: 4200, gstRate: 18 },
@@ -44,6 +47,8 @@ const PoFormatBuilderDialog = ({
   onDeleteFormat,
   onSave,
 }) => {
+  const poLogoFileInputRef = useRef(null);
+  const [uploadTenantLogo, { isLoading: logoUploading }] = useUploadPurchaseOrderTenantLogoMutation();
   const isInr = isInrCurrency(draftConfig.defaultCurrency);
   const taxMode = getTaxMode(draftConfig.defaultCurrency);
   const formatOptions = savedFormatConfigs.some((format) => format.id === draftConfig.id)
@@ -55,11 +60,67 @@ const PoFormatBuilderDialog = ({
   const sampleSubtotal = SAMPLE_ITEMS.reduce((sum, item) => sum + item.quantity * item.unitRate, 0);
   const sampleTax = showGstSummary ? SAMPLE_ITEMS.reduce((sum, item) => sum + (item.quantity * item.unitRate * item.gstRate) / 100, 0) : 0;
   const sampleTotal = sampleSubtotal + sampleTax;
-  const normalizedTemplateCode = normalizePoTemplateCode(draftConfig.templateCode);
-  const documentBorderClass = normalizedTemplateCode === "T3" ? "border-2 border-slate-900" : "border";
-  const headerBorderClass = normalizedTemplateCode === "T4" ? "border-b-4 border-emerald-600" : "border-b";
+  const documentBorderClass = "border";
+  const headerBorderClass = "border-b";
 
   const updateConfig = (patch) => setDraftConfig((prev) => ({ ...prev, ...patch }));
+
+  const getLogoUploadResult = (response) =>
+    response?.data || response?.branding || response?.logo || response;
+
+  const enableHeaderLogo = (config) => ({
+    ...config,
+    sections: (config.sections || []).map((section) => {
+      if (section.section !== "HEADER") return section;
+      return {
+        ...section,
+        isEnabled: true,
+        fields: (section.fields || []).map((field) =>
+          field.fieldKey === "h_logo" ? { ...field, isEnabled: true } : field,
+        ),
+      };
+    }),
+  });
+
+  const handlePoLogoFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    if (!file) return;
+
+    const lowerName = file.name.toLowerCase();
+    const isPng = file.type === "image/png" || lowerName.endsWith(".png");
+    const isSvg = file.type === "image/svg+xml" || lowerName.endsWith(".svg");
+    if (!isPng && !isSvg) {
+      toast.error("Upload a PNG or SVG logo");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const response = await uploadTenantLogo(formData).unwrap();
+      const result = getLogoUploadResult(response);
+      const logoUrl = result?.logoUrl || result?.logo_url || result?.url || result?.fileUrl || "";
+      const logoS3Key = result?.logoS3Key || result?.logo_s3_key || result?.s3Key || "";
+
+      if (!logoUrl) {
+        toast.error("Logo upload did not return a logo URL");
+        return;
+      }
+
+      setDraftConfig((prev) =>
+        enableHeaderLogo({
+          ...prev,
+          logoUrl,
+          logoS3Key,
+        }),
+      );
+      toast.success("PO logo uploaded. Save the format to keep it.");
+    } catch (error) {
+      toast.error(error?.data?.detail || error?.data?.message || "Failed to upload logo");
+    }
+  };
 
   const toggleSection = (sectionKey, checked) => {
     setDraftConfig((prev) => ({
@@ -140,7 +201,7 @@ const PoFormatBuilderDialog = ({
                   <SelectContent>
                     {formatOptions.map((format) => (
                       <SelectItem key={format.id} value={format.id}>
-                        {format.name} ({normalizePoTemplateCode(format.templateCode)}, {format.defaultCurrency})
+                        {format.name} ({format.defaultCurrency})
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -166,33 +227,53 @@ const PoFormatBuilderDialog = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-2">
-                  <Label>PO Prefix</Label>
-                  <Input
-                    value={draftConfig.poNumberPrefix}
-                    onChange={(event) => updateConfig({ poNumberPrefix: event.target.value })}
-                    data-testid="po-builder-prefix"
+              <div className="rounded-lg border bg-background p-3">
+                <div className="flex items-center gap-3">
+                  <PoLogo logoUrl={draftConfig.logoUrl} companyName={draftConfig.companyName} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <ImageIcon className="h-4 w-4 text-muted-foreground" />
+                      <Label className="text-sm">PO Logo</Label>
+                    </div>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      PNG or SVG. Saved with this format for PO snapshots.
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3 flex items-center gap-2">
+                  <input
+                    ref={poLogoFileInputRef}
+                    type="file"
+                    accept=".png,.svg,image/png,image/svg+xml"
+                    className="hidden"
+                    onChange={handlePoLogoFileChange}
+                    data-testid="po-builder-logo-file-input"
                   />
-                </div>
-                <div className="space-y-2">
-                  <Label>Template</Label>
-                  <Select
-                    value={normalizePoTemplateCode(draftConfig.templateCode)}
-                    onValueChange={(templateCode) => updateConfig({ templateCode })}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => poLogoFileInputRef.current?.click()}
+                    disabled={logoUploading}
+                    data-testid="po-builder-logo-upload-btn"
                   >
-                    <SelectTrigger data-testid="po-builder-template">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="T1">T1 Classic</SelectItem>
-                      <SelectItem value="T2">T2 Compact</SelectItem>
-                      <SelectItem value="T3">T3 Bordered</SelectItem>
-                      <SelectItem value="T4">T4 Modern</SelectItem>
-                      <SelectItem value="T5">T5 Letterhead</SelectItem>
-                    </SelectContent>
-                  </Select>
+                    {logoUploading ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Upload className="mr-2 h-4 w-4" />
+                    )}
+                    {draftConfig.logoUrl ? "Replace Logo" : "Upload Logo"}
+                  </Button>
                 </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>PO Prefix</Label>
+                <Input
+                  value={draftConfig.poNumberPrefix}
+                  onChange={(event) => updateConfig({ poNumberPrefix: event.target.value })}
+                  data-testid="po-builder-prefix"
+                />
               </div>
 
               <div className="space-y-2">
@@ -276,9 +357,7 @@ const PoFormatBuilderDialog = ({
                     <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_320px]">
                       <div className="flex items-start gap-3">
                         {fieldEnabled(draftConfig, "HEADER", "h_logo") && (
-                          <div className="grid h-12 w-12 place-items-center rounded bg-emerald-700 text-lg font-semibold text-white">
-                            {(draftConfig.companyName || "O").charAt(0)}
-                          </div>
+                          <PoLogo logoUrl={draftConfig.logoUrl} companyName={draftConfig.companyName} />
                         )}
                         <div>
                           <h2 className="text-xl font-bold">{draftConfig.companyName || "Company Name"}</h2>

@@ -1,18 +1,29 @@
 import { serviceApi } from "../serviceApi";
-import { toInvoiceApiPayload, toInvoiceUiPayload, toVendorApiPayload, toVendorUiPayload, normalizeInvoiceListResponse } from "../utils/payloadMappers";
+import {
+  toInvoiceApiPayload,
+  toInvoiceUiPayload,
+  toVendorApiPayload,
+  toVendorRequestApiPayload,
+  toVendorUiPayload,
+  extractListResponse,
+  normalizeInvoiceListResponse,
+  normalizeInvoiceFilterOptions,
+} from "../utils/payloadMappers";
 import { normalizeApprovalHistoryEntries } from "../../pages/invoices/utils/invoiceHistory";
 import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
 
-const unwrapVendorList = (response) => {
-  if (Array.isArray(response)) return response;
-  if (Array.isArray(response?.data)) return response.data;
-  if (Array.isArray(response?.content)) return response.content;
-  if (Array.isArray(response?.items)) return response.items;
-  if (Array.isArray(response?.vendors)) return response.vendors;
-  if (response && (response.id || response.vendorId || response.vendor_id)) {
-    return [response];
-  }
-  return [];
+const unwrapVendorList = extractListResponse;
+
+const normalizeVendorListResponse = (response) => {
+  const vendors = unwrapVendorList(response).map(toVendorUiPayload);
+  const payload = response?.data && !Array.isArray(response.data) ? response.data : response;
+
+  return Object.assign(vendors, {
+    total: Number(payload?.total ?? payload?.totalCount ?? payload?.count ?? vendors.length),
+    limit: Number(payload?.limit ?? payload?.size ?? vendors.length),
+    offset: Number(payload?.offset ?? 0),
+    hasMore: Boolean(payload?.hasMore ?? payload?.has_more ?? false),
+  });
 };
 
 export const invoicesVendorsApi = serviceApi.injectEndpoints({
@@ -28,6 +39,20 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
       query: (params) => ({ url: "/invoices", method: "GET", params }),
       transformResponse: normalizeInvoiceListResponse,
       providesTags: ["Invoices"],
+    }),
+    getInvoice: builder.query({
+      query: (id) => ({ url: `/invoices/${id}`, method: "GET" }),
+      transformResponse: toInvoiceUiPayload,
+      providesTags: (_result, _error, id) => [{ type: "Invoices", id }],
+    }),
+    getInvoiceFilterOptions: builder.query({
+      query: (params = {}) => ({
+        url: "/invoices/filter-options",
+        method: "GET",
+        params,
+      }),
+      transformResponse: normalizeInvoiceFilterOptions,
+      providesTags: [{ type: "Invoices", id: "FILTER_OPTIONS" }],
     }),
     createInvoice: builder.mutation({
       query: (body) => ({
@@ -56,6 +81,14 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
     deleteInvoice: builder.mutation({
       query: (id) => ({ url: `/invoices/${id}`, method: "DELETE" }),
       invalidatesTags: ["Invoices", "Dashboard", "Reports"],
+    }),
+    cancelInvoice: builder.mutation({
+      query: ({ id, reason }) => ({
+        url: `/invoices/${id}/cancel`,
+        method: "POST",
+        body: { reason },
+      }),
+      invalidatesTags: ["Invoices", "Approvals", "Payments", "Dashboard", "Reports"],
     }),
     scanInvoice: builder.mutation({
       query: (body) => ({
@@ -89,7 +122,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
     getPendingCheckerInvoices: builder.query({
       query: (params) => ({ url: "/checker/pending", method: "GET", params }),
       transformResponse: (response) =>
-        Array.isArray(response) ? response.map(toInvoiceUiPayload) : [],
+        extractListResponse(response).map(toInvoiceUiPayload),
       providesTags: ["Invoices", "Approvals"],
     }),
     checkInvoice: builder.mutation({
@@ -101,9 +134,8 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
       invalidatesTags: ["Invoices", "Approvals", "Dashboard", "Reports"],
     }),
     getVendors: builder.query({
-      query: () => ({ url: "/vendors", method: "GET" }),
-      transformResponse: (response) =>
-        unwrapVendorList(response).map(toVendorUiPayload),
+      query: (params) => ({ url: "/vendors", method: "GET", params }),
+      transformResponse: normalizeVendorListResponse,
       providesTags: (result) => {
         if (Array.isArray(result)) {
           return [
@@ -124,11 +156,21 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
         return [{ type: "Vendors", id: "LIST" }];
       },
     }),
+    getVendor: builder.query({
+      query: (id) => ({ url: `/vendors/${id}`, method: "GET" }),
+      transformResponse: (response) => {
+        const payload = response?.vendor ?? response?.data ?? response;
+        return toVendorUiPayload(payload);
+      },
+      providesTags: (_result, _error, id) => [{ type: "Vendors", id }],
+    }),
     createVendor: builder.mutation({
       query: (body) => ({
         url: "/vendors",
         method: "POST",
-        body: Array.isArray(body)
+        body: body instanceof FormData
+          ? body
+          : Array.isArray(body)
           ? body.map(toVendorApiPayload)
           : [toVendorApiPayload(body)],
       }),
@@ -143,7 +185,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
       query: (body) => ({
         url: "/vendors/request",
         method: "POST",
-        body: toVendorApiPayload(body),
+        body: toVendorRequestApiPayload(body),
       }),
       transformResponse: (response) => {
         const payload = response?.vendor ?? response?.data ?? response;
@@ -155,7 +197,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
       query: ({ id, body }) => ({
         url: `/vendors/${id}`,
         method: "PUT",
-        body: toVendorApiPayload(body),
+        body: body instanceof FormData ? body : toVendorApiPayload(body),
       }),
       invalidatesTags: (result, error, { id }) => [
         { type: "Vendors", id: "LIST" },
@@ -203,11 +245,15 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
 
 export const {
   useGetInvoiceMandatoryFieldsQuery,
+  useGetInvoiceFilterOptionsQuery,
   useGetInvoicesQuery,
+  useGetInvoiceQuery,
+  useLazyGetInvoiceQuery,
   useCreateInvoiceMutation,
   useUpdateInvoiceMutation,
   useForwardInvoiceMutation,
   useDeleteInvoiceMutation,
+  useCancelInvoiceMutation,
   useScanInvoiceMutation,
   useBulkUploadInvoicesMutation,
   useApproveInvoiceMutation,
@@ -216,6 +262,8 @@ export const {
   useGetPendingCheckerInvoicesQuery,
   useCheckInvoiceMutation,
   useGetVendorsQuery,
+  useGetVendorQuery,
+  useLazyGetVendorQuery,
   useCreateVendorMutation,
   useRequestVendorAdditionMutation,
   useUpdateVendorMutation,

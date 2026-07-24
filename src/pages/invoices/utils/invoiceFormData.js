@@ -1,4 +1,9 @@
 import { format } from "date-fns";
+import { normalizeDueDateForInvoice, normalizeMsmePaymentDue, resolveVendorIsMsme } from "./msmePaymentDue";
+import { DOCUMENT_TYPE } from "../constants/proformaInvoice";
+import { normalizeInvoiceSource } from "../constants";
+import { resolveInvoiceMatchingFormState } from "./invoiceMatchingFlow";
+import { normalizeInvoiceOverdueFields } from "./invoiceDueDate";
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../../utils/currency";
 import {
   createDefaultLineItem,
@@ -28,7 +33,10 @@ export const formatInvoiceDateInput = (value) => {
   return format(date, "yyyy-MM-dd");
 };
 
-export const mapInvoiceLineItemToForm = (item = {}, { useInrTax = true } = {}) =>
+export const mapInvoiceLineItemToForm = (
+  item = {},
+  { useInrTax = true, currency = DEFAULT_CURRENCY } = {},
+) =>
   mapExtractedLineItemToForm(
     {
       ...item,
@@ -36,7 +44,7 @@ export const mapInvoiceLineItemToForm = (item = {}, { useInrTax = true } = {}) =
       lineTotal: item.lineTotal ?? item.amount ?? item.lineTotal,
       amount: item.amount ?? item.lineTotal ?? item.lineTotal,
     },
-    { useInrTax },
+    { useInrTax, currency },
   );
 
 export const buildInvoiceEditFormData = (
@@ -80,8 +88,19 @@ export const buildInvoiceEditFormData = (
     invoice.location || invoice.placeOfSupply || invoice.placeOfSupply || "";
 
   const invoiceDate = formatInvoiceDateInput(invoice.invoiceDate ?? invoice.invoiceDate);
-  const dueDate = formatInvoiceDateInput(invoice.dueDate ?? invoice.dueDate);
-  const gstAmount = Number(invoice.gstAmount ?? invoice.gstAmount);
+  const dueDate = normalizeDueDateForInvoice({
+    invoiceDate,
+    dueDate: formatInvoiceDateInput(invoice.dueDate ?? invoice.dueDate),
+    vendorIsMsme: resolveVendorIsMsme(invoice, vendor),
+  });
+  const gstAmount = Number(
+    invoice.gstAmount ??
+      invoice.gst_amount ??
+      invoice.taxAmount ??
+      invoice.tax_amount ??
+      invoice.totalTaxAmount ??
+      invoice.total_tax_amount,
+  );
   const tdsSectionId = invoice.tdsSectionId ?? invoice.tds_section_id ?? null;
   const tdsSectionCode = invoice.tdsSectionCode ?? invoice.tds_section_code ?? null;
   const tdsRate = invoice.tdsRate ?? invoice.tds_rate ?? null;
@@ -101,6 +120,30 @@ export const buildInvoiceEditFormData = (
       invoice.vendorAddress ||
       invoice.vendorAddress ||
       "",
+    billingGstin:
+      invoice.billingGstin ||
+      invoice.billing_gstin ||
+      "",
+    branchName:
+      invoice.branchName ||
+      invoice.branch_name ||
+      "",
+    branchCode:
+      invoice.branchCode ||
+      invoice.branch_code ||
+      "",
+    vendorBranchName:
+      invoice.vendorBranchName ||
+      invoice.vendor_branch_name ||
+      "",
+    vendorBranchCode:
+      invoice.vendorBranchCode ||
+      invoice.vendor_branch_code ||
+      "",
+    vendorBranchGstin:
+      invoice.vendorBranchGstin ||
+      invoice.vendor_branch_gstin ||
+      "",
     gstTreatment: invoice.gstTreatment || invoice.gstTreatment || defaultGstTreatment,
     gstin: resolveInvoiceFormGstin(invoice, vendor),
     sourceOfSupply: sourceOfSupply,
@@ -117,20 +160,43 @@ export const buildInvoiceEditFormData = (
       invoice.invoiceDiscountType ??
       "%",
     taxesLevel: invoice.taxesLevel || invoice.taxesLevel || LINE_ITEM_LEVEL,
-    invoiceTax: invoice.invoiceTax || invoice.invoiceTax || DEFAULT_INR_TAX,
-    invoiceTaxName: invoice.invoiceTaxName || invoice.invoiceTaxName || "Tax",
+    invoiceTax:
+      invoice.invoiceTax ||
+      invoice.invoice_tax ||
+      invoice.taxLabel ||
+      invoice.tax_label ||
+      DEFAULT_INR_TAX,
+    invoiceTaxName: invoice.invoiceTaxName || invoice.invoice_tax_name || "Tax",
     invoiceTaxRate:
       invoice.invoiceTaxRate ??
-      invoice.invoiceTaxRate ??
+      invoice.invoice_tax_rate ??
+      invoice.gstRate ??
+      invoice.gst_rate ??
       "",
-    source: invoice.source || "Upload",
-    sourceEmail: invoice.sourceEmail || invoice.sourceEmail || "",
+    source: normalizeInvoiceSource(invoice.source),
+    sourceEmail: invoice.sourceEmail || invoice.source_email || "",
+    voucherType:
+      invoice.voucherType ||
+      invoice.voucher_type ||
+      invoice.accountingVoucherType ||
+      invoice.accounting_voucher_type ||
+      "",
     lineItemsExpanded: resolveLineItemsExpanded(invoice),
     lineItems:
       invoiceLineItems.length > 0
-        ? invoiceLineItems.map((item) => mapInvoiceLineItemToForm(item, { useInrTax }))
+        ? invoiceLineItems.map((item) =>
+            mapInvoiceLineItemToForm(item, {
+              useInrTax,
+              currency: editCurrency,
+            }),
+          )
         : [createDefaultLineItem(editCurrency)],
     description: invoice.memo || invoice.description || "",
+    tdsNarration:
+      invoice.tdsNarration ||
+      invoice.tds_narration ||
+      invoice.narration ||
+      "",
     tds:
       invoice.tds ||
       buildTdsValue({
@@ -142,7 +208,18 @@ export const buildInvoiceEditFormData = (
     tdsSectionId,
     tdsSectionCode,
     tdsRate,
-    amount: invoice.amount ?? invoice.netAmount ?? 0,
+    amount:
+      invoice.totalAmount ??
+      invoice.total_amount ??
+      invoice.netAmount ??
+      invoice.net_amount ??
+      0,
+    netAmount:
+      invoice.netAmount ??
+      invoice.net_amount ??
+      invoice.netPayable ??
+      invoice.net_payable ??
+      "",
     currency: editCurrency,
     roundOff:
       invoice.roundOff ??
@@ -183,5 +260,13 @@ export const buildInvoiceEditFormData = (
           campaignName: "",
           referenceNumber: "",
         }),
+    ...normalizeMsmePaymentDue(invoice),
+    ...normalizeInvoiceOverdueFields(invoice),
+    ...resolveInvoiceMatchingFormState(invoice),
+    documentType: invoice.documentType ?? invoice.document_type ?? DOCUMENT_TYPE.TAX_INVOICE,
+    linkedProformaInvoiceId:
+      invoice.linkedProformaInvoiceId ?? invoice.linked_proforma_invoice_id ?? "",
+    linkedProformaInvoiceNumber:
+      invoice.linkedProformaInvoiceNumber ?? invoice.linked_proforma_invoice_number ?? "",
   };
 };

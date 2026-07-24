@@ -1,4 +1,5 @@
 import { serviceApi } from "../serviceApi";
+import { extractListResponse } from "../utils/payloadMappers";
 import { DEFAULT_CURRENCY } from "../../utils/currency";
 
 const normalizeWorkflowTypeMap = (value) => {
@@ -44,12 +45,12 @@ export const workflowApi = serviceApi.injectEndpoints({
     getWorkflowTypes: builder.query({
       query: () => ({ url: "/workflow/type", method: "GET" }),
       providesTags: ["Workflow"],
-      transformResponse: (response) => (Array.isArray(response) ? response : []),
+      transformResponse: extractListResponse,
     }),
     getWorkflowInvoiceApprovers: builder.query({
       query: () => ({ url: "/workflow/invoice-approver", method: "GET" }),
       providesTags: ["Workflow"],
-      transformResponse: (response) => (Array.isArray(response) ? response : []),
+      transformResponse: extractListResponse,
     }),
     getWorkflows: builder.query({
       query: (params) => ({ url: "/workflow/list", method: "GET", params }),

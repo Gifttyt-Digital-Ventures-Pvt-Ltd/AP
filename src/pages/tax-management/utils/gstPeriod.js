@@ -1,0 +1,105 @@
+/** Indian FY month labels used in Documents UI (Apr–Mar order). */
+export const GST_UI_MONTHS = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar'];
+
+const MONTH_LABEL_TO_NUM = {
+  Jan: '01',
+  Feb: '02',
+  Mar: '03',
+  Apr: '04',
+  May: '05',
+  Jun: '06',
+  Jul: '07',
+  Aug: '08',
+  Sep: '09',
+  Oct: '10',
+  Nov: '11',
+  Dec: '12',
+  January: '01',
+  February: '02',
+  March: '03',
+  April: '04',
+  June: '06',
+  July: '07',
+  August: '08',
+  September: '09',
+  October: '10',
+  November: '11',
+  December: '12',
+};
+
+/** Normalise FY label to API form e.g. `"2025-26"`. */
+export function normalizeFinancialYear(fy) {
+  return String(fy || '').replace(/^FY\s+/i, '').trim();
+}
+
+/** Indian FY (Apr–Mar) ending in the reference date, e.g. `"2025-26"`. */
+export function getCurrentIndianFinancialYear(referenceDate = new Date()) {
+  const month = referenceDate.getMonth() + 1;
+  const calendarYear = referenceDate.getFullYear();
+  const startYear = month >= 4 ? calendarYear : calendarYear - 1;
+  return `${startYear}-${String(startYear + 1).slice(-2)}`;
+}
+
+/** UI label for Returns tab, e.g. `"FY 2025-26"`. */
+export function toIndianFinancialYearReturnsLabel(fy = '') {
+  const normalized = normalizeFinancialYear(fy);
+  return normalized ? `FY ${normalized}` : '';
+}
+
+/** Recent Indian FY values for Documents (newest first). */
+export function getIndianFinancialYearOptions(count = 3, referenceDate = new Date()) {
+  const startYear = Number.parseInt(getCurrentIndianFinancialYear(referenceDate).slice(0, 4), 10);
+  return Array.from({ length: count }, (_, index) => {
+    const year = startYear - index;
+    return `${year}-${String(year + 1).slice(-2)}`;
+  });
+}
+
+/** Recent Indian FY labels for Returns tab (newest first). */
+export function getIndianFinancialYearReturnsOptions(count = 3, referenceDate = new Date()) {
+  return getIndianFinancialYearOptions(count, referenceDate).map(toIndianFinancialYearReturnsLabel);
+}
+
+/** Convert UI month label (`Sep`, `September`) to API month (`"09"`). */
+export function uiMonthToApiMonth(monthLabel) {
+  const key = String(monthLabel || '').trim();
+  if (!key) return '';
+  if (/^\d{1,2}$/.test(key)) return key.padStart(2, '0');
+  return MONTH_LABEL_TO_NUM[key] ?? MONTH_LABEL_TO_NUM[key.slice(0, 3)] ?? '';
+}
+
+// Overview rows (FE §8 OverviewRow) don't carry a `period` field, but the recon detail/link/
+// upload/override endpoints (BE §10.3-10.6) all require one — derived from the invoice's own
+// month since GST recon periods align with the invoice month.
+export function dateToApiPeriod(dateStr) {
+  const date = new Date(dateStr);
+  if (Number.isNaN(date.getTime())) return '';
+  return `${String(date.getMonth() + 1).padStart(2, '0')}${date.getFullYear()}`;
+}
+
+/** Convert API month number to short UI label. */
+export function apiMonthToUiMonth(monthNum) {
+  const num = String(monthNum || '').padStart(2, '0');
+  const entry = Object.entries(MONTH_LABEL_TO_NUM).find(
+    ([label, value]) => value === num && label.length === 3,
+  );
+  return entry?.[0] ?? num;
+}
+
+/** Map Returns tab return type to API value. */
+export function uiReturnTypeToApi(returnType) {
+  if (!returnType || returnType === 'All Returns') return undefined;
+  return returnType.replace(/-/g, '');
+}
+
+/** Map Returns FY display to API form (`FY 2024-25`). */
+export function uiReturnsFyToApi(fyLabel) {
+  const normalized = normalizeFinancialYear(fyLabel);
+  if (/^\d{4}-\d{2}$/.test(normalized)) {
+    return `FY ${normalized}`;
+  }
+  if (/^FY\s+\d{4}-\d{2}$/i.test(String(fyLabel || '').trim())) {
+    return String(fyLabel).trim().replace(/^fy/i, 'FY');
+  }
+  return normalized ? `FY ${normalized}` : '';
+}

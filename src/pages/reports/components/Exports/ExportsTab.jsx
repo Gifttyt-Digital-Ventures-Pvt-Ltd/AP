@@ -9,6 +9,7 @@ import {
   LineChart,
   Search,
   Users,
+  Building2,
 } from "lucide-react";
 import { toast } from "sonner";
 import AppDataTable from "../../../../components/common/AppDataTable";
@@ -37,6 +38,14 @@ import {
   useGetReportExportVendorsQuery,
   useLazyDownloadReportExportQuery,
 } from "../../../../Services/apis/reportExportsApi";
+import { useGetVendorsQuery } from "../../../../Services/apis/invoicesVendorsApi";
+import { useGetOrganisationQuery } from "../../../../Services/apis/settingsApi";
+import { useRBAC } from "../../../../contexts/RBACContext";
+import { getBranchCostStatuses } from "../../../../utils/invoiceConfiguration";
+import {
+  getConfiguredOrganisationGstins,
+  normalizeOrganisationBranchesFromApi,
+} from "../../../../utils/organisationGst";
 
 const DEFAULT_REPORT_TYPES = [
   {
@@ -76,6 +85,17 @@ const DEFAULT_REPORT_TYPES = [
     icon: Users,
   },
   {
+    id: "branch-analysis",
+    name: "Branch Analysis Report",
+    description:
+      "Analyze branch-wise operational costs, area utilization, and invoice distribution.",
+    metrics: "Branches",
+    columns:
+      "Branch Name, Branch Code, Area (sq ft), Total Cost, Cost / sq ft, No. of Invoices",
+    icon: Building2,
+    formats: ["excel"],
+  },
+  {
     id: "approval-audit",
     name: "Approvals Report",
     description:
@@ -101,6 +121,7 @@ const REPORT_METRIC_LABELS = {
   "payment-register": "Payments",
   "invoice-item": "Line Items",
   "vendor-spend": "Vendors",
+  "branch-analysis": "Branches",
   "approval-audit": "Approvals",
 };
 
@@ -236,6 +257,10 @@ const buildExportPayload = ({
   selectedStatuses,
   selectedCurrencies,
   selectedVendorIds,
+  selectedVendorBranchCodes = [],
+  selectedBillingGstins = [],
+  selectedOrgBranchCodes = [],
+  costStatuses,
   allReports = false,
 }) => ({
   reportType: allReports ? "all" : reportType,
@@ -247,6 +272,10 @@ const buildExportPayload = ({
   statuses: selectedStatuses,
   currencies: selectedCurrencies,
   vendorIds: selectedVendorIds,
+  ...(selectedVendorBranchCodes.length ? { vendorBranchCodes: selectedVendorBranchCodes } : {}),
+  ...(selectedBillingGstins.length ? { billingGstins: selectedBillingGstins } : {}),
+  ...(selectedOrgBranchCodes.length ? { orgBranchCodes: selectedOrgBranchCodes } : {}),
+  ...(costStatuses ? { costStatuses } : {}),
 });
 
 const getMultiSelectLabel = (placeholder, options, selected) => {
@@ -367,19 +396,34 @@ const normalizeFilterOption = (option = {}) => {
 };
 
 const ExportsTab = ({ currencies = [] }) => {
+  const { isCorporateSectionEnabled, isBranchEnabled, isBranchCostAnalysisEnabled } = useRBAC();
   const [dateRange, setDateRange] = useState("this_month");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [format, setFormat] = useState("excel");
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedVendorIds, setSelectedVendorIds] = useState([]);
+  const [selectedVendorBranchCodes, setSelectedVendorBranchCodes] = useState([]);
+  const [selectedBillingGstins, setSelectedBillingGstins] = useState([]);
+  const [selectedOrgBranchCodes, setSelectedOrgBranchCodes] = useState([]);
   const [selectedStatuses, setSelectedStatuses] = useState([]);
   const [selectedCurrencies, setSelectedCurrencies] = useState([]);
   const [expandedId, setExpandedId] = useState("");
   const searchQuery = searchTerm.trim();
+  const branchCostStatuses = useMemo(
+    () =>
+      getBranchCostStatuses(isCorporateSectionEnabled("PAYMENTS_ALL")).join(","),
+    [isCorporateSectionEnabled],
+  );
 
   const { data: vendors = [], isFetching: vendorsFetching } =
     useGetReportExportVendorsQuery();
+  const { data: vendorDirectory = [] } = useGetVendorsQuery(undefined, {
+    skip: !isBranchEnabled,
+  });
+  const { data: organisationData } = useGetOrganisationQuery(undefined, {
+    skip: !isBranchEnabled,
+  });
   const { data: exportStatuses = [], isFetching: statusesFetching } =
     useGetReportExportStatusesQuery();
   const { data: apiReportTypes = [], isFetching: typesFetching } =
@@ -399,8 +443,12 @@ const ExportsTab = ({ currencies = [] }) => {
       apiReportTypes.length > 0 ? apiReportTypes : DEFAULT_REPORT_TYPES;
     return source
       .map(normalizeReportType)
-      .filter((report) => report.id && report.name);
-  }, [apiReportTypes]);
+      .filter((report) => report.id && report.name)
+      .filter(
+        (report) =>
+          isBranchCostAnalysisEnabled || report.id !== "branch-analysis",
+      );
+  }, [apiReportTypes, isBranchCostAnalysisEnabled]);
 
   const normalizedExports = useMemo(
     () => exportRows.map(normalizeExportRow),
@@ -433,6 +481,57 @@ const ExportsTab = ({ currencies = [] }) => {
         .filter(Boolean),
     [vendors],
   );
+  const organisationBranches = useMemo(
+    () => normalizeOrganisationBranchesFromApi(organisationData),
+    [organisationData],
+  );
+  const orgGstOptions = useMemo(
+    () =>
+      getConfiguredOrganisationGstins(
+        organisationData?.gst_registrations ?? organisationData?.gstRegistrations ?? [],
+      ).map((gstin) => ({ value: gstin, label: gstin })),
+    [organisationData],
+  );
+  const orgBranchOptions = useMemo(
+    () =>
+      organisationBranches
+        .filter((branch) => branch.branchCode)
+        .map((branch) => ({
+          value: branch.branchCode,
+          label: branch.branchName
+            ? `${branch.branchName} (${branch.branchCode})`
+            : branch.branchCode,
+        })),
+    [organisationBranches],
+  );
+  const vendorBranchOptions = useMemo(() => {
+    const selectedSet = new Set(selectedVendorIds.map(String));
+    const sourceVendors = (Array.isArray(vendorDirectory) ? vendorDirectory : []).filter((vendor) =>
+      selectedSet.has(String(vendor?.id ?? vendor?.vendorId ?? vendor?.vendor_id)),
+    );
+    const branchMap = new Map();
+    sourceVendors.forEach((vendor) => {
+      const branches =
+        vendor.vendorBranches ??
+        vendor.vendor_branches ??
+        vendor.branchDetails ??
+        vendor.branch_details ??
+        [];
+      (Array.isArray(branches) ? branches : []).forEach((branch) => {
+        const branchCode = String(branch.branchCode ?? branch.branch_code ?? branch.code ?? '')
+          .trim()
+          .toUpperCase();
+        const branchName = branch.branchName ?? branch.branch_name ?? branch.name ?? '';
+        if (!branchCode || branchMap.has(branchCode)) return;
+        branchMap.set(branchCode, {
+          value: branchCode,
+          label: branchName ? `${branchName} (${branchCode})` : branchCode,
+        });
+      });
+    });
+    return Array.from(branchMap.values());
+  }, [selectedVendorIds, vendorDirectory]);
+  const showVendorBranchFilter = selectedVendorIds.length > 0 && vendorBranchOptions.length > 0;
 
   const handleGenerate = async (
     reportType,
@@ -448,17 +547,24 @@ const ExportsTab = ({ currencies = [] }) => {
     }
 
     try {
+      const resolvedFormat =
+        reportType === "branch-analysis" ? "excel" : format;
       const response = await generateReportExport(
         buildExportPayload({
           reportType,
           reportTypes: selectedReportTypes,
-          format,
+          format: resolvedFormat,
           dateRange,
           customFrom,
           customTo,
           selectedStatuses,
           selectedCurrencies,
           selectedVendorIds,
+          selectedVendorBranchCodes,
+          selectedBillingGstins,
+          selectedOrgBranchCodes,
+          costStatuses:
+            reportType === "branch-analysis" ? branchCostStatuses : undefined,
           allReports,
         }),
       ).unwrap();
@@ -472,7 +578,7 @@ const ExportsTab = ({ currencies = [] }) => {
           response.downloadUrl,
           allReports
             ? "all-reports.zip"
-            : `${reportType}.${format === "csv" ? "csv" : "xlsx"}`,
+            : `${reportType}.${resolvedFormat === "csv" ? "csv" : "xlsx"}`,
         );
       }
       if (refreshExports) refetch();
@@ -583,8 +689,11 @@ const ExportsTab = ({ currencies = [] }) => {
   ];
 
   return (
-    <div className="space-y-6">
-      <Card>
+    // Bounded-height flex chain (mirrors Approvals.jsx / GST Overview / Invoice Matching) so
+    // the Recent Exports table can scroll internally with a sticky header, instead of the
+    // whole page scrolling past it.
+    <div className="flex h-full min-h-0 flex-col gap-6">
+      <Card className="shrink-0">
         <CardContent className="space-y-4 p-4">
           <div className="grid gap-3 lg:grid-cols-4">
             <div className="space-y-1">
@@ -612,12 +721,25 @@ const ExportsTab = ({ currencies = [] }) => {
               }
               options={vendorOptions}
               selected={selectedVendorIds}
-              onChange={setSelectedVendorIds}
+              onChange={(nextVendorIds) => {
+                setSelectedVendorIds(nextVendorIds);
+                setSelectedVendorBranchCodes([]);
+              }}
               icon={Users}
               disabled={vendorsFetching}
               searchable
               searchPlaceholder="Search vendors..."
             />
+            {showVendorBranchFilter ? (
+              <MultiSelectDropdown
+                label="Vendor Branch"
+                placeholder="All Vendor Branches"
+                options={vendorBranchOptions}
+                selected={selectedVendorBranchCodes}
+                onChange={setSelectedVendorBranchCodes}
+                icon={Users}
+              />
+            ) : null}
             <MultiSelectDropdown
               label="Statuses"
               placeholder={
@@ -638,6 +760,33 @@ const ExportsTab = ({ currencies = [] }) => {
               icon={FileSpreadsheet}
             />
           </div>
+
+          {isBranchEnabled ? (
+            <div className="grid gap-3 lg:grid-cols-2">
+              <MultiSelectDropdown
+                label="Organisation GSTIN"
+                placeholder={
+                  orgGstOptions.length ? "All Organisation GSTINs" : "No GSTINs configured"
+                }
+                options={orgGstOptions}
+                selected={selectedBillingGstins}
+                onChange={setSelectedBillingGstins}
+                icon={FileText}
+                disabled={orgGstOptions.length === 0}
+              />
+              <MultiSelectDropdown
+                label="Organisation Branch"
+                placeholder={
+                  orgBranchOptions.length ? "All Organisation Branches" : "No branches configured"
+                }
+                options={orgBranchOptions}
+                selected={selectedOrgBranchCodes}
+                onChange={setSelectedOrgBranchCodes}
+                icon={Users}
+                disabled={orgBranchOptions.length === 0}
+              />
+            </div>
+          ) : null}
 
           {dateRange === "custom" && (
             <div className="flex max-w-md items-center gap-2">
@@ -762,7 +911,7 @@ const ExportsTab = ({ currencies = [] }) => {
           </Card>
         )}
       </div> */}
-      <div className="grid gap-3 lg:grid-cols-2">
+      <div className="grid shrink-0 gap-3 lg:grid-cols-2">
         {[0, 1].map((columnIndex) => (
           <div key={columnIndex} className="flex flex-col gap-3">
             {reportTypes
@@ -801,7 +950,11 @@ const ExportsTab = ({ currencies = [] }) => {
 
                         <Badge variant="outline">
                           <FileSpreadsheet className="mr-1 h-3 w-3" />
-                          {format === "csv" ? "CSV" : "Excel"}
+                          {report.id === "branch-analysis" || report.formats?.includes("excel")
+                            ? "Excel"
+                            : format === "csv"
+                              ? "CSV"
+                              : "Excel"}
                         </Badge>
                       </button>
 
@@ -870,24 +1023,32 @@ const ExportsTab = ({ currencies = [] }) => {
         )}
       </div>
 
-      <Card>
-        <CardContent className="space-y-4 p-4">
-          <div>
-            <h3 className="text-base font-semibold">Recent Exports</h3>
-            <p className="text-sm text-muted-foreground">
-              Generated report files available for download.
-            </p>
-          </div>
-          <AppDataTable
-            columns={columns}
-            rows={normalizedExports}
-            rowKey="id"
-            isLoading={exportsFetching}
-            emptyMessage="No reports generated yet"
-            stickyHeader={false}
-          />
-        </CardContent>
-      </Card>
+      {/* Bounded to the remaining height so the table can scroll its rows internally with a
+          sticky header, matching Approvals > All / GST Overview / Invoice Matching. */}
+      <div className="min-h-0 flex-1">
+        <Card className="flex h-full min-h-0 flex-col overflow-hidden">
+          <CardContent className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4">
+            <div className="shrink-0">
+              <h3 className="text-base font-semibold">Recent Exports</h3>
+              <p className="text-sm text-muted-foreground">
+                Generated report files available for download.
+              </p>
+            </div>
+            <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-thin-muted">
+              <AppDataTable
+                columns={columns}
+                rows={normalizedExports}
+                rowKey="id"
+                isLoading={exportsFetching}
+                emptyMessage="No reports generated yet"
+                tableContainerClassName="overflow-visible"
+                headClassName="[&_th]:sticky [&_th]:top-0 [&_th]:z-10"
+                bordered
+              />
+            </div>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 };

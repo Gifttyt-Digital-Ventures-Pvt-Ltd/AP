@@ -1,5 +1,6 @@
 import React, { useMemo } from 'react';
-import { Download, Eye } from 'lucide-react';
+import InvoiceDueDateCell from '../../invoices/components/InvoiceDueDateCell';
+import { Ban, Download, Eye, FileSpreadsheet } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Checkbox } from '../../../components/ui/checkbox';
 import AppDataTable from '../../../components/common/AppDataTable';
@@ -12,6 +13,8 @@ import {
   formatInvoiceAmount,
   sumInvoiceAmountsByCurrency,
 } from '../../invoices/utils/invoiceAmounts';
+import { OrgBranchCell, VendorWithBranchCell } from '../../../components/common/BranchTableCells';
+import { cn } from '../../../lib/utils';
 
 const renderCurrencyTotals = (totals, className) => {
   if (totals.length === 0) {
@@ -38,13 +41,14 @@ const renderCurrencyTotals = (totals, className) => {
 };
 
 const basePendingPaymentTableHeader = [
-  { key: 'invoiceNumber', title: 'Invoice #', cellClassName: "  font-medium" },
-  { key: 'vendorName', title: 'Vendor' },
-  { key: 'amount', title: 'Amount', cellClassName: "  font-semibold" },
-  { key: 'invoiceDate', title: 'Invoice Date', cellClassName: 'text-sm text-muted-foreground' },
-  { key: 'dueDate', title: 'Due Date', cellClassName: 'text-sm text-muted-foreground' },
-  { key: 'status', title: 'Status' },
-  { key: 'actions', title: 'Actions', headerClassName: 'text-left', cellClassName: 'text-left' },
+  { key: 'invoiceNumber', title: 'Invoice #', headerClassName: 'bg-muted text-foreground', cellClassName: "  font-medium" },
+  { key: 'orgBranch', title: 'Branch', headerClassName: 'bg-muted text-foreground', cellClassName: 'text-sm' },
+  { key: 'vendorName', title: 'Vendor', headerClassName: 'bg-muted text-foreground' },
+  { key: 'amount', title: 'Amount', headerClassName: 'bg-muted text-foreground', cellClassName: "  font-semibold" },
+  { key: 'invoiceDate', title: 'Invoice Date', headerClassName: 'bg-muted text-foreground', cellClassName: 'text-sm text-muted-foreground' },
+  { key: 'dueDate', title: 'Due Date', headerClassName: 'bg-muted text-foreground', cellClassName: 'text-sm text-muted-foreground' },
+  { key: 'status', title: 'Status', headerClassName: 'bg-muted text-foreground' },
+  { key: 'actions', title: 'Actions', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'text-left' },
 ];
 
 // Pending tab with summary card and pending invoice table.
@@ -58,16 +62,27 @@ const PendingPaymentsTab = ({
   onToggleInvoice,
   onSelectAllInvoices,
   onOpenRecordPayment,
+  onOpenInvoiceReport,
   canRecordPayment = false,
+  canDownloadInvoiceReport = false,
   safeFormatDate,
   handleViewInvoice,
   handleDownloadInvoice,
+  canCancelInvoice,
+  handleCancelInvoice,
+  showBranchField = false,
 }) => {
   const { showIntegrationColumn } = useZohoIntegrationActive();
-  const pendingPaymentTableHeader = useMemo(
-    () => withIntegrationTableHeader(basePendingPaymentTableHeader, showIntegrationColumn),
-    [showIntegrationColumn],
-  );
+  const pendingPaymentTableHeader = useMemo(() => {
+    const headers = showBranchField
+      ? basePendingPaymentTableHeader
+      : basePendingPaymentTableHeader.filter((header) => header.key !== 'orgBranch');
+    return withIntegrationTableHeader(headers, showIntegrationColumn).map((column) =>
+      column.key === 'integration'
+        ? { ...column, headerClassName: 'bg-muted text-foreground text-left' }
+        : column,
+    );
+  }, [showBranchField, showIntegrationColumn]);
   const selectedInvoices = invoices.filter((invoice) => selectedInvoiceIds.includes(invoice.id));
   const totalPendingByCurrency = useMemo(
     () => sumInvoiceAmountsByCurrency(invoices),
@@ -82,7 +97,7 @@ const PendingPaymentsTab = ({
   const renderPendingPaymentRow = (invoice, rowIndex, headers) => (
     <TableRow
       key={invoice.id ?? rowIndex}
-      data-testid={`pending-invoice-row-${invoice.id}`}
+      data-testid={`pending-invoice-row-${invoice?.id ?? 'unknown'}`}
       className={
         showRecordPaymentSelection && selectedInvoiceIds.includes(invoice.id) ? 'bg-primary/10' : ''
       }
@@ -101,7 +116,7 @@ const PendingPaymentsTab = ({
                   <Checkbox
                     checked={selectedInvoiceIds.includes(invoice.id)}
                     onCheckedChange={() => onToggleInvoice?.(invoice.id)}
-                    data-testid={`pending-invoice-select-${invoice.id}`}
+                    data-testid={`pending-invoice-select-${invoice?.id ?? 'unknown'}`}
                   />
                 </div>
                 <span>{invoice.invoiceNumber || '-'}</span>
@@ -110,6 +125,12 @@ const PendingPaymentsTab = ({
               invoice.invoiceNumber || '-'
             );
             break;
+          case 'vendorName':
+            value = <VendorWithBranchCell record={invoice} />;
+            break;
+          case 'orgBranch':
+            value = <OrgBranchCell record={invoice} />;
+            break;
           case 'amount':
             value = formatInvoiceAmount(invoice, invoice.amount || 0);
             break;
@@ -117,7 +138,12 @@ const PendingPaymentsTab = ({
             value = safeFormatDate(invoice.invoiceDate);
             break;
           case 'dueDate':
-            value = safeFormatDate(invoice.dueDate);
+            value = (
+              <InvoiceDueDateCell
+                invoice={invoice}
+                formattedDueDate={safeFormatDate(invoice.dueDate)}
+              />
+            );
             break;
           case 'status':
             value = (
@@ -139,7 +165,7 @@ const PendingPaymentsTab = ({
                   variant="ghost"
                   size="sm"
                   onClick={() => handleViewInvoice?.(invoice)}
-                  data-testid={`view-pending-invoice-${invoice.id}`}
+                  data-testid={`view-pending-invoice-${invoice?.id ?? 'unknown'}`}
                   title="View Invoice"
                   className="h-8 w-8 p-0"
                 >
@@ -149,12 +175,24 @@ const PendingPaymentsTab = ({
                   variant="ghost"
                   size="sm"
                   onClick={() => handleDownloadInvoice?.(invoice)}
-                  data-testid={`download-pending-invoice-${invoice.id}`}
+                  data-testid={`download-pending-invoice-${invoice?.id ?? 'unknown'}`}
                   title="Download Invoice"
                   className="h-8 w-8 p-0"
                 >
                   <Download className="h-4 w-4" />
                 </Button>
+                {canCancelInvoice?.(invoice) && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleCancelInvoice?.(invoice)}
+                    data-testid={`cancel-pending-invoice-${invoice?.id ?? 'unknown'}`}
+                    title="Cancel Invoice"
+                    className="h-8 w-8 p-0"
+                  >
+                    <Ban className="h-4 w-4 text-destructive" />
+                  </Button>
+                )}
               </div>
             );
             break;
@@ -163,7 +201,10 @@ const PendingPaymentsTab = ({
         }
 
         return (
-          <TableCell key={header.key} className={header.cellClassName}>
+          <TableCell
+            key={header.key}
+            className={cn('border border-border', header.cellClassName)}
+          >
             {value}
           </TableCell>
         );
@@ -172,51 +213,50 @@ const PendingPaymentsTab = ({
   );
 
   return (
-    <>
+    <div className="flex h-full min-h-0 flex-col gap-3">
       {invoices.length > 0 && (
-        <div className="bg-accent/10 border border-accent/30 rounded-lg p-4 mb-4">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-sm font-medium">Total Pending Amount</p>
-              {renderCurrencyTotals(
-                totalPendingByCurrency,
-                "text-2xl font-bold   text-primary",
-              )}
-              {showRecordPaymentSelection && selectedInvoiceIds.length > 0 && (
-                <div className="mt-1 text-sm text-muted-foreground">
-                  Selected {selectedInvoiceIds.length} invoice
-                  {selectedInvoiceIds.length === 1 ? '' : 's'}
-                  {selectedTotalByCurrency.length === 1 ? (
-                    <>
-                      {' '}
-                      ·{' '}
-                      <span className="  font-medium text-foreground">
-                        {formatCurrency(
-                          selectedTotalByCurrency[0].total,
-                          selectedTotalByCurrency[0].currency,
-                        )}
-                      </span>
-                    </>
-                  ) : (
-                    <div className="mt-1 space-y-0.5   font-medium text-foreground">
-                      {selectedTotalByCurrency.map(({ currency, total }) => (
-                        <p key={currency}>{formatCurrency(total, currency)}</p>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
+        <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-accent/30 bg-accent/10 px-3 py-2">
+          <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            <span className="text-xs font-medium text-muted-foreground">Total Pending</span>
+            {renderCurrencyTotals(totalPendingByCurrency, 'text-lg font-bold text-primary')}
+            {showRecordPaymentSelection && selectedInvoiceIds.length > 0 && (
+              <span className="text-xs text-muted-foreground">
+                · {selectedInvoiceIds.length} selected
+                {selectedTotalByCurrency.length === 1 ? (
+                  <>
+                    {' '}
+                    ({formatCurrency(
+                      selectedTotalByCurrency[0].total,
+                      selectedTotalByCurrency[0].currency,
+                    )})
+                  </>
+                ) : null}
+              </span>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {canDownloadInvoiceReport && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onOpenInvoiceReport}
+                data-testid="open-pending-payment-report-dialog"
+              >
+                <FileSpreadsheet className="mr-2 h-4 w-4" />
+                Download report
+              </Button>
+            )}
 
             {canBulkRelease && (
-              <Button onClick={handleBulkRelease} size="lg" data-testid="pending-tab-bulk-release-button">
+              <Button onClick={handleBulkRelease} size="sm" data-testid="pending-tab-bulk-release-button">
                 Release All Payments
               </Button>
             )}
 
             {showRecordPaymentSelection && canRecordPayment && (
               <Button
-                size="lg"
+                size="sm"
                 onClick={onOpenRecordPayment}
                 disabled={selectedInvoiceIds.length === 0}
                 data-testid="open-record-payment-dialog"
@@ -229,21 +269,35 @@ const PendingPaymentsTab = ({
       )}
 
       <div
-        className="bg-card border border-border rounded-lg shadow-sm overflow-hidden"
+        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm"
         data-testid="pending-invoices-table"
       >
-        <AppDataTable
-          tableHeader={pendingPaymentTableHeader}
-          tableData={filteredPendingInvoices}
-          renderRow={renderPendingPaymentRow}
-          showCheckbox={showRecordPaymentSelection}
-          isChecked={allSelected}
-          onSelectAllChange={onSelectAllInvoices}
-          emptyMessage="No pending payments. All invoices need approval first."
-          emptyTestId="no-pending-payments"
-        />
+        <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-thin-muted">
+          <AppDataTable
+            tableHeader={pendingPaymentTableHeader}
+            tableData={filteredPendingInvoices}
+            renderRow={renderPendingPaymentRow}
+            showCheckbox={showRecordPaymentSelection}
+            isChecked={allSelected}
+            onSelectAllChange={onSelectAllInvoices}
+            tableClassName="min-w-[1100px]"
+            tableContainerClassName="overflow-visible"
+            headClassName="border-b border-border bg-muted shadow-sm"
+            stickyHeader
+            bordered
+            emptyMessage="No pending payments. All invoices need approval first."
+            emptyTestId="no-pending-payments"
+          />
+        </div>
+        <div className="mt-auto flex shrink-0 border-t border-border p-4">
+          <p className="text-sm text-muted-foreground" data-testid="pending-payments-table-summary">
+            {filteredPendingInvoices.length === invoices.length
+              ? `Showing ${filteredPendingInvoices.length.toLocaleString('en-IN')} pending invoice${filteredPendingInvoices.length === 1 ? '' : 's'}`
+              : `Showing ${filteredPendingInvoices.length.toLocaleString('en-IN')} of ${invoices.length.toLocaleString('en-IN')} pending invoices`}
+          </p>
+        </div>
       </div>
-    </>
+    </div>
   );
 };
 

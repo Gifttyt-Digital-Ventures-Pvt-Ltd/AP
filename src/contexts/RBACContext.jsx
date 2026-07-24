@@ -13,6 +13,11 @@ import {
   resolveRoutePermissionRule,
 } from "../constants/rbacPolicy";
 import { canAssignRoleSetsPermission } from "../utils/rbacPermissions";
+import {
+  isBranchCostAnalysisEnabledForCorporate,
+  isBranchEnabledForCorporate,
+  isBranchSqFtEnabledForCorporate,
+} from "../utils/invoiceConfiguration";
 
 const RBACContext = createContext({
   isLoaded: false,
@@ -29,6 +34,9 @@ const RBACContext = createContext({
   isCorporateScreenSectionEnabled: () => false,
   isCategoryFeatureEnabled: false,
   isCampaignFeatureEnabled: false,
+  isBranchEnabled: false,
+  isBranchSqFtEnabled: false,
+  isBranchCostAnalysisEnabled: false,
   isPaymentBatchesFeatureEnabled: false,
   isConnectedBankingEnabled: false,
   isBillingFeatureEnabled: false,
@@ -85,6 +93,8 @@ const getAssignedRoles = (employeeDetails = null) => {
 };
 
 const FALLBACK_DIRECT_ROLE_PERMISSIONS = {
+  MASTER_ADMIN: [FULL_ACCESS_PERMISSION, "master-admin"],
+  AP_MASTER_ADMIN: [FULL_ACCESS_PERMISSION, "master-admin"],
   CREATOR: ["campaign-manage"],
   MAKER: ["campaign-manage"],
   CHECKER: ["invoice-checker"],
@@ -178,9 +188,13 @@ export const RBACProvider = ({ children }) => {
   const isCorporateAdmin =
     normalizedCorporateUserRole === "CORP_ADMIN" ||
     normalizedCorporateUserRole === "CORPADMIN" ||
+    normalizedCorporateUserRole === "MASTER_ADMIN" ||
+    normalizedCorporateUserRole === "AP_MASTER_ADMIN" ||
     normalizedCorporateUserRole === "ADMIN" ||
     normalizedAuthRole === "CORP_ADMIN" ||
     normalizedAuthRole === "CORPADMIN" ||
+    normalizedAuthRole === "MASTER_ADMIN" ||
+    normalizedAuthRole === "AP_MASTER_ADMIN" ||
     normalizedAuthRole === "ADMIN";
 
   const computedPermissions = useMemo(() => {
@@ -374,6 +388,21 @@ export const RBACProvider = ({ children }) => {
     [enabledSectionsSet, isTokenBasedSubscriptionEnabled],
   );
 
+  const isBranchEnabled = useMemo(
+    () => isBranchEnabledForCorporate(corporateScreens),
+    [corporateScreens],
+  );
+
+  const isBranchSqFtEnabled = useMemo(
+    () => isBranchSqFtEnabledForCorporate(corporateScreens),
+    [corporateScreens],
+  );
+
+  const isBranchCostAnalysisEnabled = useMemo(
+    () => isBranchCostAnalysisEnabledForCorporate(corporateScreens),
+    [corporateScreens],
+  );
+
   const hasAnyPermission = (permissionIds = []) => {
     if (!permissionIds || permissionIds.length === 0) return true;
     return permissionIds.some((permissionId) => hasPermission(permissionId));
@@ -397,7 +426,7 @@ export const RBACProvider = ({ children }) => {
     if (normalizedPath === "/user-roles" || normalizedPath.startsWith("/user-roles/")) {
       const canViewRoles = hasAnyPermission(["roles-view", "roles-manage"]);
       const canViewRoleUsers = hasAnyPermission(["roles-view", "roles-manage", "roles-manage-users"]);
-      const canViewWorkflow = hasAnyPermission(["vendor-workflow-view", "vendor-workflow-manage"]);
+      const canViewWorkflow = hasAnyPermission(["approval-workflow-view", "approval-workflow-manage"]);
       const canViewCategories = hasAnyPermission(["category-view", "category-manage"]);
       return (
         (canViewRoleUsers && isCorporateSectionEnabled("MANAGE_ROLE_USERS")) ||
@@ -407,11 +436,20 @@ export const RBACProvider = ({ children }) => {
       );
     }
 
+    if (normalizedPath === "/settings/notifications") {
+      return (
+        isCorporateSectionEnabled("SETTINGS_NOTIFICATIONS") &&
+        (isCorporateAdmin || hasAnyPermission(["notifications-manage", "NOTIFICATIONS MANAGE"]))
+      );
+    }
+
     if (normalizedPath === "/settings" || normalizedPath.startsWith("/settings/")) {
       return (
+        isCorporateAdmin ||
+        (hasAnyPermission(["notifications-manage", "NOTIFICATIONS MANAGE"]) &&
+          isCorporateSectionEnabled("SETTINGS_NOTIFICATIONS")) ||
         (hasPermission("settings-org") && isCorporateSectionEnabled("SETTINGS_ORG_DETAILS")) ||
         (hasAnyPermission(["settings-banking", "banking-full"]) && isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING")) ||
-        (hasPermission("settings-interaction") && isCorporateSectionEnabled("SETTINGS_INTEGRATIONS")) ||
         (hasAnyPermission(["credits-view", "credits-ledger", "credits-manage", "VIEW_WALLET", "VIEW_LEDGER", "MANAGE_BILLING"]) &&
           isBillingFeatureEnabled)
       );
@@ -458,9 +496,6 @@ export const RBACProvider = ({ children }) => {
     if (actionKey === "billing.requestTokens" || actionKey === "billing.updateSettings") {
       return isBillingFeatureEnabled;
     }
-    if (actionKey === "tax.calculateGst") {
-      return isCorporateSectionEnabled("TAX_GST");
-    }
     if (actionKey === "tax.calculateTds" || actionKey === "tax.generateForm16a") {
       return isCorporateSectionEnabled("TAX_TDS_COMPLIANCE");
     }
@@ -474,6 +509,9 @@ export const RBACProvider = ({ children }) => {
 
     if (actionKey.startsWith("integrations.")) {
       return isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
+    }
+    if (actionKey.startsWith("gmailIntegration.")) {
+      return isCorporateSectionEnabled("GMAIL_INTEGRATION_ALL");
     }
 
     return true;
@@ -498,6 +536,9 @@ export const RBACProvider = ({ children }) => {
     isCorporateScreenSectionEnabled,
     isCategoryFeatureEnabled,
     isCampaignFeatureEnabled,
+    isBranchEnabled,
+    isBranchSqFtEnabled,
+    isBranchCostAnalysisEnabled,
     isPaymentBatchesFeatureEnabled,
     isConnectedBankingEnabled,
     isBillingFeatureEnabled,

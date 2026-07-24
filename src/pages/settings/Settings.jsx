@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   useGetBankAccountsQuery,
   useCreateBankAccountMutation,
@@ -12,45 +13,48 @@ import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
-import { Building2, Check, CheckCircle, Copy, Globe, Loader2, Mail, MapPin, Phone, Plug, PlugZap, RefreshCw, Save, Settings as SettingsIcon, XCircle } from 'lucide-react';
+import { Building2, CheckCircle, Copy, Globe, Loader2, Mail, MapPin, Phone, Save } from 'lucide-react';
 import { toast } from 'sonner';
 import BankAccountDialog from './components/BankAccountDialog';
-import TallyConfigDialog from './components/TallyConfigDialog';
-import ZohoIntegrationCard from './components/ZohoIntegrationCard';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useRBAC } from '../../contexts/RBACContext';
 import CreditsPage from '../credits/CreditsPage';
+import NotificationSettings from '../notifications/NotificationSettings';
+import OrgBranchesSection from './components/OrgBranchesSection';
+import OrgGstRegistrationsSection from './components/OrgGstRegistrationsSection';
+import {
+  buildOrganisationSavePayload,
+  createEmptyGstRegistration,
+  getConfiguredOrganisationGstins,
+  normalizeGstRegistrationsFromApi,
+  normalizeOrganisationBranchesFromApi,
+  validateGstRegistrations,
+  validateOrganisationBranches,
+} from '../../utils/organisationGst';
+import {
+  formatBankAccountType,
+  isBankAccountActive,
+  maskBankAccountNumber,
+} from '../banking/utils/bankAccounts';
 
-// Tally Logo Component
-const TallyLogo = () => (
-  <div className="text-2xl font-bold italic" style={{ fontFamily: 'serif', color: '#D32F2F' }}>
-    <span style={{ color: '#D32F2F' }}>Tally</span>
-    <span className="text-xs align-super text-gray-500">.ERP9</span>
-  </div>
-);
-
-// Sync data items that will be fetched
-const SYNC_DATA_ITEMS = [
-  'Invoices',
-  'Bills',
-  'Expenses',
-  'Chart of Accounts',
-  'Customers',
-  'Vendors',
-  'Product & Services'
-];
-
+const ORGANISATION_DETAILS_FORM_ID = 'organisation-details-form';
 const Settings = () => {
-  const { hasAnyPermission, isCorporateSectionEnabled, isBillingFeatureEnabled } = useRBAC();
+  const {
+    corporateScreens,
+    hasAnyPermission,
+    isCorporateSectionEnabled,
+    isBillingFeatureEnabled,
+    isCorporateAdmin,
+    isBranchEnabled: isBranchConfigurationEnabled,
+    isBranchSqFtEnabled: isBranchSqFtConfigurationEnabled,
+  } = useRBAC();
+  const navigate = useNavigate();
   const canViewBankingSettings =
     hasAnyPermission(['settings-banking', 'banking-full']) &&
     isCorporateSectionEnabled('SETTINGS_CONNECTED_BANKING');
   const canViewOrganisationSettings =
     hasAnyPermission(['settings-org']) &&
     isCorporateSectionEnabled('SETTINGS_ORG_DETAILS');
-  const canViewIntegrationsSettings =
-    hasAnyPermission(['settings-interaction']) &&
-    isCorporateSectionEnabled('SETTINGS_INTEGRATIONS');
   const canViewBillingSettings = hasAnyPermission([
     'credits-view',
     'credits-ledger',
@@ -59,14 +63,18 @@ const Settings = () => {
     'VIEW_LEDGER',
     'MANAGE_BILLING',
   ]) && isBillingFeatureEnabled;
+  const canManageNotificationSettings =
+    isCorporateSectionEnabled('SETTINGS_NOTIFICATIONS') &&
+    (isCorporateAdmin || hasAnyPermission(['notifications-manage', 'NOTIFICATIONS MANAGE']));
   const availableSettingsTabs = useMemo(() => {
     const tabs = [];
     if (canViewOrganisationSettings) tabs.push('organisation');
     if (canViewBankingSettings) tabs.push('banking');
+    if (canManageNotificationSettings) tabs.push('notifications');
     if (canViewBillingSettings) tabs.push('billing');
-    if (canViewIntegrationsSettings) tabs.push('integrations');
     return tabs;
-  }, [canViewBankingSettings, canViewBillingSettings, canViewIntegrationsSettings, canViewOrganisationSettings]);
+  }, [canManageNotificationSettings, canViewBankingSettings, canViewBillingSettings, canViewOrganisationSettings]);
+  const [searchParams] = useSearchParams();
   const [activeSettingsTab, setActiveSettingsTab] = useState('');
   const {
     data: bankAccountsData = [],
@@ -84,7 +92,10 @@ const Settings = () => {
   const [createOrganisation] = useCreateOrganisationMutation();
   const [updateOrganisation] = useUpdateOrganisationMutation();
   const { guardAction, canPerformAction } = useActionGuard();
-  const bankAccounts = Array.isArray(bankAccountsData) ? bankAccountsData : [];
+  const bankAccounts = useMemo(
+    () => (Array.isArray(bankAccountsData) ? bankAccountsData : []),
+    [bankAccountsData],
+  );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
     account_name: '',
@@ -93,18 +104,16 @@ const Settings = () => {
     account_type: 'Checking',
     currency: 'INR'
   });
-  const [tallyConnected, setTallyConnected] = useState(true);
-  const [tallySyncing, setTallySyncing] = useState(false);
-  const [tallyConfigOpen, setTallyConfigOpen] = useState(false);
-  const [tallyConfig, setTallyConfig] = useState({ server_url: 'http://localhost:9000', company_name: '' });
-
   // Organisation Details state
   const [orgDetails, setOrgDetails] = useState(null);
   const [orgSaving, setOrgSaving] = useState(false);
+  const [emailCopied, setEmailCopied] = useState(false);
   const [orgForm, setOrgForm] = useState({
     company_name: '',
     legal_name: '',
     gstin: '',
+    branches: [],
+    gst_registrations: [createEmptyGstRegistration()],
     pan: '',
     cin: '',
     address_line1: '',
@@ -121,15 +130,25 @@ const Settings = () => {
     ifsc_code: '',
     account_holder_name: ''
   });
-  const [emailCopied, setEmailCopied] = useState(false);
   const canCreateBankAccount = canPerformAction('settings.createBankAccount');
   const canCreateOrganisationDetails = canPerformAction('settings.createOrganisation');
   const canUpdateOrganisationDetails = canPerformAction('settings.updateOrganisation');
   const canSaveOrganisation = orgDetails ? canUpdateOrganisationDetails : canCreateOrganisationDetails;
 
   useEffect(() => {
+    const requestedTab = searchParams.get('tab');
+    if (requestedTab === 'integrations') {
+      navigate('/integrations', { replace: true });
+      return;
+    }
+    if (requestedTab && availableSettingsTabs.includes(requestedTab)) {
+      setActiveSettingsTab(requestedTab);
+    }
+  }, [availableSettingsTabs, navigate, searchParams]);
+
+  useEffect(() => {
     if (availableSettingsTabs.length === 0) return;
-    if (!availableSettingsTabs.includes(activeSettingsTab)) {
+    if (!activeSettingsTab || !availableSettingsTabs.includes(activeSettingsTab)) {
       setActiveSettingsTab(availableSettingsTabs[0]);
     }
   }, [activeSettingsTab, availableSettingsTabs]);
@@ -143,10 +162,14 @@ const Settings = () => {
       setOrgForm(prev => {
         const isFormEmpty = !prev.company_name && !prev.email && !prev.phone;
         if (isFormEmpty || !orgDetails) {
+          const gstRegistrations = normalizeGstRegistrationsFromApi(organisationData);
+          const branches = normalizeOrganisationBranchesFromApi(organisationData);
           return {
             company_name: organisationData.company_name || '',
             legal_name: organisationData.legal_name || '',
-            gstin: organisationData.gstin || '',
+            gstin: gstRegistrations[0]?.gstin || organisationData.gstin || '',
+            branches,
+            gst_registrations: gstRegistrations,
             pan: organisationData.pan || '',
             cin: organisationData.cin || '',
             address_line1: organisationData.address_line1 || '',
@@ -190,6 +213,8 @@ const Settings = () => {
       company_name: '',
       legal_name: '',
       gstin: '',
+      branches: [],
+      gst_registrations: [createEmptyGstRegistration()],
       pan: '',
       cin: '',
       address_line1: '',
@@ -223,15 +248,31 @@ const Settings = () => {
       return;
     }
 
+    const gstValidationError = validateGstRegistrations(orgForm.gst_registrations);
+    if (gstValidationError) {
+      toast.error(gstValidationError);
+      return;
+    }
+
+    const branchValidationError = isBranchConfigurationEnabled
+      ? validateOrganisationBranches(orgForm.branches)
+      : '';
+    if (branchValidationError) {
+      toast.error(branchValidationError);
+      return;
+    }
+
+    const organisationPayload = buildOrganisationSavePayload(orgForm);
+
     setOrgSaving(true);
     try {
       if (orgDetails) {
         // Update existing
-        await updateOrganisation(orgForm).unwrap();
+        await updateOrganisation(organisationPayload).unwrap();
         toast.success('Organisation details updated successfully');
       } else {
         // Create new
-        await createOrganisation(orgForm).unwrap();
+        await createOrganisation(organisationPayload).unwrap();
         toast.success('Organisation details created successfully');
       }
     } catch (error) {
@@ -239,15 +280,6 @@ const Settings = () => {
       toast.error(errorMessage);
     } finally {
       setOrgSaving(false);
-    }
-  };
-
-  const copyPlatformEmail = () => {
-    if (orgDetails?.platform_email) {
-      navigator.clipboard.writeText(orgDetails.platform_email);
-      setEmailCopied(true);
-      toast.success('Platform email copied to clipboard!');
-      setTimeout(() => setEmailCopied(false), 2000);
     }
   };
 
@@ -275,48 +307,43 @@ const Settings = () => {
     });
   };
 
-  const handleTallyConnect = async () => {
-    if (!tallyConfig.server_url) {
-      toast.error('Please configure Tally server URL first');
-      setTallyConfigOpen(true);
-      return;
-    }
-    setTallySyncing(true);
+  const organisationSaveLabel = orgDetails ? 'Update Details' : 'Save Details';
+
+  const renderOrganisationSaveButton = ({
+    testId = 'org-save-btn',
+    className = '',
+  } = {}) => (
+    <Button
+      type="submit"
+      form={ORGANISATION_DETAILS_FORM_ID}
+      disabled={orgSaving || !canSaveOrganisation}
+      className={`min-w-[150px] shrink-0 ${className}`}
+      data-testid={testId}
+    >
+      {orgSaving ? (
+        <>
+          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          Saving...
+        </>
+      ) : (
+        <>
+          <Save className="h-4 w-4 mr-2" />
+          {organisationSaveLabel}
+        </>
+      )}
+    </Button>
+  );
+
+  const copyPlatformEmail = async () => {
+    if (!orgDetails?.platform_email) return;
     try {
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      setTallyConnected(true);
-      toast.success('Successfully connected to Tally!');
+      await navigator.clipboard.writeText(orgDetails.platform_email);
+      setEmailCopied(true);
+      toast.success('Platform email copied');
+      setTimeout(() => setEmailCopied(false), 2000);
     } catch (error) {
-      toast.error('Failed to connect to Tally');
-    } finally {
-      setTallySyncing(false);
+      toast.error('Failed to copy platform email');
     }
-  };
-
-  const handleTallyDisconnect = () => {
-    setTallyConnected(false);
-    toast.success('Disconnected from Tally');
-  };
-
-  const handleTallySyncMasters = async () => {
-    setTallySyncing(true);
-    try {
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      toast.success('Master data synced successfully from Tally!');
-    } catch (error) {
-      toast.error('Failed to sync master data');
-    } finally {
-      setTallySyncing(false);
-    }
-  };
-
-  const handleTallyConfigSave = () => {
-    if (!tallyConfig.server_url) {
-      toast.error('Tally Server URL is required');
-      return;
-    }
-    toast.success('Tally configuration saved');
-    setTallyConfigOpen(false);
   };
 
   return (
@@ -325,7 +352,7 @@ const Settings = () => {
         <h1 className="text-4xl md:text-5xl font-bold font-['Manrope'] text-primary mb-2" data-testid="settings-title">
           Settings
         </h1>
-        <p className="text-muted-foreground">Manage your account settings and integrations</p>
+        <p className="text-muted-foreground">Manage your account and organisation settings</p>
       </div>
 
       <Tabs value={activeSettingsTab} onValueChange={setActiveSettingsTab} className="space-y-6" data-testid="settings-tabs">
@@ -336,11 +363,11 @@ const Settings = () => {
           {canViewBankingSettings && (
             <TabsTrigger value="banking" data-testid="tab-banking">Connected Banking</TabsTrigger>
           )}
+          {canManageNotificationSettings && (
+            <TabsTrigger value="notifications" data-testid="tab-notifications">Notifications</TabsTrigger>
+          )}
           {canViewBillingSettings && (
             <TabsTrigger value="billing" data-testid="tab-billing">Billing</TabsTrigger>
-          )}
-          {canViewIntegrationsSettings && (
-            <TabsTrigger value="integrations" data-testid="tab-integrations">Integrations</TabsTrigger>
           )}
         </TabsList>
 
@@ -351,7 +378,11 @@ const Settings = () => {
                 <Building2 className="h-5 w-5 text-primary" />
                 Organisation Details
               </h3>
-              <p className="text-sm text-muted-foreground">Configure your company information for invoices and communications</p>
+              <p className="text-sm text-muted-foreground">
+                Configure your company information for invoices and communications.
+                Use the save action at the bottom of this page after updating branches,
+                GST registrations, or contact details.
+              </p>
             </div>
 
             {orgLoading ? (
@@ -359,7 +390,11 @@ const Settings = () => {
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
               </div>
             ) : (
-              <form onSubmit={handleOrgSave} className="space-y-6">
+              <form
+                id={ORGANISATION_DETAILS_FORM_ID}
+                onSubmit={handleOrgSave}
+                className="space-y-6"
+              >
                 {/* Platform Email Banner */}
                 {orgDetails?.platform_email && (
                   <div className="bg-blue-50 border border-blue-200 rounded-lg p-4" data-testid="platform-email-banner">
@@ -418,21 +453,34 @@ const Settings = () => {
                   </div>
                 </div>
 
-                {/* Tax Information */}
-                <div className="space-y-4">
-                  <h4 className="font-semibold text-gray-800 border-b pb-2">Tax & Registration</h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <Label htmlFor="gstin">GSTIN</Label>
-                      <Input
-                        id="gstin"
-                        value={orgForm.gstin}
-                        onChange={(e) => setOrgForm({ ...orgForm, gstin: e.target.value.toUpperCase() })}
-                        placeholder="22AAAAA0000A1Z5"
-                        maxLength={15}
-                        data-testid="org-gstin-input"
-                      />
-                    </div>
+                  {/* Tax Information */}
+                  <div className="space-y-4">
+                    <h4 className="font-semibold text-gray-800 border-b pb-2">Tax & Registration</h4>
+                  {isBranchConfigurationEnabled ? (
+                    <OrgBranchesSection
+                      branches={orgForm.branches}
+                      gstOptions={getConfiguredOrganisationGstins(orgForm.gst_registrations)}
+                      onChange={(branches) => setOrgForm({ ...orgForm, branches })}
+                      showAreaField={isBranchSqFtConfigurationEnabled}
+                    />
+                  ) : null}
+                  <OrgGstRegistrationsSection
+                    registrations={orgForm.gst_registrations}
+                    onChange={(gst_registrations) => {
+                      const configuredGstins = new Set(getConfiguredOrganisationGstins(gst_registrations));
+                      setOrgForm({
+                        ...orgForm,
+                        gst_registrations,
+                        gstin: gst_registrations[0]?.gstin ?? '',
+                        branches: orgForm.branches.map((branch) =>
+                          branch.billingGstin && !configuredGstins.has(branch.billingGstin)
+                            ? { ...branch, billingGstin: '' }
+                            : branch,
+                        ),
+                      });
+                    }}
+                  />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="pan">PAN</Label>
                       <Input
@@ -620,26 +668,13 @@ const Settings = () => {
                   </div>
                 </div>
 
-                {/* Save Button */}
-                <div className="flex justify-end pt-4 border-t">
-                  <Button
-                    type="submit"
-                    disabled={orgSaving || !canSaveOrganisation}
-                    className="min-w-[150px]"
-                    data-testid="org-save-btn"
-                  >
-                    {orgSaving ? (
-                      <>
-                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                        Saving...
-                      </>
-                    ) : (
-                      <>
-                        <Save className="h-4 w-4 mr-2" />
-                        {orgDetails ? 'Update Details' : 'Save Details'}
-                      </>
-                    )}
-                  </Button>
+                <div className="sticky bottom-[-24px] -mx-6 mt-2 border-t border-border bg-card/95 px-6 py-4 backdrop-blur supports-[backdrop-filter]:bg-card/85">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <p className="text-sm text-muted-foreground">
+                      Review your changes, then {organisationSaveLabel.toLowerCase()}.
+                    </p>
+                    {renderOrganisationSaveButton()}
+                  </div>
                 </div>
               </form>
             )}
@@ -667,25 +702,27 @@ const Settings = () => {
             <div className="space-y-4">
               {bankAccounts.map((account) => (
                 <div
-                  key={account.id}
+                  key={account?.id ?? account?.account_number ?? account?.account_name ?? 'unknown'}
                   className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
-                  data-testid={`bank-account-${account.id}`}
+                  data-testid={`bank-account-${account?.id ?? 'unknown'}`}
                 >
                   <div>
-                    <h4 className="font-medium">{account.account_name}</h4>
+                    <h4 className="font-medium">{account?.account_name || 'Bank account'}</h4>
                     <p className="text-sm text-muted-foreground">
-                      {account.bank_name} - {account.account_type}
+                      {[account?.bank_name, formatBankAccountType(account?.account_type)]
+                        .filter(Boolean)
+                        .join(' · ') || '—'}
                     </p>
-                    <p className="text-xs   text-muted-foreground mt-1">
-                      **** {account.account_number.slice(-4)}
+                    <p className="text-xs text-muted-foreground mt-1">
+                      {maskBankAccountNumber(account?.account_number)}
                     </p>
                   </div>
                   <div className="flex items-center gap-4">
-                    <span className="text-sm   font-semibold">{account.currency}</span>
+                    <span className="text-sm font-semibold">{account?.currency || '—'}</span>
                     <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                      account.is_active ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-800'
+                      isBankAccountActive(account) ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-800'
                     }`}>
-                      {account.is_active ? 'Active' : 'Inactive'}
+                      {isBankAccountActive(account) ? 'Active' : 'Inactive'}
                     </span>
                   </div>
                 </div>
@@ -703,129 +740,12 @@ const Settings = () => {
           <CreditsPage />
         </TabsContent>}
 
-        {canViewIntegrationsSettings && <TabsContent value="integrations">
-          <div className="space-y-6" data-testid="settings-integrations-gateway">
-            <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2">
-              <ZohoIntegrationCard />
-
-              <div className="bg-card border border-border rounded-xl shadow-sm overflow-hidden" data-testid="tally-integration-card">
-                <div className={`px-6 py-4 flex items-center justify-between border-b ${tallyConnected ? 'bg-emerald-50 border-emerald-200' : 'bg-white border-border'}`}>
-                  <div className="flex items-center gap-3">
-                    <TallyLogo />
-                  </div>
-                  <div className={`flex items-center gap-2 px-3 py-1 rounded-full text-sm font-medium ${
-                    tallyConnected
-                      ? 'bg-emerald-100 text-emerald-700'
-                      : 'bg-gray-100 text-gray-500'
-                  }`}>
-                    {tallyConnected ? (
-                      <>
-                        <Check className="h-4 w-4" />
-                        Connected
-                      </>
-                    ) : (
-                      <>
-                        <XCircle className="h-4 w-4" />
-                        Not Connected
-                      </>
-                    )}
-                  </div>
-                </div>
-
-                <div className="p-6">
-                  <h4 className="font-semibold text-gray-800 mb-3">We'll fetch your:</h4>
-                  <ul className="space-y-2 mb-6">
-                    {SYNC_DATA_ITEMS.map((item) => (
-                      <li key={item} className="flex items-center gap-2 text-sm text-gray-600">
-                        <span className="w-1.5 h-1.5 rounded-full bg-gray-400"></span>
-                        {item}
-                      </li>
-                    ))}
-                  </ul>
-
-                  {!tallyConnected ? (
-                    <Button
-                      className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                      onClick={handleTallyConnect}
-                      disabled={tallySyncing}
-                      data-testid="tally-connect-button"
-                    >
-                      {tallySyncing ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Connecting...
-                        </>
-                      ) : (
-                        <>
-                          <Plug className="h-4 w-4 mr-2" />
-                          Connect
-                        </>
-                      )}
-                    </Button>
-                  ) : (
-                    <div className="space-y-3">
-                      <div className="flex gap-3">
-                        <Button
-                          variant="outline"
-                          className="flex-1"
-                          onClick={handleTallyDisconnect}
-                          data-testid="tally-disconnect-button"
-                        >
-                          <PlugZap className="h-4 w-4 mr-2" />
-                          Disconnect
-                        </Button>
-                        <Button
-                          variant="outline"
-                          className="flex-1"
-                          onClick={() => setTallyConfigOpen(true)}
-                          data-testid="tally-configure-button"
-                        >
-                          <SettingsIcon className="h-4 w-4 mr-2" />
-                          Configure
-                        </Button>
-                      </div>
-                      <Button
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white"
-                        onClick={handleTallySyncMasters}
-                        disabled={tallySyncing}
-                        data-testid="tally-sync-button"
-                      >
-                        {tallySyncing ? (
-                          <>
-                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Syncing...
-                          </>
-                        ) : (
-                          <>
-                            <RefreshCw className="h-4 w-4 mr-2" />
-                            Sync Masters
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
-              <p className="text-sm text-blue-800">
-                <strong>Note:</strong> Connect your accounting system to keep vendors, invoices, ledgers, and master data aligned with AP workflows.
-              </p>
-            </div>
-          </div>
+        {canManageNotificationSettings && <TabsContent value="notifications">
+          <NotificationSettings />
         </TabsContent>}
 
       </Tabs>
 
-      <TallyConfigDialog
-        open={tallyConfigOpen}
-        setOpen={setTallyConfigOpen}
-        TallyLogo={TallyLogo}
-        tallyConfig={tallyConfig}
-        setTallyConfig={setTallyConfig}
-        handleTallyConfigSave={handleTallyConfigSave}
-      />
     </div>
   );
 };

@@ -78,6 +78,8 @@ export function useDashboardData() {
   const bottleneck = summary?.bottleneck ?? null;
   const recentInvoices = summary?.recent_invoices ?? [];
   const pendingApprovals = summary?.pending_your_approval ?? [];
+  const overdueInvoices = summary?.overdue_invoices ?? [];
+  const overdueSummary = summary?.overdue_summary ?? null;
   const paymentBatchStats = summary?.payment_batches ?? null;
 
   const showPaymentBatches =
@@ -123,6 +125,8 @@ export function useDashboardData() {
     bottleneck,
     recentInvoices,
     pendingApprovals,
+    overdueInvoices,
+    overdueSummary,
     paymentBatchStats,
     showPaymentBatches,
     loading: isLoading,

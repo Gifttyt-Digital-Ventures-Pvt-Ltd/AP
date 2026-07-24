@@ -1,4 +1,11 @@
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../utils/currency";
+import {
+  isGmailInvoiceSource,
+  normalizeInvoiceSource,
+} from "../../pages/invoices/constants";
+import { normalizeMsmePaymentDue } from "../../pages/invoices/utils/msmePaymentDue";
+import { normalizeInvoiceOverdueFields } from "../../pages/invoices/utils/invoiceDueDate";
+import { normalizeExpenseType } from "../../pages/invoices/utils/invoiceAccountingFields";
 
 const toLocalDateTimeString = (value) => {
   if (!value) return value;
@@ -125,11 +132,50 @@ export const normalizeInvoiceLineItem = (item = {}) => {
     tax: item.tax ?? inferTaxLabelFromGstRate(gstRate),
     taxName: item.taxName ?? item.tax_name ?? "",
     taxRate: item.taxRate ?? item.tax_rate ?? "",
-    ledger: item.ledger ?? "",
+    ledger:
+      item.ledger ??
+      item.ledgerName ??
+      item.ledger_name ??
+      "",
+    ledgerId: item.ledgerId ?? item.ledger_id ?? item.accountId ?? item.account_id ?? "",
+    accountGroupId:
+      item.accountGroupId ??
+      item.account_group_id ??
+      item.groupId ??
+      item.group_id ??
+      "",
+    accountGroupName:
+      item.accountGroupName ??
+      item.account_group_name ??
+      item.groupName ??
+      item.group_name ??
+      "",
+    groupId:
+      item.groupId ??
+      item.group_id ??
+      item.accountGroupId ??
+      item.account_group_id ??
+      "",
+    groupName:
+      item.groupName ??
+      item.group_name ??
+      item.accountGroupName ??
+      item.account_group_name ??
+      "",
+    expenseType: normalizeExpenseType(item.expenseType ?? item.expense_type ?? ""),
     discount: Number(item.discount ?? 0) || 0,
     discountType: item.discountType ?? item.discount_type ?? "%",
     eligibleForItc: item.eligibleForItc ?? item.eligible_for_itc ?? true,
   };
+};
+
+const toInvoiceLineItemDiscountTypeApiValue = (discountType = "") => {
+  const normalized = String(discountType || "").trim().toLowerCase();
+  if (!normalized || normalized === "%") return "percentage";
+  if (normalized === "percent" || normalized === "percentage") {
+    return "percentage";
+  }
+  return "amount";
 };
 
 const toInvoiceLineItemApiPayload = (item = {}) => {
@@ -146,10 +192,26 @@ const toInvoiceLineItemApiPayload = (item = {}) => {
     amount: normalized.amount,
   };
 
+  if (normalized.discount > 0) {
+    payload.discount = normalized.discount;
+    payload.discountType = toInvoiceLineItemDiscountTypeApiValue(
+      normalized.discountType,
+    );
+  }
   if (hsnSac) payload.hsnSac = hsnSac;
   if (gstRate !== undefined) payload.gstRate = gstRate;
   if (itemCode) payload.itemCode = itemCode;
   if (uom) payload.uom = uom;
+  if (normalized.ledger) {
+    payload.ledger = normalized.ledger;
+    payload.ledgerName = normalized.ledger;
+  }
+  if (normalized.ledgerId) payload.ledgerId = normalized.ledgerId;
+  if (normalized.accountGroupId) payload.accountGroupId = normalized.accountGroupId;
+  if (normalized.accountGroupName) payload.accountGroupName = normalized.accountGroupName;
+  if (normalized.groupId) payload.groupId = normalized.groupId;
+  if (normalized.groupName) payload.groupName = normalized.groupName;
+  if (normalized.expenseType) payload.expenseType = normalized.expenseType;
 
   return payload;
 };
@@ -172,6 +234,7 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
   const lineItemsSource = invoice.lineItems ?? invoice.line_items ?? [];
   const category = invoice.category;
   const categoryId = category?.id ?? invoice.categoryId ?? invoice.category_id;
+  const totalAmount = pickInvoiceField(invoice, "totalAmount", "total_amount");
 
   return {
     ...invoice,
@@ -185,11 +248,14 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
       : [],
     invoiceDate: pickInvoiceField(invoice, "invoiceDate", "invoice_date"),
     dueDate: pickInvoiceField(invoice, "dueDate", "due_date"),
-    amount: invoice.amount ?? invoice.netAmount ?? invoice.net_amount,
+    ...normalizeInvoiceOverdueFields(invoice),
+    totalAmount,
+    amount: totalAmount ?? invoice.netAmount ?? invoice.net_amount,
     memo: invoice.memo ?? invoice.description,
     billingAddress:
       pickInvoiceField(invoice, "billingAddress", "billing_address") ??
       pickInvoiceField(invoice, "vendorAddress", "vendor_address"),
+    billingGstin: pickInvoiceField(invoice, "billingGstin", "billing_gstin", ""),
     vendorAddress: pickInvoiceField(invoice, "vendorAddress", "vendor_address"),
     gstTreatment: pickInvoiceField(invoice, "gstTreatment", "gst_treatment"),
     gstin: invoice.gstin ?? invoice.vendorGstin ?? invoice.vendor_gstin,
@@ -208,8 +274,14 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
     invoiceTax: pickInvoiceField(invoice, "invoiceTax", "invoice_tax"),
     invoiceTaxName: pickInvoiceField(invoice, "invoiceTaxName", "invoice_tax_name"),
     invoiceTaxRate: pickInvoiceField(invoice, "invoiceTaxRate", "invoice_tax_rate"),
-    source: invoice.source,
+    source: normalizeInvoiceSource(invoice.source),
     sourceEmail: pickInvoiceField(invoice, "sourceEmail", "source_email"),
+    voucherType:
+      pickInvoiceField(invoice, "voucherType", "voucher_type") ??
+      pickInvoiceField(invoice, "accountingVoucherType", "accounting_voucher_type"),
+    tdsNarration:
+      pickInvoiceField(invoice, "tdsNarration", "tds_narration") ??
+      pickInvoiceField(invoice, "narration", "narration"),
     fileId: pickInvoiceField(invoice, "fileId", "file_id"),
     fileHash: pickInvoiceField(invoice, "fileHash", "file_hash"),
     originalFileName:
@@ -218,6 +290,11 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
     fileCategory: pickInvoiceField(invoice, "fileCategory", "file_category"),
     workItemId: pickInvoiceField(invoice, "workItemId", "work_item_id"),
     branchName: pickInvoiceField(invoice, "branchName", "branch_name"),
+    branchCode: pickInvoiceField(invoice, "branchCode", "branch_code"),
+    branchId: pickInvoiceField(invoice, "branchId", "branch_id"),
+    vendorBranchName: pickInvoiceField(invoice, "vendorBranchName", "vendor_branch_name"),
+    vendorBranchCode: pickInvoiceField(invoice, "vendorBranchCode", "vendor_branch_code"),
+    vendorBranchGstin: pickInvoiceField(invoice, "vendorBranchGstin", "vendor_branch_gstin"),
     poNumber: pickInvoiceField(invoice, "poNumber", "po_number"),
     poId: pickInvoiceField(invoice, "poId", "po_id"),
     grnNumber: pickInvoiceField(invoice, "grnNumber", "grn_number"),
@@ -253,6 +330,52 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
     categoryName: invoice.categoryName ?? invoice.category_name ?? category?.name,
     currentFileName: pickInvoiceField(invoice, "currentFileName", "current_file_name"),
     matchingId: pickInvoiceField(invoice, "matchingId", "matching_id"),
+    documentType: pickInvoiceField(invoice, "documentType", "document_type", "TAX_INVOICE"),
+    linkedProformaInvoiceId: pickInvoiceField(
+      invoice,
+      "linkedProformaInvoiceId",
+      "linked_proforma_invoice_id",
+    ),
+    linkedProformaInvoiceNumber: pickInvoiceField(
+      invoice,
+      "linkedProformaInvoiceNumber",
+      "linked_proforma_invoice_number",
+    ),
+    isLinkedToProforma: Boolean(
+      invoice.isLinkedToProforma ??
+        invoice.is_linked_to_proforma ??
+        pickInvoiceField(invoice, "linkedProformaInvoiceId", "linked_proforma_invoice_id"),
+    ),
+    linkedTaxInvoices: Array.isArray(invoice.linkedTaxInvoices)
+      ? invoice.linkedTaxInvoices
+      : Array.isArray(invoice.linked_tax_invoices)
+        ? invoice.linked_tax_invoices
+        : [],
+    linkedTaxInvoiceCount: Number(
+      invoice.linkedTaxInvoiceCount ??
+        invoice.linked_tax_invoice_count ??
+        (Array.isArray(invoice.linkedTaxInvoices)
+          ? invoice.linkedTaxInvoices.length
+          : Array.isArray(invoice.linked_tax_invoices)
+            ? invoice.linked_tax_invoices.length
+            : 0),
+    ),
+    piTotalAmount: Number(
+      invoice.piTotalAmount ?? invoice.pi_total_amount ?? invoice.netAmount ?? invoice.net_amount ?? 0,
+    ),
+    piLinkedAmount: Number(invoice.piLinkedAmount ?? invoice.pi_linked_amount ?? 0),
+    piRemainingBalance: Number(
+      invoice.piRemainingBalance ??
+        invoice.pi_remaining_balance ??
+        invoice.remainingBalance ??
+        invoice.remaining_balance ??
+        0,
+    ),
+    piFullyInvoiced: Boolean(
+      invoice.piFullyInvoiced ??
+        invoice.pi_fully_invoiced ??
+        Number(invoice.piRemainingBalance ?? invoice.pi_remaining_balance ?? 1) <= 0,
+    ),
     workflowId:
       pickInvoiceField(invoice, "workflowId", "workflow_id") ??
       pickInvoiceField(invoice, "approvalWorkflowId", "approval_workflow_id"),
@@ -278,6 +401,18 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
       invoice.lineItemsExpanded ??
       invoice.line_items_expanded ??
       true,
+    canCancel:
+      invoice.canCancel ??
+      invoice.can_cancel ??
+      invoice.cancellable ??
+      invoice.isCancellable ??
+      false,
+    cancelDisabledReason:
+      invoice.cancelDisabledReason ??
+      invoice.cancel_disabled_reason ??
+      invoice.cancellationDisabledReason ??
+      "",
+    ...normalizeMsmePaymentDue(invoice),
   };
 };
 
@@ -308,16 +443,26 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
         (Number(totals.igst) || 0) +
         (Number(totals.foreignTax) || 0)
       : Number(pickInvoiceField(invoice, "gstAmount", "gst_amount", 0));
-  const amount =
+  const totalAmount =
     totals?.total != null
       ? Number(totals.total)
-      : Number(invoice.amount ?? subTotalFromLines + gstAmount) || 0;
+      : Number(
+          invoice.totalAmount ?? invoice.total_amount ?? subTotalFromLines + gstAmount,
+        ) || 0;
   const resolvedTdsAmount =
     tdsAmount !== undefined
       ? tdsAmount === null
         ? null
         : Number(tdsAmount)
       : Number(pickInvoiceField(invoice, "tdsAmount", "tds_amount", 0));
+  const explicitNetAmount = pickInvoiceField(invoice, "netAmount", "net_amount");
+  const explicitNetPayable = pickInvoiceField(invoice, "netPayable", "net_payable");
+  const resolvedNetAmount =
+    explicitNetAmount !== undefined && explicitNetAmount !== null && explicitNetAmount !== ""
+      ? Number(explicitNetAmount)
+      : explicitNetPayable !== undefined && explicitNetPayable !== null && explicitNetPayable !== ""
+        ? Number(explicitNetPayable)
+        : Math.max(totalAmount - (Number(resolvedTdsAmount) || 0), 0);
   const parsedTdsSelection = resolveTdsSelection(
     pickInvoiceField(invoice, "tds", "tds", ""),
   );
@@ -333,7 +478,7 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
       parsedTdsSelection.tdsRate,
   };
 
-  const source = invoice.source || "Upload";
+  const source = normalizeInvoiceSource(invoice.source);
   const originalFileName =
     pickInvoiceField(invoice, "originalFileName", "original_file_name") ??
     pickInvoiceField(invoice, "originalFileName", "original_filename") ??
@@ -344,7 +489,7 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
     originalFileName;
 
   const category = categoryEnabled ? resolveInvoiceCategoryPayload(invoice) : undefined;
-  const normalizedSource = source || "Upload";
+  const normalizedSource = source;
   const dueDate = toLocalDateTimeString(pickInvoiceField(invoice, "dueDate", "due_date", ""));
 
   return {
@@ -356,12 +501,22 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
       pickInvoiceField(invoice, "invoiceDate", "invoice_date", ""),
     ),
     dueDate: dueDate || null,
-    amount,
+    totalAmount,
+    amount: totalAmount,
+    netAmount: resolvedNetAmount,
+    netPayable: resolvedNetAmount,
     gstAmount,
     tdsAmount: resolvedTdsAmount,
     tdsSectionId: tdsSelection.tdsSectionId,
     tdsSectionCode: tdsSelection.tdsSectionCode,
     tdsRate: tdsSelection.tdsRate,
+    voucherType: pickInvoiceField(invoice, "voucherType", "voucher_type", ""),
+    tdsNarration:
+      pickInvoiceField(invoice, "tdsNarration", "tds_narration") ??
+      pickInvoiceField(invoice, "narration", "narration", ""),
+    narration:
+      pickInvoiceField(invoice, "tdsNarration", "tds_narration") ??
+      pickInvoiceField(invoice, "narration", "narration", ""),
     currency:
       normalizeCurrencyCode(
         pickInvoiceField(invoice, "currency", "currency_code", ""),
@@ -373,7 +528,7 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
       "",
     source: normalizedSource,
     sourceEmail:
-      normalizedSource === "Email"
+      isGmailInvoiceSource(normalizedSource)
         ? pickInvoiceField(invoice, "sourceEmail", "source_email", null)
         : null,
     fileId: pickInvoiceField(invoice, "fileId", "file_id", null),
@@ -385,6 +540,11 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
     fileCategory:
       pickInvoiceField(invoice, "fileCategory", "file_category", "Expense Invoice"),
     branchName: pickInvoiceField(invoice, "branchName", "branch_name", ""),
+    branchCode: pickInvoiceField(invoice, "branchCode", "branch_code", ""),
+    branchId: pickInvoiceField(invoice, "branchId", "branch_id", ""),
+    vendorBranchName: pickInvoiceField(invoice, "vendorBranchName", "vendor_branch_name", ""),
+    vendorBranchCode: pickInvoiceField(invoice, "vendorBranchCode", "vendor_branch_code", ""),
+    vendorBranchGstin: pickInvoiceField(invoice, "vendorBranchGstin", "vendor_branch_gstin", ""),
     workItemId: pickInvoiceField(invoice, "workItemId", "work_item_id", ""),
     departmentId: normalizeDepartmentId(
       pickInvoiceField(invoice, "departmentId", "department_id"),
@@ -395,6 +555,16 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
     grnId: pickInvoiceField(invoice, "grnId", "grn_id", ""),
     grnNumber: pickInvoiceField(invoice, "grnNumber", "grn_number", ""),
     matchingId: pickInvoiceField(invoice, "matchingId", "matching_id", ""),
+    documentType: pickInvoiceField(invoice, "documentType", "document_type", "TAX_INVOICE"),
+    ...(pickInvoiceField(invoice, "linkedProformaInvoiceId", "linked_proforma_invoice_id")
+      ? {
+          linkedProformaInvoiceId: pickInvoiceField(
+            invoice,
+            "linkedProformaInvoiceId",
+            "linked_proforma_invoice_id",
+          ),
+        }
+      : {}),
     workflowId:
       pickInvoiceField(invoice, "workflowId", "workflow_id") ??
       pickInvoiceField(invoice, "approvalWorkflowId", "approval_workflow_id"),
@@ -403,6 +573,7 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
       pickInvoiceField(invoice, "approvalWorkflowName", "approval_workflow_name"),
     ...(category ? { category, categoryId: category.id, categoryName: category.name } : {}),
     gstTreatment: pickInvoiceField(invoice, "gstTreatment", "gst_treatment", ""),
+    billingGstin: pickInvoiceField(invoice, "billingGstin", "billing_gstin", ""),
     gstin: invoice.gstin ?? invoice.vendorGstin ?? invoice.vendor_gstin ?? "",
     sourceOfSupply: pickInvoiceField(invoice, "sourceOfSupply", "source_of_supply", ""),
     destinationOfSupply:
@@ -452,6 +623,102 @@ export const EMPTY_INVOICE_LIST_RESPONSE = {
   limit: 0,
   hasMore: false,
   statusCounts: null,
+};
+
+export const EMPTY_INVOICE_FILTER_OPTIONS = {
+  vendors: [],
+  branches: [],
+  statuses: [],
+  quickFilters: [],
+};
+
+const unwrapInvoiceFilterList = (response, keys = []) => {
+  if (Array.isArray(response)) return response;
+  const payload = response?.data ?? response ?? {};
+  if (Array.isArray(payload)) return payload;
+  for (const key of keys) {
+    if (Array.isArray(payload?.[key])) return payload[key];
+  }
+  return [];
+};
+
+const normalizeInvoiceFilterVendorOptions = (vendors = []) =>
+  vendors
+    .map((vendor) => {
+      const value = vendor?.id ?? vendor?.vendorId ?? vendor?.vendor_id;
+      const label = vendor?.name ?? vendor?.vendorName ?? vendor?.vendor_name ?? "";
+      if (value === undefined || value === null || !String(label).trim()) {
+        return null;
+      }
+      return {
+        value: String(value),
+        label: String(label),
+        isPendingApproval: Boolean(
+          vendor?.isPendingApproval ?? vendor?.is_pending_approval,
+        ),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+const normalizeInvoiceFilterBranchOptions = (branches = []) =>
+  branches
+    .map((branch) => {
+      const branchCode = String(
+        branch?.branchCode ?? branch?.branch_code ?? branch?.code ?? "",
+      ).trim();
+      const branchName = String(
+        branch?.branchName ?? branch?.branch_name ?? branch?.name ?? "",
+      ).trim();
+      const value = branchCode || branchName;
+      if (!value) return null;
+      const label =
+        branchName && branchCode
+          ? `${branchName} (${branchCode})`
+          : branchName || branchCode;
+      return { value, label };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+const normalizeInvoiceFilterSelectOptions = (options = []) =>
+  options
+    .map((option) => {
+      if (typeof option === "string") {
+        const value = option.trim();
+        return value ? { value, label: value } : null;
+      }
+      const value = option?.value ?? option?.id ?? option?.status ?? "";
+      const label = option?.label ?? option?.name ?? value;
+      if (!String(value).trim()) return null;
+      return {
+        value: String(value),
+        label: String(label),
+        ...(option?.count !== undefined && option?.count !== null
+          ? { count: Number(option.count) || 0 }
+          : {}),
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+export const normalizeInvoiceFilterOptions = (response) => {
+  const payload = response?.data ?? response ?? {};
+
+  return {
+    vendors: normalizeInvoiceFilterVendorOptions(
+      unwrapInvoiceFilterList(payload, ["vendors", "items", "content"]),
+    ),
+    branches: normalizeInvoiceFilterBranchOptions(
+      unwrapInvoiceFilterList(payload, ["branches", "items", "content"]),
+    ),
+    statuses: normalizeInvoiceFilterSelectOptions(
+      unwrapInvoiceFilterList(payload, ["statuses", "items", "content"]),
+    ),
+    quickFilters: normalizeInvoiceFilterSelectOptions(
+      unwrapInvoiceFilterList(payload, ["quickFilters", "quick_filters", "items", "content"]),
+    ),
+  };
 };
 
 const normalizeInvoiceStatusCounts = (statusCounts) => {
@@ -528,21 +795,34 @@ export const normalizeInvoiceListResponse = (response) => {
 
 export const getInvoiceListItems = (data) => {
   if (Array.isArray(data)) return data;
-  if (Array.isArray(data?.items)) return data.items;
+  if (data && typeof data === 'object') {
+    if (Array.isArray(data.content)) return data.content;
+    if (Array.isArray(data.items)) return data.items;
+    if (Array.isArray(data.data)) return data.data;
+    if (Array.isArray(data.invoices)) return data.invoices;
+  }
   return [];
 };
 
-export const mergeInvoiceVendorOptions = (approvedVendors = [], pendingVendors = []) => {
+export const mergeInvoiceVendorOptions = (vendors = []) => {
+  const list = Array.isArray(vendors) ? vendors : [];
   const merged = new Map();
 
-  approvedVendors.forEach((vendor) => {
+  list.forEach((vendor) => {
     if (vendor?.id === undefined || vendor?.id === null) return;
-    merged.set(String(vendor.id), { ...vendor, isPendingApproval: false });
-  });
+    const statusKey = String(vendor.status || "")
+      .trim()
+      .toLowerCase()
+      .replace(/[_-]+/g, " ");
+    const isPendingApproval =
+      statusKey === "pending approval" ||
+      statusKey === "create request" ||
+      statusKey === "vendor approval pending";
 
-  pendingVendors.forEach((vendor) => {
-    if (vendor?.id === undefined || vendor?.id === null) return;
-    merged.set(String(vendor.id), { ...vendor, isPendingApproval: true });
+    merged.set(String(vendor.id), {
+      ...vendor,
+      isPendingApproval,
+    });
   });
 
   return Array.from(merged.values());

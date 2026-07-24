@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { Button } from "../../../components/ui/button";
-import { Calendar } from "../../../components/ui/calendar";
+import DatePicker from "../../../components/common/DatePicker";
 import {
   Dialog,
   DialogContent,
@@ -12,11 +12,6 @@ import {
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "../../../components/ui/popover";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -26,34 +21,15 @@ import {
 import { FieldError } from "./CampaignShared";
 import {
   formatCurrency,
-  formatDate,
   PAYMENT_MODE_LABELS,
   PAYMENT_MODES,
 } from "../utils/campaignFormatters";
-
-const parseDateValue = (value) => {
-  if (!value) return undefined;
-  const [year, month, day] = String(value).split("-").map(Number);
-  if (!year || !month || !day) return undefined;
-  return new Date(year, month - 1, day);
-};
-
-const toDateValue = (date) => {
-  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return "";
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
 
 const sanitizeAmountInput = (value) => {
   const sanitized = String(value).replace(/[^\d.]/g, "");
   const [whole, ...decimalParts] = sanitized.split(".");
   return decimalParts.length ? `${whole}.${decimalParts.join("")}` : whole;
 };
-
-const campaignCalendarStartMonth = new Date(new Date().getFullYear() - 10, 0);
-const campaignCalendarEndMonth = new Date(2099, 11);
 
 const RecordAdvanceModal = ({
   open,
@@ -85,7 +61,9 @@ const RecordAdvanceModal = ({
     const amount = Number(form.amount);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const paymentDate = parseDateValue(form.paymentDate);
+    const paymentDate = form.paymentDate
+      ? new Date(`${form.paymentDate}T00:00:00`)
+      : null;
     if (amount <= 0) next.amount = "Amount must be > 0";
     if (outstandingAmount > 0 && amount > outstandingAmount) {
       next.amount = `Amount cannot exceed outstanding amount ${formatCurrency(outstandingAmount)}`;
@@ -110,11 +88,9 @@ const RecordAdvanceModal = ({
     });
   };
 
-  const handlePaymentDateSelect = (date) => {
-    if (!date) return;
-    setForm((prev) => ({ ...prev, paymentDate: toDateValue(date) }));
+  const handlePaymentDateChange = (nextPaymentDate) => {
+    setForm((prev) => ({ ...prev, paymentDate: nextPaymentDate }));
     setErrors((prev) => ({ ...prev, paymentDate: "" }));
-    setPaymentDateOpen(false);
   };
 
   return (
@@ -200,36 +176,15 @@ const RecordAdvanceModal = ({
           </div>
           <div className="space-y-2">
             <Label>Payment Date *</Label>
-            <Popover open={paymentDateOpen} onOpenChange={setPaymentDateOpen}>
-              <PopoverTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-9 w-full justify-start text-left font-normal"
-                >
-                  {form.paymentDate
-                    ? formatDate(form.paymentDate)
-                    : "Select payment date"}
-                </Button>
-              </PopoverTrigger>
-              <PopoverContent className="z-[80] w-auto p-0" align="start">
-                <Calendar
-                  mode="single"
-                  captionLayout="dropdown"
-                  navLayout="after"
-                  startMonth={campaignCalendarStartMonth}
-                  endMonth={campaignCalendarEndMonth}
-                  selected={parseDateValue(form.paymentDate)}
-                  onSelect={handlePaymentDateSelect}
-                  disabled={(date) => {
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    return date > today;
-                  }}
-                  initialFocus
-                />
-              </PopoverContent>
-            </Popover>
+            <DatePicker
+              value={form.paymentDate}
+              onChange={handlePaymentDateChange}
+              open={paymentDateOpen}
+              onOpenChange={setPaymentDateOpen}
+              placeholder="Select payment date"
+              popoverClassName="z-[80] w-auto p-0"
+              maxDate={new Date().toISOString().split("T")[0]}
+            />
             <FieldError>{errors.paymentDate}</FieldError>
           </div>
         </div>

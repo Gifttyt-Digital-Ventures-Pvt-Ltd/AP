@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from '../../../components/ui/select';
 import { Plus } from 'lucide-react';
+import BankAccountSelectField from '../../../components/banking/BankAccountSelectField';
 
 const getInvoiceOptionLabel = (invoice) =>
   `${invoice?.invoiceNumber || '-'} - ${invoice?.vendorName || '-'} - ₹${Number(
@@ -124,24 +125,14 @@ const PaymentDialog = ({
         </div>
 
         {showBankAccountField && (
-          <div>
-            <Label htmlFor="bank_account_id">Bank Account *</Label>
-            <Select
-              value={formData.bank_account_id || ""}
-              onValueChange={(value) => setFormData({ ...formData, bank_account_id: value })}
-            >
-              <SelectTrigger id="bank_account_id" data-testid="payment-bank-select">
-                <SelectValue placeholder="Select bank account" />
-              </SelectTrigger>
-              <SelectContent>
-              {bankAccounts.map((account) => (
-                <SelectItem key={account.id} value={account.id}>
-                  {account.account_name || account.bank_name} - {account.account_number || account.bank_name}
-                </SelectItem>
-              ))}
-              </SelectContent>
-            </Select>
-          </div>
+          <BankAccountSelectField
+            id="bank_account_id"
+            value={formData.bank_account_id || ''}
+            onChange={(value) => setFormData({ ...formData, bank_account_id: value })}
+            accounts={bankAccounts}
+            activeOnly
+            testId="payment-bank-select"
+          />
         )}
 
         <div>

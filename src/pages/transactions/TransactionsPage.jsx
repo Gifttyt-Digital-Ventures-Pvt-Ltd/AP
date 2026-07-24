@@ -15,6 +15,7 @@ import {
   useLinkTransactionInvoiceMutation,
 } from '../../Services/apis/transactionsApi';
 import { format } from 'date-fns';
+import { parseApiDate } from '@/lib/utils';
 import { Button } from '../../components/ui/button';
 import {
   AlertDialog,
@@ -45,6 +46,11 @@ import ReviewDialog from './components/ReviewDialog';
 import VoucherDialog from './components/VoucherDialog';
 import LinkInvoiceDialog from './components/LinkInvoiceDialog';
 import { useActionGuard } from '../../hooks/useActionGuard';
+
+const formatDisplayDate = (value, pattern) => {
+  const parsed = parseApiDate(value);
+  return parsed ? format(parsed, pattern) : '-';
+};
 
 const TransactionsPage = () => {
   const [transactionQueryParams, setTransactionQueryParams] = useState({});
@@ -402,11 +408,11 @@ const TransactionsPage = () => {
   // Format date range display
   const getDateFilterLabel = () => {
     if (appliedDateFilter.from && appliedDateFilter.to) {
-      return `${format(new Date(appliedDateFilter.from), 'd MMM')} - ${format(new Date(appliedDateFilter.to), 'd MMM yyyy')}`;
+      return `${formatDisplayDate(appliedDateFilter.from, 'd MMM')} - ${formatDisplayDate(appliedDateFilter.to, 'd MMM yyyy')}`;
     } else if (appliedDateFilter.from) {
-      return `From ${format(new Date(appliedDateFilter.from), 'd MMM yyyy')}`;
+      return `From ${formatDisplayDate(appliedDateFilter.from, 'd MMM yyyy')}`;
     } else if (appliedDateFilter.to) {
-      return `Until ${format(new Date(appliedDateFilter.to), 'd MMM yyyy')}`;
+      return `Until ${formatDisplayDate(appliedDateFilter.to, 'd MMM yyyy')}`;
     }
     return null;
   };
@@ -825,7 +831,7 @@ const TransactionsPage = () => {
                           <input type="checkbox" className="rounded" />
                         </td>
                         <td className="p-3 text-gray-800">
-                          {format(new Date(txn.date), 'd MMM yyyy')}
+                          {formatDisplayDate(txn?.date, 'd MMM yyyy')}
                         </td>
                         <td className="p-3">
                           <div className="flex items-center gap-2">
@@ -1095,7 +1101,7 @@ const TransactionsPage = () => {
                           <input type="checkbox" className="rounded" />
                         </td>
                         <td className="p-3 text-gray-800">
-                          {format(new Date(txn.date), 'd MMM yyyy')}
+                          {formatDisplayDate(txn?.date, 'd MMM yyyy')}
                         </td>
                         <td className="p-3">
                           <div className="flex items-center gap-2">

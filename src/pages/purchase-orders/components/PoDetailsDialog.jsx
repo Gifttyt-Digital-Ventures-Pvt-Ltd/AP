@@ -33,18 +33,11 @@ import {
 import {
   isFormatFieldEnabled,
   isFormatSectionEnabled,
-  normalizePoTemplateCode,
 } from "../utils";
-
-const poLineItemTableHeader = [
-  { key: "lineNumber", title: "#" },
-  { key: "description", title: "Description" },
-  { key: "hsnSacCode", title: "HSN/SAC" },
-  { key: "quantity", title: "Qty" },
-  { key: "unitPrice", title: "Unit Price" },
-  { key: "taxAmount", title: "Tax" },
-  { key: "totalAmount", title: "Amount", cellClassName: "font-medium" },
-];
+import PoLogo from "./PoLogo";
+import { OrgBranchDetail, VendorBranchDetail } from "../../../components/common/BranchTableCells";
+import AccountingLockBanner from "../../../components/AccountingLockBanner";
+import { isAccountingReadyLocked } from "../../../utils/accountingLock";
 
 const PoDetailsDialog = ({
   showViewDialog,
@@ -60,6 +53,7 @@ const PoDetailsDialog = ({
   setShowApprovalDialog,
   canManagePo,
   canApprovePo,
+  onEditPO,
 }) => {
   const selectedPoId = selectedPO?.id || selectedPO?.po_id || selectedPO?.poId;
   const [viewTab, setViewTab] = useState("details");
@@ -68,13 +62,8 @@ const PoDetailsDialog = ({
   );
   const poCurrency = selectedPO?.currency || "INR";
   const isInr = poCurrency === "INR";
-  const templateCode = normalizePoTemplateCode(
-    selectedPO?.template_code || selectedPO?.templateCode || "T1",
-  );
-  const documentBorderClass =
-    templateCode === "T3" ? "border-2 border-slate-900" : "border";
-  const headerBorderClass =
-    templateCode === "T4" ? "border-b-4 border-emerald-600" : "border-b";
+  const documentBorderClass = "border";
+  const headerBorderClass = "border-b";
 
   const selectedFormat =
     selectedPO?.formatConfigSnapshot ||
@@ -91,18 +80,77 @@ const PoDetailsDialog = ({
     selectedFormat
       ? isFormatFieldEnabled(selectedFormat, sectionKey, fieldKey)
       : true;
+  const poCompanyName =
+    selectedFormat?.companyName ||
+    selectedPO?.company_name ||
+    selectedPO?.companyName ||
+    "Company Name";
+  const poLogoUrl =
+    selectedFormat?.logoUrl ||
+    selectedFormat?.logo_url ||
+    selectedPO?.logoUrl ||
+    selectedPO?.logo_url ||
+    null;
+  const vendorAddress =
+    selectedPO?.vendor_address ||
+    selectedPO?.vendorAddress ||
+    selectedPO?.vendor_billing_address ||
+    selectedPO?.vendorBillingAddress ||
+    [
+      selectedPO?.vendorSnapshot?.addressLine1 ?? selectedPO?.vendorSnapshot?.address_line1,
+      selectedPO?.vendorSnapshot?.addressLine2 ?? selectedPO?.vendorSnapshot?.address_line2,
+      selectedPO?.vendorSnapshot?.city,
+      selectedPO?.vendorSnapshot?.state,
+      selectedPO?.vendorSnapshot?.pincode ??
+        selectedPO?.vendorSnapshot?.postalCode ??
+        selectedPO?.vendorSnapshot?.postal_code,
+      selectedPO?.vendorSnapshot?.country,
+    ]
+      .filter(Boolean)
+      .join(", ");
+  const hideStatusInDocument = ["Approved", "Issued"].includes(selectedPO?.status);
+  const poLineItemTableHeader = [
+    { key: "lineNumber", title: "#" },
+    ...(fieldOn("LINE_ITEM", "item_name")
+      ? [{ key: "description", title: "Description" }]
+      : []),
+    ...(isInr && fieldOn("LINE_ITEM", "hsn_sac_code")
+      ? [{ key: "hsnSacCode", title: "HSN/SAC" }]
+      : []),
+    ...(fieldOn("LINE_ITEM", "quantity")
+      ? [{ key: "quantity", title: "Qty" }]
+      : []),
+    ...(fieldOn("LINE_ITEM", "uom")
+      ? [{ key: "unitOfMeasure", title: "Unit" }]
+      : []),
+    ...(fieldOn("LINE_ITEM", "unit_rate")
+      ? [{ key: "unitPrice", title: "Unit Price" }]
+      : []),
+    ...(fieldOn("LINE_ITEM", "discount_percent")
+      ? [{ key: "discountPercent", title: "Disc %" }]
+      : []),
+    ...(isInr && fieldOn("LINE_ITEM", "gst_rate")
+      ? [{ key: "gstRate", title: "GST %" }]
+      : []),
+    ...(isInr && fieldOn("LINE_ITEM", "gst_rate")
+      ? [{ key: "taxAmount", title: "Tax" }]
+      : []),
+    { key: "totalAmount", title: "Amount", cellClassName: "font-medium" },
+  ];
 
   const renderLineItemRow = (item, rowIndex, headers) => {
     const lineItem = {
       lineNumber: item.line_number ?? item.lineNumber ?? rowIndex + 1,
-      description: item.item_description ?? item.description ?? "-",
-      hsnSacCode: item.hsn_sac_code ?? item.hsnSac ?? "-",
-      quantity:
-        `${Number(item.quantity ?? 0)} ${item.unit_of_measure ?? item.uom ?? ""}`.trim(),
+      description: item.item_description ?? item.itemDescription ?? item.description ?? "-",
+      hsnSacCode: item.hsn_sac_code ?? item.hsnSacCode ?? item.hsnSac ?? "-",
+      quantity: Number(item.quantity ?? 0),
+      unitOfMeasure: item.unit_of_measure ?? item.unitOfMeasure ?? item.uom ?? "-",
       unitPrice: formatCurrency(
-        Number(item.unit_price ?? item.unitPrice ?? 0),
+        Number(item.unit_price ?? item.unitRate ?? item.unitPrice ?? 0),
         poCurrency,
       ),
+      discountPercent: `${Number(item.discount_percent ?? item.discountPercent ?? 0)}%`,
+      gstRate: `${Number(item.gst_rate ?? item.gstRate ?? 0)}%`,
       taxAmount: formatCurrency(
         Number(
           item.tax_amount ??
@@ -170,8 +218,8 @@ const PoDetailsDialog = ({
 
   return (
     <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
-      <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto p-0">
-        <DialogHeader>
+      <DialogContent className="flex max-h-[92vh] max-w-6xl flex-col overflow-hidden p-0">
+        <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2 px-6 pt-6 pb-3 border-b">
             <FileText className="h-5 w-5" />
             Purchase Order: {selectedPO?.po_number}
@@ -182,9 +230,21 @@ const PoDetailsDialog = ({
           </DialogDescription>
         </DialogHeader>
 
-        {selectedPO && (
-          <div className="bg-slate-100 px-6 py-5 space-y-6">
-            <Tabs value={viewTab} onValueChange={setViewTab}>
+        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-100">
+          {selectedPO ? (
+            <div className="bg-background px-6 pt-4">
+              <AccountingLockBanner
+                record={selectedPO}
+                objectLabel="purchase order"
+                objectType="PO"
+                objectId={selectedPO?.id}
+              />
+            </div>
+          ) : null}
+
+          {selectedPO && (
+            <div className="px-6 py-5 space-y-6">
+              <Tabs value={viewTab} onValueChange={setViewTab}>
               <TabsList className="grid w-full max-w-sm grid-cols-2">
                 <TabsTrigger value="details">Details</TabsTrigger>
                 <TabsTrigger value="history">
@@ -202,35 +262,35 @@ const PoDetailsDialog = ({
                       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[1fr_360px]">
                         <div className="flex items-start gap-3">
                           {fieldOn("HEADER", "h_logo") && (
-                            <div className="grid h-12 w-12 shrink-0 place-items-center rounded bg-emerald-700 text-lg font-semibold text-white">
-                              {(selectedPO?.company_name || "O").charAt(0)}
-                            </div>
+                            <PoLogo logoUrl={poLogoUrl} companyName={poCompanyName} />
                           )}
                           <div>
                             <h2 className="text-xl font-bold">
-                              {selectedPO?.company_name || "Company Name"}
+                              {poCompanyName}
                             </h2>
                             <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">
                               Purchase Order
                             </p>
                             <p className="mt-2 text-xs text-muted-foreground">
-                              {selectedPO.po_format_name || "PO Format"} -{" "}
-                              {templateCode}
+                              {selectedPO.po_format_name || "PO Format"}
                             </p>
                           </div>
                         </div>
 
                         <div className="space-y-1 text-right text-sm">
-                          <div>
-                            <span className="text-muted-foreground">
-                              Status:
-                            </span>{" "}
-                            <Badge
-                              className={`${statusColors[selectedPO.status] || "bg-gray-500"} text-white`}
-                            >
-                              {selectedPO.status}
-                            </Badge>
-                          </div>
+                          {!hideStatusInDocument && (
+                            <div>
+                              <span className="text-muted-foreground">
+                                Status:
+                              </span>{" "}
+                              <Badge
+                                variant="outline"
+                                className={`border-0 font-semibold ${statusColors[selectedPO.status] || statusColors.Draft}`}
+                              >
+                                {selectedPO.status}
+                              </Badge>
+                            </div>
+                          )}
                           {fieldOn("HEADER", "po_number") && (
                             <p>
                               <span className="text-muted-foreground">
@@ -284,6 +344,11 @@ const PoDetailsDialog = ({
                             {selectedPO.vendor_name || "-"}
                           </p>
                         )}
+                        {vendorAddress ? (
+                          <p className="mt-2 whitespace-pre-line text-sm text-muted-foreground">
+                            Address: {vendorAddress}
+                          </p>
+                        ) : null}
                         {isInr &&
                           fieldOn("VENDOR", "vendor_gstin") &&
                           selectedPO.vendor_gstin && (
@@ -298,6 +363,8 @@ const PoDetailsDialog = ({
                               PAN: {selectedPO.vendor_pan}
                             </p>
                           )}
+                        <OrgBranchDetail record={selectedPO} label="Organisation Branch" />
+                        <VendorBranchDetail record={selectedPO} label="Vendor Branch" />
                       </section>
                     )}
 
@@ -496,11 +563,12 @@ const PoDetailsDialog = ({
                   </div>
                 )}
               </TabsContent>
-            </Tabs>
-          </div>
-        )}
+              </Tabs>
+            </div>
+          )}
+        </div>
 
-        <DialogFooter className="px-6 py-4 border-t">
+        <DialogFooter className="shrink-0 border-t bg-background px-6 py-4">
           <Button variant="outline" onClick={() => setShowViewDialog(false)}>
             Close
           </Button>
@@ -519,7 +587,9 @@ const PoDetailsDialog = ({
               Download PO
             </Button>
           )}
-          {selectedPO?.status === "Draft" && canManagePo && (
+          {["Draft", "Sent Back"].includes(selectedPO?.status) &&
+            canManagePo &&
+            !isAccountingReadyLocked(selectedPO) && (
             <Button
               onClick={() => handleSubmitForApproval(selectedPoId)}
               disabled={submitting}
@@ -528,6 +598,18 @@ const PoDetailsDialog = ({
               {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
               <Send className="h-4 w-4 mr-2" />
               Submit for Approval
+            </Button>
+          )}
+          {["Draft", "Sent Back"].includes(selectedPO?.status) &&
+            canManagePo &&
+            !isAccountingReadyLocked(selectedPO) && (
+            <Button
+              variant="outline"
+              onClick={() => onEditPO?.(selectedPO)}
+              disabled={submitting}
+              data-testid="edit-po-btn"
+            >
+              Edit PO
             </Button>
           )}
           {selectedPO?.status === "Pending Approval" && canApprovePo && (

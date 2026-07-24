@@ -12,6 +12,17 @@ import AppDataTable from "../../../components/common/AppDataTable";
 import RefreshButton from "../../../components/common/RefreshButton";
 import { Button } from "../../../components/ui/button";
 import { TableCell, TableRow } from "../../../components/ui/table";
+import { cn } from "../../../lib/utils";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../../components/ui/alert-dialog";
 import { useActionGuard } from "../../../hooks/useActionGuard";
 import CategoryDialog from "./CategoryDialog";
 import CategoryViewDialog from "./CategoryViewDialog";
@@ -79,6 +90,7 @@ const CategoriesTab = () => {
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
   const [viewingCategory, setViewingCategory] = useState(null);
+  const [deleteCategoryTarget, setDeleteCategoryTarget] = useState(null);
 
   const canCreateCategory = canPerformAction("categories.create");
   const canUpdateCategory = canPerformAction("categories.update");
@@ -103,15 +115,21 @@ const CategoriesTab = () => {
     setViewDialogOpen(true);
   };
 
-  const handleDeleteCategory = async (category) => {
+  const handleDeleteCategory = (category) => {
     if (!guardAction("categories.delete")) return;
-    if (!window.confirm(`Delete ${category.name}?`)) return;
+    setDeleteCategoryTarget(category);
+  };
 
+  const confirmDeleteCategory = async () => {
+    const category = deleteCategoryTarget;
+    if (!category) return;
     try {
       await deleteCategory(category.id).unwrap();
       toast.success("Category deleted");
     } catch (error) {
       toast.error(getErrorMessage(error, "Failed to delete category"));
+    } finally {
+      setDeleteCategoryTarget(null);
     }
   };
 
@@ -210,7 +228,10 @@ const CategoriesTab = () => {
         }
 
         return (
-          <TableCell key={header.key} className={header.cellClassName}>
+          <TableCell
+            key={header.key}
+            className={cn('border border-border', header.cellClassName)}
+          >
             {value}
           </TableCell>
         );
@@ -268,6 +289,7 @@ const CategoriesTab = () => {
           isLoading={categoriesLoading || categoriesFetching}
           loadingRowCount={4}
           striped
+          bordered
         />
 
         {!categoriesLoading && categories.length === 0 && (
@@ -308,6 +330,32 @@ const CategoriesTab = () => {
         category={viewingCategory}
         employees={approvers}
       />
+
+      <AlertDialog
+        open={Boolean(deleteCategoryTarget)}
+        onOpenChange={(open) => !open && setDeleteCategoryTarget(null)}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Category?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Delete category "{deleteCategoryTarget?.name}"? This action
+              cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingCategory}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDeleteCategory}
+              disabled={deletingCategory}
+            >
+              {deletingCategory ? "Deleting..." : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

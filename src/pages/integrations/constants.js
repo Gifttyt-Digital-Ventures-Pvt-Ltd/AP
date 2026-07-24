@@ -20,12 +20,12 @@ export const OBJECT_LABELS = {
 export const FALLBACK_ZOHO_PROVIDER = {
   provider: "ZOHO_BOOKS",
   name: "Zoho Books",
-  description: "OAuth connection for vendors, chart of accounts, bills, payments, journals, and ledgers.",
+  description: "OAuth connection for vendors, chart of accounts, bills, transactions, journals, and ledgers.",
   auth: {
     type: "OAUTH2",
     requiresDataCenter: true,
     requiresOrgSelection: true,
-    supportsByoCredentials: true,
+    requiresClientCredentials: true,
   },
   objects: {
     CHART_OF_ACCOUNTS: { supported: true, directions: ["PULL"] },
@@ -38,13 +38,27 @@ export const FALLBACK_ZOHO_PROVIDER = {
   syncOrder: ["CHART_OF_ACCOUNTS", "VENDORS", "BILLS", "VENDOR_PAYMENTS", "JOURNALS"],
 };
 
-export const ACTIVE_SYNC_STATUSES = new Set(["PENDING", "AUTHORIZING", "SYNCING", "RUNNING", "THROTTLED", "QUEUED"]);
+export const ACTIVE_SYNC_STATUSES = new Set([
+  "PENDING",
+  "PENDING_AUTHORIZATION",
+  "AUTHORIZING",
+  "SYNCING",
+  "RUNNING",
+  "THROTTLED",
+  "QUEUED",
+]);
 
-export const OAUTH_POLL_STATUSES = new Set(["PENDING", "AUTHORIZING"]);
+export const OAUTH_POLL_STATUSES = new Set(["PENDING", "PENDING_AUTHORIZATION", "AUTHORIZING"]);
 
 export const OAUTH_TERMINAL_STATUSES = new Set(["CONNECTED", "ERROR", "DISCONNECTED", "FAILED"]);
 
-export const BLOCKING_CONNECTION_STATUSES = new Set(["CONNECTED", "PENDING", "AUTHORIZING", "ERROR"]);
+export const BLOCKING_CONNECTION_STATUSES = new Set([
+  "CONNECTED",
+  "PENDING",
+  "PENDING_AUTHORIZATION",
+  "AUTHORIZING",
+  "ERROR",
+]);
 
 export const ZOHO_OAUTH_SESSION_KEY = "optifii.zoho.oauth.connectionId";
 
@@ -55,6 +69,3 @@ export const REVIEW_RESOLVE_ACTIONS = [
   { value: "REJECT", label: "Reject" },
   { value: "IGNORE", label: "Ignore" },
 ];
-
-export const isZohoByoFeatureEnabled = () =>
-  import.meta.env.VITE_INTEGRATIONS_ZOHO_BYO_ENABLED !== "false";

@@ -1,8 +1,117 @@
 import { parseMsmeValue } from '../../utils/vendorValidation';
+import { sanitizeVendorTdsForSave } from '../../pages/vendors/utils/vendorTds';
+
+/** Always returns an array from common API list envelopes. */
+const LIST_RESPONSE_KEYS = [
+  'content',
+  'data',
+  'items',
+  'results',
+  'vendors',
+  'campaigns',
+  'exports',
+  'reports',
+  'types',
+  'reportTypes',
+  'employees',
+  'roles',
+  'users',
+  'categories',
+  'workflows',
+  'batches',
+  'notifications',
+  'logs',
+  'auditLogs',
+  'entries',
+  'sections',
+  'states',
+  'statuses',
+  'branches',
+  'invoices',
+  'purchaseOrders',
+  'purchase_orders',
+  'grns',
+  'screens',
+  'providers',
+  'connections',
+  'organizations',
+  'mappings',
+  'history',
+  'ledgers',
+  'statements',
+  'transactions',
+  'payments',
+  'approvals',
+];
+
+const pickArrayFromObject = (object, keys) => {
+  if (!object || typeof object !== 'object' || Array.isArray(object)) return null;
+  let emptyMatch = null;
+  for (const key of keys) {
+    const value = object[key];
+    if (!Array.isArray(value)) continue;
+    if (value.length > 0) return value;
+    if (!emptyMatch) emptyMatch = value;
+  }
+  return emptyMatch;
+};
+
+export const extractListResponse = (response, extraKeys = []) => {
+  if (Array.isArray(response)) return response;
+  if (!response || typeof response !== 'object') return [];
+
+  const additionalKeys = Array.isArray(extraKeys) ? extraKeys : [];
+  const keys = [...additionalKeys, ...LIST_RESPONSE_KEYS];
+  const direct = pickArrayFromObject(response, keys);
+  if (direct) return direct;
+
+  if (response.data && typeof response.data === 'object') {
+    if (Array.isArray(response.data)) return response.data;
+    const nested = pickArrayFromObject(response.data, keys);
+    if (nested) return nested;
+  }
+
+  const entityId =
+    response.id ??
+    response._id ??
+    response.vendorId ??
+    response.vendor_id;
+  if (entityId !== undefined && entityId !== null) return [response];
+
+  return [];
+};
+
+/** Paginated list payloads often expose rows on `content` / `items`. */
+export const extractPageContent = (response) => {
+  if (Array.isArray(response)) return response;
+  if (response && typeof response === 'object') {
+    if (Array.isArray(response.content)) return response.content;
+    if (Array.isArray(response.items)) return response.items;
+    if (Array.isArray(response.purchaseOrders)) return response.purchaseOrders;
+    if (Array.isArray(response.purchase_orders)) return response.purchase_orders;
+    if (Array.isArray(response.grns)) return response.grns;
+    const paginatedData = response.data;
+    if (
+      Array.isArray(paginatedData) &&
+      (response.totalElements != null || response.total != null || response.totalPages != null)
+    ) {
+      return paginatedData;
+    }
+  }
+  return extractListResponse(response);
+};
+
+/** Invoice-matching GRN picker: `{ content: [], hasGrns: false }`. */
+export const extractMatchingGrns = (response) => ({
+  items: extractPageContent(response),
+  hasGrns: response?.hasGrns ?? response?.has_grns ?? null,
+});
 
 export const toVendorApiPayload = (vendor = {}) => {
   const {
     name,
+    trade_name,
+    tradeName,
     vendor_type,
     vendorType,
     msme,
@@ -30,19 +139,45 @@ export const toVendorApiPayload = (vendor = {}) => {
     accountHolderName,
     category,
     currency,
-    payment_terms,
-    paymentTerms,
     contact_person,
     contactPerson,
     website,
     notes,
+    status,
+    action,
+    documents,
+    vendorDocuments,
+    vendor_documents,
+    tdsMapping,
+    tds_mapping,
+    tdsMappings,
+    tds_mappings,
+    gstRegistrations,
+    gst_regs,
+    gstRegs,
+    gst_registrations,
+    vendorBranches,
+    vendor_branches,
+    branchDetails,
+    branch_details,
   } = vendor;
 
   const resolvedMsme = parseMsmeValue(msme);
   const msmeBoolean = resolvedMsme === null ? false : resolvedMsme;
+  const resolvedTdsMapping = sanitizeVendorTdsForSave(
+    tdsMapping ??
+      tds_mapping ??
+      (Array.isArray(tdsMappings ?? tds_mappings) ? (tdsMappings ?? tds_mappings)[0] : null),
+  );
+  const resolvedGstRegistrations =
+    gstRegistrations ?? gst_regs ?? gstRegs ?? gst_registrations ?? undefined;
+  const resolvedVendorBranches =
+    vendorBranches ?? vendor_branches ?? branchDetails ?? branch_details ?? undefined;
+  const resolvedDocuments = documents ?? vendorDocuments ?? vendor_documents ?? undefined;
 
   return {
     name,
+    tradeName: tradeName ?? trade_name,
     vendorType: vendorType ?? vendor_type,
     msme: msmeBoolean,
     email,
@@ -63,17 +198,117 @@ export const toVendorApiPayload = (vendor = {}) => {
     accountHolderName: accountHolderName ?? account_holder_name,
     category,
     currency,
-    paymentTerms: paymentTerms ?? payment_terms,
     contactPerson: contactPerson ?? contact_person,
     website,
     notes,
+    ...(resolvedDocuments !== undefined ? { documents: resolvedDocuments } : {}),
+    ...(resolvedGstRegistrations !== undefined
+      ? { gstRegistrations: resolvedGstRegistrations }
+      : {}),
+    ...(resolvedVendorBranches !== undefined
+      ? { vendorBranches: resolvedVendorBranches }
+      : {}),
+    ...(resolvedTdsMapping ? { tdsMapping: resolvedTdsMapping } : {}),
+    ...(status ? { status } : {}),
+    ...(action ? { action } : {}),
   };
+};
+
+const addStringIfPresent = (payload, key, value) => {
+  const nextValue = String(value ?? '').trim();
+  if (nextValue) payload[key] = nextValue;
+};
+
+/** Vendor addition request payload — only company name and vendor type are mandatory. */
+export const toVendorRequestApiPayload = (vendor = {}) => {
+  const payload = {
+    name: String(vendor.name ?? '').trim(),
+    vendorType: vendor.vendorType ?? vendor.vendor_type,
+  };
+
+  addStringIfPresent(payload, 'tradeName', vendor.tradeName ?? vendor.trade_name);
+  addStringIfPresent(payload, 'email', vendor.email);
+  addStringIfPresent(payload, 'phone', vendor.phone);
+  addStringIfPresent(payload, 'mobile', vendor.mobile);
+  addStringIfPresent(payload, 'pan', vendor.pan);
+  addStringIfPresent(payload, 'gstin', vendor.gstin);
+  addStringIfPresent(payload, 'addressLine1', vendor.addressLine1 ?? vendor.address_line1);
+  addStringIfPresent(payload, 'addressLine2', vendor.addressLine2 ?? vendor.address_line2);
+  addStringIfPresent(payload, 'city', vendor.city);
+  addStringIfPresent(payload, 'state', vendor.state);
+  addStringIfPresent(payload, 'pincode', vendor.pincode);
+  addStringIfPresent(payload, 'country', vendor.country);
+  addStringIfPresent(payload, 'bankName', vendor.bankName ?? vendor.bank_name);
+  addStringIfPresent(payload, 'accountNumber', vendor.accountNumber ?? vendor.account_number);
+  addStringIfPresent(payload, 'ifscCode', vendor.ifscCode ?? vendor.ifsc_code);
+  addStringIfPresent(payload, 'branch', vendor.branch);
+  addStringIfPresent(payload, 'accountHolderName', vendor.accountHolderName ?? vendor.account_holder_name);
+  addStringIfPresent(payload, 'category', vendor.category);
+  addStringIfPresent(payload, 'currency', vendor.currency);
+  addStringIfPresent(payload, 'contactPerson', vendor.contactPerson ?? vendor.contact_person);
+  addStringIfPresent(payload, 'website', vendor.website);
+  addStringIfPresent(payload, 'notes', vendor.notes);
+
+  const resolvedDocuments = vendor.documents ?? vendor.vendorDocuments ?? vendor.vendor_documents;
+  if (resolvedDocuments && Object.keys(resolvedDocuments).length > 0) {
+    payload.documents = resolvedDocuments;
+  }
+
+  const resolvedGstRegistrations =
+    vendor.gstRegistrations ?? vendor.gst_regs ?? vendor.gstRegs ?? vendor.gst_registrations;
+  if (Array.isArray(resolvedGstRegistrations)) {
+    const filledRegistrations = resolvedGstRegistrations.filter((registration) =>
+      String(registration?.gstin ?? '').trim());
+    if (filledRegistrations.length > 0) payload.gstRegistrations = filledRegistrations;
+  }
+
+  return payload;
+};
+
+const buildUiVendorGstRegistrations = (vendor = {}) => {
+  const registrations =
+    vendor.gstRegistrations ??
+    vendor.gst_regs ??
+    vendor.gstRegs ??
+    vendor.gst_registrations;
+
+  if (Array.isArray(registrations) && registrations.length > 0) {
+    return registrations;
+  }
+
+  const gstin = String(vendor.gstin || '').trim().toUpperCase();
+  if (!gstin) return [];
+
+  return [{
+    gstin,
+    state: vendor.state || '',
+    isPrimary: true,
+  }];
 };
 
 export const toVendorUiPayload = (vendor = {}) => ({
   ...vendor,
   vendor_type: vendor.vendor_type ?? vendor.vendorType,
+  gstin: String(vendor.gstin || '').trim().toUpperCase() || vendor.gstin || '',
+  gstRegistrations: buildUiVendorGstRegistrations(vendor),
+  vendorBranches:
+    vendor.vendorBranches ??
+    vendor.vendor_branches ??
+    vendor.branchDetails ??
+    vendor.branch_details ??
+    [],
+  documents: vendor.documents ?? vendor.vendorDocuments ?? vendor.vendor_documents ?? {},
+  tdsMapping:
+    vendor.tdsMapping ??
+    vendor.tds_mapping ??
+    (Array.isArray(vendor.tdsMappings ?? vendor.tds_mappings)
+      ? (vendor.tdsMappings ?? vendor.tds_mappings)[0]
+      : null) ??
+    vendor.vendorTdsMapping ??
+    vendor.vendor_tds_mapping ??
+    null,
   msme: parseMsmeValue(vendor.msme ?? vendor.is_msme) === true,
+  trade_name: vendor.trade_name ?? vendor.tradeName ?? '',
   address_line1: vendor.address_line1 ?? vendor.addressLine1,
   address_line2: vendor.address_line2 ?? vendor.addressLine2,
   bank_name: vendor.bank_name ?? vendor.bankName,
@@ -128,20 +363,75 @@ export const toBankAccountApiPayload = (account = {}) => {
 
 export const toBankAccountUiPayload = (account = {}) => ({
   ...account,
-  account_name: account.account_name ?? account.accountName,
-  account_number: account.account_number ?? account.accountNumber,
-  bank_name: account.bank_name ?? account.bankName,
-  account_type: account.account_type ?? account.accountType,
-  ifsc_code: account.ifsc_code ?? account.ifscCode,
+  account_name: account.account_name ?? account.accountName ?? "",
+  account_number: account.account_number ?? account.accountNumber ?? "",
+  bank_name: account.bank_name ?? account.bankName ?? "",
+  account_type: account.account_type ?? account.accountType ?? "",
+  ifsc_code: account.ifsc_code ?? account.ifscCode ?? "",
   is_active: account.is_active ?? account.isActive,
 });
+
+export const toPaymentCreateApiPayload = (payment = {}) => {
+  const payload = {};
+  const invoiceId = payment.invoice_id ?? payment.invoiceId;
+  addStringIfPresent(payload, "invoice_id", invoiceId);
+  addStringIfPresent(
+    payload,
+    "payment_date",
+    payment.payment_date ?? payment.paymentDate,
+  );
+  addStringIfPresent(
+    payload,
+    "payment_method",
+    payment.payment_method ?? payment.paymentMethod,
+  );
+  addStringIfPresent(
+    payload,
+    "bank_account_id",
+    payment.bank_account_id ?? payment.bankAccountId,
+  );
+  addStringIfPresent(
+    payload,
+    "reference_number",
+    payment.reference_number ?? payment.referenceNumber,
+  );
+  addStringIfPresent(payload, "notes", payment.notes);
+  return payload;
+};
+
+export const toRecordPaymentsApiPayload = (payment = {}) => {
+  const invoiceNumbers = payment.invoice_numbers ?? payment.invoiceNumbers;
+  const payload = {
+    invoice_numbers: Array.isArray(invoiceNumbers)
+      ? invoiceNumbers.filter(Boolean)
+      : [],
+  };
+  addStringIfPresent(
+    payload,
+    "payment_date",
+    payment.payment_date ?? payment.paymentDate,
+  );
+  addStringIfPresent(
+    payload,
+    "payment_method",
+    payment.payment_method ?? payment.paymentMethod,
+  );
+  addStringIfPresent(
+    payload,
+    "reference_number",
+    payment.reference_number ?? payment.referenceNumber,
+  );
+  return payload;
+};
 
 export {
   buildCreateInvoiceRequestBody,
   buildInvoiceApiPayload,
   EMPTY_INVOICE_LIST_RESPONSE,
+  EMPTY_INVOICE_FILTER_OPTIONS,
   getInvoiceListItems,
   mergeInvoiceVendorOptions,
+  normalizeInvoiceFilterOptions,
   normalizeInvoiceLineItem,
   normalizeInvoiceListResponse,
   normalizeInvoiceResponse,

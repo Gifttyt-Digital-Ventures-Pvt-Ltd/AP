@@ -1,5 +1,6 @@
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../../utils/currency";
 import { parseNumericInput } from "./numericInput";
+import { normalizeExpenseType } from "./invoiceAccountingFields";
 
 export const DEFAULT_INR_TAX = "CGST + SGST 18%";
 export const LINE_ITEM_LEVEL = "At Line Item Level";
@@ -7,6 +8,24 @@ export const INVOICE_LEVEL = "At Invoice Level";
 
 export const isInrInvoiceCurrency = (currency) =>
   normalizeCurrencyCode(currency) === DEFAULT_CURRENCY;
+
+export const normalizeLineItemDiscountTypeForForm = (
+  discountType = "%",
+  currency = DEFAULT_CURRENCY,
+) => {
+  const normalizedType = String(discountType || "").trim().toLowerCase();
+  if (
+    normalizedType === "amount" ||
+    normalizedType === "flat" ||
+    normalizedType === "currency"
+  ) {
+    return isInrInvoiceCurrency(currency) ? "₹" : normalizeCurrencyCode(currency);
+  }
+  if (normalizedType === "percent" || normalizedType === "percentage") {
+    return "%";
+  }
+  return discountType || "%";
+};
 
 export const formatForeignTaxLabel = (taxName, taxRate) => {
   const name = String(taxName || "Tax").trim() || "Tax";
@@ -31,6 +50,24 @@ export const parseTaxNameFromLabel = (taxLabel = "") => {
   return withoutPercent || "Tax";
 };
 
+const resolveLineItemTaxLabel = (item = {}) =>
+  item?.tax ??
+  item?.invoiceTax ??
+  item?.invoice_tax ??
+  item?.taxLabel ??
+  item?.tax_label ??
+  "";
+
+const resolveLineItemTaxRate = (item = {}) =>
+  [
+    item?.taxRate,
+    item?.tax_rate,
+    item?.gstRate,
+    item?.gst_rate,
+    item?.taxPercentage,
+    item?.tax_percentage,
+  ].find((value) => value !== undefined && value !== null && value !== "");
+
 export const applyForeignLineItemTax = (item, taxName, taxRate) => {
   const rate = Number(taxRate);
   const normalizedRate = Number.isFinite(rate) ? rate : "";
@@ -53,7 +90,13 @@ export const applyInrLineItemTax = (item, tax = DEFAULT_INR_TAX) => ({
 export const createDefaultLineItem = (currency = DEFAULT_CURRENCY) => {
   const base = {
     description: "",
-    ledger: "Cloud Services",
+    ledger: "",
+    ledgerId: "",
+    accountGroupId: "",
+    accountGroupName: "",
+    groupId: "",
+    groupName: "",
+    expenseType: "",
     quantity: 1,
     unitRate: 0,
     discount: 0,
@@ -70,9 +113,10 @@ export const createDefaultLineItem = (currency = DEFAULT_CURRENCY) => {
 };
 
 export const resolveInrTaxLabel = (item, taxesRaw = []) => {
-  if (item?.tax) return item.tax;
+  const explicitTaxLabel = resolveLineItemTaxLabel(item);
+  if (explicitTaxLabel) return explicitTaxLabel;
 
-  const rate = Number(item?.taxRate ?? item?.tax_rate ?? 0);
+  const rate = Number(resolveLineItemTaxRate(item) || 0);
   const hasLineRate = rate > 0;
   const lineTaxAmount = Number(item?.taxAmount ?? item?.tax_amount ?? 0) || 0;
   const totalTaxAmount = taxesRaw.reduce(
@@ -139,11 +183,21 @@ export const resolveScannedLineItemPricing = (item = {}) => {
   const quantity = Number(item?.quantity ?? item?.qty ?? 1) || 1;
   const listUnitPrice =
     Number(item?.unitPrice ?? item?.unitPrice ?? item?.price ?? 0) || 0;
-  const lineTotal = Number(
+  const scannedLineTotal = Number(
     item?.lineTotal ?? item?.lineTotal ?? item?.amount ?? 0,
   );
-  const amount = lineTotal > 0 ? lineTotal : quantity * listUnitPrice;
-  const effectiveUnitPrice = quantity > 0 ? amount / quantity : listUnitPrice;
+  const discountAmount = Number(
+    item?.discountAmount ?? item?.discount_amount ?? item?.discountValue ?? 0,
+  ) || 0;
+  const grossAmount =
+    listUnitPrice > 0 ? quantity * listUnitPrice : scannedLineTotal + discountAmount;
+  const amount = grossAmount > 0 ? grossAmount : scannedLineTotal;
+  const effectiveUnitPrice =
+    listUnitPrice > 0
+      ? listUnitPrice
+      : quantity > 0 && amount > 0
+        ? amount / quantity
+        : 0;
 
   return {
     quantity,
@@ -291,10 +345,9 @@ export const resolveScannedLineItemTax = (
 
   const fallbackLabel = fallback?.defaultTaxLabel ?? "";
   const fallbackRateCandidate =
-    item?.taxRate ??
-    item?.tax_rate ??
+    resolveLineItemTaxRate(item) ??
     fallback?.defaultTaxRate ??
-    parseTaxRateFromLabel(item?.tax) ??
+    parseTaxRateFromLabel(resolveLineItemTaxLabel(item)) ??
     parseTaxRateFromLabel(fallbackLabel) ??
     taxesRaw?.[0]?.taxRate ??
     taxesRaw?.[0]?.tax_rate;
@@ -304,7 +357,7 @@ export const resolveScannedLineItemTax = (
   let taxName =
     item?.taxName ??
     item?.tax_name ??
-    parseTaxNameFromLabel(item?.tax) ??
+    parseTaxNameFromLabel(resolveLineItemTaxLabel(item)) ??
     fallback?.defaultTaxName ??
     parseTaxNameFromLabel(fallbackLabel) ??
     "";
@@ -322,11 +375,14 @@ export const resolveScannedLineItemTax = (
   return {
     taxName,
     taxRate: rate,
-    tax: item?.tax || formatForeignTaxLabel(taxName, rate),
+    tax: resolveLineItemTaxLabel(item) || formatForeignTaxLabel(taxName, rate),
   };
 };
 
-export const mapExtractedLineItemToForm = (item = {}, { useInrTax = true } = {}) => {
+export const mapExtractedLineItemToForm = (
+  item = {},
+  { useInrTax = true, currency = DEFAULT_CURRENCY } = {},
+) => {
   const quantity = Number(item.quantity || 1);
   const lineTotal = Number(item.lineTotal ?? item.amount ?? item.lineTotal ?? 0);
   const unitPrice = Number(item.unitPrice ?? item.unitRate ?? item.unitPrice ?? 0);
@@ -336,16 +392,33 @@ export const mapExtractedLineItemToForm = (item = {}, { useInrTax = true } = {})
 
   return {
     description: item.description || "",
-    ledger: item.ledger || "Cloud Services",
-    tax: item.tax || (useInrTax ? DEFAULT_INR_TAX : ""),
-    taxName: item.taxName || "",
-    taxRate: item.taxRate ?? "",
+    ledger: item.ledger || item.ledgerName || item.ledger_name || "",
+    ledgerId: item.ledgerId || item.ledger_id || "",
+    accountGroupId:
+      item.accountGroupId || item.account_group_id || item.groupId || item.group_id || "",
+    accountGroupName:
+      item.accountGroupName || item.account_group_name || item.groupName || item.group_name || "",
+    groupId: item.groupId || item.group_id || item.accountGroupId || item.account_group_id || "",
+    groupName:
+      item.groupName || item.group_name || item.accountGroupName || item.account_group_name || "",
+    expenseType: normalizeExpenseType(item.expenseType || item.expense_type || ""),
+    tax: resolveLineItemTaxLabel(item) || (useInrTax ? DEFAULT_INR_TAX : ""),
+    taxName: item.taxName || item.tax_name || "",
+    taxRate: resolveLineItemTaxRate(item) ?? "",
     quantity,
     unitRate: unitRate,
     lineTotal: resolvedLineTotal,
     discount: item.discount || 0,
-    discountType: item.discountType || "%",
-    hsnSac: item.hsnSac || "",
+    discountAmount: item.discountAmount ?? item.discount_amount ?? "",
+    discountPercent: item.discountPercent ?? item.discount_percent ?? "",
+    discountType: normalizeLineItemDiscountTypeForForm(
+      item.discountType ?? item.discount_type ?? "%",
+      currency,
+    ),
+    grossAmount: item.grossAmount ?? item.gross_amount ?? "",
+    taxAmount: item.taxAmount ?? item.tax_amount ?? "",
+    netAmount: item.netAmount ?? item.net_amount ?? "",
+    hsnSac: item.hsnSac || item.hsn_sac || "",
     eligibleForItc: item.eligibleForItc ?? true,
   };
 };
@@ -370,6 +443,15 @@ export const syncLineItemLineTotal = (item = {}) => {
     ...item,
     lineTotal: quantity * unitRate,
   };
+};
+
+export const formatInrTaxPercent = (rate) => {
+  const numeric = Number(rate);
+  if (!Number.isFinite(numeric) || numeric <= 0) return "";
+  const formatted = Number.isInteger(numeric)
+    ? String(numeric)
+    : String(Number(numeric.toFixed(2)));
+  return `${formatted}%`;
 };
 
 export const calculateInvoiceTotals = ({
@@ -445,6 +527,23 @@ export const calculateInvoiceTotals = ({
     }
   }
 
+  let cgstRate = 0;
+  let sgstRate = 0;
+  let igstRate = 0;
+
+  if (isInrInvoiceCurrency(currency) && invoiceLevelTaxEnabled) {
+    const taxRate = taxRates.find((entry) => entry.value === invoiceTax);
+    if (taxRate) {
+      cgstRate = Number(taxRate.cgst) || 0;
+      sgstRate = Number(taxRate.sgst) || 0;
+      igstRate = Number(taxRate.igst) || 0;
+    }
+  } else if (isInrInvoiceCurrency(currency) && subTotal > 0) {
+    if (cgst > 0) cgstRate = (cgst / subTotal) * 100;
+    if (sgst > 0) sgstRate = (sgst / subTotal) * 100;
+    if (igst > 0) igstRate = (igst / subTotal) * 100;
+  }
+
   let foreignTaxes = [];
   let foreignTax = 0;
 
@@ -513,6 +612,9 @@ export const calculateInvoiceTotals = ({
     cgst,
     sgst,
     igst,
+    cgstRate,
+    sgstRate,
+    igstRate,
     foreignTax,
     foreignTaxes,
     invoiceDiscountAmount: boundedInvoiceDiscountAmount,

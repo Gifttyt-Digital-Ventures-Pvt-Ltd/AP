@@ -32,6 +32,7 @@ import LedgerTable from "@/components/credits/LedgerTable";
 import TokenTopUpRequestDialog from "@/components/credits/TokenTopUpRequestDialog";
 import { useRBAC } from "@/contexts/RBACContext";
 import { parseCreditAmount } from "@/utils/creditMath";
+import { parseApiDate } from "@/lib/utils";
 import {
   useGetClientActionTypesQuery,
   useGetClientLedgerQuery,
@@ -57,14 +58,15 @@ const LEDGER_VIEW_PERMISSIONS = [
 const HISTORY_LEDGER_PAGE_SIZE = 25;
 
 const formatWalletUpdatedAt = (value) => {
-  if (!value) return null;
+  const parsed = parseApiDate(value);
+  if (!parsed) return null;
   return new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",
     month: "short",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(value));
+  }).format(parsed);
 };
 
 const getLedgerMeta = (ledger) => {

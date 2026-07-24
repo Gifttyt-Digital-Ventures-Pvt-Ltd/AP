@@ -1,7 +1,7 @@
 import { formatCurrency as formatCurrencyAmount } from "../../../utils/currency";
 
 export const SUPPORTED_PO_CURRENCIES = ["INR", "USD", "EUR", "GBP"];
-export const SUPPORTED_PO_TEMPLATES = ["T1", "T2", "T3", "T4", "T5"];
+export const DEFAULT_PO_TEMPLATE_CODE = "T1";
 
 export { formatCurrencyAmount as formatCurrency };
 
@@ -12,7 +12,7 @@ export const DEFAULT_PO_FORMAT_CONFIG = {
   companyName: "Optifii AP",
   poNumberPrefix: "PO-",
   dateFormat: "DD/MM/YYYY",
-  templateCode: "T1",
+  templateCode: DEFAULT_PO_TEMPLATE_CODE,
   sections: [
     {
       section: "HEADER",
@@ -86,11 +86,7 @@ export const getTaxMode = (currency = "INR") => (currency === "INR" ? "GST" : "E
 
 export const isInrCurrency = (currency = "INR") => getTaxMode(currency) === "GST";
 
-export const normalizePoTemplateCode = (templateCode = "T1") => {
-  const raw = String(templateCode || "").trim().toUpperCase();
-  if (!raw || raw === "DEFAULT") return "T1";
-  return SUPPORTED_PO_TEMPLATES.includes(raw) ? raw : "T1";
-};
+export const normalizePoTemplateCode = () => DEFAULT_PO_TEMPLATE_CODE;
 
 export const normalizePoStatus = (status = "") => {
   const normalized = String(status || "")
@@ -131,14 +127,29 @@ export const formatDate = (dateStr) => {
 
 export const normalizePoLineItem = (item = {}) => ({
   ...item,
-  item_description: item.item_description ?? item.description ?? "",
-  hsn_sac_code: item.hsn_sac_code ?? item.hsnSac ?? "",
-  unit_of_measure: item.unit_of_measure ?? item.uom ?? "NOS",
-  unit_price: item.unit_price ?? item.unitPrice ?? 0,
+  line_number: item.line_number ?? item.lineNumber ?? "",
+  item_description: item.item_description ?? item.itemDescription ?? item.description ?? "",
+  hsn_sac_code: item.hsn_sac_code ?? item.hsnSacCode ?? item.hsnSac ?? "",
+  unit_of_measure: item.unit_of_measure ?? item.unitOfMeasure ?? item.uom ?? "NOS",
+  unit_price: item.unit_price ?? item.unitRate ?? item.unitPrice ?? 0,
   discount_percent: item.discount_percent ?? item.discountPercent ?? 0,
+  discount_amount: item.discount_amount ?? item.discountAmount ?? 0,
   gst_rate: item.gst_rate ?? item.gstRate ?? 0,
+  gst_tax_label: item.gst_tax_label ?? item.gstTaxLabel ?? "",
+  gst_tax_type: item.gst_tax_type ?? item.gstTaxType ?? "",
   tax_amount: item.tax_amount ?? item.taxAmount ?? 0,
   total_amount: item.total_amount ?? item.totalAmount ?? item.lineTotal ?? item.amount ?? 0,
+  taxable_value: item.taxable_value ?? item.taxableValue ?? 0,
+  cgst_amount: item.cgst_amount ?? item.cgstAmount ?? 0,
+  cgst_percent: item.cgst_percent ?? item.cgstPercent ?? 0,
+  sgst_amount: item.sgst_amount ?? item.sgstAmount ?? 0,
+  sgst_percent: item.sgst_percent ?? item.sgstPercent ?? 0,
+  igst_amount: item.igst_amount ?? item.igstAmount ?? 0,
+  igst_percent: item.igst_percent ?? item.igstPercent ?? 0,
+  cess_amount: item.cess_amount ?? item.cessAmount ?? 0,
+  cess_percent: item.cess_percent ?? item.cessPercent ?? 0,
+  received_quantity: item.received_quantity ?? item.receivedQuantity ?? 0,
+  invoiced_quantity: item.invoiced_quantity ?? item.invoicedQuantity ?? 0,
 });
 
 export const normalizePurchaseOrder = (po = {}) => ({
@@ -146,6 +157,29 @@ export const normalizePurchaseOrder = (po = {}) => ({
   po_number: po.po_number ?? po.poNumber,
   vendor_id: po.vendor_id ?? po.vendorId,
   vendor_name: po.vendor_name ?? po.vendorName,
+  vendor_address:
+    po.vendor_address ??
+    po.vendorAddress ??
+    po.vendor_billing_address ??
+    po.vendorBillingAddress ??
+    [
+      po.vendorSnapshot?.addressLine1 ?? po.vendorSnapshot?.address_line1,
+      po.vendorSnapshot?.addressLine2 ?? po.vendorSnapshot?.address_line2,
+      po.vendorSnapshot?.city,
+      po.vendorSnapshot?.state,
+      po.vendorSnapshot?.pincode ??
+        po.vendorSnapshot?.postalCode ??
+        po.vendorSnapshot?.postal_code,
+      po.vendorSnapshot?.country,
+    ]
+      .filter(Boolean)
+      .join(", "),
+  branch_name: po.branch_name ?? po.branchName ?? '',
+  branch_code: po.branch_code ?? po.branchCode ?? '',
+  billing_gstin: po.billing_gstin ?? po.billingGstin ?? '',
+  vendor_branch_name: po.vendor_branch_name ?? po.vendorBranchName ?? '',
+  vendor_branch_code: po.vendor_branch_code ?? po.vendorBranchCode ?? '',
+  vendor_branch_gstin: po.vendor_branch_gstin ?? po.vendorBranchGstin ?? '',
   po_date: po.po_date ?? po.poDate,
   valid_till: po.valid_till ?? po.validTill ?? "",
   expected_delivery_date: po.expected_delivery_date ?? po.expectedDeliveryDate,
@@ -175,6 +209,12 @@ export const normalizePurchaseOrder = (po = {}) => ({
       Number(po.total_cess ?? po.totalCess ?? 0),
   total_amount: po.total_amount ?? po.totalAmount ?? po.grand_total ?? po.grandTotal ?? 0,
   net_payable: po.net_payable ?? po.netPayable ?? po.total_amount ?? po.totalAmount ?? po.grand_total ?? po.grandTotal ?? 0,
+  total_discount: po.total_discount ?? po.totalDiscount ?? 0,
+  total_taxable_value: po.total_taxable_value ?? po.totalTaxableValue ?? 0,
+  total_cgst: po.total_cgst ?? po.totalCgst ?? 0,
+  total_sgst: po.total_sgst ?? po.totalSgst ?? 0,
+  total_igst: po.total_igst ?? po.totalIgst ?? 0,
+  total_cess: po.total_cess ?? po.totalCess ?? 0,
   status: normalizePoStatus(po.status),
   shipping_address: po.shipping_address ?? po.shippingAddress ?? "",
   billing_address: po.billing_address ?? po.billingAddress ?? "",
@@ -218,15 +258,29 @@ export const isFormatFieldEnabled = (formatConfig = {}, sectionKey = "", fieldKe
 export const buildCreatePurchaseOrderPayload = (form = {}, formatConfig = null) => {
   const currency = form.currency || "INR";
   const isInr = isInrCurrency(currency);
+  const poNumber = String(form.po_number || "").trim();
   const headerOn = (key) => !formatConfig || isFormatFieldEnabled(formatConfig, "HEADER", key);
   const shipBillOn = (key) => !formatConfig || isFormatFieldEnabled(formatConfig, "SHIP_BILL", key);
   const paymentOn = (key) => !formatConfig || isFormatFieldEnabled(formatConfig, "PAYMENT", key);
   const taxTotalsOn = (key) => !formatConfig || isFormatFieldEnabled(formatConfig, "TAX_TOTALS", key);
   const lineOn = (key) => !formatConfig || isFormatFieldEnabled(formatConfig, "LINE_ITEM", key);
   const tdsApplicable = isInr && taxTotalsOn("is_tds_applicable") && Boolean(form.tds_applicable);
+  const includeTotal = (value) => value !== undefined && value !== null && value !== "";
 
   return {
-    vendorId: form.vendor_id,
+    ...(poNumber ? { poNumber } : {}),
+    vendorId: form.vendor_id || null,
+    vendorRequestSubmitted: Boolean(form.vendor_request_submitted),
+    vendorName: form.scanned_vendor_name || form.vendor_name || null,
+    vendorGstRegistrationId: form.vendor_gst_registration_id || null,
+    vendorGstin: form.vendor_gstin || null,
+    vendorPan: form.vendor_pan || null,
+    branchName: form.branch_name || null,
+    branchCode: form.branch_code || null,
+    billingGstin: form.billing_gstin || null,
+    vendorBranchName: form.vendor_branch_name || null,
+    vendorBranchCode: form.vendor_branch_code || null,
+    vendorBranchGstin: form.vendor_branch_gstin || null,
     formatConfigId: form.po_format_id || null,
     poDate: form.po_date,
     validTill: headerOn("valid_till") ? form.valid_till || null : null,
@@ -243,10 +297,28 @@ export const buildCreatePurchaseOrderPayload = (form = {}, formatConfig = null) 
     shipToAddress: shipBillOn("ship_to_address") ? form.shipping_address || null : null,
     billingAddress: shipBillOn("billing_address") ? form.billing_address || null : null,
     remarks: form.remarks || "",
+    ...(includeTotal(form.subtotal) ? { subtotal: Number(form.subtotal) } : {}),
+    ...(includeTotal(form.total_discount) ? { totalDiscount: Number(form.total_discount) } : {}),
+    ...(includeTotal(form.total_taxable_value) ? { totalTaxableValue: Number(form.total_taxable_value) } : {}),
+    ...(includeTotal(form.total_cgst) ? { totalCgst: Number(form.total_cgst) } : {}),
+    ...(includeTotal(form.total_sgst) ? { totalSgst: Number(form.total_sgst) } : {}),
+    ...(includeTotal(form.total_igst) ? { totalIgst: Number(form.total_igst) } : {}),
+    ...(includeTotal(form.total_cess) ? { totalCess: Number(form.total_cess) } : {}),
+    ...(includeTotal(form.tax_amount) ? { taxAmount: Number(form.tax_amount) } : {}),
+    ...(includeTotal(form.total_amount) ? { totalAmount: Number(form.total_amount) } : {}),
     lineItems: (form.line_items || []).map((item) => {
       const quantity = Number(item.quantity) || 0;
       const unitRate = Number(item.unit_price) || 0;
       const discountPercent = lineOn("discount_percent") ? Number(item.discount_percent) || 0 : 0;
+      const gstTaxLabel = lineOn("gst_rate") ? item.gst_tax_label || "" : "";
+      const gstTaxType =
+        gstTaxLabel.startsWith("IGST")
+          ? "IGST"
+          : gstTaxLabel.startsWith("CGST + SGST")
+            ? "CGST_SGST"
+            : gstTaxLabel === "Exempt"
+              ? "EXEMPT"
+              : null;
       const baseLine = {
         itemDescription: item.item_description || "",
         quantity,
@@ -254,6 +326,9 @@ export const buildCreatePurchaseOrderPayload = (form = {}, formatConfig = null) 
         unitRate,
         discountPercent,
         remarks: item.remarks || "",
+        ...(includeTotal(item.taxable_value) ? { taxableValue: Number(item.taxable_value) } : {}),
+        ...(includeTotal(item.tax_amount) ? { taxAmount: Number(item.tax_amount) } : {}),
+        ...(includeTotal(item.total_amount) ? { totalAmount: Number(item.total_amount) } : {}),
       };
 
       if (!isInr) return baseLine;
@@ -262,6 +337,12 @@ export const buildCreatePurchaseOrderPayload = (form = {}, formatConfig = null) 
         ...baseLine,
         hsnSacCode: lineOn("hsn_sac_code") ? item.hsn_sac_code || "" : "",
         gstRate: lineOn("gst_rate") ? Number(item.gst_rate) || 0 : 0,
+        gstTaxLabel: gstTaxLabel || null,
+        gstTaxType,
+        ...(includeTotal(item.cgst_amount) ? { cgstAmount: Number(item.cgst_amount) } : {}),
+        ...(includeTotal(item.sgst_amount) ? { sgstAmount: Number(item.sgst_amount) } : {}),
+        ...(includeTotal(item.igst_amount) ? { igstAmount: Number(item.igst_amount) } : {}),
+        ...(includeTotal(item.cess_amount) ? { cessAmount: Number(item.cess_amount) } : {}),
       };
     }),
   };

@@ -1,18 +1,29 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   useGetInvoicesQuery,
+  useGetInvoiceFilterOptionsQuery,
   useGetInvoiceMandatoryFieldsQuery,
   useGetVendorsQuery,
-  useGetPendingVendorApprovalsQuery,
   useScanInvoiceMutation,
   useBulkUploadInvoicesMutation,
   useRequestVendorAdditionMutation,
   useCreateInvoiceMutation,
+  useLazyGetInvoiceQuery,
   useLazyGetInvoiceHistoryQuery,
   useUpdateInvoiceMutation,
   useForwardInvoiceMutation,
   useDeleteInvoiceMutation,
+  useCancelInvoiceMutation,
 } from "../../Services/apis/invoicesVendorsApi";
+import { useRequestAccountingReadyUnlockMutation } from "../../Services/apis/accountingApi";
 import {
   getInvoiceMandatoryFieldValidationMessage,
   isInvoiceMandatoryFieldsSatisfied,
@@ -59,9 +70,13 @@ import {
   formatBulkStatusLabel,
   getBulkStatusBadgeClass,
 } from "./utils/invoiceBulkUtils";
+import { findVendorByInvoiceName } from "./utils/vendorMatching";
+import { syncInvoiceMatchingOnSave } from "./utils/invoiceMatchingFlow";
 import { getInvoiceFileUrl } from "./utils/invoicePreview";
+import { clearNotificationQueryParams } from "../../utils/notificationQueryParams";
 import {
   EMPTY_INVOICE_LIST_RESPONSE,
+  EMPTY_INVOICE_FILTER_OPTIONS,
   extractVendorIdFromResponse,
   getInvoiceListItems,
   mergeInvoiceVendorOptions,
@@ -80,10 +95,22 @@ import {
   INDIAN_STATES,
   INVOICE_LIST_FILTERS,
   INVOICE_LIST_PAGE_SIZE,
-  INVOICE_SOURCES,
+  isGmailInvoiceSource,
   LEDGER_OPTIONS,
   TAX_RATES,
 } from "./constants";
+import {
+  DOCUMENT_TYPE,
+  INVOICE_DOCUMENT_TYPE_TABS,
+  canMapTaxInvoiceToProforma,
+  isProformaInvoice,
+} from "./constants/proformaInvoice";
+import { useProformaInvoiceSubscription } from "../../hooks/useProformaInvoiceSubscription";
+import {
+  filterInvoicesForDocumentTab,
+  getLinkedTaxInvoiceCount,
+  resolveLinkedTaxInvoiceRecords,
+} from "./utils/proformaInvoiceListing";
 import {
   formatInvoiceAmount,
   getInvoiceGrossAmount,
@@ -91,7 +118,18 @@ import {
   getInvoiceTaxAmount,
   getInvoiceTdsAmount,
 } from "./utils/invoiceAmounts";
-import { Sparkles, Eye, Mail, Pencil, Search, Trash2 } from "lucide-react";
+import { getInvoiceDueDateValidationErrorForInvoice } from "./utils/msmePaymentDue";
+import InvoiceDueDateCell from "./components/InvoiceDueDateCell";
+import {
+  Ban,
+  Sparkles,
+  Mail,
+  Pencil,
+  Search,
+  Trash2,
+  Link2,
+  Unlock,
+} from "lucide-react";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import {
@@ -108,11 +146,16 @@ import AppDataTable from "../../components/common/AppDataTable";
 import ClippedTextWithTooltip from "../../components/common/ClippedTextWithTooltip";
 import CurrencySelector from "../../components/common/CurrencySelector";
 import RefreshButton from "../../components/common/RefreshButton";
+import TableColumnFilter from "../../components/common/TableColumnFilter";
+import TableSortButton from "../../components/common/TableSortButton";
 import { InvoicePdfPreview } from "./components/InvoicePdfPreview";
 import { InvoiceForm } from "./components/InvoiceForm";
 import UploadSection from "./components/UploadSection";
 import InvoicesDialogs from "./components/InvoicesDialogs";
 import InvoiceUploadDialog from "./components/InvoiceUploadDialog";
+import MapTaxInvoiceDialog from "./components/MapTaxInvoiceDialog";
+import InvoiceDocumentTypeBadge from "./components/InvoiceDocumentTypeBadge";
+import InvoiceTableLinkedTaxExpandedRow from "./components/InvoiceTableLinkedTaxExpandedRow";
 import { getInvoiceVendorRequestValidationErrors } from "../../utils/vendorValidation";
 import { useActionGuard } from "../../hooks/useActionGuard";
 import { useCreditErrorHandler } from "../../contexts/CreditErrorContext";
@@ -123,6 +166,10 @@ import useZohoIntegrationActive from "../../hooks/useZohoIntegrationActive";
 import { withIntegrationTableHeader } from "../../utils/integrationProvenance";
 import { useCurrencyFilter } from "../../hooks/useCurrencyFilter";
 import {
+  usePerformInvoiceMatchMutation,
+  useEditInvoiceMatchMutation,
+} from "../../Services/apis/invoiceMatchingApi";
+import {
   CURRENCY_SCREENS,
   DEFAULT_CURRENCY,
   normalizeCurrencyCode,
@@ -130,8 +177,10 @@ import {
 import {
   isCheckerEditEnabled as isCheckerEditEnabledForCorporate,
   isCheckerEditForbiddenError,
+  isNetPayableEditEnabled as isNetPayableEditEnabledForCorporate,
   isRefNoEnabled as isRefNoEnabledForCorporate,
 } from "../../utils/invoiceConfiguration";
+import { OrgBranchCell } from "../../components/common/BranchTableCells";
 import {
   buildCurrentUserIdentity,
   canDeleteInvoice,
@@ -145,6 +194,11 @@ import {
   resolveBulkCreateInvoiceStatus,
   resolveInitialInvoiceStatus,
 } from "../../utils/approvalWorkflow";
+import {
+  getAccountingUnlockRequestStatus,
+  isAccountingReadyLocked,
+} from "../../utils/accountingLock";
+import { getAccountingErrorMessage } from "../accounting/utils/coaUtils";
 
 const getApprovalWorkflowName = (invoice) =>
   invoice.approvalWorkflowName ??
@@ -152,12 +206,68 @@ const getApprovalWorkflowName = (invoice) =>
   invoice.approvalWorkflow?.name ??
   "-";
 
+const extractInvoiceIdFromSaveResponse = (response) => {
+  const candidate =
+    response?.invoice ?? response?.data?.invoice ?? response?.data ?? response;
+  const id =
+    candidate?.id ??
+    candidate?.invoiceId ??
+    candidate?.invoice_id ??
+    response?.id ??
+    response?.invoiceId ??
+    response?.invoice_id;
+  return id !== undefined && id !== null ? String(id) : "";
+};
+
+const getInvoiceCancelCapability = (invoice = {}) =>
+  invoice.canCancel ??
+  invoice.can_cancel ??
+  invoice.cancellable ??
+  invoice.isCancellable;
+
+const isInvoiceCancellable = (invoice = {}) => {
+  const capability = getInvoiceCancelCapability(invoice);
+  return capability === true;
+};
+
+const createEmptyInvoiceColumnFilters = () => ({
+  vendorIds: [],
+  branches: [],
+  statuses: [],
+  uploadDateFrom: "",
+  uploadDateTo: "",
+  invoiceDateFrom: "",
+  invoiceDateTo: "",
+});
+
+const invoiceSortOptions = [
+  { value: "uploadDate", label: "Upload date", defaultDirection: "desc" },
+  { value: "invoiceDate", label: "Invoice date", defaultDirection: "desc" },
+  { value: "amount", label: "Amount", defaultDirection: "desc" },
+];
+
 const baseInvoiceTableHeader = [
   {
     key: "srNo",
     title: "Sr. No",
-    headerClassName: "p-3 text-left text-xs font-medium",
-    cellClassName: "p-3 text-sm font-medium",
+    headerClassName: "p-3 text-left text-xs font-medium sticky left-0",
+    cellClassName: "p-3 text-sm font-medium sticky left-0 bg-inherit",
+  },
+  {
+    key: "vendorName",
+    title: "Vendor",
+    headerClassName:
+      "p-3 text-left text-xs font-medium sticky left-[var(--invoice-sticky-col2)] ",
+    cellClassName:
+      "p-3 text-sm sticky left-[var(--invoice-sticky-col2)]  bg-inherit ",
+  },
+  {
+    key: "invoiceNumber",
+    title: "Invoice #",
+    headerClassName:
+      "p-3 text-left text-xs font-medium sticky left-[var(--invoice-sticky-col3)] right-0 border-r-2 border-r-shadow-2xl",
+    cellClassName:
+      "p-3 text-sm font-medium sticky left-[var(--invoice-sticky-col3)] bg-inherit border-r-2 border-r-shadow-2xl",
   },
   {
     key: "source",
@@ -166,20 +276,14 @@ const baseInvoiceTableHeader = [
     cellClassName: "p-3",
   },
   {
-    key: "invoiceNumber",
-    title: "Invoice #",
-    headerClassName: "p-3 text-left text-xs font-medium",
-    cellClassName: "p-3   text-sm font-medium",
-  },
-  {
     key: "refNo",
     title: "Ref No",
     headerClassName: "p-3 text-left text-xs font-medium",
-    cellClassName: "p-3 text-sm font-mono",
+    cellClassName: "p-3 text-sm",
   },
   {
-    key: "vendorName",
-    title: "Vendor",
+    key: "documentType",
+    title: "Type",
     headerClassName: "p-3 text-left text-xs font-medium",
     cellClassName: "p-3 text-sm",
   },
@@ -226,6 +330,12 @@ const baseInvoiceTableHeader = [
     cellClassName: "p-3 text-xs text-muted-foreground whitespace-nowrap",
   },
   {
+    key: "dueDate",
+    title: "Due Date",
+    headerClassName: "p-3 text-left text-xs font-medium",
+    cellClassName: "p-3 text-xs whitespace-nowrap",
+  },
+  {
     key: "status",
     title: "Status",
     headerClassName: "p-3 text-left text-xs font-medium",
@@ -246,13 +356,35 @@ const baseInvoiceTableHeader = [
 ];
 
 const InvoicesPage = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const handledNotificationRef = useRef(null);
   const { user } = useAuth();
   const {
     corporateScreens,
     isCategoryFeatureEnabled,
     isCampaignFeatureEnabled,
     isCorporateAdmin,
+    isCorporateScreenAllowed,
+    isCorporateSectionEnabled,
+    hasPermission,
+    isBranchEnabled,
   } = useRBAC();
+  const hasPurchaseOrderSubscription =
+    isCorporateScreenAllowed("PURCHASE_ORDER") &&
+    (isCorporateSectionEnabled("PURCHASE_ORDER_ALL") ||
+      isCorporateSectionEnabled("PURCHASE_ORDER_CREATE") ||
+      isCorporateSectionEnabled("PURCHASE_ORDER_UPLOAD"));
+  const hasGrnSubscription =
+    isCorporateScreenAllowed("GRN") && isCorporateSectionEnabled("GRN_ALL");
+  const isInvoiceMatchingEnabled =
+    isCorporateScreenAllowed("INVOICE_MATCHING") &&
+    isCorporateSectionEnabled("INVOICE_MATCHING_ALL");
+  const { isPiSubscriptionEnabled } = useProformaInvoiceSubscription();
+  const showProformaInvoiceFields = isPiSubscriptionEnabled;
+  const showInvoiceMatchingSelection =
+    isInvoiceMatchingEnabled && hasPurchaseOrderSubscription;
+  const canUseThreeWayMatching =
+    showInvoiceMatchingSelection && hasGrnSubscription;
   const { showIntegrationColumn } = useZohoIntegrationActive();
   const { data: corporateUserContext = null } =
     useGetCorporateUserDetailsQuery();
@@ -274,13 +406,37 @@ const InvoicesPage = () => {
     [currencies],
   );
   const [invoiceStatusFilter, setInvoiceStatusFilter] = useState("all");
+  const [invoiceDocumentTypeTab, setInvoiceDocumentTypeTab] = useState("all");
+  const [uploadPiPrefill, setUploadPiPrefill] = useState(null);
+  const [mapTaxInvoiceTarget, setMapTaxInvoiceTarget] = useState(null);
+  const [mapTaxInvoiceDialogOpen, setMapTaxInvoiceDialogOpen] = useState(false);
+  const [expandedPiIds, setExpandedPiIds] = useState(() => new Set());
+
+  const [invoiceColumnFilters, setInvoiceColumnFilters] = useState(
+    createEmptyInvoiceColumnFilters,
+  );
+  const [invoiceSort, setInvoiceSort] = useState({
+    value: "uploadDate",
+    direction: "desc",
+  });
   const [searchTerm, setSearchTerm] = useState("");
   const [invoicePageOffset, setInvoicePageOffset] = useState(0);
   const debouncedSearchTerm = useDebouncedValue(searchTerm.trim(), 300);
+  const debouncedInvoiceColumnFilters = useDebouncedValue(
+    invoiceColumnFilters,
+    300,
+  );
 
   useEffect(() => {
     setInvoicePageOffset(0);
-  }, [invoiceStatusFilter, debouncedSearchTerm, currencyParam]);
+  }, [
+    invoiceStatusFilter,
+    invoiceDocumentTypeTab,
+    debouncedSearchTerm,
+    currencyParam,
+    debouncedInvoiceColumnFilters,
+    invoiceSort,
+  ]);
 
   const invoiceQueryArgs = useMemo(
     () => ({
@@ -289,11 +445,49 @@ const InvoicesPage = () => {
       offset: invoicePageOffset,
       ...(invoiceStatusFilter !== "all" ? { filter: invoiceStatusFilter } : {}),
       ...(debouncedSearchTerm ? { search: debouncedSearchTerm } : {}),
+      ...(debouncedInvoiceColumnFilters.vendorIds.length > 0
+        ? { vendorIds: debouncedInvoiceColumnFilters.vendorIds }
+        : {}),
+      ...(debouncedInvoiceColumnFilters.branches.length > 0
+        ? { branches: debouncedInvoiceColumnFilters.branches }
+        : {}),
+      ...(debouncedInvoiceColumnFilters.statuses.length > 0
+        ? { statuses: debouncedInvoiceColumnFilters.statuses }
+        : {}),
+      ...(debouncedInvoiceColumnFilters.uploadDateFrom
+        ? { uploadDateFrom: debouncedInvoiceColumnFilters.uploadDateFrom }
+        : {}),
+      ...(debouncedInvoiceColumnFilters.uploadDateTo
+        ? { uploadDateTo: debouncedInvoiceColumnFilters.uploadDateTo }
+        : {}),
+      ...(debouncedInvoiceColumnFilters.invoiceDateFrom
+        ? { invoiceDateFrom: debouncedInvoiceColumnFilters.invoiceDateFrom }
+        : {}),
+      ...(debouncedInvoiceColumnFilters.invoiceDateTo
+        ? { invoiceDateTo: debouncedInvoiceColumnFilters.invoiceDateTo }
+        : {}),
+      ...(showProformaInvoiceFields
+        ? {
+            excludeLinkedTaxInvoices: true,
+            ...(invoiceDocumentTypeTab === "tax"
+              ? { documentType: DOCUMENT_TYPE.TAX_INVOICE }
+              : {}),
+            ...(invoiceDocumentTypeTab === "proforma"
+              ? { documentType: DOCUMENT_TYPE.PROFORMA_INVOICE }
+              : {}),
+          }
+        : {}),
+      sortBy: invoiceSort.value,
+      sortDirection: invoiceSort.direction,
     }),
     [
       currencyQueryArgs,
       invoiceStatusFilter,
+      invoiceDocumentTypeTab,
+      showProformaInvoiceFields,
       debouncedSearchTerm,
+      debouncedInvoiceColumnFilters,
+      invoiceSort,
       invoicePageOffset,
     ],
   );
@@ -302,16 +496,22 @@ const InvoicesPage = () => {
     isFetching: invoicesFetching,
     refetch: refetchInvoices,
   } = useGetInvoicesQuery(invoiceQueryArgs);
+  const invoiceFilterOptionsQueryArgs = useMemo(
+    () => ({
+      ...currencyQueryArgs,
+    }),
+    [currencyQueryArgs],
+  );
+  const {
+    data: invoiceFilterOptionsData = EMPTY_INVOICE_FILTER_OPTIONS,
+    isFetching: invoiceFilterOptionsFetching,
+    refetch: refetchInvoiceFilterOptions,
+  } = useGetInvoiceFilterOptionsQuery(invoiceFilterOptionsQueryArgs);
   const {
     data: vendorsData = [],
     isFetching: vendorsFetching,
     refetch: refetchVendors,
   } = useGetVendorsQuery();
-  const {
-    data: pendingVendorsData = [],
-    isFetching: pendingVendorsFetching,
-    refetch: refetchPendingVendors,
-  } = useGetPendingVendorApprovalsQuery();
   const { data: departmentsData = [] } = useGetCorporateDepartmentsQuery();
   const {
     data: invoiceMandatoryFieldsData,
@@ -345,16 +545,39 @@ const InvoicesPage = () => {
   const [bulkUploadInvoices] = useBulkUploadInvoicesMutation();
   const [requestVendorAddition, { isLoading: requestVendorLoading }] =
     useRequestVendorAdditionMutation();
-  const [createInvoice] = useCreateInvoiceMutation();
+  const [createInvoice, { isLoading: createInvoiceLoading }] =
+    useCreateInvoiceMutation();
+  const [getInvoice] = useLazyGetInvoiceQuery();
   const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
   const [updateInvoice, { isLoading: updateInvoiceLoading }] =
     useUpdateInvoiceMutation();
+  const [performInvoiceMatch, { isLoading: performMatchingLoading }] =
+    usePerformInvoiceMatchMutation();
+  const [editInvoiceMatch, { isLoading: editMatchingLoading }] =
+    useEditInvoiceMatchMutation();
+  const invoiceMatchingLoading = performMatchingLoading || editMatchingLoading;
   const [forwardInvoice, { isLoading: forwardInvoiceLoading }] =
     useForwardInvoiceMutation();
   const [deleteInvoice] = useDeleteInvoiceMutation();
+  const [cancelInvoice, { isLoading: cancelInvoiceLoading }] =
+    useCancelInvoiceMutation();
+  const [
+    requestAccountingUnlock,
+    { isLoading: requestAccountingUnlockLoading },
+  ] = useRequestAccountingReadyUnlockMutation();
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
-  const invoices = getInvoiceListItems(invoicesListData);
+  const invoices = useMemo(
+    () => getInvoiceListItems(invoicesListData),
+    [invoicesListData],
+  );
+  const displayInvoices = useMemo(
+    () =>
+      showProformaInvoiceFields
+        ? filterInvoicesForDocumentTab(invoices, invoiceDocumentTypeTab)
+        : invoices,
+    [invoices, invoiceDocumentTypeTab, showProformaInvoiceFields],
+  );
   const invoicePagination = useMemo(() => {
     const total = Number(invoicesListData.total ?? 0) || 0;
     const offset = Number(invoicesListData.offset ?? invoicePageOffset) || 0;
@@ -372,22 +595,29 @@ const InvoicesPage = () => {
       currentPage,
       totalPages,
       startRecord: total === 0 ? 0 : offset + 1,
-      endRecord: total === 0 ? 0 : Math.min(offset + invoices.length, total),
+      endRecord:
+        total === 0 ? 0 : Math.min(offset + displayInvoices.length, total),
     };
-  }, [invoicesListData, invoicePageOffset, invoices.length]);
+  }, [invoicesListData, invoicePageOffset, displayInvoices.length]);
 
   const goToInvoicePage = useCallback((pageIndex) => {
     const safePage = Math.max(0, pageIndex);
     setInvoicePageOffset(safePage * INVOICE_LIST_PAGE_SIZE);
   }, []);
-  const approvedVendors = Array.isArray(vendorsData) ? vendorsData : [];
-  const pendingVendors = Array.isArray(pendingVendorsData)
-    ? pendingVendorsData
-    : [];
+  const vendors = Array.isArray(vendorsData) ? vendorsData : [];
   const invoiceVendorOptions = useMemo(
-    () => mergeInvoiceVendorOptions(approvedVendors, pendingVendors),
-    [approvedVendors, pendingVendors],
+    () => mergeInvoiceVendorOptions(vendors),
+    [vendors],
   );
+  const invoiceVendorFilterOptions = invoiceFilterOptionsData.vendors;
+  const branchFilterOptions = invoiceFilterOptionsData.branches;
+  const invoiceStatusFilterOptions = invoiceFilterOptionsData.statuses;
+  const invoiceQuickFilters = useMemo(() => {
+    if (invoiceFilterOptionsData.quickFilters.length > 0) {
+      return invoiceFilterOptionsData.quickFilters;
+    }
+    return INVOICE_LIST_FILTERS;
+  }, [invoiceFilterOptionsData.quickFilters]);
   const departments = Array.isArray(departmentsData) ? departmentsData : [];
   const invoiceCategories =
     isCategoryFeatureEnabled && Array.isArray(invoiceCategoriesData)
@@ -409,6 +639,7 @@ const InvoicesPage = () => {
   const canDeleteInvoices = canPerformAction("invoices.delete");
   const canCheckInvoices = canPerformAction("invoices.check");
   const canAddVendors = canPerformAction("invoices.addVendor");
+  const isMasterAdmin = hasPermission("master-admin");
   const isCheckerEditEnabled = useMemo(
     () =>
       isCheckerEditEnabledForCorporate(
@@ -423,19 +654,198 @@ const InvoicesPage = () => {
       ),
     [corporateScreens?.activeInvoiceConfiguration],
   );
+  const isNetPayableEditEnabled = useMemo(
+    () =>
+      isNetPayableEditEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const updateInvoiceColumnFilter = useCallback((key, value) => {
+    setInvoiceColumnFilters((prev) => ({
+      ...prev,
+      [key]: value,
+    }));
+  }, []);
+  const renderInvoiceColumnHeader = useCallback(
+    (column) => {
+      switch (column.key) {
+        case "vendorName":
+          return (
+            <TableColumnFilter
+              title={column.title}
+              type="select"
+              value={invoiceColumnFilters.vendorIds}
+              onChange={(value) =>
+                updateInvoiceColumnFilter("vendorIds", value)
+              }
+              options={invoiceVendorFilterOptions}
+              allLabel="All vendors"
+              searchable
+              multiple
+              searchPlaceholder="Search vendors"
+            />
+          );
+        case "orgBranch":
+          return (
+            <TableColumnFilter
+              title={column.title}
+              type="select"
+              value={invoiceColumnFilters.branches}
+              onChange={(value) => updateInvoiceColumnFilter("branches", value)}
+              options={branchFilterOptions}
+              allLabel="All branches"
+              searchable
+              multiple
+              searchPlaceholder="Search branches"
+            />
+          );
+        case "createdAt":
+          return (
+            <TableColumnFilter
+              title={column.title}
+              type="dateRange"
+              value={{
+                from: invoiceColumnFilters.uploadDateFrom,
+                to: invoiceColumnFilters.uploadDateTo,
+              }}
+              onChange={(value) =>
+                setInvoiceColumnFilters((prev) => ({
+                  ...prev,
+                  uploadDateFrom: value.from,
+                  uploadDateTo: value.to,
+                }))
+              }
+              fromLabel="Uploaded from"
+              toLabel="Uploaded to"
+              align="end"
+            />
+          );
+        case "invoiceDate":
+          return (
+            <TableColumnFilter
+              title={column.title}
+              type="dateRange"
+              value={{
+                from: invoiceColumnFilters.invoiceDateFrom,
+                to: invoiceColumnFilters.invoiceDateTo,
+              }}
+              onChange={(value) =>
+                setInvoiceColumnFilters((prev) => ({
+                  ...prev,
+                  invoiceDateFrom: value.from,
+                  invoiceDateTo: value.to,
+                }))
+              }
+              fromLabel="Invoice from"
+              toLabel="Invoice to"
+              align="end"
+            />
+          );
+        case "status":
+          return (
+            <TableColumnFilter
+              title={column.title}
+              type="select"
+              value={
+                invoiceColumnFilters.statuses.length > 0
+                  ? invoiceColumnFilters.statuses
+                  : invoiceStatusFilter === "all"
+                    ? []
+                    : [invoiceStatusFilter]
+              }
+              onChange={(value) => {
+                updateInvoiceColumnFilter("statuses", value);
+                setInvoiceStatusFilter("all");
+              }}
+              options={invoiceStatusFilterOptions}
+              allLabel="All statuses"
+              searchable
+              multiple
+              searchPlaceholder="Search statuses"
+              align="end"
+            />
+          );
+        default:
+          return column.title;
+      }
+    },
+    [
+      branchFilterOptions,
+      invoiceColumnFilters,
+      invoiceStatusFilter,
+      invoiceStatusFilterOptions,
+      invoiceVendorFilterOptions,
+      updateInvoiceColumnFilter,
+    ],
+  );
   const invoiceTableHeader = useMemo(() => {
-    const headers = isRefNoEnabled
+    let headers = isRefNoEnabled
       ? baseInvoiceTableHeader
       : baseInvoiceTableHeader.filter((column) => column.key !== "refNo");
-    return withIntegrationTableHeader(headers, showIntegrationColumn);
-  }, [isRefNoEnabled, showIntegrationColumn]);
+    if (isBranchEnabled) {
+      const invoiceNumberIndex = headers.findIndex(
+        (column) => column.key === "invoiceNumber",
+      );
+      if (invoiceNumberIndex !== -1) {
+        headers = [
+          ...headers.slice(0, invoiceNumberIndex + 1),
+          { key: "orgBranch", title: "Branch", cellClassName: "text-sm" },
+          ...headers.slice(invoiceNumberIndex + 1),
+        ];
+      }
+    }
+    return withIntegrationTableHeader(headers, showIntegrationColumn).map(
+      (column) => ({
+        ...column,
+        title: renderInvoiceColumnHeader(column),
+        headerClassName: cn(column.headerClassName, "bg-muted text-foreground"),
+      }),
+    );
+  }, [
+    isRefNoEnabled,
+    isBranchEnabled,
+    showIntegrationColumn,
+    renderInvoiceColumnHeader,
+  ]);
+
+  // Keep the sticky Sr No / Vendor / Invoice # columns aligned with the
+  // actual (auto-sized) widths of those columns' header cells.
+  const invoiceTableWrapperRef = useRef(null);
+
+  useLayoutEffect(() => {
+    const wrapperEl = invoiceTableWrapperRef.current;
+    if (!wrapperEl) return undefined;
+
+    const updateStickyColumnOffsets = () => {
+      const headerCells = wrapperEl.querySelectorAll("thead th");
+      const col1Width = headerCells[0]?.getBoundingClientRect().width || 0;
+      const col1And2Width =
+        col1Width + (headerCells[1]?.getBoundingClientRect().width || 0);
+      wrapperEl.style.setProperty("--invoice-sticky-col2", `${col1Width}px`);
+      wrapperEl.style.setProperty(
+        "--invoice-sticky-col3",
+        `${col1And2Width}px`,
+      );
+    };
+
+    updateStickyColumnOffsets();
+
+    const resizeObserver = new window.ResizeObserver(updateStickyColumnOffsets);
+    wrapperEl
+      .querySelectorAll("thead th")
+      .forEach((cell) => resizeObserver.observe(cell));
+
+    return () => resizeObserver.disconnect();
+  }, [invoiceTableHeader, displayInvoices, invoicesFetching]);
+
   const invoiceEditContext = useMemo(
     () => ({
       ...buildCurrentUserIdentity({ user, corporateUserContext }),
       canUpdateInvoices,
       canManageInvoices,
       canCheckInvoices,
-      isCorporateAdmin,
+      isCorporateAdmin: isCorporateAdmin || isMasterAdmin,
       isCheckerEditEnabled,
     }),
     [
@@ -445,6 +855,7 @@ const InvoicesPage = () => {
       canManageInvoices,
       canCheckInvoices,
       isCorporateAdmin,
+      isMasterAdmin,
       isCheckerEditEnabled,
     ],
   );
@@ -473,6 +884,7 @@ const InvoicesPage = () => {
   const [bulkExtractTotalFiles, setBulkExtractTotalFiles] = useState(0);
   const [bulkExtractStartedAt, setBulkExtractStartedAt] = useState(null);
   const [bulkExtractProgress, setBulkExtractProgress] = useState(0);
+  const bulkUploadInFlightRef = useRef(false);
   const [bulkProgress, setBulkProgress] = useState({
     total: 0,
     processed: 0,
@@ -487,6 +899,8 @@ const InvoicesPage = () => {
   const [bulkEditFileURL, setBulkEditFileURL] = useState(null);
   const [bulkAddingVendorItemId, setBulkAddingVendorItemId] = useState("");
   const [invoiceDeleteTarget, setInvoiceDeleteTarget] = useState(null);
+  const [invoiceCancelTarget, setInvoiceCancelTarget] = useState(null);
+  const [invoiceCancelReason, setInvoiceCancelReason] = useState("");
   const [requestVendorOpen, setRequestVendorOpen] = useState(false);
   const [invoiceUploadDialogOpen, setInvoiceUploadDialogOpen] = useState(false);
   const [requestVendorContext, setRequestVendorContext] = useState(null);
@@ -557,18 +971,7 @@ const InvoicesPage = () => {
   }, [bulkPreviewOpen, bulkCreating, bulkPreviewItems]);
 
   const findVendorByName = useCallback(
-    (vendorName) => {
-      if (!vendorName) return null;
-      const normalizedName = vendorName.toLowerCase().trim();
-      return (
-        invoiceVendorOptions.find(
-          (vendor) =>
-            String(vendor?.name || "")
-              .toLowerCase()
-              .trim() === normalizedName,
-        ) || null
-      );
-    },
+    (vendorName) => findVendorByInvoiceName(invoiceVendorOptions, vendorName),
     [invoiceVendorOptions],
   );
 
@@ -656,6 +1059,7 @@ const InvoicesPage = () => {
         formBase.originalFileName || filename || file?.name || null,
       currentFileName: file?.name || filename || null,
       status: resolveBulkCreateInvoiceStatus(),
+      action: "saved",
     });
   };
 
@@ -683,7 +1087,7 @@ const InvoicesPage = () => {
     setActiveTab("list");
   };
 
-  const handleSingleInvoiceFile = async (file) => {
+  const handleSingleInvoiceFile = async (file, uploadContext = {}) => {
     if (!guardAction("invoices.scan")) return false;
     if (!file) return false;
 
@@ -695,6 +1099,10 @@ const InvoicesPage = () => {
 
     const formDataUpload = new FormData();
     formDataUpload.append("file", file);
+    if (uploadContext.billingGstin) {
+      formDataUpload.append("billingGstin", uploadContext.billingGstin);
+      formDataUpload.append("billing_gstin", uploadContext.billingGstin);
+    }
 
     try {
       const response = await scanInvoice(formDataUpload).unwrap();
@@ -724,7 +1132,23 @@ const InvoicesPage = () => {
 
       const extractedInvoice = normalizeScannedInvoice(normalizedResponse);
       setExtractedData(extractedInvoice);
-      setFormData(initializeFormData(extractedInvoice));
+      const baseForm = initializeFormData(extractedInvoice);
+      setFormData(
+        uploadPiPrefill
+          ? {
+              ...baseForm,
+              documentType:
+                uploadPiPrefill.documentType ?? DOCUMENT_TYPE.TAX_INVOICE,
+              linkedProformaInvoiceId:
+                uploadPiPrefill.linkedProformaInvoiceId ?? "",
+              linkedProformaInvoiceNumber:
+                uploadPiPrefill.linkedProformaInvoiceNumber ?? "",
+              vendorId: uploadPiPrefill.vendorId || baseForm.vendorId,
+              vendorName: uploadPiPrefill.vendorName || baseForm.vendorName,
+            }
+          : baseForm,
+      );
+      setUploadPiPrefill(null);
       toast.success("Invoice scanned successfully!");
     } catch (error) {
       if (handleCreditError(error)) return;
@@ -768,10 +1192,12 @@ const InvoicesPage = () => {
     return true;
   };
 
-  const handleBulkInvoiceFiles = async (filesInput) => {
+  const handleBulkInvoiceFiles = async (filesInput, uploadContext = {}) => {
     if (!guardAction("invoices.bulkUpload")) return false;
+    if (bulkUploadInFlightRef.current) return false;
     const files = Array.from(filesInput || []);
     if (!files || files.length === 0) return false;
+    bulkUploadInFlightRef.current = true;
     setBulkProgress({
       total: 0,
       processed: 0,
@@ -788,6 +1214,10 @@ const InvoicesPage = () => {
     files.forEach((file) => {
       formDataUpload.append("files", file);
     });
+    if (uploadContext.billingGstin) {
+      formDataUpload.append("billingGstin", uploadContext.billingGstin);
+      formDataUpload.append("billing_gstin", uploadContext.billingGstin);
+    }
 
     toast.info(`Uploading ${files.length} invoices...`, { duration: 3000 });
 
@@ -885,19 +1315,20 @@ const InvoicesPage = () => {
     } finally {
       setBulkExtractProgress(100);
       setBulkExtracting(false);
+      bulkUploadInFlightRef.current = false;
     }
     return true;
   };
 
-  const handleInvoiceFilesUpload = async (filesInput) => {
+  const handleInvoiceFilesUpload = async (filesInput, uploadContext = {}) => {
     const files = Array.from(filesInput || []).filter(Boolean);
     if (files.length === 0) return false;
 
     if (files.length === 1) {
-      return handleSingleInvoiceFile(files[0]);
+      return handleSingleInvoiceFile(files[0], uploadContext);
     }
 
-    return handleBulkInvoiceFiles(files);
+    return handleBulkInvoiceFiles(files, uploadContext);
   };
 
   const handleCreateBulkInvoices = async (mode = "all") => {
@@ -1279,6 +1710,18 @@ const InvoicesPage = () => {
   };
 
   const validateMandatoryPayload = (payload) => {
+    const msmeDueDateError = getInvoiceDueDateValidationErrorForInvoice(
+      payload,
+      {
+        findVendorById,
+        findVendorByName,
+      },
+    );
+    if (msmeDueDateError) {
+      toast.error(msmeDueDateError);
+      return false;
+    }
+
     const message = getInvoiceMandatoryFieldValidationMessage(
       payload,
       invoiceMandatoryFields,
@@ -1291,9 +1734,18 @@ const InvoicesPage = () => {
     return true;
   };
 
-  const validateSavedInvoiceEdit = (payload) => {
+  const validateSavedInvoiceEdit = (
+    payload,
+    { requireBillingGst = false } = {},
+  ) => {
     if (!payload?.vendorName?.trim()) {
       toast.error("Vendor name is required");
+      return false;
+    }
+    if (requireBillingGst && !String(payload.billingGstin || "").trim()) {
+      toast.error(
+        "Select a billing GSTIN from Organisation Details before submitting invoice",
+      );
       return false;
     }
     if (!payload.vendorId && !payload.vendorRequestSubmitted) {
@@ -1337,7 +1789,9 @@ const InvoicesPage = () => {
           })),
         }),
         memo: data.description,
-        sourceEmail: data.source === "Email" ? data.sourceEmail : null,
+        sourceEmail: isGmailInvoiceSource(data.source)
+          ? data.sourceEmail
+          : null,
         departmentName:
           data.departmentName || getDepartmentNameById(data.departmentId),
         ...(keepSaved ? { action: "saved" } : {}),
@@ -1348,10 +1802,32 @@ const InvoicesPage = () => {
           data.lineItems,
           data.tds,
           calculateLineItemSubtotal,
+          data.tdsRate,
         ),
       },
     );
   };
+
+  const maybePerformInvoiceMatching = async (
+    invoiceId,
+    sourceData,
+    { skip = false } = {},
+  ) =>
+    syncInvoiceMatchingOnSave(invoiceId, sourceData, {
+      skip,
+      enabled: showInvoiceMatchingSelection,
+      canUseThreeWayMatching,
+      performInvoiceMatch,
+      editInvoiceMatch,
+      onError: (error) => {
+        const message =
+          typeof error === "string"
+            ? error
+            : extractApiErrorDetail(error) ||
+              "Invoice saved, but automatic matching failed";
+        toast.error(message);
+      },
+    });
 
   // Add vendor from scanned invoice data
   const handleAddVendorFromInvoice = async () => {
@@ -1397,28 +1873,19 @@ const InvoicesPage = () => {
 
       const requestedVendorId = extractVendorIdFromResponse(response);
 
-      const [vendorsResult, pendingResult] = await Promise.all([
+      const [vendorsResult] = await Promise.all([
         refetchVendors(),
-        refetchPendingVendors(),
+        refetchInvoiceFilterOptions(),
       ]);
       const freshVendorOptions = mergeInvoiceVendorOptions(
         vendorsResult?.data || [],
-        pendingResult?.data || [],
       );
-      const normalizedVendorName = vendorName.toLowerCase().trim();
       const matchedVendor =
         (requestedVendorId
           ? freshVendorOptions.find(
               (vendor) => String(vendor.id) === String(requestedVendorId),
             )
-          : null) ||
-        freshVendorOptions.find(
-          (vendor) =>
-            String(vendor?.name || "")
-              .toLowerCase()
-              .trim() === normalizedVendorName,
-        ) ||
-        null;
+          : null) || findVendorByInvoiceName(freshVendorOptions, vendorName);
       const resolvedVendorId = matchedVendor?.id || requestedVendorId || "";
 
       if (requestVendorContext?.type === "bulk") {
@@ -1505,7 +1972,7 @@ const InvoicesPage = () => {
       await Promise.all([
         refetchInvoices(),
         refetchVendors(),
-        refetchPendingVendors(),
+        refetchInvoiceFilterOptions(),
       ]);
       toast.success("Invoices refreshed");
     } catch {
@@ -1550,6 +2017,7 @@ const InvoicesPage = () => {
           formData.lineItems,
           formData.tds,
           calculateLineItemSubtotal,
+          formData.tdsRate,
         ),
         uploadedFileName: uploadedFile?.name,
       },
@@ -1565,6 +2033,7 @@ const InvoicesPage = () => {
     if (!validateMandatoryPayload(formData)) return;
 
     try {
+      let createResponse = null;
       if (uploadedFile) {
         const multipartPayload = buildMultipartPayload(
           invoicePayload,
@@ -1575,15 +2044,26 @@ const InvoicesPage = () => {
               formData.lineItems,
               formData.tds,
               calculateLineItemSubtotal,
+              formData.tdsRate,
             ),
           },
         );
-        await createInvoice(multipartPayload).unwrap();
+        createResponse = await createInvoice(multipartPayload).unwrap();
       } else {
-        await createInvoice(invoicePayload).unwrap();
+        createResponse = await createInvoice(invoicePayload).unwrap();
       }
 
-      toast.success("Invoice added successfully");
+      const matchResult = await maybePerformInvoiceMatching(
+        extractInvoiceIdFromSaveResponse(createResponse),
+        formData,
+        { skip: isSavedInvoiceStatus(createStatus) },
+      );
+
+      toast.success(
+        matchResult === "created"
+          ? "Invoice added and matching performed"
+          : "Invoice added successfully",
+      );
       resetUploadWorkspace();
     } catch (error) {
       const errorMessage =
@@ -1610,6 +2090,42 @@ const InvoicesPage = () => {
       );
     }
   };
+
+  const handleMapTaxInvoice = (piInvoice) => {
+    if (!piInvoice?.id) return;
+    if (!canMapTaxInvoiceToProforma(piInvoice)) {
+      toast.error(
+        "Proforma Invoice must be Approved before mapping a tax invoice.",
+      );
+      return;
+    }
+    setMapTaxInvoiceTarget(piInvoice);
+    setMapTaxInvoiceDialogOpen(true);
+  };
+
+  const handleMapTaxInvoiceUpload = (piInvoice) => {
+    if (!piInvoice?.id) return;
+    setUploadPiPrefill({
+      documentType: DOCUMENT_TYPE.TAX_INVOICE,
+      linkedProformaInvoiceId: piInvoice.id,
+      linkedProformaInvoiceNumber: piInvoice.invoiceNumber,
+      vendorId: piInvoice.vendorId,
+      vendorName: piInvoice.vendorName,
+    });
+    setViewDialogOpen(false);
+    setEditDialogOpen(false);
+    setMapTaxInvoiceDialogOpen(false);
+    setInvoiceUploadDialogOpen(true);
+  };
+
+  const togglePiExpanded = useCallback((piId) => {
+    setExpandedPiIds((previous) => {
+      const next = new Set(previous);
+      if (next.has(piId)) next.delete(piId);
+      else next.add(piId);
+      return next;
+    });
+  }, []);
 
   const handleViewInvoice = async (invoice) => {
     setSelectedInvoice(invoice);
@@ -1643,6 +2159,90 @@ const InvoicesPage = () => {
     }
   };
 
+  const closeViewDialog = useCallback((open) => {
+    setViewDialogOpen(open);
+    if (!open) {
+      clearNotificationQueryParams(searchParams, setSearchParams);
+    }
+  }, [searchParams, setSearchParams]);
+
+  const notificationSource = searchParams.get("source");
+  const notificationAction = searchParams.get("action");
+  const notificationInvoiceId = searchParams.get("invoiceId");
+  const notificationWeakEntity = searchParams.get("weakEntity") === "1";
+
+  useEffect(() => {
+    if (
+      notificationSource !== "notification" ||
+      notificationAction !== "preview" ||
+      !notificationInvoiceId
+    ) {
+      return;
+    }
+
+    const notificationKey = `${notificationSource}:${notificationAction}:${notificationInvoiceId}`;
+    if (handledNotificationRef.current === notificationKey) return;
+    handledNotificationRef.current = notificationKey;
+    setActiveTab("list");
+
+    const loadedInvoice = invoices.find(
+      (invoice) => String(invoice?.id) === String(notificationInvoiceId),
+    );
+
+    if (loadedInvoice) {
+      handleViewInvoice(loadedInvoice);
+      return;
+    }
+
+    if (notificationWeakEntity) {
+      toast.warning("Could not open the exact item. Showing the related module instead.");
+      return;
+    }
+
+    getInvoice(notificationInvoiceId)
+      .unwrap()
+      .then((invoice) => handleViewInvoice(invoice))
+      .catch(() => {
+        toast.warning("Could not open the exact item. Showing the related module instead.");
+      });
+  }, [
+    getInvoice,
+    handleViewInvoice,
+    invoices,
+    notificationAction,
+    notificationInvoiceId,
+    notificationSource,
+    notificationWeakEntity,
+  ]);
+
+  const handleViewLinkedInvoice = useCallback(
+    async (linkedInvoice) => {
+      const fullInvoice = invoices.find(
+        (item) => String(item.id) === String(linkedInvoice?.id),
+      );
+
+      if (fullInvoice) {
+        handleViewInvoice(fullInvoice);
+        return;
+      }
+
+      if (!linkedInvoice?.id) {
+        handleViewInvoice(linkedInvoice);
+        return;
+      }
+
+      try {
+        const invoiceDetail = await getInvoice(linkedInvoice.id).unwrap();
+        handleViewInvoice({ ...linkedInvoice, ...invoiceDetail });
+      } catch (error) {
+        console.error("Failed to fetch linked tax invoice detail:", error);
+        toast.error("Could not load full linked tax invoice details");
+        handleViewInvoice(linkedInvoice);
+      }
+    },
+    [getInvoice, handleViewInvoice, invoices],
+  );
+
   const handleEditInvoice = (invoice) => {
     if (!canEditInvoice(invoice, invoiceEditContext)) {
       toast.error(getInvoiceEditBlockedMessage(invoice, invoiceEditContext));
@@ -1661,6 +2261,30 @@ const InvoicesPage = () => {
     setEditDialogOpen(true);
   };
 
+  const handleRequestInvoiceUnlock = async (invoice) => {
+    if (!canUpdateInvoices) {
+      toast.error("You need invoice edit access to request unlock");
+      return;
+    }
+    if (!guardAction("accounting.ready.unlockRequest")) return;
+    try {
+      const result = await requestAccountingUnlock({
+        id:
+          invoice?.accountingReadyId ||
+          invoice?.accounting_ready_id ||
+          invoice?.readyItemId,
+        objectType: isProformaInvoice(invoice) ? "PI" : "INVOICE",
+        objectId: invoice?.id,
+      }).unwrap();
+      toast.success(result?.message || "Unlock request submitted");
+      await refetchInvoices();
+    } catch (error) {
+      toast.error(
+        getAccountingErrorMessage(error, "Could not raise unlock request"),
+      );
+    }
+  };
+
   const handleUpdateInvoice = async () => {
     if (!guardAction("invoices.update")) return;
     if (!selectedInvoice || !formData) return;
@@ -1668,20 +2292,35 @@ const InvoicesPage = () => {
     const isSavedDraft = isSavedInvoiceStatus(selectedInvoice.status);
     if (isSavedDraft) {
       if (!validateSavedInvoiceEdit(formData)) return;
-    } else if (!validateMandatoryPayload(formData)) {
-      return;
+    } else {
+      if (!String(formData.billingGstin || "").trim()) {
+        toast.error(
+          "Select a billing GSTIN from Organisation Details before updating invoice",
+        );
+        return;
+      }
+      if (!validateMandatoryPayload(formData)) return;
     }
 
     try {
-      await updateInvoice({
+      const updateResponse = await updateInvoice({
         id: selectedInvoice.id,
         body: buildUpdateInvoiceBody(formData, { keepSaved: isSavedDraft }),
       }).unwrap();
+      const matchResult = await maybePerformInvoiceMatching(
+        extractInvoiceIdFromSaveResponse(updateResponse) || selectedInvoice.id,
+        formData,
+        { skip: isSavedDraft },
+      );
 
       toast.success(
         isSavedDraft
           ? "Draft saved successfully"
-          : "Invoice updated successfully",
+          : matchResult === "created"
+            ? "Invoice updated and matching performed"
+            : matchResult === "updated"
+              ? "Invoice updated and matching updated"
+              : "Invoice updated successfully",
       );
       setEditDialogOpen(false);
       setSelectedInvoice(null);
@@ -1704,14 +2343,21 @@ const InvoicesPage = () => {
     if (!guardAction("invoices.update")) return;
     if (!selectedInvoice || !formData) return;
     if (!isSavedInvoiceStatus(selectedInvoice.status)) return;
+    if (!String(formData.billingGstin || "").trim()) {
+      toast.error(
+        "Select a billing GSTIN from Organisation Details before submitting invoice",
+      );
+      return;
+    }
     if (!canForwardSavedInvoice(selectedInvoice, invoiceEditContext)) {
       toast.error("You do not have permission to submit this invoice");
       return;
     }
-    if (!validateSavedInvoiceEdit(formData)) return;
+    if (!validateSavedInvoiceEdit(formData, { requireBillingGst: true }))
+      return;
 
     try {
-      await updateInvoice({
+      const updateResponse = await updateInvoice({
         id: selectedInvoice.id,
         body: buildUpdateInvoiceBody(formData),
       }).unwrap();
@@ -1721,7 +2367,18 @@ const InvoicesPage = () => {
         action: "forward",
       }).unwrap();
 
-      toast.success("Invoice submitted to checker");
+      const matchResult = await maybePerformInvoiceMatching(
+        extractInvoiceIdFromSaveResponse(updateResponse) || selectedInvoice.id,
+        formData,
+      );
+
+      toast.success(
+        matchResult === "created"
+          ? "Invoice submitted and matching performed"
+          : matchResult === "updated"
+            ? "Invoice submitted and matching updated"
+            : "Invoice submitted to checker",
+      );
       setEditDialogOpen(false);
       setSelectedInvoice(null);
       setFormData(null);
@@ -1749,8 +2406,57 @@ const InvoicesPage = () => {
     }
   };
 
+  const handleCancelInvoice = (invoice) => {
+    if (!isInvoiceCancellable(invoice)) {
+      toast.error(
+        invoice?.cancelDisabledReason ||
+          invoice?.cancel_disabled_reason ||
+          "This invoice cannot be cancelled",
+      );
+      return;
+    }
+    setInvoiceCancelTarget(invoice);
+    setInvoiceCancelReason("");
+  };
+
+  const handleCancelLinkedInvoice = (linkedInvoice) => {
+    const fullInvoice =
+      invoices.find((item) => String(item.id) === String(linkedInvoice?.id)) ??
+      linkedInvoice;
+    handleCancelInvoice(fullInvoice);
+  };
+
+  const confirmCancelInvoice = async () => {
+    if (!invoiceCancelTarget) return;
+    const reason = invoiceCancelReason.trim();
+    if (reason.length < 5) {
+      toast.error("Please enter a cancellation reason");
+      return;
+    }
+
+    try {
+      const response = await cancelInvoice({
+        id: invoiceCancelTarget.id,
+        reason,
+      }).unwrap();
+      toast.success(response?.message || "Invoice cancelled successfully");
+      setViewDialogOpen(false);
+      setInvoiceCancelTarget(null);
+      setInvoiceCancelReason("");
+      await refetchInvoices();
+    } catch (error) {
+      toast.error(
+        extractApiErrorDetail(error) ||
+          error?.data?.message ||
+          "Failed to cancel invoice",
+      );
+    }
+  };
+
   const canEdit = (invoice) => canEditInvoice(invoice, invoiceEditContext);
   const canDelete = (status) => canDeleteInvoice(status, canDeleteInvoices);
+  const canCancel = (invoice) =>
+    Boolean(invoice?.id) && isInvoiceCancellable(invoice);
 
   const getStatusBadgeClass = (status) => getInvoiceStatusBadgeClass(status);
 
@@ -1778,6 +2484,7 @@ const InvoicesPage = () => {
         isSavedDraft={isSavedDraft}
         calculateTotals={calculateTotals}
         findVendorByName={findVendorByName}
+        findVendorById={findVendorById}
         handleAddVendorFromInvoice={handleAddVendorFromInvoice}
         updateLineItem={updateLineItem}
         removeLineItem={removeLineItem}
@@ -1789,7 +2496,13 @@ const InvoicesPage = () => {
         setActiveTab={setActiveTab}
         handleUpdateInvoice={handleUpdateInvoice}
         handleAddInvoice={handleAddInvoice}
+        isSubmitting={
+          isEdit
+            ? updateInvoiceLoading || invoiceMatchingLoading
+            : createInvoiceLoading || invoiceMatchingLoading
+        }
         canAddVendor={canAddVendors}
+        canEditNetPayable={isNetPayableEditEnabled}
         canSubmit={
           isEdit
             ? selectedInvoice &&
@@ -1801,7 +2514,8 @@ const InvoicesPage = () => {
                     formData,
                     invoiceMandatoryFields,
                     mandatoryFieldOptions,
-                  ))
+                  ) &&
+                  !invoiceMatchingLoading)
             : canManageInvoices &&
               !invoiceMandatoryFieldsLoading &&
               isInvoiceMandatoryFieldsSatisfied(
@@ -1810,7 +2524,8 @@ const InvoicesPage = () => {
                 mandatoryFieldOptions,
               ) &&
               (Boolean(formData?.vendorId) ||
-                Boolean(formData?.vendorRequestSubmitted))
+                Boolean(formData?.vendorRequestSubmitted)) &&
+              !invoiceMatchingLoading
         }
         departmentMandatory={invoiceMandatoryFields.department}
         categoryMandatory={invoiceMandatoryFields.category}
@@ -1825,9 +2540,14 @@ const InvoicesPage = () => {
         currencyOptions={invoiceCurrencyOptions}
         GST_TREATMENTS={GST_TREATMENTS}
         INDIAN_STATES={INDIAN_STATES}
-        INVOICE_SOURCES={INVOICE_SOURCES}
         LEDGER_OPTIONS={LEDGER_OPTIONS}
         TAX_RATES={TAX_RATES}
+        showBillingGst={isEdit || Boolean(uploadedFile)}
+        requireBillingGst={isEdit && !isSavedDraft}
+        showBranchField={isBranchEnabled}
+        showInvoiceMatching={showInvoiceMatchingSelection}
+        canUseThreeWayMatching={canUseThreeWayMatching}
+        showProformaInvoiceFields={showProformaInvoiceFields}
       />
     );
   };
@@ -1837,7 +2557,8 @@ const InvoicesPage = () => {
     Boolean(selectedInvoice) &&
     isSavedInvoiceStatus(selectedInvoice?.status) &&
     canForwardSavedInvoice(selectedInvoice, invoiceEditContext) &&
-    canSubmitSavedDraft(formData);
+    canSubmitSavedDraft(formData) &&
+    !invoiceMatchingLoading;
 
   const {
     total: invoiceTotal = 0,
@@ -1860,134 +2581,246 @@ const InvoicesPage = () => {
     return Array.from({ length: 5 }, (_, index) => start + index);
   })();
 
-  const renderInvoiceRow = (invoice, rowIndex, headers) => (
-    <TableRow
-      key={invoice.id ?? rowIndex}
-      className={cn(
-        rowIndex % 2 === 1 && "bg-muted/20",
-        "border-b border-border transition-colors hover:bg-muted/50",
-        invoice.isDuplicate && "bg-amber-100 hover:bg-amber-100",
-      )}
-      data-testid={`invoice-row-${invoice.id}`}
-    >
-      {headers.map((header) => {
-        let value;
+  const renderInvoiceRow = (invoice, rowIndex, headers) => {
+    const invoiceId = invoice.id ?? rowIndex;
+    const linkedCount = getLinkedTaxInvoiceCount(invoice);
+    const canExpandLinked =
+      showProformaInvoiceFields &&
+      isProformaInvoice(invoice) &&
+      linkedCount > 0;
+    const isExpanded = expandedPiIds.has(invoiceId);
+    const linkedRecords = canExpandLinked
+      ? resolveLinkedTaxInvoiceRecords(invoice, invoices)
+      : [];
 
-        switch (header.key) {
-          case "srNo":
-            value = invoiceOffset + rowIndex + 1;
-            break;
-          case "source":
-            value = (
-              <span
-                className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${invoice.source === "Email" ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-green-100 text-green-700 border border-green-200"}`}
-              >
-                {invoice.source === "Email" && <Mail className="h-3 w-3" />}
-                {invoice.source || "Upload"}
-              </span>
-            );
-            break;
-          case "integration":
-            value = <IntegrationSourceBadge record={invoice} />;
-            break;
-          case "originalFileName":
-            value = invoice.originalFileName || "-";
-            break;
-          case "refNo":
-            value = invoice.refNo || "-";
-            break;
-          case "grossAmount":
-            value = formatInvoiceAmount(
-              invoice,
-              getInvoiceGrossAmount(invoice),
-            );
-            break;
-          case "taxAmount":
-            value = formatInvoiceAmount(invoice, getInvoiceTaxAmount(invoice));
-            break;
-          case "tdsAmount":
-            value = formatInvoiceAmount(invoice, getInvoiceTdsAmount(invoice));
-            break;
-          case "netAmount":
-            value = formatInvoiceAmount(invoice, getInvoiceNetAmount(invoice));
-            break;
-          case "approvalWorkflowName":
-            value = getApprovalWorkflowName(invoice);
-            break;
-          case "invoiceDate":
-            value = invoice.invoiceDate
-              ? format(new Date(invoice.invoiceDate), "dd MMM yy")
-              : "-";
-            break;
-          case "status":
-            value = (
-              <span
-                className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border whitespace-nowrap ${getStatusBadgeClass(invoice.status)}`}
-              >
-                {formatWorkflowStatus(invoice.status)}
-              </span>
-            );
-            break;
-          case "createdAt":
-            value = invoice.createdAt
-              ? format(new Date(invoice.createdAt), "dd MMM yy, hh:mm a")
-              : "-";
-            break;
-          case "actions":
-            value = (
-              <div className="flex justify-start gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleViewInvoice(invoice)}
-                  data-testid={`view-invoice-${invoice.id}`}
-                  title="View Invoice"
-                  className="h-8 w-8 p-0"
-                >
-                  <Eye className="h-4 w-4" />
-                </Button>
-                {canEdit(invoice) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleEditInvoice(invoice)}
-                    data-testid={`edit-invoice-${invoice.id}`}
-                    title="Edit Invoice"
-                    className="h-8 w-8 p-0"
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                )}
-                {canDelete(invoice.status) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDeleteInvoice(invoice)}
-                    data-testid={`delete-invoice-${invoice.id}`}
-                    title="Delete Invoice"
-                    className="h-8 w-8 p-0"
-                  >
-                    <Trash2 className="h-4 w-4 text-destructive" />
-                  </Button>
-                )}
-              </div>
-            );
-            break;
-          case "vendorName":
-            value = <ClippedTextWithTooltip text={invoice.vendorName} />;
-            break;
-          default:
-            value = invoice?.[header.key] || "-";
-        }
+    return (
+      <React.Fragment key={invoiceId}>
+        <TableRow
+          className={cn(
+            "bg-card border-b border-border transition-colors hover:bg-muted cursor-pointer",
+            invoice.isDuplicate && "bg-amber-100 hover:bg-amber-100",
+          )}
+          onClick={() => handleViewInvoice(invoice)}
+          data-testid={`invoice-row-${invoice?.id ?? "unknown"}`}
+        >
+          {headers.map((header) => {
+            let value;
 
-        return (
-          <TableCell key={header.key} className={header.cellClassName}>
-            {value}
-          </TableCell>
-        );
-      })}
-    </TableRow>
-  );
+            switch (header.key) {
+              case "srNo":
+                value = invoiceOffset + rowIndex + 1;
+                break;
+              case "source":
+                value = (
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${isGmailInvoiceSource(invoice.source) ? "bg-blue-100 text-blue-700 border border-blue-200" : "bg-green-100 text-green-700 border border-green-200"}`}
+                  >
+                    {isGmailInvoiceSource(invoice.source) && (
+                      <Mail className="h-3 w-3" />
+                    )}
+                    {invoice.source || "Upload"}
+                  </span>
+                );
+                break;
+              case "integration":
+                value = <IntegrationSourceBadge record={invoice} />;
+                break;
+              case "originalFileName":
+                value = invoice.originalFileName || "-";
+                break;
+              case "refNo":
+                value = invoice.refNo || "-";
+                break;
+              case "orgBranch":
+                value = <OrgBranchCell record={invoice} />;
+                break;
+              case "grossAmount":
+                value = formatInvoiceAmount(
+                  invoice,
+                  getInvoiceGrossAmount(invoice),
+                );
+                break;
+              case "taxAmount":
+                value = formatInvoiceAmount(
+                  invoice,
+                  getInvoiceTaxAmount(invoice),
+                );
+                break;
+              case "tdsAmount":
+                value = formatInvoiceAmount(
+                  invoice,
+                  getInvoiceTdsAmount(invoice),
+                );
+                break;
+              case "netAmount":
+                value = formatInvoiceAmount(
+                  invoice,
+                  getInvoiceNetAmount(invoice),
+                );
+                break;
+              case "approvalWorkflowName":
+                value = getApprovalWorkflowName(invoice);
+                break;
+              case "invoiceDate":
+                value = invoice.invoiceDate
+                  ? format(new Date(invoice.invoiceDate), "dd MMM yy")
+                  : "-";
+                break;
+              case "dueDate":
+                value = (
+                  <InvoiceDueDateCell
+                    invoice={invoice}
+                    formattedDueDate={
+                      invoice.dueDate
+                        ? format(new Date(invoice.dueDate), "dd MMM yy")
+                        : "-"
+                    }
+                  />
+                );
+                break;
+              case "status":
+                value = (
+                  <span
+                    className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border whitespace-nowrap ${getStatusBadgeClass(invoice.status)}`}
+                  >
+                    {formatWorkflowStatus(invoice.status)}
+                  </span>
+                );
+                break;
+              case "createdAt":
+                value = invoice.createdAt
+                  ? format(new Date(invoice.createdAt), "dd MMM yy, hh:mm a")
+                  : "-";
+                break;
+              case "actions":
+                value = (
+                  <div
+                    className="flex justify-start gap-1"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    {showProformaInvoiceFields &&
+                      isProformaInvoice(invoice) &&
+                      canUploadInvoices &&
+                      canMapTaxInvoiceToProforma(invoice) && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleMapTaxInvoice(invoice)}
+                          data-testid={`map-tax-invoice-${invoice?.id ?? "unknown"}`}
+                          title="Map Tax Invoice"
+                          className="h-8 w-8 p-0"
+                        >
+                          <Link2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    {canEdit(invoice) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleEditInvoice(invoice)}
+                        data-testid={`edit-invoice-${invoice?.id ?? "unknown"}`}
+                        title="Edit Invoice"
+                        className="h-8 w-8 p-0"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                    )}
+                    {isAccountingReadyLocked(invoice) &&
+                      canUpdateInvoices &&
+                      String(
+                        getAccountingUnlockRequestStatus(invoice) || "",
+                      ).toUpperCase() !== "PENDING" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRequestInvoiceUnlock(invoice)}
+                          disabled={requestAccountingUnlockLoading}
+                          data-testid={`request-unlock-invoice-${invoice?.id ?? "unknown"}`}
+                          title="Request accounting unlock"
+                          className="h-8 w-8 p-0"
+                        >
+                          <Unlock className="h-4 w-4 text-amber-700" />
+                        </Button>
+                      )}
+                    {canDelete(invoice.status) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDeleteInvoice(invoice)}
+                        data-testid={`delete-invoice-${invoice?.id ?? "unknown"}`}
+                        title="Delete Invoice"
+                        className="h-8 w-8 p-0"
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    )}
+                    {canCancel(invoice) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleCancelInvoice(invoice)}
+                        data-testid={`cancel-invoice-${invoice?.id ?? "unknown"}`}
+                        title="Cancel Invoice"
+                        className="h-8 w-8 p-0"
+                      >
+                        <Ban className="h-4 w-4 text-destructive" />
+                      </Button>
+                    )}
+                  </div>
+                );
+                break;
+              case "vendorName":
+                value = (
+                  <ClippedTextWithTooltip
+                    text={invoice.vendorName}
+                    maxWidthClass="max-w-[140px]"
+                  />
+                );
+                break;
+              case "documentType":
+                value = (
+                  <InvoiceDocumentTypeBadge
+                    invoice={invoice}
+                    showLinkedCount={showProformaInvoiceFields}
+                    expandable={canExpandLinked}
+                    isExpanded={isExpanded}
+                    onToggleExpand={() => togglePiExpanded(invoiceId)}
+                  />
+                );
+                break;
+              default:
+                value = invoice?.[header.key] || "-";
+            }
+
+            return (
+              <TableCell
+                key={header.key}
+                className={cn("border border-border", header.cellClassName)}
+                onClick={
+                  header.key === "documentType"
+                    ? (event) => event.stopPropagation()
+                    : undefined
+                }
+              >
+                {value}
+              </TableCell>
+            );
+          })}
+        </TableRow>
+        {canExpandLinked && isExpanded ? (
+          <InvoiceTableLinkedTaxExpandedRow
+            parentInvoice={invoice}
+            linkedInvoices={linkedRecords}
+            colSpan={headers.length}
+            onViewInvoice={handleViewLinkedInvoice}
+            onCancelLinkedInvoice={handleCancelLinkedInvoice}
+            canCancelLinkedInvoice={canCancel}
+            getStatusBadgeClass={getStatusBadgeClass}
+          />
+        ) : null}
+      </React.Fragment>
+    );
+  };
 
   const renderBulkEditInvoiceForm = () => (
     <InvoiceForm
@@ -2031,11 +2864,16 @@ const InvoicesPage = () => {
           discountsLevel: bulkEditForm?.discountsLevel,
           invoiceDiscount: bulkEditForm?.invoiceDiscount,
           invoiceDiscountType: bulkEditForm?.invoiceDiscountType,
-          roundOff: bulkEditForm?.roundOff ?? bulkEditForm?.round_off ?? bulkEditForm?.roundoff,
-          invoiceTotal: bulkEditForm?.scannedTotal ?? bulkEditForm?.invoiceTotal,
+          roundOff:
+            bulkEditForm?.roundOff ??
+            bulkEditForm?.round_off ??
+            bulkEditForm?.roundoff,
+          invoiceTotal:
+            bulkEditForm?.scannedTotal ?? bulkEditForm?.invoiceTotal,
         })
       }
       findVendorByName={findVendorByName}
+      findVendorById={findVendorById}
       handleAddVendorFromInvoice={() => {
         if (bulkEditItemId) handleAddVendorForBulkItem(bulkEditItemId);
       }}
@@ -2084,7 +2922,6 @@ const InvoicesPage = () => {
       currencyOptions={invoiceCurrencyOptions}
       GST_TREATMENTS={GST_TREATMENTS}
       INDIAN_STATES={INDIAN_STATES}
-      INVOICE_SOURCES={INVOICE_SOURCES}
       LEDGER_OPTIONS={LEDGER_OPTIONS}
       TAX_RATES={TAX_RATES}
     />
@@ -2118,7 +2955,9 @@ const InvoicesPage = () => {
           <RefreshButton
             onClick={handleRefreshInvoices}
             refreshing={
-              invoicesFetching || vendorsFetching || pendingVendorsFetching
+              invoicesFetching ||
+              vendorsFetching ||
+              invoiceFilterOptionsFetching
             }
           >
             Refresh
@@ -2150,29 +2989,66 @@ const InvoicesPage = () => {
         disabled={scanning || bulkExtracting || !canUploadInvoices}
       />
 
-      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center">
+      <MapTaxInvoiceDialog
+        open={mapTaxInvoiceDialogOpen}
+        onOpenChange={(open) => {
+          setMapTaxInvoiceDialogOpen(open);
+          if (!open) setMapTaxInvoiceTarget(null);
+        }}
+        piInvoice={mapTaxInvoiceTarget}
+        onUploadNew={handleMapTaxInvoiceUpload}
+      />
+
+      <div className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        {showProformaInvoiceFields && (
+          <div className="flex flex-wrap gap-2">
+            {INVOICE_DOCUMENT_TYPE_TABS.map(({ value, label }) => (
+              <Button
+                key={value}
+                type="button"
+                size="sm"
+                variant={
+                  invoiceDocumentTypeTab === value ? "default" : "outline"
+                }
+                onClick={() => setInvoiceDocumentTypeTab(value)}
+                data-testid={`invoice-document-tab-${value}`}
+              >
+                {label}
+              </Button>
+            ))}
+          </div>
+        )}
         <div className="flex flex-wrap gap-2">
-          {INVOICE_LIST_FILTERS.map(({ value, label }) => (
+          {invoiceQuickFilters.map(({ value, label, count }) => (
             <Button
               key={value}
               type="button"
               size="sm"
               variant={invoiceStatusFilter === value ? "default" : "outline"}
-              onClick={() => setInvoiceStatusFilter(value)}
+              onClick={() => {
+                setInvoiceStatusFilter(value);
+                updateInvoiceColumnFilter("statuses", []);
+              }}
               data-testid={`invoice-filter-${value}`}
             >
-              {label}
+              {count != null ? `${label} (${count})` : label}
             </Button>
           ))}
-        </div>
-        <div className="relative w-full sm:w-64 sm:max-w-xs">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search vendor, invoice #, ref no, amount..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-            data-testid="invoice-search-input"
+          <div className="relative w-full sm:w-64 sm:max-w-xs">
+            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search vendor, invoice #, ref no, amount..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-10"
+              data-testid="invoice-search-input"
+            />
+          </div>
+          <TableSortButton
+            options={invoiceSortOptions}
+            value={invoiceSort.value}
+            direction={invoiceSort.direction}
+            onChange={setInvoiceSort}
           />
         </div>
       </div>
@@ -2180,16 +3056,20 @@ const InvoicesPage = () => {
       <div
         className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm"
         data-testid="invoices-table"
+        ref={invoiceTableWrapperRef}
       >
         <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-thin-muted">
           <AppDataTable
             tableHeader={invoiceTableHeader}
-            tableData={invoices}
+            tableData={displayInvoices}
             renderRow={renderInvoiceRow}
             isLoading={invoicesFetching}
             loadingRowCount={8}
             tableClassName="min-w-[1900px]"
-            headClassName="border-b border-border bg-muted/50"
+            tableContainerClassName="overflow-visible"
+            headClassName="border-b border-border bg-muted shadow-sm"
+            stickyHeader
+            bordered
             emptyMessage="No invoices found. Upload your first invoice to get started!"
             emptyTestId="no-invoices"
           />
@@ -2273,6 +3153,7 @@ const InvoicesPage = () => {
         scanning={scanning}
         renderInvoiceForm={renderInvoiceForm}
         handleAddInvoice={handleAddInvoice}
+        canAddInvoice={Boolean(formData)}
       />
 
       <InvoicesDialogs
@@ -2312,7 +3193,7 @@ const InvoicesPage = () => {
         renderPdfPreview={renderPdfPreview}
         renderBulkEditInvoiceForm={renderBulkEditInvoiceForm}
         viewDialogOpen={viewDialogOpen}
-        setViewDialogOpen={setViewDialogOpen}
+        setViewDialogOpen={closeViewDialog}
         selectedInvoice={selectedInvoice}
         viewPreviewError={viewPreviewError}
         setViewPreviewError={setViewPreviewError}
@@ -2323,8 +3204,16 @@ const InvoicesPage = () => {
         loadingHistory={loadingHistory}
         canEdit={canEdit}
         handleEditInvoice={handleEditInvoice}
+        canCancel={canCancel}
+        handleCancelInvoice={handleCancelInvoice}
         findVendorByName={findVendorByName}
         findVendorById={findVendorById}
+        showProformaInvoiceFields={showProformaInvoiceFields}
+        onMapTaxInvoice={handleMapTaxInvoice}
+        onViewLinkedInvoice={handleViewLinkedInvoice}
+        allInvoices={invoices}
+        onCancelLinkedInvoice={handleCancelLinkedInvoice}
+        canCancelLinkedInvoice={canCancel}
         editDialogOpen={editDialogOpen}
         setEditDialogOpen={setEditDialogOpen}
         formData={formData}
@@ -2332,7 +3221,9 @@ const InvoicesPage = () => {
         handleForwardSavedInvoice={handleForwardSavedInvoice}
         canForwardSavedDraft={canForwardSavedDraft}
         forwardSavedInvoiceLoading={
-          updateInvoiceLoading || forwardInvoiceLoading
+          updateInvoiceLoading ||
+          forwardInvoiceLoading ||
+          invoiceMatchingLoading
         }
         renderInvoiceForm={renderInvoiceForm}
         requestVendorOpen={requestVendorOpen}
@@ -2344,6 +3235,12 @@ const InvoicesPage = () => {
         invoiceDeleteTarget={invoiceDeleteTarget}
         setInvoiceDeleteTarget={setInvoiceDeleteTarget}
         confirmDeleteInvoice={confirmDeleteInvoice}
+        invoiceCancelTarget={invoiceCancelTarget}
+        setInvoiceCancelTarget={setInvoiceCancelTarget}
+        invoiceCancelReason={invoiceCancelReason}
+        setInvoiceCancelReason={setInvoiceCancelReason}
+        confirmCancelInvoice={confirmCancelInvoice}
+        cancelInvoiceLoading={cancelInvoiceLoading}
       />
     </div>
   );
