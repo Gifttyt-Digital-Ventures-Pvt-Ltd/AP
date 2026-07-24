@@ -41,21 +41,21 @@ const Banking = () => {
   const selectedAccountTransactions = transactions
     .filter((txn) => {
       if (!selectedAccount) return true;
-      const accountName = (selectedAccount.account_name || '').toLowerCase();
-      const bankName = (selectedAccount.bank_name || '').toLowerCase();
-      const txnAccount = (txn.account || '').toLowerCase();
+      const accountName = (selectedAccount?.account_name ?? '').toLowerCase();
+      const bankName = (selectedAccount?.bank_name ?? '').toLowerCase();
+      const txnAccount = (txn?.account ?? '').toLowerCase();
       return !txnAccount || txnAccount === accountName || txnAccount === bankName;
     })
     .map((txn) => ({
-      id: txn.id,
-      vendor: txn.vendor_name || txn.counterparty || txn.description || '-',
-      ref_number: String(txn.reference_number || txn.ref_number || txn.id || '-'),
-      date: txn.date ? new Date(txn.date) : new Date(),
-      withdrawal: txn.is_credit ? null : Number(txn.amount || 0),
-      deposit: txn.is_credit ? Number(txn.amount || 0) : null,
-      closing_balance: Number(txn.running_balance ?? txn.closing_balance ?? 0),
-      authorized_by: txn.reviewed_by_name || txn.authorized_by || null,
-      type: txn.is_credit ? 'deposit' : 'withdrawal',
+      id: txn?.id,
+      vendor: txn?.vendor_name || txn?.counterparty || txn?.description || '-',
+      ref_number: String(txn?.reference_number || txn?.ref_number || txn?.id || '-'),
+      date: txn?.date ? new Date(txn.date) : new Date(),
+      withdrawal: txn?.is_credit ? null : Number(txn?.amount || 0),
+      deposit: txn?.is_credit ? Number(txn?.amount || 0) : null,
+      closing_balance: Number(txn?.running_balance ?? txn?.closing_balance ?? 0),
+      authorized_by: txn?.reviewed_by_name || txn?.authorized_by || null,
+      type: txn?.is_credit ? 'deposit' : 'withdrawal',
     }))
     .sort((a, b) => b.date - a.date);
 
@@ -63,11 +63,11 @@ const Banking = () => {
     if (!selectedAccount) return;
 
     const accountDetails = `
-Account Name: ${selectedAccount.account_name}
-Bank: ${selectedAccount.bank_name}
-Account Number: ${selectedAccount.account_number}
-Account Type: ${selectedAccount.account_type}
-Currency: ${selectedAccount.currency}
+Account Name: ${selectedAccount?.account_name ?? '-'}
+Bank: ${selectedAccount?.bank_name ?? '-'}
+Account Number: ${selectedAccount?.account_number ?? '-'}
+Account Type: ${selectedAccount?.account_type ?? '-'}
+Currency: ${selectedAccount?.currency ?? '-'}
     `.trim();
 
     navigator.clipboard.writeText(accountDetails);
@@ -78,17 +78,18 @@ Currency: ${selectedAccount.currency}
     if (!selectedAccount) return;
 
     toast.info(`
-      Account: ${selectedAccount.account_name}
-      Bank: ${selectedAccount.bank_name}
-      Type: ${selectedAccount.account_type}
-      Currency: ${selectedAccount.currency}
+      Account: ${selectedAccount?.account_name ?? '-'}
+      Bank: ${selectedAccount?.bank_name ?? '-'}
+      Type: ${selectedAccount?.account_type ?? '-'}
+      Currency: ${selectedAccount?.currency ?? '-'}
     `);
   };
 
   const filteredTransactions = selectedAccountTransactions.filter((transaction) => {
-    const matchesSearch =
-      transaction.vendor.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      transaction.ref_number.toLowerCase().includes(searchTerm.toLowerCase());
+    const query = (searchTerm ?? '').toLowerCase();
+    const vendor = (transaction?.vendor ?? '').toLowerCase();
+    const refNumber = (transaction?.ref_number ?? '').toLowerCase();
+    const matchesSearch = vendor.includes(query) || refNumber.includes(query);
 
     if (!matchesSearch) return false;
 

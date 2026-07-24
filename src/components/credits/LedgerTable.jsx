@@ -8,16 +8,18 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import CreditAmount from "./CreditAmount";
+import { parseApiDate } from "@/lib/utils";
 
 const formatDateTime = (value) => {
-  if (!value) return "-";
+  const parsed = parseApiDate(value);
+  if (!parsed) return "-";
   return new Intl.DateTimeFormat("en-IN", {
     day: "2-digit",
     month: "short",
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-  }).format(new Date(value));
+  }).format(parsed);
 };
 
 const asArray = (response) => {
@@ -50,34 +52,34 @@ const LedgerTable = ({ ledger, loading = false, limit }) => {
 
   return (
     <div className="overflow-hidden rounded-md border">
-      <Table>
+      <Table className="border-separate border-spacing-0">
         <TableHeader>
           <TableRow>
-            <TableHead>Date</TableHead>
-            <TableHead>Type</TableHead>
-            <TableHead>Action</TableHead>
-            <TableHead className="text-right">Amount</TableHead>
-            <TableHead className="text-right">Balance after</TableHead>
-            <TableHead>Performed by</TableHead>
-            <TableHead>Reference</TableHead>
+            <TableHead className="border border-border">Date</TableHead>
+            <TableHead className="border border-border">Type</TableHead>
+            <TableHead className="border border-border">Action</TableHead>
+            <TableHead className="border border-border text-right">Amount</TableHead>
+            <TableHead className="border border-border text-right">Balance after</TableHead>
+            <TableHead className="border border-border">Performed by</TableHead>
+            <TableHead className="border border-border">Reference</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {entries.map((entry) => (
             <TableRow key={entry.id}>
-              <TableCell className="whitespace-nowrap">{formatDateTime(entry.createdAt)}</TableCell>
-              <TableCell>
+              <TableCell className="border border-border whitespace-nowrap">{formatDateTime(entry.createdAt)}</TableCell>
+              <TableCell className="border border-border">
                 <Badge variant="outline">{entry.entryType}</Badge>
               </TableCell>
-              <TableCell>{entry.actionName || entry.actionCode || "-"}</TableCell>
-              <TableCell className="text-right">
+              <TableCell className="border border-border">{entry.actionName || entry.actionCode || "-"}</TableCell>
+              <TableCell className="border border-border text-right">
                 <CreditAmount value={entry.amount} signed />
               </TableCell>
-              <TableCell className="text-right">
+              <TableCell className="border border-border text-right">
                 <CreditAmount value={entry.balanceAfter} />
               </TableCell>
-              <TableCell>{entry.performedBy || "-"}</TableCell>
-              <TableCell>{entry.reference || "-"}</TableCell>
+              <TableCell className="border border-border">{entry.performedBy || "-"}</TableCell>
+              <TableCell className="border border-border">{entry.reference || "-"}</TableCell>
             </TableRow>
           ))}
         </TableBody>

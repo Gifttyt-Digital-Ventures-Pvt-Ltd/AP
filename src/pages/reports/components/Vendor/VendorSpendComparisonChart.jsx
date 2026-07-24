@@ -12,6 +12,32 @@ import {
 } from 'recharts';
 import ReportsTooltip from '../ReportsTooltip';
 
+const MAX_WORDS_PER_LINE = 3;
+
+// Recharts' default tick text is a single line at fontSize 10 / fill #666 /
+// textAnchor middle. This mirrors those exact defaults so short names render
+// identically to before, and only wraps onto a second line past 3 words.
+const VendorNameTick = ({ x, y, payload }) => {
+  const words = String(payload?.value ?? '').trim().split(/\s+/).filter(Boolean);
+  const lines =
+    words.length > MAX_WORDS_PER_LINE
+      ? [
+          words.slice(0, Math.ceil(words.length / 2)).join(' '),
+          words.slice(Math.ceil(words.length / 2)).join(' '),
+        ]
+      : [words.join(' ')];
+
+  return (
+    <text x={x} y={y} textAnchor="middle" fontSize={10} fill="#666">
+      {lines.map((line, index) => (
+        <tspan key={index} x={x} dy={index === 0 ? '0.71em' : '1em'}>
+          {line}
+        </tspan>
+      ))}
+    </text>
+  );
+};
+
 const VendorSpendComparisonChart = ({ vendorBreakdown = [], formatCurrency, formatFullCurrency }) => (
   <Card>
     <CardHeader>
@@ -22,7 +48,7 @@ const VendorSpendComparisonChart = ({ vendorBreakdown = [], formatCurrency, form
       <ResponsiveContainer width="100%" height={300}>
         <BarChart data={vendorBreakdown.slice(0, 10)}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-          <XAxis dataKey="name" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={80} />
+          <XAxis dataKey="name" tick={<VendorNameTick />} angle={0} textAnchor="middle" interval={0} height={80} />
           <YAxis tickFormatter={formatCurrency} tick={{ fontSize: 12 }} />
           <Tooltip content={<ReportsTooltip formatFullCurrency={formatFullCurrency} />} />
           <Legend />

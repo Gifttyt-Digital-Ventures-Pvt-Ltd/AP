@@ -1,5 +1,6 @@
 export const VENDOR_FIELD_SECTIONS = {
   COMPANY_NAME: 'COMPANY_NAME',
+  TRADE_NAME: 'TRADE_NAME',
   VENDOR_TYPE: 'VENDOR_TYPE',
   EMAIL_ID: 'EMAIL_ID',
   MOBILE_NO: 'MOBILE_NO',
@@ -25,9 +26,14 @@ export const VENDOR_FIELD_SECTIONS = {
   REMARKS: 'REMARKS',
 };
 
+export const VENDOR_VERIFICATION_SECTION_IDS = new Set([
+  'VENDOR_VERIFY_PORTAL',
+]);
+
 /** Section ID → snake_case form / bulk-upload field key */
 export const VENDOR_SECTION_TO_FORM_KEY = {
   [VENDOR_FIELD_SECTIONS.COMPANY_NAME]: 'name',
+  [VENDOR_FIELD_SECTIONS.TRADE_NAME]: 'trade_name',
   [VENDOR_FIELD_SECTIONS.VENDOR_TYPE]: 'vendor_type',
   [VENDOR_FIELD_SECTIONS.EMAIL_ID]: 'email',
   [VENDOR_FIELD_SECTIONS.MOBILE_NO]: 'mobile',
@@ -59,6 +65,7 @@ export const VENDOR_FORM_KEY_TO_SECTION = Object.fromEntries(
 
 export const VENDOR_FIELD_DEFAULT_LABELS = {
   [VENDOR_FIELD_SECTIONS.COMPANY_NAME]: 'Company Name',
+  [VENDOR_FIELD_SECTIONS.TRADE_NAME]: 'Trade Name',
   [VENDOR_FIELD_SECTIONS.VENDOR_TYPE]: 'Vendor Type',
   [VENDOR_FIELD_SECTIONS.EMAIL_ID]: 'Email ID',
   [VENDOR_FIELD_SECTIONS.MOBILE_NO]: 'Mobile No',
@@ -116,7 +123,10 @@ export const normalizeVendorFieldCatalog = (catalog = []) => {
 
 export const normalizeActiveVendorFields = (activeVendorFields = []) => {
   if (!Array.isArray(activeVendorFields)) return [];
-  return activeVendorFields.map(normalizeVendorFieldSection).filter(Boolean);
+  return activeVendorFields
+    .map(normalizeVendorFieldSection)
+    .filter(Boolean)
+    .filter((section) => !VENDOR_VERIFICATION_SECTION_IDS.has(section));
 };
 
 export const isVendorFieldRequired = (sectionId, activeVendorFields = []) => {

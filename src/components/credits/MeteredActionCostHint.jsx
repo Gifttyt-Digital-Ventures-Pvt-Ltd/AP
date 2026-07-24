@@ -10,10 +10,11 @@ const MeteredActionCostHint = ({
   unitCount = 1,
   className = "",
 }) => {
-  const { isBillingFeatureEnabled } = useRBAC();
+  const { isBillingFeatureEnabled, isTokenBasedSubscription } = useRBAC();
   const estimate = useMeteredActionEstimate(actionCode, unitCount);
+  const isMeteredBillingEnabled = isBillingFeatureEnabled && isTokenBasedSubscription;
 
-  if (!isBillingFeatureEnabled) {
+  if (!isMeteredBillingEnabled) {
     return null;
   }
 

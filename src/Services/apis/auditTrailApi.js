@@ -1,4 +1,5 @@
 import { serviceApi } from "../serviceApi";
+import { extractListResponse } from "../utils/payloadMappers";
 
 export const AUDIT_ACTIONS = [
   "VENDOR_CREATED",
@@ -114,7 +115,8 @@ export const auditTrailApi = serviceApi.injectEndpoints({
     }),
     getAuditUsers: builder.query({
       query: () => ({ url: "/api/v1/audit-logs/users", method: "GET" }),
-      transformResponse: (response) => toArray(response).map(normalizeAuditUser),
+      transformResponse: (response) =>
+        extractListResponse(response).map(normalizeAuditUser),
       providesTags: ["AuditLogs"],
     }),
     exportAuditLogs: builder.mutation({

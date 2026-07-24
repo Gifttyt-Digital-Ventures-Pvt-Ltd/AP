@@ -3,7 +3,6 @@ import { toast } from "sonner";
 import {
   useCreateInvoiceMutation,
   useGetInvoiceMandatoryFieldsQuery,
-  useGetPendingVendorApprovalsQuery,
   useGetVendorsQuery,
   useRequestVendorAdditionMutation,
   useScanInvoiceMutation,
@@ -53,7 +52,6 @@ import {
 import {
   GST_TREATMENTS,
   INDIAN_STATES,
-  INVOICE_SOURCES,
   LEDGER_OPTIONS,
   TAX_RATES,
 } from "../constants";
@@ -72,9 +70,12 @@ import {
   buildVendorRequestForm,
   createEmptyVendorRequestForm,
 } from "../utils/invoiceBulkUtils";
+import { findVendorByInvoiceName } from "../utils/vendorMatching";
+import { getInvoiceDueDateValidationErrorForInvoice } from "../utils/msmePaymentDue";
 import { useCurrencyFilter } from "../../../hooks/useCurrencyFilter";
 import { CURRENCY_SCREENS } from "../../../utils/currency";
 import { getInvoiceVendorRequestValidationErrors } from "../../../utils/vendorValidation";
+import { useProformaInvoiceSubscription } from "../../../hooks/useProformaInvoiceSubscription";
 
 const applyPrefillVendor = (formState, prefillVendor, prefillCampaign) => {
   const hasVendor = Boolean(prefillVendor?.vendorId || prefillVendor?.vendorName);
@@ -121,7 +122,22 @@ const InvoiceSingleUploadLayer = ({
   prefillCampaignRef.current = prefillCampaign;
 
   const { user } = useAuth();
-  const { isCategoryFeatureEnabled, isCampaignFeatureEnabled } = useRBAC();
+  const { isCategoryFeatureEnabled, isCampaignFeatureEnabled, isBranchEnabled, isCorporateScreenAllowed, isCorporateSectionEnabled } = useRBAC();
+  const hasPurchaseOrderSubscription =
+    isCorporateScreenAllowed("PURCHASE_ORDER") &&
+    (isCorporateSectionEnabled("PURCHASE_ORDER_ALL") ||
+      isCorporateSectionEnabled("PURCHASE_ORDER_CREATE") ||
+      isCorporateSectionEnabled("PURCHASE_ORDER_UPLOAD"));
+  const hasGrnSubscription =
+    isCorporateScreenAllowed("GRN") && isCorporateSectionEnabled("GRN_ALL");
+  const isInvoiceMatchingEnabled =
+    isCorporateScreenAllowed("INVOICE_MATCHING") &&
+    isCorporateSectionEnabled("INVOICE_MATCHING_ALL");
+  const showInvoiceMatchingSelection =
+    isInvoiceMatchingEnabled && hasPurchaseOrderSubscription;
+  const canUseThreeWayMatching =
+    showInvoiceMatchingSelection && hasGrnSubscription;
+  const { isPiSubscriptionEnabled } = useProformaInvoiceSubscription();
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
   const { setHideSidebar } = useSidebar();
@@ -149,8 +165,6 @@ const InvoiceSingleUploadLayer = ({
   const uploadedFileRef = useRef(null);
 
   const { data: vendorsData = [], refetch: refetchVendors } = useGetVendorsQuery();
-  const { data: pendingVendorsData = [], refetch: refetchPendingVendors } =
-    useGetPendingVendorApprovalsQuery();
   const { data: departmentsData = [] } = useGetCorporateDepartmentsQuery();
   const { data: invoiceMandatoryFieldsData, isLoading: invoiceMandatoryFieldsLoading } =
     useGetInvoiceMandatoryFieldsQuery(
@@ -183,9 +197,8 @@ const InvoiceSingleUploadLayer = ({
     () =>
       mergeInvoiceVendorOptions(
         Array.isArray(vendorsData) ? vendorsData : [],
-        Array.isArray(pendingVendorsData) ? pendingVendorsData : [],
       ),
-    [vendorsData, pendingVendorsData],
+    [vendorsData],
   );
   const departments = Array.isArray(departmentsData) ? departmentsData : [];
   const invoiceCategories =
@@ -215,15 +228,7 @@ const InvoiceSingleUploadLayer = ({
   }, [uploadedFileURL, uploadedFile]);
 
   const findVendorByName = useCallback(
-    (vendorName) => {
-      if (!vendorName) return null;
-      const normalizedName = vendorName.toLowerCase().trim();
-      return (
-        invoiceVendorOptions.find(
-          (vendor) => String(vendor?.name || "").toLowerCase().trim() === normalizedName,
-        ) || null
-      );
-    },
+    (vendorName) => findVendorByInvoiceName(invoiceVendorOptions, vendorName),
     [invoiceVendorOptions],
   );
 
@@ -380,6 +385,15 @@ const InvoiceSingleUploadLayer = ({
   };
 
   const validateMandatoryPayload = (payload) => {
+    const msmeDueDateError = getInvoiceDueDateValidationErrorForInvoice(payload, {
+      findVendorById,
+      findVendorByName,
+    });
+    if (msmeDueDateError) {
+      toast.error(msmeDueDateError);
+      return false;
+    }
+
     const message = getInvoiceMandatoryFieldValidationMessage(
       payload,
       invoiceMandatoryFields,
@@ -392,7 +406,7 @@ const InvoiceSingleUploadLayer = ({
     return true;
   };
 
-  const processFile = async (file) => {
+  const processFile = async (file, uploadContext = {}) => {
     if (!guardAction("invoices.scan")) return false;
     if (!file) return false;
 
@@ -406,6 +420,10 @@ const InvoiceSingleUploadLayer = ({
 
     const formDataUpload = new FormData();
     formDataUpload.append("file", file);
+    if (uploadContext.billingGstin) {
+      formDataUpload.append("billingGstin", uploadContext.billingGstin);
+      formDataUpload.append("billing_gstin", uploadContext.billingGstin);
+    }
 
     try {
       const response = await scanInvoice(formDataUpload).unwrap();
@@ -543,6 +561,7 @@ const InvoiceSingleUploadLayer = ({
           formData.lineItems,
           formData.tds,
           calculateLineItemSubtotal,
+          formData.tdsRate,
         ),
         uploadedFileName: uploadedFile?.name,
       },
@@ -650,26 +669,16 @@ const InvoiceSingleUploadLayer = ({
         gstin,
       }).unwrap();
       const requestedVendorId = extractVendorIdFromResponse(response);
-      const [vendorsResult, pendingResult] = await Promise.all([
-        refetchVendors(),
-        refetchPendingVendors(),
-      ]);
+      const vendorsResult = await refetchVendors();
       const freshVendorOptions = mergeInvoiceVendorOptions(
         vendorsResult?.data || [],
-        pendingResult?.data || [],
       );
-      const normalizedVendorName = vendorName.toLowerCase().trim();
       const matchedVendor =
         (requestedVendorId
           ? freshVendorOptions.find(
               (vendor) => String(vendor.id) === String(requestedVendorId),
             )
-          : null) ||
-        freshVendorOptions.find(
-          (vendor) =>
-            String(vendor?.name || "").toLowerCase().trim() === normalizedVendorName,
-        ) ||
-        null;
+          : null) || findVendorByInvoiceName(freshVendorOptions, vendorName);
       const resolvedVendorId = matchedVendor?.id || requestedVendorId || "";
 
       setFormData((prev) =>
@@ -712,6 +721,7 @@ const InvoiceSingleUploadLayer = ({
       hideActions={hideActions}
       calculateTotals={calculateTotals}
       findVendorByName={findVendorByName}
+      findVendorById={findVendorById}
       handleAddVendorFromInvoice={handleAddVendorFromInvoice}
       updateLineItem={updateLineItem}
       removeLineItem={removeLineItem}
@@ -738,16 +748,21 @@ const InvoiceSingleUploadLayer = ({
       vendorOptions={invoiceVendorOptions}
       GST_TREATMENTS={GST_TREATMENTS}
       INDIAN_STATES={INDIAN_STATES}
-      INVOICE_SOURCES={INVOICE_SOURCES}
       LEDGER_OPTIONS={LEDGER_OPTIONS}
       TAX_RATES={TAX_RATES}
+      showBillingGst={Boolean(uploadedFile)}
+      requireBillingGst={false}
+      showBranchField={isBranchEnabled}
+      showProformaInvoiceFields={isPiSubscriptionEnabled}
+      showInvoiceMatching={showInvoiceMatchingSelection}
+      canUseThreeWayMatching={canUseThreeWayMatching}
     />
   );
 
-  const handlePickerFiles = async (files) => {
+  const handlePickerFiles = async (files, uploadContext = {}) => {
     const file = files?.[0];
     if (!file) return false;
-    await processFile(file);
+    await processFile(file, uploadContext);
     // Do not let InvoiceUploadDialog call onOpenChange(false) — that was
     // resetting the upload session before React committed uploadedFile.
     return false;
@@ -785,6 +800,7 @@ const InvoiceSingleUploadLayer = ({
         scanning={scanning}
         renderInvoiceForm={renderInvoiceForm}
         handleAddInvoice={handleAddInvoice}
+        canAddInvoice={canSubmit}
       />
       <RequestVendorDialog
         open={requestVendorOpen}

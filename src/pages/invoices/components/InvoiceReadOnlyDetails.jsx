@@ -2,22 +2,40 @@ import React, { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { Label } from "../../../components/ui/label";
 import { formatCurrency, normalizeCurrencyCode } from "../../../utils/currency";
+import { useGetInvoiceTdsPreviewQuery } from "../../../Services/apis/taxApi";
+import useTdsSubscription from "../../../hooks/useTdsSubscription";
 import { TAX_RATES } from "../constants";
 import { buildInvoiceEditFormData } from "../utils/invoiceFormData";
 import {
   calculateInvoiceTotals,
+  formatInrTaxPercent,
   INVOICE_LEVEL,
   isInrInvoiceCurrency,
   parseTaxRateFromLabel,
   resolveLineItemSubtotal,
 } from "../utils/invoiceTax";
 import { parseNumericInput } from "../utils/numericInput";
-import { formatTdsLabel, parseTdsRate } from "../utils/tds";
+import { formatTdsDisplayLabel, resolveTdsRate } from "../utils/tds";
 import LineItemsSummary, { LineItemsSectionHeader } from "./LineItemsSummary";
+import MsmePaymentDueBadge from "./MsmePaymentDueBadge";
+import InvoiceDueDateIndicators from "./InvoiceDueDateIndicators";
 import {
-  computeLineItemsSummary,
-  resolveLineItemsExpanded,
-} from "../utils/lineItemsSummary";
+  normalizeMsmePaymentDue,
+} from "../utils/msmePaymentDue";
+import { computeLineItemsSummary, resolveLineItemsExpanded } from "../utils/lineItemsSummary";
+import { Button } from "../../../components/ui/button";
+import { Link2 } from "lucide-react";
+import {
+  canMapTaxInvoiceToProforma,
+  getDocumentTypeLabel,
+  isProformaInvoice,
+} from "../constants/proformaInvoice";
+import { resolveLinkedTaxInvoiceRecords } from "../utils/proformaInvoiceListing";
+import InvoiceLinkedTaxInvoicesPanel from "./InvoiceLinkedTaxInvoicesPanel";
+import {
+  getTdsPreviewAmount,
+  getTdsPreviewNetPayable,
+} from "./TdsBreakdownPanel";
 
 const formatDisplayDate = (value) => {
   if (!value) return "-";
@@ -35,8 +53,8 @@ const DetailField = ({ label, value, mono = false, className = "" }) => (
   </div>
 );
 
-const computeTdsAmount = (lineItems = [], tdsValue = "", subTotalOverride) => {
-  const tdsRate = parseTdsRate(tdsValue);
+const computeTdsAmount = (lineItems = [], tdsValue = "", subTotalOverride, tdsRateOverride = null) => {
+  const tdsRate = resolveTdsRate(tdsValue, tdsRateOverride);
   if (!tdsRate) return 0;
   const subTotal =
     subTotalOverride ??
@@ -53,6 +71,13 @@ const InvoiceReadOnlyDetails = ({
   findVendorById,
   isCategoryFeatureEnabled = true,
   isCampaignFeatureEnabled = false,
+  showProformaInvoiceFields = false,
+  onMapTaxInvoice,
+  onViewLinkedInvoice,
+  allInvoices = [],
+  getStatusBadgeClass,
+  canCancelLinkedInvoice = false,
+  onCancelLinkedInvoice,
 }) => {
   const formData = useMemo(
     () =>
@@ -78,8 +103,31 @@ const InvoiceReadOnlyDetails = ({
     setShowLineItems(resolveLineItemsExpanded(formData ?? {}));
   }, [invoice?.id, formData?.lineItemsExpanded]);
 
+  const { isTdsSubscriptionEnabled } = useTdsSubscription();
+  const invoiceIdForTdsPreview = invoice?.id ?? invoice?.invoiceId;
+  const readOnlyTdsSectionCode =
+    invoice?.tdsSectionCode ??
+    invoice?.tds_section_code ??
+    invoice?.sectionCode ??
+    invoice?.section_code;
+  const readOnlyTdsRate = invoice?.tdsRate ?? invoice?.tds_rate;
+  const {
+    data: tdsPreview,
+    isFetching: tdsPreviewLoading,
+    isError: tdsPreviewError,
+    refetch: refetchTdsPreview,
+  } = useGetInvoiceTdsPreviewQuery(
+    {
+      invoiceId: invoiceIdForTdsPreview,
+      sectionCode: readOnlyTdsSectionCode,
+      rateOverride: readOnlyTdsRate,
+    },
+    { skip: !isTdsSubscriptionEnabled || !invoiceIdForTdsPreview || !readOnlyTdsSectionCode },
+  );
+
   if (!formData) return null;
 
+  const msmePaymentDue = normalizeMsmePaymentDue(invoice);
   const invoiceCurrency = normalizeCurrencyCode(formData.currency);
   const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
   const isInvoiceLevelDiscount = formData.discountsLevel === INVOICE_LEVEL;
@@ -123,18 +171,24 @@ const InvoiceReadOnlyDetails = ({
       invoice.roundOff ??
       invoice.round_off ??
       invoice.roundoff,
-    invoiceTotal: formData.scannedTotal ?? formData.invoiceTotal ?? invoice.amount,
+    invoiceTotal:
+      formData.scannedTotal ??
+      formData.invoiceTotal ??
+      invoice.totalAmount ??
+      invoice.total_amount,
   });
 
   const tdsAmountFromRate = computeTdsAmount(
     formData.lineItems,
     formData.tds,
     isInvoiceLevelDiscount ? totals.subTotalBeforeDiscount : totals.subTotal,
+    formData.tdsRate,
   );
-  const tdsAmount =
+  const fallbackTdsAmount =
     tdsAmountFromRate ||
-    Number(invoice.tdsAmount ?? 0) ||
+    Number(invoice.tdsAmount ?? invoice.tds_amount ?? 0) ||
     0;
+  const tdsAmount = getTdsPreviewAmount(tdsPreview, fallbackTdsAmount);
   const totalTax = useInrTax
     ? (Number(totals.cgst) || 0) + (Number(totals.sgst) || 0) + (Number(totals.igst) || 0)
     : (totals.foreignTaxes || []).reduce(
@@ -153,12 +207,20 @@ const InvoiceReadOnlyDetails = ({
     roundOffValue !== null &&
     roundOffValue !== "" &&
     Number.isFinite(Number(roundOffValue));
-  const netPayable =
-    Number(invoice.netAmount) ||
+  const fallbackNetPayable =
+    Number(
+      invoice.netAmount ??
+        invoice.net_amount ??
+        invoice.totalAmount ??
+        invoice.total_amount,
+    ) ||
     Math.max(Math.round((totals.total - tdsAmount) * 100) / 100, 0);
-  const tdsLabel =
-    formatTdsLabel(formData.tdsSectionCode, formData.tdsRate) ||
-    (formData.tds ? String(formData.tds).split("::").pop() : "");
+  const netPayable = getTdsPreviewNetPayable(tdsPreview, fallbackNetPayable);
+  const tdsLabel = formatTdsDisplayLabel({
+    tds: formData.tds,
+    tdsSectionCode: formData.tdsSectionCode,
+    tdsRate: formData.tdsRate,
+  });
 
   const showCategory =
     showCategoryField &&
@@ -190,6 +252,25 @@ const InvoiceReadOnlyDetails = ({
       : formatAmount(discount);
   };
 
+  const hasLineAmountValue = (value) =>
+    value !== undefined && value !== null && value !== "";
+
+  const getLineItemTaxAmount = (item) => {
+    if (hasLineAmountValue(item.taxAmount)) return parseNumericInput(item.taxAmount, 0);
+    const taxableAmount = calculateLineItemSubtotal(item);
+    const rate = useInrTax
+      ? parseTaxRateFromLabel(item.tax)
+      : (Number(item.taxRate) || parseTaxRateFromLabel(item.tax) || 0);
+    return (taxableAmount * rate) / 100;
+  };
+
+  const getLineItemNetAmount = (item) => {
+    if (hasLineAmountValue(item.netAmount)) return parseNumericInput(item.netAmount, 0);
+    const taxableAmount = calculateLineItemSubtotal(item);
+    const taxAmount = isInvoiceLevelTax ? 0 : getLineItemTaxAmount(item);
+    return taxableAmount + taxAmount;
+  };
+
   const lineItemsSummary = computeLineItemsSummary({
     lineItems: formData.lineItems,
     calculateLineItemSubtotal,
@@ -208,7 +289,15 @@ const InvoiceReadOnlyDetails = ({
             <DetailField label="Ref No" value={invoice?.refNo} mono />
           )}
           <DetailField label="Billing Date" value={formatDisplayDate(formData.invoiceDate)} />
-          <DetailField label="Due Date" value={formatDisplayDate(formData.dueDate)} />
+          <div>
+            <DetailField label="Due Date" value={formatDisplayDate(formData.dueDate)} />
+            <InvoiceDueDateIndicators invoice={invoice} className="mt-1" />
+            {msmePaymentDue.vendorIsMsme && msmePaymentDue.msmeMaxDueDate ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                MSME max due date: {formatDisplayDate(msmePaymentDue.msmeMaxDueDate)}
+              </p>
+            ) : null}
+          </div>
           <DetailField label="Currency" value={invoiceCurrency} mono />
           <DetailField label="Department" value={formData.departmentName} />
           {showCategory && (
@@ -232,6 +321,25 @@ const InvoiceReadOnlyDetails = ({
 
         <div className="grid grid-cols-2 gap-3">
           <DetailField label="GST Treatment" value={formData.gstTreatment} />
+          <DetailField
+            label="Branch"
+            value={
+              formData.branchName && formData.branchCode
+                ? `${formData.branchName} (${formData.branchCode})`
+                : formData.branchName || formData.branchCode
+            }
+          />
+          {(formData.vendorBranchName || formData.vendorBranchCode) && (
+            <DetailField
+              label="Vendor Branch"
+              value={
+                formData.vendorBranchName && formData.vendorBranchCode
+                  ? `${formData.vendorBranchName} (${formData.vendorBranchCode})`
+                  : formData.vendorBranchName || formData.vendorBranchCode
+              }
+            />
+          )}
+          <DetailField label="Billing GSTIN" value={formData.billingGstin} mono />
           <DetailField label="GSTIN / Tax ID" value={formData.gstin} mono />
           <DetailField label="Source of Supply" value={formData.sourceOfSupply} />
           <DetailField label="Destination" value={formData.destinationOfSupply} />
@@ -239,9 +347,6 @@ const InvoiceReadOnlyDetails = ({
 
         <div className="grid grid-cols-2 gap-3">
           <DetailField label="Source" value={formData.source} />
-          {formData.source === "Email" && (
-            <DetailField label="Source Email" value={formData.sourceEmail} />
-          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -260,10 +365,12 @@ const InvoiceReadOnlyDetails = ({
           {showLineItems ? (
             <div className="border rounded-lg overflow-hidden">
               <div className="overflow-x-auto scrollbar-thin-muted">
-                <table className="min-w-[760px] w-full text-xs">
+                <table className="min-w-[1120px] w-full text-xs">
                   <thead className="bg-gray-50 border-b">
                     <tr>
                       <th className="p-2 text-left font-medium min-w-[180px]">Item Description</th>
+                      <th className="p-2 text-left font-medium w-[160px]">Group / Branch</th>
+                      <th className="p-2 text-left font-medium w-[130px]">Expense Type</th>
                       {!isInvoiceLevelTax && (
                         <th className="p-2 text-left font-medium w-[130px]">Tax</th>
                       )}
@@ -294,6 +401,10 @@ const InvoiceReadOnlyDetails = ({
                             </p>
                           )}
                         </td>
+                        <td className="p-2">
+                          {item.accountGroupName || item.groupName || item.ledger || "-"}
+                        </td>
+                        <td className="p-2">{item.expenseType || "-"}</td>
                         {!isInvoiceLevelTax && (
                           <td className="p-2">{formatLineItemTax(item)}</td>
                         )}
@@ -309,25 +420,8 @@ const InvoiceReadOnlyDetails = ({
                         </td>
                         {!isInvoiceLevelTax && (
                           <>
-                            <td className="p-2">
-                              {(() => {
-                                const taxableAmount = calculateLineItemSubtotal(item);
-                                const rate = useInrTax
-                                  ? parseTaxRateFromLabel(item.tax)
-                                  : (Number(item.taxRate) || parseTaxRateFromLabel(item.tax) || 0);
-                                return formatAmount((taxableAmount * rate) / 100);
-                              })()}
-                            </td>
-                            <td className="p-2">
-                              {(() => {
-                                const taxableAmount = calculateLineItemSubtotal(item);
-                                const rate = useInrTax
-                                  ? parseTaxRateFromLabel(item.tax)
-                                  : (Number(item.taxRate) || parseTaxRateFromLabel(item.tax) || 0);
-                                const taxAmount = (taxableAmount * rate) / 100;
-                                return formatAmount(taxableAmount + taxAmount);
-                              })()}
-                            </td>
+                            <td className="p-2">{formatAmount(getLineItemTaxAmount(item))}</td>
+                            <td className="p-2">{formatAmount(getLineItemNetAmount(item))}</td>
                           </>
                         )}
                       </tr>
@@ -374,19 +468,28 @@ const InvoiceReadOnlyDetails = ({
         )}
         {useInrTax && totals.cgst > 0 && (
           <div className="flex justify-between text-xs">
-            <span>CGST</span>
+            <span>
+              CGST
+              {totals.cgstRate > 0 ? ` ${formatInrTaxPercent(totals.cgstRate)}` : ""}
+            </span>
             <span className=" ">{formatAmount(totals.cgst)}</span>
           </div>
         )}
         {useInrTax && totals.sgst > 0 && (
           <div className="flex justify-between text-xs">
-            <span>SGST</span>
+            <span>
+              SGST
+              {totals.sgstRate > 0 ? ` ${formatInrTaxPercent(totals.sgstRate)}` : ""}
+            </span>
             <span className=" ">{formatAmount(totals.sgst)}</span>
           </div>
         )}
         {useInrTax && totals.igst > 0 && (
           <div className="flex justify-between text-xs">
-            <span>IGST</span>
+            <span>
+              IGST
+              {totals.igstRate > 0 ? ` ${formatInrTaxPercent(totals.igstRate)}` : ""}
+            </span>
             <span className=" ">{formatAmount(totals.igst)}</span>
           </div>
         )}
@@ -425,6 +528,46 @@ const InvoiceReadOnlyDetails = ({
           </span>
         </div>
       </div>
+
+      {showProformaInvoiceFields && isProformaInvoice(invoice) && (
+        <div className="space-y-3 pt-4 border-t">
+          <div className="flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold">Linked Tax Invoices</h3>
+            {onMapTaxInvoice && canMapTaxInvoiceToProforma(invoice) && (
+              <Button size="sm" variant="outline" onClick={() => onMapTaxInvoice(invoice)}>
+                <Link2 className="h-4 w-4 mr-2" />
+                Map Tax Invoice
+              </Button>
+            )}
+          </div>
+          {onMapTaxInvoice &&
+            isProformaInvoice(invoice) &&
+            !canMapTaxInvoiceToProforma(invoice) && (
+              <p className="text-sm text-amber-700">
+                This Proforma Invoice must be Approved before you can map tax invoices.
+              </p>
+            )}
+          <InvoiceLinkedTaxInvoicesPanel
+            linkedInvoices={resolveLinkedTaxInvoiceRecords(invoice, allInvoices)}
+            onViewInvoice={onViewLinkedInvoice}
+            onCancelLinkedInvoice={
+              onCancelLinkedInvoice
+                ? (linkedInvoice) => onCancelLinkedInvoice(linkedInvoice)
+                : undefined
+            }
+            canCancelLinkedInvoice={canCancelLinkedInvoice}
+            getStatusBadgeClass={getStatusBadgeClass}
+            title=""
+          />
+          <DetailField label="Document Type" value={getDocumentTypeLabel(invoice)} />
+          {invoice.piRemainingBalance != null && (
+            <DetailField
+              label="Remaining PI Balance"
+              value={formatCurrency(invoice.piRemainingBalance, formData.currency)}
+            />
+          )}
+        </div>
+      )}
 
       {/* <div className="pt-2 border-t">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">

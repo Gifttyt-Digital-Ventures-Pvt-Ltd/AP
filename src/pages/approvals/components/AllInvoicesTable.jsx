@@ -1,7 +1,7 @@
 import React, { useMemo } from "react";
 import { Eye, Search } from "lucide-react";
 import AppDataTable from "../../../components/common/AppDataTable";
-import ClippedTextWithTooltip from "../../../components/common/ClippedTextWithTooltip";
+import { OrgBranchCell, VendorWithBranchCell } from "../../../components/common/BranchTableCells";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import {
@@ -14,29 +14,37 @@ import {
 } from "../../../components/ui/pagination";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import { formatCurrency } from "../../../utils/currency";
+import InvoiceDocumentTypeBadge from "../../invoices/components/InvoiceDocumentTypeBadge";
+import InvoiceDueDateCell from "../../invoices/components/InvoiceDueDateCell";
+import { cn } from "../../../lib/utils";
 
 const baseAllInvoicesTableHeader = [
-  { key: "srNo", title: "Sr. No", cellClassName: "text-sm font-medium" },
-  { key: "invoiceNumber", title: "Invoice #", cellClassName: "font-medium" },
-  { key: "refNo", title: "Ref No", cellClassName: "font-mono text-sm" },
-  { key: "vendorName", title: "Vendor" },
-  { key: "approval", title: "Approval" },
-  { key: "amount", title: "Amount", cellClassName: "font-semibold" },
-  { key: "status", title: "Status" },
+  { key: "srNo", title: "Sr. No", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm font-medium" },
+  { key: "invoiceNumber", title: "Invoice #", headerClassName: "bg-muted text-foreground", cellClassName: "font-medium" },
+  { key: "refNo", title: "Ref No", headerClassName: "bg-muted text-foreground", cellClassName: "font-mono text-sm" },
+  { key: "orgBranch", title: "Branch", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm" },
+  { key: "vendorName", title: "Vendor", headerClassName: "bg-muted text-foreground" },
+  { key: "documentType", title: "Type", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm" },
+  { key: "approval", title: "Approval", headerClassName: "bg-muted text-foreground" },
+  { key: "amount", title: "Amount", headerClassName: "bg-muted text-foreground", cellClassName: "font-semibold" },
+  { key: "dueDate", title: "Due Date", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm whitespace-nowrap" },
+  { key: "status", title: "Status", headerClassName: "bg-muted text-foreground" },
   {
     key: "createdByName",
     title: "Created By",
+    headerClassName: "bg-muted text-foreground",
     cellClassName: "text-sm text-muted-foreground",
   },
   {
     key: "paymentDate",
     title: "Payment date",
+    headerClassName: "bg-muted text-foreground",
     cellClassName: "text-sm text-muted-foreground",
   },
   {
     key: "actions",
     title: "Actions",
-    headerClassName: "text-left",
+    headerClassName: "bg-muted text-foreground text-left",
     cellClassName: "text-left",
   },
 ];
@@ -50,6 +58,7 @@ const AllInvoicesTable = ({
   onPageChange,
   isLoading = false,
   showRefNoField = false,
+  showBranchField = false,
   getStatusBadgeClass,
   formatStatus,
   getApprovalProgress,
@@ -67,13 +76,15 @@ const AllInvoicesTable = ({
     hasMore = false,
   } = pagination ?? {};
 
-  const tableHeader = useMemo(
-    () =>
-      showRefNoField
-        ? baseAllInvoicesTableHeader
-        : baseAllInvoicesTableHeader.filter((column) => column.key !== "refNo"),
-    [showRefNoField],
-  );
+  const tableHeader = useMemo(() => {
+    let headers = showRefNoField
+      ? baseAllInvoicesTableHeader
+      : baseAllInvoicesTableHeader.filter((column) => column.key !== "refNo");
+    if (!showBranchField) {
+      headers = headers.filter((column) => column.key !== "orgBranch");
+    }
+    return headers;
+  }, [showRefNoField, showBranchField]);
 
   const renderAllInvoiceRow = (invoice, rowIndex, headers) => {
     const progress = getApprovalProgress(invoice);
@@ -90,8 +101,22 @@ const AllInvoicesTable = ({
             case "amount":
               value = formatCurrency(invoice.amount, invoice.currency);
               break;
+            case "dueDate":
+              value = (
+                <InvoiceDueDateCell
+                  invoice={invoice}
+                  formattedDueDate={safeFormatDate(invoice.dueDate ?? invoice.due_date)}
+                />
+              );
+              break;
             case "vendorName":
-              value = <ClippedTextWithTooltip text={invoice.vendorName} />;
+              value = <VendorWithBranchCell record={invoice} />;
+              break;
+            case "documentType":
+              value = <InvoiceDocumentTypeBadge invoice={invoice} />;
+              break;
+            case "orgBranch":
+              value = <OrgBranchCell record={invoice} />;
               break;
             case "approval":
               value = (
@@ -100,7 +125,7 @@ const AllInvoicesTable = ({
                   size="sm"
                   className="h-auto p-0 text-sm text-muted-foreground underline underline-offset-4"
                   onClick={() => handleOpenInvoiceHistory?.(invoice)}
-                  data-testid={`all-approval-history-${invoice.id}`}
+                  data-testid={`all-approval-history-${invoice?.id ?? 'unknown'}`}
                 >
                   {progress.approved}/{progress.total} steps
                 </Button>
@@ -133,7 +158,7 @@ const AllInvoicesTable = ({
                     variant="ghost"
                     size="sm"
                     onClick={() => handleViewInvoice?.(invoice)}
-                    data-testid={`view-invoice-${invoice.id}`}
+                    data-testid={`view-invoice-${invoice?.id ?? 'unknown'}`}
                     title="View Invoice"
                     className="h-8 w-8 p-0"
                   >
@@ -147,7 +172,10 @@ const AllInvoicesTable = ({
           }
 
           return (
-            <TableCell key={header.key} className={header.cellClassName}>
+            <TableCell
+              key={header.key}
+              className={cn("border border-border", header.cellClassName)}
+            >
               {value}
             </TableCell>
           );
@@ -157,7 +185,7 @@ const AllInvoicesTable = ({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-4">
       <div className="relative w-full shrink-0 sm:w-64 sm:max-w-xs">
         <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
         <Input
@@ -177,6 +205,11 @@ const AllInvoicesTable = ({
             renderRow={renderAllInvoiceRow}
             isLoading={isLoading}
             loadingRowCount={8}
+            tableClassName="min-w-[1500px]"
+            tableContainerClassName="overflow-visible"
+            headClassName="border-b border-border bg-muted shadow-sm"
+            stickyHeader
+            bordered
             emptyMessage="No invoices found"
             emptyTestId="approvals-all-no-invoices"
           />

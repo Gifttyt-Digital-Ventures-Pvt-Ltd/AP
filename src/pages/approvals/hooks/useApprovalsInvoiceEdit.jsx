@@ -13,7 +13,6 @@ import {
 import {
   useGetInvoiceMandatoryFieldsQuery,
   useGetVendorsQuery,
-  useGetPendingVendorApprovalsQuery,
   useRequestVendorAdditionMutation,
   useUpdateInvoiceMutation,
   useCheckInvoiceMutation,
@@ -23,7 +22,11 @@ import {
   useGetCorporateUserDetailsQuery,
 } from "../../../Services/apis/corporateApi";
 import { useGetCategoriesForInvoiceQuery } from "../../../Services/apis/categoriesApi";
-import { mergeInvoiceVendorOptions } from "../../../Services/utils/payloadMappers";
+import { findVendorByInvoiceName } from "../../invoices/utils/vendorMatching";
+import {
+  extractVendorIdFromResponse,
+  mergeInvoiceVendorOptions,
+} from "../../../Services/utils/payloadMappers";
 import { useAuth } from "../../../contexts/AuthContext";
 import { useRBAC } from "../../../contexts/RBACContext";
 import { useActionGuard } from "../../../hooks/useActionGuard";
@@ -33,7 +36,7 @@ import { InvoiceForm } from "../../invoices/components/InvoiceForm";
 import {
   GST_TREATMENTS,
   INDIAN_STATES,
-  INVOICE_SOURCES,
+  isGmailInvoiceSource,
   LEDGER_OPTIONS,
   TAX_RATES,
 } from "../../invoices/constants";
@@ -43,6 +46,7 @@ import {
   isInvoiceMandatoryFieldsSatisfied,
   normalizeInvoiceMandatoryFields,
 } from "../../invoices/utils/mandatoryFields";
+import { getInvoiceDueDateValidationErrorForInvoice } from "../../invoices/utils/msmePaymentDue";
 import {
   applyForeignLineItemTax,
   applyInrLineItemTax,
@@ -94,6 +98,7 @@ export const useApprovalsInvoiceEdit = ({
     isCampaignFeatureEnabled,
     isCorporateAdmin,
     hasPermission,
+    isBranchEnabled,
   } = useRBAC();
   const { guardAction, canPerformAction } = useActionGuard();
 
@@ -101,6 +106,7 @@ export const useApprovalsInvoiceEdit = ({
   const canManageInvoices = canPerformAction("invoices.create");
   const canCheckInvoices = canPerformAction("invoices.check");
   const canAddVendors = canPerformAction("invoices.addVendor");
+  const isMasterAdmin = hasPermission("master-admin");
 
   const { data: corporateUserContext = null } =
     useGetCorporateUserDetailsQuery();
@@ -112,7 +118,6 @@ export const useApprovalsInvoiceEdit = ({
     "";
 
   const { data: vendorsData = [] } = useGetVendorsQuery();
-  const { data: pendingVendorsData = [] } = useGetPendingVendorApprovalsQuery();
   const { data: departmentsData = [] } = useGetCorporateDepartmentsQuery();
   const {
     data: invoiceMandatoryFieldsData,
@@ -153,9 +158,8 @@ export const useApprovalsInvoiceEdit = ({
     () =>
       mergeInvoiceVendorOptions(
         Array.isArray(vendorsData) ? vendorsData : [],
-        Array.isArray(pendingVendorsData) ? pendingVendorsData : [],
       ),
-    [vendorsData, pendingVendorsData],
+    [vendorsData],
   );
   const departments = Array.isArray(departmentsData) ? departmentsData : [];
   const invoiceCategories =
@@ -189,7 +193,7 @@ export const useApprovalsInvoiceEdit = ({
       canUpdateInvoices,
       canManageInvoices,
       canCheckInvoices,
-      isCorporateAdmin,
+      isCorporateAdmin: isCorporateAdmin || isMasterAdmin,
       isCheckerEditEnabled,
     }),
     [
@@ -199,23 +203,13 @@ export const useApprovalsInvoiceEdit = ({
       canManageInvoices,
       canCheckInvoices,
       isCorporateAdmin,
+      isMasterAdmin,
       isCheckerEditEnabled,
     ],
   );
 
   const findVendorByName = useCallback(
-    (vendorName) => {
-      if (!vendorName) return null;
-      const normalizedName = vendorName.toLowerCase().trim();
-      return (
-        invoiceVendorOptions.find(
-          (vendor) =>
-            String(vendor?.name || "")
-              .toLowerCase()
-              .trim() === normalizedName,
-        ) || null
-      );
-    },
+    (vendorName) => findVendorByInvoiceName(invoiceVendorOptions, vendorName),
     [invoiceVendorOptions],
   );
 
@@ -367,6 +361,15 @@ export const useApprovalsInvoiceEdit = ({
   };
 
   const validateMandatoryPayload = (payload) => {
+    const dueDateError = getInvoiceDueDateValidationErrorForInvoice(payload, {
+      findVendorById,
+      findVendorByName,
+    });
+    if (dueDateError) {
+      toast.error(dueDateError);
+      return false;
+    }
+
     const message = getInvoiceMandatoryFieldValidationMessage(
       payload,
       invoiceMandatoryFields,
@@ -425,7 +428,7 @@ export const useApprovalsInvoiceEdit = ({
           })),
         }),
         memo: data.description,
-        sourceEmail: data.source === "Email" ? data.sourceEmail : null,
+        sourceEmail: isGmailInvoiceSource(data.source) ? data.sourceEmail : null,
         departmentName:
           data.departmentName || getDepartmentNameById(data.departmentId),
         ...(keepSaved ? { action: "saved" } : {}),
@@ -436,6 +439,7 @@ export const useApprovalsInvoiceEdit = ({
           data.lineItems,
           data.tds,
           calculateLineItemSubtotal,
+          data.tdsRate,
         ),
       },
     );
@@ -655,9 +659,11 @@ export const useApprovalsInvoiceEdit = ({
         currencyOptions={invoiceCurrencyOptions}
         GST_TREATMENTS={GST_TREATMENTS}
         INDIAN_STATES={INDIAN_STATES}
-        INVOICE_SOURCES={INVOICE_SOURCES}
         LEDGER_OPTIONS={LEDGER_OPTIONS}
         TAX_RATES={TAX_RATES}
+        showBillingGst={isEdit}
+        requireBillingGst={isEdit && !isSavedDraft}
+        showBranchField={isBranchEnabled}
       />
     );
   };

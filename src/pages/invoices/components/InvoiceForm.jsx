@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Building2, CheckCircle2, ChevronsUpDown, Plus, X } from "lucide-react";
+import { Building2, CheckCircle2, ChevronsUpDown, Loader2, Plus, X } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
@@ -9,6 +9,10 @@ import {
   PopoverContent,
 } from "../../../components/ui/popover";
 import { cn } from "../../../lib/utils";
+import {
+  vendorMatchesInvoiceName,
+  vendorMatchesInvoiceNameQuery,
+} from "../utils/vendorMatching";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import AppDataTable from "../../../components/common/AppDataTable";
 import AppSelect from "../../../components/common/AppSelect";
@@ -26,6 +30,7 @@ import {
   LINE_ITEM_LEVEL,
   parseTaxRateFromLabel,
   remapLineItemsForCurrencyChange,
+  formatInrTaxPercent,
 } from "../utils/invoiceTax";
 import {
   formatNumericInputValue,
@@ -38,13 +43,60 @@ import {
   computeLineItemsSummary,
   resolveLineItemsExpanded,
 } from "../utils/lineItemsSummary";
-import { useGetTdsSectionsQuery } from "../../../Services/apis/taxApi";
 import {
-  buildTdsOptions,
-  NO_TDS_VALUE,
-  parseTdsRate,
-  parseTdsSelection,
+  useGetOrganisationGstCredentialsQuery,
+  useGetInvoiceTdsPreviewQuery,
+} from "../../../Services/apis/taxApi";
+import { useGetOrganisationQuery } from "../../../Services/apis/settingsApi";
+import { normalizeOrganisationBranchesFromApi } from "../../../utils/organisationGst";
+import { extractPageContent, extractMatchingGrns } from "../../../Services/utils/payloadMappers";
+import {
+  useGetAvailableGrnsQuery,
+  useGetAvailablePurchaseOrdersQuery,
+} from "../../../Services/apis/invoiceMatchingApi";
+import { mergeSelectedMatchingOption } from "../utils/invoiceMatchingFlow";
+import {
+  formatTdsDisplayLabel,
+  resolveTdsRate,
 } from "../utils/tds";
+import { buildInvoiceTdsStateFromVendor } from "../../vendors/utils/vendorTds";
+import TdsSelectionField from "./TdsSelectionField";
+import {
+  getTdsPreviewAmount,
+  getTdsPreviewNetPayable,
+} from "./TdsBreakdownPanel";
+import InvoiceDueDateIndicators from "./InvoiceDueDateIndicators";
+import {
+  computeMsmeMaxDueDate,
+  normalizeDueDateForInvoice,
+  normalizeMsmePaymentDue,
+} from "../utils/msmePaymentDue";
+import InvoiceDocumentTypeFields from "./InvoiceDocumentTypeFields";
+import ProformaInvoicePicker from "./ProformaInvoicePicker";
+import PiLinkValidationCard from "./PiLinkValidationCard";
+import { DOCUMENT_TYPE, normalizeDocumentType } from "../constants/proformaInvoice";
+import { useGetEligiblePisForGrnQuery } from "../../../Services/apis/goodsReceiptApi";
+import {
+  useLazyGetProformaInvoiceSuggestionsQuery,
+  useValidateProformaInvoiceLinkMutation,
+} from "../../../Services/apis/proformaInvoiceApi";
+import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
+import useTdsSubscription from "../../../hooks/useTdsSubscription";
+import {
+  useGetAccountingVoucherTypesQuery,
+  useGetCoaTreeQuery,
+} from "../../../Services/apis/accountingApi";
+import {
+  buildLocalLinkValidation,
+  buildProformaLinkValidateRequest,
+  rankProformaInvoiceSuggestions,
+} from "../utils/proformaInvoiceMatching";
+import {
+  buildGroupBranchOptionsFromCoa,
+  EXPENSE_TYPE_OPTIONS,
+  findAccountingOption,
+  normalizeExpenseType,
+} from "../utils/invoiceAccountingFields";
 
 const lineItemTableHeader = [
   {
@@ -53,7 +105,18 @@ const lineItemTableHeader = [
     headerClassName: "min-w-[190px]",
     cellClassName: "min-w-[190px] align-top",
   },
-  // { key: "ledger", title: "Ledger", headerClassName: "w-[160px]", cellClassName: "w-[200px]" },
+  {
+    key: "accountGroup",
+    title: "Group / Branch",
+    headerClassName: "w-[260px]",
+    cellClassName: "w-[280px] align-top",
+  },
+  {
+    key: "expenseType",
+    title: "Expense Type",
+    headerClassName: "w-[150px]",
+    cellClassName: "w-[150px] align-top",
+  },
   {
     key: "tax",
     title: "Tax",
@@ -105,7 +168,7 @@ const lineItemTableHeader = [
 ];
 
 const lineItemSelectClassName =
-  "h-7 w-full rounded border bg-white pl-2 pr-7 text-xs";
+  "h-7 w-full justify-between rounded border bg-white pl-2 pr-8 text-xs [&>span]:min-w-0 [&>span]:truncate";
 
 const RequiredLabel = ({ children, required = false, className = "" }) => (
   <Label className={cn("text-xs", required && "text-blue-400", className)}>
@@ -117,6 +180,36 @@ const RequiredLabel = ({ children, required = false, className = "" }) => (
 const resolveRoundOff = (data = {}) =>
   data.roundOff ?? data.round_off ?? data.roundoff;
 
+const normalizePurchaseOrderOption = (po = {}) => ({
+  ...po,
+  id: po.id ?? po.poId ?? po.po_id ?? po.purchaseOrderId ?? po.purchase_order_id,
+  poNumber: po.poNumber ?? po.po_number ?? po.number ?? "",
+  amount: Number(po.amount ?? po.poAmount ?? po.po_amount ?? 0),
+  currency: po.currency ?? DEFAULT_CURRENCY,
+});
+
+const normalizeGrnOption = (grn = {}) => ({
+  ...grn,
+  id: grn.id ?? grn.grnId ?? grn.grn_id,
+  grnNumber: grn.grnNumber ?? grn.grn_number ?? grn.number ?? "",
+  amount: Number(grn.amount ?? grn.grnAmount ?? grn.grn_amount ?? 0),
+  currency: grn.currency ?? DEFAULT_CURRENCY,
+});
+
+const getVendorBranchOptionValue = (branch = {}) => {
+  const code = String(branch.branchCode || "").trim();
+  if (code) return code;
+  const name = String(branch.branchName || "").trim();
+  return name ? `name:${name}` : "";
+};
+
+const formatVendorBranchOptionLabel = (branch = {}) => {
+  const name = branch.branchName || "";
+  const code = branch.branchCode || "";
+  if (name && code) return `${name} (${code})`;
+  return name || code || "Branch";
+};
+
 export const InvoiceForm = ({
   formData,
   setFormData,
@@ -125,6 +218,7 @@ export const InvoiceForm = ({
   isSavedDraft = false,
   calculateTotals,
   findVendorByName,
+  findVendorById,
   handleAddVendorFromInvoice,
   updateLineItem,
   removeLineItem,
@@ -136,7 +230,9 @@ export const InvoiceForm = ({
   setActiveTab,
   handleUpdateInvoice,
   handleAddInvoice,
+  isSubmitting = false,
   canAddVendor = true,
+  canEditNetPayable = false,
   canSubmit = true,
   vendorOptions = [],
   departments = [],
@@ -151,16 +247,39 @@ export const InvoiceForm = ({
   currencyOptions = [],
   GST_TREATMENTS,
   INDIAN_STATES,
-  INVOICE_SOURCES,
-  LEDGER_OPTIONS,
   TAX_RATES,
+  showBillingGst = false,
+  requireBillingGst = false,
+  showBranchField = false,
+  showInvoiceMatching = false,
+  canUseThreeWayMatching = false,
+  showProformaInvoiceFields = false,
 }) => {
-  const { data: tdsSectionsData = [] } = useGetTdsSectionsQuery();
+  const canShowBranchField = showBillingGst && showBranchField;
+  const {
+    data: organisationGstCredentials = [],
+    isLoading: organisationGstLoading,
+    isFetching: organisationGstFetching,
+    isError: organisationGstError,
+  } = useGetOrganisationGstCredentialsQuery(undefined, {
+    skip: !showBillingGst,
+  });
+  const {
+    data: organisationData,
+    isFetching: organisationFetching,
+  } = useGetOrganisationQuery(undefined, {
+    skip: !canShowBranchField,
+  });
+  const { isTdsSubscriptionEnabled } = useTdsSubscription();
+  const { data: coaData } = useGetCoaTreeQuery();
+  const { data: backendVoucherTypeOptions = [] } = useGetAccountingVoucherTypesQuery();
   const [vendorPickerOpen, setVendorPickerOpen] = useState(false);
   const [vendorQuery, setVendorQuery] = useState("");
   const vendorAnchorRef = useRef(null);
   const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false);
   const [currencyQuery, setCurrencyQuery] = useState("");
+  const [accountGroupSearchByRow, setAccountGroupSearchByRow] = useState({});
+  const [accountGroupPickerOpenByRow, setAccountGroupPickerOpenByRow] = useState({});
 
   const filteredVendorOptions = useMemo(() => {
     const query = String(vendorQuery || "")
@@ -168,12 +287,72 @@ export const InvoiceForm = ({
       .trim();
     const options = Array.isArray(vendorOptions) ? vendorOptions : [];
     if (!query) return options;
-    return options.filter((vendor) =>
-      String(vendor?.name || "")
-        .toLowerCase()
-        .includes(query),
-    );
+    return options.filter((vendor) => vendorMatchesInvoiceNameQuery(vendor, query));
   }, [vendorOptions, vendorQuery]);
+
+  const selectedVendor = useMemo(() => {
+    if (formData?.vendorId && typeof findVendorById === "function") {
+      return findVendorById(formData.vendorId);
+    }
+    if (formData?.vendorName && typeof findVendorByName === "function") {
+      return findVendorByName(formData.vendorName);
+    }
+    return null;
+  }, [formData?.vendorId, formData?.vendorName, findVendorById, findVendorByName]);
+
+  const vendorBranches = useMemo(() => {
+    const branches =
+      selectedVendor?.vendorBranches ??
+      selectedVendor?.vendor_branches ??
+      selectedVendor?.branchDetails ??
+      selectedVendor?.branch_details ??
+      [];
+    if (!Array.isArray(branches)) return [];
+    return branches
+      .map((branch) => ({
+        branchName: String(branch.branchName ?? branch.branch_name ?? branch.name ?? "").trim(),
+        branchCode: String(branch.branchCode ?? branch.branch_code ?? branch.code ?? "")
+          .trim()
+          .toUpperCase(),
+        gstin: String(
+          branch.gstin ??
+            branch.mappedGstin ??
+            branch.mapped_gstin ??
+            branch.billingGstin ??
+            "",
+        )
+          .trim()
+          .toUpperCase(),
+      }))
+      .filter((branch) => branch.branchName || branch.branchCode);
+  }, [selectedVendor]);
+
+  const vendorBranchOptions = useMemo(
+    () =>
+      vendorBranches.map((branch) => ({
+        value: getVendorBranchOptionValue(branch),
+        label: formatVendorBranchOptionLabel(branch),
+      })),
+    [vendorBranches],
+  );
+
+  const selectedVendorBranchValue = useMemo(() => {
+    const code = String(formData?.vendorBranchCode || "").trim();
+    if (code) {
+      const byCode = vendorBranches.find((branch) => branch.branchCode === code);
+      if (byCode) return getVendorBranchOptionValue(byCode);
+    }
+    const name = String(formData?.vendorBranchName || "").trim();
+    if (name) {
+      const byName = vendorBranches.find((branch) => branch.branchName === name);
+      if (byName) return getVendorBranchOptionValue(byName);
+    }
+    return "";
+  }, [formData?.vendorBranchCode, formData?.vendorBranchName, vendorBranches]);
+
+  const msmePaymentDue = normalizeMsmePaymentDue(formData);
+  const vendorIsMsme = Boolean(selectedVendor?.msme) || msmePaymentDue.vendorIsMsme;
+  const msmeMaxDueDate = vendorIsMsme ? computeMsmeMaxDueDate(formData?.invoiceDate) : "";
 
   const resolvedCurrencyOptions = useMemo(
     () =>
@@ -226,18 +405,150 @@ export const InvoiceForm = ({
     setCurrencyQuery(formData?.currency || DEFAULT_CURRENCY);
   }, [formData?.currency]);
 
-  const tdsOptions = useMemo(
-    () => buildTdsOptions(tdsSectionsData, formData?.tds),
-    [tdsSectionsData, formData?.tds],
+  const billingGstOptions = useMemo(
+    () =>
+      organisationGstCredentials.map((entry) => ({
+        value: entry.gst,
+        label: entry.gst,
+      })),
+    [organisationGstCredentials],
   );
 
-  if (!formData) return null;
-  const showLineItems = resolveLineItemsExpanded(formData);
-  const invoiceCurrency = formData.currency || DEFAULT_CURRENCY;
+  const organisationBranches = useMemo(
+    () => normalizeOrganisationBranchesFromApi(organisationData),
+    [organisationData],
+  );
+
+  const branchOptions = useMemo(
+    () =>
+      organisationBranches
+        .filter((branch) => branch.branchName && branch.branchCode)
+        .map((branch) => ({
+          value: branch.branchCode,
+          label: `${branch.branchName} (${branch.branchCode})`,
+        })),
+    [organisationBranches],
+  );
+
+  const organisationGstBusy = organisationGstLoading || organisationGstFetching;
+  const branchBusy = organisationFetching;
+
+  useEffect(() => {
+    if (!showBillingGst || organisationGstBusy || !formData) return;
+    if (organisationGstError || organisationGstCredentials.length === 0) {
+      if (formData.billingGstin) {
+        setFormData((prev) => ({
+          ...prev,
+          billingGstin: "",
+        }));
+      }
+      return;
+    }
+
+    const currentBillingGst = String(formData.billingGstin || "").trim().toUpperCase();
+    const matchedCurrent = organisationGstCredentials.find((entry) => entry.gst === currentBillingGst);
+    if (matchedCurrent) {
+      if (formData.billingGstin !== matchedCurrent.gst) {
+        setFormData((prev) => ({
+          ...prev,
+          billingGstin: matchedCurrent.gst,
+        }));
+      }
+      return;
+    }
+
+    if (currentBillingGst) {
+      setFormData((prev) => ({
+        ...prev,
+        billingGstin: "",
+      }));
+      return;
+    }
+
+    if (organisationGstCredentials.length === 1) {
+      setFormData((prev) => ({
+        ...prev,
+        billingGstin: organisationGstCredentials[0].gst,
+      }));
+    }
+  }, [
+    formData,
+    organisationGstError,
+    organisationGstBusy,
+    organisationGstCredentials,
+    showBillingGst,
+    setFormData,
+  ]);
+
+  const showLineItems = resolveLineItemsExpanded(formData || {});
+  const invoiceCurrency = formData?.currency || DEFAULT_CURRENCY;
   const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
-  const isGstinRequired = useInrTax && formData.gstTreatment !== "N/A";
-  const isInvoiceLevelDiscount = formData.discountsLevel === INVOICE_LEVEL;
-  const isInvoiceLevelTax = formData.taxesLevel === INVOICE_LEVEL;
+  const isGstinRequired = useInrTax && formData?.gstTreatment !== "N/A";
+  const selectedBillingGst = organisationGstCredentials.find(
+    (entry) => entry.gst === String(formData?.billingGstin || "").trim().toUpperCase(),
+  );
+  const selectedBranchCode = String(formData?.branchCode || "").trim();
+  const selectedBranch = organisationBranches.find(
+    (branch) => branch.branchCode === selectedBranchCode,
+  );
+  const applyBranchSelection = (branchCode) => {
+    const branch = organisationBranches.find((entry) => entry.branchCode === branchCode);
+    setFormData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        branchCode: branch?.branchCode || "",
+        branchName: branch?.branchName || "",
+        ...(branch?.billingGstin ? { billingGstin: branch.billingGstin } : {}),
+      };
+    });
+  };
+  const clearBranchSelection = () => {
+    setFormData((prev) =>
+      prev
+        ? {
+            ...prev,
+            branchCode: "",
+            branchName: "",
+          }
+        : prev,
+    );
+  };
+  const applyVendorBranchSelection = (value) => {
+    const branch = vendorBranches.find(
+      (entry) => getVendorBranchOptionValue(entry) === value,
+    );
+    setFormData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        vendorBranchCode: branch?.branchCode || "",
+        vendorBranchName: branch?.branchName || "",
+        vendorBranchGstin: branch?.gstin || "",
+        ...(branch?.gstin ? { gstin: branch.gstin } : {}),
+      };
+    });
+  };
+  const clearVendorBranchSelection = () => {
+    setFormData((prev) =>
+      prev
+        ? {
+            ...prev,
+            vendorBranchCode: "",
+            vendorBranchName: "",
+            vendorBranchGstin: "",
+          }
+        : prev,
+    );
+  };
+  const billingGstSatisfied = !requireBillingGst || Boolean(selectedBillingGst?.gst);
+  const isInvoiceLevelDiscount = formData?.discountsLevel === INVOICE_LEVEL;
+  const isInvoiceLevelTax = formData?.taxesLevel === INVOICE_LEVEL;
+  const accountGroupOptions = useMemo(
+    () => buildGroupBranchOptionsFromCoa(coaData?.tree || []),
+    [coaData?.tree],
+  );
+  const voucherTypeOptions = backendVoucherTypeOptions;
   const lineItemHeaders = lineItemTableHeader
     .filter(
       (column) =>
@@ -258,8 +569,256 @@ export const InvoiceForm = ({
       return column;
     });
   const formatAmount = (amount) => formatCurrency(amount, invoiceCurrency);
-  const totals = calculateTotals(formData.lineItems, invoiceCurrency);
-  const roundOffValue = resolveRoundOff(formData);
+  const totals = calculateTotals(formData?.lineItems || [], invoiceCurrency);
+
+  const { data: eligiblePis = [] } = useGetEligiblePisForGrnQuery(undefined, {
+    skip: !showProformaInvoiceFields,
+  });
+  const [fetchPiSuggestions, { data: apiPiSuggestions = [], isFetching: piSuggestionsLoading }] =
+    useLazyGetProformaInvoiceSuggestionsQuery();
+  const [validatePiLink, { isLoading: piLinkValidationLoading }] =
+    useValidateProformaInvoiceLinkMutation();
+  const [piLinkValidation, setPiLinkValidation] = useState(null);
+
+  useEffect(() => {
+    if (!showProformaInvoiceFields) return undefined;
+    if ((formData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE) !== DOCUMENT_TYPE.TAX_INVOICE) {
+      return undefined;
+    }
+    if (!formData?.vendorId && !formData?.vendorName) return undefined;
+
+    fetchPiSuggestions({
+      vendorId: formData.vendorId,
+      vendorName: formData.vendorName,
+      invoiceAmount: totals?.total,
+      currency: formData.currency,
+      billingGstin: formData.billingGstin,
+      vendorGstin: formData.gstin,
+      poId: formData.matchingPurchaseOrderId,
+      poNumber: formData.matchingPoNumber,
+      invoiceDate: formData.invoiceDate,
+    }).catch(() => undefined);
+
+    return undefined;
+  }, [
+    showProformaInvoiceFields,
+    formData?.documentType,
+    formData?.vendorId,
+    formData?.vendorName,
+    formData?.currency,
+    formData?.billingGstin,
+    formData?.gstin,
+    formData?.matchingPurchaseOrderId,
+    formData?.matchingPoNumber,
+    formData?.invoiceDate,
+    totals?.total,
+    fetchPiSuggestions,
+  ]);
+
+  const piSuggestions = useMemo(() => {
+    const rankingContext = {
+      vendorId: formData?.vendorId,
+      vendorName: formData?.vendorName,
+      invoiceAmount: totals?.total,
+      currency: formData?.currency,
+      billingGstin: formData?.billingGstin,
+      vendorGstin: formData?.gstin,
+      poId: formData?.matchingPurchaseOrderId,
+      poNumber: formData?.matchingPoNumber,
+      invoiceDate: formData?.invoiceDate,
+      lineItems: formData?.lineItems,
+    };
+    if (Array.isArray(apiPiSuggestions) && apiPiSuggestions.length > 0) {
+      return apiPiSuggestions;
+    }
+    return rankProformaInvoiceSuggestions(eligiblePis, rankingContext);
+  }, [apiPiSuggestions, eligiblePis, formData, totals?.total]);
+
+  const selectedProformaInvoice = useMemo(
+    () =>
+      piSuggestions.find(
+        (pi) => String(pi.id) === String(formData?.linkedProformaInvoiceId ?? ""),
+      ) ?? null,
+    [piSuggestions, formData?.linkedProformaInvoiceId],
+  );
+
+  const piLinkValidateKey = useMemo(
+    () =>
+      JSON.stringify(
+        buildProformaLinkValidateRequest({
+          proformaInvoiceId: selectedProformaInvoice?.id,
+          vendorId: formData?.vendorId,
+          vendorName: formData?.vendorName,
+          invoiceAmount: totals?.total,
+          currency: formData?.currency,
+          poId: formData?.matchingPurchaseOrderId,
+          poNumber: formData?.matchingPoNumber,
+          lineItems: formData?.lineItems,
+        }),
+      ),
+    [
+      selectedProformaInvoice?.id,
+      formData?.vendorId,
+      formData?.vendorName,
+      formData?.currency,
+      formData?.matchingPurchaseOrderId,
+      formData?.matchingPoNumber,
+      formData?.lineItems,
+      totals?.total,
+    ],
+  );
+  const debouncedPiLinkValidateKey = useDebouncedValue(piLinkValidateKey, 400);
+
+  useEffect(() => {
+    if (!showProformaInvoiceFields) {
+      setPiLinkValidation(null);
+      return undefined;
+    }
+    if ((formData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE) !== DOCUMENT_TYPE.TAX_INVOICE) {
+      setPiLinkValidation(null);
+      return undefined;
+    }
+    if (!selectedProformaInvoice?.id) {
+      setPiLinkValidation(null);
+      return undefined;
+    }
+
+    const localValidation = () =>
+      buildLocalLinkValidation(selectedProformaInvoice, {
+        vendorId: formData?.vendorId,
+        vendorName: formData?.vendorName,
+        invoiceAmount: totals?.total,
+        poId: formData?.matchingPurchaseOrderId,
+        poNumber: formData?.matchingPoNumber,
+        lineItems: formData?.lineItems,
+      });
+
+    let cancelled = false;
+
+    const runValidation = async () => {
+      const requestBody = buildProformaLinkValidateRequest({
+        proformaInvoiceId: selectedProformaInvoice.id,
+        vendorId: formData?.vendorId,
+        vendorName: formData?.vendorName,
+        invoiceAmount: totals?.total,
+        currency: formData?.currency,
+        poId: formData?.matchingPurchaseOrderId,
+        poNumber: formData?.matchingPoNumber,
+        lineItems: formData?.lineItems,
+      });
+
+      try {
+        const result = await validatePiLink(requestBody).unwrap();
+        if (!cancelled) setPiLinkValidation(result);
+      } catch {
+        if (!cancelled) setPiLinkValidation(localValidation());
+      }
+    };
+
+    runValidation();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    showProformaInvoiceFields,
+    formData?.documentType,
+    selectedProformaInvoice,
+    debouncedPiLinkValidateKey,
+    validatePiLink,
+  ]);
+
+  const handleDocumentTypeChange = (value) => {
+    const documentType = normalizeDocumentType(value?.target?.value ?? value);
+    setFormData((prev) => ({
+      ...prev,
+      documentType,
+      ...(documentType === DOCUMENT_TYPE.PROFORMA_INVOICE
+        ? { linkedProformaInvoiceId: "", linkedProformaInvoiceNumber: "" }
+        : {}),
+    }));
+  };
+
+  const handleSelectProformaInvoice = (pi) => {
+    setFormData((prev) => ({
+      ...prev,
+      linkedProformaInvoiceId: pi?.id ?? "",
+      linkedProformaInvoiceNumber: pi?.invoiceNumber ?? "",
+    }));
+  };
+
+  const invoiceAmountForMatching = Number(
+    formData?.amount ??
+      formData?.invoiceAmount ??
+      totals?.total ??
+      totals?.amount ??
+      totals?.subtotal ??
+      0,
+  );
+  const invoiceMatchingPoQuery = useMemo(
+    () => ({
+      vendorName: String(formData?.vendorName || "").trim(),
+      ...(formData?.vendorId ? { vendorId: formData.vendorId } : {}),
+      amount: invoiceAmountForMatching,
+      ...(formData?.invoiceId ? { invoiceId: formData.invoiceId } : {}),
+    }),
+    [
+      formData?.vendorId,
+      formData?.vendorName,
+      formData?.invoiceId,
+      invoiceAmountForMatching,
+    ],
+  );
+  const shouldLoadPurchaseOrders =
+    showInvoiceMatching &&
+    (Boolean(invoiceMatchingPoQuery.vendorName) ||
+      Boolean(invoiceMatchingPoQuery.vendorId)) &&
+    invoiceMatchingPoQuery.amount > 0;
+  const {
+    data: availablePurchaseOrdersData = {},
+    isFetching: purchaseOrdersLoading,
+  } = useGetAvailablePurchaseOrdersQuery(invoiceMatchingPoQuery, {
+    skip: !shouldLoadPurchaseOrders,
+  });
+  const selectedMatchingPoId = formData?.matchingPurchaseOrderId || "";
+  const {
+    data: availableGrnsData = {},
+    isFetching: grnsLoading,
+  } = useGetAvailableGrnsQuery(selectedMatchingPoId, {
+    skip:
+      !showInvoiceMatching ||
+      !canUseThreeWayMatching ||
+      !selectedMatchingPoId,
+  });
+  const availablePurchaseOrders = useMemo(() => {
+    const items = extractPageContent(availablePurchaseOrdersData).map(normalizePurchaseOrderOption);
+    return mergeSelectedMatchingOption(items, selectedMatchingPoId, {
+      id: selectedMatchingPoId,
+      poNumber: formData?.matchingPoNumber || selectedMatchingPoId,
+      amount: 0,
+    });
+  }, [
+    availablePurchaseOrdersData,
+    selectedMatchingPoId,
+    formData?.matchingPoNumber,
+  ]);
+  const availableGrns = useMemo(() => {
+    const { items } = extractMatchingGrns(availableGrnsData);
+    return mergeSelectedMatchingOption(items.map(normalizeGrnOption), formData?.matchingGrnId, {
+      id: formData?.matchingGrnId,
+      grnNumber: formData?.matchingGrnNumber || formData?.matchingGrnId,
+      amount: 0,
+    });
+  }, [
+    availableGrnsData,
+    formData?.matchingGrnId,
+    formData?.matchingGrnNumber,
+  ]);
+  const matchingGrnsAvailability = useMemo(
+    () => extractMatchingGrns(availableGrnsData),
+    [availableGrnsData],
+  );
+  const roundOffValue = resolveRoundOff(formData || {});
   const totalTax = useInrTax
     ? (Number(totals.cgst) || 0) + (Number(totals.sgst) || 0) + (Number(totals.igst) || 0)
     : (totals.foreignTaxes || []).reduce(
@@ -271,21 +830,57 @@ export const InvoiceForm = ({
     roundOffValue !== null &&
     roundOffValue !== "" &&
     Number.isFinite(Number(roundOffValue));
-  const tdsRate = parseTdsRate(formData.tds);
-  const tdsAmount = Math.round(((totals.subTotal * tdsRate) / 100) * 100) / 100;
-  const netPayable = Math.max(
-    Math.round((totals.total - tdsAmount) * 100) / 100,
+  const tdsRate = resolveTdsRate(formData.tds, formData.tdsRate);
+  const tdsLabel = formatTdsDisplayLabel({
+    tds: formData.tds,
+    tdsSectionCode: formData.tdsSectionCode,
+    tdsRate: formData.tdsRate,
+  });
+  const invoiceIdForTdsPreview = formData?.id ?? formData?.invoiceId;
+  const debouncedTdsPreviewArgs = useDebouncedValue(
+    {
+      invoiceId: invoiceIdForTdsPreview,
+      sectionCode: formData?.tdsSectionCode,
+      rateOverride: formData?.tdsRate,
+    },
+    400,
+  );
+  const {
+    data: tdsPreview,
+    isFetching: tdsPreviewLoading,
+    isError: tdsPreviewError,
+    refetch: refetchTdsPreview,
+  } = useGetInvoiceTdsPreviewQuery(debouncedTdsPreviewArgs, {
+    skip: !isTdsSubscriptionEnabled || !invoiceIdForTdsPreview || !formData?.tdsSectionCode,
+  });
+  const fallbackTdsAmount = Math.round(((totals.subTotal * tdsRate) / 100) * 100) / 100;
+  const fallbackNetPayable = Math.max(
+    Math.round((totals.total - fallbackTdsAmount) * 100) / 100,
     0,
   );
+  const tdsAmount = getTdsPreviewAmount(tdsPreview, fallbackTdsAmount);
+  const calculatedNetPayable = getTdsPreviewNetPayable(tdsPreview, fallbackNetPayable);
+  const manualNetPayable =
+    formData.netAmount !== undefined && formData.netAmount !== null && formData.netAmount !== ""
+      ? Number(formData.netAmount)
+      : null;
+  const hasManualNetPayableValue = Number.isFinite(manualNetPayable);
+  const netPayable =
+    canEditNetPayable && hasManualNetPayableValue
+      ? manualNetPayable
+      : calculatedNetPayable;
   const lineItemsSummary = computeLineItemsSummary({
-    lineItems: formData.lineItems,
+    lineItems: formData?.lineItems || [],
     calculateLineItemSubtotal,
     isInvoiceLevelTax,
     useInrTax,
   });
 
+  if (!formData) return null;
+
   const applyVendorNameChange = (newName) => {
     const matched = findVendorByName(newName);
+    const matchedIsMsme = Boolean(matched?.msme);
     setFormData({
       ...formData,
       vendorName: newName,
@@ -296,10 +891,21 @@ export const InvoiceForm = ({
       gstin: matched?.gstin
         ? String(matched.gstin).trim().toUpperCase()
         : formData.gstin,
+      dueDate: normalizeDueDateForInvoice({
+        invoiceDate: formData.invoiceDate,
+        dueDate: formData.dueDate,
+        vendorIsMsme: matchedIsMsme,
+      }),
       campaignId: "",
       campaignName: "",
       referenceNumber: "",
       campaignReferenceNumber: "",
+      matchingPurchaseOrderId: "",
+      matchingGrnId: "",
+      vendorBranchCode: "",
+      vendorBranchName: "",
+      vendorBranchGstin: "",
+      ...buildInvoiceTdsStateFromVendor(matched),
     });
   };
 
@@ -316,6 +922,15 @@ export const InvoiceForm = ({
       campaignName: "",
       referenceNumber: "",
       campaignReferenceNumber: "",
+      matchingPurchaseOrderId: "",
+      matchingGrnId: "",
+      tds: "",
+      tdsSectionId: null,
+      tdsSectionCode: null,
+      tdsRate: null,
+      vendorBranchCode: "",
+      vendorBranchName: "",
+      vendorBranchGstin: "",
     });
   };
 
@@ -350,14 +965,198 @@ export const InvoiceForm = ({
               </div>
             );
             break;
-          case "ledger":
+          case "accountGroup":
+            {
+              const accountGroupSearch = accountGroupSearchByRow[index] || "";
+              const isAccountGroupPickerOpen = Boolean(accountGroupPickerOpenByRow[index]);
+              const visibleAccountGroupOptions = accountGroupSearch.trim()
+                ? accountGroupOptions.filter((option) => {
+                    const query = accountGroupSearch.trim().toLowerCase();
+                    return (
+                      option.label?.toLowerCase().includes(query) ||
+                      option.accountGroupName?.toLowerCase().includes(query) ||
+                      option.pathLabel?.toLowerCase().includes(query) ||
+                      option.parentPath?.toLowerCase().includes(query) ||
+                      option.category?.toLowerCase().includes(query) ||
+                      option.status?.toLowerCase().includes(query) ||
+                      option.expenseType?.toLowerCase().includes(query)
+                    );
+                  })
+                : accountGroupOptions;
+              const selectedAccountGroupValue =
+                item.accountGroupId ||
+                item.groupId ||
+                findAccountingOption(accountGroupOptions, item.accountGroupName || item.groupName)?.value ||
+                "";
+              const selectedAccountGroup = findAccountingOption(
+                accountGroupOptions,
+                selectedAccountGroupValue,
+              );
+              const applyAccountGroupSelection = (selected) => {
+                setFormData((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        lineItems: prev.lineItems.map((lineItem, lineIndex) =>
+                          lineIndex === index
+                            ? {
+                                ...lineItem,
+                                accountGroupId: selected?.accountGroupId || "",
+                                accountGroupName: selected?.accountGroupName || "",
+                                groupId: selected?.groupId || "",
+                                groupName: selected?.groupName || "",
+                                expenseType: selected?.expenseType || lineItem.expenseType || "",
+                              }
+                            : lineItem,
+                        ),
+                      }
+                    : prev,
+                );
+                setAccountGroupSearchByRow((prev) => ({ ...prev, [index]: "" }));
+                setAccountGroupPickerOpenByRow((prev) => ({ ...prev, [index]: false }));
+              };
+              value = (
+                <Popover
+                  open={isAccountGroupPickerOpen}
+                  onOpenChange={(open) =>
+                    setAccountGroupPickerOpenByRow((prev) => ({
+                      ...prev,
+                      [index]: open,
+                    }))
+                  }
+                >
+                  <PopoverAnchor asChild>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() =>
+                        setAccountGroupPickerOpenByRow((prev) => ({
+                          ...prev,
+                          [index]: !isAccountGroupPickerOpen,
+                        }))
+                      }
+                      className="h-7 w-full justify-between px-2 text-left text-xs font-normal"
+                    >
+                      <span className="truncate">
+                        {selectedAccountGroup?.accountGroupName ||
+                          item.accountGroupName ||
+                          item.groupName ||
+                          "Select group"}
+                      </span>
+                      <ChevronsUpDown className="ml-1 h-3 w-3 shrink-0 text-muted-foreground" />
+                    </Button>
+                  </PopoverAnchor>
+                  <PopoverContent
+                    className="z-[80] w-72 p-2"
+                    align="start"
+                    onWheel={(event) => event.stopPropagation()}
+                    onTouchMove={(event) => event.stopPropagation()}
+                  >
+                    <Input
+                      value={accountGroupSearch}
+                      onChange={(e) =>
+                        setAccountGroupSearchByRow((prev) => ({
+                          ...prev,
+                          [index]: e.target.value,
+                        }))
+                      }
+                      placeholder="Search group"
+                      className="mb-2 h-8 text-xs"
+                      autoFocus
+                    />
+                    <div
+                      className="max-h-64 overflow-y-auto overscroll-contain pr-1 scrollbar-thin-muted"
+                      onWheel={(event) => event.stopPropagation()}
+                      onTouchMove={(event) => event.stopPropagation()}
+                    >
+                      {visibleAccountGroupOptions.length ? (
+                        visibleAccountGroupOptions.map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => applyAccountGroupSelection(option)}
+                            className={cn(
+                              "flex w-full rounded px-2 py-1.5 text-left text-xs hover:bg-muted",
+                              selectedAccountGroupValue === option.value && "bg-muted",
+                            )}
+                          >
+                            {Number(option.hierarchyLevel || 0) > 0 ? (
+                              <span
+                                className="relative mr-2 shrink-0 self-stretch"
+                                style={{
+                                  width: `${Math.min(Number(option.hierarchyLevel || 0), 6) * 14}px`,
+                                }}
+                              >
+                                <span
+                                  className="absolute bottom-[-6px] top-[-6px] w-px bg-border"
+                                  style={{
+                                    left: `${Math.max(Math.min(Number(option.hierarchyLevel || 0), 6) * 14 - 8, 0)}px`,
+                                  }}
+                                />
+                                <span
+                                  className="absolute top-3 h-px bg-border"
+                                  style={{
+                                    left: `${Math.max(Math.min(Number(option.hierarchyLevel || 0), 6) * 14 - 8, 0)}px`,
+                                    width: "10px",
+                                  }}
+                                />
+                              </span>
+                            ) : (
+                              <span className="mr-2 w-2 shrink-0" />
+                            )}
+                            <span className="block min-w-0 flex-1">
+                              <span className="flex min-w-0 items-center gap-1.5">
+                                <span className="truncate font-medium">
+                                  {option.accountGroupName}
+                                </span>
+                                {/* <span className="shrink-0 rounded-full bg-slate-100 px-1.5 py-0.5 text-[9px] uppercase text-slate-500">
+                                  Level {Number(option.hierarchyLevel || 0)}
+                                </span> */}
+                                {option.status ? (
+                                  <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] uppercase text-muted-foreground">
+                                    {option.status}
+                                  </span>
+                                ) : null}
+                              </span>
+                              {option.parentPath ? (
+                                <span className="block truncate text-[10px] text-muted-foreground">
+                                  Under {option.parentPath}
+                                </span>
+                              ) : (
+                                <span className="block text-[10px] text-muted-foreground">
+                                  Root group
+                                </span>
+                              )}
+                              {option.expenseType ? (
+                                <span className="block truncate text-[10px] text-muted-foreground">
+                                  {option.expenseType}
+                                </span>
+                              ) : null}
+                            </span>
+                          </button>
+                        ))
+                      ) : (
+                        <p className="px-2 py-3 text-xs text-muted-foreground">
+                          {accountGroupOptions.length
+                            ? "No group found."
+                            : "Sync COA to load groups."}
+                        </p>
+                      )}
+                    </div>
+                  </PopoverContent>
+                </Popover>
+              );
+            }
+            break;
+          case "expenseType":
             value = (
               <AppSelect
-                value={item.ledger}
+                value={normalizeExpenseType(item.expenseType) || ""}
                 onChange={(e) =>
-                  updateLineItem(index, "ledger", e.target.value)
+                  updateLineItem(index, "expenseType", normalizeExpenseType(e.target.value))
                 }
-                options={LEDGER_OPTIONS}
+                options={EXPENSE_TYPE_OPTIONS}
+                placeholder="Select type"
                 className={lineItemSelectClassName}
               />
             );
@@ -469,7 +1268,7 @@ export const InvoiceForm = ({
                       ? "₹"
                       : invoiceCurrency,
                   ]}
-                  className="h-7 w-14 rounded border text-xs bg-white pl-2 pr-6"
+                  className="h-7 w-14 justify-between rounded border bg-white pl-2 pr-7 text-xs [&>span]:min-w-0 [&>span]:truncate"
                 />
               </div>
             );
@@ -589,6 +1388,36 @@ export const InvoiceForm = ({
             </div>
           )}
 
+          {showProformaInvoiceFields && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                <InvoiceDocumentTypeFields
+                  documentType={formData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE}
+                  onDocumentTypeChange={handleDocumentTypeChange}
+                  disabled={isEdit}
+                />
+                {(formData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE) ===
+                  DOCUMENT_TYPE.TAX_INVOICE && (
+                  <ProformaInvoicePicker
+                    suggestions={piSuggestions}
+                    selectedId={formData?.linkedProformaInvoiceId}
+                    onSelect={handleSelectProformaInvoice}
+                    loading={piSuggestionsLoading}
+                  />
+                )}
+              </div>
+              {(formData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE) ===
+                DOCUMENT_TYPE.TAX_INVOICE && (
+                <PiLinkValidationCard
+                  validation={piLinkValidation}
+                  selectedPi={selectedProformaInvoice}
+                  currency={formData?.currency}
+                  loading={piLinkValidationLoading}
+                />
+              )}
+            </div>
+          )}
+
           <div className="space-y-3">
             <h3 className="text-sm font-semibold text-gray-800">
               Vendor Details
@@ -672,7 +1501,7 @@ export const InvoiceForm = ({
                             type="button"
                             className={cn(
                               "flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent",
-                              formData.vendorName === vendor.name &&
+                              vendorMatchesInvoiceName(vendor, formData.vendorName) &&
                                 "bg-accent",
                             )}
                             onMouseDown={(event) => event.preventDefault()}
@@ -694,6 +1523,34 @@ export const InvoiceForm = ({
                     </div>
                   </PopoverContent>
                 </Popover>
+                {formData.vendorMatched && vendorBranchOptions.length > 0 ? (
+                  <div className="mt-3">
+                    <Label className="text-xs">Vendor Branch (Optional)</Label>
+                    <div className="flex items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        <AppSelect
+                          value={selectedVendorBranchValue}
+                          onChange={(event) => applyVendorBranchSelection(event.target.value)}
+                          options={vendorBranchOptions}
+                          placeholder="Select vendor branch"
+                          className="h-8 text-sm"
+                          data-testid="invoice-vendor-branch-select"
+                        />
+                      </div>
+                      {selectedVendorBranchValue ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={clearVendorBranchSelection}
+                          className="h-8 shrink-0 px-2 text-xs"
+                        >
+                          Clear
+                        </Button>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : null}
               </div>
                 <div>
                   <RequiredLabel required>Inovoice/Bill Number</RequiredLabel>
@@ -726,9 +1583,18 @@ export const InvoiceForm = ({
                 <Input
                   type="date"
                   value={formData.invoiceDate}
-                  onChange={(e) =>
-                    setFormData({ ...formData, invoiceDate: e.target.value })
-                  }
+                  onChange={(e) => {
+                    const invoiceDate = e.target.value;
+                    setFormData((prev) => ({
+                      ...prev,
+                      invoiceDate,
+                      dueDate: normalizeDueDateForInvoice({
+                        invoiceDate,
+                        dueDate: prev.dueDate,
+                        vendorIsMsme,
+                      }),
+                    }));
+                  }}
                   className="h-8 text-sm"
                 />
               </div>
@@ -737,11 +1603,22 @@ export const InvoiceForm = ({
                 <Input
                   type="date"
                   value={formData.dueDate}
-                  onChange={(e) =>
-                    setFormData({ ...formData, dueDate: e.target.value })
-                  }
+                  min={formData.invoiceDate || undefined}
+                  max={msmeMaxDueDate || undefined}
+                  onChange={(e) => {
+                    const dueDate = e.target.value;
+                    setFormData((prev) => ({
+                      ...prev,
+                      dueDate: normalizeDueDateForInvoice({
+                        invoiceDate: prev.invoiceDate,
+                        dueDate,
+                        vendorIsMsme,
+                      }),
+                    }));
+                  }}
                   className="h-8 text-sm"
                 />
+                {isEdit ? <InvoiceDueDateIndicators invoice={formData} className="mt-2" /> : null}
               </div>
             </div>
 
@@ -833,6 +1710,7 @@ export const InvoiceForm = ({
             </div>
 
             <div className="grid grid-cols-2 gap-3">
+              {/* Department field hidden during create/edit — restore when needed
               <div>
                 <RequiredLabel required={departmentMandatory}>
                   Department
@@ -875,6 +1753,7 @@ export const InvoiceForm = ({
                   }))}
                 />
               </div>
+              */}
               {showCategoryField && (
                 <div>
                   <RequiredLabel required={categoryMandatory}>
@@ -918,6 +1797,94 @@ export const InvoiceForm = ({
             </div>
 
             <div>
+              {showBillingGst ? (
+                <div className="mb-3 space-y-3">
+                  <div className={`grid grid-cols-1 gap-3 ${canShowBranchField ? 'md:grid-cols-2' : ''}`}>
+                    {canShowBranchField ? (
+                      <div>
+                        <Label className="text-xs">Branch (Optional)</Label>
+                        <div className="flex items-center gap-2">
+                          <div className="min-w-0 flex-1">
+                            <AppSelect
+                              value={selectedBranchCode}
+                              onChange={(event) => applyBranchSelection(event.target.value)}
+                              options={branchOptions}
+                              placeholder={branchBusy ? "Loading branches..." : "Select branch"}
+                              className="h-8 text-sm"
+                              disabled={branchBusy || branchOptions.length === 0}
+                              data-testid="invoice-preview-branch-select"
+                            />
+                          </div>
+                          {selectedBranchCode ? (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={clearBranchSelection}
+                              className="h-8 shrink-0 px-2 text-xs"
+                            >
+                              Clear
+                            </Button>
+                          ) : null}
+                        </div>
+                        {branchOptions.length === 0 && !branchBusy ? (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Configure branches in Settings &gt; Organisation Details.
+                          </p>
+                        ) : 
+                        //selectedBranch?.billingGstin ? (
+                        //   <p className="mt-1 text-xs text-muted-foreground">
+                        //     Billing GSTIN is mapped from the selected branch.
+                        //   </p>
+                        // ) : 
+                         null}
+                      </div>
+                    ) : null}
+
+                    <div>
+                      <RequiredLabel required={requireBillingGst}>Billing GSTIN</RequiredLabel>
+                      <AppSelect
+                        value={formData.billingGstin || ""}
+                        onChange={(event) => {
+                          const nextGst = event.target.value;
+                          const matched = organisationGstCredentials.find((entry) => entry.gst === nextGst);
+                          setFormData({
+                            ...formData,
+                            billingGstin: matched?.gst || "",
+                          });
+                        }}
+                        options={billingGstOptions}
+                        placeholder={
+                          organisationGstBusy
+                            ? "Loading organisation GSTINs..."
+                            : "Select billing GSTIN"
+                        }
+                        className="h-8 text-sm"
+                        disabled={organisationGstBusy || billingGstOptions.length === 0}
+                        data-testid="invoice-preview-billing-gst-select"
+                      />
+                    </div>
+                  </div>
+                  {organisationGstError ? (
+                    <p className="mt-1 text-xs text-destructive">
+                      Failed to load organisation GSTINs. Add invoice is blocked until this loads.
+                    </p>
+                  ) : billingGstOptions.length === 0 && !organisationGstBusy ? (
+                    <p className="mt-1 text-xs text-destructive">
+                      Add GSTIN and GST portal username in Settings &gt; Organisation Details before proceeding.
+                    </p>
+                  ) : !billingGstSatisfied ? (
+                    <p className="mt-1 text-xs text-destructive">
+                      Select a billing GSTIN configured in Organisation Details.
+                    </p>
+                  ) : (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Billing GSTIN must be one of this organisation's configured GST registrations.
+                    </p>
+                  )}
+                </div>
+              ) : null}
+
               <Label className="text-xs">Billing Address</Label>
               <textarea
                 value={formData.billingAddress}
@@ -928,6 +1895,113 @@ export const InvoiceForm = ({
                 className="w-full min-h-[50px] rounded-md border border-input bg-background px-2 py-1.5 text-xs resize-none"
               />
             </div>
+
+            {showInvoiceMatching && (
+              <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <Label className="text-xs font-medium">Invoice Matching</Label>
+                    <p className="text-xs text-muted-foreground">
+                      {isEdit
+                        ? "Optional. Existing PO/GRN selections are loaded on edit. Change them to update the match after save."
+                        : "Optional. Select a PO for 2-way matching; add a GRN for 3-way matching."}
+                    </p>
+                    {formData?.matchingStatus ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Current match status:{" "}
+                        <span className="font-medium text-foreground">{formData.matchingStatus}</span>
+                      </p>
+                    ) : null}
+                  </div>
+                  {selectedMatchingPoId ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() =>
+                        setFormData({
+                          ...formData,
+                          matchingPurchaseOrderId: "",
+                          matchingGrnId: "",
+                        })
+                      }
+                    >
+                      <X className="mr-1 h-3 w-3" />
+                      Clear
+                    </Button>
+                  ) : null}
+                </div>
+                <div className={canUseThreeWayMatching ? "grid gap-3 md:grid-cols-2" : "grid gap-3"}>
+                  <div>
+                    <Label className="text-xs">Purchase Order</Label>
+                    <AppSelect
+                      value={selectedMatchingPoId}
+                      onChange={(event) =>
+                        setFormData({
+                          ...formData,
+                          matchingPurchaseOrderId: event.target.value,
+                          matchingGrnId: "",
+                        })
+                      }
+                      options={availablePurchaseOrders.map((po) => ({
+                        value: po.id,
+                        label: `${po.poNumber || "PO"} - ${formatAmount(po.amount)}`,
+                      }))}
+                      placeholder={
+                        !invoiceMatchingPoQuery.vendorName &&
+                        !invoiceMatchingPoQuery.vendorId
+                          ? "Select vendor first"
+                          : purchaseOrdersLoading
+                            ? "Loading purchase orders..."
+                            : "Select purchase order"
+                      }
+                      className="h-8 text-sm"
+                      disabled={!shouldLoadPurchaseOrders || purchaseOrdersLoading}
+                    />
+                    {shouldLoadPurchaseOrders && !purchaseOrdersLoading && availablePurchaseOrders.length === 0 ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        No available purchase orders found for this vendor and invoice amount.
+                      </p>
+                    ) : null}
+                  </div>
+                  {canUseThreeWayMatching ? (
+                    <div>
+                      <Label className="text-xs">GRN</Label>
+                      <AppSelect
+                        value={formData.matchingGrnId || ""}
+                        onChange={(event) =>
+                          setFormData({
+                            ...formData,
+                            matchingGrnId: event.target.value,
+                          })
+                        }
+                        options={availableGrns.map((grn) => ({
+                          value: grn.id,
+                          label: `${grn.grnNumber || "GRN"} - ${formatAmount(grn.amount)}`,
+                        }))}
+                        placeholder={
+                          !selectedMatchingPoId
+                            ? "Select PO first"
+                            : grnsLoading
+                              ? "Loading GRNs..."
+                              : "Select GRN"
+                        }
+                        className="h-8 text-sm"
+                        disabled={!selectedMatchingPoId || grnsLoading}
+                      />
+                      {selectedMatchingPoId && !grnsLoading && availableGrns.length === 0 ? (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {matchingGrnsAvailability.hasGrns === false
+                            ? "No approved GRNs are available for this purchase order yet."
+                            : "No available GRNs found for the selected purchase order."}
+                        </p>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -1026,31 +2100,46 @@ export const InvoiceForm = ({
 
             <div>
               <RequiredLabel required>Source</RequiredLabel>
-              <AppSelect
-                value={formData.source}
-                onChange={(e) =>
-                  setFormData({ ...formData, source: e.target.value })
-                }
-                options={INVOICE_SOURCES}
-                className="h-8 text-sm"
+              <Input
+                value={formData.source || "Upload"}
+                readOnly
+                disabled
+                className="h-8 text-sm bg-muted"
                 data-testid="source-select"
               />
             </div>
-            {formData.source === "Email" && (
+
+            <div className="grid grid-cols-2 gap-3">
               <div>
-                <RequiredLabel required>Source Email</RequiredLabel>
-                <Input
-                  type="email"
-                  value={formData.sourceEmail}
+                <RequiredLabel>Voucher Type</RequiredLabel>
+                <AppSelect
+                  value={formData.voucherType || ""}
                   onChange={(e) =>
-                    setFormData({ ...formData, sourceEmail: e.target.value })
+                    setFormData({
+                      ...formData,
+                      voucherType: e.target.value,
+                    })
                   }
-                  placeholder="vendor@example.com"
-                  className="w-full h-8 text-sm"
-                  data-testid="source-email-input"
+                  options={voucherTypeOptions}
+                  placeholder="Select voucher type"
+                  className="h-8 text-sm"
                 />
               </div>
-            )}
+              <div>
+                <RequiredLabel>Narration</RequiredLabel>
+                <Input
+                  value={formData.tdsNarration || ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      tdsNarration: e.target.value,
+                    })
+                  }
+                  placeholder="Narration for TDS Register"
+                  className="h-8 text-sm"
+                />
+              </div>
+            </div>
 
             <div className="flex gap-6 text-xs">
               <div className="flex items-center gap-1.5">
@@ -1107,7 +2196,7 @@ export const InvoiceForm = ({
                       tableHeader={lineItemHeaders}
                       tableData={formData.lineItems}
                       renderRow={renderLineItemRow}
-                      tableClassName="min-w-[890px] border-separate border-spacing-0"
+                      tableClassName="min-w-[1240px] border-separate border-spacing-0"
                       headClassName="bg-gray-50 border-b"
                       stickyHeader={false}
                       striped={false}
@@ -1247,19 +2336,34 @@ export const InvoiceForm = ({
             )}
             {useInrTax && totals.cgst > 0 && (
               <div className="flex justify-between text-xs">
-                <span>CGST 9%</span>
+                <span>
+                  CGST
+                  {totals.cgstRate > 0
+                    ? ` ${formatInrTaxPercent(totals.cgstRate)}`
+                    : ""}
+                </span>
                 <span>{formatAmount(totals.cgst)}</span>
               </div>
             )}
             {useInrTax && totals.sgst > 0 && (
               <div className="flex justify-between text-xs">
-                <span>SGST 9%</span>
+                <span>
+                  SGST
+                  {totals.sgstRate > 0
+                    ? ` ${formatInrTaxPercent(totals.sgstRate)}`
+                    : ""}
+                </span>
                 <span>{formatAmount(totals.sgst)}</span>
               </div>
             )}
             {useInrTax && totals.igst > 0 && (
               <div className="flex justify-between text-xs">
-                <span>IGST</span>
+                <span>
+                  IGST
+                  {totals.igstRate > 0
+                    ? ` ${formatInrTaxPercent(totals.igstRate)}`
+                    : ""}
+                </span>
                 <span>{formatAmount(totals.igst)}</span>
               </div>
             )}
@@ -1286,26 +2390,27 @@ export const InvoiceForm = ({
                 <span>{formatAmount(Number(roundOffValue))}</span>
               </div>
             )}
-            <div className="flex justify-between items-center pt-1.5 border-t text-xs">
-              <div className="flex items-center gap-1.5">
-                <span>TDS</span>
-                <AppSelect
-                  value={formData.tds || NO_TDS_VALUE}
-                  onChange={(e) => {
-                    const nextValue = e.target.value;
-                    const tdsSelection = parseTdsSelection(nextValue);
+            <div className="flex justify-between items-start pt-1.5 border-t text-xs gap-3">
+              <div className="min-w-0 flex-1 space-y-1">
+                <span>TDS{tdsLabel ? ` (${tdsLabel})` : ""}</span>
+                <TdsSelectionField
+                  value={formData.tds || ""}
+                  onChange={(selection) =>
                     setFormData({
                       ...formData,
-                      tds: nextValue === NO_TDS_VALUE ? "" : nextValue,
-                      ...tdsSelection,
-                    });
-                  }}
-                  placeholder="TDS"
-                  options={tdsOptions}
-                  className="h-6 w-36 rounded border pl-1 pr-6 text-xs"
+                      tds: selection.tds,
+                      tdsSectionId: selection.tdsSectionId,
+                      tdsSectionCode: selection.tdsSectionCode,
+                      tdsRate: selection.tdsRate,
+                    })
+                  }
+                  showLabel={false}
+                  selectClassName="h-6 w-full max-w-[220px] rounded border pl-1 pr-6 text-xs"
+                  inputClassName="h-6 w-16 px-1 text-xs"
+                  testIdPrefix="invoice-tds"
                 />
               </div>
-              <span>{formatAmount(tdsAmount)}</span>
+              <span className="shrink-0 pt-1">{formatAmount(tdsAmount)}</span>
             </div>
             <div className="flex justify-between text-sm pt-1.5 border-t">
               <span>Total</span>
@@ -1313,7 +2418,26 @@ export const InvoiceForm = ({
             </div>
             <div className="flex justify-between text-sm font-bold pt-1.5 border-t">
               <span>Net Payable</span>
-              <span>{formatAmount(netPayable)}</span>
+              {canEditNetPayable ? (
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={hasManualNetPayableValue ? formData.netAmount : formatNumericInputValue(netPayable)}
+                  onChange={(event) =>
+                    setFormData({
+                      ...formData,
+                      netAmount: sanitizeNumericInput(event.target.value, {
+                        allowDecimal: true,
+                      }),
+                    })
+                  }
+                  className="h-8 w-36 text-right font-bold"
+                  data-testid="invoice-net-payable-input"
+                />
+              ) : (
+                <span>{formatAmount(netPayable)}</span>
+              )}
             </div>
           </div>
         </div>
@@ -1339,13 +2463,26 @@ export const InvoiceForm = ({
             <Button
               onClick={isEdit ? handleUpdateInvoice : handleAddInvoice}
               className="flex-1"
-              disabled={!canSubmit}
+              disabled={!canSubmit || isSubmitting}
             >
-              {isEdit
-                ? isSavedDraft
-                  ? "Save Draft"
-                  : "Update Invoice"
-                : "Add Invoice"}
+              {isSubmitting ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  {isEdit
+                    ? isSavedDraft
+                      ? "Saving..."
+                      : "Updating..."
+                    : "Creating..."}
+                </>
+              ) : isEdit ? (
+                isSavedDraft ? (
+                  "Save Draft"
+                ) : (
+                  "Update Invoice"
+                )
+              ) : (
+                "Add Invoice"
+              )}
             </Button>
           </div>
         )}

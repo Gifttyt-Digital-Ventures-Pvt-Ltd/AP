@@ -1,16 +1,10 @@
 import { serviceApi } from "../serviceApi";
+import { extractListResponse } from "../utils/payloadMappers";
 
 const toArray = (value) => (Array.isArray(value) ? value : []);
 
-const normalizeCategoriesList = (response) => {
-  if (Array.isArray(response)) return response;
-  if (Array.isArray(response?.data)) return response.data;
-  if (Array.isArray(response?.categories)) return response.categories;
-  if (Array.isArray(response?.items)) return response.items;
-  if (Array.isArray(response?.content)) return response.content;
-  if (Array.isArray(response?.results)) return response.results;
-  return [];
-};
+const normalizeCategoriesList = (response) =>
+  extractListResponse(response, ['categories']);
 
 const normalizeUserId = (value) => {
   if (value === undefined || value === null) return "";
@@ -150,10 +144,8 @@ export const categoriesApi = serviceApi.injectEndpoints({
     }),
     getCategoryInvoiceApprovers: builder.query({
       query: () => ({ url: "/categories/invoice-approvers", method: "GET" }),
-      transformResponse: (response) => {
-        const rows = Array.isArray(response) ? response : toArray(response?.data);
-        return rows.map(normalizeApprover);
-      },
+      transformResponse: (response) =>
+        extractListResponse(response).map(normalizeApprover),
       providesTags: ["Categories"],
     }),
     getCategoriesForInvoice: builder.query({

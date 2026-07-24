@@ -206,7 +206,7 @@ const CreditSettingsPanel = ({ wallet, canManage = false, onSaved }) => {
                     checked={selectedRecipientIds.includes(recipient.id)}
                     disabled={!canManage}
                     onCheckedChange={() => toggleRecipient(recipient.id)}
-                    data-testid={`alert-recipient-${recipient.id}`}
+                    data-testid={`alert-recipient-${recipient?.id ?? 'unknown'}`}
                   />
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium">{recipient.name}</span>

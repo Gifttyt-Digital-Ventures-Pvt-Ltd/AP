@@ -1,3 +1,8 @@
+import {
+  getAccountingReadyBlockedMessage,
+  isAccountingReadyLocked,
+} from "./accountingLock";
+
 export const NEEDS_CORRECTION_STATUS = "Needs Correction";
 export const LEGACY_SENT_BACK_STATUS = "Sent Back";
 export const NEEDS_CORRECTION_ACTION = "Needs Correction";
@@ -92,6 +97,13 @@ export const resolveInitialInvoiceStatus = ({
 };
 
 export const resolveBulkCreateInvoiceStatus = () => SAVED_STATUS;
+
+export const resolveBulkCreateVendorStatus = () => SAVED_STATUS;
+
+export const isSavedVendorStatus = (status) =>
+  normalizeWorkflowStatus(status) === SAVED_STATUS;
+
+export const resolveSavedVendorSubmitStatus = () => "Pending Approval";
 
 export const emailsMatch = (left, right) => {
   if (!left || !right) return false;
@@ -297,6 +309,8 @@ export const shouldCheckerSubmitOnUpdate = (invoice, identity = {}) => {
 };
 
 export const canEditInvoice = (invoice, identity = {}) => {
+  if (isAccountingReadyLocked(invoice)) return false;
+
   const {
     canUpdateInvoices,
     canManageInvoices,
@@ -320,11 +334,17 @@ export const canEditInvoice = (invoice, identity = {}) => {
   const canMutateInvoice = canUpdateInvoices || canManageInvoices;
   if (!canMutateInvoice) return false;
 
-  if (status === NEEDS_CORRECTION_STATUS) return matchesCreator(invoice, identity);
+  if (status === NEEDS_CORRECTION_STATUS) {
+    return Boolean(canManageInvoices || matchesCreator(invoice, identity));
+  }
   return true;
 };
 
 export const getInvoiceEditBlockedMessage = (invoice, identity = {}) => {
+  if (isAccountingReadyLocked(invoice)) {
+    return getAccountingReadyBlockedMessage(invoice, "invoice");
+  }
+
   const status = normalizeWorkflowStatus(invoice?.status);
   const {
     canUpdateInvoices,
@@ -346,7 +366,7 @@ export const getInvoiceEditBlockedMessage = (invoice, identity = {}) => {
   }
 
   if (status === NEEDS_CORRECTION_STATUS) {
-    return 'Only the creator can edit an invoice in Needs Correction status';
+    return 'Only the creator or an invoice manager can edit an invoice in Needs Correction status';
   }
 
   return `Invoices in ${status || 'this'} status cannot be edited`;
@@ -362,9 +382,12 @@ const VENDOR_MAKER_EDITABLE_STATUSES = new Set([
   "Pending Approval",
   "Approved",
   "Draft",
+  SAVED_STATUS,
 ]);
 
 export const canEditVendor = (vendor, identity = {}) => {
+  if (isAccountingReadyLocked(vendor)) return false;
+
   const { canUpdateVendor, canRequestVendor, isCorporateAdmin } = identity;
   const status = normalizeWorkflowStatus(vendor?.status);
   if (status === "Rejected") return false;
@@ -379,6 +402,18 @@ export const canEditVendor = (vendor, identity = {}) => {
 
   if (!canUpdateVendor) return false;
   return VENDOR_MAKER_EDITABLE_STATUSES.has(status) || status === "";
+};
+
+export const getVendorEditBlockedMessage = (vendor) => {
+  if (isAccountingReadyLocked(vendor)) {
+    return getAccountingReadyBlockedMessage(vendor, "vendor");
+  }
+  const status = normalizeWorkflowStatus(vendor?.status);
+  if (status === "Rejected") return "Rejected vendors cannot be edited";
+  if (status === NEEDS_CORRECTION_STATUS) {
+    return "Only the creator can edit a vendor in Needs Correction status";
+  }
+  return "This vendor cannot be edited in its current status";
 };
 
 export const canSaveVendorEdit = (vendor, identity = {}) => {

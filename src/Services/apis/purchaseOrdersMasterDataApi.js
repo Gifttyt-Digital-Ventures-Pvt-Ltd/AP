@@ -1,13 +1,8 @@
 import { serviceApi } from "../serviceApi";
 import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
+import { extractListResponse } from "../utils/payloadMappers";
 
-const getListData = (response) => {
-  if (Array.isArray(response)) return response;
-  if (Array.isArray(response?.content)) return response.content;
-  if (Array.isArray(response?.data)) return response.data;
-  if (Array.isArray(response?.items)) return response.items;
-  return [];
-};
+const getListData = extractListResponse;
 
 const getEntityId = (entity) => entity?.id ?? entity?.poId ?? entity?.po_id;
 
@@ -42,6 +37,7 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
         method: "GET",
         params,
       }),
+      transformResponse: extractListResponse,
       providesTags: (result) => provideListTags("PurchaseOrders", result),
     }),
     // GET /purchase-orders/pending-approvals
@@ -51,6 +47,7 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
         url: "/purchase-orders/pending-approvals",
         method: "GET",
       }),
+      transformResponse: extractListResponse,
       providesTags: (result) => [
         { type: "Approvals", id: "LIST" },
         ...provideListTags("PurchaseOrders", result),
@@ -93,6 +90,7 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
     // Lists all active saved formats available for PO creation.
     getPurchaseOrderFormatConfigs: builder.query({
       query: () => ({ url: "/po-format-configs", method: "GET" }),
+      transformResponse: extractListResponse,
       providesTags: (result) => provideListTags("PurchaseOrderFormatConfig", result),
     }),
     // GET /po-format-configs/{id}
@@ -108,6 +106,7 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
       invalidatesTags: [
         { type: "PurchaseOrderFormatConfig", id: "LIST" },
         { type: "PurchaseOrderFormatConfig", id: "DEFAULT" },
+        "Settings",
       ],
     }),
     // PUT /po-format-configs/{id}
@@ -138,14 +137,23 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
       ],
     }),
     // POST /branding/logo
-    // Future logo upload. Pass FormData with `file`; backend returns logoUrl
-    // and logoS3Key, either tenant-wide or resolved into format snapshots.
+    // Tenant-wide logo upload. Pass FormData with `file`; backend returns
+    // logoUrl and optional logoS3Key for PO previews/snapshots.
     uploadPurchaseOrderTenantLogo: builder.mutation({
       query: (body) => ({ url: "/branding/logo", method: "POST", body }),
       invalidatesTags: [
         { type: "PurchaseOrderFormatConfig", id: "LIST" },
         { type: "PurchaseOrderFormatConfig", id: "DEFAULT" },
+        "Settings",
       ],
+    }),
+    scanPurchaseOrder: builder.mutation({
+      query: (body) => ({
+        url: "/scan/extract-po-data",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: [...CREDIT_INVALIDATION_TAGS],
     }),
     // POST /purchase-orders/draft
     // Saves a PO draft. Payload shape is the same as createPurchaseOrder.
@@ -162,6 +170,20 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
         { type: "PurchaseOrders", id: "LIST" },
         { type: "Approvals", id: "LIST" },
         ...CREDIT_INVALIDATION_TAGS,
+      ],
+    }),
+    // PUT /purchase-orders/{id}
+    // Updates an editable PO such as DRAFT or SENT_BACK. Payload shape is the
+    // same as createPurchaseOrder.
+    updatePurchaseOrder: builder.mutation({
+      query: ({ id, body }) => ({
+        url: `/purchase-orders/${id}`,
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: (result, error, { id } = {}) => [
+        ...invalidateEntityAndList("PurchaseOrders", id),
+        { type: "Approvals", id: "LIST" },
       ],
     }),
     // POST /purchase-orders/{id}/submit
@@ -213,12 +235,14 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
     // Future TDS selector source. Current UI accepts free text/percent.
     getPurchaseOrderTdsSections: builder.query({
       query: () => ({ url: "/master/tds-sections", method: "GET" }),
+      transformResponse: extractListResponse,
       providesTags: [{ type: "MasterData", id: "PO_TDS_SECTIONS" }],
     }),
     // GET /master/states
     // Future state selector source for placeOfSupply.
     getPurchaseOrderStates: builder.query({
       query: () => ({ url: "/master/states", method: "GET" }),
+      transformResponse: extractListResponse,
       providesTags: [{ type: "MasterData", id: "PO_STATES" }],
     }),
     // GET /master/hsn-rates?code=...
@@ -250,8 +274,10 @@ export const {
   useDeletePurchaseOrderFormatConfigMutation,
   useSetDefaultPurchaseOrderFormatConfigMutation,
   useUploadPurchaseOrderTenantLogoMutation,
+  useScanPurchaseOrderMutation,
   useSavePurchaseOrderDraftMutation,
   useCreatePurchaseOrderMutation,
+  useUpdatePurchaseOrderMutation,
   useSubmitPurchaseOrderMutation,
   useApprovePurchaseOrderMutation,
   useGeneratePurchaseOrderPdfMutation,

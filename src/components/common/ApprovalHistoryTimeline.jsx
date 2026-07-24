@@ -23,6 +23,13 @@ const getHistoryEntryIconBackground = (actionType) => {
   return "bg-gray-100";
 };
 
+const formatHistoryTimestamp = (timestamp) => {
+  if (!timestamp) return null;
+  const parsed = new Date(timestamp);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+};
+
 const ApprovalHistoryTimeline = ({
   history = [],
   loading = false,
@@ -68,8 +75,16 @@ const ApprovalHistoryTimeline = ({
                       {normalizeHistoryActionType(entry.action_type)}
                     </span>
                     <div className="text-right text-xs text-muted-foreground">
-                      <p>{format(new Date(entry.timestamp), "dd MMM yyyy")}</p>
-                      <p>{format(new Date(entry.timestamp), "hh:mm a")}</p>
+                      {(() => {
+                        const parsed = formatHistoryTimestamp(entry?.timestamp);
+                        if (!parsed) return <p>-</p>;
+                        return (
+                          <>
+                            <p>{format(parsed, "dd MMM yyyy")}</p>
+                            <p>{format(parsed, "hh:mm a")}</p>
+                          </>
+                        );
+                      })()}
                     </div>
                   </div>
                   <p className="text-sm mb-3">{entry.action_description}</p>

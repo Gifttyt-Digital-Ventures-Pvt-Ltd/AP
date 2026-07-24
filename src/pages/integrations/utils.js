@@ -34,6 +34,7 @@ export const formatDateTime = (value) => {
 };
 
 export const getErrorText = (error, fallback = "Something went wrong") =>
+  error?.data?.error ||
   error?.data?.detail ||
   error?.data?.message ||
   error?.error ||
@@ -62,8 +63,17 @@ export const normalizeConnections = (response) => {
   return toArray(rawConnections).filter(Boolean);
 };
 
-export const normalizeObjects = (manifest = {}) =>
-  Object.entries(manifest.objects || {}).filter(([, config]) => config?.supported !== false);
+export const normalizeObjects = (manifest = {}) => {
+  const objects = { ...(manifest.objects || {}) };
+  const providerKey = String(getProviderKey(manifest) || "").toUpperCase();
+  const isErpProvider = providerKey.includes("ZOHO") || providerKey.includes("TALLY");
+
+  if (isErpProvider && !objects.CHART_OF_ACCOUNTS) {
+    objects.CHART_OF_ACCOUNTS = { supported: true, directions: ["PULL"] };
+  }
+
+  return Object.entries(objects).filter(([, config]) => config?.supported !== false);
+};
 
 export const getProviderName = (provider = {}) =>
   provider.name || provider.displayName || titleize(provider.provider || provider.code || "ERP");

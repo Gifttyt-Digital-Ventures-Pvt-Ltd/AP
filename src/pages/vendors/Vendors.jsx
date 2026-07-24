@@ -1,15 +1,40 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   useGetVendorsQuery,
+  useLazyGetVendorQuery,
   useCreateVendorMutation,
   useUpdateVendorMutation,
   useDeleteVendorMutation,
-  useGetPendingVendorApprovalsQuery,
   useApproveVendorMutation,
 } from '../../Services/apis/invoicesVendorsApi';
 import { Button } from '../../components/ui/button';
 import { Input } from '../../components/ui/input';
-import { Search, Plus, Pencil, Trash2, Eye, X, Check, RotateCcw } from 'lucide-react';
+import { Card, CardContent } from '../../components/ui/card';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '../../components/ui/select';
+import {
+  Building2,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Clock3,
+  Eye,
+  Map as MapIcon,
+  Plus,
+  RotateCcw,
+  Search,
+  Trash2,
+  X,
+  Pencil,
+  Unlock,
+} from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { useActionGuard } from '../../hooks/useActionGuard';
@@ -17,15 +42,26 @@ import { useCreditErrorHandler } from '../../contexts/CreditErrorContext';
 import { useRBAC } from '../../contexts/RBACContext';
 import { useAuth } from '../../contexts/AuthContext';
 import { useGetCorporateUserDetailsQuery } from '../../Services/apis/corporateApi';
+import { useRequestAccountingReadyUnlockMutation } from '../../Services/apis/accountingApi';
+import { clearNotificationQueryParams } from '../../utils/notificationQueryParams';
 import {
   buildCurrentUserIdentity,
   canEditVendor,
   canSaveVendorEdit,
   extractApiErrorDetail,
   formatWorkflowStatus,
+  getVendorEditBlockedMessage,
+  isSavedVendorStatus,
   NEEDS_CORRECTION_ACTION,
   NEEDS_CORRECTION_STATUS,
+  resolveBulkCreateVendorStatus,
+  resolveSavedVendorSubmitStatus,
 } from '../../utils/approvalWorkflow';
+import { getAccountingErrorMessage } from '../accounting/utils/coaUtils';
+import {
+  getAccountingUnlockRequestStatus,
+  isAccountingReadyLocked,
+} from '../../utils/accountingLock';
 import VendorDetailsDialog from '../../components/vendors/VendorDetailsDialog';
 import * as XLSX from '@e965/xlsx';
 import AppDataTable from '../../components/common/AppDataTable';
@@ -35,12 +71,39 @@ import MultipleVendorUploadDialog from './components/MultipleVendorUploadDialog'
 import {
   getVendorUploadMandatoryFieldKeys,
   isVendorFieldRequired,
+  VENDOR_FIELD_SECTIONS,
   VENDOR_FORM_KEY_TO_SECTION,
 } from '../../utils/vendorFieldConfig';
-import { getVendorValidationErrors, parseMsmeValue } from '../../utils/vendorValidation';
+import {
+  getBulkVendorUploadValidationErrors,
+  getVendorValidationErrors,
+  getVendorGstVerificationErrors,
+  parseMsmeValue,
+} from '../../utils/vendorValidation';
 import BulkUploadReviewDialog from './components/BulkUploadReviewDialog';
 import DeleteVendorDialog from './components/DeleteVendorDialog';
 import ViewVendorDialog from './components/ViewVendorDialog';
+import {
+  getFirstVendorGstin,
+  getVendorGstRegistrations,
+  getVendorMultiStateCount,
+  getVendorRegistrationStates,
+} from './components/VendorGstRegistrationsPanel';
+import VendorMultiGstBadge from './components/VendorMultiGstBadge';
+import VendorTableGstExpandedRow from './components/VendorTableGstExpandedRow';
+import {
+  createEmptyVendorDocuments,
+  normalizeVendorDocuments,
+} from './utils/vendorDocuments';
+import {
+  getVendorTdsCertificateValidationErrors,
+  getVendorTdsValidationErrors,
+  hasConfiguredVendorTds,
+  normalizeVendorTds,
+} from './utils/vendorTds';
+import { buildVendorSaveBody, normalizeVendorForSave } from './utils/vendorSave';
+import { mergeBulkVendorRowsByPan } from './utils/bulkVendorMerge';
+import { isVendorPortalFetchEnabled } from '../../utils/vendorVerificationConfig';
 import VendorApprovalDialog from './components/VendorApprovalDialog';
 import IntegrationSourceBadge from '../../components/integrations/IntegrationSourceBadge';
 import useZohoIntegrationActive from '../../hooks/useZohoIntegrationActive';
@@ -48,6 +111,7 @@ import { withIntegrationTableHeader } from '../../utils/integrationProvenance';
 
 const VENDOR_UPLOAD_FIELDS = [
   'name',
+  'trade_name',
   'vendor_type',
   'email',
   'mobile',
@@ -75,6 +139,7 @@ const VENDOR_UPLOAD_FIELDS = [
 
 const VENDOR_UPLOAD_HEADER_MAP = {
   name: 'Company Name',
+  trade_name: 'Trade Name',
   vendor_type: 'Vendor Type',
   email: 'Email ID',
   mobile: 'Mobile No',
@@ -100,39 +165,6 @@ const VENDOR_UPLOAD_HEADER_MAP = {
   notes: 'Remarks',
 };
 
-const toBulkVendorPayload = (row) => {
-  const name = String(row.name || '').trim();
-  const vendorTypeRaw = String(row.vendor_type || '').trim().toLowerCase();
-  const vendorType = vendorTypeRaw === 'individual' ? 'Individual' : 'Company';
-  return {
-    name,
-    vendor_type: vendorType,
-    email: String(row.email || '').trim(),
-    phone: String(row.phone || '').trim(),
-    mobile: String(row.mobile || '').trim(),
-    pan: String(row.pan || '').trim().toUpperCase(),
-    gstin: String(row.gstin || '').trim().toUpperCase(),
-    address_line1: String(row.address_line1 || '').trim(),
-    address_line2: String(row.address_line2 || '').trim(),
-    city: String(row.city || '').trim(),
-    state: String(row.state || '').trim(),
-    pincode: String(row.pincode || '').trim(),
-    country: String(row.country || '').trim() || 'India',
-    bank_name: String(row.bank_name || '').trim(),
-    account_number: String(row.account_number || '').trim(),
-    ifsc_code: String(row.ifsc_code || '').trim().toUpperCase(),
-    branch: String(row.branch || '').trim(),
-    account_holder_name: String(row.account_holder_name || '').trim(),
-    category: String(row.category || '').trim(),
-    currency: String(row.currency || '').trim() || 'INR',
-    payment_terms: String(row.payment_terms || '').trim() || '30',
-    contact_person: String(row.contact_person || '').trim(),
-    website: String(row.website || '').trim(),
-    notes: String(row.notes || '').trim(),
-    msme: parseMsmeValue(row.msme) === true,
-  };
-};
-
 const getVendorApiErrorMessages = (response) => {
   if (!response || !Array.isArray(response.failed)) return [];
   return response.failed.flatMap((item) =>
@@ -140,24 +172,66 @@ const getVendorApiErrorMessages = (response) => {
   );
 };
 
-const Vendors = () => {
-  const {
-    data: vendorsData = [],
-    isError: vendorsError,
-    isFetching: vendorsFetching,
-    refetch: refetchVendors,
-  } = useGetVendorsQuery();
-  const {
-    data: pendingApprovalsData = [],
-    isError: pendingApprovalsError,
-    isFetching: pendingApprovalsFetching,
-    refetch: refetchPendingApprovals,
-  } = useGetPendingVendorApprovalsQuery();
+const getVendorType = (vendor) => vendor?.vendor_type || vendor?.vendorType || 'Company';
 
+const GST_REGISTRATION_OWNED_VENDOR_SECTIONS = new Set([
+  VENDOR_FIELD_SECTIONS.ADDRESS_LINE_1,
+  VENDOR_FIELD_SECTIONS.ADDRESS_LINE_2,
+  VENDOR_FIELD_SECTIONS.CITY,
+  VENDOR_FIELD_SECTIONS.STATE,
+  VENDOR_FIELD_SECTIONS.PINCODE,
+  VENDOR_FIELD_SECTIONS.COUNTRY,
+  VENDOR_FIELD_SECTIONS.ACCOUNT_NAME,
+  VENDOR_FIELD_SECTIONS.ACCOUNT_NUMBER,
+  VENDOR_FIELD_SECTIONS.IFSC_CODE,
+  VENDOR_FIELD_SECTIONS.BANK_NAME,
+  VENDOR_FIELD_SECTIONS.BRANCH,
+]);
+
+const getNormalizedVendorStatusKey = (status) =>
+  String(status || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, ' ');
+
+const isPendingApprovalStatus = (status) =>
+  getNormalizedVendorStatusKey(status) === 'pending approval';
+
+const VendorMetricCard = ({ label, value, icon: Icon, tone = 'primary' }) => {
+  const toneClasses = {
+    primary: 'bg-primary/10 text-primary',
+    success: 'bg-emerald-50 text-emerald-700',
+    warning: 'bg-amber-50 text-amber-700',
+    neutral: 'bg-slate-100 text-slate-700',
+  };
+
+  return (
+    <Card className="rounded-md border-border shadow-none">
+      <CardContent className="flex items-center justify-between gap-2 px-3 py-2">
+        <div className="min-w-0">
+          <p className="text-[11px] font-medium leading-none text-muted-foreground">{label}</p>
+          <p className="mt-1 text-lg font-semibold leading-none tabular-nums text-foreground">{value}</p>
+        </div>
+        <div
+          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-md ${toneClasses[tone]}`}
+        >
+          <Icon className="h-3.5 w-3.5" />
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+const Vendors = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const handledNotificationRef = useRef(null);
   const [createVendor, { isLoading: createVendorLoading }] = useCreateVendorMutation();
-  const [updateVendor] = useUpdateVendorMutation();
-  const [deleteVendor] = useDeleteVendorMutation();
-  const [approveVendor] = useApproveVendorMutation();
+  const [updateVendor, { isLoading: updateVendorLoading }] = useUpdateVendorMutation();
+  const [deleteVendor, { isLoading: deleteVendorLoading }] = useDeleteVendorMutation();
+  const [approveVendor, { isLoading: approveVendorLoading }] = useApproveVendorMutation();
+  const [getVendor] = useLazyGetVendorQuery();
+  const [requestAccountingUnlock, { isLoading: requestVendorUnlockLoading }] =
+    useRequestAccountingReadyUnlockMutation();
   const { user } = useAuth();
   const { data: corporateUserContext = null } = useGetCorporateUserDetailsQuery();
   const { guardAction, canPerformAction } = useActionGuard();
@@ -165,10 +239,18 @@ const Vendors = () => {
   const { corporateScreens, isCorporateAdmin } = useRBAC();
   const { showIntegrationColumn } = useZohoIntegrationActive();
   const activeVendorFields = corporateScreens?.activeVendorFields ?? [];
+  const portalVerificationEnabled = isVendorPortalFetchEnabled(corporateScreens?.activeVendorVerification);
   const vendorFieldConfiguration = corporateScreens?.vendorFieldConfiguration ?? [];
-  const vendorUploadMandatoryFields = useMemo(
-    () => getVendorUploadMandatoryFieldKeys(activeVendorFields),
+  const effectiveActiveVendorFields = useMemo(
+    () =>
+      activeVendorFields.filter(
+        (section) => !GST_REGISTRATION_OWNED_VENDOR_SECTIONS.has(String(section).trim().toUpperCase()),
+      ),
     [activeVendorFields],
+  );
+  const vendorUploadMandatoryFields = useMemo(
+    () => getVendorUploadMandatoryFieldKeys(effectiveActiveVendorFields),
+    [effectiveActiveVendorFields],
   );
   const vendorUploadOptionalFields = useMemo(
     () => VENDOR_UPLOAD_FIELDS.filter((field) => !vendorUploadMandatoryFields.includes(field)),
@@ -192,6 +274,23 @@ const Vendors = () => {
     ],
   );
   const [searchTerm, setSearchTerm] = useState('');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [vendorSort] = useState({ sortBy: 'createdAt', sortDirection: 'desc' });
+  const deferredSearchTerm = useDeferredValue(searchTerm);
+  const vendorQueryParams = useMemo(() => ({
+    ...(deferredSearchTerm.trim() ? { search: deferredSearchTerm.trim() } : {}),
+    ...(typeFilter !== 'all' ? { type: typeFilter } : {}),
+    ...(statusFilter !== 'all' ? { status: statusFilter } : {}),
+    sortBy: vendorSort.sortBy,
+    sortDirection: vendorSort.sortDirection,
+  }), [deferredSearchTerm, typeFilter, statusFilter, vendorSort]);
+  const {
+    data: vendorsData = [],
+    isError: vendorsError,
+    isFetching: vendorsFetching,
+    refetch: refetchVendors,
+  } = useGetVendorsQuery(vendorQueryParams);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [vendorUploadOptionOpen, setVendorUploadOptionOpen] = useState(false);
   const [multipleVendorUploadOpen, setMultipleVendorUploadOpen] = useState(false);
@@ -202,9 +301,11 @@ const Vendors = () => {
   const [approvalComments, setApprovalComments] = useState('');
   const [bulkReviewOpen, setBulkReviewOpen] = useState(false);
   const [bulkReviewData, setBulkReviewData] = useState(null);
+  const [expandedVendorIds, setExpandedVendorIds] = useState(() => new Set());
   const [formData, setFormData] = useState({
     // Basic Information
     name: '',
+    trade_name: '',
     vendor_type: 'Company',
     email: '',
     phone: '',
@@ -213,6 +314,8 @@ const Vendors = () => {
     // Tax Information
     pan: '',
     gstin: '',
+    gstRegistrations: [],
+    vendorBranches: [],
     msme: false,
     
     // Address
@@ -235,22 +338,20 @@ const Vendors = () => {
     currency: 'INR',
     contact_person: '',
     website: '',
-    notes: ''
+    notes: '',
+    documents: createEmptyVendorDocuments(),
+    tdsMapping: null,
+    tdsCertificates: [],
+    tdsDetailsEdited: false,
   });
 
   const vendors = Array.isArray(vendorsData) ? vendorsData : [];
-  const pendingApprovalVendors = Array.isArray(pendingApprovalsData) ? pendingApprovalsData : [];
 
   useEffect(() => {
     if (vendorsError) {
       toast.error('Failed to load vendors');
     }
   }, [vendorsError]);
-  useEffect(() => {
-    if (pendingApprovalsError) {
-      toast.error('Failed to load pending vendor approvals');
-    }
-  }, [pendingApprovalsError]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -265,20 +366,54 @@ const Vendors = () => {
     }
 
     const validationErrors = getVendorValidationErrors(formData, {
-      activeVendorFields,
+      activeVendorFields: effectiveActiveVendorFields,
       vendorFieldConfiguration,
     });
+    const tdsValidationErrors = [
+      ...getVendorTdsValidationErrors(formData.tdsMapping),
+      ...getVendorTdsCertificateValidationErrors(formData.tdsCertificates, {
+        requireCertificate: Boolean(
+          formData.tdsDetailsEdited && hasConfiguredVendorTds(formData.tdsMapping),
+        ),
+      }),
+    ];
     if (validationErrors.length > 0) {
       toast.error(validationErrors[0]);
+      return;
+    }
+    if (tdsValidationErrors.length > 0) {
+      toast.error(tdsValidationErrors[0]);
+      return;
+    }
+
+    const gstVerificationErrors = getVendorGstVerificationErrors(formData, null, {
+      gstVerificationEnabled: portalVerificationEnabled,
+      activeVendorFields: effectiveActiveVendorFields,
+    });
+    if (gstVerificationErrors.length > 0) {
+      toast.error(gstVerificationErrors[0]);
       return;
     }
 
     try {
       if (editingVendor) {
-        await updateVendor({ id: editingVendor.id, body: formData }).unwrap();
-        toast.success('Vendor updated successfully');
+        const submittingSavedVendor = isSavedVendorStatus(editingVendor.status);
+        const vendorPayload = buildVendorSaveBody(
+          formData,
+          submittingSavedVendor ? { status: resolveSavedVendorSubmitStatus() } : {},
+        );
+        await updateVendor({
+          id: editingVendor.id,
+          body: vendorPayload,
+        }).unwrap();
+        toast.success(
+          submittingSavedVendor
+            ? 'Vendor submitted for approval'
+            : 'Vendor updated successfully',
+        );
       } else {
-        const response = await createVendor(formData).unwrap();
+        const vendorPayload = buildVendorSaveBody(formData);
+        const response = await createVendor(vendorPayload).unwrap();
         const successCount = Number(response?.successCount ?? 0);
         const failedCount = Number(response?.failedCount ?? 0);
         const errorMessages = getVendorApiErrorMessages(response);
@@ -319,8 +454,8 @@ const Vendors = () => {
     }
 
     try {
-      const vendorsPayload = rows
-        .map((row) => toBulkVendorPayload(row))
+      const vendorsPayload = mergeBulkVendorRowsByPan(rows)
+        .map((vendor) => normalizeVendorForSave(vendor))
         .filter((vendor) => vendor.name);
 
       if (!vendorsPayload.length) {
@@ -329,7 +464,10 @@ const Vendors = () => {
         };
       }
 
-      const response = await createVendor(vendorsPayload).unwrap();
+      const bulkStatus = resolveBulkCreateVendorStatus();
+      const response = await createVendor(
+        vendorsPayload.map((vendor) => ({ ...vendor, status: bulkStatus })),
+      ).unwrap();
       const successCount = Number(response?.successCount ?? 0);
       const failedCount = Number(response?.failedCount ?? 0);
       const errorMessages = getVendorApiErrorMessages(response);
@@ -358,15 +496,11 @@ const Vendors = () => {
   };
 
   const validateVendorUploadRow = (row, rowIndex) =>
-    getVendorValidationErrors(row, {
-      rowIndex,
-      activeVendorFields,
-      vendorFieldConfiguration,
-    });
+    getBulkVendorUploadValidationErrors(row, { rowIndex });
 
   const getUploadGuideType = (fieldKey, optionalText) => {
     const section = VENDOR_FORM_KEY_TO_SECTION[fieldKey];
-    if (section && isVendorFieldRequired(section, activeVendorFields)) {
+    if (section && isVendorFieldRequired(section, effectiveActiveVendorFields)) {
       return 'Mandatory';
     }
     return optionalText;
@@ -375,6 +509,7 @@ const Vendors = () => {
   const downloadVendorTemplate = () => {
     const headerRow = [
       'Company Name',
+      'Trade Name',
       'Vendor Type',
       'Email ID',
       'Mobile No',
@@ -401,8 +536,22 @@ const Vendors = () => {
     ];
 
     const guideRows = [
+      ['Bulk upload instructions'],
+      [
+        'Rows with the same valid PAN in this file are merged into one vendor with multiple GST registrations.',
+      ],
+      [
+        'Use one row per GSTIN. Repeat company name and PAN on each row. Identity fields (name, trade name, contact, etc.) are taken from the first row in each PAN group.',
+      ],
+      [''],
+      ['Example: one vendor, two GSTINs (same PAN on both rows)'],
+      ['Company Name', 'PAN No', 'GST no', 'State', 'City'],
+      ['Acme India Pvt Ltd', 'ABCDE1234F', '27AAAAA0000A1Z5', 'Maharashtra', 'Mumbai'],
+      ['Acme India Pvt Ltd', 'ABCDE1234F', '29AAAAA0000A1Z6', 'Karnataka', 'Bengaluru'],
+      [''],
       ['Parameter', 'Type'],
       ['Company Name', getUploadGuideType('name', 'Optional')],
+      ['Trade Name', getUploadGuideType('trade_name', 'Optional')],
       ['Vendor Type', getUploadGuideType('vendor_type', 'Optional (Company/Individual)')],
       ['Email ID', getUploadGuideType('email', 'Optional')],
       ['Mobile No', getUploadGuideType('mobile', 'Optional')],
@@ -423,8 +572,8 @@ const Vendors = () => {
         ),
       ],
       ['Country', getUploadGuideType('country', 'Optional')],
-      ['PAN No', getUploadGuideType('pan', 'Optional')],
-      ['GST no', getUploadGuideType('gstin', 'Optional')],
+      ['PAN No', getUploadGuideType('pan', 'Optional. Repeat the same PAN on each row for multi-GST vendors')],
+      ['GST no', getUploadGuideType('gstin', 'Optional. One GSTIN per row; multiple rows with the same PAN are merged')],
       ['MSME', getUploadGuideType('msme', 'Optional (Yes/No)')],
       ['Account Name', getUploadGuideType('account_holder_name', 'Optional')],
       ['Account Number', getUploadGuideType('account_number', 'Optional')],
@@ -451,25 +600,31 @@ const Vendors = () => {
 
   const handleEdit = (vendor) => {
     if (!canEditVendor(vendor, vendorEditContext)) {
-      const status = formatWorkflowStatus(vendor?.status);
-      if (status === 'Rejected') {
-        toast.error('Rejected vendors cannot be edited');
-      } else if (status === NEEDS_CORRECTION_STATUS) {
-        toast.error('Only the creator can edit a vendor in Needs Correction status');
-      } else {
-        toast.error('This vendor cannot be edited in its current status');
-      }
+      toast.error(getVendorEditBlockedMessage(vendor));
       return;
     }
     setEditingVendor(vendor);
+    const firstGstin = getFirstVendorGstin(vendor);
+    const vendorBranches =
+      vendor.vendorBranches ??
+      vendor.vendor_branches ??
+      vendor.branchDetails ??
+      vendor.branch_details ??
+      [];
     setFormData({
+      id: vendor.id ?? vendor.vendorId,
+      vendorId: vendor.vendorId ?? vendor.id,
+      status: vendor.status,
       name: vendor.name || '',
+      trade_name: vendor.trade_name || vendor.tradeName || '',
       vendor_type: vendor.vendor_type || 'Company',
       email: vendor.email || '',
       phone: vendor.phone || '',
       mobile: vendor.mobile || '',
       pan: vendor.pan || '',
-      gstin: vendor.gstin || '',
+      gstin: firstGstin || '',
+      gstRegistrations: getVendorGstRegistrations(vendor),
+      vendorBranches: Array.isArray(vendorBranches) ? vendorBranches : [],
       msme: parseMsmeValue(vendor.msme) === true,
       address_line1: vendor.address_line1 || '',
       address_line2: vendor.address_line2 || '',
@@ -486,9 +641,32 @@ const Vendors = () => {
       currency: vendor.currency || 'INR',
       contact_person: vendor.contact_person || '',
       website: vendor.website || '',
-      notes: vendor.notes || ''
+      notes: vendor.notes || '',
+      documents: normalizeVendorDocuments(vendor.documents),
+      tdsMapping: normalizeVendorTds(vendor.tdsMapping ?? vendor.tdsMappings),
+      tdsCertificates: [],
+      tdsDetailsEdited: false,
     });
     setDialogOpen(true);
+  };
+
+  const handleRequestVendorUnlock = async (vendor) => {
+    if (!canUpdateVendorPermission) {
+      toast.error('You need vendor edit access to request unlock');
+      return;
+    }
+    if (!guardAction('accounting.ready.unlockRequest')) return;
+    try {
+      const result = await requestAccountingUnlock({
+        id: vendor?.accountingReadyId || vendor?.accounting_ready_id || vendor?.readyItemId,
+        objectType: 'VENDOR',
+        objectId: vendor?.id,
+      }).unwrap();
+      toast.success(result?.message || 'Unlock request submitted');
+      await refetchVendors();
+    } catch (error) {
+      toast.error(getAccountingErrorMessage(error, 'Could not raise unlock request'));
+    }
   };
 
   const handleDelete = async (id) => {
@@ -537,6 +715,7 @@ const Vendors = () => {
     const normalizedStatus = formatWorkflowStatus(status);
     if (normalizedStatus === 'Approved') return 'bg-emerald-100 text-emerald-800 border-emerald-200';
     if (normalizedStatus === 'Rejected') return 'bg-red-100 text-red-800 border-red-200';
+    if (normalizedStatus === 'Saved') return 'bg-slate-100 text-slate-800 border-slate-200';
     if (normalizedStatus === 'Draft' || normalizedStatus === NEEDS_CORRECTION_STATUS) {
       return 'bg-amber-100 text-amber-900 border-amber-200';
     }
@@ -547,12 +726,15 @@ const Vendors = () => {
     setEditingVendor(null);
     setFormData({
       name: '',
+      trade_name: '',
       vendor_type: 'Company',
       email: '',
       phone: '',
       mobile: '',
       pan: '',
       gstin: '',
+      gstRegistrations: [],
+      vendorBranches: [],
       msme: false,
       address_line1: '',
       address_line2: '',
@@ -569,73 +751,211 @@ const Vendors = () => {
       currency: 'INR',
       contact_person: '',
       website: '',
-      notes: ''
+      notes: '',
+      documents: createEmptyVendorDocuments(),
+      tdsMapping: null,
+      tdsCertificates: [],
+      tdsDetailsEdited: false,
     });
   };
 
-  const filteredVendors = vendors.filter(vendor =>
-    vendor.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-  const filteredPendingVendorIds = new Set(
-    pendingApprovalVendors
-      .map((vendor) => (vendor?.id !== undefined && vendor?.id !== null ? String(vendor.id) : null))
-      .filter((id) => id !== undefined && id !== null),
+  const vendorStats = useMemo(() => {
+    const approved = vendors.filter((vendor) => formatWorkflowStatus(vendor.status) === 'Approved').length;
+    const pendingApproval = vendors.filter((vendor) => isPendingApprovalStatus(vendor.status)).length;
+    const saved = vendors.filter((vendor) => isSavedVendorStatus(vendor.status)).length;
+    const multiState = getVendorMultiStateCount(vendors);
+
+    return {
+      total: vendors.length,
+      approved,
+      pendingApproval,
+      saved,
+      multiState,
+    };
+  }, [vendors]);
+
+  const isEditingSavedVendor =
+    Boolean(editingVendor) && isSavedVendorStatus(editingVendor?.status);
+
+  const toggleVendorExpanded = (vendorId) => {
+    setExpandedVendorIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(vendorId)) {
+        next.delete(vendorId);
+      } else {
+        next.add(vendorId);
+      }
+      return next;
+    });
+  };
+
+  const closeViewVendorDialog = useCallback((open) => {
+    if (!open) {
+      setViewingVendor(null);
+      clearNotificationQueryParams(searchParams, setSearchParams);
+    }
+  }, [searchParams, setSearchParams]);
+
+  const filteredVendors = vendors;
+
+  const hasActiveFilters = Boolean(searchTerm.trim()) || typeFilter !== 'all' || statusFilter !== 'all';
+
+  const resetVendorFilters = () => {
+    setSearchTerm('');
+    setTypeFilter('all');
+    setStatusFilter('all');
+  };
+
+  const vendorTotal = Number(vendorsData?.total ?? vendors.length);
+  const vendorFilterSummary = `${filteredVendors.length} of ${vendorTotal} vendor${
+    vendorTotal === 1 ? '' : 's'
+  } shown`;
+
+  const isPendingApprovalVendor = (vendor) => isPendingApprovalStatus(vendor?.status);
+
+  const notificationSource = searchParams.get('source');
+  const notificationAction = searchParams.get('action');
+  const notificationVendorId = searchParams.get('vendorId');
+  const notificationFilter = searchParams.get('filter');
+  const notificationWeakEntity = searchParams.get('weakEntity') === '1';
+
+  useEffect(() => {
+    if (notificationSource === 'notification' && notificationFilter === 'pending-approval') {
+      setStatusFilter('pending-approval');
+    }
+  }, [notificationFilter, notificationSource]);
+
+  useEffect(() => {
+    if (
+      notificationSource !== 'notification' ||
+      notificationAction !== 'preview' ||
+      !notificationVendorId
+    ) {
+      return;
+    }
+
+    const notificationKey = `${notificationSource}:${notificationAction}:${notificationVendorId}`;
+    if (handledNotificationRef.current === notificationKey) return;
+    handledNotificationRef.current = notificationKey;
+
+    const loadedVendor = vendors.find(
+      (vendor) => String(vendor?.id ?? vendor?.vendorId) === String(notificationVendorId),
+    );
+
+    if (loadedVendor) {
+      setViewingVendor(loadedVendor);
+      return;
+    }
+
+    if (notificationWeakEntity) {
+      toast.warning('Could not open the exact item. Showing the related module instead.');
+      return;
+    }
+
+    getVendor(notificationVendorId)
+      .unwrap()
+      .then((vendor) => {
+        if (vendor?.id || vendor?.vendorId) {
+          setViewingVendor(vendor);
+          return;
+        }
+        toast.warning('Could not open the exact item. Showing the related module instead.');
+      })
+      .catch(() => {
+        toast.warning('Could not open the exact item. Showing the related module instead.');
+      });
+  }, [
+    getVendor,
+    notificationAction,
+    notificationSource,
+    notificationVendorId,
+    notificationWeakEntity,
+    vendors,
+  ]);
+
+  const vendorTypeOptions = useMemo(() => {
+    const options = new Map([
+      ['company', 'Company'],
+      ['individual', 'Individual'],
+    ]);
+    vendors.forEach((vendor) => {
+      const type = String(getVendorType(vendor)).trim();
+      if (type) options.set(type.toLowerCase(), type);
+    });
+    return Array.from(options.values());
+  }, [vendors]);
+
+  const vendorStatusOptions = useMemo(
+    () => {
+      const options = new Map();
+      vendors.forEach((vendor) => {
+        const status = formatWorkflowStatus(vendor.status) || 'Pending Approval';
+        if (status) options.set(getNormalizedVendorStatusKey(status), status);
+      });
+      return Array.from(options.values());
+    },
+    [vendors],
   );
   const canCreateVendor = canPerformAction('vendors.create');
   const canEditVendorPermission = canUpdateVendorPermission;
   const canDeleteVendor = canPerformAction('vendors.delete');
   const canApproveVendor = canPerformAction('vendors.approve');
-  const vendorsRefreshing = vendorsFetching || pendingApprovalsFetching;
+  const vendorsRefreshing = vendorsFetching;
 
   const handleRefreshVendors = async () => {
     try {
-      await Promise.all([refetchVendors(), refetchPendingApprovals()]);
+      await refetchVendors();
       toast.success('Vendors refreshed');
     } catch {
       toast.error('Failed to refresh vendors');
     }
   };
 
-  const isPendingApprovalVendor = (vendor) => {
-    const normalizedStatus = String(vendor?.status || '')
-      .trim()
-      .toLowerCase()
-      .replace(/[_-]+/g, ' ');
-    if (normalizedStatus === 'pending approval') return true;
-    const vendorId = vendor?.id !== undefined && vendor?.id !== null ? String(vendor.id) : '';
-    return vendorId ? filteredPendingVendorIds.has(vendorId) : false;
-  };
-
   const vendorsTableHeader = useMemo(
     () =>
       withIntegrationTableHeader(
         [
-          { key: 'vendor', title: 'Vendor' },
-          { key: 'createdAt', title: 'Created Date', cellClassName: 'text-xs text-muted-foreground whitespace-nowrap' },
-          { key: 'status', title: 'Status' },
-          { key: 'contact', title: 'Contact' },
-          { key: 'gstin', title: 'GSTIN' },
-          { key: 'actions', title: 'Actions', headerClassName: 'text-left' },
+          { key: 'vendor', title: 'Vendor', headerClassName: 'bg-muted text-foreground' },
+          { key: 'createdAt', title: 'Created Date', headerClassName: 'bg-muted text-foreground', cellClassName: 'text-xs text-muted-foreground whitespace-nowrap' },
+          { key: 'status', title: 'Status', headerClassName: 'bg-muted text-foreground' },
+          { key: 'contact', title: 'Contact', headerClassName: 'bg-muted text-foreground' },
+          { key: 'gstRegistrations', title: 'GSTINs', headerClassName: 'bg-muted text-foreground' },
+          { key: 'actions', title: 'Actions', headerClassName: 'bg-muted text-foreground text-left' },
         ],
         showIntegrationColumn,
+      ).map((column) =>
+        column.key === 'integration'
+          ? { ...column, headerClassName: 'bg-muted text-foreground' }
+          : column,
       ),
     [showIntegrationColumn],
   );
 
-  const renderVendorRow = (vendor, rowIndex, headers) => (
-    <TableRow
-      key={vendor.id ?? rowIndex}
-      className="border-b border-border hover:bg-muted/50 transition-colors"
-      data-testid={`vendor-row-${vendor.id}`}
-    >
-      {headers.map((header) => {
-        let value;
+  const renderVendorRow = (vendor, rowIndex, headers) => {
+    const vendorId = vendor.id ?? rowIndex;
+    const registrations = getVendorGstRegistrations(vendor);
+    const registrationStates = getVendorRegistrationStates(vendor);
+    const isExpanded = expandedVendorIds.has(vendorId);
+    const canExpand = registrations.length > 0;
 
-        switch (header.key) {
+    return (
+      <React.Fragment key={vendorId}>
+        <TableRow
+          className="border-b border-border hover:bg-muted/50 transition-colors"
+          data-testid={`vendor-row-${vendor?.id ?? 'unknown'}`}
+        >
+          {headers.map((header) => {
+            let value;
+
+            switch (header.key) {
           case 'vendor':
             value = (
               <div>
                 <div className="font-medium">{vendor.name}</div>
+                <div className="mt-1 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                  <span>{getVendorType(vendor)}</span>
+                  {vendor.pan && <span className="font-mono">{vendor.pan}</span>}
+                </div>
               </div>
             );
             break;
@@ -668,8 +988,31 @@ const Vendors = () => {
           case 'pan':
             value = vendor.pan || '-';
             break;
-          case 'gstin':
-            value = vendor.gstin || '-';
+          case 'gstRegistrations':
+            value = registrations.length > 0 ? (
+              <div className="space-y-1">
+                <button
+                  type="button"
+                  onClick={() => toggleVendorExpanded(vendorId)}
+                  className="inline-flex items-center gap-1.5 text-left"
+                  data-testid={`toggle-vendor-gst-${vendor?.id ?? 'unknown'}`}
+                >
+                  <VendorMultiGstBadge count={registrations.length} states={registrationStates} />
+                  {canExpand ? (
+                    isExpanded ? (
+                      <ChevronUp className="h-3.5 w-3.5 text-muted-foreground" />
+                    ) : (
+                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                    )
+                  ) : null}
+                </button>
+                {registrations.length > 1 && !isExpanded ? (
+                  <div className="text-xs text-muted-foreground">{registrationStates.join(' · ')}</div>
+                ) : null}
+              </div>
+            ) : (
+              <span className="text-sm text-muted-foreground">-</span>
+            );
             break;
           case 'integration':
             value = <IntegrationSourceBadge record={vendor} />;
@@ -692,7 +1035,7 @@ const Vendors = () => {
                   className="w-8 h-8 p-0 rounded-md"
                   onClick={() => setViewingVendor(vendor)}
                   title="View"
-                  data-testid={`view-vendor-${vendor.id}`}
+                  data-testid={`view-vendor-${vendor?.id ?? 'unknown'}`}
                 >
                   <Eye className="h-4 w-4" />
                 </Button>
@@ -704,7 +1047,7 @@ const Vendors = () => {
                       className="w-8 h-8 p-0 rounded-md"
                       onClick={() => openVendorApprovalDialog(vendor, NEEDS_CORRECTION_ACTION)}
                       title="Needs Correction"
-                      data-testid={`needs-correction-vendor-${vendor.id}`}
+                      data-testid={`needs-correction-vendor-${vendor?.id ?? 'unknown'}`}
                     >
                       <RotateCcw className="h-4 w-4 text-amber-600" />
                     </Button>
@@ -714,7 +1057,7 @@ const Vendors = () => {
                       className="w-8 h-8 p-0 rounded-md"
                       onClick={() => openVendorApprovalDialog(vendor, 'Rejected')}
                       title="Reject"
-                      data-testid={`reject-vendor-${vendor.id}`}
+                      data-testid={`reject-vendor-${vendor?.id ?? 'unknown'}`}
                     >
                       <X className="h-4 w-4 text-red-500" />
                     </Button>
@@ -724,13 +1067,15 @@ const Vendors = () => {
                       className="w-8 h-8 p-0 rounded-md"
                       onClick={() => openVendorApprovalDialog(vendor, 'Approved')}
                       title="Approve"
-                      data-testid={`approve-vendor-${vendor.id}`}
+                      data-testid={`approve-vendor-${vendor?.id ?? 'unknown'}`}
                     >
                       <Check className="h-4 w-4 text-emerald-700" />
                     </Button>
                   </>
                 )}
-                {(canEditVendor(vendor, vendorEditContext) || canDeleteVendor) && (
+                {(canEditVendor(vendor, vendorEditContext) ||
+                  canDeleteVendor ||
+                  (isAccountingReadyLocked(vendor) && canUpdateVendorPermission)) && (
                   <>
                     {canEditVendor(vendor, vendorEditContext) && (
                       <Button
@@ -743,18 +1088,33 @@ const Vendors = () => {
                             ? 'Edit vendor (creator)'
                             : 'Edit vendor'
                         }
-                        data-testid={`edit-vendor-${vendor.id}`}
+                        data-testid={`edit-vendor-${vendor?.id ?? 'unknown'}`}
                       >
                         <Pencil className="h-4 w-4" />
                       </Button>
                     )}
+                    {isAccountingReadyLocked(vendor) &&
+                      canUpdateVendorPermission &&
+                      String(getAccountingUnlockRequestStatus(vendor) || '').toUpperCase() !== 'PENDING' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-8 h-8 p-0 rounded-md"
+                          onClick={() => handleRequestVendorUnlock(vendor)}
+                          disabled={requestVendorUnlockLoading}
+                          title="Request accounting unlock"
+                          data-testid={`request-unlock-vendor-${vendor?.id ?? 'unknown'}`}
+                        >
+                          <Unlock className="h-4 w-4 text-amber-700" />
+                        </Button>
+                      )}
                     {canDeleteVendor && (
                       <Button
                         variant="ghost"
                         size="sm"
                         className="w-8 h-8 p-0 rounded-md"
                         onClick={() => handleDelete(vendor.id)}
-                        data-testid={`delete-vendor-${vendor.id}`}
+                        data-testid={`delete-vendor-${vendor?.id ?? 'unknown'}`}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
@@ -768,31 +1128,39 @@ const Vendors = () => {
             value = '-';
         }
 
-        const className = [
-          header.cellClassName,
-          header.key === 'pan' || header.key === 'gstin' ? "  text-sm" : '',
-          header.key === 'actions' ? 'text-left' : '',
-        ]
-          .filter(Boolean)
-          .join(' ');
+            const className = [
+              'border border-border',
+              header.cellClassName,
+              header.key === 'pan' ? 'text-sm' : '',
+              header.key === 'actions' ? 'text-left' : '',
+            ]
+              .filter(Boolean)
+              .join(' ');
 
-        return (
-          <TableCell key={header.key} className={className}>
-            {value}
-          </TableCell>
-        );
-      })}
-    </TableRow>
-  );
+            return (
+              <TableCell key={header.key} className={className}>
+                {value}
+              </TableCell>
+            );
+          })}
+        </TableRow>
+        {isExpanded && canExpand ? (
+          <VendorTableGstExpandedRow vendor={vendor} colSpan={headers.length} />
+        ) : null}
+      </React.Fragment>
+    );
+  };
 
   return (
-    <div data-testid="vendors-page">
-      <div className="flex justify-between items-center mb-8">
+    <div className="flex min-h-0 flex-1 flex-col gap-4" data-testid="vendors-page">
+      <div className="shrink-0 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-4xl md:text-5xl font-bold font-['Manrope'] text-primary mb-2" data-testid="vendors-title">
+          <h1 className="text-3xl font-bold font-['Manrope'] text-primary md:text-4xl" data-testid="vendors-title">
             Vendors
           </h1>
-          <p className="text-muted-foreground">Manage your vendor relationships</p>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            Manage vendor legal entities and their GST registrations
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <RefreshButton
@@ -857,48 +1225,157 @@ const Vendors = () => {
         formData={formData}
         setFormData={setFormData}
         onSubmit={handleSubmit}
-        title={editingVendor ? 'Edit Vendor' : 'Create Vendor'}
-        description="Add contact details and payment info of your vendor in OptiFii"
-        submitLabel={editingVendor ? 'Update Vendor' : 'Create Vendor'}
+        title={
+          isEditingSavedVendor
+            ? 'Complete Vendor'
+            : editingVendor
+              ? 'Edit Vendor'
+              : 'Create Vendor'
+        }
+        description={
+          isEditingSavedVendor
+            ? 'Review imported vendor details, complete GSTIN and documents, then submit for approval.'
+            : 'Add contact details and payment info of your vendor in OptiFii'
+        }
+        submitLabel={
+          isEditingSavedVendor
+            ? 'Submit for Approval'
+            : editingVendor
+              ? 'Update Vendor'
+              : 'Create Vendor'
+        }
+        submitting={createVendorLoading || updateVendorLoading}
         activeVendorFields={activeVendorFields}
         vendorFieldConfiguration={vendorFieldConfiguration}
         testId="vendor-dialog"
       />
 
-      <div className="mb-6">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search and filter"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10"
-            data-testid="vendor-search-input"
-          />
-        </div>
+      <div className="shrink-0 grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+        <VendorMetricCard
+          label="Total Vendors"
+          value={vendorStats.total}
+          icon={Building2}
+        />
+        <VendorMetricCard
+          label="Approved"
+          value={vendorStats.approved}
+          icon={CheckCircle2}
+          tone="success"
+        />
+        <VendorMetricCard
+          label="Pending Approval"
+          value={vendorStats.pendingApproval}
+          icon={Clock3}
+          tone="warning"
+        />
+        <VendorMetricCard
+          label="Multi-State"
+          value={vendorStats.multiState}
+          icon={MapIcon}
+          tone="neutral"
+        />
       </div>
 
-      <div className="bg-card border border-border rounded-lg shadow-sm overflow-hidden">
-        <AppDataTable
-          tableHeader={vendorsTableHeader}
-          tableData={filteredVendors}
-          renderRow={renderVendorRow}
-          emptyMessage="No vendors found. Create your first vendor to get started!"
-          emptyTestId="no-vendors"
-          tableClassName="w-full"
-          striped={false}
-        />
+      <div className="shrink-0 rounded-md border border-border bg-card shadow-none">
+        <CardContent className="p-3">
+          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search vendors by name, PAN, GSTIN, state, email, or phone"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="h-9 pl-10"
+                data-testid="vendor-search-input"
+              />
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2 lg:w-[360px]">
+              <Select value={typeFilter} onValueChange={setTypeFilter}>
+                <SelectTrigger className="h-9" data-testid="vendor-type-filter">
+                  <SelectValue placeholder="Vendor type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  {vendorTypeOptions.map((type) => (
+                    <SelectItem key={type} value={type.toLowerCase()}>
+                      {type}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="h-9" data-testid="vendor-status-filter">
+                  <SelectValue placeholder="Status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Statuses</SelectItem>
+                  {vendorStatusOptions.map((status) => (
+                    <SelectItem key={status} value={getNormalizedVendorStatusKey(status)}>
+                      {status}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {hasActiveFilters && (
+            <div className="mt-2 flex justify-end">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2 text-xs"
+                onClick={resetVendorFilters}
+              >
+                Clear filters
+              </Button>
+            </div>
+          )}
+        </CardContent>
+      </div>
+
+      <div
+        className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm"
+        data-testid="vendors-table"
+      >
+        <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-thin-muted">
+          <AppDataTable
+            tableHeader={vendorsTableHeader}
+            tableData={filteredVendors}
+            renderRow={renderVendorRow}
+            isLoading={vendorsFetching}
+            loadingRowCount={8}
+            emptyMessage="No vendors found. Create your first vendor to get started!"
+            emptyTestId="no-vendors"
+            tableClassName="min-w-[1000px]"
+            tableContainerClassName="overflow-visible"
+            headClassName="border-b border-border bg-muted shadow-sm"
+            stickyHeader
+            striped={false}
+            bordered
+          />
+        </div>
+        <div className="mt-auto flex shrink-0 border-t border-border p-4">
+          <p className="text-sm text-muted-foreground" data-testid="vendors-table-summary">
+            {!hasActiveFilters && filteredVendors.length === vendorTotal
+              ? `Showing ${filteredVendors.length.toLocaleString('en-IN')} vendor${filteredVendors.length === 1 ? '' : 's'}`
+              : `${vendorFilterSummary}`}
+          </p>
+        </div>
       </div>
 
       <DeleteVendorDialog
         open={Boolean(vendorDeleteTarget)}
-        onOpenChange={(open) => !open && setVendorDeleteTarget(null)}
+        onOpenChange={(open) => {
+          if (!open && !deleteVendorLoading) setVendorDeleteTarget(null);
+        }}
         onConfirm={confirmDeleteVendor}
+        deleting={deleteVendorLoading}
       />
 
       <ViewVendorDialog
         open={Boolean(viewingVendor)}
-        onOpenChange={(open) => !open && setViewingVendor(null)}
+        onOpenChange={closeViewVendorDialog}
         vendor={viewingVendor}
         canApprove={canApproveVendor}
         isPendingApproval={viewingVendor ? isPendingApprovalVendor(viewingVendor) : false}
@@ -910,11 +1387,14 @@ const Vendors = () => {
 
       <VendorApprovalDialog
         open={Boolean(approvalTarget)}
-        onOpenChange={(open) => !open && setApprovalTarget(null)}
+        onOpenChange={(open) => {
+          if (!open && !approveVendorLoading) setApprovalTarget(null);
+        }}
         approvalTarget={approvalTarget}
         approvalComments={approvalComments}
         onCommentsChange={setApprovalComments}
         onConfirm={confirmVendorApprovalAction}
+        confirming={approveVendorLoading}
       />
     </div>
   );

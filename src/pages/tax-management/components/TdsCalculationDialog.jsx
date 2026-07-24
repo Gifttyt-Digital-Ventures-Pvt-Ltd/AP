@@ -9,6 +9,21 @@ import MeteredActionCostHint from '../../../components/credits/MeteredActionCost
 import { CREDIT_ACTION_CODES } from '../../../constants/creditActions';
 
 // Dialog to calculate TDS using selected section and invoice amount.
+const getInvoiceNumber = (invoice = {}) =>
+  invoice.invoiceNumber ?? invoice.invoice_number ?? invoice.id ?? 'Invoice';
+
+const getInvoiceVendorName = (invoice = {}) =>
+  invoice.vendorName ?? invoice.vendor_name ?? invoice.vendor ?? 'Unknown vendor';
+
+const getInvoiceAmount = (invoice = {}) =>
+  Number(invoice.amount ?? invoice.totalAmount ?? invoice.total_amount ?? 0) || 0;
+
+const getTdsSectionCode = (section = {}) =>
+  section.section_code ?? section.sectionCode ?? section.code ?? section.id ?? '';
+
+const getTdsSectionName = (section = {}) =>
+  section.name ?? section.description ?? section.section_name ?? '';
+
 const TdsCalculationDialog = ({
   open,
   setOpen,
@@ -34,7 +49,7 @@ const TdsCalculationDialog = ({
             value={tdsForm.invoice_id}
             onValueChange={(v) => {
               const inv = invoices.find((i) => i.id === v);
-              setTdsForm((prev) => ({ ...prev, invoice_id: v, base_amount: inv?.amount || 0 }));
+              setTdsForm((prev) => ({ ...prev, invoice_id: v, base_amount: getInvoiceAmount(inv) }));
             }}
           >
             <SelectTrigger data-testid="tds-invoice-select">
@@ -43,7 +58,7 @@ const TdsCalculationDialog = ({
             <SelectContent>
               {invoices.map((inv) => (
                 <SelectItem key={inv.id} value={inv.id}>
-                  {inv.invoice_number} - {inv.vendor_name} ({formatCurrency(inv.amount)})
+                  {getInvoiceNumber(inv)} - {getInvoiceVendorName(inv)} ({formatCurrency(getInvoiceAmount(inv))})
                 </SelectItem>
               ))}
             </SelectContent>
@@ -58,8 +73,8 @@ const TdsCalculationDialog = ({
             </SelectTrigger>
             <SelectContent>
               {tdsSections.map((section) => (
-                <SelectItem key={section.id} value={section.section_code}>
-                  {section.section_code} - {section.description}
+                <SelectItem key={section.id ?? getTdsSectionCode(section)} value={getTdsSectionCode(section)}>
+                  {getTdsSectionCode(section)} - {getTdsSectionName(section)}
                 </SelectItem>
               ))}
             </SelectContent>

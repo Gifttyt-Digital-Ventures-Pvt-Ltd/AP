@@ -19,6 +19,8 @@ import {
   useGetIntegrationProvidersQuery,
   useGetZohoConnectionStatusQuery,
   useGetZohoOrganizationsQuery,
+  useLazyGetSyncDataCategoriesQuery,
+  useTriggerIntegrationSyncMutation,
 } from "../../../Services/apis/integrationsApi";
 import { useActionGuard } from "../../../hooks/useActionGuard";
 import { Badge } from "../../../components/ui/badge";
@@ -33,13 +35,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../components/ui/select";
-import { Switch } from "../../../components/ui/switch";
 import {
   DATA_CENTERS,
   FALLBACK_ZOHO_PROVIDER,
   OBJECT_LABELS,
   ZOHO_OAUTH_SESSION_KEY,
-  isZohoByoFeatureEnabled,
 } from "../constants";
 import {
   getConnectionId,
@@ -57,6 +57,8 @@ import {
   toArray,
   titleize,
 } from "../utils";
+import { isGranularSyncSupported } from "../syncDataUtils";
+import ManageSyncedData from "./ManageSyncedData";
 import { PageShell, StatusBadge } from "./shared";
 
 const getZohoOrganizationId = (organization = {}) =>
@@ -65,6 +67,13 @@ const getZohoOrganizationId = (organization = {}) =>
   organization.organizationId ||
   organization.organization_id ||
   organization.id;
+
+const getCreateConnectionResponseData = (response = {}) => response.data || response;
+
+const getAuthorizationUrl = (response = {}) => {
+  const data = getCreateConnectionResponseData(response);
+  return data.authorizationUrl || data.authorization_url || data.authUrl || data.auth_url || "";
+};
 
 const ConnectionWizard = () => {
   const { provider = "ZOHO_BOOKS" } = useParams();
@@ -75,6 +84,8 @@ const ConnectionWizard = () => {
   const { data: connectionsResponse } = useGetIntegrationConnectionsQuery();
   const [createConnection, { isLoading: creating }] = useCreateZohoConnectionMutation();
   const [bindOrganization, { isLoading: bindingOrg }] = useBindZohoOrganizationMutation();
+  const [triggerSync] = useTriggerIntegrationSyncMutation();
+  const [checkSyncDataCategories] = useLazyGetSyncDataCategoriesQuery();
   const providers = useMemo(() => normalizeProviders(providersResponse), [providersResponse]);
   const providerManifest =
     providers.find((item) => getProviderKey(item) === provider) || FALLBACK_ZOHO_PROVIDER;
@@ -85,15 +96,13 @@ const ConnectionWizard = () => {
   const oauthErrorDescription = searchParams.get("error_description") || searchParams.get("message") || "";
 
   const [dataCenter, setDataCenter] = useState("in");
-  const [useByoCredentials, setUseByoCredentials] = useState(false);
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [connectionId, setConnectionId] = useState("");
   const [selectedOrg, setSelectedOrg] = useState("");
   const [enabledObjects, setEnabledObjects] = useState(() => new Set(providerManifest.syncOrder || []));
-  const byoEnabled =
-    isZohoByoFeatureEnabled() && providerManifest.auth?.supportsByoCredentials !== false;
-  const model = useByoCredentials ? "B" : "A";
+  const [showGranularSyncStep, setShowGranularSyncStep] = useState(false);
+  const model = "B";
 
   const resumedConnectionId = useMemo(() => {
     if (queryConnectionId) return queryConnectionId;
@@ -136,7 +145,7 @@ const ConnectionWizard = () => {
   useEffect(() => {
     setPollOAuthStatus(shouldPollOAuthStatus(connectionStatus));
   }, [connectionStatus]);
-  const canLoadOrganizations = connectionId && !["ERROR", "DISCONNECTED"].includes(connectionStatus);
+  const canLoadOrganizations = Boolean(connectionId && connectionStatus === "CONNECTED");
   const { data: organizationsResponse, isFetching: orgsFetching } = useGetZohoOrganizationsQuery(connectionId, {
     skip: !canLoadOrganizations,
   });
@@ -157,8 +166,8 @@ const ConnectionWizard = () => {
 
   const handleStartConnection = async () => {
     if (!guardAction("integrations.connect")) return;
-    if (useByoCredentials && (!clientId.trim() || !clientSecret.trim())) {
-      toast.error("Client ID and Client Secret are required for BYO credentials");
+    if (!clientId.trim() || !clientSecret.trim()) {
+      toast.error("Client ID and Client Secret are required to connect Zoho");
       return;
     }
     if (enabledObjects.size === 0) {
@@ -171,12 +180,13 @@ const ConnectionWizard = () => {
         model,
         dataCenter,
         enabledObjects: Array.from(enabledObjects),
-        ...(useByoCredentials
-          ? { clientId: clientId.trim(), clientSecret: clientSecret.trim() }
-          : {}),
+        clientId: clientId.trim(),
+        clientSecret: clientSecret.trim(),
       };
       const response = await createConnection(payload).unwrap();
-      const nextConnectionId = response.connectionId || response.connection_id || response.id;
+      const responseData = getCreateConnectionResponseData(response);
+      const nextConnectionId =
+        responseData.connectionId || responseData.connection_id || responseData.id;
       if (!nextConnectionId) {
         toast.error("Connection created but no connection ID was returned");
         return;
@@ -186,8 +196,9 @@ const ConnectionWizard = () => {
       const nextParams = new URLSearchParams(searchParams);
       nextParams.set("connectionId", nextConnectionId);
       setSearchParams(nextParams, { replace: true });
-      if (response.authUrl) {
-        window.location.assign(response.authUrl);
+      const authorizationUrl = getAuthorizationUrl(responseData);
+      if (authorizationUrl) {
+        window.location.assign(authorizationUrl);
         return;
       }
       toast.success("Connection created. Waiting for authorization status.");
@@ -201,7 +212,24 @@ const ConnectionWizard = () => {
     try {
       await bindOrganization({ connectionId, organizationId: selectedOrg }).unwrap();
       sessionStorage.removeItem(ZOHO_OAUTH_SESSION_KEY);
-      toast.success("Zoho organization selected");
+
+      try {
+        const summary = await checkSyncDataCategories({ provider, connectionId }).unwrap();
+        if (isGranularSyncSupported(summary)) {
+          setShowGranularSyncStep(true);
+          toast.success("Zoho organization selected. Select ERP data to import.");
+          return;
+        }
+      } catch {
+        // Granular sync is optional during rollout. Keep the existing broad initial sync fallback.
+      }
+
+      try {
+        await triggerSync({ connectionId }).unwrap();
+      } catch {
+        // Initial sync can be retried from the dashboard if the backend queue is unavailable.
+      }
+      toast.success("Zoho organization selected. Initial sync started.");
       navigate(`/integrations/${connectionId}`);
     } catch (error) {
       toast.error(getErrorText(error, "Failed to bind organization"));
@@ -217,10 +245,35 @@ const ConnectionWizard = () => {
     });
   };
 
+  if (showGranularSyncStep) {
+    return (
+      <PageShell
+        title="Import ERP Data"
+        description="Select ERP master data to import. Already imported items stay locked and cannot be resent."
+        backAction={
+          <Button asChild variant="outline" size="sm">
+            <Link to="/integrations">
+              <ArrowLeft className="mr-2 h-4 w-4" />
+              Back
+            </Link>
+          </Button>
+        }
+      >
+        <ManageSyncedData
+          mode="wizard"
+          connectionId={connectionId}
+          provider={provider}
+          embedded
+          onDone={() => navigate(`/integrations/${connectionId}`)}
+        />
+      </PageShell>
+    );
+  }
+
   return (
     <PageShell
       title={`Connect ${getProviderName(providerManifest)}`}
-      description="Model A uses Optifii's shared OAuth app. Model B lets enterprise clients bring their own Zoho app credentials."
+      description="Connect Zoho Books using your own Zoho app credentials. Tokens and secrets remain server-side."
       backAction={
         <Button asChild variant="outline" size="sm">
           <Link to="/integrations">
@@ -265,34 +318,23 @@ const ConnectionWizard = () => {
             <CardHeader>
               <CardTitle className="flex items-center gap-2 text-base">
                 <KeyRound className="h-4 w-4" />
-                OAuth model
+                Zoho app credentials
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between rounded-md border p-3">
-                <div>
-                  <p className="font-medium">Use my own Zoho app</p>
-                  <p className="text-sm text-muted-foreground">Advanced Model B path with client-owned OAuth credentials.</p>
-                </div>
-                <Switch
-                  checked={useByoCredentials}
-                  disabled={!byoEnabled}
-                  onCheckedChange={setUseByoCredentials}
-                />
-              </div>
-              {!byoEnabled && (
-                <p className="text-xs text-muted-foreground">
-                  BYO credentials are disabled for this tenant. Contact your administrator to enable Model B.
-                </p>
-              )}
-              {useByoCredentials ? (
+              <div className="space-y-4">
+                <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+                  <li>Create a Server-based Application in the Zoho API Console.</li>
+                  <li>Add the authorized redirect URI shown below.</li>
+                  <li>Copy the generated Client ID and Client Secret into Optifii.</li>
+                </ol>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="space-y-2">
-                    <Label>Client ID</Label>
+                    <Label>Client ID *</Label>
                     <Input value={clientId} onChange={(event) => setClientId(event.target.value)} />
                   </div>
                   <div className="space-y-2">
-                    <Label>Client Secret</Label>
+                    <Label>Client Secret *</Label>
                     <Input
                       type="password"
                       value={clientSecret}
@@ -312,11 +354,7 @@ const ConnectionWizard = () => {
                     </p>
                   </div>
                 </div>
-              ) : (
-                <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
-                  Model A uses Optifii&apos;s server-side OAuth app. No client secret is collected or exposed in the browser.
-                </div>
-              )}
+              </div>
             </CardContent>
           </Card>
 
@@ -355,8 +393,8 @@ const ConnectionWizard = () => {
             <CardContent className="space-y-4">
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Model</span>
-                  <Badge variant="outline">Model {model}</Badge>
+                  <span className="text-muted-foreground">Connection type</span>
+                  <Badge variant="outline">Client-owned app</Badge>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Data center</span>
@@ -393,7 +431,20 @@ const ConnectionWizard = () => {
               <CardTitle className="text-base">Organization</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              {orgsFetching ? (
+              {!connectionId ? (
+                <p className="text-sm text-muted-foreground">
+                  Complete Zoho authorization to load organizations for this connection.
+                </p>
+              ) : shouldPollOAuthStatus(connectionStatus) ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Waiting for Zoho authorization to complete.
+                </div>
+              ) : connectionStatus !== "CONNECTED" ? (
+                <p className="text-sm text-muted-foreground">
+                  Organizations are available after the connection reaches Connected status.
+                </p>
+              ) : orgsFetching ? (
                 <div className="flex items-center gap-2 text-sm text-muted-foreground">
                   <Loader2 className="h-4 w-4 animate-spin" />
                   Loading organizations
@@ -424,9 +475,7 @@ const ConnectionWizard = () => {
                 </>
               ) : (
                 <p className="text-sm text-muted-foreground">
-                  {connectionId
-                    ? "Organizations appear here after Zoho authorization succeeds."
-                    : "Start authorization to load Zoho organizations."}
+                  No Zoho organizations were returned for this account. Verify the connected Zoho user has access to at least one Books organization.
                 </p>
               )}
             </CardContent>

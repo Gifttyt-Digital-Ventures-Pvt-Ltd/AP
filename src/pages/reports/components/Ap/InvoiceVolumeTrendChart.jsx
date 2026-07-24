@@ -21,7 +21,7 @@ const InvoiceVolumeTrendChart = ({ volumeTrend = [], formatFullCurrency }) => (
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={volumeTrend}>
           <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-          <XAxis dataKey="date" tick={{ fontSize: 10 }} angle={-45} textAnchor="end" height={60} />
+          <XAxis dataKey="date" tick={{ fontSize: 10 }} angle={0} textAnchor="middle" interval={0} height={60} />
           <YAxis tick={{ fontSize: 12 }} />
           <Tooltip content={<ReportsTooltip formatFullCurrency={formatFullCurrency} />} />
           <Line type="monotone" dataKey="count" stroke="#6366f1" strokeWidth={2} dot={{ r: 3 }} name="Invoices" />

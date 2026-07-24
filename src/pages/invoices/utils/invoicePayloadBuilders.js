@@ -1,7 +1,8 @@
 import { format } from "date-fns";
 import { buildInvoiceApiPayload } from "../../../Services/utils/payloadMappers";
 import { DEFAULT_CURRENCY, normalizeCurrencyCode } from "../../../utils/currency";
-import { TAX_RATES } from "../constants";
+import { TAX_RATES, isGmailInvoiceSource, normalizeInvoiceSource } from "../constants";
+import { DOCUMENT_TYPE } from "../constants/proformaInvoice";
 import {
   calculateInvoiceTotals,
   createDefaultLineItem,
@@ -10,13 +11,20 @@ import {
   isInrInvoiceCurrency,
   LINE_ITEM_LEVEL,
   mapExtractedLineItemToForm,
+  normalizeLineItemDiscountTypeForForm,
   resolveLineItemSubtotal,
 } from "./invoiceTax";
 import { parseNumericInput } from "./numericInput";
-import { parseTdsRate } from "./tds";
+import { resolveTdsRate } from "./tds";
+import { normalizeDueDateForInvoice, resolveVendorIsMsme } from "./msmePaymentDue";
 
-export const computeTdsAmount = (lineItems = [], tdsValue = "", calculateLineItemSubtotal) => {
-  const tdsRate = parseTdsRate(tdsValue);
+export const computeTdsAmount = (
+  lineItems = [],
+  tdsValue = "",
+  calculateLineItemSubtotal,
+  tdsRateOverride = null,
+) => {
+  const tdsRate = resolveTdsRate(tdsValue, tdsRateOverride);
   if (!tdsRate) return null;
   const subTotal = (lineItems || []).reduce(
     (sum, item) => sum + calculateLineItemSubtotal(item),
@@ -75,7 +83,16 @@ export const calculateInvoiceDataTotals = (
 
 export const mapBulkLineItemToEditForm = (line = {}, currency = DEFAULT_CURRENCY) => ({
   description: line.description || "",
-  ledger: line.ledger || "Cloud Services",
+  ledger: line.ledger || line.ledgerName || line.ledger_name || "",
+  ledgerId: line.ledgerId || line.ledger_id || "",
+  accountGroupId:
+    line.accountGroupId || line.account_group_id || line.groupId || line.group_id || "",
+  accountGroupName:
+    line.accountGroupName || line.account_group_name || line.groupName || line.group_name || "",
+  groupId: line.groupId || line.group_id || line.accountGroupId || line.account_group_id || "",
+  groupName:
+    line.groupName || line.group_name || line.accountGroupName || line.account_group_name || "",
+  expenseType: line.expenseType || line.expense_type || "",
   quantity: Number(line.quantity || 1),
   unitRate: Number(line.unitRate ?? line.unitPrice ?? 0),
   amount: Number(
@@ -87,12 +104,15 @@ export const mapBulkLineItemToEditForm = (line = {}, currency = DEFAULT_CURRENCY
       line.amount ??
       Number(line.quantity || 1) * Number(line.unitRate ?? line.unitPrice ?? 0),
   ),
-  hsnSac: line.hsnSac || "",
+  hsnSac: line.hsnSac || line.hsn_sac || "",
   tax: line.tax || (isInrInvoiceCurrency(currency) ? DEFAULT_INR_TAX : ""),
   taxName: line.taxName || "",
   taxRate: line.taxRate ?? "",
   discount: line.discount || 0,
-  discountType: line.discountType || "%",
+  discountType: normalizeLineItemDiscountTypeForForm(
+    line.discountType ?? line.discount_type ?? "%",
+    currency,
+  ),
   eligibleForItc: line.eligibleForItc ?? true,
 });
 
@@ -102,11 +122,21 @@ export const mapBulkLineItemToPayload = (line = {}, currency = DEFAULT_CURRENCY)
   unitRate: parseNumericInput(line.unitRate, 0),
   unitPrice: parseNumericInput(line.unitRate, 0),
   amount: parseNumericInput(line.amount ?? line.lineTotal, 0),
-  hsnSac: line.hsnSac || "",
+  hsnSac: line.hsnSac || line.hsn_sac || "",
   tax: line.tax || (isInrInvoiceCurrency(currency) ? DEFAULT_INR_TAX : ""),
   taxName: line.taxName || "",
   taxRate: line.taxRate ?? "",
-  ledger: line.ledger || "Cloud Services",
+  ledger: line.ledger || line.ledgerName || line.ledger_name || "",
+  ledgerName: line.ledger || line.ledgerName || line.ledger_name || "",
+  ledgerId: line.ledgerId || line.ledger_id || "",
+  accountGroupId:
+    line.accountGroupId || line.account_group_id || line.groupId || line.group_id || "",
+  accountGroupName:
+    line.accountGroupName || line.account_group_name || line.groupName || line.group_name || "",
+  groupId: line.groupId || line.group_id || line.accountGroupId || line.account_group_id || "",
+  groupName:
+    line.groupName || line.group_name || line.accountGroupName || line.account_group_name || "",
+  expenseType: line.expenseType || line.expense_type || "",
   discount: parseNumericInput(line.discount, 0),
   discountType: line.discountType || "%",
   eligibleForItc: line.eligibleForItc ?? true,
@@ -138,6 +168,14 @@ export const initializeInvoiceFormData = (
   { findVendorByName, isCategoryFeatureEnabled },
 ) => {
   const matchedVendor = extractedData?.vendorName ? findVendorByName(extractedData.vendorName) : null;
+  const vendorIsMsme = resolveVendorIsMsme({}, matchedVendor);
+  const invoiceDate = extractedData?.invoiceDate || format(new Date(), "yyyy-MM-dd");
+  const extractedDueDate = extractedData?.dueDate || "";
+  const dueDate = normalizeDueDateForInvoice({
+    invoiceDate,
+    dueDate: extractedDueDate,
+    vendorIsMsme,
+  });
   const notesText = Array.isArray(extractedData?.notes) ? extractedData.notes.join("\n") : "";
   const invoiceCurrency = normalizeCurrencyCode(extractedData?.currency) || DEFAULT_CURRENCY;
   const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
@@ -160,10 +198,34 @@ export const initializeInvoiceFormData = (
     vendorGstin: extractedData?.vendorGstin || "",
     vendorAddress: vendorAddress,
     invoiceNumber: extractedData?.invoiceNumber || "",
-    invoiceDate: extractedData?.invoiceDate || format(new Date(), "yyyy-MM-dd"),
-    dueDate: extractedData?.dueDate || "",
+    invoiceDate,
+    dueDate,
     billingAddress: billingAddress,
     shippingAddress: extractedData?.shippingAddress || extractedData?.shippingAddress || "",
+    billingGstin:
+      extractedData?.billingGstin ||
+      extractedData?.billing_gstin ||
+      "",
+    branchName:
+      extractedData?.branchName ||
+      extractedData?.branch_name ||
+      "",
+    branchCode:
+      extractedData?.branchCode ||
+      extractedData?.branch_code ||
+      "",
+    vendorBranchName:
+      extractedData?.vendorBranchName ||
+      extractedData?.vendor_branch_name ||
+      "",
+    vendorBranchCode:
+      extractedData?.vendorBranchCode ||
+      extractedData?.vendor_branch_code ||
+      "",
+    vendorBranchGstin:
+      extractedData?.vendorBranchGstin ||
+      extractedData?.vendor_branch_gstin ||
+      "",
     gstTreatment: extractedData?.gstTreatment || extractedData?.gstTreatment || defaultGstTreatment,
     gstin:
       extractedData?.vendorGstin ||
@@ -219,17 +281,35 @@ export const initializeInvoiceFormData = (
       extractedData?.invoiceTaxRate ??
       extractedData?.invoice_tax_rate ??
       "",
-    source: extractedData?.source || "Upload",
+    source: "Upload",
     sourceEmail: "",
+    voucherType:
+      extractedData?.voucherType ||
+      extractedData?.voucher_type ||
+      extractedData?.accountingVoucherType ||
+      extractedData?.accounting_voucher_type ||
+      "",
     lineItemsExpanded: true,
     lineItems: extractedData?.lineItems?.length > 0
       ? extractedData.lineItems.map((item) =>
-          mapExtractedLineItemToForm(item, { useInrTax }),
+          mapExtractedLineItemToForm(item, {
+            useInrTax,
+            currency: invoiceCurrency,
+          }),
         )
       : [createDefaultLineItem(invoiceCurrency)],
     description: extractedData?.description || notesText || "",
+    tdsNarration:
+      extractedData?.tdsNarration ||
+      extractedData?.tds_narration ||
+      extractedData?.narration ||
+      "",
     tds: "",
-    amount: extractedData?.amount || 0,
+    amount:
+      extractedData?.totalAmount ??
+      extractedData?.total_amount ??
+      extractedData?.invoiceTotal ??
+      0,
     currency: normalizeCurrencyCode(extractedData?.currency) || DEFAULT_CURRENCY,
     roundOff:
       extractedData?.roundOff ??
@@ -246,7 +326,10 @@ export const initializeInvoiceFormData = (
       extractedData?.invoiceTaxName ?? extractedData?.invoice_tax_name,
     scannedTaxRate:
       extractedData?.invoiceTaxRate ?? extractedData?.invoice_tax_rate,
-    scannedTotal: extractedData?.invoiceTotal,
+    scannedTotal:
+      extractedData?.totalAmount ??
+      extractedData?.total_amount ??
+      extractedData?.invoiceTotal,
     fileId: extractedData?.fileId || null,
     fileHash: extractedData?.fileHash || null,
     originalFileName: extractedData?.originalFileName || null,
@@ -275,6 +358,17 @@ export const initializeInvoiceFormData = (
       extractedData?.referenceCode ||
       extractedData?.reference_code ||
       "",
+    matchingPurchaseOrderId: "",
+    matchingGrnId: "",
+    matchingId: "",
+    existingMatchingPurchaseOrderId: "",
+    existingMatchingGrnId: "",
+    matchingPoNumber: "",
+    matchingGrnNumber: "",
+    matchingStatus: "",
+    documentType: extractedData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE,
+    linkedProformaInvoiceId: extractedData?.linkedProformaInvoiceId ?? "",
+    linkedProformaInvoiceNumber: extractedData?.linkedProformaInvoiceNumber ?? "",
   };
 };
 
@@ -330,8 +424,10 @@ export const buildToCreateInvoicePayload = (
         invoiceData.originalFileName ||
         invoiceData.originalFileName ||
         null,
-      source: invoiceData.source || "Upload",
-      sourceEmail: invoiceData.source === "Email" ? invoiceData.sourceEmail : null,
+      source: normalizeInvoiceSource(invoiceData.source),
+      sourceEmail: isGmailInvoiceSource(invoiceData.source)
+        ? invoiceData.sourceEmail || null
+        : null,
       ...(isCampaignFeatureEnabled
         ? {
             campaignId: invoiceData.campaignId || "",
@@ -345,7 +441,12 @@ export const buildToCreateInvoicePayload = (
       totals,
       tdsAmount:
         options.tdsAmount ??
-        computeTdsAmount(lineItems, invoiceData.tds, calculateLineItemSubtotal),
+        computeTdsAmount(
+          lineItems,
+          invoiceData.tds,
+          calculateLineItemSubtotal,
+          invoiceData.tdsRate,
+        ),
       categoryEnabled: isCategoryFeatureEnabled,
       campaignEnabled: isCampaignFeatureEnabled,
     },

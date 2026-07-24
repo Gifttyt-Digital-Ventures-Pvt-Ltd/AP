@@ -3,6 +3,7 @@ import { isInrInvoiceCurrency } from "./invoiceTax";
 
 export const createEmptyVendorRequestForm = () => ({
   name: "",
+  trade_name: "",
   vendor_type: "Company",
   email: "",
   phone: "",
@@ -33,6 +34,7 @@ export const buildVendorRequestForm = (source = {}) => {
   return {
     ...createEmptyVendorRequestForm(),
     name: source.vendorName || source.name || "",
+    trade_name: source.tradeName || source.trade_name || "",
     gstin:
       source.vendorGstin ||
       source.vendorGstin ||

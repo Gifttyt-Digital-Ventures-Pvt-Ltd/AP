@@ -7,15 +7,22 @@ import React, {
 } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
+import { useLogoutConfirmation } from "../contexts/LogoutConfirmationContext";
 import { useRBAC } from "../contexts/RBACContext";
 import {
   useGetCorporateDetailsQuery,
   useGetCorporateUserDetailsQuery,
 } from "../Services/apis/corporateApi";
 import { useGetClientWalletSummaryQuery } from "../Services/apis/creditsApi";
+import {
+  useGetNotificationSettingsQuery,
+  useGetUnreadNotificationCountQuery,
+} from "../Services/apis/notificationsApi";
 import { redirectToOriginLogin } from "../utils/authRedirect";
 import { formatCredits } from "./credits/CreditAmount";
+import { completeApLogout } from "../utils/logoutFlow";
 import CreditBalanceBadge from "./credits/CreditBalanceBadge";
+import { useNotificationStream } from "../pages/notifications/useNotificationStream";
 import { Button } from "./ui/button";
 import {
   Tooltip,
@@ -32,7 +39,7 @@ import {
   Settings,
   LogOut,
   Menu,
-  X,
+  ChevronLeft,
   Building2,
   Shield,
   ArrowLeftRight,
@@ -48,6 +55,7 @@ import {
   Plug,
   User,
   WalletCards,
+  BookOpen,
 } from "lucide-react";
 
 // Context to control sidebar visibility from child components
@@ -60,7 +68,13 @@ export const useSidebar = () => useContext(SidebarContext);
 
 export const Layout = ({ children }) => {
   const { user, logout } = useAuth();
-  const { canAccessRoute, isLoaded: rbacLoaded, isBillingFeatureEnabled } = useRBAC();
+  const { requestLogoutConfirmation } = useLogoutConfirmation();
+  const {
+    canAccessRoute,
+    isLoaded: rbacLoaded,
+    isTokenBasedSubscription,
+    isCorporateSectionEnabled,
+  } = useRBAC();
   const { data: corporateContext = null } = useGetCorporateDetailsQuery();
   const { data: corporateUserContext = null } =
     useGetCorporateUserDetailsQuery();
@@ -69,21 +83,46 @@ export const Layout = ({ children }) => {
     isLoading: walletLoading,
     isError: walletError,
   } = useGetClientWalletSummaryQuery(undefined, {
+    skip: !user || !rbacLoaded || !isTokenBasedSubscription,
+    refetchOnFocus: false,
+    refetchOnMountOrArgChange: false,
+  });
+  const canUseNotifications = rbacLoaded && isCorporateSectionEnabled("SETTINGS_NOTIFICATIONS");
+  const { data: notificationSettings = null, isError: notificationSettingsError } =
+    useGetNotificationSettingsQuery(undefined, {
+      skip: !user || !canUseNotifications,
+      refetchOnFocus: true,
+    });
+  const inAppNotificationsEnabled =
+    canUseNotifications &&
+    (notificationSettingsError ? true : notificationSettings?.master?.inAppEnabled !== false);
+  useNotificationStream(Boolean(user && canUseNotifications && inAppNotificationsEnabled));
+  const { data: unreadNotifications = null } = useGetUnreadNotificationCountQuery(undefined, {
+    skip: !user || !canUseNotifications || !inAppNotificationsEnabled,
     pollingInterval: 60000,
-    skip: !user || !rbacLoaded || !isBillingFeatureEnabled,
+    refetchOnFocus: true,
   });
   const navigate = useNavigate();
   const location = useLocation();
   const mainContentRef = useRef(null);
+  const scrollContainerRef = useRef(null);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [hideSidebar, setHideSidebar] = useState(false);
-  const corporateName = String(corporateContext?.corporate?.name || "").trim();
+  const corporateName = String(
+    corporateContext?.corporate?.name ||
+      corporateUserContext?.corporate?.name ||
+      "",
+  ).trim();
   const userName =
+    String(corporateUserContext?.employeeDetails?.name || "").trim() ||
     String(corporateUserContext?.corporateUser?.name || "").trim() ||
     String(user?.name || "").trim();
   const sidebarPrimaryName = corporateName || userName || "User";
   const sidebarSecondaryLabel = userName;
   const tokenBalance = formatCredits(walletSummary?.balance || 0);
+  const unreadNotificationCount = Number(
+    unreadNotifications?.count ?? unreadNotifications?.unreadCount ?? 0,
+  );
 
   const menuItems = [
     { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
@@ -98,18 +137,21 @@ export const Layout = ({ children }) => {
     { icon: Users, label: "Vendors", path: "/vendors" },
     { icon: Megaphone, label: "Campaigns", path: "/campaigns" },
     { icon: Calculator, label: "Tax Management", path: "/tax-management" },
+    { icon: BookOpen, label: "Accounting", path: "/accounting" },
     { icon: BarChart3, label: "Reports", path: "/reports" },
     { icon: Plug, label: "Integrations", path: "/integrations" },
     { icon: Building2, label: "Banking", path: "/banking" },
-    { icon: Bell, label: "Notifications", path: "/notifications" },
+    ...(canUseNotifications ? [{ icon: Bell, label: "Notifications", path: "/notifications" }] : []),
     { icon: Shield, label: "User Roles", path: "/user-roles" },
     { icon: Settings, label: "Settings", path: "/settings" },
     { icon: History, label: "Audit Trail", path: "/audit-trail" },
   ];
 
-  const handleLogout = () => {
-    logout();
-    redirectToOriginLogin();
+  const handleLogout = async () => {
+    const confirmed = await requestLogoutConfirmation();
+    if (confirmed) {
+      completeApLogout(logout);
+    }
   };
 
   const isActive = (path) =>
@@ -125,9 +167,10 @@ export const Layout = ({ children }) => {
   };
 
   useEffect(() => {
-    if (!mainContentRef.current) return;
-    mainContentRef.current.scrollTo({ top: 0, behavior: "auto" });
-  }, [location.pathname]);
+    scrollContainerRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    mainContentRef.current?.scrollTo({ top: 0, left: 0, behavior: "auto" });
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [location.pathname, location.search]);
 
   return (
     <SidebarContext.Provider value={{ hideSidebar, setHideSidebar }}>
@@ -154,12 +197,13 @@ export const Layout = ({ children }) => {
                   variant="ghost"
                   size="sm"
                   onClick={() => setSidebarOpen(!sidebarOpen)}
+                  className="group"
                   data-testid="sidebar-toggle"
                 >
                   {sidebarOpen ? (
-                    <X className="h-4 w-4" />
+                    <ChevronLeft className="h-4 w-4 transition-transform duration-200 ease-out group-hover:-translate-x-0.5 group-hover:scale-110" />
                   ) : (
-                    <Menu className="h-4 w-4" />
+                    <Menu className="h-4 w-4 transition-transform duration-200 ease-out group-hover:scale-110" />
                   )}
                 </Button>
               </div>
@@ -172,17 +216,28 @@ export const Layout = ({ children }) => {
                   if (!canShowNavItem(item.path)) return null;
 
                   const Icon = item.icon;
+                  const isNotificationsItem = item.path === "/notifications";
                   const buttonElement = (
                     <button
                       onClick={() => handleNavigate(item.path)}
-                      className={`w-full flex items-center gap-3 px-2 py-2 rounded-md transition-all ${
+                      className={`relative w-full flex items-center gap-3 px-2 py-2 rounded-md transition-all ${
                         isActive(item.path)
                           ? "bg-button-primary text-button-primary-foreground"
                           : "hover:bg-button-primary-hover hover:text-primary-foreground"
                       }`}
-                      data-testid={`nav-${item.label.toLowerCase()}`}
+                      data-testid={`nav-${(item?.label ?? 'nav').toLowerCase()}`}
+                      aria-label={
+                        isNotificationsItem && unreadNotificationCount > 0
+                          ? `Notifications, ${unreadNotificationCount} unread`
+                          : item.label
+                      }
                     >
                       <Icon className="h-6 w-6" />
+                      {isNotificationsItem && inAppNotificationsEnabled && unreadNotificationCount > 0 && (
+                        <span className="absolute left-6 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold leading-none text-white">
+                          {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
+                        </span>
+                      )}
                       {sidebarOpen && (
                         <span className="text-sm font-medium">
                           {item.label}
@@ -240,7 +295,7 @@ export const Layout = ({ children }) => {
                       </div>
                     </button>
                   ))}
-                {isBillingFeatureEnabled &&
+                {isTokenBasedSubscription &&
                   !walletError &&
                   (!sidebarOpen ? (
                     <Tooltip>
@@ -307,6 +362,7 @@ export const Layout = ({ children }) => {
             data-testid="main-content"
           >
             <div
+              ref={scrollContainerRef}
               className={
                 hideSidebar
                   ? "flex min-h-0 flex-1 flex-col overflow-y-auto p-4"

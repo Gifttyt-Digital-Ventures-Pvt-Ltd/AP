@@ -2,10 +2,18 @@ import React from "react";
 import ExecutiveMetricsGrid from "./ExecutiveMetricsGrid";
 import SpendingTrendChart from "./SpendingTrendChart";
 import StatusDistributionChart from "./StatusDistributionChart";
+import BranchCostAnalysisCard from "./BranchCostAnalysisCard";
 import TopVendorsChart from "./TopVendorsChart";
 
 const ExecutiveTab = ({
   executiveData,
+  branchCostData,
+  branchCostLoading = false,
+  branchCostPeriod,
+  onBranchCostPeriodChange,
+  branchCostPagination,
+  onBranchCostPageChange,
+  showBranchCostAnalysis = false,
   formatCurrency,
   formatFullCurrency,
 }) => {
@@ -28,6 +36,18 @@ const ExecutiveTab = ({
           statusDistribution={executiveData.status_distribution}
         />
       </div>
+
+      {showBranchCostAnalysis ? (
+        <BranchCostAnalysisCard
+          branchCostData={branchCostData}
+          isLoading={branchCostLoading}
+          formatFullCurrency={formatFullCurrency}
+          period={branchCostPeriod}
+          onPeriodChange={onBranchCostPeriodChange}
+          pagination={branchCostPagination}
+          onPageChange={onBranchCostPageChange}
+        />
+      ) : null}
 
       {/* <TopVendorsChart
         topVendors={executiveData.top_vendors}

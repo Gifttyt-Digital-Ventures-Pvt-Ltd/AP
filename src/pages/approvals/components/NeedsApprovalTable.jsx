@@ -1,4 +1,5 @@
-import React from "react";
+import React, { useMemo } from "react";
+import InvoiceDueDateCell from "../../invoices/components/InvoiceDueDateCell";
 import { Button } from "../../../components/ui/button";
 import { CheckCircle, Eye, RotateCcw, XCircle } from "lucide-react";
 import {
@@ -7,28 +8,36 @@ import {
   normalizeWorkflowStatus,
 } from "../../../utils/approvalWorkflow";
 import AppDataTable from "../../../components/common/AppDataTable";
-import ClippedTextWithTooltip from "../../../components/common/ClippedTextWithTooltip";
+import { OrgBranchCell, VendorWithBranchCell } from "../../../components/common/BranchTableCells";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import { formatCurrency } from "../../../utils/currency";
+import InvoiceDocumentTypeBadge from "../../invoices/components/InvoiceDocumentTypeBadge";
+import { cn } from "../../../lib/utils";
 
-const needsApprovalTableHeader = [
-  { key: "vendorName", title: "Vendor" },
-  { key: "amount", title: "Amount", cellClassName: "  font-semibold" },
-  { key: "approval", title: "Approval" },
+const baseNeedsApprovalTableHeader = [
+  { key: "invoiceNumber", title: "Invoice #", headerClassName: "bg-muted text-foreground", cellClassName: "font-medium" },
+  { key: "refNo", title: "Ref No", headerClassName: "bg-muted text-foreground", cellClassName: "font-mono text-sm" },
+  { key: "orgBranch", title: "Branch", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm" },
+  { key: "vendorName", title: "Vendor", headerClassName: "bg-muted text-foreground" },
+  { key: "documentType", title: "Type", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm" },
+  { key: "amount", title: "Amount", headerClassName: "bg-muted text-foreground", cellClassName: "  font-semibold" },
+  { key: "approval", title: "Approval", headerClassName: "bg-muted text-foreground" },
   {
     key: "dueDate",
     title: "Due date",
+    headerClassName: "bg-muted text-foreground",
     cellClassName: "text-sm text-muted-foreground",
   },
   {
     key: "invoiceDate",
     title: "Invoice date",
+    headerClassName: "bg-muted text-foreground",
     cellClassName: "text-sm text-muted-foreground",
   },
   {
     key: "action",
     title: "Action",
-    headerClassName: "text-center",
+    headerClassName: "bg-muted text-foreground text-left",
     cellClassName: "text-left",
   },
 ];
@@ -44,10 +53,21 @@ const NeedsApprovalTable = ({
   canApproveInvoices,
   canCheckInvoices,
   showApprovalProgress = false,
+  showRefNoField = true,
+  showBranchField = false,
 }) => {
-  const tableHeaders = showApprovalProgress
-    ? needsApprovalTableHeader
-    : needsApprovalTableHeader.filter((header) => header.key !== "approval");
+  const tableHeaders = useMemo(() => {
+    let headers = showApprovalProgress
+      ? baseNeedsApprovalTableHeader
+      : baseNeedsApprovalTableHeader.filter((header) => header.key !== "approval");
+    if (!showRefNoField) {
+      headers = headers.filter((header) => header.key !== "refNo");
+    }
+    if (!showBranchField) {
+      headers = headers.filter((header) => header.key !== "orgBranch");
+    }
+    return headers;
+  }, [showApprovalProgress, showRefNoField, showBranchField]);
 
   const renderNeedsApprovalRow = (invoice, rowIndex, headers) => {
     const progress = getApprovalProgress(invoice);
@@ -60,7 +80,7 @@ const NeedsApprovalTable = ({
     return (
       <TableRow
         key={invoice.id ?? rowIndex}
-        data-testid={`approval-row-${invoice.id}`}
+        data-testid={`approval-row-${invoice?.id ?? 'unknown'}`}
       >
         {headers.map((header) => {
           let value;
@@ -69,8 +89,20 @@ const NeedsApprovalTable = ({
             case "amount":
               value = formatCurrency(invoice.amount, invoice.currency);
               break;
+            case "invoiceNumber":
+              value = invoice.invoiceNumber || "-";
+              break;
+            case "refNo":
+              value = invoice.refNo || "-";
+              break;
             case "vendorName":
-              value = <ClippedTextWithTooltip text={invoice.vendorName} />;
+              value = <VendorWithBranchCell record={invoice} />;
+              break;
+            case "documentType":
+              value = <InvoiceDocumentTypeBadge invoice={invoice} />;
+              break;
+            case "orgBranch":
+              value = <OrgBranchCell record={invoice} />;
               break;
             case "approval":
               value = (
@@ -80,7 +112,7 @@ const NeedsApprovalTable = ({
                     size="sm"
                     className="h-auto p-0 text-sm text-muted-foreground underline underline-offset-4"
                     onClick={() => handleOpenInvoiceHistory?.(invoice)}
-                    data-testid={`approval-history-${invoice.id}`}
+                    data-testid={`approval-history-${invoice?.id ?? 'unknown'}`}
                   >
                     {isChecker
                       ? "History"
@@ -99,7 +131,12 @@ const NeedsApprovalTable = ({
               );
               break;
             case "dueDate":
-              value = safeFormatDate(invoice.dueDate || invoice.dueDate);
+              value = (
+                <InvoiceDueDateCell
+                  invoice={invoice}
+                  formattedDueDate={safeFormatDate(invoice.dueDate || invoice.dueDate)}
+                />
+              );
               break;
             case "invoiceDate":
               value = safeFormatDate(
@@ -113,7 +150,7 @@ const NeedsApprovalTable = ({
                     variant="ghost"
                     size="sm"
                     onClick={() => handleViewInvoice?.(invoice)}
-                    data-testid={`view-invoice-${invoice.id}`}
+                    data-testid={`view-invoice-${invoice?.id ?? 'unknown'}`}
                     title="View Invoice"
                     className="h-8 w-8 p-0"
                   >
@@ -127,7 +164,7 @@ const NeedsApprovalTable = ({
                         isChecker ? "Checked" : "Approved",
                       )
                     }
-                    data-testid={`approve-button-${invoice.id}`}
+                    data-testid={`approve-button-${invoice?.id ?? 'unknown'}`}
                     disabled={!canAct}
                   >
                     <CheckCircle className="h-4 w-4 mr-2" />
@@ -139,7 +176,7 @@ const NeedsApprovalTable = ({
                     onClick={() =>
                       handleApprovalAction(invoice, NEEDS_CORRECTION_ACTION)
                     }
-                    data-testid={`needs-correction-button-${invoice.id}`}
+                    data-testid={`needs-correction-button-${invoice?.id ?? 'unknown'}`}
                     disabled={!canAct}
                   >
                     <RotateCcw className="h-4 w-4 mr-2" />
@@ -149,7 +186,7 @@ const NeedsApprovalTable = ({
                     size="sm"
                     variant="destructive"
                     onClick={() => handleApprovalAction(invoice, "Rejected")}
-                    data-testid={`reject-button-${invoice.id}`}
+                    data-testid={`reject-button-${invoice?.id ?? 'unknown'}`}
                     disabled={!canAct}
                   >
                     <XCircle className="h-4 w-4 mr-2" />
@@ -163,7 +200,10 @@ const NeedsApprovalTable = ({
           }
 
           return (
-            <TableCell key={header.key} className={header.cellClassName}>
+            <TableCell
+              key={header.key}
+              className={cn("border border-border", header.cellClassName)}
+            >
               {value}
             </TableCell>
           );
@@ -174,16 +214,30 @@ const NeedsApprovalTable = ({
 
   return (
     <div
-      className="bg-card border border-border rounded-lg shadow-sm overflow-hidden"
+      className="flex h-full min-h-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm"
       data-testid="needs-approval-table"
     >
-      <AppDataTable
-        tableHeader={tableHeaders}
-        tableData={myPendingInvoices}
-        renderRow={renderNeedsApprovalRow}
-        emptyMessage="No invoices need your approval"
-        emptyTestId="no-approvals"
-      />
+      <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-thin-muted">
+        <AppDataTable
+          tableHeader={tableHeaders}
+          tableData={myPendingInvoices}
+          renderRow={renderNeedsApprovalRow}
+          tableClassName="min-w-[1300px]"
+          tableContainerClassName="overflow-visible"
+          headClassName="border-b border-border bg-muted shadow-sm"
+          stickyHeader
+          bordered
+          emptyMessage="No invoices need your approval"
+          emptyTestId="no-approvals"
+        />
+      </div>
+      <div className="mt-auto flex shrink-0 border-t border-border p-4">
+        <p className="text-sm text-muted-foreground" data-testid="needs-approval-table-summary">
+          {myPendingInvoices.length === 0
+            ? "No invoices need your approval"
+            : `Showing ${myPendingInvoices.length.toLocaleString("en-IN")} invoice${myPendingInvoices.length === 1 ? "" : "s"} needing your approval`}
+        </p>
+      </div>
     </div>
   );
 };
