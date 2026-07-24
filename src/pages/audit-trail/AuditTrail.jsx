@@ -25,6 +25,7 @@ import { Label } from "../../components/ui/label";
 import { Badge } from "../../components/ui/badge";
 import AppDataTable from "../../components/common/AppDataTable";
 import { TableCell, TableRow } from "../../components/ui/table";
+import { cn } from "../../lib/utils";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -261,10 +262,10 @@ const AuditBadge = ({ type, value }) => (
 
 const AuditRow = memo(({ entry, highlighted }) => (
   <TableRow className={highlighted ? "bg-yellow-50 transition-colors" : undefined}>
-    <TableCell className="w-[180px]">
+    <TableCell className={cn("border border-border", "w-[180px]")}>
       {formatTimestamp(entry.timestamp)}
     </TableCell>
-    <TableCell className="w-[180px]">
+    <TableCell className={cn("border border-border", "w-[180px]")}>
       {entry.userName === "SYSTEM" ? (
         <span className="inline-flex items-center gap-1 italic">
           <Bot className="h-4 w-4 text-muted-foreground" />
@@ -274,15 +275,15 @@ const AuditRow = memo(({ entry, highlighted }) => (
         entry.userName || "-"
       )}
     </TableCell>
-    <TableCell className="w-[200px]">
+    <TableCell className={cn("border border-border", "w-[200px]")}>
       <AuditBadge type="Action" value={entry.action} />
     </TableCell>
-    <TableCell className="max-w-[420px]">
+    <TableCell className={cn("border border-border", "max-w-[420px]")}>
       <span className="block truncate" title={entry.details || "-"}>
         {entry.details || "-"}
       </span>
     </TableCell>
-    <TableCell className="w-[120px]">
+    <TableCell className={cn("border border-border", "w-[120px]")}>
       <AuditBadge type="Status" value={entry.status} />
     </TableCell>
   </TableRow>
@@ -780,6 +781,7 @@ const AuditTrail = () => {
               emptyColSpan={tableHeader.length}
               tableContainerClassName="overflow-visible"
               headClassName="[&_th]:sticky [&_th]:top-0 [&_th]:z-10"
+              bordered
             />
           </div>
 

@@ -53,6 +53,7 @@ const AppDataTable = ({
   stickyHeader = true,
   striped = true,
   tableContainerClassName = "",
+  bordered = false,
 }) => {
   const resolvedColumns =
     tableHeader?.map((header, index) => {
@@ -97,7 +98,8 @@ const AppDataTable = ({
             <TableHead
               key={column.key || column.header}
               className={cn(
-                "h-10 whitespace-nowrap border-0 bg-muted/100 px-3 text-xs font-medium text-foreground",
+                "h-10 whitespace-nowrap bg-muted/100 px-3 text-xs font-medium text-foreground",
+                bordered ? "border border-border" : "border-0",
                 index === 0 && "rounded-l-md",
                 index === resolvedColumns.length - 1 && "rounded-r-md",
                 column.headerClassName,
@@ -132,7 +134,11 @@ const AppDataTable = ({
               {resolvedColumns.map((column) => (
                 <TableCell
                   key={column.key || column.header}
-                  className={cn("px-3 py-3", column.cellClassName)}
+                  className={cn(
+                    "px-3 py-3",
+                    bordered && "border border-border",
+                    column.cellClassName,
+                  )}
                 >
                   <Skeleton className="h-5 w-full" />
                 </TableCell>
@@ -190,7 +196,11 @@ const AppDataTable = ({
                 {resolvedColumns.map((column) => (
                   <TableCell
                     key={column.key || column.header}
-                    className={cn("px-3 py-3", column.cellClassName)}
+                    className={cn(
+                      "px-3 py-3",
+                      bordered && "border border-border",
+                      column.cellClassName,
+                    )}
                   >
                     {column.render
                       ? safeRenderCell(column.render, row, index)

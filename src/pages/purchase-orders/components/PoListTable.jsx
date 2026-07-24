@@ -185,7 +185,10 @@ const PoListTable = ({
         }
 
         return (
-          <TableCell key={header.key} className={cn("px-3 py-3", header.cellClassName)}>
+          <TableCell
+            key={header.key}
+            className={cn("px-3 py-3 border border-border", header.cellClassName)}
+          >
             {value}
           </TableCell>
         );
@@ -235,6 +238,7 @@ const PoListTable = ({
             tableContainerClassName="overflow-visible"
             headClassName="border-b border-border bg-muted shadow-sm"
             stickyHeader
+            bordered
             emptyMessage="No purchase orders found. Create your first PO to get started."
             emptyTestId="no-purchase-orders"
           />

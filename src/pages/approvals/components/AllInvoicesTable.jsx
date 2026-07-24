@@ -16,6 +16,7 @@ import { TableCell, TableRow } from "../../../components/ui/table";
 import { formatCurrency } from "../../../utils/currency";
 import InvoiceDocumentTypeBadge from "../../invoices/components/InvoiceDocumentTypeBadge";
 import InvoiceDueDateCell from "../../invoices/components/InvoiceDueDateCell";
+import { cn } from "../../../lib/utils";
 
 const baseAllInvoicesTableHeader = [
   { key: "srNo", title: "Sr. No", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm font-medium" },
@@ -171,7 +172,10 @@ const AllInvoicesTable = ({
           }
 
           return (
-            <TableCell key={header.key} className={header.cellClassName}>
+            <TableCell
+              key={header.key}
+              className={cn("border border-border", header.cellClassName)}
+            >
               {value}
             </TableCell>
           );
@@ -205,6 +209,7 @@ const AllInvoicesTable = ({
             tableContainerClassName="overflow-visible"
             headClassName="border-b border-border bg-muted shadow-sm"
             stickyHeader
+            bordered
             emptyMessage="No invoices found"
             emptyTestId="approvals-all-no-invoices"
           />

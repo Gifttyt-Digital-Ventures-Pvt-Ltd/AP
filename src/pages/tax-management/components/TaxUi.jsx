@@ -125,11 +125,11 @@ export const TaxSelect = ({ value, onValueChange, options, placeholder = 'Select
 export const TaxCompactTable = ({ columns, rows, getRowKey, onRowClick, getRowClassName, emptyMessage = 'No records found.' }) => (
   <div className="overflow-hidden rounded-md border">
     <div className="overflow-x-auto">
-      <Table>
+      <Table className="border-separate border-spacing-0">
         <TableHeader>
           <TableRow className="bg-muted/50">
             {columns.map((column) => (
-              <TableHead key={column.key} className={cn('whitespace-nowrap text-xs', column.className)}>
+              <TableHead key={column.key} className={cn('whitespace-nowrap border border-border text-xs', column.className)}>
                 {column.title}
               </TableHead>
             ))}
@@ -138,7 +138,7 @@ export const TaxCompactTable = ({ columns, rows, getRowKey, onRowClick, getRowCl
         <TableBody>
           {rows.length === 0 ? (
             <TableRow>
-              <TableCell colSpan={columns.length} className="py-8 text-center text-sm text-muted-foreground">
+              <TableCell colSpan={columns.length} className="border border-border py-8 text-center text-sm text-muted-foreground">
                 {emptyMessage}
               </TableCell>
             </TableRow>
@@ -150,7 +150,7 @@ export const TaxCompactTable = ({ columns, rows, getRowKey, onRowClick, getRowCl
                 onClick={onRowClick ? () => onRowClick(row) : undefined}
               >
                 {columns.map((column) => (
-                  <TableCell key={column.key} className={cn('whitespace-nowrap text-sm', column.cellClassName)}>
+                  <TableCell key={column.key} className={cn('whitespace-nowrap border border-border text-sm', column.cellClassName)}>
                     {column.render ? column.render(row, index) : row[column.key] ?? '-'}
                   </TableCell>
                 ))}

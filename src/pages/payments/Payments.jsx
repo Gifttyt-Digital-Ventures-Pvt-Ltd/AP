@@ -42,6 +42,7 @@ import { Textarea } from '../../components/ui/textarea';
 import { Checkbox } from '../../components/ui/checkbox';
 import AppDataTable from '../../components/common/AppDataTable';
 import { TableCell, TableRow } from '../../components/ui/table';
+import { cn } from '../../lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
 import { Search, Plus, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -895,7 +896,10 @@ const Payments = () => {
         }
 
         return (
-          <TableCell key={header.key} className={header.cellClassName}>
+          <TableCell
+            key={header.key}
+            className={cn('border border-border', header.cellClassName)}
+          >
             {value}
           </TableCell>
         );
@@ -1021,6 +1025,7 @@ const Payments = () => {
                     showCheckbox
                     isChecked={allBatchInvoicesSelected}
                     onSelectAllChange={selectAllInvoices}
+                    bordered
                     emptyMessage="No invoices available for batch creation"
                   />
                 </div>

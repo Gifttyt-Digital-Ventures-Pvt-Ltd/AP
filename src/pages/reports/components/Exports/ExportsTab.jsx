@@ -1043,6 +1043,7 @@ const ExportsTab = ({ currencies = [] }) => {
                 emptyMessage="No reports generated yet"
                 tableContainerClassName="overflow-visible"
                 headClassName="[&_th]:sticky [&_th]:top-0 [&_th]:z-10"
+                bordered
               />
             </div>
           </CardContent>
