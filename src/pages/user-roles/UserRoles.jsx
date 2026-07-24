@@ -124,9 +124,9 @@ const UserRoles = () => {
   const canManageRoles = hasPermission("roles-manage");
   const canManageUserRecords = canManageRoleUsers || hasPermission(FULL_ACCESS_PERMISSION);
   const canViewWorkflow =
-    hasPermission("vendor-workflow-view") ||
-    hasPermission("vendor-workflow-manage");
-  const canManageWorkflow = hasPermission("vendor-workflow-manage");
+    hasPermission("approval-workflow-view") ||
+    hasPermission("approval-workflow-manage");
+  const canManageWorkflow = hasPermission("approval-workflow-manage");
   const canViewCategories =
     hasPermission("category-view") || hasPermission("category-manage");
   const canUseManageRoleCategories = isCorporateSectionEnabled("CATEGORY_ALL");
@@ -323,11 +323,14 @@ const UserRoles = () => {
         );
       }
       if (backendEntry.screen === "CATEGORY") return canUseManageRoleCategories;
-      if (backendEntry.screen === "VENDOR_APPROVAL_WORKFLOW") {
-        return (
-          isCorporateSectionEnabled("MANAGE_ROLE_APPROVAL_WORKFLOW") ||
-          isCorporateSectionEnabled("VENDOR_APPROVAL_WORKFLOW_ALL")
-        );
+      if (
+        backendEntry.screen === "MANAGE_ROLE" &&
+        (
+          backendEntry.permissionType === "WORKFLOW_VIEW" ||
+          backendEntry.permissionType === "WORKFLOW_MANAGE"
+        )
+      ) {
+        return isCorporateSectionEnabled("MANAGE_ROLE_APPROVAL_WORKFLOW");
       }
       if (backendEntry.screen === "MANAGE_ROLE") {
         if (backendEntry.permissionType === "USERS") {
@@ -349,7 +352,10 @@ const UserRoles = () => {
         if (backendEntry.permissionType === "BANKING")
           return isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING");
         if (backendEntry.permissionType === "INTERACTION")
-          return isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
+          return (
+            isCorporateSectionEnabled("SETTINGS_INTEGRATIONS") ||
+            isCorporateSectionEnabled("GMAIL_INTEGRATION_ALL")
+          );
         if (
           backendEntry.permissionType === "BILLING" ||
           backendEntry.permissionType === "MANAGE_BILLING"
@@ -375,8 +381,15 @@ const UserRoles = () => {
       if (backendEntry.screen === "BANKING") {
         return isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING");
       }
-      if (backendEntry.screen === "INTEGRATIONS" || backendEntry.screen === "ERP_INTEGRATIONS") {
-        return isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
+      if (
+        backendEntry.screen === "INTEGRATIONS" ||
+        backendEntry.screen === "ERP_INTEGRATIONS" ||
+        backendEntry.screen === "GMAIL_INTEGRATION"
+      ) {
+        return (
+          isCorporateSectionEnabled("SETTINGS_INTEGRATIONS") ||
+          isCorporateSectionEnabled("GMAIL_INTEGRATION_ALL")
+        );
       }
       if (backendEntry.screen === "NOTIFICATIONS") {
         return (
@@ -454,10 +467,16 @@ const UserRoles = () => {
     }
 
     if (
+      isCorporateSectionEnabled("SETTINGS_INTEGRATIONS") ||
+      isCorporateSectionEnabled("GMAIL_INTEGRATION_ALL")
+    ) {
+      keys.add("INTEGRATIONS:MANAGE");
+    }
+
+    if (
       isCorporateScreenAllowed("SETTINGS") &&
       isCorporateSectionEnabled("SETTINGS_NOTIFICATIONS")
     ) {
-      keys.add("NOTIFICATIONS:VIEW");
       keys.add("NOTIFICATIONS:MANAGE");
     }
 
@@ -519,10 +538,16 @@ const UserRoles = () => {
     }
 
     if (
+      isCorporateSectionEnabled("SETTINGS_INTEGRATIONS") ||
+      isCorporateSectionEnabled("GMAIL_INTEGRATION_ALL")
+    ) {
+      keys.add("integrations-manage");
+    }
+
+    if (
       isCorporateScreenAllowed("SETTINGS") &&
       isCorporateSectionEnabled("SETTINGS_NOTIFICATIONS")
     ) {
-      keys.add("notifications-view");
       keys.add("notifications-manage");
     }
 

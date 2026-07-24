@@ -426,7 +426,7 @@ export const RBACProvider = ({ children }) => {
     if (normalizedPath === "/user-roles" || normalizedPath.startsWith("/user-roles/")) {
       const canViewRoles = hasAnyPermission(["roles-view", "roles-manage"]);
       const canViewRoleUsers = hasAnyPermission(["roles-view", "roles-manage", "roles-manage-users"]);
-      const canViewWorkflow = hasAnyPermission(["vendor-workflow-view", "vendor-workflow-manage"]);
+      const canViewWorkflow = hasAnyPermission(["approval-workflow-view", "approval-workflow-manage"]);
       const canViewCategories = hasAnyPermission(["category-view", "category-manage"]);
       return (
         (canViewRoleUsers && isCorporateSectionEnabled("MANAGE_ROLE_USERS")) ||
@@ -437,13 +437,17 @@ export const RBACProvider = ({ children }) => {
     }
 
     if (normalizedPath === "/settings/notifications") {
-      return isCorporateAdmin || hasAnyPermission(["notifications-manage", "NOTIFICATIONS MANAGE"]);
+      return (
+        isCorporateSectionEnabled("SETTINGS_NOTIFICATIONS") &&
+        (isCorporateAdmin || hasAnyPermission(["notifications-manage", "NOTIFICATIONS MANAGE"]))
+      );
     }
 
     if (normalizedPath === "/settings" || normalizedPath.startsWith("/settings/")) {
       return (
         isCorporateAdmin ||
-        hasAnyPermission(["notifications-manage", "NOTIFICATIONS MANAGE"]) ||
+        (hasAnyPermission(["notifications-manage", "NOTIFICATIONS MANAGE"]) &&
+          isCorporateSectionEnabled("SETTINGS_NOTIFICATIONS")) ||
         (hasPermission("settings-org") && isCorporateSectionEnabled("SETTINGS_ORG_DETAILS")) ||
         (hasAnyPermission(["settings-banking", "banking-full"]) && isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING")) ||
         (hasAnyPermission(["credits-view", "credits-ledger", "credits-manage", "VIEW_WALLET", "VIEW_LEDGER", "MANAGE_BILLING"]) &&

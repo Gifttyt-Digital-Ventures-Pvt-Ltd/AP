@@ -33,53 +33,31 @@ export const ROUTE_PERMISSION_RULES = {
   },
   "/tax-management": { anyOf: ["tax-view", "tax-manage"] },
   "/accounting": {
-    anyOf: [
-      "integrations.view",
-      "integrations.sync.trigger",
-      "settings-interaction",
-    ],
+    anyOf: ["integrations-manage"],
   },
   "/reports": { anyOf: ["reports-view", "reports-full"] },
   "/audit-trail": { anyOf: ["audit-trail-view"] },
   "/integrations": {
-    anyOf: [
-      "settings-interaction",
-      "integrations.view",
-      "integrations.connect",
-      "integrations.disconnect",
-      "integrations.mapping.edit",
-      "integrations.sync.trigger",
-      "integrations.review.resolve",
-    ],
+    anyOf: ["integrations-manage"],
   },
-  "/integrations/gmail": { anyOf: ["settings-interaction"] },
+  "/integrations/gmail": {
+    anyOf: ["integrations-manage"],
+  },
   "/integrations/erp": {
-    anyOf: [
-      "integrations.view",
-      "integrations.connect",
-      "integrations.disconnect",
-      "integrations.mapping.edit",
-      "integrations.sync.trigger",
-      "integrations.review.resolve",
-    ],
+    anyOf: ["integrations-manage"],
   },
   "/integrations/connect": {
-    anyOf: [
-      "integrations.connect",
-      "integrations.disconnect",
-      "integrations.mapping.edit",
-      "integrations.sync.trigger",
-      "integrations.review.resolve",
-    ],
+    anyOf: ["integrations-manage"],
   },
   "/banking": { anyOf: ["banking-view", "banking-full"] },
+  "/notifications": {},
   "/user-roles": {
     anyOf: [
       "roles-view",
       "roles-manage",
       "roles-manage-users",
-      "vendor-workflow-view",
-      "vendor-workflow-manage",
+      "approval-workflow-view",
+      "approval-workflow-manage",
       "category-view",
       "category-manage",
     ],
@@ -88,6 +66,7 @@ export const ROUTE_PERMISSION_RULES = {
     anyOf: [
       "settings-org",
       "settings-banking",
+      "notifications-manage",
       "credits-view",
       "credits-ledger",
       "credits-manage",
@@ -128,7 +107,6 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
     anySections: ["TAX_GST", "TAX_TDS_COMPLIANCE"],
   },
   "/accounting": {
-    screen: "SETTINGS",
     anySections: ["SETTINGS_INTEGRATIONS"],
   },
   "/reports": {
@@ -143,15 +121,12 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
   },
   "/audit-trail": { screen: "AUDIT_TRAIL", anySections: ["AUDIT_TRAIL_ALL"] },
   "/integrations": {
-    screen: "SETTINGS",
     anySections: ["SETTINGS_INTEGRATIONS", "GMAIL_INTEGRATION_ALL"],
   },
   "/integrations/gmail": {
-    screen: "GMAIL_INTEGRATION",
     anySections: ["GMAIL_INTEGRATION_ALL"],
   },
   "/integrations/erp": {
-    screen: "SETTINGS",
     anySections: ["SETTINGS_INTEGRATIONS"],
   },
   "/banking": { anySections: ["SETTINGS_CONNECTED_BANKING"] },
@@ -271,27 +246,27 @@ export const ACTION_PERMISSION_RULES = {
   "transactions.uploadVoucher": { anyOf: ["banking-full"] },
   "transactions.linkInvoice": { anyOf: ["banking-full"] },
 
-  "integrations.connect": { anyOf: ["integrations.connect"] },
-  "integrations.disconnect": { anyOf: ["integrations.disconnect"] },
-  "integrations.mapping.edit": { anyOf: ["integrations.mapping.edit"] },
-  "integrations.sync.trigger": { anyOf: ["integrations.sync.trigger"] },
-  "integrations.review.resolve": { anyOf: ["integrations.review.resolve"] },
-  "gmailIntegration.connect": { anyOf: ["settings-interaction"] },
-  "gmailIntegration.disconnect": { anyOf: ["settings-interaction"] },
-  "gmailIntegration.sync": { anyOf: ["settings-interaction"] },
+  "integrations.connect": { anyOf: ["integrations-manage"] },
+  "integrations.disconnect": { anyOf: ["integrations-manage"] },
+  "integrations.mapping.edit": { anyOf: ["integrations-manage"] },
+  "integrations.sync.trigger": { anyOf: ["integrations-manage"] },
+  "integrations.review.resolve": { anyOf: ["integrations-manage"] },
+  "gmailIntegration.connect": { anyOf: ["integrations-manage"] },
+  "gmailIntegration.disconnect": { anyOf: ["integrations-manage"] },
+  "gmailIntegration.sync": { anyOf: ["integrations-manage"] },
 
   "accounting.view": {
-    anyOf: ["integrations.view", "integrations.sync.trigger", "settings-interaction"],
+    anyOf: ["integrations-manage"],
   },
   "accounting.ledger.create": {
-    anyOf: ["integrations.sync.trigger", "integrations.mapping.edit"],
+    anyOf: ["integrations-manage"],
   },
   "accounting.ledger.edit": {
-    anyOf: ["integrations.sync.trigger", "integrations.mapping.edit"],
+    anyOf: ["integrations-manage"],
   },
-  "accounting.coa.sync": { anyOf: ["integrations.sync.trigger"] },
-  "accounting.ready.mark": { anyOf: ["integrations.sync.trigger", "integrations.mapping.edit"] },
-  "accounting.ready.sync": { anyOf: ["integrations.sync.trigger"] },
+  "accounting.coa.sync": { anyOf: ["integrations-manage"] },
+  "accounting.ready.mark": { anyOf: ["integrations-manage"] },
+  "accounting.ready.sync": { anyOf: ["integrations-manage"] },
   "accounting.ready.unlockRequest": {
     anyOf: [
       "invoice-maker",
@@ -300,12 +275,12 @@ export const ACTION_PERMISSION_RULES = {
       "po-manage",
       "grn-manage",
       "vendors-manage",
-      "integrations.sync.trigger",
+      "integrations-manage",
     ],
   },
-  "accounting.ready.unlockApprove": { anyOf: ["integrations.sync.trigger", "integrations.review.resolve"] },
-  "accounting.syncLogs.view": { anyOf: ["integrations.view", "integrations.sync.trigger"] },
-  "accounting.syncLogs.download": { anyOf: ["integrations.sync.trigger", "integrations.view"] },
+  "accounting.ready.unlockApprove": { anyOf: ["integrations-manage"] },
+  "accounting.syncLogs.view": { anyOf: ["integrations-manage"] },
+  "accounting.syncLogs.download": { anyOf: ["integrations-manage"] },
 
   "roles.invite": { anyOf: ["roles-manage-users"] },
   "roles.updateUserRole": { anyOf: ["roles-manage-users"] },
@@ -314,12 +289,12 @@ export const ACTION_PERMISSION_RULES = {
   "roles.assignRoleSets": { anyOf: ["roles-manage"] },
   "roles.manageCustomRoles": { anyOf: ["roles-manage"] },
 
-  "workflow.create": { anyOf: ["vendor-workflow-manage"] },
-  "workflow.update": { anyOf: ["vendor-workflow-manage"] },
-  "workflow.delete": { anyOf: ["vendor-workflow-manage"] },
-  "workflow.switch": { anyOf: ["vendor-workflow-manage"] },
+  "workflow.create": { anyOf: ["approval-workflow-manage"] },
+  "workflow.update": { anyOf: ["approval-workflow-manage"] },
+  "workflow.delete": { anyOf: ["approval-workflow-manage"] },
+  "workflow.switch": { anyOf: ["approval-workflow-manage"] },
   "workflow.test": {
-    anyOf: ["vendor-workflow-view", "vendor-workflow-manage"],
+    anyOf: ["approval-workflow-view", "approval-workflow-manage"],
   },
 };
 

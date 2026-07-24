@@ -126,6 +126,12 @@ const mapRolesPermission = (permissionType) => {
   if (permissionType === "VIEW") return "roles-view";
   if (permissionType === "MANAGE") return "roles-manage";
   if (permissionType === "USERS" || permissionType === "MANAGE_USERS") return "roles-manage-users";
+  if (permissionType === "WORKFLOW_VIEW" || permissionType === "APPROVAL_WORKFLOW_VIEW") {
+    return "approval-workflow-view";
+  }
+  if (permissionType === "WORKFLOW_MANAGE" || permissionType === "APPROVAL_WORKFLOW_MANAGE") {
+    return "approval-workflow-manage";
+  }
   return null;
 };
 
@@ -134,7 +140,9 @@ const mapSettingsPermission = (permissionType) => {
     return "settings-org";
   }
   if (permissionType === "BANKING") return "settings-banking";
-  if (permissionType === "INTERACTION") return "settings-interaction";
+  if (permissionType === "INTERACTION" || permissionType === "INTEGRATIONS") {
+    return "integrations-manage";
+  }
   if (permissionType === "BILLING" || permissionType === "MANAGE_BILLING") {
     return "credits-manage";
   }
@@ -142,31 +150,28 @@ const mapSettingsPermission = (permissionType) => {
 };
 
 const mapIntegrationsPermission = (permissionType) => {
-  if (permissionType === "VIEW") return "integrations.view";
-  if (permissionType === "CONNECT") return "integrations.connect";
-  if (permissionType === "DISCONNECT") return "integrations.disconnect";
-  if (permissionType === "MAPPING_EDIT" || permissionType === "MAPPING") return "integrations.mapping.edit";
-  if (permissionType === "SYNC_TRIGGER" || permissionType === "SYNC") return "integrations.sync.trigger";
-  if (permissionType === "REVIEW_RESOLVE" || permissionType === "REVIEW") return "integrations.review.resolve";
-  if (permissionType === "MANAGE" || permissionType === "FULL") {
-    return [
-      "integrations.view",
-      "integrations.connect",
-      "integrations.disconnect",
-      "integrations.mapping.edit",
-      "integrations.sync.trigger",
-      "integrations.review.resolve",
-    ];
+  if (
+    permissionType === "VIEW" ||
+    permissionType === "CONNECT" ||
+    permissionType === "DISCONNECT" ||
+    permissionType === "MAPPING_EDIT" ||
+    permissionType === "MAPPING" ||
+    permissionType === "SYNC_TRIGGER" ||
+    permissionType === "SYNC" ||
+    permissionType === "REVIEW_RESOLVE" ||
+    permissionType === "REVIEW" ||
+    permissionType === "MANAGE" ||
+    permissionType === "FULL" ||
+    permissionType === "INTERACTION"
+  ) {
+    return "integrations-manage";
   }
   return null;
 };
 
 const mapNotificationsPermission = (permissionType) => {
-  if (permissionType === "VIEW") return "notifications-view";
   if (permissionType === "MANAGE") return "notifications-manage";
-  if (permissionType === "FULL") {
-    return ["notifications-view", "notifications-manage"];
-  }
+  if (permissionType === "FULL") return "notifications-manage";
   return null;
 };
 
@@ -176,9 +181,9 @@ const mapCategoryPermission = (permissionType) => {
   return null;
 };
 
-const mapVendorWorkflowPermission = (permissionType) => {
-  if (permissionType === "VIEW") return "vendor-workflow-view";
-  if (permissionType === "MANAGE") return "vendor-workflow-manage";
+const mapApprovalWorkflowPermission = (permissionType) => {
+  if (permissionType === "VIEW") return "approval-workflow-view";
+  if (permissionType === "MANAGE") return "approval-workflow-manage";
   return null;
 };
 
@@ -274,7 +279,11 @@ export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput)
     return mapSettingsPermission(permissionType);
   }
 
-  if (screen === "INTEGRATIONS" || screen === "ERP_INTEGRATIONS") {
+  if (
+    screen === "INTEGRATIONS" ||
+    screen === "ERP_INTEGRATIONS" ||
+    screen === "GMAIL_INTEGRATION"
+  ) {
     return mapIntegrationsPermission(permissionType);
   }
 
@@ -287,12 +296,11 @@ export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput)
   }
 
   if (
-    screen === "VENDOR_APPROVAL_WORKFLOW" ||
-    screen === "VENDOR_WORKFLOW" ||
+    screen === "MANAGE_ROLE_APPROVAL_WORKFLOW" ||
     screen === "APPROVAL_WORKFLOW" ||
     screen === "WORKFLOW"
   ) {
-    return mapVendorWorkflowPermission(permissionType);
+    return mapApprovalWorkflowPermission(permissionType);
   }
 
   return null;
