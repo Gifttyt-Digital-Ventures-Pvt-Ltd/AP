@@ -93,6 +93,20 @@ const getDownloadUrl = (response) =>
   response?.fileUrl ||
   response?.file_url;
 
+const getGrnFormatSnapshot = (grn) =>
+  grn?.config_snapshot ??
+  grn?.configSnapshot ??
+  grn?.format_config_snapshot ??
+  grn?.formatConfigSnapshot ??
+  null;
+
+const getGrnFormatConfigId = (grn) =>
+  grn?.grn_format_id ??
+  grn?.grnFormatId ??
+  grn?.formatConfigId ??
+  getGrnFormatSnapshot(grn)?.id ??
+  '';
+
 const normalizeDownloadUrl = (url) => {
   if (!url) return '';
   if (/^https?:\/\//i.test(url)) return url;
@@ -311,6 +325,24 @@ const GoodsReceipt = () => {
 
   const createFormFormatConfig = resolveFormFormatConfig(grnForm);
   const uploadFormFormatConfig = resolveFormFormatConfig(grnForm);
+  const detailFormatConfig = useMemo(() => {
+    const snapshot = getGrnFormatSnapshot(detailGrn);
+    const formatConfigId = getGrnFormatConfigId(detailGrn);
+
+    if (snapshot && typeof snapshot === 'object') {
+      return makeGrnFormatConfig(
+        snapshot,
+        formatConfigId || 'default-grn-format',
+        snapshot.name || 'GRN Format',
+        tenantBranding,
+      );
+    }
+
+    return (
+      savedFormatConfigs.find((config) => config.id === formatConfigId) ||
+      activeFormatConfig
+    );
+  }, [activeFormatConfig, detailGrn, savedFormatConfigs, tenantBranding]);
 
   useEffect(() => {
     const formatsFromApi = getListData(formatConfigsResponse).map((config, index) =>
@@ -1377,7 +1409,7 @@ const GoodsReceipt = () => {
         grn={detailGrn}
         open={Boolean(detailGrn)}
         onOpenChange={closeGrnDetailDialog}
-        formatConfig={activeFormatConfig}
+        formatConfig={detailFormatConfig}
         vendors={vendorsData}
         initialEditMode={detailEditMode}
         canApprove={canPostGrn}

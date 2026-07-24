@@ -9,6 +9,7 @@ import {
 import { toInvoiceUiPayload, EMPTY_INVOICE_LIST_RESPONSE, getInvoiceListItems } from '../../Services/utils/payloadMappers';
 import {
   useGetPaymentsQuery,
+  useLazyGetPaymentQuery,
   useGetBankAccountsQuery,
   useBulkReleasePaymentsMutation,
   useCreatePaymentMutation,
@@ -190,6 +191,7 @@ const Payments = () => {
   const [createPaymentBatch] = useCreatePaymentBatchMutation();
   const [cancelInvoice, { isLoading: cancelInvoiceLoading }] = useCancelInvoiceMutation();
   const [getInvoice] = useLazyGetInvoiceQuery();
+  const [getPayment] = useLazyGetPaymentQuery();
   const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
@@ -677,6 +679,11 @@ const Payments = () => {
 
   const resolvePaymentInvoice = (payment) => {
     const normalizedPayment = normalizePayment(payment);
+    const embeddedInvoice =
+      normalizedPayment.invoice ??
+      normalizedPayment.invoiceDetails ??
+      normalizedPayment.invoice_details;
+    if (embeddedInvoice) return toInvoiceUiPayload(embeddedInvoice);
     if (normalizedPayment.invoice_id) {
       const matchById = allInvoices.find((invoice) => invoice.id === normalizedPayment.invoice_id);
       if (matchById) return matchById;
@@ -793,11 +800,21 @@ const Payments = () => {
       return;
     }
 
-    // TODO: Use a payment detail endpoint here if the backend exposes one.
-    toast.warning('Payment details are not available yet.');
+    if (notificationWeakEntity) {
+      toast.warning('Payment details are not available yet.');
+      return;
+    }
+
+    getPayment(notificationPaymentId)
+      .unwrap()
+      .then((payment) => handleViewPaymentInvoice(payment))
+      .catch(() => {
+        toast.warning('Payment details are not available yet.');
+      });
   }, [
     allInvoices,
     getInvoice,
+    getPayment,
     notificationAction,
     notificationInvoiceId,
     notificationPaymentId,

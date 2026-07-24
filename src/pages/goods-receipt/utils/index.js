@@ -95,6 +95,31 @@ export const normalizeGrnLineItem = (item = {}) => ({
 export const normalizeGrn = (grn = {}) => ({
   ...grn,
   id: grn.id ?? grn.grnId ?? grn.grn_id,
+  grn_format_id:
+    grn.grn_format_id ??
+    grn.grnFormatId ??
+    grn.formatConfigId ??
+    grn.config_snapshot?.id ??
+    grn.configSnapshot?.id ??
+    '',
+  grnFormatId:
+    grn.grnFormatId ??
+    grn.grn_format_id ??
+    grn.formatConfigId ??
+    grn.config_snapshot?.id ??
+    grn.configSnapshot?.id ??
+    '',
+  formatConfigId:
+    grn.formatConfigId ??
+    grn.grn_format_id ??
+    grn.grnFormatId ??
+    grn.config_snapshot?.id ??
+    grn.configSnapshot?.id ??
+    '',
+  config_snapshot:
+    grn.config_snapshot ?? grn.configSnapshot ?? grn.format_config_snapshot ?? grn.formatConfigSnapshot,
+  configSnapshot:
+    grn.configSnapshot ?? grn.config_snapshot ?? grn.formatConfigSnapshot ?? grn.format_config_snapshot,
   grn_number: grn.grn_number ?? grn.grnNumber ?? '',
   po_id: grn.po_id ?? grn.poId ?? '',
   po_number: grn.po_number ?? grn.poNumber ?? '',

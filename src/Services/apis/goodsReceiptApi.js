@@ -10,6 +10,34 @@ const grnFormatTags = [{ type: "GoodsReceipt", id: "CONFIG" }];
 
 const getGrnFormatId = (entity) => entity?.id ?? entity?.grnFormatConfigId ?? entity?.grn_format_config_id;
 
+const unwrapGrnDetailResponse = (response) => response?.grn ?? response?.data ?? response;
+
+const normalizeGrnDetailResponse = (response) => {
+  const grn = unwrapGrnDetailResponse(response);
+  if (!grn || typeof grn !== "object") return grn;
+
+  const configSnapshot =
+    grn.config_snapshot ??
+    grn.configSnapshot ??
+    grn.format_config_snapshot ??
+    grn.formatConfigSnapshot;
+  const formatConfigId =
+    grn.grn_format_id ??
+    grn.grnFormatId ??
+    grn.formatConfigId ??
+    configSnapshot?.id ??
+    "";
+
+  return {
+    ...grn,
+    grn_format_id: formatConfigId,
+    grnFormatId: grn.grnFormatId ?? formatConfigId,
+    formatConfigId: grn.formatConfigId ?? formatConfigId,
+    config_snapshot: configSnapshot,
+    configSnapshot,
+  };
+};
+
 const provideGrnFormatListTags = (result) => [
   { type: "GoodsReceipt", id: "CONFIG_LIST" },
   ...getListData(result)
@@ -30,6 +58,7 @@ export const goodsReceiptApi = serviceApi.injectEndpoints({
     }),
     getGrnById: builder.query({
       query: (id) => ({ url: `/grn/${id}`, method: "GET" }),
+      transformResponse: normalizeGrnDetailResponse,
       providesTags: (_result, _error, id) => [{ type: "GoodsReceipt", id }],
     }),
     getGrnDownloadUrl: builder.mutation({

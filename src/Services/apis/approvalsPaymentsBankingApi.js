@@ -22,6 +22,11 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
       transformResponse: extractListResponse,
       providesTags: ["Payments"],
     }),
+    getPayment: builder.query({
+      query: (id) => ({ url: `/payments/${id}`, method: "GET" }),
+      transformResponse: (response) => response?.payment ?? response?.data ?? response,
+      providesTags: (_result, _error, id) => [{ type: "Payments", id }],
+    }),
     createPayment: builder.mutation({
       query: (body) => ({
         url: "/payments",
@@ -69,6 +74,8 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
 export const {
   useGetPendingApprovalsQuery,
   useGetPaymentsQuery,
+  useGetPaymentQuery,
+  useLazyGetPaymentQuery,
   useCreatePaymentMutation,
   useBulkReleasePaymentsMutation,
   useRecordPaymentsMutation,

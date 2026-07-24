@@ -156,6 +156,14 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
         return [{ type: "Vendors", id: "LIST" }];
       },
     }),
+    getVendor: builder.query({
+      query: (id) => ({ url: `/vendors/${id}`, method: "GET" }),
+      transformResponse: (response) => {
+        const payload = response?.vendor ?? response?.data ?? response;
+        return toVendorUiPayload(payload);
+      },
+      providesTags: (_result, _error, id) => [{ type: "Vendors", id }],
+    }),
     createVendor: builder.mutation({
       query: (body) => ({
         url: "/vendors",
@@ -254,6 +262,8 @@ export const {
   useGetPendingCheckerInvoicesQuery,
   useCheckInvoiceMutation,
   useGetVendorsQuery,
+  useGetVendorQuery,
+  useLazyGetVendorQuery,
   useCreateVendorMutation,
   useRequestVendorAdditionMutation,
   useUpdateVendorMutation,

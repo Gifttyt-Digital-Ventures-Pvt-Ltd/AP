@@ -64,7 +64,8 @@ const Settings = () => {
     'MANAGE_BILLING',
   ]) && isBillingFeatureEnabled;
   const canManageNotificationSettings =
-    isCorporateAdmin || hasAnyPermission(['notifications-manage', 'NOTIFICATIONS MANAGE']);
+    isCorporateSectionEnabled('SETTINGS_NOTIFICATIONS') &&
+    (isCorporateAdmin || hasAnyPermission(['notifications-manage', 'NOTIFICATIONS MANAGE']));
   const availableSettingsTabs = useMemo(() => {
     const tabs = [];
     if (canViewOrganisationSettings) tabs.push('organisation');

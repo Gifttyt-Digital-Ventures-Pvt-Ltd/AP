@@ -73,6 +73,7 @@ export const Layout = ({ children }) => {
     canAccessRoute,
     isLoaded: rbacLoaded,
     isTokenBasedSubscription,
+    isCorporateSectionEnabled,
   } = useRBAC();
   const { data: corporateContext = null } = useGetCorporateDetailsQuery();
   const { data: corporateUserContext = null } =
@@ -86,16 +87,18 @@ export const Layout = ({ children }) => {
     refetchOnFocus: false,
     refetchOnMountOrArgChange: false,
   });
+  const canUseNotifications = rbacLoaded && isCorporateSectionEnabled("SETTINGS_NOTIFICATIONS");
   const { data: notificationSettings = null, isError: notificationSettingsError } =
     useGetNotificationSettingsQuery(undefined, {
-      skip: !user,
+      skip: !user || !canUseNotifications,
       refetchOnFocus: true,
     });
   const inAppNotificationsEnabled =
-    notificationSettingsError ? true : notificationSettings?.master?.inAppEnabled !== false;
-  useNotificationStream(Boolean(user && inAppNotificationsEnabled));
+    canUseNotifications &&
+    (notificationSettingsError ? true : notificationSettings?.master?.inAppEnabled !== false);
+  useNotificationStream(Boolean(user && canUseNotifications && inAppNotificationsEnabled));
   const { data: unreadNotifications = null } = useGetUnreadNotificationCountQuery(undefined, {
-    skip: !user || !inAppNotificationsEnabled,
+    skip: !user || !canUseNotifications || !inAppNotificationsEnabled,
     pollingInterval: 60000,
     refetchOnFocus: true,
   });
@@ -138,7 +141,7 @@ export const Layout = ({ children }) => {
     { icon: BarChart3, label: "Reports", path: "/reports" },
     { icon: Plug, label: "Integrations", path: "/integrations" },
     { icon: Building2, label: "Banking", path: "/banking" },
-    { icon: Bell, label: "Notifications", path: "/notifications" },
+    ...(canUseNotifications ? [{ icon: Bell, label: "Notifications", path: "/notifications" }] : []),
     { icon: Shield, label: "User Roles", path: "/user-roles" },
     { icon: Settings, label: "Settings", path: "/settings" },
     { icon: History, label: "Audit Trail", path: "/audit-trail" },

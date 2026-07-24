@@ -2,6 +2,7 @@ import React, { useCallback, useDeferredValue, useEffect, useMemo, useRef, useSt
 import { useSearchParams } from 'react-router-dom';
 import {
   useGetVendorsQuery,
+  useLazyGetVendorQuery,
   useCreateVendorMutation,
   useUpdateVendorMutation,
   useDeleteVendorMutation,
@@ -228,6 +229,7 @@ const Vendors = () => {
   const [updateVendor, { isLoading: updateVendorLoading }] = useUpdateVendorMutation();
   const [deleteVendor, { isLoading: deleteVendorLoading }] = useDeleteVendorMutation();
   const [approveVendor, { isLoading: approveVendorLoading }] = useApproveVendorMutation();
+  const [getVendor] = useLazyGetVendorQuery();
   const [requestAccountingUnlock, { isLoading: requestVendorUnlockLoading }] =
     useRequestAccountingReadyUnlockMutation();
   const { user } = useAuth();
@@ -815,6 +817,7 @@ const Vendors = () => {
   const notificationAction = searchParams.get('action');
   const notificationVendorId = searchParams.get('vendorId');
   const notificationFilter = searchParams.get('filter');
+  const notificationWeakEntity = searchParams.get('weakEntity') === '1';
 
   useEffect(() => {
     if (notificationSource === 'notification' && notificationFilter === 'pending-approval') {
@@ -844,12 +847,29 @@ const Vendors = () => {
       return;
     }
 
-    // TODO: Use a vendor detail endpoint here if the backend exposes one.
-    toast.warning('Could not open the exact item. Showing the related module instead.');
+    if (notificationWeakEntity) {
+      toast.warning('Could not open the exact item. Showing the related module instead.');
+      return;
+    }
+
+    getVendor(notificationVendorId)
+      .unwrap()
+      .then((vendor) => {
+        if (vendor?.id || vendor?.vendorId) {
+          setViewingVendor(vendor);
+          return;
+        }
+        toast.warning('Could not open the exact item. Showing the related module instead.');
+      })
+      .catch(() => {
+        toast.warning('Could not open the exact item. Showing the related module instead.');
+      });
   }, [
+    getVendor,
     notificationAction,
     notificationSource,
     notificationVendorId,
+    notificationWeakEntity,
     vendors,
   ]);
 

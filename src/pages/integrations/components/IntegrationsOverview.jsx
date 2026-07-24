@@ -174,17 +174,11 @@ const IntegrationsOverview = () => {
   const emailIntegration = selectEmailIntegration(summary);
   const erpIntegration = selectErpIntegration(summary);
   const canViewGmail =
-    hasAnyPermission(["settings-interaction"]) &&
+    hasAnyPermission(["integrations-manage"]) &&
     isCorporateSectionEnabled("GMAIL_INTEGRATION_ALL");
   const canViewErp =
-    hasAnyPermission([
-      "integrations.view",
-      "integrations.connect",
-      "integrations.disconnect",
-      "integrations.mapping.edit",
-      "integrations.sync.trigger",
-      "integrations.review.resolve",
-    ]) && isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
+    hasAnyPermission(["integrations-manage"]) &&
+    isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
   const activeErpProvider = erpIntegration.provider;
 
   if (isLoading) {
