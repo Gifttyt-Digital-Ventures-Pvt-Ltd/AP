@@ -3,6 +3,7 @@ import AppDataTable from '../../../../components/common/AppDataTable';
 import { Button } from '../../../../components/ui/button';
 import { TableCell, TableRow } from '../../../../components/ui/table';
 import { formatCurrency, formatDate } from '../../utils/taxFormatting';
+import { cn } from '../../../../lib/utils';
 import {
   GstReconDifferBadge,
   GstReconStatusChip,
@@ -94,7 +95,10 @@ const GstReconOverviewTable = ({
         }
 
         return (
-          <TableCell key={header.key} className={header.cellClassName}>
+          <TableCell
+            key={header.key}
+            className={cn('border border-border', header.cellClassName)}
+          >
             {value}
           </TableCell>
         );
@@ -113,6 +117,7 @@ const GstReconOverviewTable = ({
           emptyMessage={emptyMessage}
           tableContainerClassName="overflow-visible"
           headClassName="[&_th]:sticky [&_th]:top-0 [&_th]:z-10"
+          bordered
         />
       </div>
 

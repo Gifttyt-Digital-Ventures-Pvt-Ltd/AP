@@ -123,7 +123,6 @@ import InvoiceDueDateCell from "./components/InvoiceDueDateCell";
 import {
   Ban,
   Sparkles,
-  Eye,
   Mail,
   Pencil,
   Search,
@@ -260,7 +259,7 @@ const baseInvoiceTableHeader = [
     headerClassName:
       "p-3 text-left text-xs font-medium sticky left-[var(--invoice-sticky-col2)] ",
     cellClassName:
-      "p-3 text-sm sticky left-[var(--invoice-sticky-col2)]  bg-inherit",
+      "p-3 text-sm sticky left-[var(--invoice-sticky-col2)]  bg-inherit ",
   },
   {
     key: "invoiceNumber",
@@ -351,8 +350,8 @@ const baseInvoiceTableHeader = [
   {
     key: "actions",
     title: "Actions",
-    headerClassName: "p-3 text-left text-xs font-medium sticky right-0 border-l-2 border-l-shadow-2xl",
-    cellClassName: "p-3 text-left sticky right-0 bg-inherit border-l-2 border-l-shadow-2xl",
+    headerClassName: "p-3 text-left text-xs font-medium",
+    cellClassName: "p-3 text-left",
   },
 ];
 
@@ -2598,10 +2597,10 @@ const InvoicesPage = () => {
       <React.Fragment key={invoiceId}>
         <TableRow
           className={cn(
-            rowIndex % 2 === 1 ? "bg-muted" : "bg-card",
-            "border-b border-border transition-colors hover:bg-muted",
+            "bg-card border-b border-border transition-colors hover:bg-muted cursor-pointer",
             invoice.isDuplicate && "bg-amber-100 hover:bg-amber-100",
           )}
+          onClick={() => handleViewInvoice(invoice)}
           data-testid={`invoice-row-${invoice?.id ?? "unknown"}`}
         >
           {headers.map((header) => {
@@ -2695,17 +2694,10 @@ const InvoicesPage = () => {
                 break;
               case "actions":
                 value = (
-                  <div className="flex justify-start gap-1">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleViewInvoice(invoice)}
-                      data-testid={`view-invoice-${invoice?.id ?? "unknown"}`}
-                      title="View Invoice"
-                      className="h-8 w-8 p-0"
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
+                  <div
+                    className="flex justify-start gap-1"
+                    onClick={(event) => event.stopPropagation()}
+                  >
                     {showProformaInvoiceFields &&
                       isProformaInvoice(invoice) &&
                       canUploadInvoices &&
@@ -2778,7 +2770,12 @@ const InvoicesPage = () => {
                 );
                 break;
               case "vendorName":
-                value = <ClippedTextWithTooltip text={invoice.vendorName} />;
+                value = (
+                  <ClippedTextWithTooltip
+                    text={invoice.vendorName}
+                    maxWidthClass="max-w-[140px]"
+                  />
+                );
                 break;
               case "documentType":
                 value = (
@@ -2796,7 +2793,15 @@ const InvoicesPage = () => {
             }
 
             return (
-              <TableCell key={header.key} className={header.cellClassName}>
+              <TableCell
+                key={header.key}
+                className={cn("border border-border", header.cellClassName)}
+                onClick={
+                  header.key === "documentType"
+                    ? (event) => event.stopPropagation()
+                    : undefined
+                }
+              >
                 {value}
               </TableCell>
             );
@@ -3064,6 +3069,7 @@ const InvoicesPage = () => {
             tableContainerClassName="overflow-visible"
             headClassName="border-b border-border bg-muted shadow-sm"
             stickyHeader
+            bordered
             emptyMessage="No invoices found. Upload your first invoice to get started!"
             emptyTestId="no-invoices"
           />

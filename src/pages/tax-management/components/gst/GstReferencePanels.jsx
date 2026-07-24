@@ -169,12 +169,12 @@ const GstReconciliationDrawerContent = ({ row }) => {
           Tax Breakup
         </p>
         <div className="overflow-hidden rounded-md border">
-          <Table>
+          <Table className="border-separate border-spacing-0">
             <TableHeader>
               <TableRow className="bg-muted/50">
                 {["Component", "Books", "GST Portal", "Difference"].map(
                   (heading) => (
-                    <TableHead key={heading} className="text-xs">
+                    <TableHead key={heading} className="border border-border text-xs">
                       {heading}
                     </TableHead>
                   ),
@@ -184,15 +184,15 @@ const GstReconciliationDrawerContent = ({ row }) => {
             <TableBody>
               {breakup.map((line) => (
                 <TableRow key={line.component}>
-                  <TableCell className="text-sm">{line.component}</TableCell>
-                  <TableCell className="text-sm font-medium">
+                  <TableCell className="border border-border text-sm">{line.component}</TableCell>
+                  <TableCell className="border border-border text-sm font-medium">
                     {line.books}
                   </TableCell>
-                  <TableCell className="text-sm font-medium">
+                  <TableCell className="border border-border text-sm font-medium">
                     {line.portal}
                   </TableCell>
                   <TableCell
-                    className={`text-sm font-semibold ${line.difference !== "₹0.00" ? "text-red-600" : "text-green-600"}`}
+                    className={`border border-border text-sm font-semibold ${line.difference !== "₹0.00" ? "text-red-600" : "text-green-600"}`}
                   >
                     {line.difference}
                   </TableCell>

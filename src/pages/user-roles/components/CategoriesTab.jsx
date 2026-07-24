@@ -12,6 +12,7 @@ import AppDataTable from "../../../components/common/AppDataTable";
 import RefreshButton from "../../../components/common/RefreshButton";
 import { Button } from "../../../components/ui/button";
 import { TableCell, TableRow } from "../../../components/ui/table";
+import { cn } from "../../../lib/utils";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -227,7 +228,10 @@ const CategoriesTab = () => {
         }
 
         return (
-          <TableCell key={header.key} className={header.cellClassName}>
+          <TableCell
+            key={header.key}
+            className={cn('border border-border', header.cellClassName)}
+          >
             {value}
           </TableCell>
         );
@@ -285,6 +289,7 @@ const CategoriesTab = () => {
           isLoading={categoriesLoading || categoriesFetching}
           loadingRowCount={4}
           striped
+          bordered
         />
 
         {!categoriesLoading && categories.length === 0 && (

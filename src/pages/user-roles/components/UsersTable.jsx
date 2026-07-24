@@ -4,6 +4,7 @@ import { CheckCircle, Eye, Pencil, ShieldCheck, Trash2, X } from 'lucide-react';
 import { format } from 'date-fns';
 import AppDataTable from '../../../components/common/AppDataTable';
 import { TableCell, TableRow } from '../../../components/ui/table';
+import { cn } from '../../../lib/utils';
 
 const roleBadgeClass = (role) => {
   const palettes = [
@@ -155,7 +156,10 @@ const UsersTable = ({
         }
 
         return (
-          <TableCell key={header.key} className={header.cellClassName}>
+          <TableCell
+            key={header.key}
+            className={cn('border border-border', header.cellClassName)}
+          >
             {value}
           </TableCell>
         );
@@ -170,6 +174,7 @@ const UsersTable = ({
         tableData={users}
         renderRow={renderUserRow}
         emptyMessage="No users found"
+        bordered
       />
     </div>
   );

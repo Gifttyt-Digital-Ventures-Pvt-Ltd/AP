@@ -168,23 +168,23 @@ const GrnListTab = ({
       </Card>
 
       <Card className="overflow-hidden">
-        <Table>
+        <Table className="border-separate border-spacing-0">
           <TableHeader>
             <TableRow>
-              <TableHead>GRN Number</TableHead>
-              <TableHead>Date</TableHead>
-              <TableHead>Vendor</TableHead>
-              <TableHead>PO Reference</TableHead>
-              <TableHead>Source</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="text-center">Lines</TableHead>
-              <TableHead>Actions</TableHead>
+              <TableHead className="border border-border">GRN Number</TableHead>
+              <TableHead className="border border-border">Date</TableHead>
+              <TableHead className="border border-border">Vendor</TableHead>
+              <TableHead className="border border-border">PO Reference</TableHead>
+              <TableHead className="border border-border">Source</TableHead>
+              <TableHead className="border border-border">Status</TableHead>
+              <TableHead className="border border-border text-center">Lines</TableHead>
+              <TableHead className="border border-border">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {pageData.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="py-12 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="border border-border py-12 text-center text-muted-foreground">
                   No goods receipts found.{' '}
                   {canCreate && (
                     <Button variant="link" className="px-1" onClick={onCreate}>
@@ -196,28 +196,28 @@ const GrnListTab = ({
             ) : (
               pageData.map((grn) => (
                 <TableRow key={grn.id} data-testid={`grn-row-${grn?.id ?? 'unknown'}`}>
-                  <TableCell className="font-semibold text-primary">{grn.grn_number}</TableCell>
-                  <TableCell className="text-muted-foreground">{formatDate(grn.receipt_date)}</TableCell>
-                  <TableCell>{grn.vendor_name || '—'}</TableCell>
-                  <TableCell>
+                  <TableCell className="border border-border font-semibold text-primary">{grn.grn_number}</TableCell>
+                  <TableCell className="border border-border text-muted-foreground">{formatDate(grn.receipt_date)}</TableCell>
+                  <TableCell className="border border-border">{grn.vendor_name || '—'}</TableCell>
+                  <TableCell className="border border-border">
                     {grn.po_number ? (
                       <span className="font-medium text-blue-600">{grn.po_number}</span>
                     ) : (
                       '—'
                     )}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="border border-border">
                     <GrnSourceBadge source={grn.source_type} />
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="border border-border">
                     <GrnStatusBadge status={grn.status} />
                   </TableCell>
-                  <TableCell className="text-center">
+                  <TableCell className="border border-border text-center">
                     <span className="inline-flex min-w-[1.75rem] justify-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
                       {grn.line_items?.length || 0}
                     </span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="border border-border">
                     <div className="flex gap-1">
                       <Button variant="ghost" size="sm" onClick={() => onView(grn)} data-testid={`view-grn-${grn?.id ?? 'unknown'}`}>
                         <Eye className="mr-1 h-4 w-4" />
