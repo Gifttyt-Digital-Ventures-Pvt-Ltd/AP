@@ -14,6 +14,12 @@ const toLocalDateTimeString = (value) => {
   return value;
 };
 
+const roundMoney = (value) => {
+  if (value === null || value === undefined || value === "") return value;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? Math.round(numeric * 100) / 100 : value;
+};
+
 const normalizeDepartmentId = (value) => {
   if (value === "" || value === null || value === undefined) return undefined;
   const numeric = Number(value);
@@ -178,7 +184,8 @@ const toInvoiceLineItemDiscountTypeApiValue = (discountType = "") => {
   return "amount";
 };
 
-const toInvoiceLineItemApiPayload = (item = {}) => {
+const toInvoiceLineItemApiPayload = (item = {}, options = {}) => {
+  const { erpIntegrationEnabled = true } = options;
   const normalized = normalizeInvoiceLineItem(item);
   const gstRate = resolveGstRateFromLineItem(normalized);
   const hsnSac = String(normalized.hsnSac ?? "").trim();
@@ -202,16 +209,18 @@ const toInvoiceLineItemApiPayload = (item = {}) => {
   if (gstRate !== undefined) payload.gstRate = gstRate;
   if (itemCode) payload.itemCode = itemCode;
   if (uom) payload.uom = uom;
-  if (normalized.ledger) {
-    payload.ledger = normalized.ledger;
-    payload.ledgerName = normalized.ledger;
+  if (erpIntegrationEnabled) {
+    if (normalized.ledger) {
+      payload.ledger = normalized.ledger;
+      payload.ledgerName = normalized.ledger;
+    }
+    if (normalized.ledgerId) payload.ledgerId = normalized.ledgerId;
+    if (normalized.accountGroupId) payload.accountGroupId = normalized.accountGroupId;
+    if (normalized.accountGroupName) payload.accountGroupName = normalized.accountGroupName;
+    if (normalized.groupId) payload.groupId = normalized.groupId;
+    if (normalized.groupName) payload.groupName = normalized.groupName;
+    if (normalized.expenseType) payload.expenseType = normalized.expenseType;
   }
-  if (normalized.ledgerId) payload.ledgerId = normalized.ledgerId;
-  if (normalized.accountGroupId) payload.accountGroupId = normalized.accountGroupId;
-  if (normalized.accountGroupName) payload.accountGroupName = normalized.accountGroupName;
-  if (normalized.groupId) payload.groupId = normalized.groupId;
-  if (normalized.groupName) payload.groupName = normalized.groupName;
-  if (normalized.expenseType) payload.expenseType = normalized.expenseType;
 
   return payload;
 };
@@ -232,6 +241,15 @@ const resolveInvoiceCategoryPayload = (invoice = {}) => {
 /** Normalizes API/list responses into camelCase invoice objects for the UI. */
 export const normalizeInvoiceResponse = (invoice = {}) => {
   const lineItemsSource = invoice.lineItems ?? invoice.line_items ?? [];
+  const lineItemMode = pickInvoiceField(invoice, "lineItemMode", "line_item_mode", "DETAILED");
+  const lineItemsRemoved = Boolean(
+    invoice.lineItemsRemoved ?? invoice.line_items_removed ?? false,
+  );
+  const removedLineItemsCount = Number(
+    pickInvoiceField(invoice, "removedLineItemsCount", "removed_line_items_count") ??
+      pickInvoiceField(invoice, "previousLineItemCount", "previous_line_item_count") ??
+      0,
+  ) || 0;
   const category = invoice.category;
   const categoryId = category?.id ?? invoice.categoryId ?? invoice.category_id;
   const totalAmount = pickInvoiceField(invoice, "totalAmount", "total_amount");
@@ -246,6 +264,15 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
     lineItems: Array.isArray(lineItemsSource)
       ? lineItemsSource.map(normalizeInvoiceLineItem)
       : [],
+    lineItemMode,
+    lineItemsRemoved,
+    removedLineItemsCount,
+    subTotal:
+      pickInvoiceField(invoice, "subTotal", "sub_total") ??
+      pickInvoiceField(invoice, "subtotal", "subtotal"),
+    totalTaxAmount:
+      pickInvoiceField(invoice, "totalTaxAmount", "total_tax_amount") ??
+      pickInvoiceField(invoice, "gstAmount", "gst_amount"),
     invoiceDate: pickInvoiceField(invoice, "invoiceDate", "invoice_date"),
     dueDate: pickInvoiceField(invoice, "dueDate", "due_date"),
     ...normalizeInvoiceOverdueFields(invoice),
@@ -426,43 +453,65 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
     uploadedFileName,
     categoryEnabled = true,
     campaignEnabled = true,
+    erpIntegrationEnabled = true,
   } = options;
   const lineItemsSource = invoice.lineItems ?? invoice.line_items ?? [];
+  const lineItemMode = pickInvoiceField(invoice, "lineItemMode", "line_item_mode", "DETAILED");
+  const isSummaryOnly = lineItemMode === "SUMMARY_ONLY";
+  const lineItemsRemoved = Boolean(
+    invoice.lineItemsRemoved ?? invoice.line_items_removed ?? false,
+  );
   const normalizedLineItems = Array.isArray(lineItemsSource)
     ? lineItemsSource.map(normalizeInvoiceLineItem)
     : [];
+  const removedLineItemsCount = Number(
+    pickInvoiceField(invoice, "removedLineItemsCount", "removed_line_items_count") ??
+      pickInvoiceField(invoice, "previousLineItemCount", "previous_line_item_count") ??
+      0,
+  ) || 0;
 
-  const subTotalFromLines = normalizedLineItems.reduce(
-    (sum, item) => sum + (Number(item.amount) || 0),
-    0,
-  );
-  const gstAmount =
-    totals != null
+  const subTotalFromLines = isSummaryOnly
+    ? Number(
+        pickInvoiceField(invoice, "subTotal", "sub_total") ??
+          pickInvoiceField(invoice, "subtotal", "subtotal", 0),
+      ) || 0
+    : normalizedLineItems.reduce(
+        (sum, item) => sum + (Number(item.amount) || 0),
+        0,
+      );
+  const gstAmount = roundMoney(
+    isSummaryOnly
+      ? Number(
+          pickInvoiceField(invoice, "totalTaxAmount", "total_tax_amount") ??
+            pickInvoiceField(invoice, "gstAmount", "gst_amount", 0),
+        ) || 0
+      : totals != null
       ? (Number(totals.cgst) || 0) +
         (Number(totals.sgst) || 0) +
         (Number(totals.igst) || 0) +
         (Number(totals.foreignTax) || 0)
-      : Number(pickInvoiceField(invoice, "gstAmount", "gst_amount", 0));
+      : Number(pickInvoiceField(invoice, "gstAmount", "gst_amount", 0)),
+  );
   const totalAmount =
     totals?.total != null
-      ? Number(totals.total)
-      : Number(
+      ? roundMoney(totals.total)
+      : roundMoney(Number(
           invoice.totalAmount ?? invoice.total_amount ?? subTotalFromLines + gstAmount,
-        ) || 0;
+        ) || 0);
   const resolvedTdsAmount =
     tdsAmount !== undefined
       ? tdsAmount === null
         ? null
-        : Number(tdsAmount)
-      : Number(pickInvoiceField(invoice, "tdsAmount", "tds_amount", 0));
+        : roundMoney(tdsAmount)
+      : roundMoney(Number(pickInvoiceField(invoice, "tdsAmount", "tds_amount", 0)));
   const explicitNetAmount = pickInvoiceField(invoice, "netAmount", "net_amount");
   const explicitNetPayable = pickInvoiceField(invoice, "netPayable", "net_payable");
   const resolvedNetAmount =
     explicitNetAmount !== undefined && explicitNetAmount !== null && explicitNetAmount !== ""
-      ? Number(explicitNetAmount)
+      ? roundMoney(explicitNetAmount)
       : explicitNetPayable !== undefined && explicitNetPayable !== null && explicitNetPayable !== ""
-        ? Number(explicitNetPayable)
-        : Math.max(totalAmount - (Number(resolvedTdsAmount) || 0), 0);
+        ? roundMoney(explicitNetPayable)
+        : roundMoney(Math.max(totalAmount - (Number(resolvedTdsAmount) || 0), 0));
   const parsedTdsSelection = resolveTdsSelection(
     pickInvoiceField(invoice, "tds", "tds", ""),
   );
@@ -496,7 +545,16 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
     invoiceNumber: pickInvoiceField(invoice, "invoiceNumber", "invoice_number", ""),
     vendorId: pickInvoiceField(invoice, "vendorId", "vendor_id", ""),
     vendorName: pickInvoiceField(invoice, "vendorName", "vendor_name", ""),
-    lineItems: normalizedLineItems.map(toInvoiceLineItemApiPayload),
+    lineItemMode,
+    lineItemsRemoved,
+    removedLineItemsCount: isSummaryOnly ? removedLineItemsCount : 0,
+    lineItems: isSummaryOnly
+      ? []
+      : normalizedLineItems.map((item) =>
+          toInvoiceLineItemApiPayload(item, { erpIntegrationEnabled }),
+        ),
+    subTotal: roundMoney(subTotalFromLines),
+    totalTaxAmount: gstAmount,
     invoiceDate: toLocalDateTimeString(
       pickInvoiceField(invoice, "invoiceDate", "invoice_date", ""),
     ),
@@ -510,13 +568,17 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
     tdsSectionId: tdsSelection.tdsSectionId,
     tdsSectionCode: tdsSelection.tdsSectionCode,
     tdsRate: tdsSelection.tdsRate,
-    voucherType: pickInvoiceField(invoice, "voucherType", "voucher_type", ""),
-    tdsNarration:
-      pickInvoiceField(invoice, "tdsNarration", "tds_narration") ??
-      pickInvoiceField(invoice, "narration", "narration", ""),
-    narration:
-      pickInvoiceField(invoice, "tdsNarration", "tds_narration") ??
-      pickInvoiceField(invoice, "narration", "narration", ""),
+    ...(erpIntegrationEnabled
+      ? {
+          voucherType: pickInvoiceField(invoice, "voucherType", "voucher_type", ""),
+          tdsNarration:
+            pickInvoiceField(invoice, "tdsNarration", "tds_narration") ??
+            pickInvoiceField(invoice, "narration", "narration", ""),
+          narration:
+            pickInvoiceField(invoice, "tdsNarration", "tds_narration") ??
+            pickInvoiceField(invoice, "narration", "narration", ""),
+        }
+      : {}),
     currency:
       normalizeCurrencyCode(
         pickInvoiceField(invoice, "currency", "currency_code", ""),
@@ -581,16 +643,16 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
     billingAddress: pickInvoiceField(invoice, "billingAddress", "billing_address", ""),
     shippingAddress: pickInvoiceField(invoice, "shippingAddress", "shipping_address", ""),
     discountsLevel: pickInvoiceField(invoice, "discountsLevel", "discounts_level", ""),
-    invoiceDiscount: Number(
+    invoiceDiscount: roundMoney(Number(
       pickInvoiceField(invoice, "invoiceDiscount", "invoice_discount", 0),
-    ),
+    )),
     invoiceDiscountType:
       pickInvoiceField(invoice, "invoiceDiscountType", "invoice_discount_type", "%"),
     taxesLevel: pickInvoiceField(invoice, "taxesLevel", "taxes_level", ""),
     invoiceTax: pickInvoiceField(invoice, "invoiceTax", "invoice_tax", ""),
     invoiceTaxName: pickInvoiceField(invoice, "invoiceTaxName", "invoice_tax_name", ""),
     invoiceTaxRate: pickInvoiceField(invoice, "invoiceTaxRate", "invoice_tax_rate", ""),
-    roundOff: pickInvoiceField(invoice, "roundOff", "round_off") ?? invoice.roundoff,
+    roundOff: roundMoney(pickInvoiceField(invoice, "roundOff", "round_off") ?? invoice.roundoff),
     ...(invoice.status != null && invoice.status !== ""
       ? { status: invoice.status }
       : {}),

@@ -8,7 +8,11 @@ import {
   ClipboardList,
 } from "lucide-react";
 import { DEFAULT_CURRENCY } from "../../../utils/currency";
-import { INVOICE_LEVEL, isInrInvoiceCurrency } from "../utils/invoiceTax";
+import {
+  INVOICE_LEVEL,
+  LINE_ITEM_MODE_SUMMARY_ONLY,
+  isInrInvoiceCurrency,
+} from "../utils/invoiceTax";
 
 export const buildInvoiceFormChecklist = (
   formData,
@@ -52,6 +56,10 @@ export const buildInvoiceFormChecklist = (
     (formData.lineItems || []).every(
       (item) => item.description?.trim() && Number(item.unitRate) > 0,
     );
+  const isSummaryOnlyInvoice =
+    formData.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
+  const summaryAmountsValid =
+    Number(formData.subTotal) >= 0 && Number(formData.totalTaxAmount) >= 0;
 
   const hasVendorName = !!formData.vendorName?.trim();
   const vendorUnmatched =
@@ -213,10 +221,12 @@ export const buildInvoiceFormChecklist = (
       items: [
         item({
           label:
-            validLineItems.length === 0
+            isSummaryOnlyInvoice
+              ? "Summary amounts"
+              : validLineItems.length === 0
               ? "At least one line item"
               : `${validLineItems.length} of ${formData.lineItems.length} item${formData.lineItems.length !== 1 ? "s" : ""} complete`,
-          done: allLineItemsValid,
+          done: isSummaryOnlyInvoice ? summaryAmountsValid : allLineItemsValid,
           required: true,
         }),
       ],
