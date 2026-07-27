@@ -2244,12 +2244,20 @@ export const InvoiceForm = ({
 		                <div className="mt-4 space-y-3">
 		                  <div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-3">
 		                    <Label className="text-xs">Total Line Items</Label>
-		                    <div
-		                      className="flex h-8 w-full items-center rounded-md border bg-white px-3 text-sm font-medium"
-		                      data-testid="summary-total-line-items"
-		                    >
-		                      {removedLineItemsCount}
-		                    </div>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={formData.removedLineItemsCount ?? removedLineItemsCount}
+                      onChange={(event) =>
+                        setFormData({
+                          ...formData,
+                          removedLineItemsCount: sanitizeNumericInput(event.target.value),
+                        })
+                      }
+                      className="h-8 w-full text-sm"
+                      data-testid="summary-total-line-items"
+                    />
 		                  </div>
 		                  <div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-3">
 		                    <Label className="text-xs">Subtotal</Label>
@@ -2281,7 +2289,7 @@ export const InvoiceForm = ({
                             invoiceDiscount: sanitizeNumericInput(event.target.value),
                           })
                         }
-                        className="h-8 min-w-0 flex-1 text-sm text-right"
+                        className="h-8 min-w-0 flex-1 text-sm text-left"
                         data-testid="summary-discount-input"
                       />
                       <AppSelect
@@ -2441,7 +2449,7 @@ export const InvoiceForm = ({
                 )}
               </span>
             </div>
-            {(isSummaryOnlyInvoice || isInvoiceLevelDiscount) && (
+            {!isSummaryOnlyInvoice && isInvoiceLevelDiscount && (
               <div className="flex justify-between items-center text-xs">
                 <div className="flex items-center gap-1.5">
                   <span>Discount</span>

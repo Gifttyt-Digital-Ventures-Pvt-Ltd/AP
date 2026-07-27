@@ -18,6 +18,13 @@ import InvoiceDocumentTypeBadge from "../../invoices/components/InvoiceDocumentT
 import InvoiceDueDateCell from "../../invoices/components/InvoiceDueDateCell";
 import { cn } from "../../../lib/utils";
 
+const resolveApprovalAmount = (invoice = {}) =>
+  invoice.netAmount ??
+  invoice.net_amount ??
+  invoice.netPayable ??
+  invoice.net_payable ??
+  invoice.amount;
+
 const baseAllInvoicesTableHeader = [
   { key: "srNo", title: "Sr. No", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm font-medium" },
   { key: "invoiceNumber", title: "Invoice #", headerClassName: "bg-muted text-foreground", cellClassName: "font-medium" },
@@ -99,7 +106,7 @@ const AllInvoicesTable = ({
               value = offset + rowIndex + 1;
               break;
             case "amount":
-              value = formatCurrency(invoice.amount, invoice.currency);
+              value = formatCurrency(resolveApprovalAmount(invoice), invoice.currency);
               break;
             case "dueDate":
               value = (

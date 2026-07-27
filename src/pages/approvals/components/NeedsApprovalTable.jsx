@@ -14,6 +14,13 @@ import { formatCurrency } from "../../../utils/currency";
 import InvoiceDocumentTypeBadge from "../../invoices/components/InvoiceDocumentTypeBadge";
 import { cn } from "../../../lib/utils";
 
+const resolveNeedsApprovalAmount = (invoice = {}) =>
+  invoice.netAmount ??
+  invoice.net_amount ??
+  invoice.netPayable ??
+  invoice.net_payable ??
+  invoice.amount;
+
 const baseNeedsApprovalTableHeader = [
   { key: "invoiceNumber", title: "Invoice #", headerClassName: "bg-muted text-foreground", cellClassName: "font-medium" },
   { key: "refNo", title: "Ref No", headerClassName: "bg-muted text-foreground", cellClassName: "font-mono text-sm" },
@@ -87,7 +94,7 @@ const NeedsApprovalTable = ({
 
           switch (header.key) {
             case "amount":
-              value = formatCurrency(invoice.amount, invoice.currency);
+              value = formatCurrency(resolveNeedsApprovalAmount(invoice), invoice.currency);
               break;
             case "invoiceNumber":
               value = invoice.invoiceNumber || "-";
