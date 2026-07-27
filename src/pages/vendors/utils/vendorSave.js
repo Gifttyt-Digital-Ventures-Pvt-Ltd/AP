@@ -3,6 +3,7 @@ import {
   sanitizeVendorDocumentsForSave,
 } from './vendorDocuments';
 import { sanitizeVendorTdsForSave } from './vendorTds';
+import { toVendorApiPayload } from '../../../Services/utils/payloadMappers';
 
 const stripVendorLevelAddressAndBank = (vendor = {}) => {
   const {
@@ -69,7 +70,15 @@ export const sanitizeVendorBranchesForSave = (branches = []) =>
 
 export const normalizeVendorForSave = (vendor = {}) => {
   const sanitized = stripVendorLevelAddressAndBank(vendor);
-  const { tdsMappings, vendor_branches, branches, ...restSanitized } = sanitized;
+  const {
+    id,
+    vendorId,
+    vendor_id,
+    tdsMappings,
+    vendor_branches,
+    branches,
+    ...restSanitized
+  } = sanitized;
   delete restSanitized.tdsCertificates;
   delete restSanitized.tdsDetailsEdited;
   const tdsMapping = sanitizeVendorTdsForSave(restSanitized.tdsMapping ?? tdsMappings);
@@ -155,9 +164,12 @@ export const hasVendorMultipartFiles = (vendor = {}) => {
 
 const buildVendorJsonPayload = (vendor = {}, overrides = {}) => {
   const pendingCertificates = normalizePendingTdsCertificates(vendor.tdsCertificates);
-  return {
+  const payload = {
     ...normalizeVendorForSave(vendor),
     ...overrides,
+  };
+  return {
+    ...toVendorApiPayload(payload),
     ...(pendingCertificates.length > 0 ? { tdsCertificates: pendingCertificates } : {}),
   };
 };
