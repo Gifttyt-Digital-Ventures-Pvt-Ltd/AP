@@ -11,6 +11,8 @@ import {
   formatInrTaxPercent,
   INVOICE_LEVEL,
   isInrInvoiceCurrency,
+  isInvoiceLevelSelection,
+  isLineItemLevelSelection,
   LINE_ITEM_MODE_SUMMARY_ONLY,
   parseTaxRateFromLabel,
   resolveLineItemSubtotal,
@@ -134,8 +136,9 @@ const InvoiceReadOnlyDetails = ({
   const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
   const isSummaryOnlyInvoice =
     formData.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
-  const isInvoiceLevelDiscount = formData.discountsLevel === INVOICE_LEVEL;
-  const isInvoiceLevelTax = formData.taxesLevel === INVOICE_LEVEL;
+  const isInvoiceLevelDiscount = isInvoiceLevelSelection(formData.discountsLevel);
+  const isInvoiceLevelTax = isInvoiceLevelSelection(formData.taxesLevel);
+  const showLineItemDiscount = isLineItemLevelSelection(formData.discountsLevel);
   const formatAmount = (amount) => formatCurrency(amount, invoiceCurrency);
 
   const calculateLineItemSubtotal = (item) => {
@@ -162,7 +165,7 @@ const InvoiceReadOnlyDetails = ({
   );
   const summaryDiscountValue = parseNumericInput(formData.invoiceDiscount, 0);
   const summaryInvoiceDiscountAmount =
-    formData.discountsLevel === INVOICE_LEVEL
+    isInvoiceLevelSelection(formData.discountsLevel)
       ? formData.invoiceDiscountType === "%"
         ? (summarySubTotal * summaryDiscountValue) / 100
         : summaryDiscountValue
@@ -414,20 +417,36 @@ const InvoiceReadOnlyDetails = ({
               <p className="text-xs text-muted-foreground">
                 Individual line items have been removed.
               </p>
-	              <div className="mt-4 grid gap-3 sm:grid-cols-5">
-	                <DetailField label="Total Line Items" value={removedLineItemsCount} />
-	                <DetailField label="Subtotal" value={formatAmount(totals.subTotal)} />
-	                {isInvoiceLevelDiscount && (
-	                  <DetailField
-	                    label="Discount"
-	                    value={`-${formatAmount(totals.invoiceDiscountAmount || 0)}`}
-	                  />
-	                )}
-	                {!isInvoiceLevelTax && (
-	                  <DetailField label="Total Tax Amount" value={formatAmount(totalTax)} />
-	                )}
-	                <DetailField label="Invoice Total" value={formatAmount(totals.total)} />
-	              </div>
+              <div className="mt-4 space-y-3">
+                <div className="flex items-center justify-between gap-4">
+                  <Label className="text-xs text-muted-foreground">Total Line Items</Label>
+                  <p className="text-sm font-medium text-right">{removedLineItemsCount}</p>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <Label className="text-xs text-muted-foreground">Subtotal</Label>
+                  <p className="text-sm font-medium text-right">
+                    {formatAmount(totals.subTotalBeforeDiscount ?? totals.subTotal)}
+                  </p>
+                </div>
+                {(isSummaryOnlyInvoice || isInvoiceLevelDiscount) && (
+                  <div className="flex items-center justify-between gap-4">
+                    <Label className="text-xs text-muted-foreground">Discount</Label>
+                    <p className="text-sm font-medium text-right">
+                      -{formatAmount(totals.invoiceDiscountAmount || 0)}
+                    </p>
+                  </div>
+                )}
+                {!isInvoiceLevelTax && (
+                  <div className="flex items-center justify-between gap-4">
+                    <Label className="text-xs text-muted-foreground">Total Tax Amount</Label>
+                    <p className="text-sm font-medium text-right">{formatAmount(totalTax)}</p>
+                  </div>
+                )}
+                <div className="flex items-center justify-between gap-4">
+                  <Label className="text-xs text-muted-foreground">Invoice Total</Label>
+                  <p className="text-sm font-semibold text-right">{formatAmount(totals.total)}</p>
+                </div>
+              </div>
             </div>
           ) : showLineItems ? (
             <div className="border rounded-lg overflow-hidden">
@@ -447,7 +466,7 @@ const InvoiceReadOnlyDetails = ({
                       )}
                       <th className="p-2 text-left font-medium w-[50px]">Qty</th>
                       <th className="p-2 text-left font-medium w-[80px]">Rate</th>
-                      {!isInvoiceLevelDiscount && (
+                      {showLineItemDiscount && (
                         <th className="p-2 text-left font-medium w-[80px]">Discount</th>
                       )}
                       <th className="p-2 text-left font-medium w-[90px]">
@@ -487,7 +506,7 @@ const InvoiceReadOnlyDetails = ({
                         <td className="p-2  ">
                           {formatAmount(item.unitRate ?? item.unitPrice ?? 0)}
                         </td>
-                        {!isInvoiceLevelDiscount && (
+                        {showLineItemDiscount && (
                           <td className="p-2">{formatLineItemDiscount(item)}</td>
                         )}
                         <td className="p-2 font-semibold">

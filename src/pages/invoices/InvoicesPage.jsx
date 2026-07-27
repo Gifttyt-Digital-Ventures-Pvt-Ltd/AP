@@ -1669,11 +1669,9 @@ const InvoicesPage = () => {
       );
       const discountValue = parseNumericInput(formData?.invoiceDiscount, 0);
       const invoiceDiscountAmount =
-        formData?.discountsLevel === INVOICE_LEVEL
-          ? formData?.invoiceDiscountType === "%"
-            ? (subTotal * discountValue) / 100
-            : discountValue
-          : 0;
+        formData?.invoiceDiscountType === "%"
+          ? (subTotal * discountValue) / 100
+          : discountValue;
       const boundedInvoiceDiscountAmount = Math.max(
         0,
         Math.min(invoiceDiscountAmount, subTotal),
@@ -3022,11 +3020,9 @@ const InvoicesPage = () => {
           );
           const discountValue = parseNumericInput(bulkEditForm?.invoiceDiscount, 0);
           const invoiceDiscountAmount =
-            bulkEditForm?.discountsLevel === INVOICE_LEVEL
-              ? bulkEditForm?.invoiceDiscountType === "%"
-                ? (subTotal * discountValue) / 100
-                : discountValue
-              : 0;
+            bulkEditForm?.invoiceDiscountType === "%"
+              ? (subTotal * discountValue) / 100
+              : discountValue;
           const boundedInvoiceDiscountAmount = Math.max(
             0,
             Math.min(invoiceDiscountAmount, subTotal),

@@ -35,6 +35,8 @@ import {
   DEFAULT_INR_TAX,
   INVOICE_LEVEL,
   isInrInvoiceCurrency,
+  isInvoiceLevelSelection,
+  isLineItemLevelSelection,
   LINE_ITEM_LEVEL,
   LINE_ITEM_MODE_SUMMARY_ONLY,
   parseTaxRateFromLabel,
@@ -147,8 +149,8 @@ const lineItemTableHeader = [
   {
     key: "discount",
     title: "Discount",
-    headerClassName: "w-[120px] text-left",
-    cellClassName: "w-[120px] align-top",
+    headerClassName: "w-[120px] min-w-[120px] text-left",
+    cellClassName: "w-[120px] min-w-[120px] align-top",
   },
   {
     key: "subtotal",
@@ -561,8 +563,9 @@ export const InvoiceForm = ({
     );
   };
   const billingGstSatisfied = !requireBillingGst || Boolean(selectedBillingGst?.gst);
-  const isInvoiceLevelDiscount = formData?.discountsLevel === INVOICE_LEVEL;
-  const isInvoiceLevelTax = formData?.taxesLevel === INVOICE_LEVEL;
+  const isInvoiceLevelDiscount = isInvoiceLevelSelection(formData?.discountsLevel);
+  const isInvoiceLevelTax = isInvoiceLevelSelection(formData?.taxesLevel);
+  const showLineItemDiscount = isLineItemLevelSelection(formData?.discountsLevel);
   const accountGroupOptions = useMemo(
     () => buildGroupBranchOptionsFromCoa(coaData?.tree || []),
     [coaData?.tree],
@@ -573,7 +576,7 @@ export const InvoiceForm = ({
       (column) =>
         (showErpIntegrationFields ||
           (column.key !== "accountGroup" && column.key !== "expenseType")) &&
-        (isInvoiceLevelDiscount ? column.key !== "discount" : true) &&
+        (showLineItemDiscount || column.key !== "discount") &&
         (isInvoiceLevelTax
           ? column.key !== "tax" &&
             column.key !== "taxAmount" &&
@@ -591,7 +594,9 @@ export const InvoiceForm = ({
     });
   const lineItemsTableMinWidth = showErpIntegrationFields
     ? "min-w-[1240px]"
-    : "min-w-[830px]";
+    : isInvoiceLevelTax
+      ? "min-w-[830px]"
+      : "min-w-[1040px]";
   const formatAmount = (amount) => formatCurrency(amount, invoiceCurrency);
   const totals = calculateTotals(formData?.lineItems || [], invoiceCurrency);
 
@@ -1271,7 +1276,7 @@ export const InvoiceForm = ({
             );
             break;
           case "discount":
-            if (isInvoiceLevelDiscount) {
+            if (!showLineItemDiscount) {
               value = "-";
               break;
             }
@@ -2263,43 +2268,40 @@ export const InvoiceForm = ({
 		                      data-testid="summary-subtotal-input"
 		                    />
 		                  </div>
-		                  {isInvoiceLevelDiscount && (
-		                    <div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-3">
-		                      <Label className="text-xs">Discount</Label>
-		                      <div className="flex h-8 items-center gap-2">
-		                        <Input
-		                          type="text"
-		                          inputMode="decimal"
-		                          value={formatNumericInputValue(formData.invoiceDiscount)}
-		                          onChange={(event) =>
-		                            setFormData({
-		                              ...formData,
-		                              invoiceDiscount: sanitizeNumericInput(event.target.value),
-		                            })
-		                          }
-		                          className="h-8 min-w-0 flex-1 text-sm text-right"
-		                          data-testid="summary-discount-input"
-		                        />
-		                        <AppSelect
-		                          value={formData.invoiceDiscountType || "%"}
-		                          onChange={(event) =>
-		                            setFormData({
-		                              ...formData,
-		                              invoiceDiscountType: event.target.value,
-		                            })
-		                          }
-		                          options={[
-		                            "%",
-		                            invoiceCurrency === DEFAULT_CURRENCY
-		                              ? "₹"
-		                              : invoiceCurrency,
-		                          ]}
-		                          className="h-8 w-20 rounded border bg-white pl-2 pr-6 text-sm"
-		                        />
-		                      </div>
-		                    </div>
-		                  )}
-		                  {!isInvoiceLevelTax && (
+                  <div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-3">
+                    <Label className="text-xs">Discount</Label>
+                    <div className="flex h-8 items-center gap-2">
+                      <Input
+                        type="text"
+                        inputMode="decimal"
+                        value={formatNumericInputValue(formData.invoiceDiscount)}
+                        onChange={(event) =>
+                          setFormData({
+                            ...formData,
+                            invoiceDiscount: sanitizeNumericInput(event.target.value),
+                          })
+                        }
+                        className="h-8 min-w-0 flex-1 text-sm text-right"
+                        data-testid="summary-discount-input"
+                      />
+                      <AppSelect
+                        value={formData.invoiceDiscountType || "%"}
+                        onChange={(event) =>
+                          setFormData({
+                            ...formData,
+                            invoiceDiscountType: event.target.value,
+                          })
+                        }
+                        options={[
+                          "%",
+                          invoiceCurrency === DEFAULT_CURRENCY ? "₹" : invoiceCurrency,
+                        ]}
+                        className="h-8 w-20 justify-between rounded-md border bg-white pl-2 pr-7 text-xs"
+                        data-testid="summary-discount-type"
+                      />
+                    </div>
+                  </div>
+                  {!isInvoiceLevelTax && (
 		                    <div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-3">
 		                      <Label className="text-xs">Total Tax Amount</Label>
 		                      <Input
@@ -2433,13 +2435,13 @@ export const InvoiceForm = ({
               <span>Sub Total</span>
               <span className="font-medium">
                 {formatAmount(
-                  isInvoiceLevelDiscount
+                  isSummaryOnlyInvoice || isInvoiceLevelDiscount
                     ? totals.subTotalBeforeDiscount
                     : totals.subTotal,
                 )}
               </span>
             </div>
-            {isInvoiceLevelDiscount && (
+            {(isSummaryOnlyInvoice || isInvoiceLevelDiscount) && (
               <div className="flex justify-between items-center text-xs">
                 <div className="flex items-center gap-1.5">
                   <span>Discount</span>

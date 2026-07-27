@@ -8,6 +8,22 @@ export const INVOICE_LEVEL = "At Invoice Level";
 export const LINE_ITEM_MODE_DETAILED = "DETAILED";
 export const LINE_ITEM_MODE_SUMMARY_ONLY = "SUMMARY_ONLY";
 
+export const isInvoiceLevelSelection = (value = "") => {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ");
+  return normalized.includes("invoice");
+};
+
+export const isLineItemLevelSelection = (value = "") => {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ");
+  return normalized.includes("line item");
+};
+
 export const isInrInvoiceCurrency = (currency) =>
   normalizeCurrencyCode(currency) === DEFAULT_CURRENCY;
 

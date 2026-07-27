@@ -418,11 +418,9 @@ export const buildToCreateInvoicePayload = (
   );
   const discountValue = parseNumericInput(invoiceData.invoiceDiscount, 0);
   const invoiceDiscountAmount =
-    invoiceData.discountsLevel === INVOICE_LEVEL
-      ? invoiceData.invoiceDiscountType === "%"
-        ? (summarySubTotal * discountValue) / 100
-        : discountValue
-      : 0;
+    invoiceData.invoiceDiscountType === "%"
+      ? (summarySubTotal * discountValue) / 100
+      : discountValue;
   const boundedInvoiceDiscountAmount = Math.max(
     0,
     Math.min(invoiceDiscountAmount, summarySubTotal),

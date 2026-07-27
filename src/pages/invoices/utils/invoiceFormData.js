@@ -160,7 +160,12 @@ export const buildInvoiceEditFormData = (
     destinationOfSupply: destinationOfSupply,
     location: locationValue,
     reverseCharges: invoice.reverseCharges || invoice.reverseCharges || "Not Applicable",
-    discountsLevel: invoice.discountsLevel || invoice.discountsLevel || LINE_ITEM_LEVEL,
+    discountsLevel:
+      invoice.discountsLevel ||
+      invoice.discounts_level ||
+      invoice.discountLevel ||
+      invoice.discount_level ||
+      LINE_ITEM_LEVEL,
     invoiceDiscount:
       invoice.invoiceDiscount ??
       invoice.invoiceDiscount ??
@@ -169,7 +174,12 @@ export const buildInvoiceEditFormData = (
       invoice.invoiceDiscountType ??
       invoice.invoiceDiscountType ??
       "%",
-    taxesLevel: invoice.taxesLevel || invoice.taxesLevel || LINE_ITEM_LEVEL,
+    taxesLevel:
+      invoice.taxesLevel ||
+      invoice.taxes_level ||
+      invoice.taxLevel ||
+      invoice.tax_level ||
+      LINE_ITEM_LEVEL,
     invoiceTax:
       invoice.invoiceTax ||
       invoice.invoice_tax ||
