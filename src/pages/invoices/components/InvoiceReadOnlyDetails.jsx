@@ -11,6 +11,7 @@ import {
   formatInrTaxPercent,
   INVOICE_LEVEL,
   isInrInvoiceCurrency,
+  LINE_ITEM_MODE_SUMMARY_ONLY,
   parseTaxRateFromLabel,
   resolveLineItemSubtotal,
 } from "../utils/invoiceTax";
@@ -72,6 +73,7 @@ const InvoiceReadOnlyDetails = ({
   isCategoryFeatureEnabled = true,
   isCampaignFeatureEnabled = false,
   showProformaInvoiceFields = false,
+  showErpIntegrationFields = false,
   onMapTaxInvoice,
   onViewLinkedInvoice,
   allInvoices = [],
@@ -130,6 +132,8 @@ const InvoiceReadOnlyDetails = ({
   const msmePaymentDue = normalizeMsmePaymentDue(invoice);
   const invoiceCurrency = normalizeCurrencyCode(formData.currency);
   const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
+  const isSummaryOnlyInvoice =
+    formData.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
   const isInvoiceLevelDiscount = formData.discountsLevel === INVOICE_LEVEL;
   const isInvoiceLevelTax = formData.taxesLevel === INVOICE_LEVEL;
   const formatAmount = (amount) => formatCurrency(amount, invoiceCurrency);
@@ -145,38 +149,79 @@ const InvoiceReadOnlyDetails = ({
     return resolveLineItemSubtotal(item);
   };
 
-  const totals = calculateInvoiceTotals({
-    lineItems: formData.lineItems,
-    currency: invoiceCurrency,
-    calculateLineItemSubtotal,
-    taxRates: TAX_RATES,
-    invoiceTaxAmount: formData.scannedTaxAmount ?? invoice.gstAmount,
-    invoiceTaxName:
-      isInvoiceLevelTax
-        ? formData.invoiceTaxName
-        : formData.scannedTaxName ?? "Tax",
-    invoiceTaxRate:
-      isInvoiceLevelTax
-        ? formData.invoiceTaxRate
-        : formData.scannedTaxRate,
-    invoiceTax: formData.invoiceTax,
-    taxesLevel: formData.taxesLevel,
-    discountsLevel: formData.discountsLevel,
-    invoiceDiscount: formData.invoiceDiscount,
-    invoiceDiscountType: formData.invoiceDiscountType,
-    roundOff:
-      formData.roundOff ??
+  const summarySubTotal = parseNumericInput(formData.subTotal, 0);
+  const summaryTaxAmount = parseNumericInput(formData.totalTaxAmount, 0);
+  const summaryRoundOff = parseNumericInput(
+    formData.roundOff ??
       formData.round_off ??
       formData.roundoff ??
       invoice.roundOff ??
       invoice.round_off ??
       invoice.roundoff,
-    invoiceTotal:
-      formData.scannedTotal ??
-      formData.invoiceTotal ??
-      invoice.totalAmount ??
-      invoice.total_amount,
-  });
+    0,
+  );
+  const summaryDiscountValue = parseNumericInput(formData.invoiceDiscount, 0);
+  const summaryInvoiceDiscountAmount =
+    formData.discountsLevel === INVOICE_LEVEL
+      ? formData.invoiceDiscountType === "%"
+        ? (summarySubTotal * summaryDiscountValue) / 100
+        : summaryDiscountValue
+      : 0;
+  const boundedSummaryDiscountAmount = Math.max(
+    0,
+    Math.min(summaryInvoiceDiscountAmount, summarySubTotal),
+  );
+  const summaryTaxableSubTotal = summarySubTotal - boundedSummaryDiscountAmount;
+  const totals = isSummaryOnlyInvoice
+    ? {
+        subTotal: summaryTaxableSubTotal,
+        subTotalBeforeDiscount: summarySubTotal,
+        cgst: 0,
+        sgst: 0,
+        igst: useInrTax ? summaryTaxAmount : 0,
+        inrTaxes: useInrTax && summaryTaxAmount > 0
+          ? [{ name: "Total Tax", rate: 0, amount: summaryTaxAmount }]
+          : [],
+        foreignTax: useInrTax ? 0 : summaryTaxAmount,
+        foreignTaxes: !useInrTax && summaryTaxAmount > 0
+          ? [{ name: formData.invoiceTaxName || "Tax", rate: 0, amount: summaryTaxAmount }]
+          : [],
+        invoiceDiscountAmount: boundedSummaryDiscountAmount,
+        roundOff: summaryRoundOff,
+        total: summaryTaxableSubTotal + summaryTaxAmount + summaryRoundOff,
+      }
+    : calculateInvoiceTotals({
+        lineItems: formData.lineItems,
+        currency: invoiceCurrency,
+        calculateLineItemSubtotal,
+        taxRates: TAX_RATES,
+        invoiceTaxAmount: formData.scannedTaxAmount ?? invoice.gstAmount,
+        invoiceTaxName:
+          isInvoiceLevelTax
+            ? formData.invoiceTaxName
+            : formData.scannedTaxName ?? "Tax",
+        invoiceTaxRate:
+          isInvoiceLevelTax
+            ? formData.invoiceTaxRate
+            : formData.scannedTaxRate,
+        invoiceTax: formData.invoiceTax,
+        taxesLevel: formData.taxesLevel,
+        discountsLevel: formData.discountsLevel,
+        invoiceDiscount: formData.invoiceDiscount,
+        invoiceDiscountType: formData.invoiceDiscountType,
+        roundOff:
+          formData.roundOff ??
+          formData.round_off ??
+          formData.roundoff ??
+          invoice.roundOff ??
+          invoice.round_off ??
+          invoice.roundoff,
+        invoiceTotal:
+          formData.scannedTotal ??
+          formData.invoiceTotal ??
+          invoice.totalAmount ??
+          invoice.total_amount,
+      });
 
   const tdsAmountFromRate = computeTdsAmount(
     formData.lineItems,
@@ -277,6 +322,7 @@ const InvoiceReadOnlyDetails = ({
     isInvoiceLevelTax,
     useInrTax,
   });
+  const removedLineItemsCount = Number(formData.removedLineItemsCount || 0);
 
   return (
     <div className="space-y-4">
@@ -355,22 +401,47 @@ const InvoiceReadOnlyDetails = ({
         </div>
       </div>
 
-      {formData.lineItems?.length > 0 && (
+      {(formData.lineItems?.length > 0 || isSummaryOnlyInvoice) && (
         <div className="space-y-3">
           <LineItemsSectionHeader
             showLineItems={showLineItems}
             onToggle={() => setShowLineItems((prev) => !prev)}
             itemCount={formData.lineItems.length}
+            summaryOnly={isSummaryOnlyInvoice}
           />
-          {showLineItems ? (
+          {isSummaryOnlyInvoice ? (
+            <div className="rounded-lg border bg-gray-50 p-4">
+              <p className="text-xs text-muted-foreground">
+                Individual line items have been removed.
+              </p>
+	              <div className="mt-4 grid gap-3 sm:grid-cols-5">
+	                <DetailField label="Total Line Items" value={removedLineItemsCount} />
+	                <DetailField label="Subtotal" value={formatAmount(totals.subTotal)} />
+	                {isInvoiceLevelDiscount && (
+	                  <DetailField
+	                    label="Discount"
+	                    value={`-${formatAmount(totals.invoiceDiscountAmount || 0)}`}
+	                  />
+	                )}
+	                {!isInvoiceLevelTax && (
+	                  <DetailField label="Total Tax Amount" value={formatAmount(totalTax)} />
+	                )}
+	                <DetailField label="Invoice Total" value={formatAmount(totals.total)} />
+	              </div>
+            </div>
+          ) : showLineItems ? (
             <div className="border rounded-lg overflow-hidden">
               <div className="overflow-x-auto scrollbar-thin-muted">
                 <table className="min-w-[1120px] w-full text-xs">
                   <thead className="bg-gray-50 border-b">
                     <tr>
                       <th className="p-2 text-left font-medium min-w-[180px]">Item Description</th>
-                      <th className="p-2 text-left font-medium w-[160px]">Group / Branch</th>
-                      <th className="p-2 text-left font-medium w-[130px]">Expense Type</th>
+                      {showErpIntegrationFields && (
+                        <>
+                          <th className="p-2 text-left font-medium w-[160px]">Group / Branch</th>
+                          <th className="p-2 text-left font-medium w-[130px]">Expense Type</th>
+                        </>
+                      )}
                       {!isInvoiceLevelTax && (
                         <th className="p-2 text-left font-medium w-[130px]">Tax</th>
                       )}
@@ -401,10 +472,14 @@ const InvoiceReadOnlyDetails = ({
                             </p>
                           )}
                         </td>
-                        <td className="p-2">
-                          {item.accountGroupName || item.groupName || item.ledger || "-"}
-                        </td>
-                        <td className="p-2">{item.expenseType || "-"}</td>
+                        {showErpIntegrationFields && (
+                          <>
+                            <td className="p-2">
+                              {item.accountGroupName || item.groupName || item.ledger || "-"}
+                            </td>
+                            <td className="p-2">{item.expenseType || "-"}</td>
+                          </>
+                        )}
                         {!isInvoiceLevelTax && (
                           <td className="p-2">{formatLineItemTax(item)}</td>
                         )}
@@ -466,34 +541,17 @@ const InvoiceReadOnlyDetails = ({
             </span>
           </div>
         )}
-        {useInrTax && totals.cgst > 0 && (
-          <div className="flex justify-between text-xs">
-            <span>
-              CGST
-              {totals.cgstRate > 0 ? ` ${formatInrTaxPercent(totals.cgstRate)}` : ""}
-            </span>
-            <span className=" ">{formatAmount(totals.cgst)}</span>
-          </div>
-        )}
-        {useInrTax && totals.sgst > 0 && (
-          <div className="flex justify-between text-xs">
-            <span>
-              SGST
-              {totals.sgstRate > 0 ? ` ${formatInrTaxPercent(totals.sgstRate)}` : ""}
-            </span>
-            <span className=" ">{formatAmount(totals.sgst)}</span>
-          </div>
-        )}
-        {useInrTax && totals.igst > 0 && (
-          <div className="flex justify-between text-xs">
-            <span>
-              IGST
-              {totals.igstRate > 0 ? ` ${formatInrTaxPercent(totals.igstRate)}` : ""}
-            </span>
-            <span className=" ">{formatAmount(totals.igst)}</span>
-          </div>
-        )}
-        {!useInrTax &&
+        {!isSummaryOnlyInvoice && useInrTax &&
+          totals.inrTaxes?.map((entry) => (
+            <div key={`${entry.name}-${entry.rate}`} className="flex justify-between text-xs">
+              <span>
+                {entry.name}
+                {entry.rate > 0 ? ` ${formatInrTaxPercent(entry.rate)}` : ""}
+              </span>
+              <span className=" ">{formatAmount(entry.amount)}</span>
+            </div>
+          ))}
+        {!isSummaryOnlyInvoice && !useInrTax &&
           totals.foreignTaxes?.map((entry) => (
             <div key={`${entry.name}-${entry.rate}`} className="flex justify-between text-xs">
               <span>
@@ -518,7 +576,7 @@ const InvoiceReadOnlyDetails = ({
           <span className=" ">{formatAmount(tdsAmount)}</span>
         </div>
         <div className="flex justify-between text-sm pt-1.5 border-t">
-          <span>Total</span>
+          <span>{isSummaryOnlyInvoice ? "Line Items Total" : "Total"}</span>
           <span className=" ">{formatAmount(totals.total)}</span>
         </div>
         <div className="flex justify-between text-sm font-bold pt-1.5 border-t">

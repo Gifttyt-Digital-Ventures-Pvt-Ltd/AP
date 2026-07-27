@@ -133,6 +133,7 @@ const InvoiceSingleUploadLayer = ({
   const isInvoiceMatchingEnabled =
     isCorporateScreenAllowed("INVOICE_MATCHING") &&
     isCorporateSectionEnabled("INVOICE_MATCHING_ALL");
+  const showErpIntegrationFields = isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
   const showInvoiceMatchingSelection =
     isInvoiceMatchingEnabled && hasPurchaseOrderSubscription;
   const canUseThreeWayMatching =
@@ -266,6 +267,7 @@ const InvoiceSingleUploadLayer = ({
     getCategoryNameById,
     isCategoryFeatureEnabled,
     isCampaignFeatureEnabled,
+    isErpIntegrationEnabled: showErpIntegrationFields,
   };
 
   const toCreateInvoicePayload = (invoiceData = {}, options = {}) =>

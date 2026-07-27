@@ -71,6 +71,7 @@ const InvoicesDialogs = (props) => {
     findVendorByName,
     findVendorById,
     showProformaInvoiceFields = false,
+    showErpIntegrationFields = false,
     onMapTaxInvoice,
     onViewLinkedInvoice,
     allInvoices = [],
@@ -162,6 +163,7 @@ const InvoicesDialogs = (props) => {
         departmentMandatory={invoiceMandatoryFields?.department}
         categoryMandatory={invoiceMandatoryFields?.category}
         showProformaInvoiceFields={showProformaInvoiceFields}
+        showErpIntegrationFields={showErpIntegrationFields}
         onMapTaxInvoice={onMapTaxInvoice}
         onViewLinkedInvoice={onViewLinkedInvoice}
         allInvoices={allInvoices}

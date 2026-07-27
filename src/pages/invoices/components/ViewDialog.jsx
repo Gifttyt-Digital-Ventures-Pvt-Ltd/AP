@@ -49,6 +49,7 @@ const ViewDialog = ({
   departmentMandatory = false,
   categoryMandatory = false,
   showProformaInvoiceFields = false,
+  showErpIntegrationFields = false,
   onMapTaxInvoice,
   onViewLinkedInvoice,
   allInvoices = [],
@@ -204,6 +205,7 @@ const ViewDialog = ({
                           findVendorByName={findVendorByName}
                           findVendorById={findVendorById}
                           showProformaInvoiceFields={showProformaInvoiceFields}
+                          showErpIntegrationFields={showErpIntegrationFields}
                           onMapTaxInvoice={onMapTaxInvoice}
                           onViewLinkedInvoice={onViewLinkedInvoice}
                           allInvoices={allInvoices}

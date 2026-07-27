@@ -1,8 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Building2, CheckCircle2, ChevronsUpDown, Loader2, Plus, X } from "lucide-react";
+import { Building2, CheckCircle2, ChevronsUpDown, Loader2, Plus, Trash2, X } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../../components/ui/dialog";
 import {
   Popover,
   PopoverAnchor,
@@ -28,6 +36,7 @@ import {
   INVOICE_LEVEL,
   isInrInvoiceCurrency,
   LINE_ITEM_LEVEL,
+  LINE_ITEM_MODE_SUMMARY_ONLY,
   parseTaxRateFromLabel,
   remapLineItemsForCurrencyChange,
   formatInrTaxPercent,
@@ -102,8 +111,8 @@ const lineItemTableHeader = [
   {
     key: "description",
     title: "Item Description",
-    headerClassName: "min-w-[190px]",
-    cellClassName: "min-w-[190px] align-top",
+    headerClassName: "w-[300px]",
+    cellClassName: "w-[300px] align-top",
   },
   {
     key: "accountGroup",
@@ -223,6 +232,8 @@ export const InvoiceForm = ({
   updateLineItem,
   removeLineItem,
   addLineItem,
+  removeAllLineItems,
+  allowInvoiceLineItemRemoval = false,
   calculateLineItemSubtotal,
   setEditDialogOpen,
   setUploadedFile,
@@ -254,6 +265,7 @@ export const InvoiceForm = ({
   showInvoiceMatching = false,
   canUseThreeWayMatching = false,
   showProformaInvoiceFields = false,
+  showErpIntegrationFields = false,
 }) => {
   const canShowBranchField = showBillingGst && showBranchField;
   const {
@@ -271,13 +283,18 @@ export const InvoiceForm = ({
     skip: !canShowBranchField,
   });
   const { isTdsSubscriptionEnabled } = useTdsSubscription();
-  const { data: coaData } = useGetCoaTreeQuery();
-  const { data: backendVoucherTypeOptions = [] } = useGetAccountingVoucherTypesQuery();
+  const { data: coaData } = useGetCoaTreeQuery(undefined, {
+    skip: !showErpIntegrationFields,
+  });
+  const { data: backendVoucherTypeOptions = [] } = useGetAccountingVoucherTypesQuery(undefined, {
+    skip: !showErpIntegrationFields,
+  });
   const [vendorPickerOpen, setVendorPickerOpen] = useState(false);
   const [vendorQuery, setVendorQuery] = useState("");
   const vendorAnchorRef = useRef(null);
   const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false);
   const [currencyQuery, setCurrencyQuery] = useState("");
+  const [removeLineItemsDialogOpen, setRemoveLineItemsDialogOpen] = useState(false);
   const [accountGroupSearchByRow, setAccountGroupSearchByRow] = useState({});
   const [accountGroupPickerOpenByRow, setAccountGroupPickerOpenByRow] = useState({});
 
@@ -480,7 +497,9 @@ export const InvoiceForm = ({
     setFormData,
   ]);
 
-  const showLineItems = resolveLineItemsExpanded(formData || {});
+  const isSummaryOnlyInvoice =
+    formData?.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
+  const showLineItems = !isSummaryOnlyInvoice && resolveLineItemsExpanded(formData || {});
   const invoiceCurrency = formData?.currency || DEFAULT_CURRENCY;
   const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
   const isGstinRequired = useInrTax && formData?.gstTreatment !== "N/A";
@@ -552,6 +571,8 @@ export const InvoiceForm = ({
   const lineItemHeaders = lineItemTableHeader
     .filter(
       (column) =>
+        (showErpIntegrationFields ||
+          (column.key !== "accountGroup" && column.key !== "expenseType")) &&
         (isInvoiceLevelDiscount ? column.key !== "discount" : true) &&
         (isInvoiceLevelTax
           ? column.key !== "tax" &&
@@ -568,6 +589,9 @@ export const InvoiceForm = ({
       }
       return column;
     });
+  const lineItemsTableMinWidth = showErpIntegrationFields
+    ? "min-w-[1240px]"
+    : "min-w-[830px]";
   const formatAmount = (amount) => formatCurrency(amount, invoiceCurrency);
   const totals = calculateTotals(formData?.lineItems || [], invoiceCurrency);
 
@@ -875,6 +899,15 @@ export const InvoiceForm = ({
     isInvoiceLevelTax,
     useInrTax,
   });
+  const removedLineItemsCount = Number(formData?.removedLineItemsCount || 0);
+  const summarySubTotalValue = formatNumericInputValue(formData?.subTotal ?? "");
+  const summaryTaxValue = formatNumericInputValue(formData?.totalTaxAmount ?? "");
+  const confirmRemoveLineItems = () => {
+    if (typeof removeAllLineItems === "function") {
+      removeAllLineItems();
+    }
+    setRemoveLineItemsDialogOpen(false);
+  };
 
   if (!formData) return null;
 
@@ -942,14 +975,14 @@ export const InvoiceForm = ({
         switch (header.key) {
           case "description":
             value = (
-              <div>
+              <div className="w-full">
                 <Input
                   value={item.description}
                   onChange={(e) =>
                     updateLineItem(index, "description", e.target.value)
                   }
                   placeholder="Description"
-                  className="h-7 text-xs"
+                  className="h-7 w-full text-xs"
                 />
                 <div className="flex items-center gap-1 mt-0.5">
                   <span className="text-[10px] text-gray-400">HSN:</span>
@@ -1324,6 +1357,7 @@ export const InvoiceForm = ({
   );
 
   return (
+    <>
     <div className="flex flex-row items-stretch gap-4 w-full h-full min-h-0 min-w-0">
       <div className="flex-1 min-w-0 flex flex-col min-h-0">
         <div className="flex-1 overflow-y-auto space-y-4 pr-3 pb-2 scrollbar-thin-muted">
@@ -2109,37 +2143,39 @@ export const InvoiceForm = ({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <RequiredLabel>Voucher Type</RequiredLabel>
-                <AppSelect
-                  value={formData.voucherType || ""}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      voucherType: e.target.value,
-                    })
-                  }
-                  options={voucherTypeOptions}
-                  placeholder="Select voucher type"
-                  className="h-8 text-sm"
-                />
+            {showErpIntegrationFields && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <RequiredLabel>Voucher Type</RequiredLabel>
+                  <AppSelect
+                    value={formData.voucherType || ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        voucherType: e.target.value,
+                      })
+                    }
+                    options={voucherTypeOptions}
+                    placeholder="Select voucher type"
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <div>
+                  <RequiredLabel>Narration</RequiredLabel>
+                  <Input
+                    value={formData.tdsNarration || ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        tdsNarration: e.target.value,
+                      })
+                    }
+                    placeholder="Narration for TDS Register"
+                    className="h-8 text-sm"
+                  />
+                </div>
               </div>
-              <div>
-                <RequiredLabel>Narration</RequiredLabel>
-                <Input
-                  value={formData.tdsNarration || ""}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      tdsNarration: e.target.value,
-                    })
-                  }
-                  placeholder="Narration for TDS Register"
-                  className="h-8 text-sm"
-                />
-              </div>
-            </div>
+            )}
 
             <div className="flex gap-6 text-xs">
               <div className="flex items-center gap-1.5">
@@ -2187,8 +2223,113 @@ export const InvoiceForm = ({
                 })
               }
               itemCount={formData.lineItems?.length || 0}
+              canRemoveLineItems={
+                allowInvoiceLineItemRemoval &&
+                !isSummaryOnlyInvoice &&
+                (formData.lineItems?.length || 0) > 0
+              }
+              onRemoveLineItems={() => setRemoveLineItemsDialogOpen(true)}
+              summaryOnly={isSummaryOnlyInvoice}
             />
-            {showLineItems ? (
+            {isSummaryOnlyInvoice ? (
+              <div className="rounded-lg border bg-gray-50 p-4">
+                <p className="text-xs text-muted-foreground">
+                  Individual line items have been removed.
+                </p>
+		                <div className="mt-4 space-y-3">
+		                  <div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-3">
+		                    <Label className="text-xs">Total Line Items</Label>
+		                    <div
+		                      className="flex h-8 w-full items-center rounded-md border bg-white px-3 text-sm font-medium"
+		                      data-testid="summary-total-line-items"
+		                    >
+		                      {removedLineItemsCount}
+		                    </div>
+		                  </div>
+		                  <div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-3">
+		                    <Label className="text-xs">Subtotal</Label>
+	                    <Input
+	                      type="number"
+	                      min="0"
+	                      step="0.01"
+	                      value={summarySubTotalValue}
+                      onChange={(event) =>
+                        setFormData({
+                          ...formData,
+                          subTotal: sanitizeNumericInput(event.target.value),
+                        })
+                      }
+	                      className="h-8 w-full text-sm"
+		                      data-testid="summary-subtotal-input"
+		                    />
+		                  </div>
+		                  {isInvoiceLevelDiscount && (
+		                    <div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-3">
+		                      <Label className="text-xs">Discount</Label>
+		                      <div className="flex h-8 items-center gap-2">
+		                        <Input
+		                          type="text"
+		                          inputMode="decimal"
+		                          value={formatNumericInputValue(formData.invoiceDiscount)}
+		                          onChange={(event) =>
+		                            setFormData({
+		                              ...formData,
+		                              invoiceDiscount: sanitizeNumericInput(event.target.value),
+		                            })
+		                          }
+		                          className="h-8 min-w-0 flex-1 text-sm text-right"
+		                          data-testid="summary-discount-input"
+		                        />
+		                        <AppSelect
+		                          value={formData.invoiceDiscountType || "%"}
+		                          onChange={(event) =>
+		                            setFormData({
+		                              ...formData,
+		                              invoiceDiscountType: event.target.value,
+		                            })
+		                          }
+		                          options={[
+		                            "%",
+		                            invoiceCurrency === DEFAULT_CURRENCY
+		                              ? "₹"
+		                              : invoiceCurrency,
+		                          ]}
+		                          className="h-8 w-20 rounded border bg-white pl-2 pr-6 text-sm"
+		                        />
+		                      </div>
+		                    </div>
+		                  )}
+		                  {!isInvoiceLevelTax && (
+		                    <div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-3">
+		                      <Label className="text-xs">Total Tax Amount</Label>
+		                      <Input
+	                        type="number"
+	                        min="0"
+	                        step="0.01"
+	                        value={summaryTaxValue}
+	                        onChange={(event) =>
+	                          setFormData({
+	                            ...formData,
+	                            totalTaxAmount: sanitizeNumericInput(event.target.value),
+	                          })
+	                        }
+		                        className="h-8 w-full text-sm"
+		                        data-testid="summary-tax-input"
+		                      />
+		                    </div>
+		                  )}
+		                  <div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-3">
+		                    <Label className="text-xs">Invoice Total</Label>
+	                    <div
+	                      className="flex h-8 w-full items-center rounded-md border bg-white px-3 text-sm font-medium"
+	                      data-testid="summary-invoice-total"
+	                    >
+                      {formatAmount(totals.total)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : showLineItems ? (
               <>
                 <div className="border rounded-lg overflow-hidden">
                   <div className="overflow-x-auto scrollbar-thin-muted">
@@ -2196,7 +2337,7 @@ export const InvoiceForm = ({
                       tableHeader={lineItemHeaders}
                       tableData={formData.lineItems}
                       renderRow={renderLineItemRow}
-                      tableClassName="min-w-[1240px] border-separate border-spacing-0"
+                      tableClassName={`${lineItemsTableMinWidth} table-fixed border-separate border-spacing-0`}
                       headClassName="bg-gray-50 border-b"
                       stickyHeader={false}
                       striped={false}
@@ -2247,7 +2388,7 @@ export const InvoiceForm = ({
                       setFormData({ ...formData, invoiceTax: e.target.value })
                     }
                     options={TAX_RATES}
-                    className="h-8 max-w-[220px] text-sm"
+                    className="h-8 max-w-[300px] text-sm"
                   />
                 </div>
               ) : (
@@ -2334,40 +2475,20 @@ export const InvoiceForm = ({
                 <span>-{formatAmount(totals.invoiceDiscountAmount || 0)}</span>
               </div>
             )}
-            {useInrTax && totals.cgst > 0 && (
-              <div className="flex justify-between text-xs">
-                <span>
-                  CGST
-                  {totals.cgstRate > 0
-                    ? ` ${formatInrTaxPercent(totals.cgstRate)}`
-                    : ""}
-                </span>
-                <span>{formatAmount(totals.cgst)}</span>
-              </div>
-            )}
-            {useInrTax && totals.sgst > 0 && (
-              <div className="flex justify-between text-xs">
-                <span>
-                  SGST
-                  {totals.sgstRate > 0
-                    ? ` ${formatInrTaxPercent(totals.sgstRate)}`
-                    : ""}
-                </span>
-                <span>{formatAmount(totals.sgst)}</span>
-              </div>
-            )}
-            {useInrTax && totals.igst > 0 && (
-              <div className="flex justify-between text-xs">
-                <span>
-                  IGST
-                  {totals.igstRate > 0
-                    ? ` ${formatInrTaxPercent(totals.igstRate)}`
-                    : ""}
-                </span>
-                <span>{formatAmount(totals.igst)}</span>
-              </div>
-            )}
-            {!useInrTax &&
+            {!isSummaryOnlyInvoice && useInrTax &&
+              totals.inrTaxes?.map((entry) => (
+                <div
+                  key={`${entry.name}-${entry.rate}`}
+                  className="flex justify-between text-xs"
+                >
+                  <span>
+                    {entry.name}
+                    {entry.rate > 0 ? ` ${formatInrTaxPercent(entry.rate)}` : ""}
+                  </span>
+                  <span>{formatAmount(entry.amount)}</span>
+                </div>
+              ))}
+            {!isSummaryOnlyInvoice && !useInrTax &&
               totals.foreignTaxes?.map((entry) => (
                 <div
                   key={`${entry.name}-${entry.rate}`}
@@ -2405,7 +2526,7 @@ export const InvoiceForm = ({
                     })
                   }
                   showLabel={false}
-                  selectClassName="h-6 w-full max-w-[220px] rounded border pl-1 pr-6 text-xs"
+                  selectClassName="h-6 w-full max-w-[300px] rounded border pl-1 pr-6 text-xs"
                   inputClassName="h-6 w-16 px-1 text-xs"
                   testIdPrefix="invoice-tds"
                 />
@@ -2413,7 +2534,7 @@ export const InvoiceForm = ({
               <span className="shrink-0 pt-1">{formatAmount(tdsAmount)}</span>
             </div>
             <div className="flex justify-between text-sm pt-1.5 border-t">
-              <span>Total</span>
+              <span>{isSummaryOnlyInvoice ? "Line Items Total" : "Total"}</span>
               <span>{formatAmount(totals.total)}</span>
             </div>
             <div className="flex justify-between text-sm font-bold pt-1.5 border-t">
@@ -2496,6 +2617,45 @@ export const InvoiceForm = ({
         showCampaignField={showCampaignField}
       />
     </div>
+    <Dialog
+      open={removeLineItemsDialogOpen}
+      onOpenChange={setRemoveLineItemsDialogOpen}
+    >
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Remove line items?</DialogTitle>
+          <DialogDescription className="space-y-3">
+            <span className="block">
+              This will permanently remove all individual line-item details from this invoice.
+            </span>
+            <span className="block">
+              Only the invoice summary will remain editable.
+            </span>
+            <span className="block">
+              This action cannot be undone after the invoice is saved.
+            </span>
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setRemoveLineItemsDialogOpen(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={confirmRemoveLineItems}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Remove Line Items
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 };
 
