@@ -98,7 +98,7 @@ const FALLBACK_DIRECT_ROLE_PERMISSIONS = {
   CREATOR: ["campaign-manage"],
   MAKER: ["campaign-manage"],
   CHECKER: ["invoice-checker"],
-  APPROVER: ["invoice-approver", "campaign-approve"],
+  APPROVER: ["invoice-approver"],
   FINANCE: ["campaign-manage"],
   ACCOUNTANT: [
     "credits-manage",
