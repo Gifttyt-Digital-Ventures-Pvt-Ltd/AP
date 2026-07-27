@@ -14,14 +14,6 @@ import {
 } from '../../../components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../../../components/ui/sheet';
 import { humanizeGstEnum } from '../utils/gstApiMappers';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '../../../components/ui/table';
 import { cn } from '../../../lib/utils';
 
 export const TaxKpiCard = ({ label, value, sub, icon: Icon, tone = 'default' }) => {
@@ -120,47 +112,6 @@ export const TaxSelect = ({ value, onValueChange, options, placeholder = 'Select
       })}
     </SelectContent>
   </Select>
-);
-
-export const TaxCompactTable = ({ columns, rows, getRowKey, onRowClick, getRowClassName, emptyMessage = 'No records found.' }) => (
-  <div className="overflow-hidden rounded-md border">
-    <div className="overflow-x-auto">
-      <Table className="border-separate border-spacing-0">
-        <TableHeader>
-          <TableRow className="bg-muted/50">
-            {columns.map((column) => (
-              <TableHead key={column.key} className={cn('whitespace-nowrap border border-border text-xs', column.className)}>
-                {column.title}
-              </TableHead>
-            ))}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.length === 0 ? (
-            <TableRow>
-              <TableCell colSpan={columns.length} className="border border-border py-8 text-center text-sm text-muted-foreground">
-                {emptyMessage}
-              </TableCell>
-            </TableRow>
-          ) : (
-            rows.map((row, index) => (
-              <TableRow
-                key={getRowKey ? getRowKey(row, index) : row.id ?? index}
-                className={cn(onRowClick && 'cursor-pointer hover:bg-muted/50', getRowClassName?.(row, index))}
-                onClick={onRowClick ? () => onRowClick(row) : undefined}
-              >
-                {columns.map((column) => (
-                  <TableCell key={column.key} className={cn('whitespace-nowrap border border-border text-sm', column.cellClassName)}>
-                    {column.render ? column.render(row, index) : row[column.key] ?? '-'}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))
-          )}
-        </TableBody>
-      </Table>
-    </div>
-  </div>
 );
 
 export const TaxDrawer = ({ open, onOpenChange, title, children }) => (
