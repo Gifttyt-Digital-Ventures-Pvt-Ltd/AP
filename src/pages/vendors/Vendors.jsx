@@ -1129,7 +1129,7 @@ const Vendors = () => {
         }
 
             const className = [
-              'border border-border',
+              'border border-table-border',
               header.cellClassName,
               header.key === 'pan' ? 'text-sm' : '',
               header.key === 'actions' ? 'text-left' : '',

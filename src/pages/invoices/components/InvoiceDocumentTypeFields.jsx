@@ -15,7 +15,7 @@ const InvoiceDocumentTypeFields = ({
   disabled = false,
 }) => (
   <div className="space-y-2">
-    <Label>Document Type</Label>
+    <Label >Document Type</Label>
     <AppSelect
       value={normalizeDocumentType(getSelectValue(documentType))}
       onChange={(event) =>

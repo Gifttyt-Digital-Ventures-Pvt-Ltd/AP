@@ -262,10 +262,10 @@ const AuditBadge = ({ type, value }) => (
 
 const AuditRow = memo(({ entry, highlighted }) => (
   <TableRow className={highlighted ? "bg-yellow-50 transition-colors" : undefined}>
-    <TableCell className={cn("border border-border", "w-[180px]")}>
+    <TableCell className={cn("border border-table-border", "w-[180px]")}>
       {formatTimestamp(entry.timestamp)}
     </TableCell>
-    <TableCell className={cn("border border-border", "w-[180px]")}>
+    <TableCell className={cn("border border-table-border", "w-[180px]")}>
       {entry.userName === "SYSTEM" ? (
         <span className="inline-flex items-center gap-1 italic">
           <Bot className="h-4 w-4 text-muted-foreground" />
@@ -275,15 +275,15 @@ const AuditRow = memo(({ entry, highlighted }) => (
         entry.userName || "-"
       )}
     </TableCell>
-    <TableCell className={cn("border border-border", "w-[200px]")}>
+    <TableCell className={cn("border border-table-border", "w-[200px]")}>
       <AuditBadge type="Action" value={entry.action} />
     </TableCell>
-    <TableCell className={cn("border border-border", "max-w-[420px]")}>
+    <TableCell className={cn("border border-table-border", "max-w-[420px]")}>
       <span className="block truncate" title={entry.details || "-"}>
         {entry.details || "-"}
       </span>
     </TableCell>
-    <TableCell className={cn("border border-border", "w-[120px]")}>
+    <TableCell className={cn("border border-table-border", "w-[120px]")}>
       <AuditBadge type="Status" value={entry.status} />
     </TableCell>
   </TableRow>

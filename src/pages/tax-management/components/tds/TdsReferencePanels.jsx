@@ -21,9 +21,9 @@ import {
 import { Button } from '../../../../components/ui/button';
 import { Input } from '../../../../components/ui/input';
 import { Label } from '../../../../components/ui/label';
+import AppDataTable from '../../../../components/common/AppDataTable';
 import {
   TaxApiMeta,
-  TaxCompactTable,
   TaxDetailGrid,
   TaxDrawer,
   TaxFilterBar,
@@ -103,15 +103,16 @@ export const TdsOverviewPanels = () => (
         </Button>
       }
     >
-      <TaxCompactTable
+      <AppDataTable
         rows={tdsRecentActivities}
         columns={[
-          { key: 'vendor', title: 'Vendor' },
-          { key: 'section', title: 'TDS Section', render: (row) => <TaxStatusBadge status={row.section} /> },
-          { key: 'amount', title: 'Amount', render: (row) => formatCurrency(row.amount), cellClassName: 'text-right font-medium' },
-          { key: 'date', title: 'Date', cellClassName: 'text-muted-foreground' },
-          { key: 'status', title: 'Status', render: (row) => <TaxStatusBadge status={row.status} /> },
+          { key: 'vendor', header: 'Vendor' },
+          { key: 'section', header: 'TDS Section', render: (row) => <TaxStatusBadge status={row.section} /> },
+          { key: 'amount', header: 'Amount', render: (row) => formatCurrency(row.amount), cellClassName: 'text-right font-medium' },
+          { key: 'date', header: 'Date', cellClassName: 'text-muted-foreground' },
+          { key: 'status', header: 'Status', render: (row) => <TaxStatusBadge status={row.status} /> },
         ]}
+        bordered
       />
     </TaxSectionCard>
   </div>
@@ -268,14 +269,15 @@ export const TdsAnalyticsPanel = () => (
       <TdsSectionChart data={tdsSectionWise} />
     </TaxSectionCard>
     <TaxSectionCard icon={AlertCircle} title="Compliance Exceptions" description="Vendors with TDS compliance items requiring action.">
-      <TaxCompactTable
+      <AppDataTable
         rows={tdsExceptions}
         columns={[
-          { key: 'vendor', title: 'Vendor' },
-          { key: 'issue', title: 'Issue' },
-          { key: 'severity', title: 'Severity', render: (row) => <TaxStatusBadge status={row.severity} /> },
-          { key: 'amount', title: 'Amount', render: (row) => formatCurrency(row.amount), cellClassName: 'text-right' },
+          { key: 'vendor', header: 'Vendor' },
+          { key: 'issue', header: 'Issue' },
+          { key: 'severity', header: 'Severity', render: (row) => <TaxStatusBadge status={row.severity} /> },
+          { key: 'amount', header: 'Amount', render: (row) => formatCurrency(row.amount), cellClassName: 'text-right' },
         ]}
+        bordered
       />
     </TaxSectionCard>
   </div>
@@ -336,15 +338,15 @@ export const TdsReportsPanel = () => {
       </TaxSectionCard>
 
       <TaxSectionCard icon={FileText} title="Generated Reports" description="Download previously generated reports">
-        <TaxCompactTable
+        <AppDataTable
           rows={reports}
           columns={[
-            { key: 'name', title: 'Report Name' },
-            { key: 'date', title: 'Generated Date', cellClassName: 'text-muted-foreground' },
-            { key: 'status', title: 'Status', render: (row) => <TaxStatusBadge status={row.status} /> },
+            { key: 'name', header: 'Report Name' },
+            { key: 'date', header: 'Generated Date', cellClassName: 'text-muted-foreground' },
+            { key: 'status', header: 'Status', render: (row) => <TaxStatusBadge status={row.status} /> },
             {
               key: 'action',
-              title: 'Download',
+              header: 'Download',
               render: (row) =>
                 row.status === 'Completed' ? (
                   <Button variant="outline" size="sm"><Download className="mr-2 h-4 w-4" />Download</Button>
@@ -353,6 +355,7 @@ export const TdsReportsPanel = () => {
                 ),
             },
           ]}
+          bordered
         />
       </TaxSectionCard>
     </div>
@@ -420,18 +423,18 @@ export const TdsForm16aPanel = ({ onOpenCertificates }) => {
         description="Form 16A generation history"
         meta={<TaxApiMeta synced="No live data" count={String(records.length)} />}
       >
-        <TaxCompactTable
+        <AppDataTable
           rows={records}
           columns={[
-            { key: 'id', title: 'Job ID', cellClassName: 'font-mono text-xs' },
-            { key: 'vendor', title: 'Vendor' },
-            { key: 'quarter', title: 'Quarter' },
-            { key: 'fy', title: 'Financial Year' },
-            { key: 'generated', title: 'Generated Date', cellClassName: 'text-muted-foreground' },
-            { key: 'status', title: 'Status', render: (row) => <TaxStatusBadge status={row.status} /> },
+            { key: 'id', header: 'Job ID', cellClassName: 'font-mono text-xs' },
+            { key: 'vendor', header: 'Vendor' },
+            { key: 'quarter', header: 'Quarter' },
+            { key: 'fy', header: 'Financial Year' },
+            { key: 'generated', header: 'Generated Date', cellClassName: 'text-muted-foreground' },
+            { key: 'status', header: 'Status', render: (row) => <TaxStatusBadge status={row.status} /> },
             {
               key: 'actions',
-              title: 'Actions',
+              header: 'Actions',
               render: (row) => (
                 <div className="flex gap-2">
                   <Button variant="ghost" size="sm" onClick={() => { setSelectedJob(row); setDrawerOpen(true); }}>
@@ -445,6 +448,7 @@ export const TdsForm16aPanel = ({ onOpenCertificates }) => {
               ),
             },
           ]}
+          bordered
         />
       </TaxSectionCard>
 
@@ -480,15 +484,16 @@ export const TdsFvuPanel = () => (
     description="Prepare files required for TDS return filing with TRACES."
     actions={<Button><Play className="mr-2 h-4 w-4" />Generate FVU</Button>}
   >
-    <TaxCompactTable
+    <AppDataTable
       rows={tdsFvuReturns}
       columns={[
-        { key: 'form', title: 'Form' },
-        { key: 'period', title: 'Period' },
-        { key: 'records', title: 'Records', cellClassName: 'text-right' },
-        { key: 'validation', title: 'Validation', render: (row) => `${row.validation}%`, cellClassName: 'text-right' },
-        { key: 'status', title: 'Status', render: (row) => <TaxStatusBadge status={row.status} /> },
+        { key: 'form', header: 'Form' },
+        { key: 'period', header: 'Period' },
+        { key: 'records', header: 'Records', cellClassName: 'text-right' },
+        { key: 'validation', header: 'Validation', render: (row) => `${row.validation}%`, cellClassName: 'text-right' },
+        { key: 'status', header: 'Status', render: (row) => <TaxStatusBadge status={row.status} /> },
       ]}
+      bordered
     />
   </TaxSectionCard>
 );
@@ -632,15 +637,16 @@ export const TdsCsiPanel = () => {
       </div>
 
       <TaxSectionCard icon={Download} title="CSI File History" description="Previously downloaded CSI files by quarter.">
-        <TaxCompactTable
+        <AppDataTable
           rows={tdsCsiFiles}
           columns={[
-            { key: 'quarter', title: 'Quarter' },
-            { key: 'challans', title: 'Challans', cellClassName: 'text-right' },
-            { key: 'pending', title: 'Pending', cellClassName: 'text-right' },
-            { key: 'downloaded', title: 'Last Download' },
-            { key: 'status', title: 'Status', render: (row) => <TaxStatusBadge status={row.status} /> },
+            { key: 'quarter', header: 'Quarter' },
+            { key: 'challans', header: 'Challans', cellClassName: 'text-right' },
+            { key: 'pending', header: 'Pending', cellClassName: 'text-right' },
+            { key: 'downloaded', header: 'Last Download' },
+            { key: 'status', header: 'Status', render: (row) => <TaxStatusBadge status={row.status} /> },
           ]}
+          bordered
         />
       </TaxSectionCard>
     </div>
