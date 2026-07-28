@@ -446,6 +446,7 @@ const InvoicesPage = () => {
   const invoiceQueryArgs = useMemo(
     () => ({
       ...currencyQueryArgs,
+      context: "INVOICES",
       limit: INVOICE_LIST_PAGE_SIZE,
       offset: invoicePageOffset,
       ...(invoiceStatusFilter !== "all" ? { filter: invoiceStatusFilter } : {}),
