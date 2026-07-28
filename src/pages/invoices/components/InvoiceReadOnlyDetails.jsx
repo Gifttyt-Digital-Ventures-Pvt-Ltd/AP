@@ -39,6 +39,9 @@ import {
   getTdsPreviewAmount,
   getTdsPreviewNetPayable,
 } from "./TdsBreakdownPanel";
+import AppDataTable from "../../../components/common/AppDataTable";
+import { TableCell, TableRow } from "../../../components/ui/table";
+import { cn } from "../../../lib/utils";
 
 const formatDisplayDate = (value) => {
   if (!value) return "-";
@@ -319,6 +322,145 @@ const InvoiceReadOnlyDetails = ({
     return taxableAmount + taxAmount;
   };
 
+  const readOnlyLineItemHeaders = (() => {
+    const headers = [
+      {
+        key: "description",
+        title: "Item Description",
+        headerClassName: "w-[300px]",
+        cellClassName: "w-[300px] align-top",
+      },
+    ];
+    if (showErpIntegrationFields) {
+      headers.push(
+        {
+          key: "accountGroup",
+          title: "Group / Branch",
+          headerClassName: "w-[160px]",
+          cellClassName: "w-[160px] align-top",
+        },
+        {
+          key: "expenseType",
+          title: "Expense Type",
+          headerClassName: "w-[130px]",
+          cellClassName: "w-[130px] align-top",
+        },
+      );
+    }
+    if (!isInvoiceLevelTax) {
+      headers.push({
+        key: "tax",
+        title: "Tax",
+        headerClassName: "w-[130px]",
+        cellClassName: "w-[130px] align-top",
+      });
+    }
+    headers.push(
+      {
+        key: "quantity",
+        title: "Qty",
+        headerClassName: "w-[50px]",
+        cellClassName: "w-[50px] align-top",
+      },
+      {
+        key: "unitRate",
+        title: "Rate",
+        headerClassName: "w-[80px]",
+        cellClassName: "w-[80px] align-top",
+      },
+    );
+    if (showLineItemDiscount) {
+      headers.push({
+        key: "discount",
+        title: "Discount",
+        headerClassName: "w-[80px]",
+        cellClassName: "w-[80px] align-top",
+      });
+    }
+    headers.push({
+      key: "subtotal",
+      title: isInvoiceLevelTax ? "Net Amount" : "Taxable Amount",
+      headerClassName: "w-[90px]",
+      cellClassName: "w-[90px] align-top font-semibold",
+    });
+    if (!isInvoiceLevelTax) {
+      headers.push(
+        {
+          key: "taxAmount",
+          title: "Tax Amount",
+          headerClassName: "w-[90px]",
+          cellClassName: "w-[90px] align-top",
+        },
+        {
+          key: "netAmount",
+          title: "Net Amount",
+          headerClassName: "w-[90px]",
+          cellClassName: "w-[90px] align-top",
+        },
+      );
+    }
+    return headers;
+  })();
+
+  const renderReadOnlyLineItemRow = (item, index, headers) => (
+    <TableRow key={item.id ?? index} className="border-b last:border-b-0 align-top">
+      {headers.map((header) => {
+        let value;
+        switch (header.key) {
+          case "description":
+            value = (
+              <div>
+                <p>{item.description || "-"}</p>
+                {item.hsnSac && (
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                    HSN: {item.hsnSac}
+                  </p>
+                )}
+              </div>
+            );
+            break;
+          case "accountGroup":
+            value = item.accountGroupName || item.groupName || item.ledger || "-";
+            break;
+          case "expenseType":
+            value = item.expenseType || "-";
+            break;
+          case "tax":
+            value = formatLineItemTax(item);
+            break;
+          case "quantity":
+            value = item.quantity ?? "-";
+            break;
+          case "unitRate":
+            value = formatAmount(item.unitRate ?? item.unitPrice ?? 0);
+            break;
+          case "discount":
+            value = formatLineItemDiscount(item);
+            break;
+          case "subtotal":
+            value = formatAmount(calculateLineItemSubtotal(item));
+            break;
+          case "taxAmount":
+            value = formatAmount(getLineItemTaxAmount(item));
+            break;
+          case "netAmount":
+            value = formatAmount(getLineItemNetAmount(item));
+            break;
+          default:
+            value = item?.[header.key] ?? "-";
+        }
+        return (
+          <TableCell
+            key={header.key}
+            className={cn("border border-border px-2 py-2 text-xs", header.cellClassName)}
+          >
+            {value}
+          </TableCell>
+        );
+      })}
+    </TableRow>
+  );
+
   const lineItemsSummary = computeLineItemsSummary({
     lineItems: formData.lineItems,
     calculateLineItemSubtotal,
@@ -450,79 +592,18 @@ const InvoiceReadOnlyDetails = ({
             </div>
           ) : showLineItems ? (
             <div className="border rounded-lg overflow-hidden">
-              <div className="overflow-x-auto scrollbar-thin-muted">
-                <table className="min-w-[1120px] w-full text-xs">
-                  <thead className="bg-gray-50 border-b">
-                    <tr>
-                      <th className="p-2 text-left font-medium min-w-[180px]">Item Description</th>
-                      {showErpIntegrationFields && (
-                        <>
-                          <th className="p-2 text-left font-medium w-[160px]">Group / Branch</th>
-                          <th className="p-2 text-left font-medium w-[130px]">Expense Type</th>
-                        </>
-                      )}
-                      {!isInvoiceLevelTax && (
-                        <th className="p-2 text-left font-medium w-[130px]">Tax</th>
-                      )}
-                      <th className="p-2 text-left font-medium w-[50px]">Qty</th>
-                      <th className="p-2 text-left font-medium w-[80px]">Rate</th>
-                      {showLineItemDiscount && (
-                        <th className="p-2 text-left font-medium w-[80px]">Discount</th>
-                      )}
-                      <th className="p-2 text-left font-medium w-[90px]">
-                        {isInvoiceLevelTax ? "Net Amount" : "Taxable Amount"}
-                      </th>
-                      {!isInvoiceLevelTax && (
-                        <>
-                          <th className="p-2 text-left font-medium w-[90px]">Tax Amount</th>
-                          <th className="p-2 text-left font-medium w-[90px]">Net Amount</th>
-                        </>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {formData.lineItems.map((item, index) => (
-                      <tr key={index} className="border-b last:border-b-0 align-top">
-                        <td className="p-2">
-                          <p>{item.description || "-"}</p>
-                          {item.hsnSac && (
-                            <p className="text-[10px] text-muted-foreground mt-0.5">
-                              HSN: {item.hsnSac}
-                            </p>
-                          )}
-                        </td>
-                        {showErpIntegrationFields && (
-                          <>
-                            <td className="p-2">
-                              {item.accountGroupName || item.groupName || item.ledger || "-"}
-                            </td>
-                            <td className="p-2">{item.expenseType || "-"}</td>
-                          </>
-                        )}
-                        {!isInvoiceLevelTax && (
-                          <td className="p-2">{formatLineItemTax(item)}</td>
-                        )}
-                        <td className="p-2  ">{item.quantity ?? "-"}</td>
-                        <td className="p-2  ">
-                          {formatAmount(item.unitRate ?? item.unitPrice ?? 0)}
-                        </td>
-                        {showLineItemDiscount && (
-                          <td className="p-2">{formatLineItemDiscount(item)}</td>
-                        )}
-                        <td className="p-2 font-semibold">
-                          {formatAmount(calculateLineItemSubtotal(item))}
-                        </td>
-                        {!isInvoiceLevelTax && (
-                          <>
-                            <td className="p-2">{formatAmount(getLineItemTaxAmount(item))}</td>
-                            <td className="p-2">{formatAmount(getLineItemNetAmount(item))}</td>
-                          </>
-                        )}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <AppDataTable
+                tableHeader={readOnlyLineItemHeaders}
+                tableData={formData.lineItems}
+                renderRow={renderReadOnlyLineItemRow}
+                tableClassName="min-w-[980px] table-fixed border-separate border-spacing-0 text-xs"
+                tableContainerClassName="overflow-x-auto scrollbar-thin-muted"
+                headClassName="border-b bg-gray-50"
+                stickyHeader={false}
+                striped={false}
+                bordered
+                emptyMessage="No line items found"
+              />
             </div>
           ) : (
             <LineItemsSummary
