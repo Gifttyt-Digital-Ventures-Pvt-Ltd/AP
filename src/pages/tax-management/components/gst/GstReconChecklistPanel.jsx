@@ -3,7 +3,7 @@ import { CheckCircle2, ChevronDown, HelpCircle, XCircle } from 'lucide-react';
 import { Badge } from '../../../../components/ui/badge';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../../../components/ui/collapsible';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../../../components/ui/tooltip';
-import { TaxCompactTable } from '../TaxUi';
+import AppDataTable from '../../../../components/common/AppDataTable';
 import { cn } from '../../../../lib/utils';
 
 // FE §3.2 — the 8 checklist criteria + G09 (internal, surfaced per BE §5/B4).
@@ -72,28 +72,28 @@ const OutcomeCell = ({ outcome, reason }) => {
 const checklistColumns = [
   {
     key: 'criterion',
-    title: 'Criterion',
+    header: 'Criterion',
     cellClassName: 'font-medium',
     render: (row) => CRITERION_LABELS[row.code] ?? row.label ?? row.code,
   },
   {
     key: 'platformValue',
-    title: 'Platform value',
+    header: 'Platform value',
     render: (row) => formatCriterionValue(row.platformValue),
   },
   {
     key: 'gstValue',
-    title: 'GST value',
+    header: 'GST value',
     render: (row) => formatCriterionValue(row.gstValue),
   },
   {
     key: 'delta',
-    title: 'Delta',
+    header: 'Delta',
     render: (row) => (row.delta ? formatCriterionValue(row.delta) : '-'),
   },
   {
     key: 'outcome',
-    title: 'Outcome',
+    header: 'Outcome',
     render: (row) => <OutcomeCell outcome={row.outcome} reason={row.reason} />,
   },
 ];
@@ -102,12 +102,13 @@ const getChecklistRowClassName = (row) => (row.outcome === 'FAIL' ? 'bg-red-50/4
 
 /** FE §3.2 — two-column checklist comparison table (E1), one row per criterion. */
 export const GstReconChecklistTable = ({ criteria = [] }) => (
-  <TaxCompactTable
+  <AppDataTable
     columns={checklistColumns}
     rows={criteria}
-    getRowKey={(row) => row.code}
+    rowKey={(row) => row.code}
     getRowClassName={getChecklistRowClassName}
     emptyMessage="No checklist results for this invoice."
+    bordered
   />
 );
 
@@ -123,18 +124,19 @@ const formatAmount = (value) => `₹${Number(value ?? 0).toLocaleString('en-IN',
 const SlabTable = ({ title, slabs = [] }) => (
   <div className="space-y-1.5">
     <p className="text-xs font-medium text-muted-foreground">{title}</p>
-    <TaxCompactTable
+    <AppDataTable
       columns={[
-        { key: 'rate', title: 'Rate', render: (row) => `${row.rate}%` },
-        { key: 'taxable', title: 'Taxable', render: (row) => formatAmount(row.taxable) },
-        { key: 'igst', title: 'IGST', render: (row) => formatAmount(row.igst) },
-        { key: 'cgst', title: 'CGST', render: (row) => formatAmount(row.cgst) },
-        { key: 'sgst', title: 'SGST', render: (row) => formatAmount(row.sgst) },
-        { key: 'cess', title: 'Cess', render: (row) => formatAmount(row.cess) },
+        { key: 'rate', header: 'Rate', render: (row) => `${row.rate}%` },
+        { key: 'taxable', header: 'Taxable', render: (row) => formatAmount(row.taxable) },
+        { key: 'igst', header: 'IGST', render: (row) => formatAmount(row.igst) },
+        { key: 'cgst', header: 'CGST', render: (row) => formatAmount(row.cgst) },
+        { key: 'sgst', header: 'SGST', render: (row) => formatAmount(row.sgst) },
+        { key: 'cess', header: 'Cess', render: (row) => formatAmount(row.cess) },
       ]}
       rows={slabs}
-      getRowKey={(row, index) => `${row.rate}-${index}`}
+      rowKey={(row, index) => `${row.rate}-${index}`}
       emptyMessage="No rate-slab detail available."
+      bordered
     />
   </div>
 );
@@ -147,14 +149,15 @@ export const GstReconSplitPanel = ({ split, slabs }) => {
   return (
     <div className="space-y-3">
       {split ? (
-        <TaxCompactTable
+        <AppDataTable
           columns={[
-            { key: 'component', title: 'Component', cellClassName: 'font-medium' },
-            { key: 'platform', title: 'Platform', render: (row) => formatAmount(split?.platform?.[row.key]) },
-            { key: 'gst', title: 'GST', render: (row) => formatAmount(split?.gst?.[row.key]) },
+            { key: 'component', header: 'Component', cellClassName: 'font-medium' },
+            { key: 'platform', header: 'Platform', render: (row) => formatAmount(split?.platform?.[row.key]) },
+            { key: 'gst', header: 'GST', render: (row) => formatAmount(split?.gst?.[row.key]) },
           ]}
           rows={SPLIT_ROWS.map((row) => ({ ...row, component: row.label }))}
-          getRowKey={(row) => row.key}
+          rowKey={(row) => row.key}
+          bordered
         />
       ) : (
         <p className="text-xs text-muted-foreground">No tax-split data available for this invoice.</p>

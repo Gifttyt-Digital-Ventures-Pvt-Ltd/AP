@@ -500,7 +500,7 @@ const GstLedgersPanel = () => {
                     {['Tax Head', 'Cash Balance', 'Available ITC', 'Blocked ITC', 'Total Balance'].map((heading, index) => (
                       <TableHead
                         key={heading}
-                        className={cn('whitespace-nowrap border border-border text-xs', index > 0 && 'text-right')}
+                        className={cn('whitespace-nowrap border border-table-border text-xs', index > 0 && 'text-right')}
                       >
                         {heading}
                       </TableHead>
@@ -513,33 +513,33 @@ const GstLedgersPanel = () => {
                     const rowTotal = row.cash + row.itcAvail + row.itcBlocked;
                     return (
                       <TableRow key={row.head}>
-                        <TableCell className="border border-border">
+                        <TableCell className="border border-table-border">
                           <span className="inline-flex items-center gap-2 font-semibold">
                             <span className={cn('h-2.5 w-2.5 rounded-full', tone.dot)} />
                             {row.head}
                           </span>
                         </TableCell>
-                        <TableCell className="border border-border text-right text-primary">{formatCurrency(row.cash)}</TableCell>
-                        <TableCell className={cn('border border-border text-right font-semibold', row.itcAvail > 0 ? 'text-green-600' : 'text-muted-foreground')}>
+                        <TableCell className="border border-table-border text-right text-primary">{formatCurrency(row.cash)}</TableCell>
+                        <TableCell className={cn('border border-table-border text-right font-semibold', row.itcAvail > 0 ? 'text-green-600' : 'text-muted-foreground')}>
                           {formatCurrency(row.itcAvail)}
                         </TableCell>
-                        <TableCell className={cn('border border-border text-right', row.itcBlocked > 0 ? 'text-amber-600' : 'text-muted-foreground')}>
+                        <TableCell className={cn('border border-table-border text-right', row.itcBlocked > 0 ? 'text-amber-600' : 'text-muted-foreground')}>
                           {formatCurrency(row.itcBlocked)}
                         </TableCell>
-                        <TableCell className="border border-border text-right font-bold text-blue-600">{formatCurrency(rowTotal)}</TableCell>
+                        <TableCell className="border border-table-border text-right font-bold text-blue-600">{formatCurrency(rowTotal)}</TableCell>
                       </TableRow>
                     );
                   })}
                 </TableBody>
                 <tfoot>
                   <TableRow className="bg-muted/50 font-bold">
-                    <TableCell className="border border-border">Grand Total</TableCell>
-                    <TableCell className="border border-border text-right text-primary">{formatCurrency(totals.totalCash)}</TableCell>
-                    <TableCell className="border border-border text-right text-green-600">{formatCurrency(totals.totalItcAvail)}</TableCell>
-                    <TableCell className={cn('border border-border text-right', totals.totalBlocked > 0 ? 'text-amber-600' : 'text-muted-foreground')}>
+                    <TableCell className="border border-table-border">Grand Total</TableCell>
+                    <TableCell className="border border-table-border text-right text-primary">{formatCurrency(totals.totalCash)}</TableCell>
+                    <TableCell className="border border-table-border text-right text-green-600">{formatCurrency(totals.totalItcAvail)}</TableCell>
+                    <TableCell className={cn('border border-table-border text-right', totals.totalBlocked > 0 ? 'text-amber-600' : 'text-muted-foreground')}>
                       {formatCurrency(totals.totalBlocked)}
                     </TableCell>
-                    <TableCell className="border border-border text-right text-base text-blue-600">{formatCurrency(totals.grandTotal)}</TableCell>
+                    <TableCell className="border border-table-border text-right text-base text-blue-600">{formatCurrency(totals.grandTotal)}</TableCell>
                   </TableRow>
                 </tfoot>
               </Table>
@@ -627,7 +627,7 @@ const GstLedgersPanel = () => {
                     <TableHead
                       key={heading}
                       className={cn(
-                        'whitespace-nowrap border border-border text-xs',
+                        'whitespace-nowrap border border-table-border text-xs',
                         index >= 4 && index <= 7 ? 'text-right' : 'text-left',
                       )}
                     >
@@ -639,32 +639,32 @@ const GstLedgersPanel = () => {
               <TableBody>
                 {filteredHistory.map((entry) => (
                   <TableRow key={entry.id}>
-                    <TableCell className="border border-border text-xs text-muted-foreground">
+                    <TableCell className="border border-table-border text-xs text-muted-foreground">
                       {entry?.dateRetrieved?.includes('T')
                         ? formatDate(entry.dateRetrieved)
                         : (entry?.dateRetrieved ?? '-')}
                     </TableCell>
-                    <TableCell className="border border-border font-semibold">{entry.month}</TableCell>
-                    <TableCell className="border border-border font-mono text-xs text-muted-foreground">{entry.gstin}</TableCell>
-                    <TableCell className="border border-border">{entry.legalName}</TableCell>
-                    <TableCell className="border border-border text-right font-semibold text-primary">
+                    <TableCell className="border border-table-border font-semibold">{entry.month}</TableCell>
+                    <TableCell className="border border-table-border font-mono text-xs text-muted-foreground">{entry.gstin}</TableCell>
+                    <TableCell className="border border-table-border">{entry.legalName}</TableCell>
+                    <TableCell className="border border-table-border text-right font-semibold text-primary">
                       {entry.status === 'success' ? formatLakhsFromRupees(entry.cash) : '—'}
                     </TableCell>
-                    <TableCell className="border border-border text-right font-semibold text-green-600">
+                    <TableCell className="border border-table-border text-right font-semibold text-green-600">
                       {entry.status === 'success' ? formatLakhsFromRupees(entry.itcAvail) : '—'}
                     </TableCell>
-                    <TableCell className={cn('border border-border text-right', entry.itcBlocked > 0 ? 'text-amber-600' : 'text-muted-foreground')}>
+                    <TableCell className={cn('border border-table-border text-right', entry.itcBlocked > 0 ? 'text-amber-600' : 'text-muted-foreground')}>
                       {entry.status === 'success' ? formatCurrency(entry.itcBlocked) : '—'}
                     </TableCell>
-                    <TableCell className="border border-border text-right font-bold text-blue-600">
+                    <TableCell className="border border-table-border text-right font-bold text-blue-600">
                       {entry.status === 'success'
                         ? formatLakhsFromRupees(entry.totalBalance || entry.cash + entry.itcAvail)
                         : '—'}
                     </TableCell>
-                    <TableCell className="border border-border">
+                    <TableCell className="border border-table-border">
                       <TaxStatusBadge status={entry.status === 'success' ? 'Success' : 'Failed'} />
                     </TableCell>
-                    <TableCell className="border border-border">
+                    <TableCell className="border border-table-border">
                       {entry.status === 'success' ? (
                         <Button type="button" variant="ghost" size="sm" onClick={() => handleViewHistory(entry)}>
                           <Eye className="mr-1.5 h-4 w-4" />

@@ -15,8 +15,11 @@ const vendorBranchLabel = (record = {}) => {
   return name || code || '';
 };
 
-export const OrgBranchCell = ({ record = {}, fallback = '-' }) =>
-  orgBranchLabel(record) || fallback;
+export const OrgBranchCell = ({ record = {}, fallback = '-' }) => {
+  const text = orgBranchLabel(record);
+  if (!text) return fallback;
+  return <ClippedTextWithTooltip text={text} maxWidthClass="max-w-[160px]" />;
+};
 
 export const OrgBranchDetail = ({
   record = {},

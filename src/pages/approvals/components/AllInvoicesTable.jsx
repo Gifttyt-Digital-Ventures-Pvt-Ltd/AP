@@ -181,7 +181,7 @@ const AllInvoicesTable = ({
           return (
             <TableCell
               key={header.key}
-              className={cn("border border-border", header.cellClassName)}
+              className={cn("border border-table-border", header.cellClassName)}
             >
               {value}
             </TableCell>

@@ -2804,10 +2804,28 @@ const InvoicesPage = () => {
                 value = <IntegrationSourceBadge record={invoice} />;
                 break;
               case "originalFileName":
-                value = invoice.originalFileName || "-";
+                value = (
+                  <ClippedTextWithTooltip
+                    text={invoice.originalFileName}
+                    maxWidthClass="max-w-[200px]"
+                  />
+                );
+                break;
+              case "invoiceNumber":
+                value = (
+                  <ClippedTextWithTooltip
+                    text={invoice.invoiceNumber}
+                    maxWidthClass="max-w-[160px]"
+                  />
+                );
                 break;
               case "refNo":
-                value = invoice.refNo || "-";
+                value = (
+                  <ClippedTextWithTooltip
+                    text={invoice.refNo}
+                    maxWidthClass="max-w-[160px]"
+                  />
+                );
                 break;
               case "orgBranch":
                 value = <OrgBranchCell record={invoice} />;
@@ -2973,7 +2991,7 @@ const InvoicesPage = () => {
             return (
               <TableCell
                 key={header.key}
-                className={cn("border border-border", header.cellClassName)}
+                className={cn("border border-table-border", header.cellClassName)}
                 onClick={
                   header.key === "documentType"
                     ? (event) => event.stopPropagation()
@@ -3361,18 +3379,18 @@ const InvoicesPage = () => {
             emptyTestId="no-invoices"
           />
         </div>
-        <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-auto flex shrink-0 flex-col gap-2 border-t border-border px-4 py-2 sm:flex-row sm:items-center sm:justify-between">
           {invoiceTotalPages > 0 ? (
             <>
               <p
-                className="text-sm text-muted-foreground"
+                className="text-xs text-muted-foreground"
                 data-testid="invoice-pagination-summary"
               >
                 Showing {invoiceStartRecord}-{invoiceEndRecord} of{" "}
                 {invoiceTotal.toLocaleString("en-IN")}
               </p>
               <Pagination className="mx-0 w-auto justify-start sm:justify-end">
-                <PaginationContent>
+                <PaginationContent className="gap-0.5">
                   <PaginationItem>
                     <PaginationPrevious
                       href="#"
@@ -3380,11 +3398,10 @@ const InvoicesPage = () => {
                         event.preventDefault();
                         goToInvoicePage(invoiceCurrentPage - 1);
                       }}
-                      className={
-                        invoiceCurrentPage === 0
-                          ? "pointer-events-none opacity-50"
-                          : undefined
-                      }
+                      className={cn(
+                        "h-7 gap-1 pl-2 pr-2.5 text-xs",
+                        invoiceCurrentPage === 0 && "pointer-events-none opacity-50",
+                      )}
                       data-testid="invoice-pagination-previous"
                     />
                   </PaginationItem>
@@ -3397,6 +3414,7 @@ const InvoicesPage = () => {
                           event.preventDefault();
                           goToInvoicePage(pageNumber);
                         }}
+                        className="h-7 w-7 text-xs"
                         data-testid={`invoice-pagination-page-${pageNumber + 1}`}
                       >
                         {pageNumber + 1}
@@ -3410,12 +3428,12 @@ const InvoicesPage = () => {
                         event.preventDefault();
                         goToInvoicePage(invoiceCurrentPage + 1);
                       }}
-                      className={
+                      className={cn(
+                        "h-7 gap-1 pl-2.5 pr-2 text-xs",
                         !invoiceHasMore &&
-                        invoiceCurrentPage >= invoiceTotalPages - 1
-                          ? "pointer-events-none opacity-50"
-                          : undefined
-                      }
+                          invoiceCurrentPage >= invoiceTotalPages - 1 &&
+                          "pointer-events-none opacity-50",
+                      )}
                       data-testid="invoice-pagination-next"
                     />
                   </PaginationItem>
