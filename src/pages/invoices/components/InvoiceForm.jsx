@@ -59,7 +59,10 @@ import {
   useGetInvoiceTdsPreviewQuery,
 } from "../../../Services/apis/taxApi";
 import { useGetOrganisationQuery } from "../../../Services/apis/settingsApi";
-import { normalizeOrganisationBranchesFromApi } from "../../../utils/organisationGst";
+import {
+  normalizeGstRegistrationsFromApi,
+  normalizeOrganisationBranchesFromApi,
+} from "../../../utils/organisationGst";
 import { extractPageContent, extractMatchingGrns } from "../../../Services/utils/payloadMappers";
 import {
   useGetAvailableGrnsQuery,
@@ -282,7 +285,7 @@ export const InvoiceForm = ({
     data: organisationData,
     isFetching: organisationFetching,
   } = useGetOrganisationQuery(undefined, {
-    skip: !canShowBranchField,
+    skip: !showBillingGst,
   });
   const { isTdsSubscriptionEnabled } = useTdsSubscription();
   const { data: coaData } = useGetCoaTreeQuery(undefined, {
@@ -424,13 +427,33 @@ export const InvoiceForm = ({
     setCurrencyQuery(formData?.currency || DEFAULT_CURRENCY);
   }, [formData?.currency]);
 
+  const billingGstEntries = useMemo(() => {
+    const entriesByGst = new Map();
+
+    organisationGstCredentials.forEach((entry) => {
+      if (entry?.gst) entriesByGst.set(entry.gst, entry);
+    });
+
+    normalizeGstRegistrationsFromApi(organisationData).forEach((entry) => {
+      const gst = String(entry?.gstin || "").trim().toUpperCase();
+      if (!gst || entriesByGst.has(gst)) return;
+      entriesByGst.set(gst, {
+        id: entry.id || gst,
+        gst,
+        userName: entry.username || "",
+      });
+    });
+
+    return Array.from(entriesByGst.values());
+  }, [organisationData, organisationGstCredentials]);
+
   const billingGstOptions = useMemo(
     () =>
-      organisationGstCredentials.map((entry) => ({
+      billingGstEntries.map((entry) => ({
         value: entry.gst,
         label: entry.gst,
       })),
-    [organisationGstCredentials],
+    [billingGstEntries],
   );
 
   const organisationBranches = useMemo(
@@ -449,12 +472,13 @@ export const InvoiceForm = ({
     [organisationBranches],
   );
 
-  const organisationGstBusy = organisationGstLoading || organisationGstFetching;
+  const organisationGstBusy =
+    organisationGstLoading || organisationGstFetching || organisationFetching;
   const branchBusy = organisationFetching;
 
   useEffect(() => {
     if (!showBillingGst || organisationGstBusy || !formData) return;
-    if (organisationGstError || organisationGstCredentials.length === 0) {
+    if ((organisationGstError && billingGstEntries.length === 0) || billingGstEntries.length === 0) {
       if (formData.billingGstin) {
         setFormData((prev) => ({
           ...prev,
@@ -465,7 +489,7 @@ export const InvoiceForm = ({
     }
 
     const currentBillingGst = String(formData.billingGstin || "").trim().toUpperCase();
-    const matchedCurrent = organisationGstCredentials.find((entry) => entry.gst === currentBillingGst);
+    const matchedCurrent = billingGstEntries.find((entry) => entry.gst === currentBillingGst);
     if (matchedCurrent) {
       if (formData.billingGstin !== matchedCurrent.gst) {
         setFormData((prev) => ({
@@ -484,17 +508,17 @@ export const InvoiceForm = ({
       return;
     }
 
-    if (organisationGstCredentials.length === 1) {
+    if (billingGstEntries.length === 1) {
       setFormData((prev) => ({
         ...prev,
-        billingGstin: organisationGstCredentials[0].gst,
+        billingGstin: billingGstEntries[0].gst,
       }));
     }
   }, [
     formData,
+    billingGstEntries,
     organisationGstError,
     organisationGstBusy,
-    organisationGstCredentials,
     showBillingGst,
     setFormData,
   ]);
@@ -505,7 +529,7 @@ export const InvoiceForm = ({
   const invoiceCurrency = formData?.currency || DEFAULT_CURRENCY;
   const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
   const isGstinRequired = useInrTax && formData?.gstTreatment !== "N/A";
-  const selectedBillingGst = organisationGstCredentials.find(
+  const selectedBillingGst = billingGstEntries.find(
     (entry) => entry.gst === String(formData?.billingGstin || "").trim().toUpperCase(),
   );
   const selectedBranchCode = String(formData?.branchCode || "").trim();
@@ -1886,7 +1910,7 @@ export const InvoiceForm = ({
                         value={formData.billingGstin || ""}
                         onChange={(event) => {
                           const nextGst = event.target.value;
-                          const matched = organisationGstCredentials.find((entry) => entry.gst === nextGst);
+                          const matched = billingGstEntries.find((entry) => entry.gst === nextGst);
                           setFormData({
                             ...formData,
                             billingGstin: matched?.gst || "",
@@ -1904,13 +1928,13 @@ export const InvoiceForm = ({
                       />
                     </div>
                   </div>
-                  {organisationGstError ? (
+                  {organisationGstError && billingGstOptions.length === 0 ? (
                     <p className="mt-1 text-xs text-destructive">
                       Failed to load organisation GSTINs. Add invoice is blocked until this loads.
                     </p>
                   ) : billingGstOptions.length === 0 && !organisationGstBusy ? (
                     <p className="mt-1 text-xs text-destructive">
-                      Add GSTIN and GST portal username in Settings &gt; Organisation Details before proceeding.
+                      Add an organisation GSTIN in Settings &gt; Organisation Details before proceeding.
                     </p>
                   ) : !billingGstSatisfied ? (
                     <p className="mt-1 text-xs text-destructive">
