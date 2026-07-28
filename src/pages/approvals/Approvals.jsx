@@ -84,6 +84,7 @@ const Approvals = () => {
   const allInvoicesQueryArgs = useMemo(
     () => ({
       ...approvalQueryArgs,
+      context: 'APPROVALS_ALL',
       limit: INVOICE_LIST_PAGE_SIZE,
       offset: allTabPageOffset,
       ...(debouncedAllTabSearch ? { search: debouncedAllTabSearch } : {}),
