@@ -262,6 +262,26 @@ const Approvals = () => {
     await loadInvoiceHistory(invoice);
   };
 
+  const viewApprovalStatus = normalizeWorkflowStatus(viewInvoice?.status);
+  const viewInvoiceIsCheckerAction = viewApprovalStatus === 'Pending Checker';
+  const viewInvoiceCanAct =
+    Boolean(viewInvoice) &&
+    isInvoiceAwaitingApproval(viewInvoice.status) &&
+    (viewInvoiceIsCheckerAction ? canCheckInvoices : canApproveInvoices);
+  const viewApprovalActionConfig = viewInvoiceCanAct
+    ? {
+        canAct: true,
+        primaryAction: viewInvoiceIsCheckerAction ? 'Checked' : 'Approved',
+        primaryLabel: viewInvoiceIsCheckerAction ? 'Verify' : 'Approve',
+        needsCorrectionAction: NEEDS_CORRECTION_ACTION,
+        rejectAction: 'Rejected',
+        onAction: (invoice, action) => {
+          setViewDialogOpen(false);
+          handleApprovalAction(invoice, action);
+        },
+      }
+    : null;
+
   const renderPdfPreview = (props = {}) => (
     <InvoicePdfPreview
       {...props}
@@ -585,6 +605,7 @@ const Approvals = () => {
         showRefNoField={isRefNoEnabled}
         findVendorByName={findVendorByName}
         findVendorById={findVendorById}
+        approvalActionConfig={viewApprovalActionConfig}
       />
 
       {editDialogs}
