@@ -265,6 +265,7 @@ const Approvals = () => {
   const viewApprovalStatus = normalizeWorkflowStatus(viewInvoice?.status);
   const viewInvoiceIsCheckerAction = viewApprovalStatus === 'Pending Checker';
   const viewInvoiceCanAct =
+    activeTab === 'needs-approval' &&
     Boolean(viewInvoice) &&
     isInvoiceAwaitingApproval(viewInvoice.status) &&
     (viewInvoiceIsCheckerAction ? canCheckInvoices : canApproveInvoices);
