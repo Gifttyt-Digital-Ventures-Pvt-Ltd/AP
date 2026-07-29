@@ -77,7 +77,6 @@ import { buildInvoiceTdsStateFromVendor } from "../../vendors/utils/vendorTds";
 import TdsSelectionField from "./TdsSelectionField";
 import {
   getTdsPreviewAmount,
-  getTdsPreviewNetPayable,
 } from "./TdsBreakdownPanel";
 import InvoiceDueDateIndicators from "./InvoiceDueDateIndicators";
 import {
@@ -302,6 +301,7 @@ export const InvoiceForm = ({
   const [removeLineItemsDialogOpen, setRemoveLineItemsDialogOpen] = useState(false);
   const [accountGroupSearchByRow, setAccountGroupSearchByRow] = useState({});
   const [accountGroupPickerOpenByRow, setAccountGroupPickerOpenByRow] = useState({});
+  const [isNetPayableManuallyEdited, setIsNetPayableManuallyEdited] = useState(false);
 
   const filteredVendorOptions = useMemo(() => {
     const query = String(vendorQuery || "")
@@ -311,6 +311,10 @@ export const InvoiceForm = ({
     if (!query) return options;
     return options.filter((vendor) => vendorMatchesInvoiceNameQuery(vendor, query));
   }, [vendorOptions, vendorQuery]);
+
+  useEffect(() => {
+    setIsNetPayableManuallyEdited(false);
+  }, [formData?.id, formData?.invoiceId]);
 
   const selectedVendor = useMemo(() => {
     if (formData?.vendorId && typeof findVendorById === "function") {
@@ -912,16 +916,33 @@ export const InvoiceForm = ({
     0,
   );
   const tdsAmount = getTdsPreviewAmount(tdsPreview, fallbackTdsAmount);
-  const calculatedNetPayable = getTdsPreviewNetPayable(tdsPreview, fallbackNetPayable);
+  const calculatedNetPayable = fallbackNetPayable;
   const manualNetPayable =
     formData.netAmount !== undefined && formData.netAmount !== null && formData.netAmount !== ""
       ? Number(formData.netAmount)
       : null;
-  const hasManualNetPayableValue = Number.isFinite(manualNetPayable);
+  const hasManualNetPayableValue =
+    isNetPayableManuallyEdited && Number.isFinite(manualNetPayable);
   const netPayable =
     canEditNetPayable && hasManualNetPayableValue
       ? manualNetPayable
       : calculatedNetPayable;
+  const payableTotal = calculatedNetPayable;
+  useEffect(() => {
+    if (!canEditNetPayable || isNetPayableManuallyEdited) return;
+    const currentNetAmount = Number(formData?.netAmount);
+    if (Number.isFinite(currentNetAmount) && currentNetAmount === calculatedNetPayable) return;
+    setFormData((currentFormData) => ({
+      ...currentFormData,
+      netAmount: calculatedNetPayable,
+    }));
+  }, [
+    calculatedNetPayable,
+    canEditNetPayable,
+    formData?.netAmount,
+    isNetPayableManuallyEdited,
+    setFormData,
+  ]);
   const lineItemsSummary = computeLineItemsSummary({
     lineItems: formData?.lineItems || [],
     calculateLineItemSubtotal,
@@ -2552,15 +2573,17 @@ export const InvoiceForm = ({
                 <span>TDS{tdsLabel ? ` (${tdsLabel})` : ""}</span>
                 <TdsSelectionField
                   value={formData.tds || ""}
-                  onChange={(selection) =>
+                  onChange={(selection) => {
+                    setIsNetPayableManuallyEdited(false);
                     setFormData({
                       ...formData,
                       tds: selection.tds,
                       tdsSectionId: selection.tdsSectionId,
                       tdsSectionCode: selection.tdsSectionCode,
                       tdsRate: selection.tdsRate,
-                    })
-                  }
+                      netAmount: undefined,
+                    });
+                  }}
                   showLabel={false}
                   selectClassName="h-6 w-full max-w-[300px] rounded border pl-1 pr-6 text-xs"
                   inputClassName="h-6 w-16 px-1 text-xs"
@@ -2571,7 +2594,7 @@ export const InvoiceForm = ({
             </div>
             <div className="flex justify-between text-sm pt-1.5 border-t">
               <span>{isSummaryOnlyInvoice ? "Line Items Total" : "Total"}</span>
-              <span>{formatAmount(totals.total)}</span>
+              <span>{formatAmount(isSummaryOnlyInvoice ? totals.total : payableTotal)}</span>
             </div>
             <div className="flex justify-between text-sm font-bold pt-1.5 border-t">
               <span>Net Payable</span>
@@ -2581,14 +2604,15 @@ export const InvoiceForm = ({
                   min="0"
                   step="0.01"
                   value={hasManualNetPayableValue ? formData.netAmount : formatNumericInputValue(netPayable)}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    setIsNetPayableManuallyEdited(true);
                     setFormData({
                       ...formData,
                       netAmount: sanitizeNumericInput(event.target.value, {
                         allowDecimal: true,
                       }),
-                    })
-                  }
+                    });
+                  }}
                   className="h-8 w-36 text-right font-bold"
                   data-testid="invoice-net-payable-input"
                 />
