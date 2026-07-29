@@ -20,9 +20,10 @@ export const sumInvoiceAmountsByCurrency = (
   getAmount = (invoice) =>
     invoice?.netAmount ??
     invoice?.net_amount ??
+    invoice?.netPayable ??
+    invoice?.net_payable ??
     invoice?.totalAmount ??
     invoice?.total_amount ??
-    invoice?.netPayable ??
     0,
 ) => {
   const totals = new Map();
@@ -80,9 +81,8 @@ export const getInvoiceNetAmount = (invoice) => {
   const explicitNetAmount =
     invoice?.netAmount ??
     invoice?.net_amount ??
-    invoice?.totalAmount ??
-    invoice?.total_amount ??
-    invoice?.netPayable;
+    invoice?.netPayable ??
+    invoice?.net_payable;
 
   if (explicitNetAmount !== undefined && explicitNetAmount !== null && explicitNetAmount !== "") {
     return toNumber(explicitNetAmount);

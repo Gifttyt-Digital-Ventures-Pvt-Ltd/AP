@@ -560,7 +560,7 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
     ),
     dueDate: dueDate || null,
     totalAmount,
-    amount: totalAmount,
+    amount: resolvedNetAmount,
     netAmount: resolvedNetAmount,
     netPayable: resolvedNetAmount,
     gstAmount,
