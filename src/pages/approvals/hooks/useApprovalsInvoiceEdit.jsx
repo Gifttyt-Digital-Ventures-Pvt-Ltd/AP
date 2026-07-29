@@ -70,6 +70,7 @@ import { getInvoiceVendorRequestValidationErrors } from "../../../utils/vendorVa
 import {
   isCheckerEditEnabled as isCheckerEditEnabledForCorporate,
   isCheckerEditForbiddenError,
+  isNetPayableEditEnabled as isNetPayableEditEnabledForCorporate,
 } from "../../../utils/invoiceConfiguration";
 import {
   buildCurrentUserIdentity,
@@ -182,6 +183,13 @@ export const useApprovalsInvoiceEdit = ({
   const isCheckerEditEnabled = useMemo(
     () =>
       isCheckerEditEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const isNetPayableEditEnabled = useMemo(
+    () =>
+      isNetPayableEditEnabledForCorporate(
         corporateScreens?.activeInvoiceConfiguration ?? [],
       ),
     [corporateScreens?.activeInvoiceConfiguration],
@@ -631,6 +639,7 @@ export const useApprovalsInvoiceEdit = ({
         calculateLineItemSubtotal={calculateLineItemSubtotal}
         setEditDialogOpen={setEditDialogOpen}
         handleUpdateInvoice={handleUpdateInvoice}
+        canEditNetPayable={isNetPayableEditEnabled}
         canAddVendor={canAddVendors}
         canSubmit={
           isEdit

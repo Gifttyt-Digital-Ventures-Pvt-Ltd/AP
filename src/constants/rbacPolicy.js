@@ -12,8 +12,6 @@ export const ROUTE_PERMISSION_RULES = {
     anyOf: [
       "invoice-view",
       "invoice-maker",
-      "invoice-checker",
-      "invoice-approver",
     ],
   },
   "/invoice-matching": { anyOf: ["matching-view", "matching-manage"] },

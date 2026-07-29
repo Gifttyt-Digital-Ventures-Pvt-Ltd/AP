@@ -55,31 +55,31 @@ const LedgerTable = ({ ledger, loading = false, limit }) => {
       <Table className="border-separate border-spacing-0">
         <TableHeader>
           <TableRow>
-            <TableHead className="border border-border">Date</TableHead>
-            <TableHead className="border border-border">Type</TableHead>
-            <TableHead className="border border-border">Action</TableHead>
-            <TableHead className="border border-border text-right">Amount</TableHead>
-            <TableHead className="border border-border text-right">Balance after</TableHead>
-            <TableHead className="border border-border">Performed by</TableHead>
-            <TableHead className="border border-border">Reference</TableHead>
+            <TableHead className="border border-table-border">Date</TableHead>
+            <TableHead className="border border-table-border">Type</TableHead>
+            <TableHead className="border border-table-border">Action</TableHead>
+            <TableHead className="border border-table-border text-right">Amount</TableHead>
+            <TableHead className="border border-table-border text-right">Balance after</TableHead>
+            <TableHead className="border border-table-border">Performed by</TableHead>
+            <TableHead className="border border-table-border">Reference</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {entries.map((entry) => (
             <TableRow key={entry.id}>
-              <TableCell className="border border-border whitespace-nowrap">{formatDateTime(entry.createdAt)}</TableCell>
-              <TableCell className="border border-border">
+              <TableCell className="border border-table-border whitespace-nowrap">{formatDateTime(entry.createdAt)}</TableCell>
+              <TableCell className="border border-table-border">
                 <Badge variant="outline">{entry.entryType}</Badge>
               </TableCell>
-              <TableCell className="border border-border">{entry.actionName || entry.actionCode || "-"}</TableCell>
-              <TableCell className="border border-border text-right">
+              <TableCell className="border border-table-border">{entry.actionName || entry.actionCode || "-"}</TableCell>
+              <TableCell className="border border-table-border text-right">
                 <CreditAmount value={entry.amount} signed />
               </TableCell>
-              <TableCell className="border border-border text-right">
+              <TableCell className="border border-table-border text-right">
                 <CreditAmount value={entry.balanceAfter} />
               </TableCell>
-              <TableCell className="border border-border">{entry.performedBy || "-"}</TableCell>
-              <TableCell className="border border-border">{entry.reference || "-"}</TableCell>
+              <TableCell className="border border-table-border">{entry.performedBy || "-"}</TableCell>
+              <TableCell className="border border-table-border">{entry.reference || "-"}</TableCell>
             </TableRow>
           ))}
         </TableBody>

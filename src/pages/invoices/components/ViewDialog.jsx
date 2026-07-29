@@ -1,6 +1,17 @@
 import React, { useMemo, useState } from "react";
 import { format } from "date-fns";
-import { Ban, FileText, History, Link2, Pencil, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import {
+  Ban,
+  CheckCircle,
+  FileText,
+  History,
+  Link2,
+  Pencil,
+  PanelLeftClose,
+  PanelLeftOpen,
+  RotateCcw,
+  XCircle,
+} from "lucide-react";
 import ApprovalHistoryTimeline from "../../../components/common/ApprovalHistoryTimeline";
 import { Button } from "../../../components/ui/button";
 import {
@@ -49,12 +60,14 @@ const ViewDialog = ({
   departmentMandatory = false,
   categoryMandatory = false,
   showProformaInvoiceFields = false,
+  showErpIntegrationFields = false,
   onMapTaxInvoice,
   onViewLinkedInvoice,
   allInvoices = [],
   canCancelLinkedInvoice = false,
   onCancelLinkedInvoice,
   showAccountingLockBanner = true,
+  approvalActionConfig = null,
   // Optional — only used by GST Overview's "View" flow. Absent for every other ViewDialog
   // caller, so this section renders nothing and existing behavior is unchanged.
   gstReconDetail = null,
@@ -204,6 +217,7 @@ const ViewDialog = ({
                           findVendorByName={findVendorByName}
                           findVendorById={findVendorById}
                           showProformaInvoiceFields={showProformaInvoiceFields}
+                          showErpIntegrationFields={showErpIntegrationFields}
                           onMapTaxInvoice={onMapTaxInvoice}
                           onViewLinkedInvoice={onViewLinkedInvoice}
                           allInvoices={allInvoices}
@@ -273,6 +287,48 @@ const ViewDialog = ({
                     <Ban className="h-4 w-4 mr-2" />
                     Cancel Invoice
                   </Button>
+                )}
+                {approvalActionConfig?.canAct && (
+                  <>
+                    <Button
+                      onClick={() =>
+                        approvalActionConfig.onAction?.(
+                          selectedInvoice,
+                          approvalActionConfig.primaryAction,
+                        )
+                      }
+                      className="flex-1"
+                    >
+                      <CheckCircle className="h-4 w-4 mr-2" />
+                      {approvalActionConfig.primaryLabel}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() =>
+                        approvalActionConfig.onAction?.(
+                          selectedInvoice,
+                          approvalActionConfig.needsCorrectionAction,
+                        )
+                      }
+                      className="flex-1"
+                    >
+                      <RotateCcw className="h-4 w-4 mr-2" />
+                      Needs Correction
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      onClick={() =>
+                        approvalActionConfig.onAction?.(
+                          selectedInvoice,
+                          approvalActionConfig.rejectAction,
+                        )
+                      }
+                      className="flex-1"
+                    >
+                      <XCircle className="h-4 w-4 mr-2" />
+                      Reject
+                    </Button>
+                  </>
                 )}
               </div>
             </div>

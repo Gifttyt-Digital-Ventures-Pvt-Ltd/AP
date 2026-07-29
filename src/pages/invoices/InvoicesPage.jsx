@@ -45,6 +45,8 @@ import {
   DEFAULT_INR_TAX,
   INVOICE_LEVEL,
   isInrInvoiceCurrency,
+  LINE_ITEM_MODE_DETAILED,
+  LINE_ITEM_MODE_SUMMARY_ONLY,
   LINE_ITEM_LEVEL,
   remapLineItemsForCurrencyChange,
   resolveLineItemSubtotal,
@@ -64,6 +66,7 @@ import {
   normalizeLineItemsForTaxLevel,
 } from "./utils/invoicePayloadBuilders";
 import { normalizeScannedInvoice } from "./utils/scanNormalization";
+import { resolveTdsRate } from "./utils/tds";
 import {
   createEmptyVendorRequestForm,
   buildVendorRequestForm,
@@ -177,6 +180,7 @@ import {
 import {
   isCheckerEditEnabled as isCheckerEditEnabledForCorporate,
   isCheckerEditForbiddenError,
+  isInvoiceLineItemRemovalEnabled,
   isNetPayableEditEnabled as isNetPayableEditEnabledForCorporate,
   isRefNoEnabled as isRefNoEnabledForCorporate,
 } from "../../utils/invoiceConfiguration";
@@ -386,6 +390,7 @@ const InvoicesPage = () => {
   const canUseThreeWayMatching =
     showInvoiceMatchingSelection && hasGrnSubscription;
   const { showIntegrationColumn } = useZohoIntegrationActive();
+  const showErpIntegrationFields = isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
   const { data: corporateUserContext = null } =
     useGetCorporateUserDetailsQuery();
   const invoiceUserEmail =
@@ -441,6 +446,7 @@ const InvoicesPage = () => {
   const invoiceQueryArgs = useMemo(
     () => ({
       ...currencyQueryArgs,
+      context: "INVOICES",
       limit: INVOICE_LIST_PAGE_SIZE,
       offset: invoicePageOffset,
       ...(invoiceStatusFilter !== "all" ? { filter: invoiceStatusFilter } : {}),
@@ -657,6 +663,13 @@ const InvoicesPage = () => {
   const isNetPayableEditEnabled = useMemo(
     () =>
       isNetPayableEditEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const allowInvoiceLineItemRemoval = useMemo(
+    () =>
+      isInvoiceLineItemRemovalEnabled(
         corporateScreens?.activeInvoiceConfiguration ?? [],
       ),
     [corporateScreens?.activeInvoiceConfiguration],
@@ -1034,6 +1047,7 @@ const InvoicesPage = () => {
     getCategoryNameById,
     isCategoryFeatureEnabled,
     isCampaignFeatureEnabled,
+    isErpIntegrationEnabled: showErpIntegrationFields,
   };
 
   const toCreateInvoicePayload = (invoiceData = {}, options = {}) =>
@@ -1482,10 +1496,26 @@ const InvoicesPage = () => {
       invoiceTax: item.invoicePayload.invoiceTax || DEFAULT_INR_TAX,
       invoiceTaxName: item.invoicePayload.invoiceTaxName || "Tax",
       invoiceTaxRate: item.invoicePayload.invoiceTaxRate ?? "",
+      lineItemMode: item.invoicePayload.lineItemMode || LINE_ITEM_MODE_DETAILED,
+      lineItemsRemoved: item.invoicePayload.lineItemsRemoved === true,
+      subTotal:
+        item.invoicePayload.subTotal ??
+        item.invoicePayload.sub_total ??
+        item.invoicePayload.subtotal ??
+        0,
+      totalTaxAmount:
+        item.invoicePayload.totalTaxAmount ??
+        item.invoicePayload.total_tax_amount ??
+        item.invoicePayload.gstAmount ??
+        item.invoicePayload.gst_amount ??
+        0,
       memo: item.invoicePayload.memo || "",
-      lineItems: (item.invoicePayload.lineItems || []).map((line) =>
-        mapBulkLineItemToEditForm(line, item.invoicePayload.currency),
-      ),
+      lineItems:
+        item.invoicePayload.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY
+          ? []
+          : (item.invoicePayload.lineItems || []).map((line) =>
+              mapBulkLineItemToEditForm(line, item.invoicePayload.currency),
+            ),
     });
     setBulkEditOpen(true);
   };
@@ -1526,6 +1556,8 @@ const InvoicesPage = () => {
     const resolvedVendorId = bulkEditForm.vendorId || matchedVendorId;
     const vendorRequestSubmitted = Boolean(bulkEditForm.vendorRequestSubmitted);
     const vendorResolved = Boolean(resolvedVendorId) || vendorRequestSubmitted;
+    const isSummaryOnly =
+      bulkEditForm.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
     setBulkPreviewItems((prev) =>
       prev.map((item) => {
         if (item.id !== bulkEditItemId) return item;
@@ -1535,12 +1567,16 @@ const InvoicesPage = () => {
           vendorId: resolvedVendorId,
           vendorRequestSubmitted,
           amount: parseNumericInput(bulkEditForm.amount, 0),
-          lineItems: normalizeLineItemsForTaxLevel({
-            ...bulkEditForm,
-            lineItems: bulkEditForm.lineItems.map((line) =>
-              mapBulkLineItemToPayload(line, bulkEditForm.currency),
-            ),
-          }),
+          lineItemMode: isSummaryOnly ? LINE_ITEM_MODE_SUMMARY_ONLY : LINE_ITEM_MODE_DETAILED,
+          lineItemsRemoved: isSummaryOnly ? bulkEditForm.lineItemsRemoved === true : false,
+          lineItems: isSummaryOnly
+            ? []
+            : normalizeLineItemsForTaxLevel({
+                ...bulkEditForm,
+                lineItems: bulkEditForm.lineItems.map((line) =>
+                  mapBulkLineItemToPayload(line, bulkEditForm.currency),
+                ),
+              }),
         };
         if (!isCategoryFeatureEnabled) {
           delete updatedPayload.category;
@@ -1623,8 +1659,68 @@ const InvoicesPage = () => {
   const calculateTotals = (
     lineItems,
     currency = formData?.currency ?? DEFAULT_CURRENCY,
-  ) =>
-    calculateInvoiceTotals({
+  ) => {
+    const isSummaryOnly =
+      formData?.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
+    if (isSummaryOnly) {
+      const subTotal = parseNumericInput(formData?.subTotal, 0);
+      const roundOff = parseNumericInput(
+        formData?.roundOff ?? formData?.round_off ?? formData?.roundoff,
+        0,
+      );
+      const discountValue = parseNumericInput(formData?.invoiceDiscount, 0);
+      const invoiceDiscountAmount =
+        formData?.invoiceDiscountType === "%"
+          ? (subTotal * discountValue) / 100
+          : discountValue;
+      const boundedInvoiceDiscountAmount = Math.max(
+        0,
+        Math.min(invoiceDiscountAmount, subTotal),
+      );
+      const taxableSubTotal = subTotal - boundedInvoiceDiscountAmount;
+      const invoiceLevelTaxEnabled = formData?.taxesLevel === INVOICE_LEVEL;
+      let cgst = 0;
+      let sgst = 0;
+      let igst = 0;
+      let foreignTax = 0;
+      if (invoiceLevelTaxEnabled && isInrInvoiceCurrency(currency)) {
+        const taxRate = TAX_RATES.find((entry) => entry.value === formData?.invoiceTax);
+        if (taxRate) {
+          cgst = (taxableSubTotal * (Number(taxRate.cgst) || 0)) / 100;
+          sgst = (taxableSubTotal * (Number(taxRate.sgst) || 0)) / 100;
+          igst = (taxableSubTotal * (Number(taxRate.igst) || 0)) / 100;
+        }
+      } else if (invoiceLevelTaxEnabled) {
+        foreignTax =
+          (taxableSubTotal * (parseNumericInput(formData?.invoiceTaxRate, 0) || 0)) / 100;
+      }
+      const totalTaxAmount = invoiceLevelTaxEnabled
+        ? cgst + sgst + igst + foreignTax
+        : parseNumericInput(formData?.totalTaxAmount, 0);
+      const total = taxableSubTotal + totalTaxAmount + roundOff;
+      return {
+        subTotal: taxableSubTotal,
+        subTotalBeforeDiscount: subTotal,
+        cgst,
+        sgst,
+        igst,
+        cgstRate: 0,
+        sgstRate: 0,
+        igstRate: 0,
+        inrTaxes: isInrInvoiceCurrency(currency) && totalTaxAmount > 0
+          ? [{ name: "Total Tax", rate: 0, amount: totalTaxAmount }]
+          : [],
+        foreignTax: isInrInvoiceCurrency(currency) ? 0 : totalTaxAmount,
+        foreignTaxes: !isInrInvoiceCurrency(currency) && totalTaxAmount > 0
+          ? [{ name: formData?.invoiceTaxName || "Tax", rate: 0, amount: totalTaxAmount }]
+          : [],
+        invoiceDiscountAmount: boundedInvoiceDiscountAmount,
+        roundOff,
+        total,
+        isInr: isInrInvoiceCurrency(currency),
+      };
+    }
+    return calculateInvoiceTotals({
       lineItems,
       currency,
       calculateLineItemSubtotal,
@@ -1646,12 +1742,16 @@ const InvoicesPage = () => {
       roundOff: formData?.roundOff ?? formData?.round_off ?? formData?.roundoff,
       invoiceTotal: formData?.scannedTotal ?? formData?.invoiceTotal,
     });
+  };
 
   // Add line item
   const addLineItem = () => {
     setFormData((prev) =>
       clearScannedTaxSummary({
         ...prev,
+        lineItemMode: LINE_ITEM_MODE_DETAILED,
+        lineItemsRemoved: false,
+        removedLineItemsCount: 0,
         lineItems: [...prev.lineItems, createDefaultLineItem(prev.currency)],
       }),
     );
@@ -1665,6 +1765,49 @@ const InvoicesPage = () => {
         lineItems: prev.lineItems.filter((_, i) => i !== index),
       }),
     );
+  };
+
+  const removeAllInvoiceLineItems = () => {
+    setFormData((prev) => {
+      if (!prev) return prev;
+      const totals = calculateInvoiceTotals({
+        lineItems: prev.lineItems || [],
+        currency: prev.currency || DEFAULT_CURRENCY,
+        calculateLineItemSubtotal: (item) =>
+          prev.discountsLevel === INVOICE_LEVEL
+            ? parseNumericInput(item.lineTotal ?? item.amount, 0) ||
+              parseNumericInput(item.quantity, 0) * parseNumericInput(item.unitRate, 0)
+            : resolveLineItemSubtotal(item),
+        taxRates: TAX_RATES,
+        invoiceTaxAmount: prev.scannedTaxAmount,
+        invoiceTaxName:
+          prev.taxesLevel === INVOICE_LEVEL ? prev.invoiceTaxName : prev.scannedTaxName,
+        invoiceTaxRate:
+          prev.taxesLevel === INVOICE_LEVEL ? prev.invoiceTaxRate : prev.scannedTaxRate,
+        invoiceTax: prev.invoiceTax,
+        taxesLevel: prev.taxesLevel,
+        discountsLevel: prev.discountsLevel,
+        invoiceDiscount: prev.invoiceDiscount,
+        invoiceDiscountType: prev.invoiceDiscountType,
+        roundOff: prev.roundOff ?? prev.round_off ?? prev.roundoff,
+        invoiceTotal: prev.scannedTotal ?? prev.invoiceTotal,
+      });
+      const totalTaxAmount =
+        (Number(totals.cgst) || 0) +
+        (Number(totals.sgst) || 0) +
+        (Number(totals.igst) || 0) +
+        (Number(totals.foreignTax) || 0);
+      return clearScannedTaxSummary({
+        ...prev,
+        lineItemMode: LINE_ITEM_MODE_SUMMARY_ONLY,
+        lineItemsRemoved: true,
+        removedLineItemsCount: (prev.lineItems || []).length,
+        lineItems: [],
+        lineItemsExpanded: false,
+        subTotal: Math.round((Number(totals.subTotal) || 0) * 100) / 100,
+        totalTaxAmount: Math.round(totalTaxAmount * 100) / 100,
+      });
+    });
   };
 
   // Update line item
@@ -1769,15 +1912,13 @@ const InvoicesPage = () => {
     const totals = calculateTotals(data.lineItems, data.currency);
     const resolvedVendorId =
       data.vendorId || findVendorByName(data.vendorName)?.id || "";
-
-    return toCreateInvoicePayload(
-      {
-        ...data,
-        vendorId: resolvedVendorId,
-        vendorName: data.vendorName?.trim() || "",
-        lineItems: normalizeLineItemsForTaxLevel({
+    const isSummaryOnly =
+      data.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
+    const updateLineItems = isSummaryOnly
+      ? []
+      : normalizeLineItemsForTaxLevel({
           ...data,
-          lineItems: data.lineItems.map((item) => ({
+          lineItems: (data.lineItems || []).map((item) => ({
             description: item.description,
             quantity: item.quantity,
             unitPrice: item.unitRate,
@@ -1786,8 +1927,40 @@ const InvoicesPage = () => {
             taxName: item.taxName,
             taxRate: item.taxRate,
             hsnSac: item.hsnSac,
+            ...(showErpIntegrationFields
+              ? {
+                  ledger: item.ledger,
+                  ledgerName: item.ledgerName,
+                  ledgerId: item.ledgerId,
+                  accountGroupId: item.accountGroupId,
+                  accountGroupName: item.accountGroupName,
+                  groupId: item.groupId,
+                  groupName: item.groupName,
+                  expenseType: item.expenseType,
+                }
+              : {}),
           })),
-        }),
+        });
+    const updateTdsAmount = isSummaryOnly
+      ? (() => {
+          const tdsRate = resolveTdsRate(data.tds, data.tdsRate);
+          return tdsRate
+            ? Math.round(((parseNumericInput(data.subTotal, 0) * tdsRate) / 100) * 100) / 100
+            : null;
+        })()
+      : computeTdsAmount(
+          data.lineItems,
+          data.tds,
+          calculateLineItemSubtotal,
+          data.tdsRate,
+        );
+
+    return toCreateInvoicePayload(
+      {
+        ...data,
+        vendorId: resolvedVendorId,
+        vendorName: data.vendorName?.trim() || "",
+        lineItems: updateLineItems,
         memo: data.description,
         sourceEmail: isGmailInvoiceSource(data.source)
           ? data.sourceEmail
@@ -1798,12 +1971,7 @@ const InvoicesPage = () => {
       },
       {
         totals,
-        tdsAmount: computeTdsAmount(
-          data.lineItems,
-          data.tds,
-          calculateLineItemSubtotal,
-          data.tdsRate,
-        ),
+        tdsAmount: updateTdsAmount,
       },
     );
   };
@@ -1985,6 +2153,31 @@ const InvoicesPage = () => {
     if (!formData) return;
 
     const totals = calculateTotals(formData.lineItems);
+    const isSummaryOnly =
+      formData.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
+    const createLineItems = isSummaryOnly
+      ? []
+      : normalizeLineItemsForTaxLevel({
+          ...formData,
+          lineItems: formData.lineItems.map((item) => ({
+            ...item,
+            unitPrice: item.unitRate,
+            amount: calculateLineItemSubtotal(item),
+          })),
+        });
+    const createTdsAmount = isSummaryOnly
+      ? (() => {
+          const tdsRate = resolveTdsRate(formData.tds, formData.tdsRate);
+          return tdsRate
+            ? Math.round(((parseNumericInput(formData.subTotal, 0) * tdsRate) / 100) * 100) / 100
+            : null;
+        })()
+      : computeTdsAmount(
+          formData.lineItems,
+          formData.tds,
+          calculateLineItemSubtotal,
+          formData.tdsRate,
+        );
     const createStatus = resolveInitialInvoiceStatus({
       vendorId:
         formData.vendorId || findVendorByName(formData.vendorName)?.id || "",
@@ -1996,14 +2189,7 @@ const InvoicesPage = () => {
         ...formData,
         vendorName: formData.vendorName?.trim() || "",
         status: createStatus,
-        lineItems: normalizeLineItemsForTaxLevel({
-          ...formData,
-          lineItems: formData.lineItems.map((item) => ({
-            ...item,
-            unitPrice: item.unitRate,
-            amount: calculateLineItemSubtotal(item),
-          })),
-        }),
+        lineItems: createLineItems,
         memo: formData.description,
         originalFileName:
           formData.originalFileName || uploadedFile?.name || null,
@@ -2013,12 +2199,7 @@ const InvoicesPage = () => {
       {
         status: createStatus,
         totals,
-        tdsAmount: computeTdsAmount(
-          formData.lineItems,
-          formData.tds,
-          calculateLineItemSubtotal,
-          formData.tdsRate,
-        ),
+        tdsAmount: createTdsAmount,
         uploadedFileName: uploadedFile?.name,
       },
     );
@@ -2040,12 +2221,7 @@ const InvoicesPage = () => {
           uploadedFile,
           {
             totals,
-            tdsAmount: computeTdsAmount(
-              formData.lineItems,
-              formData.tds,
-              calculateLineItemSubtotal,
-              formData.tdsRate,
-            ),
+            tdsAmount: createTdsAmount,
           },
         );
         createResponse = await createInvoice(multipartPayload).unwrap();
@@ -2489,6 +2665,8 @@ const InvoicesPage = () => {
         updateLineItem={updateLineItem}
         removeLineItem={removeLineItem}
         addLineItem={addLineItem}
+        removeAllLineItems={removeAllInvoiceLineItems}
+        allowInvoiceLineItemRemoval={allowInvoiceLineItemRemoval}
         calculateLineItemSubtotal={calculateLineItemSubtotal}
         setEditDialogOpen={setEditDialogOpen}
         setUploadedFile={setUploadedFile}
@@ -2548,6 +2726,7 @@ const InvoicesPage = () => {
         showInvoiceMatching={showInvoiceMatchingSelection}
         canUseThreeWayMatching={canUseThreeWayMatching}
         showProformaInvoiceFields={showProformaInvoiceFields}
+        showErpIntegrationFields={showErpIntegrationFields}
       />
     );
   };
@@ -2626,10 +2805,28 @@ const InvoicesPage = () => {
                 value = <IntegrationSourceBadge record={invoice} />;
                 break;
               case "originalFileName":
-                value = invoice.originalFileName || "-";
+                value = (
+                  <ClippedTextWithTooltip
+                    text={invoice.originalFileName}
+                    maxWidthClass="max-w-[200px]"
+                  />
+                );
+                break;
+              case "invoiceNumber":
+                value = (
+                  <ClippedTextWithTooltip
+                    text={invoice.invoiceNumber}
+                    maxWidthClass="max-w-[160px]"
+                  />
+                );
                 break;
               case "refNo":
-                value = invoice.refNo || "-";
+                value = (
+                  <ClippedTextWithTooltip
+                    text={invoice.refNo}
+                    maxWidthClass="max-w-[160px]"
+                  />
+                );
                 break;
               case "orgBranch":
                 value = <OrgBranchCell record={invoice} />;
@@ -2795,7 +2992,7 @@ const InvoicesPage = () => {
             return (
               <TableCell
                 key={header.key}
-                className={cn("border border-border", header.cellClassName)}
+                className={cn("border border-table-border", header.cellClassName)}
                 onClick={
                   header.key === "documentType"
                     ? (event) => event.stopPropagation()
@@ -2831,8 +3028,64 @@ const InvoicesPage = () => {
       calculateTotals={(
         lineItems,
         currency = bulkEditForm?.currency ?? DEFAULT_CURRENCY,
-      ) =>
-        calculateInvoiceTotals({
+      ) => {
+        const isSummaryOnly =
+          bulkEditForm?.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
+        if (isSummaryOnly) {
+          const subTotal = parseNumericInput(bulkEditForm?.subTotal, 0);
+          const roundOff = parseNumericInput(
+            bulkEditForm?.roundOff ?? bulkEditForm?.round_off ?? bulkEditForm?.roundoff,
+            0,
+          );
+          const discountValue = parseNumericInput(bulkEditForm?.invoiceDiscount, 0);
+          const invoiceDiscountAmount =
+            bulkEditForm?.invoiceDiscountType === "%"
+              ? (subTotal * discountValue) / 100
+              : discountValue;
+          const boundedInvoiceDiscountAmount = Math.max(
+            0,
+            Math.min(invoiceDiscountAmount, subTotal),
+          );
+          const taxableSubTotal = subTotal - boundedInvoiceDiscountAmount;
+          const invoiceLevelTaxEnabled = bulkEditForm?.taxesLevel === INVOICE_LEVEL;
+          let cgst = 0;
+          let sgst = 0;
+          let igst = 0;
+          let foreignTax = 0;
+          if (invoiceLevelTaxEnabled && isInrInvoiceCurrency(currency)) {
+            const taxRate = TAX_RATES.find((entry) => entry.value === bulkEditForm?.invoiceTax);
+            if (taxRate) {
+              cgst = (taxableSubTotal * (Number(taxRate.cgst) || 0)) / 100;
+              sgst = (taxableSubTotal * (Number(taxRate.sgst) || 0)) / 100;
+              igst = (taxableSubTotal * (Number(taxRate.igst) || 0)) / 100;
+            }
+          } else if (invoiceLevelTaxEnabled) {
+            foreignTax =
+              (taxableSubTotal * (parseNumericInput(bulkEditForm?.invoiceTaxRate, 0) || 0)) / 100;
+          }
+          const totalTaxAmount = invoiceLevelTaxEnabled
+            ? cgst + sgst + igst + foreignTax
+            : parseNumericInput(bulkEditForm?.totalTaxAmount, 0);
+          return {
+            subTotal: taxableSubTotal,
+            subTotalBeforeDiscount: subTotal,
+            cgst,
+            sgst,
+            igst,
+            inrTaxes: isInrInvoiceCurrency(currency) && totalTaxAmount > 0
+              ? [{ name: "Total Tax", rate: 0, amount: totalTaxAmount }]
+              : [],
+            foreignTax: isInrInvoiceCurrency(currency) ? 0 : totalTaxAmount,
+            foreignTaxes: !isInrInvoiceCurrency(currency) && totalTaxAmount > 0
+              ? [{ name: bulkEditForm?.invoiceTaxName || "Tax", rate: 0, amount: totalTaxAmount }]
+              : [],
+            invoiceDiscountAmount: boundedInvoiceDiscountAmount,
+            roundOff,
+            total: taxableSubTotal + totalTaxAmount + roundOff,
+            isInr: isInrInvoiceCurrency(currency),
+          };
+        }
+        return calculateInvoiceTotals({
           lineItems,
           currency,
           calculateLineItemSubtotal: (item) => {
@@ -2870,8 +3123,8 @@ const InvoicesPage = () => {
             bulkEditForm?.roundoff,
           invoiceTotal:
             bulkEditForm?.scannedTotal ?? bulkEditForm?.invoiceTotal,
-        })
-      }
+        });
+      }}
       findVendorByName={findVendorByName}
       findVendorById={findVendorById}
       handleAddVendorFromInvoice={() => {
@@ -2887,9 +3140,61 @@ const InvoicesPage = () => {
       addLineItem={() =>
         setBulkEditForm((prev) => ({
           ...prev,
+          lineItemMode: LINE_ITEM_MODE_DETAILED,
+          lineItemsRemoved: false,
+          removedLineItemsCount: 0,
           lineItems: [...prev.lineItems, createDefaultLineItem(prev.currency)],
         }))
       }
+      removeAllLineItems={() => {
+        setBulkEditForm((prev) => {
+          if (!prev) return prev;
+          const totals = calculateInvoiceTotals({
+            lineItems: prev.lineItems || [],
+            currency: prev.currency || DEFAULT_CURRENCY,
+            calculateLineItemSubtotal: (item) => {
+              if (prev.discountsLevel === INVOICE_LEVEL) {
+                const lineTotal = parseNumericInput(item.lineTotal ?? item.amount, 0);
+                if (lineTotal > 0) return lineTotal;
+                return (
+                  parseNumericInput(item.quantity, 0) *
+                  parseNumericInput(item.unitRate, 0)
+                );
+              }
+              return resolveLineItemSubtotal(item);
+            },
+            taxRates: TAX_RATES,
+            invoiceTaxAmount: prev.scannedTaxAmount,
+            invoiceTaxName:
+              prev.taxesLevel === INVOICE_LEVEL ? prev.invoiceTaxName : prev.scannedTaxName,
+            invoiceTaxRate:
+              prev.taxesLevel === INVOICE_LEVEL ? prev.invoiceTaxRate : prev.scannedTaxRate,
+            invoiceTax: prev.invoiceTax,
+            taxesLevel: prev.taxesLevel,
+            discountsLevel: prev.discountsLevel,
+            invoiceDiscount: prev.invoiceDiscount,
+            invoiceDiscountType: prev.invoiceDiscountType,
+            roundOff: prev.roundOff ?? prev.round_off ?? prev.roundoff,
+            invoiceTotal: prev.scannedTotal ?? prev.invoiceTotal,
+          });
+          const totalTaxAmount =
+            (Number(totals.cgst) || 0) +
+            (Number(totals.sgst) || 0) +
+            (Number(totals.igst) || 0) +
+            (Number(totals.foreignTax) || 0);
+          return {
+            ...prev,
+            lineItemMode: LINE_ITEM_MODE_SUMMARY_ONLY,
+            lineItemsRemoved: true,
+            removedLineItemsCount: (prev.lineItems || []).length,
+            lineItems: [],
+            lineItemsExpanded: false,
+            subTotal: Math.round((Number(totals.subTotal) || 0) * 100) / 100,
+            totalTaxAmount: Math.round(totalTaxAmount * 100) / 100,
+          };
+        });
+      }}
+      allowInvoiceLineItemRemoval={allowInvoiceLineItemRemoval}
       calculateLineItemSubtotal={(item) => {
         if (bulkEditForm?.discountsLevel === INVOICE_LEVEL) {
           const lineTotal = parseNumericInput(item.lineTotal ?? item.amount, 0);
@@ -2924,6 +3229,7 @@ const InvoicesPage = () => {
       INDIAN_STATES={INDIAN_STATES}
       LEDGER_OPTIONS={LEDGER_OPTIONS}
       TAX_RATES={TAX_RATES}
+      showErpIntegrationFields={showErpIntegrationFields}
     />
   );
 
@@ -3074,18 +3380,18 @@ const InvoicesPage = () => {
             emptyTestId="no-invoices"
           />
         </div>
-        <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-auto flex shrink-0 flex-col gap-2 border-t border-border px-4 py-2 sm:flex-row sm:items-center sm:justify-between">
           {invoiceTotalPages > 0 ? (
             <>
               <p
-                className="text-sm text-muted-foreground"
+                className="text-xs text-muted-foreground"
                 data-testid="invoice-pagination-summary"
               >
                 Showing {invoiceStartRecord}-{invoiceEndRecord} of{" "}
                 {invoiceTotal.toLocaleString("en-IN")}
               </p>
               <Pagination className="mx-0 w-auto justify-start sm:justify-end">
-                <PaginationContent>
+                <PaginationContent className="gap-0.5">
                   <PaginationItem>
                     <PaginationPrevious
                       href="#"
@@ -3093,11 +3399,10 @@ const InvoicesPage = () => {
                         event.preventDefault();
                         goToInvoicePage(invoiceCurrentPage - 1);
                       }}
-                      className={
-                        invoiceCurrentPage === 0
-                          ? "pointer-events-none opacity-50"
-                          : undefined
-                      }
+                      className={cn(
+                        "h-7 gap-1 pl-2 pr-2.5 text-xs",
+                        invoiceCurrentPage === 0 && "pointer-events-none opacity-50",
+                      )}
                       data-testid="invoice-pagination-previous"
                     />
                   </PaginationItem>
@@ -3110,6 +3415,7 @@ const InvoicesPage = () => {
                           event.preventDefault();
                           goToInvoicePage(pageNumber);
                         }}
+                        className="h-7 w-7 text-xs"
                         data-testid={`invoice-pagination-page-${pageNumber + 1}`}
                       >
                         {pageNumber + 1}
@@ -3123,12 +3429,12 @@ const InvoicesPage = () => {
                         event.preventDefault();
                         goToInvoicePage(invoiceCurrentPage + 1);
                       }}
-                      className={
+                      className={cn(
+                        "h-7 gap-1 pl-2.5 pr-2 text-xs",
                         !invoiceHasMore &&
-                        invoiceCurrentPage >= invoiceTotalPages - 1
-                          ? "pointer-events-none opacity-50"
-                          : undefined
-                      }
+                          invoiceCurrentPage >= invoiceTotalPages - 1 &&
+                          "pointer-events-none opacity-50",
+                      )}
                       data-testid="invoice-pagination-next"
                     />
                   </PaginationItem>
@@ -3209,6 +3515,7 @@ const InvoicesPage = () => {
         findVendorByName={findVendorByName}
         findVendorById={findVendorById}
         showProformaInvoiceFields={showProformaInvoiceFields}
+        showErpIntegrationFields={showErpIntegrationFields}
         onMapTaxInvoice={handleMapTaxInvoice}
         onViewLinkedInvoice={handleViewLinkedInvoice}
         allInvoices={invoices}
