@@ -24,6 +24,26 @@ const withParams = (params = {}) =>
     ),
   );
 
+const ZOHO_PUSH_CONFIG = {
+  PO: { path: "purchase-orders", idsKey: "poIds" },
+  PURCHASE_ORDERS: { path: "purchase-orders", idsKey: "poIds" },
+  VENDOR: { path: "vendors", idsKey: "vendorIds" },
+  VENDORS: { path: "vendors", idsKey: "vendorIds" },
+  BILLS: { path: "invoices", idsKey: "invoiceIds" },
+  INVOICE: { path: "invoices", idsKey: "invoiceIds" },
+  INVOICES: { path: "invoices", idsKey: "invoiceIds" },
+  PI: { path: "invoices", idsKey: "invoiceIds" },
+};
+
+const getZohoPushConfig = (objectType) => {
+  const normalized = String(objectType || "").toUpperCase();
+  const config = ZOHO_PUSH_CONFIG[normalized];
+  if (!config) {
+    throw new Error(`Zoho push is unavailable for ${objectType || "this object"}`);
+  }
+  return config;
+};
+
 export const integrationsApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getApIntegrationSummary: builder.query({
@@ -121,6 +141,18 @@ export const integrationsApi = serviceApi.injectEndpoints({
         body: withParams({ object }),
       }),
       invalidatesTags: ["Integrations"],
+    }),
+    triggerZohoAccountingReadyPush: builder.mutation({
+      query: ({ objectType, ids = [] } = {}) => {
+        const { path, idsKey } = getZohoPushConfig(objectType);
+        const selectedIds = Array.isArray(ids) ? ids.filter(Boolean) : [];
+        return {
+          url: `${ZOHO_BASE}/${path}/sync`,
+          method: "POST",
+          body: selectedIds.length > 0 ? { [idsKey]: selectedIds } : {},
+        };
+      },
+      invalidatesTags: ["Accounting", "Integrations", "ApIntegrationSummary"],
     }),
     getIntegrationReviewQueue: builder.query({
       query: ({ connectionId, object } = {}) => ({
@@ -329,6 +361,7 @@ export const {
   useUpdateIntegrationMappingsMutation,
   useGetIntegrationSyncStatusQuery,
   useTriggerIntegrationSyncMutation,
+  useTriggerZohoAccountingReadyPushMutation,
   useGetIntegrationReviewQueueQuery,
   useResolveIntegrationMatchMutation,
   useGetIntegrationLogsQuery,

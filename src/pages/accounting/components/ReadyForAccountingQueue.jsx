@@ -43,8 +43,12 @@ import {
 import {
   useGetTallyConnectionsQuery,
   useTriggerTallySyncMutation,
+  useTriggerZohoAccountingReadyPushMutation,
 } from "../../../Services/apis/integrationsApi";
 import AccountingQueuePreviewDialog from "./AccountingQueuePreviewDialog";
+import {
+  ERP_PROVIDER,
+} from "../../integrations/integrationSummary";
 import {
   ACC_STATUS,
   ACCOUNTING_QUEUE_STAGE,
@@ -151,6 +155,47 @@ const getErpPushObjectType = (objectType) =>
 
 const getErpPushObjectLabel = (objectType) =>
   ERP_PUSH_OBJECT_LABEL[getErpPushObjectType(objectType)] || objectType;
+
+const getZohoPushResultCounts = (result = {}) => {
+  const failedItems = Array.isArray(result.failedItems) ? result.failedItems : [];
+  const successIds = Array.isArray(result.successIds) ? result.successIds : [];
+  return {
+    total: Number(result.total ?? successIds.length + failedItems.length) || 0,
+    success: Number(result.success ?? result.successCount ?? successIds.length) || 0,
+    failed: Number(result.failed ?? result.failedCount ?? failedItems.length) || 0,
+    failedItems,
+  };
+};
+
+const getZohoFailureMessage = (failedItems = []) => {
+  const firstReason = failedItems
+    .map((item) => item.reason || item.message || item.error)
+    .find(Boolean);
+  return firstReason ? `: ${firstReason}` : "";
+};
+
+const showZohoPushToast = (result, fallbackSuccessMessage) => {
+  const { total, success, failed, failedItems } = getZohoPushResultCounts(result);
+  if (failed > 0 && success === 0) {
+    toast.error(
+      result?.message ||
+        `Zoho push failed for ${failed} item(s)${getZohoFailureMessage(failedItems)}`,
+    );
+    return false;
+  }
+  if (failed > 0) {
+    toast.warning(
+      result?.message ||
+        `Zoho push partially completed: ${success} succeeded, ${failed} failed${getZohoFailureMessage(failedItems)}`,
+    );
+    return true;
+  }
+  toast.success(
+    result?.message ||
+      (total > 0 ? `Zoho push completed for ${success || total} item(s)` : fallbackSuccessMessage),
+  );
+  return true;
+};
 
 const QUEUE_TABLE_HEADER = [
   { key: "select", title: "", headerClassName: "w-10", cellClassName: "w-10" },
@@ -315,6 +360,7 @@ const SourceBadge = ({ item }) => {
 const ReadyForAccountingQueue = ({
   erpSyncAvailable = false,
   erpStatusLoading = false,
+  activeErpProvider = null,
 }) => {
   const { guardAction, canPerformAction } = useActionGuard();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -384,7 +430,9 @@ const ReadyForAccountingQueue = ({
     { skip: !showLogs },
   );
   const { data: tallyConnectionsData } = useGetTallyConnectionsQuery(undefined, {
-    skip: activeStage !== ACCOUNTING_QUEUE_STAGE.ACCOUNTING_READY,
+    skip:
+      activeStage !== ACCOUNTING_QUEUE_STAGE.ACCOUNTING_READY ||
+      activeErpProvider !== ERP_PROVIDER.TALLY,
   });
 
   const [markReady, { isLoading: markingReady }] =
@@ -403,6 +451,7 @@ const ReadyForAccountingQueue = ({
   const [loadQueueItemDetail, { isFetching: previewFetching }] =
     useLazyGetAccountingQueueItemDetailQuery();
   const [triggerTallySync] = useTriggerTallySyncMutation();
+  const [triggerZohoPush] = useTriggerZohoAccountingReadyPushMutation();
 
   const allItems = data?.items || [];
   const docs = allItems;
@@ -419,7 +468,18 @@ const ReadyForAccountingQueue = ({
     [tallyConnectionsData],
   );
   const activeTallyConnectionId = getConnectionId(activeTallyConnection);
-  const hasTallyConnection = Boolean(activeTallyConnectionId);
+  const hasTallyConnection =
+    activeErpProvider === ERP_PROVIDER.TALLY && Boolean(activeTallyConnectionId);
+  const isZohoConnection = activeErpProvider === ERP_PROVIDER.ZOHO_BOOKS;
+  const isZohoUnsupportedActiveObject =
+    isZohoConnection &&
+    String(activeObjectType || "").toUpperCase() === OBJECT_TYPE.GRN;
+  const isZohoUnsupportedSyncItem = (item = {}) =>
+    isZohoConnection &&
+    String(item.objectType || activeObjectType || "").toUpperCase() ===
+      OBJECT_TYPE.GRN;
+  const canPushQueueItem = (item = {}) =>
+    canPushItem(item) && !isZohoUnsupportedSyncItem(item);
   const activeErpPushObjectLabel = getErpPushObjectLabel(activeObjectType);
   const activePushButtonLabel = activeTab === BILL_QUEUE_TAB
     ? BILL_QUEUE_TAB
@@ -489,14 +549,14 @@ const ReadyForAccountingQueue = ({
   };
   const selectedMarkable = selectedList.filter(canMarkReadyItem);
   const selectedPushable = selectedList.filter(
-    (item) => canPushItem(item) && !isRowSyncing(item),
+    (item) => canPushQueueItem(item) && !isRowSyncing(item),
   );
   const selectableDocs = useMemo(
     () =>
       activeStage === ACCOUNTING_QUEUE_STAGE.NEEDS_APPROVAL
         ? docs.filter(canMarkReadyItem)
-        : docs.filter((item) => canPushItem(item) && !syncingRowIds.has(item.id)),
-    [activeStage, docs, syncingRowIds],
+        : docs.filter((item) => canPushQueueItem(item) && !syncingRowIds.has(item.id)),
+    [activeStage, docs, syncingRowIds, isZohoConnection, activeObjectType],
   );
   const allChecked =
     selectableDocs.length > 0 &&
@@ -668,6 +728,26 @@ const ReadyForAccountingQueue = ({
       }
       return;
     }
+    if (isZohoConnection) {
+      if (!item.objectId) {
+        updateRowSyncing(item.id, false);
+        toast.error("This row is missing an entity ID for Zoho push");
+        return;
+      }
+      try {
+        const result = await triggerZohoPush({
+          objectType: item.objectType || activeObjectType,
+          ids: [item.objectId],
+        }).unwrap();
+        showZohoPushToast(result, "Selected item queued for Zoho push");
+        await refreshAfterAction({ clearSelection: false, refreshLogs: true });
+      } catch (err) {
+        toast.error(getAccountingErrorMessage(err, "Zoho push failed"));
+      } finally {
+        updateRowSyncing(item.id, false);
+      }
+      return;
+    }
     try {
       const result = await syncItem({ id: item.id }).unwrap();
       toast.success(result?.message || "Synced to ERP successfully");
@@ -683,6 +763,26 @@ const ReadyForAccountingQueue = ({
     if (!guardAction("accounting.ready.sync")) return;
     if (!erpSyncAvailable) {
       toast.info(syncDisabledReason);
+      return;
+    }
+    if (isZohoConnection) {
+      if (!item.objectId) {
+        toast.error("This row is missing an entity ID for Zoho retry");
+        return;
+      }
+      updateRowSyncing(item.id, true);
+      try {
+        const result = await triggerZohoPush({
+          objectType: item.objectType || activeObjectType,
+          ids: [item.objectId],
+        }).unwrap();
+        showZohoPushToast(result, "Selected item queued for Zoho retry");
+        await refreshAfterAction({ clearSelection: false, refreshLogs: true });
+      } catch (err) {
+        toast.error(getAccountingErrorMessage(err, "Zoho retry failed"));
+      } finally {
+        updateRowSyncing(item.id, false);
+      }
       return;
     }
     try {
@@ -726,6 +826,35 @@ const ReadyForAccountingQueue = ({
         await refreshAfterAction({ clearSelection: false, refreshLogs: true });
       } catch (err) {
         toast.error(getAccountingErrorMessage(err, "Tally push failed"));
+      } finally {
+        setBulkPushing(false);
+      }
+      return;
+    }
+
+    if (isZohoConnection) {
+      const selectedEntityIds = selectedPushable
+        .map((item) => item.objectId)
+        .filter(Boolean);
+      if (selectedPushable.length > 0 && selectedEntityIds.length === 0) {
+        toast.error("Selected rows are missing entity IDs for Zoho push");
+        return;
+      }
+      setBulkPushing(true);
+      try {
+        const result = await triggerZohoPush({
+          objectType: activeObjectType,
+          ids: selectedEntityIds.length > 0 ? selectedEntityIds : undefined,
+        }).unwrap();
+        showZohoPushToast(
+          result,
+          selectedEntityIds.length > 0
+            ? `Queued ${selectedEntityIds.length} selected item(s) for Zoho push`
+            : `${erpPushObjectType} push to Zoho queued`,
+        );
+        await refreshAfterAction({ clearSelection: false, refreshLogs: true });
+      } catch (err) {
+        toast.error(getAccountingErrorMessage(err, "Zoho push failed"));
       } finally {
         setBulkPushing(false);
       }
@@ -841,7 +970,8 @@ const ReadyForAccountingQueue = ({
       );
     }
 
-    const canPush = canPushItem(item);
+    const zohoUnsupportedSync = isZohoUnsupportedSyncItem(item);
+    const canPush = canPushQueueItem(item);
     const canRetry = canRetryItem(item);
     const canDirectUnlock =
       item.locked &&
@@ -884,6 +1014,16 @@ const ReadyForAccountingQueue = ({
             {rowSyncing ? "Syncing..." : "Sync"}
           </Button>
         ) : null}
+        {zohoUnsupportedSync && canSyncAction ? (
+          <Button
+            size="sm"
+            variant="outline"
+            disabled
+            title="GRN push to Zoho is not supported yet."
+          >
+            Sync
+          </Button>
+        ) : null}
         {canRetry && canSyncAction ? (
           <Button
             size="sm"
@@ -911,7 +1051,7 @@ const ReadyForAccountingQueue = ({
               isRowSyncing(item) ||
               (activeStage === ACCOUNTING_QUEUE_STAGE.NEEDS_APPROVAL
                 ? !canMarkReadyItem(item)
-                : !canPushItem(item))
+                : !canPushQueueItem(item))
             }
             onCheckedChange={() => toggleOne(item.id)}
             aria-label={`Select ${item.docNo}`}
@@ -1039,8 +1179,14 @@ const ReadyForAccountingQueue = ({
             canSyncAction ? (
               <Button
                 size="sm"
-                disabled={busy || !erpSyncAvailable}
-                title={!erpSyncAvailable ? syncDisabledReason : undefined}
+                disabled={busy || !erpSyncAvailable || isZohoUnsupportedActiveObject}
+                title={
+                  isZohoUnsupportedActiveObject
+                    ? "GRN push to Zoho is not supported yet."
+                    : !erpSyncAvailable
+                      ? syncDisabledReason
+                      : undefined
+                }
                 onClick={handleBulkPush}
               >
                 {pushInProgress ? (
