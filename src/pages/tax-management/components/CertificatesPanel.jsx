@@ -62,7 +62,7 @@ const renderTdsCertificateRow = (cert, rowIndex, headers) => (
       }
 
       return (
-        <TableCell key={header.key} className={cn('px-3 py-3 border border-border', header.cellClassName)}>
+        <TableCell key={header.key} className={cn('px-3 py-3 border border-table-border', header.cellClassName)}>
           {value}
         </TableCell>
       );

@@ -171,20 +171,20 @@ const GrnListTab = ({
         <Table className="border-separate border-spacing-0">
           <TableHeader>
             <TableRow>
-              <TableHead className="border border-border">GRN Number</TableHead>
-              <TableHead className="border border-border">Date</TableHead>
-              <TableHead className="border border-border">Vendor</TableHead>
-              <TableHead className="border border-border">PO Reference</TableHead>
-              <TableHead className="border border-border">Source</TableHead>
-              <TableHead className="border border-border">Status</TableHead>
-              <TableHead className="border border-border text-center">Lines</TableHead>
-              <TableHead className="border border-border">Actions</TableHead>
+              <TableHead className="border border-table-border">GRN Number</TableHead>
+              <TableHead className="border border-table-border">Date</TableHead>
+              <TableHead className="border border-table-border">Vendor</TableHead>
+              <TableHead className="border border-table-border">PO Reference</TableHead>
+              <TableHead className="border border-table-border">Source</TableHead>
+              <TableHead className="border border-table-border">Status</TableHead>
+              <TableHead className="border border-table-border text-center">Lines</TableHead>
+              <TableHead className="border border-table-border">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {pageData.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="border border-border py-12 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="border border-table-border py-12 text-center text-muted-foreground">
                   No goods receipts found.{' '}
                   {canCreate && (
                     <Button variant="link" className="px-1" onClick={onCreate}>
@@ -196,28 +196,28 @@ const GrnListTab = ({
             ) : (
               pageData.map((grn) => (
                 <TableRow key={grn.id} data-testid={`grn-row-${grn?.id ?? 'unknown'}`}>
-                  <TableCell className="border border-border font-semibold text-primary">{grn.grn_number}</TableCell>
-                  <TableCell className="border border-border text-muted-foreground">{formatDate(grn.receipt_date)}</TableCell>
-                  <TableCell className="border border-border">{grn.vendor_name || '—'}</TableCell>
-                  <TableCell className="border border-border">
+                  <TableCell className="border border-table-border font-semibold text-primary">{grn.grn_number}</TableCell>
+                  <TableCell className="border border-table-border text-muted-foreground">{formatDate(grn.receipt_date)}</TableCell>
+                  <TableCell className="border border-table-border">{grn.vendor_name || '—'}</TableCell>
+                  <TableCell className="border border-table-border">
                     {grn.po_number ? (
                       <span className="font-medium text-blue-600">{grn.po_number}</span>
                     ) : (
                       '—'
                     )}
                   </TableCell>
-                  <TableCell className="border border-border">
+                  <TableCell className="border border-table-border">
                     <GrnSourceBadge source={grn.source_type} />
                   </TableCell>
-                  <TableCell className="border border-border">
+                  <TableCell className="border border-table-border">
                     <GrnStatusBadge status={grn.status} />
                   </TableCell>
-                  <TableCell className="border border-border text-center">
+                  <TableCell className="border border-table-border text-center">
                     <span className="inline-flex min-w-[1.75rem] justify-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
                       {grn.line_items?.length || 0}
                     </span>
                   </TableCell>
-                  <TableCell className="border border-border">
+                  <TableCell className="border border-table-border">
                     <div className="flex gap-1">
                       <Button variant="ghost" size="sm" onClick={() => onView(grn)} data-testid={`view-grn-${grn?.id ?? 'unknown'}`}>
                         <Eye className="mr-1 h-4 w-4" />

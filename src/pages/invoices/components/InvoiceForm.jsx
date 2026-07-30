@@ -1,8 +1,16 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Building2, CheckCircle2, ChevronsUpDown, Loader2, Plus, X } from "lucide-react";
+import { Building2, CheckCircle2, ChevronsUpDown, Loader2, Plus, Trash2, X } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../../components/ui/dialog";
 import {
   Popover,
   PopoverAnchor,
@@ -27,7 +35,10 @@ import {
   DEFAULT_INR_TAX,
   INVOICE_LEVEL,
   isInrInvoiceCurrency,
+  isInvoiceLevelSelection,
+  isLineItemLevelSelection,
   LINE_ITEM_LEVEL,
+  LINE_ITEM_MODE_SUMMARY_ONLY,
   parseTaxRateFromLabel,
   remapLineItemsForCurrencyChange,
   formatInrTaxPercent,
@@ -48,7 +59,10 @@ import {
   useGetInvoiceTdsPreviewQuery,
 } from "../../../Services/apis/taxApi";
 import { useGetOrganisationQuery } from "../../../Services/apis/settingsApi";
-import { normalizeOrganisationBranchesFromApi } from "../../../utils/organisationGst";
+import {
+  normalizeGstRegistrationsFromApi,
+  normalizeOrganisationBranchesFromApi,
+} from "../../../utils/organisationGst";
 import { extractPageContent, extractMatchingGrns } from "../../../Services/utils/payloadMappers";
 import {
   useGetAvailableGrnsQuery,
@@ -63,7 +77,6 @@ import { buildInvoiceTdsStateFromVendor } from "../../vendors/utils/vendorTds";
 import TdsSelectionField from "./TdsSelectionField";
 import {
   getTdsPreviewAmount,
-  getTdsPreviewNetPayable,
 } from "./TdsBreakdownPanel";
 import InvoiceDueDateIndicators from "./InvoiceDueDateIndicators";
 import {
@@ -102,8 +115,8 @@ const lineItemTableHeader = [
   {
     key: "description",
     title: "Item Description",
-    headerClassName: "min-w-[190px]",
-    cellClassName: "min-w-[190px] align-top",
+    headerClassName: "w-[300px]",
+    cellClassName: "w-[300px] align-top",
   },
   {
     key: "accountGroup",
@@ -138,8 +151,8 @@ const lineItemTableHeader = [
   {
     key: "discount",
     title: "Discount",
-    headerClassName: "w-[120px] text-left",
-    cellClassName: "w-[120px] align-top",
+    headerClassName: "w-[120px] min-w-[120px] text-left",
+    cellClassName: "w-[120px] min-w-[120px] align-top",
   },
   {
     key: "subtotal",
@@ -223,6 +236,8 @@ export const InvoiceForm = ({
   updateLineItem,
   removeLineItem,
   addLineItem,
+  removeAllLineItems,
+  allowInvoiceLineItemRemoval = false,
   calculateLineItemSubtotal,
   setEditDialogOpen,
   setUploadedFile,
@@ -238,6 +253,7 @@ export const InvoiceForm = ({
   departments = [],
   invoiceCategories = [],
   invoiceCategoriesLoading = false,
+  showDepartmentField = true,
   showCategoryField = true,
   showCampaignField = false,
   lockedCampaign = false,
@@ -254,6 +270,7 @@ export const InvoiceForm = ({
   showInvoiceMatching = false,
   canUseThreeWayMatching = false,
   showProformaInvoiceFields = false,
+  showErpIntegrationFields = false,
 }) => {
   const canShowBranchField = showBillingGst && showBranchField;
   const {
@@ -268,18 +285,24 @@ export const InvoiceForm = ({
     data: organisationData,
     isFetching: organisationFetching,
   } = useGetOrganisationQuery(undefined, {
-    skip: !canShowBranchField,
+    skip: !showBillingGst,
   });
   const { isTdsSubscriptionEnabled } = useTdsSubscription();
-  const { data: coaData } = useGetCoaTreeQuery();
-  const { data: backendVoucherTypeOptions = [] } = useGetAccountingVoucherTypesQuery();
+  const { data: coaData } = useGetCoaTreeQuery(undefined, {
+    skip: !showErpIntegrationFields,
+  });
+  const { data: backendVoucherTypeOptions = [] } = useGetAccountingVoucherTypesQuery(undefined, {
+    skip: !showErpIntegrationFields,
+  });
   const [vendorPickerOpen, setVendorPickerOpen] = useState(false);
   const [vendorQuery, setVendorQuery] = useState("");
   const vendorAnchorRef = useRef(null);
   const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false);
   const [currencyQuery, setCurrencyQuery] = useState("");
+  const [removeLineItemsDialogOpen, setRemoveLineItemsDialogOpen] = useState(false);
   const [accountGroupSearchByRow, setAccountGroupSearchByRow] = useState({});
   const [accountGroupPickerOpenByRow, setAccountGroupPickerOpenByRow] = useState({});
+  const [isNetPayableManuallyEdited, setIsNetPayableManuallyEdited] = useState(false);
 
   const filteredVendorOptions = useMemo(() => {
     const query = String(vendorQuery || "")
@@ -289,6 +312,10 @@ export const InvoiceForm = ({
     if (!query) return options;
     return options.filter((vendor) => vendorMatchesInvoiceNameQuery(vendor, query));
   }, [vendorOptions, vendorQuery]);
+
+  useEffect(() => {
+    setIsNetPayableManuallyEdited(false);
+  }, [formData?.id, formData?.invoiceId]);
 
   const selectedVendor = useMemo(() => {
     if (formData?.vendorId && typeof findVendorById === "function") {
@@ -405,13 +432,33 @@ export const InvoiceForm = ({
     setCurrencyQuery(formData?.currency || DEFAULT_CURRENCY);
   }, [formData?.currency]);
 
+  const billingGstEntries = useMemo(() => {
+    const entriesByGst = new Map();
+
+    organisationGstCredentials.forEach((entry) => {
+      if (entry?.gst) entriesByGst.set(entry.gst, entry);
+    });
+
+    normalizeGstRegistrationsFromApi(organisationData).forEach((entry) => {
+      const gst = String(entry?.gstin || "").trim().toUpperCase();
+      if (!gst || entriesByGst.has(gst)) return;
+      entriesByGst.set(gst, {
+        id: entry.id || gst,
+        gst,
+        userName: entry.username || "",
+      });
+    });
+
+    return Array.from(entriesByGst.values());
+  }, [organisationData, organisationGstCredentials]);
+
   const billingGstOptions = useMemo(
     () =>
-      organisationGstCredentials.map((entry) => ({
+      billingGstEntries.map((entry) => ({
         value: entry.gst,
         label: entry.gst,
       })),
-    [organisationGstCredentials],
+    [billingGstEntries],
   );
 
   const organisationBranches = useMemo(
@@ -430,7 +477,8 @@ export const InvoiceForm = ({
     [organisationBranches],
   );
 
-  const organisationGstBusy = organisationGstLoading || organisationGstFetching;
+  const organisationGstBusy =
+    organisationGstLoading || organisationGstFetching || organisationFetching;
   const branchBusy = organisationFetching;
   const hasOrganisationGstOptions = billingGstOptions.length > 0;
   const billingGstRequired = requireBillingGst && hasOrganisationGstOptions;
@@ -442,7 +490,7 @@ export const InvoiceForm = ({
     }
 
     const currentBillingGst = String(formData.billingGstin || "").trim().toUpperCase();
-    const matchedCurrent = organisationGstCredentials.find((entry) => entry.gst === currentBillingGst);
+    const matchedCurrent = billingGstEntries.find((entry) => entry.gst === currentBillingGst);
     if (matchedCurrent) {
       if (formData.billingGstin !== matchedCurrent.gst) {
         setFormData((prev) => ({
@@ -461,26 +509,28 @@ export const InvoiceForm = ({
       return;
     }
 
-    if (organisationGstCredentials.length === 1) {
+    if (billingGstEntries.length === 1) {
       setFormData((prev) => ({
         ...prev,
-        billingGstin: organisationGstCredentials[0].gst,
+        billingGstin: billingGstEntries[0].gst,
       }));
     }
   }, [
     formData,
+    billingGstEntries,
     organisationGstError,
     organisationGstBusy,
-    organisationGstCredentials,
     showBillingGst,
     setFormData,
   ]);
 
-  const showLineItems = resolveLineItemsExpanded(formData || {});
+  const isSummaryOnlyInvoice =
+    formData?.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
+  const showLineItems = !isSummaryOnlyInvoice && resolveLineItemsExpanded(formData || {});
   const invoiceCurrency = formData?.currency || DEFAULT_CURRENCY;
   const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
   const isGstinRequired = useInrTax && formData?.gstTreatment !== "N/A";
-  const selectedBillingGst = organisationGstCredentials.find(
+  const selectedBillingGst = billingGstEntries.find(
     (entry) => entry.gst === String(formData?.billingGstin || "").trim().toUpperCase(),
   );
   const selectedBranchCode = String(formData?.branchCode || "").trim();
@@ -537,9 +587,10 @@ export const InvoiceForm = ({
         : prev,
     );
   };
-  const billingGstSatisfied = !billingGstRequired || Boolean(selectedBillingGst?.gst);
-  const isInvoiceLevelDiscount = formData?.discountsLevel === INVOICE_LEVEL;
-  const isInvoiceLevelTax = formData?.taxesLevel === INVOICE_LEVEL;
+  const billingGstSatisfied = !requireBillingGst || Boolean(selectedBillingGst?.gst);
+  const isInvoiceLevelDiscount = isInvoiceLevelSelection(formData?.discountsLevel);
+  const isInvoiceLevelTax = isInvoiceLevelSelection(formData?.taxesLevel);
+  const showLineItemDiscount = isLineItemLevelSelection(formData?.discountsLevel);
   const accountGroupOptions = useMemo(
     () => buildGroupBranchOptionsFromCoa(coaData?.tree || []),
     [coaData?.tree],
@@ -548,7 +599,9 @@ export const InvoiceForm = ({
   const lineItemHeaders = lineItemTableHeader
     .filter(
       (column) =>
-        (isInvoiceLevelDiscount ? column.key !== "discount" : true) &&
+        (showErpIntegrationFields ||
+          (column.key !== "accountGroup" && column.key !== "expenseType")) &&
+        (showLineItemDiscount || column.key !== "discount") &&
         (isInvoiceLevelTax
           ? column.key !== "tax" &&
             column.key !== "taxAmount" &&
@@ -564,6 +617,11 @@ export const InvoiceForm = ({
       }
       return column;
     });
+  const lineItemsTableMinWidth = showErpIntegrationFields
+    ? "min-w-[1240px]"
+    : isInvoiceLevelTax
+      ? "min-w-[830px]"
+      : "min-w-[1040px]";
   const formatAmount = (amount) => formatCurrency(amount, invoiceCurrency);
   const totals = calculateTotals(formData?.lineItems || [], invoiceCurrency);
 
@@ -855,22 +913,48 @@ export const InvoiceForm = ({
     0,
   );
   const tdsAmount = getTdsPreviewAmount(tdsPreview, fallbackTdsAmount);
-  const calculatedNetPayable = getTdsPreviewNetPayable(tdsPreview, fallbackNetPayable);
+  const calculatedNetPayable = fallbackNetPayable;
   const manualNetPayable =
     formData.netAmount !== undefined && formData.netAmount !== null && formData.netAmount !== ""
       ? Number(formData.netAmount)
       : null;
-  const hasManualNetPayableValue = Number.isFinite(manualNetPayable);
+  const hasManualNetPayableValue =
+    isNetPayableManuallyEdited && Number.isFinite(manualNetPayable);
   const netPayable =
     canEditNetPayable && hasManualNetPayableValue
       ? manualNetPayable
       : calculatedNetPayable;
+  const payableTotal = calculatedNetPayable;
+  useEffect(() => {
+    if (!canEditNetPayable || isNetPayableManuallyEdited) return;
+    const currentNetAmount = Number(formData?.netAmount);
+    if (Number.isFinite(currentNetAmount) && currentNetAmount === calculatedNetPayable) return;
+    setFormData((currentFormData) => ({
+      ...currentFormData,
+      netAmount: calculatedNetPayable,
+    }));
+  }, [
+    calculatedNetPayable,
+    canEditNetPayable,
+    formData?.netAmount,
+    isNetPayableManuallyEdited,
+    setFormData,
+  ]);
   const lineItemsSummary = computeLineItemsSummary({
     lineItems: formData?.lineItems || [],
     calculateLineItemSubtotal,
     isInvoiceLevelTax,
     useInrTax,
   });
+  const removedLineItemsCount = Number(formData?.removedLineItemsCount || 0);
+  const summarySubTotalValue = formatNumericInputValue(formData?.subTotal ?? "");
+  const summaryTaxValue = formatNumericInputValue(formData?.totalTaxAmount ?? "");
+  const confirmRemoveLineItems = () => {
+    if (typeof removeAllLineItems === "function") {
+      removeAllLineItems();
+    }
+    setRemoveLineItemsDialogOpen(false);
+  };
 
   if (!formData) return null;
 
@@ -938,14 +1022,14 @@ export const InvoiceForm = ({
         switch (header.key) {
           case "description":
             value = (
-              <div>
+              <div className="w-full">
                 <Input
                   value={item.description}
                   onChange={(e) =>
                     updateLineItem(index, "description", e.target.value)
                   }
                   placeholder="Description"
-                  className="h-7 text-xs"
+                  className="h-7 w-full text-xs"
                 />
                 <div className="flex items-center gap-1 mt-0.5">
                   <span className="text-[10px] text-gray-400">HSN:</span>
@@ -1234,7 +1318,7 @@ export const InvoiceForm = ({
             );
             break;
           case "discount":
-            if (isInvoiceLevelDiscount) {
+            if (!showLineItemDiscount) {
               value = "-";
               break;
             }
@@ -1320,6 +1404,7 @@ export const InvoiceForm = ({
   );
 
   return (
+    <>
     <div className="flex flex-row items-stretch gap-4 w-full h-full min-h-0 min-w-0">
       <div className="flex-1 min-w-0 flex flex-col min-h-0">
         <div className="flex-1 overflow-y-auto space-y-4 pr-3 pb-2 scrollbar-thin-muted">
@@ -1706,50 +1791,50 @@ export const InvoiceForm = ({
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              {/* Department field hidden during create/edit — restore when needed
-              <div>
-                <RequiredLabel required={departmentMandatory}>
-                  Department
-                </RequiredLabel>
-                <AppSelect
-                  value={formData.departmentId || ""}
-                  onChange={(e) => {
-                    const selectedDepartment = departments.find(
-                      (department) => {
-                        const departmentId =
-                          department?.id ??
-                          department?.departmentId ??
-                          department?.departmentId;
-                        return String(departmentId ?? "") === e.target.value;
-                      },
-                    );
-                    setFormData({
-                      ...formData,
-                      departmentId: e.target.value,
-                      departmentName:
-                        selectedDepartment?.name ||
-                        selectedDepartment?.departmentName ||
-                        selectedDepartment?.departmentName ||
-                        "",
-                    });
-                  }}
-                  className="h-8 text-sm"
-                  data-testid="invoice-department-select"
-                  required={departmentMandatory}
-                  placeholder="Select department"
-                  options={departments.map((department) => ({
-                    value:
-                      department?.id ??
-                      department?.departmentId ??
-                      department?.departmentId,
-                    label:
-                      department?.name ??
-                      department?.departmentName ??
-                      department?.departmentName,
-                  }))}
-                />
-              </div>
-              */}
+              {showDepartmentField && (
+                <div>
+                  <RequiredLabel required={departmentMandatory}>
+                    Department
+                  </RequiredLabel>
+                  <AppSelect
+                    value={formData.departmentId || ""}
+                    onChange={(e) => {
+                      const selectedDepartment = departments.find(
+                        (department) => {
+                          const departmentId =
+                            department?.id ??
+                            department?.departmentId ??
+                            department?.department_id;
+                          return String(departmentId ?? "") === e.target.value;
+                        },
+                      );
+                      setFormData({
+                        ...formData,
+                        departmentId: e.target.value,
+                        departmentName:
+                          selectedDepartment?.name ||
+                          selectedDepartment?.departmentName ||
+                          selectedDepartment?.department_name ||
+                          "",
+                      });
+                    }}
+                    className="h-8 text-sm"
+                    data-testid="invoice-department-select"
+                    required={departmentMandatory}
+                    placeholder="Select department"
+                    options={departments.map((department) => ({
+                      value:
+                        department?.id ??
+                        department?.departmentId ??
+                        department?.department_id,
+                      label:
+                        department?.name ??
+                        department?.departmentName ??
+                        department?.department_name,
+                    }))}
+                  />
+                </div>
+              )}
               {showCategoryField && (
                 <div>
                   <RequiredLabel required={categoryMandatory}>
@@ -1843,7 +1928,7 @@ export const InvoiceForm = ({
                         value={formData.billingGstin || ""}
                         onChange={(event) => {
                           const nextGst = event.target.value;
-                          const matched = organisationGstCredentials.find((entry) => entry.gst === nextGst);
+                          const matched = billingGstEntries.find((entry) => entry.gst === nextGst);
                           setFormData({
                             ...formData,
                             billingGstin: matched?.gst || "",
@@ -2105,37 +2190,39 @@ export const InvoiceForm = ({
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <RequiredLabel>Voucher Type</RequiredLabel>
-                <AppSelect
-                  value={formData.voucherType || ""}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      voucherType: e.target.value,
-                    })
-                  }
-                  options={voucherTypeOptions}
-                  placeholder="Select voucher type"
-                  className="h-8 text-sm"
-                />
+            {showErpIntegrationFields && (
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <RequiredLabel>Voucher Type</RequiredLabel>
+                  <AppSelect
+                    value={formData.voucherType || ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        voucherType: e.target.value,
+                      })
+                    }
+                    options={voucherTypeOptions}
+                    placeholder="Select voucher type"
+                    className="h-8 text-sm"
+                  />
+                </div>
+                <div>
+                  <RequiredLabel>Narration</RequiredLabel>
+                  <Input
+                    value={formData.tdsNarration || ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        tdsNarration: e.target.value,
+                      })
+                    }
+                    placeholder="Narration for TDS Register"
+                    className="h-8 text-sm"
+                  />
+                </div>
               </div>
-              <div>
-                <RequiredLabel>Narration</RequiredLabel>
-                <Input
-                  value={formData.tdsNarration || ""}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      tdsNarration: e.target.value,
-                    })
-                  }
-                  placeholder="Narration for TDS Register"
-                  className="h-8 text-sm"
-                />
-              </div>
-            </div>
+            )}
 
             <div className="flex gap-6 text-xs">
               <div className="flex items-center gap-1.5">
@@ -2183,8 +2270,120 @@ export const InvoiceForm = ({
                 })
               }
               itemCount={formData.lineItems?.length || 0}
+              canRemoveLineItems={
+                allowInvoiceLineItemRemoval &&
+                !isSummaryOnlyInvoice &&
+                (formData.lineItems?.length || 0) > 0
+              }
+              onRemoveLineItems={() => setRemoveLineItemsDialogOpen(true)}
+              summaryOnly={isSummaryOnlyInvoice}
             />
-            {showLineItems ? (
+            {isSummaryOnlyInvoice ? (
+              <div className="rounded-lg border bg-gray-50 p-4">
+                <p className="text-xs text-muted-foreground">
+                  Individual line items have been removed.
+                </p>
+		                <div className="mt-4 space-y-3">
+		                  <div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-3">
+		                    <Label className="text-xs">Total Line Items</Label>
+                    <Input
+                      type="number"
+                      min="0"
+                      step="1"
+                      value={formData.removedLineItemsCount ?? removedLineItemsCount}
+                      onChange={(event) =>
+                        setFormData({
+                          ...formData,
+                          removedLineItemsCount: sanitizeNumericInput(event.target.value),
+                        })
+                      }
+                      className="h-8 w-full text-sm"
+                      data-testid="summary-total-line-items"
+                    />
+		                  </div>
+		                  <div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-3">
+		                    <Label className="text-xs">Subtotal</Label>
+	                    <Input
+	                      type="number"
+	                      min="0"
+	                      step="0.01"
+	                      value={summarySubTotalValue}
+                      onChange={(event) =>
+                        setFormData({
+                          ...formData,
+                          subTotal: sanitizeNumericInput(event.target.value),
+                        })
+                      }
+	                      className="h-8 w-full text-sm"
+		                      data-testid="summary-subtotal-input"
+		                    />
+		                  </div>
+                  {showLineItemDiscount && (
+                    <div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-3">
+                      <Label className="text-xs">Discount</Label>
+                      <div className="flex h-8 items-center gap-2">
+                        <Input
+                          type="text"
+                          inputMode="decimal"
+                          value={formatNumericInputValue(formData.invoiceDiscount)}
+                          onChange={(event) =>
+                            setFormData({
+                              ...formData,
+                              invoiceDiscount: sanitizeNumericInput(event.target.value),
+                            })
+                          }
+                          className="h-8 min-w-0 flex-1 text-sm text-left"
+                          data-testid="summary-discount-input"
+                        />
+                        <AppSelect
+                          value={formData.invoiceDiscountType || "%"}
+                          onChange={(event) =>
+                            setFormData({
+                              ...formData,
+                              invoiceDiscountType: event.target.value,
+                            })
+                          }
+                          options={[
+                            "%",
+                            invoiceCurrency === DEFAULT_CURRENCY ? "₹" : invoiceCurrency,
+                          ]}
+                          className="h-8 w-20 justify-between rounded-md border bg-white pl-2 pr-7 text-xs"
+                          data-testid="summary-discount-type"
+                        />
+                      </div>
+                    </div>
+                  )}
+                  {!isInvoiceLevelTax && (
+		                    <div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-3">
+		                      <Label className="text-xs">Total Tax Amount</Label>
+		                      <Input
+	                        type="number"
+	                        min="0"
+	                        step="0.01"
+	                        value={summaryTaxValue}
+	                        onChange={(event) =>
+	                          setFormData({
+	                            ...formData,
+	                            totalTaxAmount: sanitizeNumericInput(event.target.value),
+	                          })
+	                        }
+		                        className="h-8 w-full text-sm"
+		                        data-testid="summary-tax-input"
+		                      />
+		                    </div>
+		                  )}
+		                  {/* <div className="grid grid-cols-[140px_minmax(0,1fr)] items-center gap-3">
+		                    <Label className="text-xs">Invoice Total</Label>
+	                    <div
+	                      className="flex h-8 w-full items-center rounded-md border bg-white px-3 text-sm font-medium"
+	                      data-testid="summary-invoice-total"
+	                    >
+                      {formatAmount(totals.total)}
+                    </div>
+                  </div> */}
+                </div>
+              </div>
+            ) : showLineItems ? (
               <>
                 <div className="border rounded-lg overflow-hidden">
                   <div className="overflow-x-auto scrollbar-thin-muted">
@@ -2192,7 +2391,7 @@ export const InvoiceForm = ({
                       tableHeader={lineItemHeaders}
                       tableData={formData.lineItems}
                       renderRow={renderLineItemRow}
-                      tableClassName="min-w-[1240px] border-separate border-spacing-0"
+                      tableClassName={`${lineItemsTableMinWidth} table-fixed border-separate border-spacing-0`}
                       headClassName="bg-gray-50 border-b"
                       stickyHeader={false}
                       striped={false}
@@ -2243,7 +2442,7 @@ export const InvoiceForm = ({
                       setFormData({ ...formData, invoiceTax: e.target.value })
                     }
                     options={TAX_RATES}
-                    className="h-8 max-w-[220px] text-sm"
+                    className="h-8 max-w-[300px] text-sm"
                   />
                 </div>
               ) : (
@@ -2288,7 +2487,7 @@ export const InvoiceForm = ({
               <span>Sub Total</span>
               <span className="font-medium">
                 {formatAmount(
-                  isInvoiceLevelDiscount
+                  isSummaryOnlyInvoice || isInvoiceLevelDiscount
                     ? totals.subTotalBeforeDiscount
                     : totals.subTotal,
                 )}
@@ -2330,40 +2529,20 @@ export const InvoiceForm = ({
                 <span>-{formatAmount(totals.invoiceDiscountAmount || 0)}</span>
               </div>
             )}
-            {useInrTax && totals.cgst > 0 && (
-              <div className="flex justify-between text-xs">
-                <span>
-                  CGST
-                  {totals.cgstRate > 0
-                    ? ` ${formatInrTaxPercent(totals.cgstRate)}`
-                    : ""}
-                </span>
-                <span>{formatAmount(totals.cgst)}</span>
-              </div>
-            )}
-            {useInrTax && totals.sgst > 0 && (
-              <div className="flex justify-between text-xs">
-                <span>
-                  SGST
-                  {totals.sgstRate > 0
-                    ? ` ${formatInrTaxPercent(totals.sgstRate)}`
-                    : ""}
-                </span>
-                <span>{formatAmount(totals.sgst)}</span>
-              </div>
-            )}
-            {useInrTax && totals.igst > 0 && (
-              <div className="flex justify-between text-xs">
-                <span>
-                  IGST
-                  {totals.igstRate > 0
-                    ? ` ${formatInrTaxPercent(totals.igstRate)}`
-                    : ""}
-                </span>
-                <span>{formatAmount(totals.igst)}</span>
-              </div>
-            )}
-            {!useInrTax &&
+            {!isSummaryOnlyInvoice && useInrTax &&
+              totals.inrTaxes?.map((entry) => (
+                <div
+                  key={`${entry.name}-${entry.rate}`}
+                  className="flex justify-between text-xs"
+                >
+                  <span>
+                    {entry.name}
+                    {entry.rate > 0 ? ` ${formatInrTaxPercent(entry.rate)}` : ""}
+                  </span>
+                  <span>{formatAmount(entry.amount)}</span>
+                </div>
+              ))}
+            {!isSummaryOnlyInvoice && !useInrTax &&
               totals.foreignTaxes?.map((entry) => (
                 <div
                   key={`${entry.name}-${entry.rate}`}
@@ -2391,17 +2570,19 @@ export const InvoiceForm = ({
                 <span>TDS{tdsLabel ? ` (${tdsLabel})` : ""}</span>
                 <TdsSelectionField
                   value={formData.tds || ""}
-                  onChange={(selection) =>
+                  onChange={(selection) => {
+                    setIsNetPayableManuallyEdited(false);
                     setFormData({
                       ...formData,
                       tds: selection.tds,
                       tdsSectionId: selection.tdsSectionId,
                       tdsSectionCode: selection.tdsSectionCode,
                       tdsRate: selection.tdsRate,
-                    })
-                  }
+                      netAmount: undefined,
+                    });
+                  }}
                   showLabel={false}
-                  selectClassName="h-6 w-full max-w-[220px] rounded border pl-1 pr-6 text-xs"
+                  selectClassName="h-6 w-full max-w-[300px] rounded border pl-1 pr-6 text-xs"
                   inputClassName="h-6 w-16 px-1 text-xs"
                   testIdPrefix="invoice-tds"
                 />
@@ -2409,8 +2590,8 @@ export const InvoiceForm = ({
               <span className="shrink-0 pt-1">{formatAmount(tdsAmount)}</span>
             </div>
             <div className="flex justify-between text-sm pt-1.5 border-t">
-              <span>Total</span>
-              <span>{formatAmount(totals.total)}</span>
+              <span>{isSummaryOnlyInvoice ? "Line Items Total" : "Total"}</span>
+              <span>{formatAmount(isSummaryOnlyInvoice ? totals.total : payableTotal)}</span>
             </div>
             <div className="flex justify-between text-sm font-bold pt-1.5 border-t">
               <span>Net Payable</span>
@@ -2420,14 +2601,15 @@ export const InvoiceForm = ({
                   min="0"
                   step="0.01"
                   value={hasManualNetPayableValue ? formData.netAmount : formatNumericInputValue(netPayable)}
-                  onChange={(event) =>
+                  onChange={(event) => {
+                    setIsNetPayableManuallyEdited(true);
                     setFormData({
                       ...formData,
                       netAmount: sanitizeNumericInput(event.target.value, {
                         allowDecimal: true,
                       }),
-                    })
-                  }
+                    });
+                  }}
                   className="h-8 w-36 text-right font-bold"
                   data-testid="invoice-net-payable-input"
                 />
@@ -2488,10 +2670,50 @@ export const InvoiceForm = ({
         formData={formData}
         departmentMandatory={departmentMandatory}
         categoryMandatory={categoryMandatory}
+        showDepartmentField={showDepartmentField}
         showCategoryField={showCategoryField}
         showCampaignField={showCampaignField}
       />
     </div>
+    <Dialog
+      open={removeLineItemsDialogOpen}
+      onOpenChange={setRemoveLineItemsDialogOpen}
+    >
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Remove line items?</DialogTitle>
+          <DialogDescription className="space-y-3">
+            <span className="block">
+              This will permanently remove all individual line-item details from this invoice.
+            </span>
+            <span className="block">
+              Only the invoice summary will remain editable.
+            </span>
+            <span className="block">
+              This action cannot be undone after the invoice is saved.
+            </span>
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setRemoveLineItemsDialogOpen(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={confirmRemoveLineItems}
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Remove Line Items
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    </>
   );
 };
 

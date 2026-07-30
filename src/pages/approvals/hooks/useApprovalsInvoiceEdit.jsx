@@ -18,10 +18,10 @@ import {
   useCheckInvoiceMutation,
 } from "../../../Services/apis/invoicesVendorsApi";
 import {
-  useGetCorporateDepartmentsQuery,
   useGetCorporateUserDetailsQuery,
 } from "../../../Services/apis/corporateApi";
 import { useGetCategoriesForInvoiceQuery } from "../../../Services/apis/categoriesApi";
+import { useGetDepartmentsForInvoiceQuery } from "../../../Services/apis/departmentsApi";
 import { findVendorByInvoiceName } from "../../invoices/utils/vendorMatching";
 import {
   extractVendorIdFromResponse,
@@ -70,6 +70,7 @@ import { getInvoiceVendorRequestValidationErrors } from "../../../utils/vendorVa
 import {
   isCheckerEditEnabled as isCheckerEditEnabledForCorporate,
   isCheckerEditForbiddenError,
+  isNetPayableEditEnabled as isNetPayableEditEnabledForCorporate,
 } from "../../../utils/invoiceConfiguration";
 import {
   buildCurrentUserIdentity,
@@ -95,6 +96,7 @@ export const useApprovalsInvoiceEdit = ({
   const {
     corporateScreens,
     isCategoryFeatureEnabled,
+    isDepartmentFeatureEnabled,
     isCampaignFeatureEnabled,
     isCorporateAdmin,
     hasPermission,
@@ -118,7 +120,13 @@ export const useApprovalsInvoiceEdit = ({
     "";
 
   const { data: vendorsData = [] } = useGetVendorsQuery();
-  const { data: departmentsData = [] } = useGetCorporateDepartmentsQuery();
+  const { data: departmentsData = [] } = useGetDepartmentsForInvoiceQuery(
+    {
+      userEmail: invoiceUserEmail,
+      ...(currencyParam ? { currency: currencyParam } : {}),
+    },
+    { skip: !invoiceUserEmail || !isDepartmentFeatureEnabled },
+  );
   const {
     data: invoiceMandatoryFieldsData,
     isLoading: invoiceMandatoryFieldsLoading,
@@ -171,8 +179,11 @@ export const useApprovalsInvoiceEdit = ({
     [invoiceMandatoryFieldsData],
   );
   const mandatoryFieldOptions = useMemo(
-    () => ({ showCategoryField: isCategoryFeatureEnabled }),
-    [isCategoryFeatureEnabled],
+    () => ({
+      showDepartmentField: isDepartmentFeatureEnabled,
+      showCategoryField: isCategoryFeatureEnabled,
+    }),
+    [isDepartmentFeatureEnabled, isCategoryFeatureEnabled],
   );
   const invoiceCurrencyOptions = useMemo(
     () => currencies.filter((currency) => currency !== "ALL"),
@@ -182,6 +193,13 @@ export const useApprovalsInvoiceEdit = ({
   const isCheckerEditEnabled = useMemo(
     () =>
       isCheckerEditEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const isNetPayableEditEnabled = useMemo(
+    () =>
+      isNetPayableEditEnabledForCorporate(
         corporateScreens?.activeInvoiceConfiguration ?? [],
       ),
     [corporateScreens?.activeInvoiceConfiguration],
@@ -631,6 +649,7 @@ export const useApprovalsInvoiceEdit = ({
         calculateLineItemSubtotal={calculateLineItemSubtotal}
         setEditDialogOpen={setEditDialogOpen}
         handleUpdateInvoice={handleUpdateInvoice}
+        canEditNetPayable={isNetPayableEditEnabled}
         canAddVendor={canAddVendors}
         canSubmit={
           isEdit
@@ -654,6 +673,7 @@ export const useApprovalsInvoiceEdit = ({
         invoiceCategoriesLoading={
           invoiceCategoriesLoading || invoiceCategoriesFetching
         }
+        showDepartmentField={isDepartmentFeatureEnabled}
         showCategoryField={isCategoryFeatureEnabled}
         showCampaignField={isCampaignFeatureEnabled}
         currencyOptions={invoiceCurrencyOptions}

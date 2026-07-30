@@ -15,6 +15,7 @@ import {
 import { Button } from '../../../../components/ui/button';
 import { Input } from '../../../../components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../../components/ui/tabs';
+import AppDataTable from '../../../../components/common/AppDataTable';
 import { cn } from '../../../../lib/utils';
 import {
   GST_DOC_FY_OPTIONS,
@@ -53,7 +54,6 @@ import { CREDIT_ACTION_CODES } from '../../../../constants/creditActions';
 import {
   TaxAlertBanner,
   TaxApiMeta,
-  TaxCompactTable,
   TaxDetailGrid,
   TaxDrawer,
   TaxEmptyState,
@@ -595,7 +595,7 @@ const B2bReconciliationDetail = ({ snapshot, onBack, getVendor }) => {
   const b2bColumns = useMemo(() => [
     {
       key: 'supplier',
-      title: 'Supplier',
+      header: 'Supplier',
       render: (row) => (
         <div>
           <p className="font-medium">{row.vendor ?? selectedVendor?.name ?? snapshot.vendorName ?? 'All Vendors'}</p>
@@ -603,14 +603,14 @@ const B2bReconciliationDetail = ({ snapshot, onBack, getVendor }) => {
         </div>
       ),
     },
-    { key: 'invoiceNumber', title: 'Invoice No.', render: (row) => <span className="font-mono text-xs font-semibold text-primary">{row.invoiceNumber}</span> },
-    { key: 'taxableValue', title: 'Taxable', render: (row) => formatCurrency(row.taxableValue), cellClassName: 'text-right font-medium' },
-    { key: 'gst', title: 'Tax / ITC', render: (row) => formatCurrency(docTotalGst(row)), cellClassName: 'text-right font-semibold text-primary' },
-    { key: 'matchStatus', title: 'Status', render: (row) => <TaxStatusBadge status={row.matchStatus} /> },
+    { key: 'invoiceNumber', header: 'Invoice No.', render: (row) => <span className="font-mono text-xs font-semibold text-primary">{row.invoiceNumber}</span> },
+    { key: 'taxableValue', header: 'Taxable', render: (row) => formatCurrency(row.taxableValue), cellClassName: 'text-right font-medium' },
+    { key: 'gst', header: 'Tax / ITC', render: (row) => formatCurrency(docTotalGst(row)), cellClassName: 'text-right font-semibold text-primary' },
+    { key: 'matchStatus', header: 'Status', render: (row) => <TaxStatusBadge status={row.matchStatus} /> },
     {
       key: 'actions',
-      title: 'Actions',
-      className: 'text-right',
+      header: 'Actions',
+      headerClassName: 'text-right',
       cellClassName: 'text-right',
       render: (row) => (
         <Button
@@ -791,10 +791,10 @@ const B2bReconciliationDetail = ({ snapshot, onBack, getVendor }) => {
           />
         ) : (
           <>
-            <TaxCompactTable
+            <AppDataTable
               rows={visibleRecords}
               columns={b2bColumns}
-              getRowKey={(row) => row.invoiceNumber}
+              rowKey={(row) => row.invoiceNumber}
               getRowClassName={b2bRowClass}
               onRowClick={setSelected}
               emptyMessage={
@@ -804,6 +804,7 @@ const B2bReconciliationDetail = ({ snapshot, onBack, getVendor }) => {
                     ? 'No invoices require review under the current filter.'
                     : 'No records to display.'
               }
+              bordered
             />
             <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
               <span>
@@ -1000,7 +1001,7 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
   const historyColumns = useMemo(() => [
     {
       key: 'supplier',
-      title: 'Supplier',
+      header: 'Supplier',
       render: (row) => (
         <div>
           <p className="font-medium">{row.vendorName}</p>
@@ -1008,19 +1009,19 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
         </div>
       ),
     },
-    { key: 'org_gst', title: 'Org GSTIN', render: (row) => row.orgGst, cellClassName: 'font-mono text-xs' },
-    { key: 'period', title: 'Period', render: (row) => `${row.month || '—'} FY ${row.fy || '—'}` },
-    { key: 'total', title: 'Invoices', render: (row) => row.totalSupplierInvoices, cellClassName: 'text-left font-medium' },
-    { key: 'tax', title: 'Tax / ITC', render: (row) => formatCurrency(row.totalGst), cellClassName: 'text-left font-medium text-green-700' },
+    { key: 'org_gst', header: 'Org GSTIN', render: (row) => row.orgGst, cellClassName: 'font-mono text-xs' },
+    { key: 'period', header: 'Period', render: (row) => `${row.month || '—'} FY ${row.fy || '—'}` },
+    { key: 'total', header: 'Invoices', render: (row) => row.totalSupplierInvoices, cellClassName: 'text-left font-medium' },
+    { key: 'tax', header: 'Tax / ITC', render: (row) => formatCurrency(row.totalGst), cellClassName: 'text-left font-medium text-green-700' },
     {
       key: 'status',
-      title: 'Status',
+      header: 'Status',
       render: (row) => <TaxStatusBadge status={row.syncStatus} />,
     },
     {
       key: 'actions',
-      title: 'Actions',
-      className: 'text-right w-[130px]',
+      header: 'Actions',
+      headerClassName: 'text-right w-[130px]',
       cellClassName: 'text-right',
       render: (row) => (
         <Button
@@ -1141,12 +1142,13 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
           description="Previously fetched GSTR-2A B2B snapshots across organisation GSTINs"
           meta={<TaxApiMeta synced={formatB2bFetchedOn(filteredHistory[0].fetchedAt)} count={`${filteredHistory.length} snapshot${filteredHistory.length === 1 ? '' : 's'}`} />}
         >
-          <TaxCompactTable
+          <AppDataTable
             rows={filteredHistory}
             columns={historyColumns}
-            getRowKey={(row) => row.id}
+            rowKey={(row) => row.id}
             onRowClick={(row) => openSnapshotDetails(row.id)}
             emptyMessage="No fetch history found."
+            bordered
           />
           <TaxPagination
             page={historyPage}
@@ -1293,26 +1295,26 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
   });
 
   const docColumns = [
-    { key: 'documentType', title: 'Type', render: (row) => <TaxStatusBadge status={row.documentType} /> },
-    { key: 'invoiceNumber', title: 'Document No.', cellClassName: 'font-mono text-xs' },
-    { key: 'vendor', title: 'Vendor', render: (row) => row.vendor ?? vendors.find((entry) => entry.id === row.vendor_id)?.name ?? '—' },
-    { key: 'documentDate', title: 'Date' },
-    { key: 'taxableValue', title: 'Taxable', render: (row) => formatCurrency(row.taxableValue), cellClassName: 'text-right' },
-    { key: 'gst', title: 'GST', render: (row) => formatCurrency(docTotalGst(row)), cellClassName: 'text-right font-medium text-primary' },
-    { key: 'itcEligibility', title: 'ITC', render: (row) => <TaxStatusBadge status={row.itcEligibility} /> },
-    { key: 'documentStatus', title: 'Status', render: (row) => <TaxStatusBadge status={row.documentStatus} /> },
-    { key: 'apStatus', title: 'AP Match', render: (row) => <TaxStatusBadge status={row.apStatus} /> },
+    { key: 'documentType', header: 'Type', render: (row) => <TaxStatusBadge status={row.documentType} /> },
+    { key: 'invoiceNumber', header: 'Document No.', cellClassName: 'font-mono text-xs' },
+    { key: 'vendor', header: 'Vendor', render: (row) => row.vendor ?? vendors.find((entry) => entry.id === row.vendor_id)?.name ?? '—' },
+    { key: 'documentDate', header: 'Date' },
+    { key: 'taxableValue', header: 'Taxable', render: (row) => formatCurrency(row.taxableValue), cellClassName: 'text-right' },
+    { key: 'gst', header: 'GST', render: (row) => formatCurrency(docTotalGst(row)), cellClassName: 'text-right font-medium text-primary' },
+    { key: 'itcEligibility', header: 'ITC', render: (row) => <TaxStatusBadge status={row.itcEligibility} /> },
+    { key: 'documentStatus', header: 'Status', render: (row) => <TaxStatusBadge status={row.documentStatus} /> },
+    { key: 'apStatus', header: 'AP Match', render: (row) => <TaxStatusBadge status={row.apStatus} /> },
   ];
 
   const historyColumns = [
     {
       key: 'requestedAt',
-      title: 'Fetch Date',
+      header: 'Fetch Date',
       render: (row) => formatHistoryRequestedAt(row.requestedAt),
     },
     {
       key: 'fetchedFor',
-      title: 'Fetched For',
+      header: 'Fetched For',
       render: (row) => (
         <span className="text-xs" title={getDocumentHistoryVendor(row)}>
           {getDocumentHistoryVendor(row)}
@@ -1321,33 +1323,33 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
     },
     {
       key: 'month',
-      title: 'Month',
+      header: 'Month',
       render: (row) => getDocumentHistoryMonth(row),
     },
     {
       key: 'financialYear',
-      title: 'Financial Year',
+      header: 'Financial Year',
       render: (row) => getDocumentHistoryFy(row),
     },
     {
       key: 'documentType',
-      title: 'Doc Type',
+      header: 'Doc Type',
       render: (row) => getDocumentHistoryType(row),
     },
     {
       key: 'itcEligibility',
-      title: 'ITC Eligibility',
+      header: 'ITC Eligibility',
       render: (row) => getDocumentHistoryItc(row),
     },
     {
       key: 'count',
-      title: 'Documents',
+      header: 'Documents',
       cellClassName: 'text-left font-medium',
       render: (row) => getDocumentHistoryCount(row),
     },
     {
       key: 'actions',
-      title: 'Actions',
+      header: 'Actions',
       cellClassName: 'text-eft',
       render: (row) => (
         <Button
@@ -1442,12 +1444,13 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
           description="Previously fetched GSTR-2A document responses. Open a run to review its document register."
           meta={<TaxApiMeta synced={formatHistoryRequestedAt(history[0]?.requestedAt)} count={`${history.length} run${history.length === 1 ? '' : 's'}`} />}
         >
-          <TaxCompactTable
+          <AppDataTable
             rows={history}
             columns={historyColumns}
-            getRowKey={(row, index) => row.requestedAt ?? `gstr2a-history-${index}`}
+            rowKey={(row, index) => row.requestedAt ?? `gstr2a-history-${index}`}
             onRowClick={showHistoryRun}
             emptyMessage="No GSTR-2A document fetch history found."
+            bordered
           />
           <TaxPagination
             page={historyPage}
@@ -1494,7 +1497,7 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
                 </button>
               ))}
             </div>
-            <TaxCompactTable rows={visible} columns={docColumns} getRowKey={(row) => row.invoiceNumber} onRowClick={setSelected} />
+            <AppDataTable rows={visible} columns={docColumns} rowKey={(row) => row.invoiceNumber} onRowClick={setSelected} bordered />
             <TaxPagination />
           </TaxSectionCard>
         </div>
@@ -1666,27 +1669,27 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
   });
 
   const b2bColumns = [
-    { key: 'documentType', title: 'Type', render: (row) => <TaxStatusBadge status={row.documentType} /> },
-    { key: 'invoiceNumber', title: 'Document No.', cellClassName: 'font-mono text-xs' },
-    { key: 'vendor', title: 'Vendor', render: (row) => row.vendor ?? '—' },
-    { key: 'documentDate', title: 'Date' },
-    { key: 'taxableValue', title: 'Taxable', render: (row) => formatCurrency(row.taxableValue), cellClassName: 'text-right' },
-    { key: 'gst', title: 'GST', render: (row) => formatCurrency(docTotalGst(row)), cellClassName: 'text-right font-medium text-primary' },
-    { key: 'itcEligibility', title: 'ITC Status', render: (row) => <TaxStatusBadge status={docItcStatus(row)} /> },
-    { key: 'claimable', title: 'Claimable', render: (row) => formatCurrency(row.claimable), cellClassName: 'text-right text-green-600 font-medium' },
-    { key: 'blocked', title: 'Blocked', render: (row) => formatCurrency(row.blocked), cellClassName: 'text-right text-red-600' },
-    { key: 'apStatus', title: 'AP Match', render: (row) => <TaxStatusBadge status={row.apStatus} /> },
+    { key: 'documentType', header: 'Type', render: (row) => <TaxStatusBadge status={row.documentType} /> },
+    { key: 'invoiceNumber', header: 'Document No.', cellClassName: 'font-mono text-xs' },
+    { key: 'vendor', header: 'Vendor', render: (row) => row.vendor ?? '—' },
+    { key: 'documentDate', header: 'Date' },
+    { key: 'taxableValue', header: 'Taxable', render: (row) => formatCurrency(row.taxableValue), cellClassName: 'text-right' },
+    { key: 'gst', header: 'GST', render: (row) => formatCurrency(docTotalGst(row)), cellClassName: 'text-right font-medium text-primary' },
+    { key: 'itcEligibility', header: 'ITC Status', render: (row) => <TaxStatusBadge status={docItcStatus(row)} /> },
+    { key: 'claimable', header: 'Claimable', render: (row) => formatCurrency(row.claimable), cellClassName: 'text-right text-green-600 font-medium' },
+    { key: 'blocked', header: 'Blocked', render: (row) => formatCurrency(row.blocked), cellClassName: 'text-right text-red-600' },
+    { key: 'apStatus', header: 'AP Match', render: (row) => <TaxStatusBadge status={row.apStatus} /> },
   ];
 
   const historyColumns = [
     {
       key: 'requestedAt',
-      title: 'Fetch Date',
+      header: 'Fetch Date',
       render: (row) => formatHistoryRequestedAt(row.requestedAt),
     },
     {
       key: 'fetchedFor',
-      title: 'Fetched For',
+      header: 'Fetched For',
       render: (row) => (
         <span className="text-xs" title={getDocumentHistoryVendor(row)}>
           {getDocumentHistoryVendor(row)}
@@ -1695,33 +1698,33 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
     },
     {
       key: 'month',
-      title: 'Month',
+      header: 'Month',
       render: (row) => getDocumentHistoryMonth(row),
     },
     {
       key: 'financialYear',
-      title: 'Financial Year',
+      header: 'Financial Year',
       render: (row) => getDocumentHistoryFy(row),
     },
     {
       key: 'documentType',
-      title: 'Doc Type',
+      header: 'Doc Type',
       render: (row) => getDocumentHistoryType(row),
     },
     {
       key: 'itcEligibility',
-      title: 'ITC Eligibility',
+      header: 'ITC Eligibility',
       render: (row) => getDocumentHistoryItc(row),
     },
     {
       key: 'count',
-      title: 'Documents',
+      header: 'Documents',
       cellClassName: 'text-left font-medium',
       render: (row) => getDocumentHistoryCount(row),
     },
     {
       key: 'actions',
-      title: 'Actions',
+      header: 'Actions',
       cellClassName: 'text-left',
       render: (row) => (
         <Button
@@ -1816,12 +1819,13 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
           description="Previously fetched GSTR-2B document responses. Open a run to review its document register."
           meta={<TaxApiMeta synced={formatHistoryRequestedAt(history[0]?.requestedAt)} count={`${history.length} run${history.length === 1 ? '' : 's'}`} />}
         >
-          <TaxCompactTable
+          <AppDataTable
             rows={history}
             columns={historyColumns}
-            getRowKey={(row, index) => row.requestedAt ?? `gstr2b-history-${index}`}
+            rowKey={(row, index) => row.requestedAt ?? `gstr2b-history-${index}`}
             onRowClick={showHistoryRun}
             emptyMessage="No GSTR-2B document fetch history found."
+            bordered
           />
           <TaxPagination
             page={historyPage}
@@ -1860,7 +1864,7 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
                 options={quickFilters.map((filter) => ({ value: filter, label: filter, count: countMap[filter] }))}
               />
             </div>
-            <TaxCompactTable rows={visible} columns={b2bColumns} getRowKey={(row) => row.invoiceNumber} onRowClick={setSelected} />
+            <AppDataTable rows={visible} columns={b2bColumns} rowKey={(row) => row.invoiceNumber} onRowClick={setSelected} bordered />
             <TaxPagination />
           </TaxSectionCard>
         </div>

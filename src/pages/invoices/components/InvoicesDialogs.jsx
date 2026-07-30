@@ -38,6 +38,7 @@ const InvoicesDialogs = (props) => {
     getDepartmentNameById,
     invoiceCategories,
     getCategoryNameById,
+    isDepartmentFeatureEnabled,
     isCategoryFeatureEnabled,
     isCampaignFeatureEnabled,
     showRefNoField = false,
@@ -71,6 +72,7 @@ const InvoicesDialogs = (props) => {
     findVendorByName,
     findVendorById,
     showProformaInvoiceFields = false,
+    showErpIntegrationFields = false,
     onMapTaxInvoice,
     onViewLinkedInvoice,
     allInvoices = [],
@@ -152,6 +154,7 @@ const InvoicesDialogs = (props) => {
         handleEditInvoice={handleEditInvoice}
         canCancel={canCancel}
         handleCancelInvoice={handleCancelInvoice}
+        showDepartmentField={isDepartmentFeatureEnabled}
         showCategoryField={isCategoryFeatureEnabled}
         isCategoryFeatureEnabled={isCategoryFeatureEnabled}
         showCampaignField={isCampaignFeatureEnabled}
@@ -162,6 +165,7 @@ const InvoicesDialogs = (props) => {
         departmentMandatory={invoiceMandatoryFields?.department}
         categoryMandatory={invoiceMandatoryFields?.category}
         showProformaInvoiceFields={showProformaInvoiceFields}
+        showErpIntegrationFields={showErpIntegrationFields}
         onMapTaxInvoice={onMapTaxInvoice}
         onViewLinkedInvoice={onViewLinkedInvoice}
         allInvoices={allInvoices}

@@ -9,6 +9,8 @@ import {
   createDefaultLineItem,
   DEFAULT_INR_TAX,
   isInrInvoiceCurrency,
+  LINE_ITEM_MODE_DETAILED,
+  LINE_ITEM_MODE_SUMMARY_ONLY,
   LINE_ITEM_LEVEL,
   mapExtractedLineItemToForm,
 } from "./invoiceTax";
@@ -60,6 +62,14 @@ export const buildInvoiceEditFormData = (
   const useInrTax = isInrInvoiceCurrency(editCurrency);
   const defaultGstTreatment = useInrTax ? "Regular" : "N/A";
   const invoiceLineItems = Array.isArray(invoice.lineItems) ? invoice.lineItems : [];
+  const lineItemMode =
+    invoice.lineItemMode ??
+    invoice.line_item_mode ??
+    LINE_ITEM_MODE_DETAILED;
+  const lineItemsRemoved =
+    invoice.lineItemsRemoved === true ||
+    invoice.line_items_removed === true;
+  const isSummaryOnly = lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
   const invoiceVendorId = invoice.vendorId ?? invoice.vendorId ?? "";
   const matchedVendorByName =
     !invoiceVendorId && invoice.vendorName && typeof findVendorByName === "function"
@@ -150,7 +160,12 @@ export const buildInvoiceEditFormData = (
     destinationOfSupply: destinationOfSupply,
     location: locationValue,
     reverseCharges: invoice.reverseCharges || invoice.reverseCharges || "Not Applicable",
-    discountsLevel: invoice.discountsLevel || invoice.discountsLevel || LINE_ITEM_LEVEL,
+    discountsLevel:
+      invoice.discountsLevel ||
+      invoice.discounts_level ||
+      invoice.discountLevel ||
+      invoice.discount_level ||
+      LINE_ITEM_LEVEL,
     invoiceDiscount:
       invoice.invoiceDiscount ??
       invoice.invoiceDiscount ??
@@ -159,7 +174,12 @@ export const buildInvoiceEditFormData = (
       invoice.invoiceDiscountType ??
       invoice.invoiceDiscountType ??
       "%",
-    taxesLevel: invoice.taxesLevel || invoice.taxesLevel || LINE_ITEM_LEVEL,
+    taxesLevel:
+      invoice.taxesLevel ||
+      invoice.taxes_level ||
+      invoice.taxLevel ||
+      invoice.tax_level ||
+      LINE_ITEM_LEVEL,
     invoiceTax:
       invoice.invoiceTax ||
       invoice.invoice_tax ||
@@ -182,8 +202,33 @@ export const buildInvoiceEditFormData = (
       invoice.accounting_voucher_type ||
       "",
     lineItemsExpanded: resolveLineItemsExpanded(invoice),
+    lineItemMode,
+    lineItemsRemoved,
+    removedLineItemsCount:
+      invoice.removedLineItemsCount ??
+      invoice.removed_line_items_count ??
+      invoice.previousLineItemCount ??
+      invoice.previous_line_item_count ??
+      0,
+    subTotal:
+      invoice.subTotal ??
+      invoice.sub_total ??
+      invoice.subtotal ??
+      invoice.taxableAmount ??
+      invoice.taxable_amount ??
+      0,
+    totalTaxAmount:
+      invoice.totalTaxAmount ??
+      invoice.total_tax_amount ??
+      invoice.gstAmount ??
+      invoice.gst_amount ??
+      invoice.taxAmount ??
+      invoice.tax_amount ??
+      0,
     lineItems:
-      invoiceLineItems.length > 0
+      isSummaryOnly
+        ? []
+        : invoiceLineItems.length > 0
         ? invoiceLineItems.map((item) =>
             mapInvoiceLineItemToForm(item, {
               useInrTax,

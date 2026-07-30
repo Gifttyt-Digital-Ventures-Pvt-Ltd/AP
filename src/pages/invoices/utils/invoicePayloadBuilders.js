@@ -9,6 +9,8 @@ import {
   DEFAULT_INR_TAX,
   INVOICE_LEVEL,
   isInrInvoiceCurrency,
+  LINE_ITEM_MODE_DETAILED,
+  LINE_ITEM_MODE_SUMMARY_ONLY,
   LINE_ITEM_LEVEL,
   mapExtractedLineItemToForm,
   normalizeLineItemDiscountTypeForForm,
@@ -40,6 +42,9 @@ export const stripLineTaxForInvoiceLevel = (line = {}) => {
 
 export const normalizeLineItemsForTaxLevel = (invoiceData = {}) => {
   const lineItems = invoiceData.lineItems || [];
+  if (invoiceData.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY) {
+    return [];
+  }
   if (invoiceData.taxesLevel !== INVOICE_LEVEL) return lineItems;
   return lineItems.map(stripLineTaxForInvoiceLevel);
 };
@@ -257,6 +262,20 @@ export const initializeInvoiceFormData = (
       extractedData?.discountsLevel ||
       extractedData?.discountsLevel ||
       LINE_ITEM_LEVEL,
+    lineItemMode: LINE_ITEM_MODE_DETAILED,
+    lineItemsRemoved: false,
+    removedLineItemsCount: 0,
+    subTotal:
+      extractedData?.subTotal ??
+      extractedData?.sub_total ??
+      extractedData?.subtotal ??
+      0,
+    totalTaxAmount:
+      extractedData?.totalTaxAmount ??
+      extractedData?.total_tax_amount ??
+      extractedData?.gstAmount ??
+      extractedData?.gst_amount ??
+      0,
     invoiceDiscount:
       extractedData?.invoiceDiscount ??
       extractedData?.invoiceDiscount ??
@@ -381,19 +400,80 @@ export const buildToCreateInvoicePayload = (
     getCategoryNameById,
     isCategoryFeatureEnabled,
     isCampaignFeatureEnabled = false,
+    isErpIntegrationEnabled = true,
   },
 ) => {
+  const isSummaryOnly =
+    invoiceData.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
   const lineItems = normalizeLineItemsForTaxLevel(invoiceData);
   const calculateLineItemSubtotal = (item) =>
     calculateInvoiceDataLineItemSubtotal(item, invoiceData);
+  const summarySubTotal = parseNumericInput(
+    invoiceData.subTotal ?? invoiceData.sub_total ?? invoiceData.subtotal,
+    0,
+  );
+  const roundOff = parseNumericInput(
+    invoiceData.roundOff ?? invoiceData.round_off ?? invoiceData.roundoff,
+    0,
+  );
+  const discountValue = parseNumericInput(invoiceData.invoiceDiscount, 0);
+  const invoiceDiscountAmount =
+    invoiceData.invoiceDiscountType === "%"
+      ? (summarySubTotal * discountValue) / 100
+      : discountValue;
+  const boundedInvoiceDiscountAmount = Math.max(
+    0,
+    Math.min(invoiceDiscountAmount, summarySubTotal),
+  );
+  const summaryTaxableSubTotal = summarySubTotal - boundedInvoiceDiscountAmount;
+  const summaryInvoiceLevelTaxEnabled = invoiceData.taxesLevel === INVOICE_LEVEL;
+  let summaryTaxAmount = parseNumericInput(
+    invoiceData.totalTaxAmount ??
+      invoiceData.total_tax_amount ??
+      invoiceData.gstAmount ??
+      invoiceData.gst_amount,
+    0,
+  );
+  if (summaryInvoiceLevelTaxEnabled && isInrInvoiceCurrency(invoiceData.currency || DEFAULT_CURRENCY)) {
+    const taxRate = TAX_RATES.find((entry) => entry.value === invoiceData.invoiceTax);
+    summaryTaxAmount = taxRate
+      ? ((summaryTaxableSubTotal * (Number(taxRate.cgst) || 0)) / 100) +
+        ((summaryTaxableSubTotal * (Number(taxRate.sgst) || 0)) / 100) +
+        ((summaryTaxableSubTotal * (Number(taxRate.igst) || 0)) / 100)
+      : 0;
+  } else if (summaryInvoiceLevelTaxEnabled) {
+    summaryTaxAmount =
+      (summaryTaxableSubTotal * parseNumericInput(invoiceData.invoiceTaxRate, 0)) / 100;
+  }
+  const summaryTotals = isSummaryOnly
+    ? {
+        subTotal: summaryTaxableSubTotal,
+        subTotalBeforeDiscount: summarySubTotal,
+        invoiceDiscountAmount: boundedInvoiceDiscountAmount,
+        total: summaryTaxableSubTotal + summaryTaxAmount + roundOff,
+        cgst: 0,
+        sgst: 0,
+        igst: isInrInvoiceCurrency(invoiceData.currency || DEFAULT_CURRENCY)
+          ? summaryTaxAmount
+          : 0,
+        foreignTax: isInrInvoiceCurrency(invoiceData.currency || DEFAULT_CURRENCY)
+          ? 0
+          : summaryTaxAmount,
+      }
+    : null;
   const totals =
     options.totals ??
+    summaryTotals ??
     (lineItems.length > 0 ? calculateInvoiceDataTotals(invoiceData, lineItems) : null);
 
   return buildInvoiceApiPayload(
     {
       ...invoiceData,
       lineItems: lineItems,
+      lineItemMode: isSummaryOnly ? LINE_ITEM_MODE_SUMMARY_ONLY : LINE_ITEM_MODE_DETAILED,
+      lineItemsRemoved: isSummaryOnly ? invoiceData.lineItemsRemoved === true : false,
+      subTotal: isSummaryOnly ? summarySubTotal : invoiceData.subTotal,
+      totalTaxAmount: isSummaryOnly ? summaryTaxAmount : invoiceData.totalTaxAmount,
       vendorId: invoiceData.vendorId || findVendorByName(invoiceData.vendorName)?.id || "",
       status: invoiceData.status ?? options.status,
       departmentName:
@@ -441,14 +521,22 @@ export const buildToCreateInvoicePayload = (
       totals,
       tdsAmount:
         options.tdsAmount ??
-        computeTdsAmount(
-          lineItems,
-          invoiceData.tds,
-          calculateLineItemSubtotal,
-          invoiceData.tdsRate,
-        ),
+        (isSummaryOnly
+          ? (() => {
+              const tdsRate = resolveTdsRate(invoiceData.tds, invoiceData.tdsRate);
+              return tdsRate
+                ? Math.round(((summarySubTotal * tdsRate) / 100) * 100) / 100
+                : null;
+            })()
+          : computeTdsAmount(
+              lineItems,
+              invoiceData.tds,
+              calculateLineItemSubtotal,
+              invoiceData.tdsRate,
+            )),
       categoryEnabled: isCategoryFeatureEnabled,
       campaignEnabled: isCampaignFeatureEnabled,
+      erpIntegrationEnabled: isErpIntegrationEnabled,
     },
   );
 };

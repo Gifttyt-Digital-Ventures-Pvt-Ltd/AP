@@ -43,11 +43,11 @@ const ActionRateList = ({ actionTypes = [], loading = false }) => {
       <Table className="border-separate border-spacing-0">
         <TableHeader>
           <TableRow>
-            <TableHead className="border border-border">Action</TableHead>
-            <TableHead className="border border-border">Category</TableHead>
-            <TableHead className="border border-border text-right">Rate</TableHead>
-            <TableHead className="border border-border">Status</TableHead>
-            <TableHead className="border border-border">Mode</TableHead>
+            <TableHead className="border border-table-border">Action</TableHead>
+            <TableHead className="border border-table-border">Category</TableHead>
+            <TableHead className="border border-table-border text-right">Rate</TableHead>
+            <TableHead className="border border-table-border">Status</TableHead>
+            <TableHead className="border border-table-border">Mode</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -58,13 +58,13 @@ const ActionRateList = ({ actionTypes = [], loading = false }) => {
 
             return (
               <TableRow key={action.id || action.code}>
-                <TableCell className="border border-border font-medium text-primary-text">
+                <TableCell className="border border-table-border font-medium text-primary-text">
                   {action.name || action.code}
                 </TableCell>
-                <TableCell className="border border-border">
+                <TableCell className="border border-table-border">
                   <Badge variant="outline">{action.category || "ACTION"}</Badge>
                 </TableCell>
-                <TableCell className="border border-border text-right">
+                <TableCell className="border border-table-border text-right">
                   {isFree ? (
                     <span className="font-semibold text-green-700">Free</span>
                   ) : (
@@ -73,14 +73,14 @@ const ActionRateList = ({ actionTypes = [], loading = false }) => {
                     </span>
                   )}
                 </TableCell>
-                <TableCell className="border border-border">
+                <TableCell className="border border-table-border">
                   {!isEnabled ? (
                     <Badge className="bg-red-50 text-red-700 hover:bg-red-50">Disabled</Badge>
                   ) : (
                     <Badge className="bg-green-50 text-green-700 hover:bg-green-50">Allowed</Badge>
                   )}
                 </TableCell>
-                <TableCell className="border border-border">
+                <TableCell className="border border-table-border">
                   {action.isBulkCapable ? (
                     <Badge variant="secondary">Bulk capable</Badge>
                   ) : (
