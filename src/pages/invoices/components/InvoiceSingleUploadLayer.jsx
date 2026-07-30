@@ -19,6 +19,7 @@ import {
 import { useAuth } from "../../../contexts/AuthContext";
 import { useRBAC } from "../../../contexts/RBACContext";
 import { useActionGuard } from "../../../hooks/useActionGuard";
+import useZohoIntegrationActive from "../../../hooks/useZohoIntegrationActive";
 import { useCreditErrorHandler } from "../../../contexts/CreditErrorContext";
 import { useSidebar } from "../../../components/Layout";
 import {
@@ -134,6 +135,7 @@ const InvoiceSingleUploadLayer = ({
     isCorporateScreenAllowed("INVOICE_MATCHING") &&
     isCorporateSectionEnabled("INVOICE_MATCHING_ALL");
   const showErpIntegrationFields = isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
+  const { hasConnectedZoho } = useZohoIntegrationActive();
   const showInvoiceMatchingSelection =
     isInvoiceMatchingEnabled && hasPurchaseOrderSubscription;
   const canUseThreeWayMatching =
@@ -765,6 +767,8 @@ const InvoiceSingleUploadLayer = ({
       showProformaInvoiceFields={isPiSubscriptionEnabled}
       showInvoiceMatching={showInvoiceMatchingSelection}
       canUseThreeWayMatching={canUseThreeWayMatching}
+      showErpIntegrationFields={showErpIntegrationFields}
+      includeLedgerAccountGroups={hasConnectedZoho}
     />
   );
 

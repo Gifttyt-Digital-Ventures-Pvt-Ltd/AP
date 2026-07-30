@@ -271,6 +271,7 @@ export const InvoiceForm = ({
   canUseThreeWayMatching = false,
   showProformaInvoiceFields = false,
   showErpIntegrationFields = false,
+  includeLedgerAccountGroups = false,
 }) => {
   const canShowBranchField = showBillingGst && showBranchField;
   const {
@@ -592,8 +593,11 @@ export const InvoiceForm = ({
   const isInvoiceLevelTax = isInvoiceLevelSelection(formData?.taxesLevel);
   const showLineItemDiscount = isLineItemLevelSelection(formData?.discountsLevel);
   const accountGroupOptions = useMemo(
-    () => buildGroupBranchOptionsFromCoa(coaData?.tree || []),
-    [coaData?.tree],
+    () =>
+      buildGroupBranchOptionsFromCoa(coaData?.tree || [], {
+        includeLedgers: includeLedgerAccountGroups,
+      }),
+    [coaData?.tree, includeLedgerAccountGroups],
   );
   const voucherTypeOptions = backendVoucherTypeOptions;
   const lineItemHeaders = lineItemTableHeader
@@ -1064,9 +1068,13 @@ export const InvoiceForm = ({
                   })
                 : accountGroupOptions;
               const selectedAccountGroupValue =
+                item.ledgerId ||
                 item.accountGroupId ||
                 item.groupId ||
-                findAccountingOption(accountGroupOptions, item.accountGroupName || item.groupName)?.value ||
+                findAccountingOption(
+                  accountGroupOptions,
+                  item.ledgerName || item.ledger || item.accountGroupName || item.groupName,
+                )?.value ||
                 "";
               const selectedAccountGroup = findAccountingOption(
                 accountGroupOptions,
@@ -1085,6 +1093,9 @@ export const InvoiceForm = ({
                                 accountGroupName: selected?.accountGroupName || "",
                                 groupId: selected?.groupId || "",
                                 groupName: selected?.groupName || "",
+                                ledgerId: selected?.ledgerId || "",
+                                ledgerName: selected?.ledgerName || "",
+                                ledger: selected?.ledgerName || "",
                                 expenseType: selected?.expenseType || lineItem.expenseType || "",
                               }
                             : lineItem,
@@ -1119,6 +1130,8 @@ export const InvoiceForm = ({
                     >
                       <span className="truncate">
                         {selectedAccountGroup?.accountGroupName ||
+                          item.ledgerName ||
+                          item.ledger ||
                           item.accountGroupName ||
                           item.groupName ||
                           "Select group"}
@@ -1195,6 +1208,11 @@ export const InvoiceForm = ({
                                 {option.status ? (
                                   <span className="shrink-0 rounded-full bg-muted px-1.5 py-0.5 text-[9px] uppercase text-muted-foreground">
                                     {option.status}
+                                  </span>
+                                ) : null}
+                                {option.optionType === "ledger" ? (
+                                  <span className="shrink-0 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9px] uppercase text-emerald-700">
+                                    Ledger
                                   </span>
                                 ) : null}
                               </span>
