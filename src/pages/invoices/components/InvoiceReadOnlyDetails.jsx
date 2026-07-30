@@ -70,6 +70,7 @@ const computeTdsAmount = (lineItems = [], tdsValue = "", subTotalOverride, tdsRa
 
 const InvoiceReadOnlyDetails = ({
   invoice,
+  showDepartmentField = true,
   showCategoryField = true,
   showCampaignField = false,
   showRefNoField = false,
@@ -277,6 +278,9 @@ const InvoiceReadOnlyDetails = ({
     showCategoryField &&
     isCategoryFeatureEnabled &&
     (formData.categoryId || formData.categoryName);
+  const showDepartment =
+    showDepartmentField &&
+    (formData.departmentId || formData.departmentName);
 
   const showCampaign =
     showCampaignField &&
@@ -490,7 +494,9 @@ const InvoiceReadOnlyDetails = ({
             ) : null}
           </div>
           <DetailField label="Currency" value={invoiceCurrency} mono />
-          <DetailField label="Department" value={formData.departmentName} />
+          {showDepartment && (
+            <DetailField label="Department" value={formData.departmentName} />
+          )}
           {showCategory && (
             <DetailField label="Category" value={formData.categoryName} />
           )}

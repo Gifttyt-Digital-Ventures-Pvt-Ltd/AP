@@ -50,6 +50,7 @@ const ViewDialog = ({
   handleEditInvoice,
   canCancel,
   handleCancelInvoice,
+  showDepartmentField = true,
   showCategoryField = true,
   isCategoryFeatureEnabled = true,
   showCampaignField = false,
@@ -209,6 +210,7 @@ const ViewDialog = ({
                         )}
                         <InvoiceReadOnlyDetails
                           invoice={selectedInvoice}
+                          showDepartmentField={showDepartmentField}
                           showCategoryField={showCategoryField}
                           isCategoryFeatureEnabled={isCategoryFeatureEnabled}
                           showCampaignField={showCampaignField}
@@ -230,6 +232,7 @@ const ViewDialog = ({
                         formData={checklistFormData}
                         departmentMandatory={departmentMandatory}
                         categoryMandatory={categoryMandatory}
+                        showDepartmentField={showDepartmentField}
                         showCategoryField={showCategoryField}
                         showCampaignField={showCampaignField}
                       />

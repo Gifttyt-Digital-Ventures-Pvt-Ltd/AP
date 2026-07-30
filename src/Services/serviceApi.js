@@ -76,6 +76,7 @@ export const serviceApi = createApi({
     "MasterData",
     "Workflow",
     "Categories",
+    "Departments",
     "AuditLogs",
     "Campaigns",
     "Integrations",

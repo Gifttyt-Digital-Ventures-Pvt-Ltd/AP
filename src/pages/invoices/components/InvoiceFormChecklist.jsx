@@ -19,6 +19,7 @@ export const buildInvoiceFormChecklist = (
   {
     departmentMandatory = false,
     categoryMandatory = false,
+    showDepartmentField = true,
     showCategoryField = true,
     showCampaignField = false,
   } = {},
@@ -187,13 +188,12 @@ export const buildInvoiceFormChecklist = (
           done: !!(formData.currency || DEFAULT_CURRENCY).trim(),
           required: true,
         }),
-        /* Department checklist hidden during create/edit — restore when needed
         item({
           label: "Department",
           done: !!formData.departmentId,
           required: departmentMandatory,
+          hidden: !showDepartmentField,
         }),
-        */
         item({
           label: "Category",
           done: !!(formData.categoryId || formData.category?.id),
@@ -238,6 +238,7 @@ export const InvoiceChecklist = ({
   formData,
   departmentMandatory = false,
   categoryMandatory = false,
+  showDepartmentField = true,
   showCategoryField = true,
   showCampaignField = false,
 }) => {
@@ -248,6 +249,7 @@ export const InvoiceChecklist = ({
       buildInvoiceFormChecklist(formData, {
         departmentMandatory,
         categoryMandatory,
+        showDepartmentField,
         showCategoryField,
         showCampaignField,
       }),
@@ -255,6 +257,7 @@ export const InvoiceChecklist = ({
       formData,
       departmentMandatory,
       categoryMandatory,
+      showDepartmentField,
       showCategoryField,
       showCampaignField,
     ],
