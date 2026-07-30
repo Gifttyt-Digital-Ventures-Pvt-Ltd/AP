@@ -253,6 +253,7 @@ export const InvoiceForm = ({
   departments = [],
   invoiceCategories = [],
   invoiceCategoriesLoading = false,
+  showDepartmentField = true,
   showCategoryField = true,
   showCampaignField = false,
   lockedCampaign = false,
@@ -1794,50 +1795,50 @@ export const InvoiceForm = ({
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              {/* Department field hidden during create/edit — restore when needed
-              <div>
-                <RequiredLabel required={departmentMandatory}>
-                  Department
-                </RequiredLabel>
-                <AppSelect
-                  value={formData.departmentId || ""}
-                  onChange={(e) => {
-                    const selectedDepartment = departments.find(
-                      (department) => {
-                        const departmentId =
-                          department?.id ??
-                          department?.departmentId ??
-                          department?.departmentId;
-                        return String(departmentId ?? "") === e.target.value;
-                      },
-                    );
-                    setFormData({
-                      ...formData,
-                      departmentId: e.target.value,
-                      departmentName:
-                        selectedDepartment?.name ||
-                        selectedDepartment?.departmentName ||
-                        selectedDepartment?.departmentName ||
-                        "",
-                    });
-                  }}
-                  className="h-8 text-sm"
-                  data-testid="invoice-department-select"
-                  required={departmentMandatory}
-                  placeholder="Select department"
-                  options={departments.map((department) => ({
-                    value:
-                      department?.id ??
-                      department?.departmentId ??
-                      department?.departmentId,
-                    label:
-                      department?.name ??
-                      department?.departmentName ??
-                      department?.departmentName,
-                  }))}
-                />
-              </div>
-              */}
+              {showDepartmentField && (
+                <div>
+                  <RequiredLabel required={departmentMandatory}>
+                    Department
+                  </RequiredLabel>
+                  <AppSelect
+                    value={formData.departmentId || ""}
+                    onChange={(e) => {
+                      const selectedDepartment = departments.find(
+                        (department) => {
+                          const departmentId =
+                            department?.id ??
+                            department?.departmentId ??
+                            department?.department_id;
+                          return String(departmentId ?? "") === e.target.value;
+                        },
+                      );
+                      setFormData({
+                        ...formData,
+                        departmentId: e.target.value,
+                        departmentName:
+                          selectedDepartment?.name ||
+                          selectedDepartment?.departmentName ||
+                          selectedDepartment?.department_name ||
+                          "",
+                      });
+                    }}
+                    className="h-8 text-sm"
+                    data-testid="invoice-department-select"
+                    required={departmentMandatory}
+                    placeholder="Select department"
+                    options={departments.map((department) => ({
+                      value:
+                        department?.id ??
+                        department?.departmentId ??
+                        department?.department_id,
+                      label:
+                        department?.name ??
+                        department?.departmentName ??
+                        department?.department_name,
+                    }))}
+                  />
+                </div>
+              )}
               {showCategoryField && (
                 <div>
                   <RequiredLabel required={categoryMandatory}>
@@ -2673,6 +2674,7 @@ export const InvoiceForm = ({
         formData={formData}
         departmentMandatory={departmentMandatory}
         categoryMandatory={categoryMandatory}
+        showDepartmentField={showDepartmentField}
         showCategoryField={showCategoryField}
         showCampaignField={showCampaignField}
       />

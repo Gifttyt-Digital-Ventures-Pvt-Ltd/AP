@@ -85,10 +85,10 @@ import {
   mergeInvoiceVendorOptions,
 } from "../../Services/utils/payloadMappers";
 import {
-  useGetCorporateDepartmentsQuery,
   useGetCorporateUserDetailsQuery,
 } from "../../Services/apis/corporateApi";
 import { useGetCategoriesForInvoiceQuery } from "../../Services/apis/categoriesApi";
+import { useGetDepartmentsForInvoiceQuery } from "../../Services/apis/departmentsApi";
 import { useAuth } from "../../contexts/AuthContext";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -366,6 +366,7 @@ const InvoicesPage = () => {
   const {
     corporateScreens,
     isCategoryFeatureEnabled,
+    isDepartmentFeatureEnabled,
     isCampaignFeatureEnabled,
     isCorporateAdmin,
     isCorporateScreenAllowed,
@@ -518,7 +519,15 @@ const InvoicesPage = () => {
     isFetching: vendorsFetching,
     refetch: refetchVendors,
   } = useGetVendorsQuery();
-  const { data: departmentsData = [] } = useGetCorporateDepartmentsQuery();
+  const { data: departmentsData = [] } = useGetDepartmentsForInvoiceQuery(
+    {
+      userEmail: invoiceUserEmail,
+      ...(currencyParam ? { currency: currencyParam } : {}),
+    },
+    {
+      skip: !invoiceUserEmail || !isDepartmentFeatureEnabled,
+    },
+  );
   const {
     data: invoiceMandatoryFieldsData,
     isLoading: invoiceMandatoryFieldsLoading,
@@ -531,8 +540,11 @@ const InvoicesPage = () => {
     [invoiceMandatoryFieldsData],
   );
   const mandatoryFieldOptions = useMemo(
-    () => ({ showCategoryField: isCategoryFeatureEnabled }),
-    [isCategoryFeatureEnabled],
+    () => ({
+      showDepartmentField: isDepartmentFeatureEnabled,
+      showCategoryField: isCategoryFeatureEnabled,
+    }),
+    [isDepartmentFeatureEnabled, isCategoryFeatureEnabled],
   );
   const {
     data: invoiceCategoriesData = [],
@@ -2713,6 +2725,7 @@ const InvoicesPage = () => {
         invoiceCategoriesLoading={
           invoiceCategoriesLoading || invoiceCategoriesFetching
         }
+        showDepartmentField={isDepartmentFeatureEnabled}
         showCategoryField={isCategoryFeatureEnabled}
         showCampaignField={isCampaignFeatureEnabled}
         currencyOptions={invoiceCurrencyOptions}
@@ -3222,6 +3235,7 @@ const InvoicesPage = () => {
       invoiceCategoriesLoading={
         invoiceCategoriesLoading || invoiceCategoriesFetching
       }
+      showDepartmentField={isDepartmentFeatureEnabled}
       showCategoryField={isCategoryFeatureEnabled}
       showCampaignField={isCampaignFeatureEnabled}
       currencyOptions={invoiceCurrencyOptions}
@@ -3482,6 +3496,7 @@ const InvoicesPage = () => {
         getDepartmentNameById={getDepartmentNameById}
         invoiceCategories={invoiceCategories}
         getCategoryNameById={getCategoryNameById}
+        isDepartmentFeatureEnabled={isDepartmentFeatureEnabled}
         isCategoryFeatureEnabled={isCategoryFeatureEnabled}
         isCampaignFeatureEnabled={isCampaignFeatureEnabled}
         showRefNoField={isRefNoEnabled}

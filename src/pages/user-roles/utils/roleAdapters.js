@@ -56,6 +56,8 @@ export const CUSTOM_ROLE_PERMISSION_MAP = {
   "integrations-manage": { screen: "INTEGRATIONS", permissionType: "MANAGE" },
   "category-view": { screen: "CATEGORY", permissionType: "VIEW" },
   "category-manage": { screen: "CATEGORY", permissionType: "MANAGE" },
+  "department-view": { screen: "DEPARTMENT", permissionType: "VIEW" },
+  "department-manage": { screen: "DEPARTMENT", permissionType: "MANAGE" },
 };
 
 const HIDDEN_ROLE_ACCESS_PERMISSIONS = new Set(["approval-view", "approval-full"]);

@@ -61,8 +61,8 @@ import {
   useTestWorkflowMutation,
   useUpdateWorkflowMutation,
 } from "../../../Services/apis/workflowApi";
-import { useGetCorporateDepartmentsQuery } from "../../../Services/apis/corporateApi";
 import { useGetCategoriesQuery } from "../../../Services/apis/categoriesApi";
+import { useGetDepartmentsQuery } from "../../../Services/apis/departmentsApi";
 import {
   WORKFLOW_SECTIONS,
   WORKFLOW_TYPE_BADGE_CLASSES,
@@ -92,6 +92,18 @@ const workflowTypeIncludesCategory = (type = "") =>
   String(type || "")
     .split("_")
     .includes("CATEGORY");
+
+const workflowTypeIncludesDepartment = (type = "") =>
+  String(type || "")
+    .split("_")
+    .includes("DEPARTMENT");
+
+const isWorkflowTypeEnabled = (
+  type,
+  { categoryEnabled = true, departmentEnabled = true } = {},
+) =>
+  (categoryEnabled || !workflowTypeIncludesCategory(type)) &&
+  (departmentEnabled || !workflowTypeIncludesDepartment(type));
 
 const emptyFormState = {
   id: "",
@@ -397,6 +409,7 @@ const ApprovalWorkflowTab = ({
   vendors = [],
   canManageWorkflow = true,
   categoryEnabled = true,
+  departmentEnabled = true,
 }) => {
   const [deleteRuleTarget, setDeleteRuleTarget] = useState(null);
   const [viewRule, setViewRule] = useState(null);
@@ -447,7 +460,7 @@ const ApprovalWorkflowTab = ({
     refetch: refetchWorkflows,
   } = useGetWorkflowsQuery(workflowListQueryArgs);
   const { data: departmentsData = [], isError: departmentsError } =
-    useGetCorporateDepartmentsQuery();
+    useGetDepartmentsQuery({ active: true }, { skip: !departmentEnabled });
   const { data: categoriesData = [], isError: categoriesError } =
     useGetCategoriesQuery(undefined, { skip: !categoryEnabled });
 
@@ -480,10 +493,10 @@ const ApprovalWorkflowTab = ({
     }
   }, [workflowsError]);
   useEffect(() => {
-    if (departmentsError) {
+    if (departmentEnabled && departmentsError) {
       toast.error("Failed to load departments");
     }
-  }, [departmentsError]);
+  }, [departmentsError, departmentEnabled]);
   useEffect(() => {
     if (categoryEnabled && categoriesError) {
       toast.error("Failed to load categories");
@@ -495,7 +508,12 @@ const ApprovalWorkflowTab = ({
     if (!grouped || typeof grouped !== "object") return [];
 
     return Object.entries(grouped).flatMap(([workflowType, items]) => {
-      if (!categoryEnabled && workflowTypeIncludesCategory(workflowType))
+      if (
+        !isWorkflowTypeEnabled(workflowType, {
+          categoryEnabled,
+          departmentEnabled,
+        })
+      )
         return [];
       if (!Array.isArray(items)) return [];
       return items
@@ -506,17 +524,22 @@ const ApprovalWorkflowTab = ({
           }),
         )
         .filter(
-          (rule) => categoryEnabled || !workflowTypeIncludesCategory(rule.type),
+          (rule) =>
+            isWorkflowTypeEnabled(rule.type, {
+              categoryEnabled,
+              departmentEnabled,
+            }),
         );
     });
-  }, [workflowsResponse, categoryEnabled]);
+  }, [workflowsResponse, categoryEnabled, departmentEnabled]);
 
   const groupedRules = useMemo(() => groupRulesByType(rules), [rules]);
   const noCatchAllRule = !hasCatchAllRule(rules);
 
   const workflowSections = useMemo(() => {
     const configured = WORKFLOW_SECTIONS.filter(
-      ({ type }) => categoryEnabled || !workflowTypeIncludesCategory(type),
+      ({ type }) =>
+        isWorkflowTypeEnabled(type, { categoryEnabled, departmentEnabled }),
     );
     const configuredTypes = new Set(configured.map((section) => section.type));
     const extraTypes = Object.keys(groupedRules).filter(
@@ -531,7 +554,7 @@ const ApprovalWorkflowTab = ({
         priority: configured.length + index + 1,
       })),
     ];
-  }, [groupedRules, categoryEnabled]);
+  }, [groupedRules, categoryEnabled, departmentEnabled]);
 
   const workflowTypes = useMemo(() => {
     const types =
@@ -542,8 +565,10 @@ const ApprovalWorkflowTab = ({
     return types
       .map((type) => String(type || "").trim())
       .filter(Boolean)
-      .filter((type) => categoryEnabled || !workflowTypeIncludesCategory(type));
-  }, [workflowTypesData, categoryEnabled]);
+      .filter((type) =>
+        isWorkflowTypeEnabled(type, { categoryEnabled, departmentEnabled }),
+      );
+  }, [workflowTypesData, categoryEnabled, departmentEnabled]);
 
   const editableWorkflowTypes = useMemo(() => {
     return workflowTypes.filter((type) => type !== "GENERIC");
@@ -599,10 +624,13 @@ const ApprovalWorkflowTab = ({
   }, [vendors, rules]);
 
   const workflowDepartments = useMemo(() => {
+    if (!departmentEnabled) return [];
     const departmentMap = new Map();
 
     if (Array.isArray(departmentsData)) {
-      departmentsData.forEach((department) => {
+      departmentsData
+        .filter((department) => department?.isActive !== false)
+        .forEach((department) => {
         const id = toStringId(
           department?.id ??
             department?.departmentId ??
@@ -641,7 +669,7 @@ const ApprovalWorkflowTab = ({
       id,
       name,
     }));
-  }, [departmentsData, rules]);
+  }, [departmentsData, rules, departmentEnabled]);
 
   const workflowCategories = useMemo(() => {
     if (!categoryEnabled) return [];
@@ -864,9 +892,11 @@ const ApprovalWorkflowTab = ({
     try {
       const response = await testWorkflow({
         vendorId: tester.vendorId,
-        departmentId: asNumberOrNull(tester.departmentId),
         amount: Number(tester.amount || 0),
         currency: tester.currency || DEFAULT_CURRENCY,
+        ...(departmentEnabled
+          ? { departmentId: asNumberOrNull(tester.departmentId) }
+          : {}),
         ...(categoryEnabled
           ? { categoryId: asNumberOrNull(tester.categoryId) }
           : {}),
@@ -922,6 +952,11 @@ const ApprovalWorkflowTab = ({
       return false;
     }
 
+    if (!departmentEnabled && workflowTypeIncludesDepartment(formState.type)) {
+      toast.error("Department workflows are not enabled for this corporate");
+      return false;
+    }
+
     if (!editingRuleId && formState.type === "GENERIC") {
       toast.error(
         "GENERIC workflow is created automatically and cannot be submitted",
@@ -929,7 +964,10 @@ const ApprovalWorkflowTab = ({
       return false;
     }
 
-    const visibility = getConditionVisibility(formState.type);
+    const visibility = getConditionVisibility(formState.type, {
+      categoryEnabled,
+      departmentEnabled,
+    });
     const selectedVendorIds = Array.isArray(formState.vendorIds)
       ? formState.vendorIds
       : [];
@@ -945,12 +983,17 @@ const ApprovalWorkflowTab = ({
       return false;
     }
 
-    if (visibility?.showDept && selectedDepartmentIds.length === 0) {
+    if (
+      departmentEnabled &&
+      visibility?.showDept &&
+      selectedDepartmentIds.length === 0
+    ) {
       toast.error("Please select at least one department");
       return false;
     }
 
     if (
+      departmentEnabled &&
       visibility?.showDept &&
       selectedDepartmentIds.some(
         (departmentId) => asNumberOrNull(departmentId) === null,
@@ -1023,7 +1066,10 @@ const ApprovalWorkflowTab = ({
   };
 
   const buildWorkflowPayload = () => {
-    const visibility = getConditionVisibility(formState.type);
+    const visibility = getConditionVisibility(formState.type, {
+      categoryEnabled,
+      departmentEnabled,
+    });
     const approvers = formState.approvers.map((approver, index) => ({
       approverId: asNumberOrNull(approver.userId),
       level: index + 1,
@@ -1034,12 +1080,16 @@ const ApprovalWorkflowTab = ({
         visibility?.showVendor && Array.isArray(formState.vendorIds)
           ? formState.vendorIds
           : [],
-      departmentIds:
-        visibility?.showDept && Array.isArray(formState.departmentIds)
-          ? formState.departmentIds
-              .map(asNumberOrNull)
-              .filter((departmentId) => departmentId !== null)
-          : [],
+      ...(departmentEnabled
+        ? {
+            departmentIds:
+              visibility?.showDept && Array.isArray(formState.departmentIds)
+                ? formState.departmentIds
+                    .map(asNumberOrNull)
+                    .filter((departmentId) => departmentId !== null)
+                : [],
+          }
+        : {}),
       ...(categoryEnabled
         ? {
             categoryIds:
@@ -1116,16 +1166,25 @@ const ApprovalWorkflowTab = ({
 
   const isEditingGeneric = editingRuleId && formState.type === "GENERIC";
   const visibility = formState.type
-    ? getConditionVisibility(formState.type)
+    ? getConditionVisibility(formState.type, {
+        categoryEnabled,
+        departmentEnabled,
+      })
     : null;
   const matchingPriorityOrder = useMemo(
-    () => getMatchingPriorityOrder(categoryEnabled),
-    [categoryEnabled],
+    () => getMatchingPriorityOrder(categoryEnabled, departmentEnabled),
+    [categoryEnabled, departmentEnabled],
   );
   const matchingExplainerStepOne = useMemo(
-    () => getMatchingExplainerStepOne(categoryEnabled),
-    [categoryEnabled],
+    () => getMatchingExplainerStepOne(categoryEnabled, departmentEnabled),
+    [categoryEnabled, departmentEnabled],
   );
+  const testerGridClass =
+    departmentEnabled && categoryEnabled
+      ? "md:grid-cols-5"
+      : departmentEnabled || categoryEnabled
+        ? "md:grid-cols-4"
+        : "md:grid-cols-3";
 
   const loading =
     workflowTypesLoading ||
@@ -1148,7 +1207,7 @@ const ApprovalWorkflowTab = ({
         </CardHeader>
         <CardContent className="space-y-4">
           <div
-            className={`grid grid-cols-1 ${categoryEnabled ? "md:grid-cols-5" : "md:grid-cols-4"} gap-4`}
+            className={`grid grid-cols-1 ${testerGridClass} gap-4`}
           >
             <div>
               <Label>Vendor</Label>
@@ -1175,30 +1234,32 @@ const ApprovalWorkflowTab = ({
               </Select>
             </div>
 
-            <div>
-              <Label>Department</Label>
-              <Select
-                value={tester.departmentId || ""}
-                onValueChange={(value) =>
-                  setTester((prev) => ({
-                    ...prev,
-                    departmentId: value,
-                    tested: false,
-                  }))
-                }
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Select department" />
-                </SelectTrigger>
-                <SelectContent>
-                {workflowDepartments.map((department) => (
-                  <SelectItem key={department.id} value={department.id}>
-                    {department.name}
-                  </SelectItem>
-                ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {departmentEnabled && (
+              <div>
+                <Label>Department</Label>
+                <Select
+                  value={tester.departmentId || ""}
+                  onValueChange={(value) =>
+                    setTester((prev) => ({
+                      ...prev,
+                      departmentId: value,
+                      tested: false,
+                    }))
+                  }
+                >
+                  <SelectTrigger className="mt-1">
+                    <SelectValue placeholder="Select department" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {workflowDepartments.map((department) => (
+                      <SelectItem key={department.id} value={department.id}>
+                        {department.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             {categoryEnabled && (
               <div>
@@ -1490,6 +1551,7 @@ const ApprovalWorkflowTab = ({
         }}
         rule={viewRule}
         categoryEnabled={categoryEnabled}
+        departmentEnabled={departmentEnabled}
         canManageWorkflow={canManageWorkflow}
         onEdit={openEditModal}
       />
@@ -1602,7 +1664,7 @@ const ApprovalWorkflowTab = ({
                   </div>
                 )}
 
-                {visibility.showDept && (
+                {departmentEnabled && visibility.showDept && (
                   <div className="space-y-2">
                     <Label>Departments</Label>
                     <div className="max-h-44 overflow-y-auto rounded-md border border-input bg-background p-2 space-y-1">

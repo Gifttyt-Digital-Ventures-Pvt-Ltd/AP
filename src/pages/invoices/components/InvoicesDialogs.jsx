@@ -38,6 +38,7 @@ const InvoicesDialogs = (props) => {
     getDepartmentNameById,
     invoiceCategories,
     getCategoryNameById,
+    isDepartmentFeatureEnabled,
     isCategoryFeatureEnabled,
     isCampaignFeatureEnabled,
     showRefNoField = false,
@@ -153,6 +154,7 @@ const InvoicesDialogs = (props) => {
         handleEditInvoice={handleEditInvoice}
         canCancel={canCancel}
         handleCancelInvoice={handleCancelInvoice}
+        showDepartmentField={isDepartmentFeatureEnabled}
         showCategoryField={isCategoryFeatureEnabled}
         isCategoryFeatureEnabled={isCategoryFeatureEnabled}
         showCampaignField={isCampaignFeatureEnabled}

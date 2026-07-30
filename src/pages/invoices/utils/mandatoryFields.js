@@ -10,15 +10,13 @@ export const normalizeInvoiceMandatoryFields = (response) => {
 export const getInvoiceMandatoryFieldValidationMessage = (
   payload,
   { department = false, category = false } = {},
-  { showCategoryField = true } = {},
+  { showDepartmentField = true, showCategoryField = true } = {},
 ) => {
   if (!payload) return null;
 
-  /* Department mandatory check disabled while field is hidden — restore when needed
-  if (department && !payload.departmentId) {
+  if (showDepartmentField && department && !payload.departmentId) {
     return 'Please select a department before creating invoice';
   }
-  */
 
   if (showCategoryField && category) {
     const categoryId = payload.categoryId || payload.category?.id;

@@ -58,6 +58,8 @@ export const ROUTE_PERMISSION_RULES = {
       "approval-workflow-manage",
       "category-view",
       "category-manage",
+      "department-view",
+      "department-manage",
     ],
   },
   "/settings": {
@@ -139,6 +141,7 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
       "MANAGE_ROLE_ROLES_PERMISSIONS",
       "MANAGE_ROLE_APPROVAL_WORKFLOW",
       "CATEGORY_ALL",
+      "DEPARTMENT_ALL",
     ],
   },
   "/settings": {
@@ -232,6 +235,9 @@ export const ACTION_PERMISSION_RULES = {
   "categories.create": { anyOf: ["category-manage"] },
   "categories.update": { anyOf: ["category-manage"] },
   "categories.delete": { anyOf: ["category-manage"] },
+  "departments.create": { anyOf: ["department-manage"] },
+  "departments.update": { anyOf: ["department-manage"] },
+  "departments.delete": { anyOf: ["department-manage"] },
 
   "tax.calculateTds": { anyOf: ["tax-manage"] },
   "tax.generateForm16a": { anyOf: ["tax-manage"] },
