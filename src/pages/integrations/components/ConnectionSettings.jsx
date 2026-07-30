@@ -39,7 +39,7 @@ const DisconnectPanel = ({ connectionId }) => {
   );
 };
 
-const DashboardBackButton = ({ connectionId, onOpenDashboard }) => {
+const DashboardBackButton = ({ onOpenDashboard }) => {
   if (onOpenDashboard) {
     return (
       <Button type="button" variant="outline" size="sm" onClick={onOpenDashboard}>
@@ -51,9 +51,9 @@ const DashboardBackButton = ({ connectionId, onOpenDashboard }) => {
 
   return (
     <Button asChild variant="outline" size="sm">
-      <Link to={`/integrations/${connectionId}`}>
+      <Link to="/integrations">
         <ArrowLeft className="mr-2 h-4 w-4" />
-        Dashboard
+        Integrations
       </Link>
     </Button>
   );
@@ -66,7 +66,7 @@ const ConnectionSettings = ({ onOpenDashboard }) => {
     <PageShell
       title="Connection Settings"
       description="Disconnecting revokes the backend-brokered ERP connection and frees the tenant to connect another ERP."
-      backAction={<DashboardBackButton connectionId={connectionId} onOpenDashboard={onOpenDashboard} />}
+      backAction={<DashboardBackButton onOpenDashboard={onOpenDashboard} />}
     >
       <Card className="rounded-md border-red-200">
         <CardContent className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">

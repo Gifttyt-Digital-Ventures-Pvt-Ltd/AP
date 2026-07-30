@@ -480,16 +480,12 @@ export const InvoiceForm = ({
   const organisationGstBusy =
     organisationGstLoading || organisationGstFetching || organisationFetching;
   const branchBusy = organisationFetching;
+  const hasOrganisationGstOptions = billingGstOptions.length > 0;
+  const billingGstRequired = requireBillingGst && hasOrganisationGstOptions;
 
   useEffect(() => {
     if (!showBillingGst || organisationGstBusy || !formData) return;
-    if ((organisationGstError && billingGstEntries.length === 0) || billingGstEntries.length === 0) {
-      if (formData.billingGstin) {
-        setFormData((prev) => ({
-          ...prev,
-          billingGstin: "",
-        }));
-      }
+    if (organisationGstError || organisationGstCredentials.length === 0) {
       return;
     }
 
@@ -1927,7 +1923,7 @@ export const InvoiceForm = ({
                     ) : null}
 
                     <div>
-                      <RequiredLabel required={requireBillingGst}>Billing GSTIN</RequiredLabel>
+                      <RequiredLabel required={billingGstRequired}>Billing GSTIN</RequiredLabel>
                       <AppSelect
                         value={formData.billingGstin || ""}
                         onChange={(event) => {
@@ -1950,13 +1946,13 @@ export const InvoiceForm = ({
                       />
                     </div>
                   </div>
-                  {organisationGstError && billingGstOptions.length === 0 ? (
-                    <p className="mt-1 text-xs text-destructive">
-                      Failed to load organisation GSTINs. Add invoice is blocked until this loads.
+                  {organisationGstError ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Failed to load organisation GSTINs. You can continue without Billing GSTIN.
                     </p>
                   ) : billingGstOptions.length === 0 && !organisationGstBusy ? (
-                    <p className="mt-1 text-xs text-destructive">
-                      Add an organisation GSTIN in Settings &gt; Organisation Details before proceeding.
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Billing GSTIN is optional because this organisation has no configured GST registrations.
                     </p>
                   ) : !billingGstSatisfied ? (
                     <p className="mt-1 text-xs text-destructive">

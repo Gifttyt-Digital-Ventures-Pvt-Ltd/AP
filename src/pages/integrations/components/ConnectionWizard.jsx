@@ -75,8 +75,21 @@ const getAuthorizationUrl = (response = {}) => {
   return data.authorizationUrl || data.authorization_url || data.authUrl || data.auth_url || "";
 };
 
-const ConnectionWizard = () => {
-  const { provider = "ZOHO_BOOKS" } = useParams();
+const ZOHO_ORG_SELECTION_STATUSES = new Set([
+  "CONNECTED",
+  "AWAITING_ORG_SELECTION",
+  "ACTION_REQUIRED",
+]);
+const SHOW_ZOHO_SYNC_OBJECT_SELECTOR = false;
+
+const ConnectionWizard = ({
+  embedded = false,
+  provider: providerOverride,
+  connectionId: connectionIdOverride = "",
+  onDone,
+}) => {
+  const params = useParams();
+  const provider = providerOverride || params.provider || "ZOHO_BOOKS";
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { guardAction } = useActionGuard();
@@ -91,7 +104,10 @@ const ConnectionWizard = () => {
     providers.find((item) => getProviderKey(item) === provider) || FALLBACK_ZOHO_PROVIDER;
 
   const queryConnectionId =
-    searchParams.get("connectionId") || searchParams.get("connection_id") || "";
+    connectionIdOverride ||
+    searchParams.get("connectionId") ||
+    searchParams.get("connection_id") ||
+    "";
   const oauthErrorCode = searchParams.get("oauth_error") || searchParams.get("error") || "";
   const oauthErrorDescription = searchParams.get("error_description") || searchParams.get("message") || "";
 
@@ -114,7 +130,8 @@ const ConnectionWizard = () => {
     const pending = connections.find(
       (connection) =>
         getConnectionProvider(connection) === provider &&
-        shouldPollOAuthStatus(getConnectionStatus(connection)),
+        (shouldPollOAuthStatus(getConnectionStatus(connection)) ||
+          ZOHO_ORG_SELECTION_STATUSES.has(getConnectionStatus(connection))),
     );
     return getConnectionId(pending || {}) || "";
   }, [connectionsResponse, provider, queryConnectionId]);
@@ -145,7 +162,9 @@ const ConnectionWizard = () => {
   useEffect(() => {
     setPollOAuthStatus(shouldPollOAuthStatus(connectionStatus));
   }, [connectionStatus]);
-  const canLoadOrganizations = Boolean(connectionId && connectionStatus === "CONNECTED");
+  const canLoadOrganizations = Boolean(
+    connectionId && ZOHO_ORG_SELECTION_STATUSES.has(connectionStatus),
+  );
   const { data: organizationsResponse, isFetching: orgsFetching } = useGetZohoOrganizationsQuery(connectionId, {
     skip: !canLoadOrganizations,
   });
@@ -224,13 +243,23 @@ const ConnectionWizard = () => {
         // Granular sync is optional during rollout. Keep the existing broad initial sync fallback.
       }
 
-      try {
-        await triggerSync({ connectionId }).unwrap();
-      } catch {
-        // Initial sync can be retried from the dashboard if the backend queue is unavailable.
+      const selectedSyncObjects = Array.from(enabledObjects).filter(Boolean);
+      if (selectedSyncObjects.length > 0) {
+        try {
+          await Promise.all(
+            selectedSyncObjects.map((object) =>
+              triggerSync({ connectionId, object }).unwrap(),
+            ),
+          );
+          toast.success("Zoho organization selected. Selected sync requests queued.");
+        } catch {
+          toast.success("Zoho organization selected. You can retry sync from the dashboard.");
+        }
+      } else {
+        toast.success("Zoho organization selected. You can start sync from the dashboard.");
       }
-      toast.success("Zoho organization selected. Initial sync started.");
-      navigate(`/integrations/${connectionId}`);
+      if (onDone) onDone(connectionId);
+      else navigate(`/integrations/${connectionId}/sync-data`);
     } catch (error) {
       toast.error(getErrorText(error, "Failed to bind organization"));
     }
@@ -246,6 +275,21 @@ const ConnectionWizard = () => {
   };
 
   if (showGranularSyncStep) {
+    const granularSyncContent = (
+      <ManageSyncedData
+        mode="wizard"
+        connectionId={connectionId}
+        provider={provider}
+        embedded
+        onDone={() => {
+          if (onDone) onDone(connectionId);
+          else navigate(`/integrations/${connectionId}/sync-data`);
+        }}
+      />
+    );
+
+    if (embedded) return granularSyncContent;
+
     return (
       <PageShell
         title="Import ERP Data"
@@ -259,16 +303,222 @@ const ConnectionWizard = () => {
           </Button>
         }
       >
-        <ManageSyncedData
-          mode="wizard"
-          connectionId={connectionId}
-          provider={provider}
-          embedded
-          onDone={() => navigate(`/integrations/${connectionId}`)}
-        />
+        {granularSyncContent}
       </PageShell>
     );
   }
+
+  const setupContent = (
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="space-y-5">
+        <Card className="rounded-md">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Database className="h-4 w-4" />
+              Data center
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-4 md:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Zoho data center</Label>
+              <Select value={dataCenter} onValueChange={setDataCenter}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select data center" />
+                </SelectTrigger>
+                <SelectContent>
+                  {DATA_CENTERS.map((dc) => (
+                    <SelectItem key={dc.value} value={dc.value}>
+                      {dc.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+              India is the default because most Optifii clients use Zoho Books India. The selected data center is stored on the connection and reused for every backend sync call.
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-md">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <KeyRound className="h-4 w-4" />
+              Zoho app credentials
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-4">
+              <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+                <li>Create a Server-based Application in the Zoho API Console.</li>
+                <li>Add the authorized redirect URI shown below.</li>
+                <li>Copy the generated Client ID and Client Secret into Optifii.</li>
+              </ol>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label>Client ID *</Label>
+                  <Input value={clientId} onChange={(event) => setClientId(event.target.value)} />
+                </div>
+                <div className="space-y-2">
+                  <Label>Client Secret *</Label>
+                  <Input
+                    type="password"
+                    value={clientSecret}
+                    onChange={(event) => setClientSecret(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label>Authorized redirect URI</Label>
+                  <div className="flex gap-2">
+                    <Input readOnly value={redirectUri} className="font-mono text-xs" />
+                    <Button type="button" variant="outline" onClick={handleCopyRedirect}>
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Add this exact URI in the Zoho API Console before authorizing. Optifii stores credentials server-side only.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {SHOW_ZOHO_SYNC_OBJECT_SELECTOR ? (
+          <Card className="rounded-md">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-base">
+                <GitBranch className="h-4 w-4" />
+                Sync objects
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3 md:grid-cols-2">
+              {normalizeObjects(providerManifest).map(([objectKey]) => (
+                <button
+                  key={objectKey}
+                  type="button"
+                  onClick={() => toggleObject(objectKey)}
+                  className={`rounded-md border p-3 text-left transition ${
+                    enabledObjects.has(objectKey)
+                      ? "border-primary bg-primary/5"
+                      : "bg-card hover:bg-muted/50"
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-medium">
+                      {OBJECT_LABELS[objectKey] || titleize(objectKey)}
+                    </span>
+                    {enabledObjects.has(objectKey) ? (
+                      <CheckCircle2 className="h-4 w-4 text-primary" />
+                    ) : null}
+                  </div>
+                </button>
+              ))}
+            </CardContent>
+          </Card>
+        ) : null}
+      </div>
+
+      <div className="space-y-5">
+        <Card className="rounded-md">
+          <CardHeader>
+            <CardTitle className="text-base">Authorize</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Connection type</span>
+                <Badge variant="outline">Client-owned app</Badge>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Data center</span>
+                <span>{dataCenter}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Objects</span>
+                <span>{enabledObjects.size}</span>
+              </div>
+            </div>
+            <Button className="w-full" onClick={handleStartConnection} disabled={creating}>
+              {creating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ExternalLink className="mr-2 h-4 w-4" />}
+              Authorize with Zoho
+            </Button>
+            {connectionId && (
+              <div className="rounded-md border p-3 text-sm">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Status</span>
+                  <StatusBadge status={connectionStatus} />
+                </div>
+                <p className="mt-2 break-all font-mono text-xs text-muted-foreground">{connectionId}</p>
+                {connectionStatus === "ERROR" && (
+                  <p className="mt-2 text-xs text-red-700">
+                    Authorization failed. Disconnect any stale connection or restart with the correct redirect URI and credentials.
+                  </p>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-md">
+          <CardHeader>
+            <CardTitle className="text-base">Organization</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {!connectionId ? (
+              <p className="text-sm text-muted-foreground">
+                Complete Zoho authorization to load organizations for this connection.
+              </p>
+            ) : shouldPollOAuthStatus(connectionStatus) ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Waiting for Zoho authorization to complete.
+              </div>
+            ) : !ZOHO_ORG_SELECTION_STATUSES.has(connectionStatus) ? (
+              <p className="text-sm text-muted-foreground">
+                Organizations are available after Zoho authorization is completed.
+              </p>
+            ) : orgsFetching ? (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Loading organizations
+              </div>
+            ) : organizations.length > 0 ? (
+              <>
+                <Select value={selectedOrg} onValueChange={setSelectedOrg}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select Zoho organization" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {organizations.map((org) => {
+                      const id = getZohoOrganizationId(org);
+                      if (!id) return null;
+                      return (
+                        <SelectItem key={id} value={String(id)}>
+                          {org.name || org.organizationName || id}
+                          {org.currencyCode || org.currency ? ` (${org.currencyCode || org.currency})` : ""}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+                <Button className="w-full" onClick={handleBindOrganization} disabled={!selectedOrg || bindingOrg}>
+                  {bindingOrg ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                  Bind organization
+                </Button>
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                No Zoho organizations were returned for this account. Verify the connected Zoho user has access to at least one Books organization.
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+
+  if (embedded) return setupContent;
 
   return (
     <PageShell
@@ -283,205 +533,7 @@ const ConnectionWizard = () => {
         </Button>
       }
     >
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="space-y-5">
-          <Card className="rounded-md">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <Database className="h-4 w-4" />
-                Data center
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Zoho data center</Label>
-                <Select value={dataCenter} onValueChange={setDataCenter}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select data center" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {DATA_CENTERS.map((dc) => (
-                      <SelectItem key={dc.value} value={dc.value}>
-                        {dc.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
-                India is the default because most Optifii clients use Zoho Books India. The selected data center is stored on the connection and reused for every backend sync call.
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-md">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <KeyRound className="h-4 w-4" />
-                Zoho app credentials
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-4">
-                <ol className="list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
-                  <li>Create a Server-based Application in the Zoho API Console.</li>
-                  <li>Add the authorized redirect URI shown below.</li>
-                  <li>Copy the generated Client ID and Client Secret into Optifii.</li>
-                </ol>
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label>Client ID *</Label>
-                    <Input value={clientId} onChange={(event) => setClientId(event.target.value)} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Client Secret *</Label>
-                    <Input
-                      type="password"
-                      value={clientSecret}
-                      onChange={(event) => setClientSecret(event.target.value)}
-                    />
-                  </div>
-                  <div className="space-y-2 md:col-span-2">
-                    <Label>Authorized redirect URI</Label>
-                    <div className="flex gap-2">
-                      <Input readOnly value={redirectUri} className="font-mono text-xs" />
-                      <Button type="button" variant="outline" onClick={handleCopyRedirect}>
-                        <Copy className="h-4 w-4" />
-                      </Button>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Add this exact URI in the Zoho API Console before authorizing. Optifii stores credentials server-side only.
-                    </p>
-                  </div>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-md">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2 text-base">
-                <GitBranch className="h-4 w-4" />
-                Sync objects
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-2">
-              {normalizeObjects(providerManifest).map(([objectKey, config]) => (
-                <button
-                  key={objectKey}
-                  type="button"
-                  onClick={() => toggleObject(objectKey)}
-                  className={`rounded-md border p-3 text-left transition ${
-                    enabledObjects.has(objectKey) ? "border-primary bg-primary/5" : "bg-card hover:bg-muted/50"
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="font-medium">{OBJECT_LABELS[objectKey] || titleize(objectKey)}</span>
-                    {enabledObjects.has(objectKey) && <CheckCircle2 className="h-4 w-4 text-primary" />}
-                  </div>
-                </button>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
-
-        <div className="space-y-5">
-          <Card className="rounded-md">
-            <CardHeader>
-              <CardTitle className="text-base">Authorize</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Connection type</span>
-                  <Badge variant="outline">Client-owned app</Badge>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Data center</span>
-                  <span>{dataCenter}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Objects</span>
-                  <span>{enabledObjects.size}</span>
-                </div>
-              </div>
-              <Button className="w-full" onClick={handleStartConnection} disabled={creating}>
-                {creating ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ExternalLink className="mr-2 h-4 w-4" />}
-                Authorize with Zoho
-              </Button>
-              {connectionId && (
-                <div className="rounded-md border p-3 text-sm">
-                  <div className="flex items-center justify-between">
-                    <span className="text-muted-foreground">Status</span>
-                    <StatusBadge status={connectionStatus} />
-                  </div>
-                  <p className="mt-2 break-all font-mono text-xs text-muted-foreground">{connectionId}</p>
-                  {connectionStatus === "ERROR" && (
-                    <p className="mt-2 text-xs text-red-700">
-                      Authorization failed. Disconnect any stale connection or restart with the correct redirect URI and credentials.
-                    </p>
-                  )}
-                </div>
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-md">
-            <CardHeader>
-              <CardTitle className="text-base">Organization</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {!connectionId ? (
-                <p className="text-sm text-muted-foreground">
-                  Complete Zoho authorization to load organizations for this connection.
-                </p>
-              ) : shouldPollOAuthStatus(connectionStatus) ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Waiting for Zoho authorization to complete.
-                </div>
-              ) : connectionStatus !== "CONNECTED" ? (
-                <p className="text-sm text-muted-foreground">
-                  Organizations are available after the connection reaches Connected status.
-                </p>
-              ) : orgsFetching ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading organizations
-                </div>
-              ) : organizations.length > 0 ? (
-                <>
-                  <Select value={selectedOrg} onValueChange={setSelectedOrg}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select Zoho organization" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {organizations.map((org) => {
-                        const id = getZohoOrganizationId(org);
-                        if (!id) return null;
-                        return (
-                          <SelectItem key={id} value={String(id)}>
-                            {org.name || org.organizationName || id}
-                            {org.currencyCode || org.currency ? ` (${org.currencyCode || org.currency})` : ""}
-                          </SelectItem>
-                        );
-                      })}
-                    </SelectContent>
-                  </Select>
-                  <Button className="w-full" onClick={handleBindOrganization} disabled={!selectedOrg || bindingOrg}>
-                    {bindingOrg ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
-                    Bind organization
-                  </Button>
-                </>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  No Zoho organizations were returned for this account. Verify the connected Zoho user has access to at least one Books organization.
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      {setupContent}
     </PageShell>
   );
 };

@@ -10,7 +10,11 @@ export const DATA_CENTERS = [
 
 export const OBJECT_LABELS = {
   CHART_OF_ACCOUNTS: "Chart of Accounts",
+  BANK_ACCOUNTS: "Bank Accounts",
+  BANK_TRANSACTIONS: "Bank Transactions",
   VENDORS: "Vendors",
+  PURCHASE_ORDERS: "Purchase Orders",
+  INVOICES: "Invoices",
   BILLS: "Bills",
   VENDOR_PAYMENTS: "Transactions",
   JOURNALS: "Journals",
@@ -20,7 +24,7 @@ export const OBJECT_LABELS = {
 export const FALLBACK_ZOHO_PROVIDER = {
   provider: "ZOHO_BOOKS",
   name: "Zoho Books",
-  description: "OAuth connection for vendors, chart of accounts, bills, transactions, journals, and ledgers.",
+  description: "OAuth connection for chart of accounts, bank accounts, vendors, purchase orders, bills, payments, journals, and bank transactions.",
   auth: {
     type: "OAUTH2",
     requiresDataCenter: true,
@@ -29,13 +33,24 @@ export const FALLBACK_ZOHO_PROVIDER = {
   },
   objects: {
     CHART_OF_ACCOUNTS: { supported: true, directions: ["PULL"] },
+    BANK_ACCOUNTS: { supported: true, directions: ["PULL"] },
     VENDORS: { supported: true, directions: ["PULL", "PUSH"] },
-    BILLS: { supported: true, directions: ["PUSH", "PULL_STATUS"] },
+    PURCHASE_ORDERS: { supported: true, directions: ["PULL", "PUSH"] },
+    INVOICES: { supported: true, directions: ["PULL", "PUSH"] },
     VENDOR_PAYMENTS: { supported: true, directions: ["PULL", "PUSH"] },
     JOURNALS: { supported: true, directions: ["PULL", "PUSH"] },
-    LEDGER_VIEW: { supported: true, directions: ["PULL"] },
+    BANK_TRANSACTIONS: { supported: true, directions: ["PULL"] },
   },
-  syncOrder: ["CHART_OF_ACCOUNTS", "VENDORS", "BILLS", "VENDOR_PAYMENTS", "JOURNALS"],
+  syncOrder: [
+    "CHART_OF_ACCOUNTS",
+    "BANK_ACCOUNTS",
+    "VENDORS",
+    "PURCHASE_ORDERS",
+    "INVOICES",
+    "VENDOR_PAYMENTS",
+    "JOURNALS",
+    "BANK_TRANSACTIONS",
+  ],
 };
 
 export const ACTIVE_SYNC_STATUSES = new Set([
@@ -50,10 +65,17 @@ export const ACTIVE_SYNC_STATUSES = new Set([
 
 export const OAUTH_POLL_STATUSES = new Set(["PENDING", "PENDING_AUTHORIZATION", "AUTHORIZING"]);
 
-export const OAUTH_TERMINAL_STATUSES = new Set(["CONNECTED", "ERROR", "DISCONNECTED", "FAILED"]);
+export const OAUTH_TERMINAL_STATUSES = new Set([
+  "CONNECTED",
+  "AWAITING_ORG_SELECTION",
+  "ERROR",
+  "DISCONNECTED",
+  "FAILED",
+]);
 
 export const BLOCKING_CONNECTION_STATUSES = new Set([
   "CONNECTED",
+  "AWAITING_ORG_SELECTION",
   "PENDING",
   "PENDING_AUTHORIZATION",
   "AUTHORIZING",

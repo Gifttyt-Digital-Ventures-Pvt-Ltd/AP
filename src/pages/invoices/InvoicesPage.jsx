@@ -2481,13 +2481,7 @@ const InvoicesPage = () => {
     if (isSavedDraft) {
       if (!validateSavedInvoiceEdit(formData)) return;
     } else {
-      if (!String(formData.billingGstin || "").trim()) {
-        toast.error(
-          "Select a billing GSTIN from Organisation Details before updating invoice",
-        );
-        return;
-      }
-      if (!validateMandatoryPayload(formData)) return;
+    if (!validateMandatoryPayload(formData)) return;
     }
 
     try {
@@ -2531,18 +2525,11 @@ const InvoicesPage = () => {
     if (!guardAction("invoices.update")) return;
     if (!selectedInvoice || !formData) return;
     if (!isSavedInvoiceStatus(selectedInvoice.status)) return;
-    if (!String(formData.billingGstin || "").trim()) {
-      toast.error(
-        "Select a billing GSTIN from Organisation Details before submitting invoice",
-      );
-      return;
-    }
     if (!canForwardSavedInvoice(selectedInvoice, invoiceEditContext)) {
       toast.error("You do not have permission to submit this invoice");
       return;
     }
-    if (!validateSavedInvoiceEdit(formData, { requireBillingGst: true }))
-      return;
+    if (!validateSavedInvoiceEdit(formData)) return;
 
     try {
       const updateResponse = await updateInvoice({
@@ -2734,7 +2721,7 @@ const InvoicesPage = () => {
         LEDGER_OPTIONS={LEDGER_OPTIONS}
         TAX_RATES={TAX_RATES}
         showBillingGst={isEdit || Boolean(uploadedFile)}
-        requireBillingGst={isEdit && !isSavedDraft}
+        requireBillingGst={false}
         showBranchField={isBranchEnabled}
         showInvoiceMatching={showInvoiceMatchingSelection}
         canUseThreeWayMatching={canUseThreeWayMatching}
