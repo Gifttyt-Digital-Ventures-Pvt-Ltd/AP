@@ -390,7 +390,7 @@ const InvoicesPage = () => {
     isInvoiceMatchingEnabled && hasPurchaseOrderSubscription;
   const canUseThreeWayMatching =
     showInvoiceMatchingSelection && hasGrnSubscription;
-  const { showIntegrationColumn } = useZohoIntegrationActive();
+  const { hasConnectedZoho, showIntegrationColumn } = useZohoIntegrationActive();
   const showErpIntegrationFields = isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
   const { data: corporateUserContext = null } =
     useGetCorporateUserDetailsQuery();
@@ -2727,6 +2727,7 @@ const InvoicesPage = () => {
         canUseThreeWayMatching={canUseThreeWayMatching}
         showProformaInvoiceFields={showProformaInvoiceFields}
         showErpIntegrationFields={showErpIntegrationFields}
+        includeLedgerAccountGroups={hasConnectedZoho}
       />
     );
   };
@@ -3231,6 +3232,7 @@ const InvoicesPage = () => {
       LEDGER_OPTIONS={LEDGER_OPTIONS}
       TAX_RATES={TAX_RATES}
       showErpIntegrationFields={showErpIntegrationFields}
+      includeLedgerAccountGroups={hasConnectedZoho}
     />
   );
 
