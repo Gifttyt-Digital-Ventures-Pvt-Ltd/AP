@@ -11,28 +11,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../../components/ui/select";
-import { ACCOUNT_TYPES, GATE_STATE } from "../constants";
-import CibRegistrationCard from "./CibRegistrationCard";
-import BeneficiariesTable from "./BeneficiariesTable";
+import { ACCOUNT_TYPES, BANK_LINK_OPTIONS, GATE_STATE } from "../constants";
 
-const STEP_LABELS = ["Link Account", "CIB Registration", "Beneficiaries"];
+const STEP_LABELS = ["Save Account"];
 
 const AccountLinkWizard = ({
   gateState,
   linkedAccount,
-  cibStatus,
-  beneficiaries = [],
   onLinkAccount,
-  onCibRegister,
-  onCibRecheck,
-  onAddBeneficiary,
-  onRegisterBeneficiary,
   linking = false,
-  cibRegistering = false,
-  cibRechecking = false,
   canManage = false,
-  canManageBeneficiaries = false,
 }) => {
+  const [bank, setBank] = useState(BANK_LINK_OPTIONS[0]?.value || "IDFC");
   const [accountType, setAccountType] = useState("CURRENT");
   const [accountNumber, setAccountNumber] = useState("");
   const [ifsc, setIfsc] = useState("");
@@ -40,15 +30,14 @@ const AccountLinkWizard = ({
   const currentStep =
     gateState === GATE_STATE.ACCOUNT_PENDING
       ? 0
-      : gateState === GATE_STATE.CIB_PENDING
-        ? 1
-        : gateState === GATE_STATE.BENEFICIARY_PENDING
-          ? 2
-          : 3;
+      : 1;
 
   const handleLink = (event) => {
     event.preventDefault();
+    const selectedBank = BANK_LINK_OPTIONS.find((option) => option.value === bank);
     onLinkAccount?.({
+      bank,
+      bankName: selectedBank?.label || bank,
       accountType,
       accountNumber: accountNumber.trim(),
       ifsc: ifsc.trim().toUpperCase(),
@@ -82,13 +71,24 @@ const AccountLinkWizard = ({
       {(gateState === GATE_STATE.ACCOUNT_PENDING || !linkedAccount) && (
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-base">Step 1 — Link ICICI Account</CardTitle>
+            <CardTitle className="text-base">Step 1 — Bank Account Details</CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleLink} className="grid gap-4 md:grid-cols-2">
               <div>
-                <Label>Bank</Label>
-                <Input value="ICICI" disabled />
+                <Label>Bank *</Label>
+                <Select value={bank} onValueChange={setBank} disabled={!canManage}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BANK_LINK_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <Label>Account Type *</Label>
@@ -111,7 +111,7 @@ const AccountLinkWizard = ({
                   id="sender-account"
                   value={accountNumber}
                   onChange={(e) => setAccountNumber(e.target.value)}
-                  placeholder="Enter ICICI account number"
+                  placeholder="Enter bank account number"
                   disabled={!canManage}
                   required
                 />
@@ -122,7 +122,7 @@ const AccountLinkWizard = ({
                   id="sender-ifsc"
                   value={ifsc}
                   onChange={(e) => setIfsc(e.target.value.toUpperCase())}
-                  placeholder="e.g. ICIC0001234"
+                  placeholder="e.g. IDFB0001234"
                   disabled={!canManage}
                   maxLength={11}
                   required
@@ -132,45 +132,11 @@ const AccountLinkWizard = ({
                 <div className="md:col-span-2">
                   <Button type="submit" disabled={linking}>
                     {linking && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-                    Verify Connection
+                    Save Account
                   </Button>
                 </div>
               )}
             </form>
-          </CardContent>
-        </Card>
-      )}
-
-      {gateState !== GATE_STATE.ACCOUNT_PENDING && (
-        <CibRegistrationCard
-          cibStatus={cibStatus}
-          onRegister={onCibRegister}
-          onRecheck={onCibRecheck}
-          registering={cibRegistering}
-          rechecking={cibRechecking}
-          canManage={canManage}
-        />
-      )}
-
-      {gateState !== GATE_STATE.ACCOUNT_PENDING && gateState !== GATE_STATE.CIB_PENDING && (
-        <Card>
-          <CardHeader className="pb-2 flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Step 3 — Beneficiaries</CardTitle>
-            {canManageBeneficiaries && (
-              <Button size="sm" variant="outline" onClick={onAddBeneficiary}>
-                Add Beneficiary
-              </Button>
-            )}
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-muted-foreground mb-4">
-              At least one active beneficiary is required before ICICI payouts can be released.
-            </p>
-            <BeneficiariesTable
-              beneficiaries={beneficiaries}
-              onRegister={onRegisterBeneficiary}
-              canManage={canManageBeneficiaries}
-            />
           </CardContent>
         </Card>
       )}

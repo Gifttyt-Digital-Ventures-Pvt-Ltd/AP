@@ -363,12 +363,17 @@ export const toBankAccountApiPayload = (account = {}) => {
 
 export const toBankAccountUiPayload = (account = {}) => ({
   ...account,
+  id: account.id ?? account.accountId ?? account.account_id ?? account.bankAccountId,
   account_name: account.account_name ?? account.accountName ?? "",
   account_number: account.account_number ?? account.accountNumber ?? "",
   bank_name: account.bank_name ?? account.bankName ?? "",
+  bank: account.bank ?? account.bankCode ?? account.bank_code ?? account.bankName ?? account.bank_name ?? "",
   account_type: account.account_type ?? account.accountType ?? "",
   ifsc_code: account.ifsc_code ?? account.ifscCode ?? "",
+  maskedAccountNumber: account.maskedAccountNumber ?? account.masked_account_number,
+  verificationStatus: account.verificationStatus ?? account.verification_status,
   is_active: account.is_active ?? account.isActive,
+  isActive: account.isActive ?? account.is_active,
 });
 
 export const toPaymentCreateApiPayload = (payment = {}) => {

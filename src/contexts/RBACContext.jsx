@@ -105,6 +105,9 @@ const FALLBACK_DIRECT_ROLE_PERMISSIONS = {
   FINANCE: ["campaign-manage"],
   ACCOUNTANT: [
     "credits-manage",
+    "payments-admin",
+    "payments-requester",
+    "payments-approver",
     "payments-manage",
     "payments-view",
     "payment-batches-manage",
@@ -432,7 +435,12 @@ export const RBACProvider = ({ children }) => {
     if (normalizedPath === "/user-roles" || normalizedPath.startsWith("/user-roles/")) {
       const canViewRoles = hasAnyPermission(["roles-view", "roles-manage"]);
       const canViewRoleUsers = hasAnyPermission(["roles-view", "roles-manage", "roles-manage-users"]);
-      const canViewWorkflow = hasAnyPermission(["approval-workflow-view", "approval-workflow-manage"]);
+      const canViewWorkflow = hasAnyPermission([
+        "approval-workflow-view",
+        "approval-workflow-manage",
+        "payment-approval-workflow-view",
+        "payment-approval-workflow-manage",
+      ]);
       const canViewCategories = hasAnyPermission(["category-view", "category-manage"]);
       return (
         (canViewRoleUsers && isCorporateSectionEnabled("MANAGE_ROLE_USERS")) ||
@@ -455,7 +463,7 @@ export const RBACProvider = ({ children }) => {
         (hasAnyPermission(["notifications-manage", "NOTIFICATIONS MANAGE"]) &&
           isCorporateSectionEnabled("SETTINGS_NOTIFICATIONS")) ||
         (hasPermission("settings-org") && isCorporateSectionEnabled("SETTINGS_ORG_DETAILS")) ||
-        (hasAnyPermission(["settings-banking", "banking-full", "banking-manage"]) &&
+        (hasAnyPermission(["settings-banking", "banking-full", "banking-manage", "banking-view", "payments-admin"]) &&
           isBankingCorporateEntitlementEnabled(isCorporateSectionEnabled)) ||
         (hasPermission("settings-interaction") && isCorporateSectionEnabled("SETTINGS_INTEGRATIONS")) ||
         (hasAnyPermission(["credits-view", "credits-ledger", "credits-manage", "VIEW_WALLET", "VIEW_LEDGER", "MANAGE_BILLING"]) &&

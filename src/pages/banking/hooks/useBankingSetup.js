@@ -1,109 +1,126 @@
 import { useMemo } from "react";
 import {
-  useGetBankingCapabilitiesQuery,
-  useGetLinkedBankingAccountsQuery,
-  useGetCibRegistrationStatusQuery,
   useGetBeneficiariesQuery,
+  useGetLinkedBankingAccountsQuery,
 } from "../../../Services/apis/connectedBankingApi";
-import { GATE_STATE, CIB_STATE, ACCOUNT_LINK_STATUS } from "../constants";
+import {
+  GATE_STATE,
+  BANK_ACCOUNT_VERIFICATION_STATUS,
+  BANKING_SETUP_STATUS,
+} from "../constants";
+import {
+  getBankAccountVerificationStatus,
+  isBankAccountPaymentEligible,
+} from "../utils/bankAccounts";
 
 export const useBankingSetup = ({ skip = false } = {}) => {
   const {
-    data: capabilities,
-    isLoading: capabilitiesLoading,
-    isFetching: capabilitiesFetching,
-    refetch: refetchCapabilities,
-  } = useGetBankingCapabilitiesQuery(undefined, { skip });
-
-  const {
-    data: accounts = [],
+    data: apiAccounts = [],
     isLoading: accountsLoading,
     isFetching: accountsFetching,
     refetch: refetchAccounts,
   } = useGetLinkedBankingAccountsQuery(undefined, { skip });
 
   const {
-    data: cibStatus,
-    isLoading: cibLoading,
-    refetch: refetchCib,
-  } = useGetCibRegistrationStatusQuery(undefined, { skip });
-
-  const {
     data: beneficiaries = [],
     isLoading: beneficiariesLoading,
+    isFetching: beneficiariesFetching,
     refetch: refetchBeneficiaries,
   } = useGetBeneficiariesQuery(undefined, { skip });
 
+  const accounts = useMemo(
+    () => apiAccounts,
+    [apiAccounts],
+  );
+
   const linkedAccount = useMemo(
-    () => accounts.find((account) => account.status === ACCOUNT_LINK_STATUS.LINKED) || accounts[0] || null,
+    () =>
+      accounts.find(isBankAccountPaymentEligible) ||
+      accounts[0] ||
+      null,
     [accounts],
   );
 
   const isAccountLinked = useMemo(
-    () =>
-      Boolean(capabilities?.accountLinked) ||
-      accounts.some((account) => account.status === ACCOUNT_LINK_STATUS.LINKED),
-    [capabilities?.accountLinked, accounts],
+    () => accounts.length > 0,
+    [accounts],
   );
 
-  const activeBeneficiaries = useMemo(
-    () =>
-      beneficiaries.filter((bene) => {
-        if (bene.status === "ACTIVE") return true;
-        if (bene.status === "ACTIVATING" && bene.availableAt) {
-          return new Date(bene.availableAt) <= new Date();
-        }
-        return false;
-      }),
-    [beneficiaries],
+  const paymentReadyAccounts = useMemo(
+    () => accounts.filter(isBankAccountPaymentEligible),
+    [accounts],
   );
+
+  const setupStatus = useMemo(() => {
+    if (accounts.length === 0) return BANKING_SETUP_STATUS.NOT_STARTED;
+    if (paymentReadyAccounts.length > 0) return BANKING_SETUP_STATUS.CONFIGURED;
+
+    const hasRejected = accounts.some(
+      (account) =>
+        getBankAccountVerificationStatus(account) === BANK_ACCOUNT_VERIFICATION_STATUS.REJECTED,
+    );
+    if (hasRejected) return BANKING_SETUP_STATUS.ACTION_REQUIRED;
+
+    const hasPending = accounts.some(
+      (account) =>
+        getBankAccountVerificationStatus(account) === BANK_ACCOUNT_VERIFICATION_STATUS.PENDING_APPROVAL,
+    );
+    if (hasPending) return BANKING_SETUP_STATUS.PENDING_VERIFICATION;
+
+    return BANKING_SETUP_STATUS.CONFIGURED;
+  }, [accounts, paymentReadyAccounts]);
 
   const gateState = useMemo(() => {
-    if (capabilities?.setupReady) return GATE_STATE.READY;
+    if (paymentReadyAccounts.length > 0) return GATE_STATE.READY;
+
+    if (setupStatus === BANKING_SETUP_STATUS.PENDING_VERIFICATION) {
+      return GATE_STATE.PENDING_VERIFICATION;
+    }
+
+    if (setupStatus === BANKING_SETUP_STATUS.ACTION_REQUIRED) {
+      return GATE_STATE.ACTION_REQUIRED;
+    }
 
     if (!isAccountLinked) return GATE_STATE.ACCOUNT_PENDING;
 
-    const cibRegistered =
-      capabilities?.cibRegistered ||
-      cibStatus?.state === CIB_STATE.REGISTERED;
-    if (!cibRegistered) return GATE_STATE.CIB_PENDING;
-
-    const hasBeneficiary =
-      capabilities?.hasActiveBeneficiary || activeBeneficiaries.length > 0;
-    if (!hasBeneficiary) return GATE_STATE.BENEFICIARY_PENDING;
-
-    return GATE_STATE.READY;
-  }, [capabilities, isAccountLinked, cibStatus, activeBeneficiaries]);
+    return GATE_STATE.CONFIGURED;
+  }, [isAccountLinked, paymentReadyAccounts, setupStatus]);
 
   const isSetupReady = gateState === GATE_STATE.READY;
 
   const refetchAll = async () => {
     await Promise.all([
-      refetchCapabilities(),
       refetchAccounts(),
-      refetchCib(),
       refetchBeneficiaries(),
     ]);
   };
 
+  const activeBeneficiaries = useMemo(
+    () =>
+      beneficiaries.filter((beneficiary) =>
+        ["ACTIVE", "VERIFIED", "SUCCESS"].includes(
+          String(beneficiary.status || "").toUpperCase(),
+        ),
+      ),
+    [beneficiaries],
+  );
+
   return {
-    capabilities,
     linkedAccount,
     isAccountLinked,
+    paymentReadyAccounts,
     accounts,
-    cibStatus,
     beneficiaries,
     activeBeneficiaries,
     gateState,
+    setupStatus,
     isSetupReady,
     isLoading:
-      capabilitiesLoading || accountsLoading || cibLoading || beneficiariesLoading,
-    isFetching: capabilitiesFetching,
+      accountsLoading || beneficiariesLoading,
+    isFetching: beneficiariesFetching,
     accountsFetching,
     refetchAll,
-    refetchCapabilities,
     refetchAccounts,
-    refetchCib,
     refetchBeneficiaries,
   };
 };

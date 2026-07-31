@@ -128,7 +128,7 @@ const ReleasedPaymentsTab = ({
           tableContainerClassName="overflow-visible"
           headClassName="border-b border-border bg-muted shadow-sm"
           stickyHeader
-          emptyMessage='No payments released yet. Click "Release All Payments" to process pending invoices.'
+          emptyMessage="No payments released yet."
           emptyTestId="no-payments"
         />
       </div>

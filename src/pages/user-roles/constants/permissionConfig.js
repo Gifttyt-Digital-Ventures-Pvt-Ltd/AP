@@ -65,8 +65,9 @@ export const PERMISSION_GROUPS = [
   {
     title: "Payments",
     permissions: [
-      { id: "payments-manage", label: "Manage" },
-      { id: "payments-view", label: "View Only" },
+      { id: "payments-admin", label: "Admin" },
+      { id: "payments-requester", label: "Requester" },
+      { id: "payments-approver", label: "Approver" },
     ],
   },
   {
@@ -92,12 +93,10 @@ export const PERMISSION_GROUPS = [
     permissions: [{ id: "audit-trail-view", label: "View Only" }],
   },
   {
-    title: "Connected Banking",
+    title: "Banking",
     permissions: [
+      { id: "banking-manage", label: "Manage" },
       { id: "banking-view", label: "View Only" },
-      { id: "banking-manage", label: "Manage (Link Account, CIB)" },
-      { id: "beneficiary-manage", label: "Manage Beneficiaries" },
-      { id: "banking-full", label: "Full Access" },
     ],
   },
   {
@@ -116,10 +115,16 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    title: "Payment Approval Workflow",
+    permissions: [
+      { id: "payment-approval-workflow-manage", label: "Manage Payment Workflows" },
+      { id: "payment-approval-workflow-view", label: "View Payment Workflows" },
+    ],
+  },
+  {
     title: "Settings",
     permissions: [
       { id: "settings-org", label: "Manage Organisation Details" },
-      { id: "settings-banking", label: "Manage Connected Banking" },
       { id: "credits-manage", label: "Manage Billing" },
       { id: "notifications-manage", label: "Manage Notifications" },
     ],
@@ -162,6 +167,9 @@ export const PERMISSION_LABELS = {
   "campaign-approve": "Campaigns - Approve",
   "matching-manage": "Invoice Matching - Manage",
   "matching-view": "Invoice Matching - View Only",
+  "payments-admin": "Payments - Admin",
+  "payments-requester": "Payments - Requester",
+  "payments-approver": "Payments - Approver",
   "payments-manage": "Payments - Manage",
   "payments-view": "Payments - View Only",
   "payment-batches-manage": "Payment Batches - Manage",
@@ -174,16 +182,18 @@ export const PERMISSION_LABELS = {
   "reports-view": "Reports - View Only",
   "reports-full": "Reports - Full Access",
   "audit-trail-view": "Audit Trail - View Only",
-  "banking-view": "Connected Banking - View Only",
-  "banking-manage": "Connected Banking - Manage (Link, CIB)",
-  "beneficiary-manage": "Connected Banking - Manage Beneficiaries",
-  "banking-full": "Connected Banking - Full Access",
+  "banking-view": "Banking - View Only",
+  "banking-manage": "Banking - Manage",
+  "beneficiary-manage": "Banking - Manage Beneficiaries",
+  "banking-full": "Banking - Full Access",
   "payouts-release": "Payments - Release ICICI Payout",
   "roles-view": "Manage Roles - View Only",
   "roles-manage": "Manage Roles - Manage Roles & Assign Role Sets",
   "roles-manage-users": "Manage Roles - Manage Users (no role assignment)",
   "approval-workflow-view": "Approval Workflow - View Only",
   "approval-workflow-manage": "Approval Workflow - Manage",
+  "payment-approval-workflow-view": "Payment Approval Workflow - View Only",
+  "payment-approval-workflow-manage": "Payment Approval Workflow - Manage",
   "settings-org": "Settings - Manage Organisation",
   "settings-banking": "Settings - Manage Banking",
   "notifications-manage": "Notifications - Manage",

@@ -80,6 +80,11 @@ const mapInvoiceMatchingPermission = (permissionType) => {
 
 const mapPaymentsPermission = (permissionType) => {
   if (permissionType === "VIEW") return "payments-view";
+  if (permissionType === "REQUESTER") return "payments-requester";
+  if (permissionType === "APPROVER" || permissionType === "APPROVE") return "payments-approver";
+  if (permissionType === "ADMIN" || permissionType === "FULL") {
+    return "payments-admin";
+  }
   if (permissionType === "MANAGE") return "payments-manage";
   return null;
 };
@@ -145,7 +150,7 @@ const mapSettingsPermission = (permissionType) => {
   if (permissionType === "ORG" || permissionType === "ORGANISATION" || permissionType === "ORGANIZATION") {
     return "settings-org";
   }
-  if (permissionType === "BANKING") return "settings-banking";
+  if (permissionType === "BANKING") return "banking-manage";
   if (permissionType === "INTERACTION" || permissionType === "INTEGRATIONS") {
     return "integrations-manage";
   }
@@ -190,6 +195,15 @@ const mapCategoryPermission = (permissionType) => {
 const mapApprovalWorkflowPermission = (permissionType) => {
   if (permissionType === "VIEW") return "approval-workflow-view";
   if (permissionType === "MANAGE") return "approval-workflow-manage";
+  return null;
+};
+
+const mapPaymentApprovalWorkflowPermission = (permissionType) => {
+  if (permissionType === "VIEW") return "payment-approval-workflow-view";
+  if (permissionType === "MANAGE") return "payment-approval-workflow-manage";
+  if (permissionType === "FULL") {
+    return ["payment-approval-workflow-view", "payment-approval-workflow-manage"];
+  }
   return null;
 };
 
@@ -311,6 +325,14 @@ export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput)
     screen === "WORKFLOW"
   ) {
     return mapApprovalWorkflowPermission(permissionType);
+  }
+
+  if (
+    screen === "PAYMENT_APPROVAL_WORKFLOW" ||
+    screen === "PAYMENT_WORKFLOW" ||
+    screen === "PAYRUN_APPROVAL_WORKFLOW"
+  ) {
+    return mapPaymentApprovalWorkflowPermission(permissionType);
   }
 
   return null;

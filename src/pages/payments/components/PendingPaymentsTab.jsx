@@ -61,8 +61,10 @@ const PendingPaymentsTab = ({
   onToggleInvoice,
   onSelectAllInvoices,
   onOpenRecordPayment,
+  onOpenCreateBatch,
   onOpenInvoiceReport,
   canRecordPayment = false,
+  canCreateBatch = false,
   canDownloadInvoiceReport = false,
   paymentActionLabel = 'Record Payment',
   safeFormatDate,
@@ -248,6 +250,16 @@ const PendingPaymentsTab = ({
             {canBulkRelease && (
               <Button onClick={handleBulkRelease} size="sm" data-testid="pending-tab-bulk-release-button">
                 Release All Payments
+              </Button>
+            )}
+
+            {canCreateBatch && (
+              <Button
+                size="sm"
+                onClick={onOpenCreateBatch}
+                data-testid="open-create-payment-batch-dialog"
+              >
+                Create Payment Batch
               </Button>
             )}
 

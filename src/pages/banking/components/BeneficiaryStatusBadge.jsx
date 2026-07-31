@@ -47,7 +47,7 @@ const BeneficiaryStatusBadge = ({ status, availableAt, className = "" }) => {
       <Tooltip>
         <TooltipTrigger asChild>{badge}</TooltipTrigger>
         <TooltipContent>
-          ICICI beneficiaries become payable ~30 minutes after registration.
+          Bank beneficiaries become payable after backend activation.
         </TooltipContent>
       </Tooltip>
     );

@@ -13,6 +13,7 @@ const CibRegistrationCard = ({
   canManage = false,
   readOnly = false,
   locked = false,
+  bankLabel = "IDFC Bank",
 }) => {
   if (locked) {
     return (
@@ -20,12 +21,12 @@ const CibRegistrationCard = ({
         <CardHeader className="pb-2">
           <CardTitle className="text-base flex items-center gap-2">
             <Lock className="h-4 w-4 text-muted-foreground" />
-            ICICI CIB Registration
+            {bankLabel} CIB Registration
           </CardTitle>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">
-            Link your ICICI account first. CIB registration becomes available after the account is verified.
+            Link your bank account first. CIB registration becomes available after the account is verified.
           </p>
         </CardContent>
       </Card>
@@ -38,7 +39,7 @@ const CibRegistrationCard = ({
     return (
       <Card className="border-green-200 bg-green-50/30">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">ICICI CIB Registration</CardTitle>
+          <CardTitle className="text-base">{bankLabel} CIB Registration</CardTitle>
         </CardHeader>
         <CardContent className="flex items-center gap-2 text-sm text-green-800">
           <CheckCircle2 className="h-4 w-4 shrink-0" />
@@ -51,13 +52,13 @@ const CibRegistrationCard = ({
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-base">ICICI CIB Registration</CardTitle>
+        <CardTitle className="text-base">{bankLabel} CIB Registration</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {state === CIB_STATE.NOT_STARTED && (
           <>
             <p className="text-sm text-muted-foreground">
-              Register with ICICI CIB to enable NEFT/RTGS payouts and beneficiary management.
+              Register with {bankLabel} CIB to enable NEFT/RTGS payouts.
             </p>
             {readOnly ? (
               <p className="text-sm text-amber-800">
@@ -77,7 +78,7 @@ const CibRegistrationCard = ({
         {state === CIB_STATE.PENDING_SELF_APPROVAL && (
           <>
             <p className="text-sm">
-              Registration submitted. <strong>Log in to ICICI CIB and approve it</strong> from your{" "}
+              Registration submitted. <strong>Log in to {bankLabel} CIB and approve it</strong> from your{" "}
               <em>Pending on Me</em> tray to activate.
             </p>
             {cibStatus?.message && (
@@ -85,7 +86,7 @@ const CibRegistrationCard = ({
             )}
             {readOnly ? (
               <p className="text-sm text-muted-foreground">
-                After approving in ICICI CIB, refresh status from Settings → Connected Banking.
+                After approving in {bankLabel} CIB, refresh status from Settings → Connected Banking.
               </p>
             ) : (
               canManage && (

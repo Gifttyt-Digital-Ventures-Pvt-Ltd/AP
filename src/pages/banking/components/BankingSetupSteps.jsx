@@ -3,23 +3,26 @@ import { CheckCircle2 } from "lucide-react";
 import { GATE_STATE } from "../constants";
 
 const STEPS = [
-  { key: GATE_STATE.ACCOUNT_PENDING, label: "Link Account" },
-  { key: GATE_STATE.CIB_PENDING, label: "CIB Registration" },
+  { key: GATE_STATE.ACCOUNT_PENDING, label: "Submit Account" },
+  { key: GATE_STATE.PENDING_VERIFICATION, label: "Account Verification" },
+  { key: GATE_STATE.READY, label: "Payment Ready" },
 ];
 
 const BankingSetupSteps = ({ gateState }) => {
   const currentIndex =
-    gateState === GATE_STATE.ACCOUNT_PENDING
-      ? 0
-      : gateState === GATE_STATE.CIB_PENDING
+    gateState === GATE_STATE.READY
+      ? STEPS.length
+      : gateState === GATE_STATE.PENDING_VERIFICATION || gateState === GATE_STATE.CONFIGURED
         ? 1
-        : 2;
+        : gateState === GATE_STATE.ACTION_REQUIRED
+          ? 1
+          : 0;
 
   return (
     <div className="flex flex-wrap gap-2">
       {STEPS.map((step, index) => {
-        const done = index < currentIndex || gateState === GATE_STATE.READY || gateState === GATE_STATE.BENEFICIARY_PENDING;
-        const active = index === currentIndex && gateState !== GATE_STATE.READY && gateState !== GATE_STATE.BENEFICIARY_PENDING;
+        const done = index < currentIndex || gateState === GATE_STATE.READY;
+        const active = index === currentIndex && gateState !== GATE_STATE.READY;
 
         return (
           <div

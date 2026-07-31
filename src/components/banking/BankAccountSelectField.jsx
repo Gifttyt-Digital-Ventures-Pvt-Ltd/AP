@@ -10,6 +10,7 @@ import {
 import {
   findBankAccountById,
   formatBankAccountOptionLabel,
+  isBankAccountPaymentEligible,
   normalizeBankAccountList,
 } from '../../pages/banking/utils/bankAccounts';
 import { SelectedBankAccountPreview } from './ConnectedBankAccountsPanel';
@@ -31,9 +32,7 @@ const BankAccountSelectField = ({
   );
   const selectableAccounts = useMemo(() => {
     if (!activeOnly) return normalizedAccounts;
-    return normalizedAccounts.filter(
-      (account) => account.is_active !== false && account.isActive !== false,
-    );
+    return normalizedAccounts.filter(isBankAccountPaymentEligible);
   }, [activeOnly, normalizedAccounts]);
   const selectedAccount = findBankAccountById(selectableAccounts, value)
     ?? findBankAccountById(normalizedAccounts, value);

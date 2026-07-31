@@ -1,75 +1,431 @@
-import React, { useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { toast } from "sonner";
-import { Loader2, RefreshCw } from "lucide-react";
+import React, { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  ArrowDownLeft,
+  ArrowUpRight,
+  Building2,
+  CreditCard,
+  Download,
+  Eye,
+  FileText,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Search,
+} from "lucide-react";
 import { useRBAC } from "../../contexts/RBACContext";
-import { useActionGuard } from "../../hooks/useActionGuard";
-import { useRegisterBeneficiaryMutation } from "../../Services/apis/connectedBankingApi";
 import { Button } from "../../components/ui/button";
+import AppDataTable from "../../components/common/AppDataTable";
+import { Input } from "../../components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../components/ui/select";
 import { GATE_STATE } from "./constants";
 import useBankingSetup from "./hooks/useBankingSetup";
-import AccountStatusCard from "./components/AccountStatusCard";
-import CibRegistrationCard from "./components/CibRegistrationCard";
-import AddBeneficiaryDialog from "./components/AddBeneficiaryDialog";
-import BeneficiariesTable from "./components/BeneficiariesTable";
+import {
+  useGetBankingAccountBalanceQuery,
+  useGetBankingAccountStatementQuery,
+} from "../../Services/apis/connectedBankingApi";
 
 const SETUP_STATUS_MESSAGES = {
-  [GATE_STATE.ACCOUNT_PENDING]: "Link your ICICI account in Settings → Connected Banking.",
-  [GATE_STATE.CIB_PENDING]: "Complete CIB registration in Settings → Connected Banking.",
-  [GATE_STATE.BENEFICIARY_PENDING]:
-    "Register at least one beneficiary below to enable ICICI payouts.",
+  [GATE_STATE.ACCOUNT_PENDING]: "Submit a bank account in Settings → Connected Banking.",
+  [GATE_STATE.PENDING_VERIFICATION]: "",
+  [GATE_STATE.ACTION_REQUIRED]: "Action required. Review the rejection reason and resubmit the corrected account details.",
+  [GATE_STATE.CONFIGURED]: "No active bank account is available for payments.",
 };
 
+const formatMoney = (value) =>
+  value == null
+    ? "—"
+    : `₹${Number(value || 0).toLocaleString("en-IN", {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      })}`;
+
+const getAccountLabel = (account = {}) =>
+  account.bankName || account.bank || "IDFC Bank";
+
+const getAccountNumber = (account = {}) =>
+  account.accountNumber || account.maskedAccountNumber || account.account_number || "—";
+
+const getMaskedAccount = (account = {}) => {
+  const value = String(getAccountNumber(account));
+  if (value === "—") return value;
+  return value.length > 4 ? `XXXX${value.slice(-4)}` : value;
+};
+
+const getAvailableBalance = (account = {}) =>
+  account.availableBalance ?? account.available_balance ?? account.balance ?? account.currentBalance ?? null;
+
+const getBalanceFetchedAt = (balance = {}, account = {}) =>
+  balance.balanceFetchedAt ??
+  balance.balance_fetched_at ??
+  balance.fetchedAt ??
+  balance.fetched_at ??
+  account.balanceFetchedAt ??
+  account.balance_fetched_at ??
+  account.updatedAt ??
+  account.updated_at ??
+  null;
+
+const formatSyncTime = (value) => {
+  if (!value) return "Not synced yet";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Not synced yet";
+  return `Last synced ${date.toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
+};
+
+const getAccountId = (account = {}, index = 0) =>
+  String(account.id || account.accountNumber || account.account_number || index);
+
+const getAccountSelectLabel = (account = {}) =>
+  `${getAccountLabel(account)} · ${getMaskedAccount(account)}`;
+
+const toDateInputValue = (date) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const getDefaultStatementRange = () => {
+  const to = new Date();
+  const from = new Date();
+  from.setDate(to.getDate() - 30);
+  return {
+    fromDate: toDateInputValue(from),
+    toDate: toDateInputValue(to),
+  };
+};
+
+const normalizeStatementDate = (value) => {
+  const text = String(value || "").trim();
+  if (/^\d{6}$/.test(text)) {
+    const day = text.slice(0, 2);
+    const month = text.slice(2, 4);
+    const year = Number(text.slice(4, 6));
+    return `20${String(year).padStart(2, "0")}-${month}-${day}`;
+  }
+  return text;
+};
+
+const formatActivityDate = (value) => {
+  if (!value) return "—";
+  const normalizedDate = normalizeStatementDate(value);
+  const date = new Date(normalizedDate);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const normalizeActivityStatus = (status = "") => {
+  const value = String(status || "").toUpperCase();
+  if (["SUCCESS", "COMPLETED", "PAID", "RELEASED"].includes(value)) return "Success";
+  if (["FAILED", "ERROR", "RETURNED", "REJECTED"].includes(value)) return "Failed";
+  return "Pending";
+};
+
+const getActivityDirection = (transaction = {}) => {
+  const value = String(transaction.type || transaction.transactionType || transaction.transaction_type || "").toUpperCase();
+  if (value.includes("CREDIT") || value === "CR") return "credit";
+  return "debit";
+};
+
+const csvEscape = (value) => {
+  const text = value == null ? "" : String(value);
+  return `"${text.replace(/"/g, '""')}"`;
+};
+
+const StatusPill = ({ status }) => {
+  const className =
+    status === "Success"
+      ? "border-green-200 bg-green-50 text-green-800"
+      : status === "Pending"
+        ? "border-amber-200 bg-amber-50 text-amber-800"
+        : "border-red-200 bg-red-50 text-red-800";
+  return (
+    <span className={`inline-flex items-center rounded-full border px-2 py-1 text-xs font-medium ${className}`}>
+      {status}
+    </span>
+  );
+};
+
+const linkedAccountsTableHeader = [
+  {
+    key: "bank",
+    title: "Bank",
+    cellClassName: "font-medium",
+    render: (account) => getAccountLabel(account),
+  },
+  {
+    key: "accountType",
+    title: "Account Type",
+    render: (account) => account.accountType || "Current",
+  },
+  {
+    key: "accountNumber",
+    title: "Account Number",
+    render: (account) => getMaskedAccount(account),
+  },
+  {
+    key: "ifsc",
+    title: "IFSC",
+    render: (account) => account.ifsc || account.ifscCode || "—",
+  },
+  {
+    key: "availableBalance",
+    title: "Available Balance",
+    headerClassName: "text-right",
+    cellClassName: "text-right font-semibold",
+    render: (account) => formatMoney(getAvailableBalance(account)),
+  },
+  {
+    key: "status",
+    title: "Status",
+    render: () => <StatusPill status="Success" />,
+  },
+];
+
+const activityTableHeader = [
+  {
+    key: "date",
+    title: "Date",
+    cellClassName: "text-muted-foreground",
+  },
+  {
+    key: "ref",
+    title: "Reference",
+    cellClassName: "font-mono text-xs",
+  },
+  {
+    key: "type",
+    title: "Type",
+    render: (item) => (
+      <div className="flex items-center gap-2">
+        <span className={`flex h-7 w-7 items-center justify-center rounded-md ${
+          item.status === "Failed"
+            ? "bg-red-50 text-red-600"
+            : item.direction === "debit"
+              ? "bg-amber-50 text-amber-700"
+              : "bg-primary/10 text-primary"
+        }`}>
+          {item.direction === "debit" ? (
+            <ArrowUpRight className="h-4 w-4" />
+          ) : (
+            <ArrowDownLeft className="h-4 w-4" />
+          )}
+        </span>
+        {item.type}
+      </div>
+    ),
+  },
+  {
+    key: "vendor",
+    title: "Vendor / Payee",
+    cellClassName: "font-medium",
+  },
+  {
+    key: "amount",
+    title: "Amount",
+    headerClassName: "text-right",
+    cellClassName: "text-right font-semibold",
+    render: (item) => (
+      <span className={item.direction === "debit" ? "text-red-600" : ""}>
+        {item.direction === "debit" && item.amount != null ? "-" : ""}
+        {formatMoney(item.amount)}
+      </span>
+    ),
+  },
+  {
+    key: "status",
+    title: "Status",
+    render: (item) => <StatusPill status={item.status} />,
+  },
+];
+
+const NoBankState = () => (
+  <div className="flex flex-col items-center rounded-lg border border-border bg-card px-6 py-16 text-center shadow-sm">
+    <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
+      <CreditCard className="h-8 w-8 text-primary" />
+    </div>
+    <h2 className="text-xl font-semibold">No bank accounts have been submitted.</h2>
+    <p className="mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+      Submit a bank account verification request to start connected banking setup.
+    </p>
+    <Button asChild className="mt-6">
+      <Link to="/settings?tab=banking">
+        <Plus className="mr-2 h-4 w-4" />
+        Add Bank Account
+      </Link>
+    </Button>
+  </div>
+);
+
 const ConnectedBanking = () => {
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const defaultStatementRange = useMemo(() => getDefaultStatementRange(), []);
+  const [activitySearch, setActivitySearch] = useState("");
+  const [activityDateFrom, setActivityDateFrom] = useState(defaultStatementRange.fromDate);
+  const [activityDateTo, setActivityDateTo] = useState(defaultStatementRange.toDate);
+  const [refreshingBalance, setRefreshingBalance] = useState(false);
+  const [selectedAccountId, setSelectedAccountId] = useState("");
   const { isConnectedBankingEnabled } = useRBAC();
-  const { guardAction, canPerformAction } = useActionGuard();
   const skip = !isConnectedBankingEnabled;
 
   const {
     accounts,
-    beneficiaries,
-    cibStatus,
     gateState,
-    isAccountLinked,
     isSetupReady,
     isLoading,
     isFetching,
     refetchAll,
-    refetchBeneficiaries,
   } = useBankingSetup({ skip });
 
-  const [registerBeneficiary, { isLoading: registeringBene }] =
-    useRegisterBeneficiaryMutation();
+  const selectedAccount = useMemo(() => {
+    if (!accounts.length) return null;
+    return accounts.find((account, index) => getAccountId(account, index) === selectedAccountId) || accounts[0];
+  }, [accounts, selectedAccountId]);
+  const selectedBalanceAccountId = selectedAccount ? getAccountId(selectedAccount) : "";
+  const hasStatementDateRange = Boolean(activityDateFrom && activityDateTo);
+  const {
+    data: selectedAccountBalance,
+    isFetching: isBalanceFetching,
+    refetch: refetchBalance,
+  } = useGetBankingAccountBalanceQuery(selectedBalanceAccountId, {
+    skip: skip || !selectedBalanceAccountId,
+  });
+  const {
+    data: selectedAccountStatement,
+    isFetching: isStatementFetching,
+    refetch: refetchStatement,
+  } = useGetBankingAccountStatementQuery(
+    {
+      accountId: selectedBalanceAccountId,
+      fromDate: activityDateFrom,
+      toDate: activityDateTo,
+    },
+    { skip: skip || !selectedBalanceAccountId || !hasStatementDateRange },
+  );
+  const selectedAccountWithBalance = useMemo(
+    () =>
+      selectedAccount
+        ? {
+            ...selectedAccount,
+            ...(selectedAccountBalance || {}),
+          }
+        : null,
+    [selectedAccount, selectedAccountBalance],
+  );
+  const accountActivity = useMemo(
+    () =>
+      (selectedAccountStatement?.transactions || []).map((transaction, index) => {
+        const transactionDate = normalizeStatementDate(
+          transaction.transactionDate || transaction.date || transaction.valueDate,
+        );
+        return {
+          id: transaction.id || `${selectedBalanceAccountId}-activity-${index}`,
+          accountId: selectedBalanceAccountId,
+          accountLabel: selectedAccountWithBalance
+            ? getAccountSelectLabel(selectedAccountWithBalance)
+            : "",
+          isoDate: transactionDate ? String(transactionDate).slice(0, 10) : "",
+          date: formatActivityDate(transactionDate),
+          ref: transaction.utr || transaction.referenceNumber || "—",
+          type: transaction.description || transaction.type || "Bank Transaction",
+          vendor: transaction.payeeName || transaction.vendorName || transaction.description || "—",
+          amount: transaction.amount ?? null,
+          direction: getActivityDirection(transaction),
+          status: normalizeActivityStatus(transaction.rawStatus || transaction.status),
+        };
+      }),
+    [selectedAccountStatement, selectedBalanceAccountId, selectedAccountWithBalance],
+  );
+  const filteredActivity = useMemo(
+    () =>
+      accountActivity.filter((item) => {
+        const query = activitySearch.toLowerCase();
+        const matchesSelectedAccount = !selectedAccountId || item.accountId === selectedAccountId;
+        const matchesDateFrom = !activityDateFrom || item.isoDate >= activityDateFrom;
+        const matchesDateTo = !activityDateTo || item.isoDate <= activityDateTo;
+        const matchesSearch =
+          !query ||
+          item.ref.toLowerCase().includes(query) ||
+          item.vendor.toLowerCase().includes(query) ||
+          item.type.toLowerCase().includes(query);
+        return (
+          matchesSelectedAccount &&
+          matchesDateFrom &&
+          matchesDateTo &&
+          matchesSearch
+        );
+      }),
+    [accountActivity, activityDateFrom, activityDateTo, activitySearch, selectedAccountId],
+  );
 
-  const [addBeneOpen, setAddBeneOpen] = useState(false);
-  const [selectedVendor, setSelectedVendor] = useState(null);
-
-  const canManageBeneficiaries = canPerformAction("banking.addBeneficiary");
-  const canAddBeneficiary =
-    canManageBeneficiaries &&
-    gateState !== GATE_STATE.ACCOUNT_PENDING &&
-    gateState !== GATE_STATE.CIB_PENDING;
+  const handleExportActivity = () => {
+    const headers = ["Date", "Reference", "Type", "Vendor / Payee", "Amount", "Status", "Bank Account"];
+    const rows = filteredActivity.map((item) => [
+      item.date,
+      item.ref,
+      item.type,
+      item.vendor,
+      item.amount == null ? "" : item.amount,
+      item.status,
+      item.accountLabel,
+    ]);
+    const csv = [headers, ...rows]
+      .map((row) => row.map(csvEscape).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `banking-activity-${selectedAccountId || "all"}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+  const handleRefreshBalance = () => {
+    setRefreshingBalance(true);
+    const refresh = selectedBalanceAccountId ? refetchBalance() : refetchAll();
+    refresh.finally(() => {
+      setRefreshingBalance(false);
+    });
+  };
+  const handleViewStatement = () => {
+    if (!selectedBalanceAccountId) return;
+    if (!hasStatementDateRange) return;
+    refetchStatement();
+  };
 
   useEffect(() => {
-    if (searchParams.get("tab") === "transactions") {
-      navigate("/transactions", { replace: true });
+    if (!accounts.length) {
+      setSelectedAccountId("");
+      return;
     }
-  }, [searchParams, navigate]);
 
-  const handleRegisterBeneficiary = async (payload) => {
-    if (!guardAction("banking.addBeneficiary")) return;
-    try {
-      await registerBeneficiary(payload).unwrap();
-      toast.success("Beneficiary registered. Payable in ~30 minutes.");
-      setAddBeneOpen(false);
-      setSelectedVendor(null);
-      await refetchBeneficiaries();
-    } catch (error) {
-      toast.error(error?.data?.message || error?.data?.detail || "Failed to register beneficiary");
+    const hasSelectedAccount = accounts.some(
+      (account, index) => getAccountId(account, index) === selectedAccountId,
+    );
+    if (!hasSelectedAccount) {
+      setSelectedAccountId(getAccountId(accounts[0], 0));
     }
-  };
+  }, [accounts, selectedAccountId]);
+
+  const bankingRefreshing = isFetching || isStatementFetching;
 
   if (!isConnectedBankingEnabled) {
     return (
@@ -95,73 +451,221 @@ const ConnectedBanking = () => {
         <div>
           <h1 className="text-2xl font-bold">Connected Banking</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            View linked account status and manage ICICI beneficiaries
+            View saved bank account details and setup readiness.
           </p>
         </div>
-        <Button variant="outline" size="sm" onClick={refetchAll} disabled={isFetching}>
-          <RefreshCw className={`h-4 w-4 mr-2 ${isFetching ? "animate-spin" : ""}`} />
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={refetchAll}
+          disabled={bankingRefreshing}
+        >
+          <RefreshCw className={`h-4 w-4 mr-2 ${bankingRefreshing ? "animate-spin" : ""}`} />
           Refresh
         </Button>
       </div>
 
-      {isSetupReady ? (
-        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
-          Setup complete — ICICI payouts are ready from the Payments page.
-        </div>
-      ) : (
+      {!isSetupReady ? (
         <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
           {setupMessage}{" "}
-          {(gateState === GATE_STATE.ACCOUNT_PENDING || gateState === GATE_STATE.CIB_PENDING) && (
+          {gateState === GATE_STATE.ACCOUNT_PENDING ||
+          gateState === GATE_STATE.ACTION_REQUIRED ||
+          gateState === GATE_STATE.CONFIGURED ? (
             <Link to="/settings?tab=banking" className="font-medium underline underline-offset-2">
               Go to Settings
             </Link>
-          )}
+          ) : null}
         </div>
+      ) : null}
+
+      {!accounts.length ? (
+        <NoBankState />
+      ) : (
+        <>
+          <section className="overflow-hidden rounded-lg border border-border bg-primary text-primary-foreground shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-5 p-6">
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 items-center justify-center rounded-lg bg-white/15">
+                  <Building2 className="h-6 w-6" />
+                </div>
+                <div>
+                  <p className="text-lg font-semibold">{getAccountLabel(selectedAccountWithBalance)}</p>
+                  <p className="text-sm text-primary-foreground/75">
+                    {selectedAccountWithBalance?.accountType || "Current"} Account · {getMaskedAccount(selectedAccountWithBalance)}
+                  </p>
+                </div>
+              </div>
+              <div className="flex w-full flex-col gap-2 sm:w-80">
+                <label className="text-xs font-medium uppercase tracking-wide text-primary-foreground/70">
+                  Select Account
+                </label>
+                <Select value={selectedAccountId} onValueChange={setSelectedAccountId}>
+                  <SelectTrigger className="border-white/25 bg-white/10 text-primary-foreground">
+                    <SelectValue placeholder="Select bank account" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {accounts.map((account, index) => {
+                      const accountId = getAccountId(account, index);
+                      return (
+                        <SelectItem key={accountId} value={accountId}>
+                          {getAccountSelectLabel(account)}
+                        </SelectItem>
+                      );
+                    })}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-end justify-between gap-5 px-6 pb-6">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-primary-foreground/65">
+                  Available Balance
+                </p>
+                <p className="mt-1 text-3xl font-bold">
+                  {isBalanceFetching && getAvailableBalance(selectedAccountWithBalance) == null
+                    ? "Fetching..."
+                    : formatMoney(getAvailableBalance(selectedAccountWithBalance))}
+                </p>
+                <p className="mt-1 text-xs text-primary-foreground/65">
+                  {formatSyncTime(getBalanceFetchedAt(selectedAccountBalance, selectedAccountWithBalance))}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <Button asChild size="sm" variant="secondary">
+                <Link to="/settings?tab=banking">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Account
+                </Link>
+              </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleRefreshBalance}
+                  disabled={refreshingBalance || isBalanceFetching || !selectedBalanceAccountId}
+                >
+                  <RefreshCw className={`mr-2 h-4 w-4 ${refreshingBalance || isBalanceFetching ? "animate-spin" : ""}`} />
+                  Refresh Balance
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleViewStatement}
+                  disabled={!selectedBalanceAccountId || !hasStatementDateRange || isStatementFetching}
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  {isStatementFetching ? "Loading Statement..." : "View Statement"}
+                </Button>
+                {/* <Button variant="secondary" size="sm">
+                  <Eye className="mr-2 h-4 w-4" />
+                  Account Details
+                </Button> */}
+              </div>
+            </div>
+          </section>
+
+          {/* <section className="rounded-lg border border-border bg-card shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+              <div>
+                <h2 className="font-semibold">Linked Bank Accounts</h2>
+                <p className="text-sm text-muted-foreground">Saved debit accounts available to Payments.</p>
+              </div>
+              <Button asChild size="sm" variant="outline">
+                <Link to="/settings?tab=banking">
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add Account
+                </Link>
+              </Button>
+            </div>
+            <div className="overflow-x-auto px-4 pb-4">
+              <AppDataTable
+                tableHeader={linkedAccountsTableHeader}
+                tableData={accounts}
+                rowKey={(account, index) => account.id || account.accountNumber || index}
+                tableClassName="min-w-[860px]"
+                tableContainerClassName="overflow-visible"
+                headClassName="border-b border-border bg-muted shadow-sm"
+                emptyMessage="No bank accounts saved yet."
+                stickyHeader={false}
+              />
+            </div>
+          </section> */}
+
+          <section className="rounded-lg border border-border bg-card shadow-sm">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
+              <div>
+                <h2 className="font-semibold">Recent Banking Activity</h2>
+                <p className="text-sm text-muted-foreground">
+                  Activity for {selectedAccount ? getAccountSelectLabel(selectedAccount) : "the selected account"}.
+                </p>
+              </div>
+              <div className="flex w-full flex-wrap items-end justify-end gap-3 lg:w-auto">
+                <div>
+                  <label className="text-xs text-muted-foreground">From</label>
+                  <Input
+                    type="date"
+                    value={activityDateFrom}
+                    onChange={(event) => setActivityDateFrom(event.target.value)}
+                    className="h-9 w-full sm:w-36"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-muted-foreground">To</label>
+                  <Input
+                    type="date"
+                    value={activityDateTo}
+                    onChange={(event) => setActivityDateTo(event.target.value)}
+                    className="h-9 w-full sm:w-36"
+                  />
+                </div>
+                <div className="relative w-full sm:w-72">
+                  <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    value={activitySearch}
+                    onChange={(event) => setActivitySearch(event.target.value)}
+                    placeholder="Search reference, vendor or type..."
+                    className="h-9 pl-9"
+                  />
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setActivityDateFrom(defaultStatementRange.fromDate);
+                    setActivityDateTo(defaultStatementRange.toDate);
+                  }}
+                >
+                  Reset Dates
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportActivity}
+                  disabled={filteredActivity.length === 0}
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Export
+                </Button>
+              </div>
+            </div>
+            <div className="overflow-x-auto px-4 pb-4">
+              <AppDataTable
+                tableHeader={activityTableHeader}
+                tableData={filteredActivity}
+                tableClassName="min-w-[960px]"
+                tableContainerClassName="overflow-visible"
+                headClassName="border-b border-border bg-muted shadow-sm"
+                emptyMessage={
+                  hasStatementDateRange
+                    ? "No banking activity found."
+                    : "Select From and To dates to view banking activity."
+                }
+                stickyHeader={false}
+              />
+            </div>
+          </section>
+
+        </>
       )}
-
-      <div className="grid gap-6 lg:grid-cols-2">
-        <AccountStatusCard accounts={accounts} />
-        <CibRegistrationCard
-          cibStatus={cibStatus}
-          readOnly
-          locked={!isAccountLinked}
-        />
-      </div>
-
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-semibold">Beneficiaries</h2>
-            <p className="text-sm text-muted-foreground">
-              Add and manage vendor payout accounts for ICICI releases.
-            </p>
-          </div>
-          {canManageBeneficiaries && (
-            <Button size="sm" onClick={() => setAddBeneOpen(true)} disabled={!canAddBeneficiary}>
-              Add Beneficiary
-            </Button>
-          )}
-        </div>
-        <BeneficiariesTable
-          beneficiaries={beneficiaries}
-          onRegister={(bene) => {
-            setSelectedVendor(bene);
-            setAddBeneOpen(true);
-          }}
-          canManage={canManageBeneficiaries && canAddBeneficiary}
-        />
-      </div>
-
-      <AddBeneficiaryDialog
-        open={addBeneOpen}
-        onOpenChange={(open) => {
-          setAddBeneOpen(open);
-          if (!open) setSelectedVendor(null);
-        }}
-        vendor={selectedVendor}
-        onSubmit={handleRegisterBeneficiary}
-        submitting={registeringBene}
-      />
     </div>
   );
 };

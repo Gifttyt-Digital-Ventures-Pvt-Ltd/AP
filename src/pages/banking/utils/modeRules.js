@@ -45,7 +45,7 @@ export const getModeCutoffNotice = (mode) => {
     return "RTGS is unavailable 12am–1am, Sundays, and holidays. Post-cutoff cap may be ₹1,00,00,000.";
   }
   if (normalized === "INEFT") {
-    return "iNEFT is rejected 7pm–1am and is for interbank transfers only (not ICICI→ICICI).";
+    return "iNEFT is rejected 7pm-1am and is for interbank transfers only.";
   }
   return null;
 };

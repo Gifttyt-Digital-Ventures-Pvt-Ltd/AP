@@ -29,14 +29,25 @@ import {
 import useBankingSetup from '../banking/hooks/useBankingSetup';
 import AccountStatusCard from '../banking/components/AccountStatusCard';
 import AccountLinkCard from '../banking/components/AccountLinkCard';
+import BeneficiariesTable from '../banking/components/BeneficiariesTable';
+import BeneficiaryForm from '../banking/components/BeneficiaryForm';
 import BankingSetupSteps from '../banking/components/BankingSetupSteps';
-import CibRegistrationCard from '../banking/components/CibRegistrationCard';
 import {
   useLinkBankingAccountMutation,
-  useRegisterCibMutation,
+  useUpdateBankingAccountMutation,
+  useDeleteBankingAccountMutation,
+  useUpdateBankingAccountStatusMutation,
+  useRegisterBeneficiaryMutation,
+  useValidateBeneficiaryMutation,
 } from '../../Services/apis/connectedBankingApi';
+import {
+  findDuplicateBankAccount,
+  getBankAccountVerificationStatus,
+} from '../banking/utils/bankAccounts';
+import { BANK_ACCOUNT_VERIFICATION_STATUS, BANKING_SETUP_STATUS, GATE_STATE } from '../banking/constants';
 
 const ORGANISATION_DETAILS_FORM_ID = 'organisation-details-form';
+
 const Settings = () => {
   const {
     corporateScreens,
@@ -50,7 +61,7 @@ const Settings = () => {
   } = useRBAC();
   const navigate = useNavigate();
   const canViewBankingSettings =
-    hasAnyPermission(['settings-banking', 'banking-full', 'banking-manage', 'banking-view']) &&
+    hasAnyPermission(['settings-banking', 'banking-full', 'banking-manage', 'banking-view', 'payments-admin']) &&
     isBankingEnabled;
   const canViewOrganisationSettings =
     hasAnyPermission(['settings-org']) &&
@@ -87,18 +98,22 @@ const Settings = () => {
   const [updateOrganisation] = useUpdateOrganisationMutation();
   const { guardAction, canPerformAction } = useActionGuard();
   const {
-    linkedAccount,
     isAccountLinked,
+    paymentReadyAccounts,
     accounts,
-    cibStatus,
-    gateState,
-    isSetupReady,
-    refetchAll,
-    refetchCib,
+    beneficiaries,
+    setupStatus,
+    refetchAccounts,
+    refetchBeneficiaries,
   } = useBankingSetup({ skip: !canViewBankingSettings || !isBankingEnabled });
-  const [linkAccount, { isLoading: linkingAccount }] = useLinkBankingAccountMutation();
-  const [registerCib, { isLoading: registeringCib }] = useRegisterCibMutation();
-  const canManageIcici = canPerformAction('banking.link');
+  const [linkBankingAccount, { isLoading: linkingAccount }] = useLinkBankingAccountMutation();
+  const [updateBankingAccount, { isLoading: updatingAccount }] = useUpdateBankingAccountMutation();
+  const [deleteBankingAccount, { isLoading: deletingAccount }] = useDeleteBankingAccountMutation();
+  const [updateBankingAccountStatus, { isLoading: updatingAccountStatus }] = useUpdateBankingAccountStatusMutation();
+  const [validateBeneficiary, { isLoading: validatingBeneficiary }] = useValidateBeneficiaryMutation();
+  const [registerBeneficiary, { isLoading: savingBeneficiary }] = useRegisterBeneficiaryMutation();
+  const canManageBanking = canPerformAction('banking.link');
+  const canManageBeneficiaries = canPerformAction('banking.addBeneficiary');
   // Organisation Details state
   const [orgDetails, setOrgDetails] = useState(null);
   const [orgSaving, setOrgSaving] = useState(false);
@@ -125,6 +140,7 @@ const Settings = () => {
     ifsc_code: '',
     account_holder_name: ''
   });
+  const [editingRejectedAccount, setEditingRejectedAccount] = useState(null);
   const canCreateOrganisationDetails = canPerformAction('settings.createOrganisation');
   const canUpdateOrganisationDetails = canPerformAction('settings.updateOrganisation');
   const canSaveOrganisation = orgDetails ? canUpdateOrganisationDetails : canCreateOrganisationDetails;
@@ -315,6 +331,151 @@ const Settings = () => {
     } catch (error) {
       toast.error('Failed to copy platform email');
     }
+  };
+
+  const displayAccounts = accounts;
+  const displayIsAccountLinked = isAccountLinked;
+  const hasPaymentReadyAccount = paymentReadyAccounts.length > 0;
+  const displayGateState = hasPaymentReadyAccount
+    ? GATE_STATE.READY
+    : setupStatus === BANKING_SETUP_STATUS.PENDING_VERIFICATION
+      ? GATE_STATE.PENDING_VERIFICATION
+      : setupStatus === BANKING_SETUP_STATUS.ACTION_REQUIRED
+        ? GATE_STATE.ACTION_REQUIRED
+        : displayIsAccountLinked
+          ? GATE_STATE.CONFIGURED
+          : GATE_STATE.ACCOUNT_PENDING;
+  const displayIsSetupReady = hasPaymentReadyAccount;
+
+  const handleLinkAccount = async ({ accountId, bank, bankName, accountName, accountType, accountNumber, ifsc }) => {
+    if (!guardAction('banking.link')) return;
+    const duplicate = findDuplicateBankAccount(
+      displayAccounts,
+      { bank, bankName, accountNumber, ifsc },
+      accountId,
+    );
+    if (duplicate) {
+      toast.error('This bank account has already been submitted by your corporate.');
+      return;
+    }
+    try {
+      const payload = {
+        bank,
+        bankName,
+        accountName,
+        accountType,
+        accountNumber,
+        ifsc,
+      };
+      if (accountId) {
+        const currentStatus = getBankAccountVerificationStatus(editingRejectedAccount || {});
+        if (currentStatus !== BANK_ACCOUNT_VERIFICATION_STATUS.REJECTED) {
+          toast.error('Only rejected bank account requests can be edited.');
+          return;
+        }
+        await updateBankingAccount({ accountId, ...payload }).unwrap();
+        toast.success('Bank account request saved and resubmitted.');
+        setEditingRejectedAccount(null);
+      } else {
+        await linkBankingAccount(payload).unwrap();
+        toast.success('Bank account verification request submitted successfully.');
+      }
+      await refetchAccounts();
+    } catch (error) {
+      toast.error(error?.data?.message || error?.data?.detail || 'Failed to submit bank account verification request');
+    }
+  };
+
+  const handleDeleteRejectedAccount = async (account) => {
+    if (!guardAction('banking.link')) return;
+    if (getBankAccountVerificationStatus(account) !== BANK_ACCOUNT_VERIFICATION_STATUS.REJECTED) {
+      toast.error('Only rejected bank account requests can be deleted.');
+      return;
+    }
+    try {
+      await deleteBankingAccount(account.id).unwrap();
+      if (String(editingRejectedAccount?.id) === String(account.id)) {
+        setEditingRejectedAccount(null);
+      }
+      await refetchAccounts();
+      toast.success('Rejected bank account request deleted.');
+    } catch (error) {
+      toast.error(error?.data?.message || error?.data?.detail || 'Failed to delete bank account request');
+    }
+  };
+
+  const handleToggleAccountActive = async (account, isActive, reason = '') => {
+    if (!guardAction('banking.link')) return;
+    if (getBankAccountVerificationStatus(account) !== BANK_ACCOUNT_VERIFICATION_STATUS.APPROVED) {
+      toast.error('Only approved bank accounts can be activated or deactivated.');
+      return;
+    }
+    const deactivationReason = reason.trim();
+    if (!isActive && !deactivationReason) {
+      toast.error('Deactivation reason is required.');
+      return;
+    }
+    try {
+      await updateBankingAccountStatus({
+        accountId: account.id,
+        isActive,
+        reason: !isActive ? deactivationReason : undefined,
+      }).unwrap();
+      await refetchAccounts();
+      toast.success(isActive ? 'Bank account activated.' : 'Bank account deactivated.');
+    } catch (error) {
+      toast.error(error?.data?.message || error?.data?.detail || 'Failed to update bank account status');
+    }
+  };
+
+  const handleVerifyBeneficiary = async (payload) => {
+    if (!guardAction('banking.verifyBeneficiary')) return null;
+    try {
+      const response = await validateBeneficiary(payload).unwrap();
+      toast.success('Beneficiary verified');
+      return response;
+    } catch (error) {
+      toast.error(error?.data?.message || error?.data?.detail || 'Beneficiary verification failed');
+      return null;
+    }
+  };
+
+  const handleSaveBeneficiary = async (payload) => {
+    if (!guardAction('banking.addBeneficiary')) return false;
+    try {
+      await registerBeneficiary(payload).unwrap();
+      await refetchBeneficiaries();
+      toast.success('Beneficiary saved successfully');
+      return true;
+    } catch (error) {
+      toast.error(error?.data?.message || error?.data?.detail || 'Failed to save beneficiary');
+      return false;
+    }
+  };
+
+  const handleRetryBeneficiary = async (beneficiary) => {
+    const payload = {
+      bankAccountId:
+        beneficiary.bankAccountId ||
+        beneficiary.bank_account_id ||
+        displayAccounts[0]?.id ||
+        displayAccounts[0]?.accountNumber,
+      name: beneficiary.name || beneficiary.beneficiaryName || '',
+      accountNumber: beneficiary.accountNumber || beneficiary.account_number || '',
+      ifsc: beneficiary.ifsc || beneficiary.ifscCode || beneficiary.ifsc_code || '',
+      vendorId: beneficiary.vendorId || beneficiary.vendor_id || undefined,
+      payeeType: 'ACCOUNT',
+    };
+    const verified = await handleVerifyBeneficiary(payload);
+    if (!verified) return false;
+    return handleSaveBeneficiary({
+      ...payload,
+      validationReference:
+        verified.validationReference ||
+        verified.referenceId ||
+        verified.correlationId,
+      verified: true,
+    });
   };
 
   return (
@@ -657,70 +818,73 @@ const Settings = () => {
             <div className="bg-card border border-border rounded-lg p-6 shadow-sm mb-6 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <h3 className="text-xl font-semibold font-['Manrope'] mb-1">ICICI Connected Banking</h3>
+                  <h3 className="text-xl font-semibold font-['Manrope'] mb-1">Connected Banking</h3>
                   <p className="text-sm text-muted-foreground">
-                    Link your ICICI account and complete CIB registration here. Manage beneficiaries from Banking.
+                    Submit bank account details for Optifii verification before using them for payments.
                   </p>
                 </div>
                 <Button variant="outline" onClick={() => navigate('/banking')}>
-                  Manage Beneficiaries
+                  Open Banking
                 </Button>
               </div>
-              {isSetupReady ? (
-                <p className="text-sm text-green-700 bg-green-50 border border-green-200 rounded-md px-3 py-2">
-                  ICICI setup is complete. Add beneficiaries in Banking, then release payouts from Payments.
+              {displayIsSetupReady ? null : setupStatus === BANKING_SETUP_STATUS.PENDING_VERIFICATION ? (
+                <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                  Bank account verification is pending.
+                </p>
+              ) : setupStatus === BANKING_SETUP_STATUS.ACTION_REQUIRED ? (
+                <p className="text-sm text-red-800 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                  A bank account request was rejected. Review the reason, then edit and resubmit or delete the request.
                 </p>
               ) : (
                 <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-                  Complete account linking and CIB registration before adding beneficiaries or releasing payouts.
+                  Submit bank account details for verification before releasing payouts.
                 </p>
               )}
-              <BankingSetupSteps gateState={gateState} />
+              <BankingSetupSteps gateState={displayGateState} />
               <div className="grid gap-4 md:grid-cols-2">
-                {isAccountLinked ? (
-                  <AccountStatusCard accounts={accounts} />
-                ) : (
-                  <AccountLinkCard
-                    linkedAccount={linkedAccount}
-                    canManage={canManageIcici}
-                    linking={linkingAccount}
-                    onLinkAccount={async ({ accountType, accountNumber, ifsc }) => {
-                      if (!guardAction('banking.link')) return;
-                      try {
-                        const result = await linkAccount({ accountType, accountNumber, ifsc }).unwrap();
-                        if (result.status === 'ERROR') {
-                          toast.error(result.healthDetail || 'Failed to verify ICICI connection');
-                        } else {
-                          toast.success('ICICI account connected successfully');
-                          await refetchAll();
-                        }
-                      } catch (error) {
-                        toast.error(error?.data?.message || error?.data?.detail || 'Failed to link account');
-                      }
-                    }}
+                {displayIsAccountLinked ? (
+                  <AccountStatusCard
+                    accounts={displayAccounts}
+                    canManage={canManageBanking}
+                    actionLoading={updatingAccountStatus || deletingAccount}
+                    onEditRejected={setEditingRejectedAccount}
+                    onDeleteRejected={handleDeleteRejectedAccount}
+                    onToggleActive={handleToggleAccountActive}
                   />
-                )}
-                <CibRegistrationCard
-                  cibStatus={cibStatus}
-                  locked={!isAccountLinked}
-                  onRegister={async () => {
-                    if (!guardAction('banking.cibRegister')) return;
-                    try {
-                      await registerCib().unwrap();
-                      toast.success('CIB registration initiated');
-                      await refetchCib();
-                    } catch (error) {
-                      toast.error(error?.data?.message || 'CIB registration failed');
-                    }
-                  }}
-                  onRecheck={async () => {
-                    await refetchCib();
-                    toast.success('CIB status refreshed');
-                  }}
-                  registering={registeringCib}
-                  canManage={canManageIcici}
-                />
+                ) : null}
+                {canManageBanking ? (
+                  <AccountLinkCard
+                    canManage={canManageBanking}
+                    linking={linkingAccount || updatingAccount}
+                    initialAccount={editingRejectedAccount}
+                    mode={editingRejectedAccount ? 'resubmit' : 'submit'}
+                    onCancel={() => setEditingRejectedAccount(null)}
+                    onLinkAccount={handleLinkAccount}
+                  />
+                ) : null}
               </div>
+              {hasPaymentReadyAccount ? (
+                <div className="space-y-4">
+                  {canManageBeneficiaries ? (
+                    <BeneficiaryForm
+                      accounts={paymentReadyAccounts}
+                      canManage={canManageBeneficiaries}
+                      validating={validatingBeneficiary}
+                      saving={savingBeneficiary}
+                      onVerify={handleVerifyBeneficiary}
+                      onSave={handleSaveBeneficiary}
+                    />
+                  ) : null}
+                  <div>
+                    <h4 className="mb-3 text-base font-semibold">Beneficiaries</h4>
+                    <BeneficiariesTable
+                      beneficiaries={beneficiaries}
+                      canManage={canManageBeneficiaries}
+                      onRegister={handleRetryBeneficiary}
+                    />
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
         </TabsContent>}

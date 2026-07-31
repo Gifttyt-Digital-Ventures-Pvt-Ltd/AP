@@ -1,7 +1,7 @@
-import { ACCOUNT_LINK_STATUS } from "../constants";
+import { isBankAccountPaymentEligible } from "./bankAccounts";
 
 export const getLinkedAccounts = (accounts = []) =>
-  accounts.filter((account) => account.status === ACCOUNT_LINK_STATUS.LINKED);
+  accounts.filter(isBankAccountPaymentEligible);
 
 export const formatBankingAccountLabel = (account = {}) => {
   const bank = account.bank || account.bank_name || "Bank";

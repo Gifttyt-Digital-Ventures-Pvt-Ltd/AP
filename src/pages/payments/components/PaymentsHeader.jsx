@@ -1,15 +1,9 @@
 import React from 'react';
-import { Button } from '../../../components/ui/button';
 import CurrencySelector from '../../../components/common/CurrencySelector';
 import RefreshButton from '../../../components/common/RefreshButton';
 
 // Page header with global payment actions.
 const PaymentsHeader = ({
-  invoicesCount,
-  handleBulkRelease,
-  canBulkRelease,
-  paymentDialog,
-  batchDialogTrigger,
   currencies = [],
   selectedCurrency,
   onCurrencyChange,
@@ -34,18 +28,6 @@ const PaymentsHeader = ({
       <RefreshButton onClick={onRefresh} refreshing={refreshing}>
         Refresh
       </RefreshButton>
-      {invoicesCount > 0 && canBulkRelease && (
-        <Button
-          variant="default"
-          onClick={handleBulkRelease}
-          data-testid="bulk-release-button"
-          className="bg-accent hover:bg-accent/90"
-        >
-          Release All Payments ({invoicesCount})
-        </Button>
-      )}
-      {batchDialogTrigger}
-      {paymentDialog}
     </div>
   </div>
 );

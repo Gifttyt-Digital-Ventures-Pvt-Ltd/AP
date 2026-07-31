@@ -37,6 +37,10 @@ import {
 } from "../../banking/utils/modeRules";
 import { PAYOUT_STATUS } from "../../banking/constants";
 
+const preventDialogOutsideDismiss = (event) => {
+  event.preventDefault();
+};
+
 const isBeneficiarySelectable = (bene) => {
   if (!bene) return false;
   if (bene.status === "ACTIVE") return true;
@@ -46,7 +50,7 @@ const isBeneficiarySelectable = (bene) => {
   return false;
 };
 
-const IciciPayoutDialog = ({
+const PayoutDialog = ({
   open,
   onOpenChange,
   selectedInvoices = [],
@@ -160,10 +164,14 @@ const IciciPayoutDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto" data-testid="icici-payout-dialog">
+      <DialogContent
+        className="max-w-lg max-h-[90vh] overflow-y-auto"
+        data-testid="payout-dialog"
+        onInteractOutside={preventDialogOutsideDismiss}
+      >
         <DialogHeader>
           <DialogTitle>
-            {step === "confirm" ? "Confirm & Release Payment" : "Release Payment (ICICI)"}
+            {step === "confirm" ? "Confirm & Release Payment" : "Release Payment"}
           </DialogTitle>
         </DialogHeader>
 
@@ -252,7 +260,7 @@ const IciciPayoutDialog = ({
               <Input
                 value={
                   linkedAccount
-                    ? `${linkedAccount.bank || "ICICI"} · ${linkedAccount.accountNumber || ""}`
+                    ? `${linkedAccount.bank || linkedAccount.bankName || "Linked Bank"} · ${linkedAccount.accountNumber || ""}`
                     : "—"
                 }
                 disabled
@@ -320,7 +328,7 @@ const IciciPayoutDialog = ({
               </div>
             </div>
             <p className="text-xs text-muted-foreground pt-2 border-t">
-              This will initiate a real money transfer via ICICI. Confirm only when details are correct.
+              This will initiate a real money transfer through the linked bank account. Confirm only when details are correct.
             </p>
           </div>
         )}
@@ -362,4 +370,4 @@ const IciciPayoutDialog = ({
   );
 };
 
-export default IciciPayoutDialog;
+export default PayoutDialog;
