@@ -8,10 +8,10 @@ import {
   useScanInvoiceMutation,
 } from "../../../Services/apis/invoicesVendorsApi";
 import {
-  useGetCorporateDepartmentsQuery,
   useGetCorporateUserDetailsQuery,
 } from "../../../Services/apis/corporateApi";
 import { useGetCategoriesForInvoiceQuery } from "../../../Services/apis/categoriesApi";
+import { useGetDepartmentsForInvoiceQuery } from "../../../Services/apis/departmentsApi";
 import {
   extractVendorIdFromResponse,
   mergeInvoiceVendorOptions,
@@ -19,6 +19,7 @@ import {
 import { useAuth } from "../../../contexts/AuthContext";
 import { useRBAC } from "../../../contexts/RBACContext";
 import { useActionGuard } from "../../../hooks/useActionGuard";
+import useZohoIntegrationActive from "../../../hooks/useZohoIntegrationActive";
 import { useCreditErrorHandler } from "../../../contexts/CreditErrorContext";
 import { useSidebar } from "../../../components/Layout";
 import {
@@ -122,7 +123,7 @@ const InvoiceSingleUploadLayer = ({
   prefillCampaignRef.current = prefillCampaign;
 
   const { user } = useAuth();
-  const { isCategoryFeatureEnabled, isCampaignFeatureEnabled, isBranchEnabled, isCorporateScreenAllowed, isCorporateSectionEnabled } = useRBAC();
+  const { isCategoryFeatureEnabled, isDepartmentFeatureEnabled, isCampaignFeatureEnabled, isBranchEnabled, isCorporateScreenAllowed, isCorporateSectionEnabled } = useRBAC();
   const hasPurchaseOrderSubscription =
     isCorporateScreenAllowed("PURCHASE_ORDER") &&
     (isCorporateSectionEnabled("PURCHASE_ORDER_ALL") ||
@@ -133,6 +134,8 @@ const InvoiceSingleUploadLayer = ({
   const isInvoiceMatchingEnabled =
     isCorporateScreenAllowed("INVOICE_MATCHING") &&
     isCorporateSectionEnabled("INVOICE_MATCHING_ALL");
+  const showErpIntegrationFields = isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
+  const { hasConnectedZoho } = useZohoIntegrationActive();
   const showInvoiceMatchingSelection =
     isInvoiceMatchingEnabled && hasPurchaseOrderSubscription;
   const canUseThreeWayMatching =
@@ -165,7 +168,10 @@ const InvoiceSingleUploadLayer = ({
   const uploadedFileRef = useRef(null);
 
   const { data: vendorsData = [], refetch: refetchVendors } = useGetVendorsQuery();
-  const { data: departmentsData = [] } = useGetCorporateDepartmentsQuery();
+  const { data: departmentsData = [] } = useGetDepartmentsForInvoiceQuery(
+    { userEmail: invoiceUserEmail, ...(currencyParam ? { currency: currencyParam } : {}) },
+    { skip: !invoiceUserEmail || !isDepartmentFeatureEnabled },
+  );
   const { data: invoiceMandatoryFieldsData, isLoading: invoiceMandatoryFieldsLoading } =
     useGetInvoiceMandatoryFieldsQuery(
       { userEmail: invoiceUserEmail },
@@ -190,8 +196,11 @@ const InvoiceSingleUploadLayer = ({
     [invoiceMandatoryFieldsData],
   );
   const mandatoryFieldOptions = useMemo(
-    () => ({ showCategoryField: isCategoryFeatureEnabled }),
-    [isCategoryFeatureEnabled],
+    () => ({
+      showDepartmentField: isDepartmentFeatureEnabled,
+      showCategoryField: isCategoryFeatureEnabled,
+    }),
+    [isDepartmentFeatureEnabled, isCategoryFeatureEnabled],
   );
   const invoiceVendorOptions = useMemo(
     () =>
@@ -266,6 +275,7 @@ const InvoiceSingleUploadLayer = ({
     getCategoryNameById,
     isCategoryFeatureEnabled,
     isCampaignFeatureEnabled,
+    isErpIntegrationEnabled: showErpIntegrationFields,
   };
 
   const toCreateInvoicePayload = (invoiceData = {}, options = {}) =>
@@ -740,6 +750,7 @@ const InvoiceSingleUploadLayer = ({
       departments={departments}
       invoiceCategories={invoiceCategories}
       invoiceCategoriesLoading={invoiceCategoriesLoading || invoiceCategoriesFetching}
+      showDepartmentField={isDepartmentFeatureEnabled}
       showCategoryField={isCategoryFeatureEnabled}
       showCampaignField={isCampaignFeatureEnabled}
       lockedCampaign={lockCampaign}
@@ -756,6 +767,8 @@ const InvoiceSingleUploadLayer = ({
       showProformaInvoiceFields={isPiSubscriptionEnabled}
       showInvoiceMatching={showInvoiceMatchingSelection}
       canUseThreeWayMatching={canUseThreeWayMatching}
+      showErpIntegrationFields={showErpIntegrationFields}
+      includeLedgerAccountGroups={hasConnectedZoho}
     />
   );
 

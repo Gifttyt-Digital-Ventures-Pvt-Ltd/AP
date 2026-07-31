@@ -61,6 +61,7 @@ import UsersTable from "./components/UsersTable";
 import ApprovalWorkflowTab from "./components/ApprovalWorkflowTab";
 import PaymentApprovalWorkflowTab from "./components/PaymentApprovalWorkflowTab";
 import CategoriesTab from "./components/CategoriesTab";
+import DepartmentsTab from "./components/DepartmentsTab";
 import UserDetailsDialog from "./components/UserDetailsDialog";
 import BulkUsersUploadDialog from "./components/BulkUsersUploadDialog";
 import { useActionGuard } from "../../hooks/useActionGuard";
@@ -117,6 +118,7 @@ const UserRoles = () => {
     isCorporateScreenAllowed,
     isCorporateSectionEnabled,
     isCategoryFeatureEnabled,
+    isDepartmentFeatureEnabled,
     isCampaignFeatureEnabled,
     isBillingFeatureEnabled,
     isConnectedBankingEnabled,
@@ -141,7 +143,12 @@ const UserRoles = () => {
     hasPermission("payment-approval-workflow-manage");
   const canViewCategories =
     hasPermission("category-view") || hasPermission("category-manage");
-  const canUseManageRoleCategories = isCorporateSectionEnabled("CATEGORY_ALL");
+  const canViewDepartments =
+    hasPermission("department-view") || hasPermission("department-manage");
+  const canUseManageRoleCategories =
+    isCategoryFeatureEnabled && isCorporateSectionEnabled("CATEGORY_ALL");
+  const canUseManageRoleDepartments =
+    isDepartmentFeatureEnabled && isCorporateSectionEnabled("DEPARTMENT_ALL");
   const canUseBillingSettings = isBillingFeatureEnabled;
   const canViewUsersTab =
     canViewUserRecords && isCorporateSectionEnabled("MANAGE_ROLE_USERS");
@@ -154,12 +161,14 @@ const UserRoles = () => {
     canViewPaymentWorkflow &&
     isCorporateSectionEnabled("MANAGE_ROLE_APPROVAL_WORKFLOW");
   const canViewCategoriesTab = canViewCategories && canUseManageRoleCategories;
+  const canViewDepartmentsTab = canViewDepartments && canUseManageRoleDepartments;
   const canViewUserRolesModule =
     canViewUsersTab ||
     canViewRolesTab ||
     canViewWorkflowTab ||
     canViewPaymentWorkflowTab ||
-    canViewCategoriesTab;
+    canViewCategoriesTab ||
+    canViewDepartmentsTab;
   const shouldSkipUsersAndRoles =
     !currentUser || !(canViewUsersTab || canViewRolesTab);
   const shouldSkipVendors = !currentUser || !canViewWorkflowTab;
@@ -245,6 +254,7 @@ const UserRoles = () => {
     if (canViewWorkflowTab) availableTabs.push("workflow");
     if (canViewPaymentWorkflowTab) availableTabs.push("payment-workflow");
     if (canViewCategoriesTab) availableTabs.push("categories");
+    if (canViewDepartmentsTab) availableTabs.push("departments");
     if (availableTabs.length === 0) return;
     if (!availableTabs.includes(activeTab)) {
       setActiveTab(availableTabs[0]);
@@ -256,6 +266,7 @@ const UserRoles = () => {
     canViewWorkflowTab,
     canViewPaymentWorkflowTab,
     canViewCategoriesTab,
+    canViewDepartmentsTab,
   ]);
 
   useEffect(() => {
@@ -341,6 +352,7 @@ const UserRoles = () => {
         );
       }
       if (backendEntry.screen === "CATEGORY") return canUseManageRoleCategories;
+      if (backendEntry.screen === "DEPARTMENT") return canUseManageRoleDepartments;
       if (
         backendEntry.screen === "MANAGE_ROLE" &&
         (
@@ -575,6 +587,11 @@ const UserRoles = () => {
       keys.add("category-manage");
     }
 
+    if (canUseManageRoleDepartments) {
+      keys.add("department-view");
+      keys.add("department-manage");
+    }
+
     if (canUseBillingSettings) {
       keys.add("credits-manage");
     }
@@ -610,6 +627,7 @@ const UserRoles = () => {
     isCampaignFeatureEnabled,
     isCorporateSectionEnabled,
     canUseManageRoleCategories,
+    canUseManageRoleDepartments,
     canUseBillingSettings,
     isCorporateScreenAllowed,
   ]);
@@ -1383,6 +1401,11 @@ const UserRoles = () => {
               Categories
             </TabsTrigger>
           )}
+          {canViewDepartmentsTab && (
+            <TabsTrigger value="departments" data-testid="tab-departments">
+              Departments
+            </TabsTrigger>
+          )}
         </TabsList>
 
         {canViewUsersTab && (
@@ -1419,6 +1442,7 @@ const UserRoles = () => {
               vendors={vendors}
               canManageWorkflow={canManageWorkflow}
               categoryEnabled={isCategoryFeatureEnabled}
+              departmentEnabled={isDepartmentFeatureEnabled}
             />
           </TabsContent>
         )}
@@ -1434,6 +1458,12 @@ const UserRoles = () => {
         {canViewCategoriesTab && (
           <TabsContent value="categories">
             <CategoriesTab />
+          </TabsContent>
+        )}
+
+        {canViewDepartmentsTab && (
+          <TabsContent value="departments">
+            <DepartmentsTab />
           </TabsContent>
         )}
       </Tabs>
@@ -1492,6 +1522,7 @@ const UserRoles = () => {
         permissionLabels={PERMISSION_LABELS}
         hiddenPermissionIds={[
           ...(isCategoryFeatureEnabled ? [] : ["category-view", "category-manage"]),
+          ...(isDepartmentFeatureEnabled ? [] : ["department-view", "department-manage"]),
           ...(isCampaignFeatureEnabled
             ? []
             : [

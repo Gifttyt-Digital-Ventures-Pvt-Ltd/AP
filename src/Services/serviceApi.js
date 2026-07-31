@@ -78,6 +78,7 @@ export const serviceApi = createApi({
     "Workflow",
     "PaymentApprovalWorkflow",
     "Categories",
+    "Departments",
     "AuditLogs",
     "Campaigns",
     "Integrations",

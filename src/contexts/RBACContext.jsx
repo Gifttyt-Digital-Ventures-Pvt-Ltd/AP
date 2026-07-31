@@ -35,6 +35,7 @@ const RBACContext = createContext({
   isCorporateSectionEnabled: () => false,
   isCorporateScreenSectionEnabled: () => false,
   isCategoryFeatureEnabled: false,
+  isDepartmentFeatureEnabled: false,
   isCampaignFeatureEnabled: false,
   isBranchEnabled: false,
   isBranchSqFtEnabled: false,
@@ -101,7 +102,7 @@ const FALLBACK_DIRECT_ROLE_PERMISSIONS = {
   CREATOR: ["campaign-manage"],
   MAKER: ["campaign-manage"],
   CHECKER: ["invoice-checker"],
-  APPROVER: ["invoice-approver", "campaign-approve"],
+  APPROVER: ["invoice-approver"],
   FINANCE: ["campaign-manage"],
   ACCOUNTANT: [
     "credits-manage",
@@ -357,6 +358,11 @@ export const RBACProvider = ({ children }) => {
   };
 
   const isCategoryFeatureEnabled = Boolean(corporateScreens?.isCategoryFeatureEnabled);
+  const canUseCategoryFeature =
+    isCategoryFeatureEnabled && isCorporateSectionEnabled("CATEGORY_ALL");
+  const isDepartmentFeatureEnabled = Boolean(corporateScreens?.isDepartmentFeatureEnabled);
+  const canUseDepartmentFeature =
+    isDepartmentFeatureEnabled && isCorporateSectionEnabled("DEPARTMENT_ALL");
   const isCampaignFeatureEnabled = useMemo(
     () =>
       Boolean(corporateScreens?.isCampaignFeatureEnabled) ||
@@ -442,11 +448,13 @@ export const RBACProvider = ({ children }) => {
         "payment-approval-workflow-manage",
       ]);
       const canViewCategories = hasAnyPermission(["category-view", "category-manage"]);
+      const canViewDepartments = hasAnyPermission(["department-view", "department-manage"]);
       return (
         (canViewRoleUsers && isCorporateSectionEnabled("MANAGE_ROLE_USERS")) ||
         (canViewRoles && isCorporateSectionEnabled("MANAGE_ROLE_ROLES_PERMISSIONS")) ||
         (canViewWorkflow && isCorporateSectionEnabled("MANAGE_ROLE_APPROVAL_WORKFLOW")) ||
-        (canViewCategories && isCategoryFeatureEnabled)
+        (canViewCategories && canUseCategoryFeature) ||
+        (canViewDepartments && canUseDepartmentFeature)
       );
     }
 
@@ -498,7 +506,10 @@ export const RBACProvider = ({ children }) => {
     if (actionRule.allOf && !hasAllPermissions(actionRule.allOf)) return false;
 
     if (actionKey.startsWith("categories.")) {
-      return isCategoryFeatureEnabled;
+      return canUseCategoryFeature;
+    }
+    if (actionKey.startsWith("departments.")) {
+      return canUseDepartmentFeature;
     }
     if (actionKey.startsWith("campaigns.")) {
       return isCampaignFeatureEnabled;
@@ -551,6 +562,7 @@ export const RBACProvider = ({ children }) => {
     isCorporateSectionEnabled,
     isCorporateScreenSectionEnabled,
     isCategoryFeatureEnabled,
+    isDepartmentFeatureEnabled,
     isCampaignFeatureEnabled,
     isBranchEnabled,
     isBranchSqFtEnabled,

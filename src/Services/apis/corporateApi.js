@@ -421,6 +421,7 @@ const normalizeCorporateScreensResponse = (response = {}) => {
     screenSectionsByScreen,
     sectionScreens: Object.fromEntries(sectionScreens),
     isCategoryFeatureEnabled: enabledSections.has("CATEGORY_ALL"),
+    isDepartmentFeatureEnabled: enabledSections.has("DEPARTMENT_ALL"),
     isCampaignFeatureEnabled: enabledSections.has("CAMPAIGN_ALL"),
     isConnectedBankingFeatureEnabled: enabledSections.has("SETTINGS_CONNECTED_BANKING"),
     vendorFieldConfiguration:

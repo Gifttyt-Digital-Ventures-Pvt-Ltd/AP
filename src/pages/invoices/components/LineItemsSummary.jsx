@@ -44,6 +44,9 @@ export const LineItemsSectionHeader = ({
   showLineItems,
   onToggle,
   itemCount = 0,
+  onRemoveLineItems,
+  canRemoveLineItems = false,
+  summaryOnly = false,
 }) => (
   <div className="flex items-center justify-between gap-2">
     <h3 className="text-sm font-semibold text-gray-800">
@@ -54,14 +57,28 @@ export const LineItemsSectionHeader = ({
         </span>
       ) : null}
     </h3>
-    <button
-      type="button"
-      onClick={onToggle}
-      className="text-xs text-blue-600 hover:text-blue-800 hover:underline shrink-0"
-      data-testid="toggle-line-items-visibility"
-    >
-      {showLineItems ? 'Hide details' : 'Show details'}
-    </button>
+    <div className="flex items-center gap-3">
+      {canRemoveLineItems && !summaryOnly ? (
+        <button
+          type="button"
+          onClick={onRemoveLineItems}
+          className="text-xs text-red-600 hover:text-red-700 hover:underline shrink-0"
+          data-testid="remove-line-items-action"
+        >
+          Remove Line Items
+        </button>
+      ) : null}
+      {!summaryOnly ? (
+        <button
+          type="button"
+          onClick={onToggle}
+          className="text-xs text-blue-600 hover:text-blue-800 hover:underline shrink-0"
+          data-testid="toggle-line-items-visibility"
+        >
+          {showLineItems ? 'Hide details' : 'Show details'}
+        </button>
+      ) : null}
+    </div>
   </div>
 );
 

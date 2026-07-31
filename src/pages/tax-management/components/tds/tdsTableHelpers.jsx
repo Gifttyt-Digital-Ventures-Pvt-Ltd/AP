@@ -179,7 +179,7 @@ export const renderTdsSectionRow = (section, rowIndex, headers) => (
       return (
         <TableCell
           key={header.key}
-          className={cn('px-3 py-3', header.cellClassName)}
+          className={cn('px-3 py-3 border border-table-border', header.cellClassName)}
         >
           {value}
         </TableCell>
@@ -265,7 +265,7 @@ export const renderTdsEntryRow = (entry, rowIndex, headers, options = {}) => (
       return (
         <TableCell
           key={header.key}
-          className={cn('px-3 py-3', header.cellClassName)}
+          className={cn('px-3 py-3 border border-table-border', header.cellClassName)}
         >
           {value}
         </TableCell>

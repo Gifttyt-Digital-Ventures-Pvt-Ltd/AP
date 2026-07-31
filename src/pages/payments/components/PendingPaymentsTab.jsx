@@ -14,6 +14,7 @@ import {
   sumInvoiceAmountsByCurrency,
 } from '../../invoices/utils/invoiceAmounts';
 import { OrgBranchCell, VendorWithBranchCell } from '../../../components/common/BranchTableCells';
+import { cn } from '../../../lib/utils';
 
 const renderCurrencyTotals = (totals, className) => {
   if (totals.length === 0) {
@@ -203,7 +204,10 @@ const PendingPaymentsTab = ({
         }
 
         return (
-          <TableCell key={header.key} className={header.cellClassName}>
+          <TableCell
+            key={header.key}
+            className={cn('border border-table-border', header.cellClassName)}
+          >
             {value}
           </TableCell>
         );
@@ -293,6 +297,7 @@ const PendingPaymentsTab = ({
             tableContainerClassName="overflow-visible"
             headClassName="border-b border-border bg-muted shadow-sm"
             stickyHeader
+            bordered
             emptyMessage="No pending payments. All invoices need approval first."
             emptyTestId="no-pending-payments"
           />

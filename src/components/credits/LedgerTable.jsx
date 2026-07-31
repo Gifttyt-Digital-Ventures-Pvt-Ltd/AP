@@ -52,34 +52,34 @@ const LedgerTable = ({ ledger, loading = false, limit }) => {
 
   return (
     <div className="overflow-hidden rounded-md border">
-      <Table>
+      <Table className="border-separate border-spacing-0">
         <TableHeader>
           <TableRow>
-            <TableHead>Date</TableHead>
-            <TableHead>Type</TableHead>
-            <TableHead>Action</TableHead>
-            <TableHead className="text-right">Amount</TableHead>
-            <TableHead className="text-right">Balance after</TableHead>
-            <TableHead>Performed by</TableHead>
-            <TableHead>Reference</TableHead>
+            <TableHead className="border border-table-border">Date</TableHead>
+            <TableHead className="border border-table-border">Type</TableHead>
+            <TableHead className="border border-table-border">Action</TableHead>
+            <TableHead className="border border-table-border text-right">Amount</TableHead>
+            <TableHead className="border border-table-border text-right">Balance after</TableHead>
+            <TableHead className="border border-table-border">Performed by</TableHead>
+            <TableHead className="border border-table-border">Reference</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
           {entries.map((entry) => (
             <TableRow key={entry.id}>
-              <TableCell className="whitespace-nowrap">{formatDateTime(entry.createdAt)}</TableCell>
-              <TableCell>
+              <TableCell className="border border-table-border whitespace-nowrap">{formatDateTime(entry.createdAt)}</TableCell>
+              <TableCell className="border border-table-border">
                 <Badge variant="outline">{entry.entryType}</Badge>
               </TableCell>
-              <TableCell>{entry.actionName || entry.actionCode || "-"}</TableCell>
-              <TableCell className="text-right">
+              <TableCell className="border border-table-border">{entry.actionName || entry.actionCode || "-"}</TableCell>
+              <TableCell className="border border-table-border text-right">
                 <CreditAmount value={entry.amount} signed />
               </TableCell>
-              <TableCell className="text-right">
+              <TableCell className="border border-table-border text-right">
                 <CreditAmount value={entry.balanceAfter} />
               </TableCell>
-              <TableCell>{entry.performedBy || "-"}</TableCell>
-              <TableCell>{entry.reference || "-"}</TableCell>
+              <TableCell className="border border-table-border">{entry.performedBy || "-"}</TableCell>
+              <TableCell className="border border-table-border">{entry.reference || "-"}</TableCell>
             </TableRow>
           ))}
         </TableBody>

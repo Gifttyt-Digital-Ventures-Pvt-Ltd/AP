@@ -38,6 +38,7 @@ import {
 import AppDataTable from "../../components/common/AppDataTable";
 import RefreshButton from "../../components/common/RefreshButton";
 import { Textarea } from "../../components/ui/textarea";
+import { cn } from "../../lib/utils";
 import { toast } from "sonner";
 import {
   AlertTriangle,
@@ -834,7 +835,7 @@ const InvoiceMatching = () => {
                 break;
               case "actions":
                 value = (
-                  <div className="flex justify-end gap-1">
+                  <div className="flex justify-start gap-1">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -857,7 +858,7 @@ const InvoiceMatching = () => {
             return (
               <TableCell
                 key={header.key}
-                className={header.cellClassName}
+                className={cn("border border-table-border", header.cellClassName)}
                 onClick={header.key === "actions" ? (event) => event.stopPropagation() : undefined}
               >
                 {value}
@@ -1059,6 +1060,7 @@ const InvoiceMatching = () => {
               emptyMessage="No matching records found."
               tableContainerClassName="overflow-visible"
               headClassName="[&_th]:sticky [&_th]:top-0 [&_th]:z-10"
+              bordered
             />
           </div>
 

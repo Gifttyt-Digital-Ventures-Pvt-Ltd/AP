@@ -1195,6 +1195,7 @@ const Vendors = () => {
         }
 
             const className = [
+              'border border-table-border',
               header.cellClassName,
               header.key === 'pan' ? 'text-sm' : '',
               header.key === 'actions' ? 'text-left' : '',
@@ -1417,6 +1418,7 @@ const Vendors = () => {
             headClassName="border-b border-border bg-muted shadow-sm"
             stickyHeader
             striped={false}
+            bordered
           />
         </div>
         <div className="mt-auto flex shrink-0 border-t border-border p-4">

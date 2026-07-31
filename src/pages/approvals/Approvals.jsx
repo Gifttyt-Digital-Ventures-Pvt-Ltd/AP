@@ -84,6 +84,7 @@ const Approvals = () => {
   const allInvoicesQueryArgs = useMemo(
     () => ({
       ...approvalQueryArgs,
+      context: 'APPROVALS_ALL',
       limit: INVOICE_LIST_PAGE_SIZE,
       offset: allTabPageOffset,
       ...(debouncedAllTabSearch ? { search: debouncedAllTabSearch } : {}),
@@ -261,6 +262,27 @@ const Approvals = () => {
     setLoadingHistory(true);
     await loadInvoiceHistory(invoice);
   };
+
+  const viewApprovalStatus = normalizeWorkflowStatus(viewInvoice?.status);
+  const viewInvoiceIsCheckerAction = viewApprovalStatus === 'Pending Checker';
+  const viewInvoiceCanAct =
+    activeTab === 'needs-approval' &&
+    Boolean(viewInvoice) &&
+    isInvoiceAwaitingApproval(viewInvoice.status) &&
+    (viewInvoiceIsCheckerAction ? canCheckInvoices : canApproveInvoices);
+  const viewApprovalActionConfig = viewInvoiceCanAct
+    ? {
+        canAct: true,
+        primaryAction: viewInvoiceIsCheckerAction ? 'Checked' : 'Approved',
+        primaryLabel: viewInvoiceIsCheckerAction ? 'Verify' : 'Approve',
+        needsCorrectionAction: NEEDS_CORRECTION_ACTION,
+        rejectAction: 'Rejected',
+        onAction: (invoice, action) => {
+          setViewDialogOpen(false);
+          handleApprovalAction(invoice, action);
+        },
+      }
+    : null;
 
   const renderPdfPreview = (props = {}) => (
     <InvoicePdfPreview
@@ -585,6 +607,7 @@ const Approvals = () => {
         showRefNoField={isRefNoEnabled}
         findVendorByName={findVendorByName}
         findVendorById={findVendorById}
+        approvalActionConfig={viewApprovalActionConfig}
       />
 
       {editDialogs}

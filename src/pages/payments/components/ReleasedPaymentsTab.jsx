@@ -9,6 +9,7 @@ import { formatCurrency } from '../../../utils/currency';
 import { withIntegrationTableHeader } from '../../../utils/integrationProvenance';
 import { formatInvoiceAmount } from '../../invoices/utils/invoiceAmounts';
 import { OrgBranchCell, VendorWithBranchCell } from '../../../components/common/BranchTableCells';
+import { cn } from '../../../lib/utils';
 
 const baseReleasedPaymentTableHeader = [
   { key: 'invoiceNumber', title: 'Invoice #', headerClassName: 'bg-muted text-foreground', cellClassName: "  font-medium" },
@@ -106,7 +107,10 @@ const ReleasedPaymentsTab = ({
         }
 
         return (
-          <TableCell key={header.key} className={header.cellClassName}>
+          <TableCell
+            key={header.key}
+            className={cn('border border-table-border', header.cellClassName)}
+          >
             {value}
           </TableCell>
         );

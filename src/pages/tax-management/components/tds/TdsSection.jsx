@@ -735,6 +735,7 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
                   }
                   isLoading={tdsEntriesLoading || tdsEntriesFetching}
                   tableContainerClassName="max-h-[560px]"
+                  bordered
                   emptyMessage="No TDS entries found. Entries appear after approved invoices with TDS deduction."
                 />
                 <div className="flex flex-col gap-3 border-t pt-3 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
@@ -789,6 +790,7 @@ const TdsSection = forwardRef(({ enabled = true, onOpenCertificates }, ref) => {
                     tableHeader={TDS_SECTIONS_TABLE_HEADER}
                     tableData={tdsSections}
                     renderRow={renderTdsSectionRow}
+                    bordered
                     emptyMessage="No TDS sections found."
                   />
                 )}

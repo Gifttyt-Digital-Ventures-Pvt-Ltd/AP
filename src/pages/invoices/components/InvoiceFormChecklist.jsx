@@ -8,13 +8,18 @@ import {
   ClipboardList,
 } from "lucide-react";
 import { DEFAULT_CURRENCY } from "../../../utils/currency";
-import { INVOICE_LEVEL, isInrInvoiceCurrency } from "../utils/invoiceTax";
+import {
+  INVOICE_LEVEL,
+  LINE_ITEM_MODE_SUMMARY_ONLY,
+  isInrInvoiceCurrency,
+} from "../utils/invoiceTax";
 
 export const buildInvoiceFormChecklist = (
   formData,
   {
     departmentMandatory = false,
     categoryMandatory = false,
+    showDepartmentField = true,
     showCategoryField = true,
     showCampaignField = false,
   } = {},
@@ -52,6 +57,10 @@ export const buildInvoiceFormChecklist = (
     (formData.lineItems || []).every(
       (item) => item.description?.trim() && Number(item.unitRate) > 0,
     );
+  const isSummaryOnlyInvoice =
+    formData.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
+  const summaryAmountsValid =
+    Number(formData.subTotal) >= 0 && Number(formData.totalTaxAmount) >= 0;
 
   const hasVendorName = !!formData.vendorName?.trim();
   const vendorUnmatched =
@@ -179,13 +188,12 @@ export const buildInvoiceFormChecklist = (
           done: !!(formData.currency || DEFAULT_CURRENCY).trim(),
           required: true,
         }),
-        /* Department checklist hidden during create/edit — restore when needed
         item({
           label: "Department",
           done: !!formData.departmentId,
           required: departmentMandatory,
+          hidden: !showDepartmentField,
         }),
-        */
         item({
           label: "Category",
           done: !!(formData.categoryId || formData.category?.id),
@@ -213,10 +221,12 @@ export const buildInvoiceFormChecklist = (
       items: [
         item({
           label:
-            validLineItems.length === 0
+            isSummaryOnlyInvoice
+              ? "Summary amounts"
+              : validLineItems.length === 0
               ? "At least one line item"
               : `${validLineItems.length} of ${formData.lineItems.length} item${formData.lineItems.length !== 1 ? "s" : ""} complete`,
-          done: allLineItemsValid,
+          done: isSummaryOnlyInvoice ? summaryAmountsValid : allLineItemsValid,
           required: true,
         }),
       ],
@@ -228,6 +238,7 @@ export const InvoiceChecklist = ({
   formData,
   departmentMandatory = false,
   categoryMandatory = false,
+  showDepartmentField = true,
   showCategoryField = true,
   showCampaignField = false,
 }) => {
@@ -238,6 +249,7 @@ export const InvoiceChecklist = ({
       buildInvoiceFormChecklist(formData, {
         departmentMandatory,
         categoryMandatory,
+        showDepartmentField,
         showCategoryField,
         showCampaignField,
       }),
@@ -245,6 +257,7 @@ export const InvoiceChecklist = ({
       formData,
       departmentMandatory,
       categoryMandatory,
+      showDepartmentField,
       showCategoryField,
       showCampaignField,
     ],

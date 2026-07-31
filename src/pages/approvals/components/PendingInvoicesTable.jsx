@@ -7,6 +7,7 @@ import { Button } from "../../../components/ui/button";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import { formatCurrency } from "../../../utils/currency";
 import InvoiceDocumentTypeBadge from "../../invoices/components/InvoiceDocumentTypeBadge";
+import { cn } from "../../../lib/utils";
 
 const basePendingInvoicesTableHeader = [
   { key: "srNo", title: "Sr. No", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm font-medium" },
@@ -147,7 +148,10 @@ const PendingInvoicesTable = ({
           }
 
           return (
-            <TableCell key={header.key} className={header.cellClassName}>
+            <TableCell
+              key={header.key}
+              className={cn("border border-table-border", header.cellClassName)}
+            >
               {value}
             </TableCell>
           );
@@ -170,6 +174,7 @@ const PendingInvoicesTable = ({
           tableContainerClassName="overflow-visible"
           headClassName="border-b border-border bg-muted shadow-sm"
           stickyHeader
+          bordered
           emptyMessage="No pending invoices"
           emptyTestId="no-pending-invoices"
         />

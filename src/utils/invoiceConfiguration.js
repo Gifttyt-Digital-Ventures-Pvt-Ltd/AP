@@ -4,7 +4,13 @@ export const INVOICE_CONFIG_SECTIONS = {
   BRANCH: 'BRANCH',
   SQ_FT: 'SQ_FT',
   NET_PAYABLE_EDIT: 'NET_PAYABLE_EDIT',
+  ALLOW_INVOICE_LINE_ITEM_REMOVAL: 'ALLOW_INVOICE_LINE_ITEM_REMOVAL',
 };
+
+const INVOICE_LINE_ITEM_REMOVAL_SECTION_ALIASES = [
+  INVOICE_CONFIG_SECTIONS.ALLOW_INVOICE_LINE_ITEM_REMOVAL,
+  'ALLOWINVOICELINEITEMREMOVAL',
+];
 
 export const CHECKER_EDIT_DISABLED_MESSAGE =
   'Invoice editing during checker review is not enabled for this corporate';
@@ -24,6 +30,11 @@ export const DEFAULT_INVOICE_CONFIGURATION = [
     displayName: 'Edit Net Payable',
     screen: 'INVOICE',
     section: INVOICE_CONFIG_SECTIONS.NET_PAYABLE_EDIT,
+  },
+  {
+    displayName: 'Allow Summary Only invoices',
+    screen: 'INVOICE',
+    section: INVOICE_CONFIG_SECTIONS.ALLOW_INVOICE_LINE_ITEM_REMOVAL,
   },
 ];
 
@@ -98,6 +109,11 @@ export const isNetPayableEditEnabled = (activeInvoiceConfiguration = []) =>
   isInvoiceConfigurationEnabled(
     INVOICE_CONFIG_SECTIONS.NET_PAYABLE_EDIT,
     activeInvoiceConfiguration,
+  );
+
+export const isInvoiceLineItemRemovalEnabled = (activeInvoiceConfiguration = []) =>
+  INVOICE_LINE_ITEM_REMOVAL_SECTION_ALIASES.some((sectionId) =>
+    isInvoiceConfigurationEnabled(sectionId, activeInvoiceConfiguration),
   );
 
 export const isBranchEnabled = (

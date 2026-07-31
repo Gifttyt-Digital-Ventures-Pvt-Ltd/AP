@@ -32,6 +32,7 @@ import {
 import AppDataTable from "../../components/common/AppDataTable";
 import RefreshButton from "../../components/common/RefreshButton";
 import { TableCell, TableRow } from "../../components/ui/table";
+import { cn } from "../../lib/utils";
 import ApproveCampaignModal from "./components/ApproveCampaignModal";
 import CampaignDetailsModal from "./components/CampaignDetailsModal";
 import { CampaignStatusBadge, SummaryTile } from "./components/CampaignShared";
@@ -335,7 +336,10 @@ const CampaignsPage = () => {
             value = campaign?.[header.key] || "-";
         }
         return (
-          <TableCell key={header.key} className={header.cellClassName}>
+          <TableCell
+            key={header.key}
+            className={cn("border border-table-border", header.cellClassName)}
+          >
             {value}
           </TableCell>
         );
@@ -450,6 +454,7 @@ const CampaignsPage = () => {
             tableContainerClassName="overflow-visible"
             headClassName="border-b border-border bg-muted shadow-sm"
             stickyHeader
+            bordered
             emptyMessage={
               campaignsLoading ? "Loading campaigns..." : "No campaigns found"
             }

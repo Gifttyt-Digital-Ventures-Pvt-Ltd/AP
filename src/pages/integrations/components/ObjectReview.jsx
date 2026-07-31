@@ -52,9 +52,9 @@ const ObjectReview = () => {
       description="Resolve ambiguous ERP matches, conflicts, and partial sync failures."
       backAction={
         <Button asChild variant="outline" size="sm">
-          <Link to={`/integrations/${connectionId}`}>
+          <Link to={`/integrations/${connectionId}/sync-data`}>
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Dashboard
+            Sync Data
           </Link>
         </Button>
       }

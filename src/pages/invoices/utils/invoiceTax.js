@@ -5,6 +5,24 @@ import { normalizeExpenseType } from "./invoiceAccountingFields";
 export const DEFAULT_INR_TAX = "CGST + SGST 18%";
 export const LINE_ITEM_LEVEL = "At Line Item Level";
 export const INVOICE_LEVEL = "At Invoice Level";
+export const LINE_ITEM_MODE_DETAILED = "DETAILED";
+export const LINE_ITEM_MODE_SUMMARY_ONLY = "SUMMARY_ONLY";
+
+export const isInvoiceLevelSelection = (value = "") => {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ");
+  return normalized.includes("invoice");
+};
+
+export const isLineItemLevelSelection = (value = "") => {
+  const normalized = String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[_-]+/g, " ");
+  return normalized.includes("line item");
+};
 
 export const isInrInvoiceCurrency = (currency) =>
   normalizeCurrencyCode(currency) === DEFAULT_CURRENCY;
@@ -474,6 +492,7 @@ export const calculateInvoiceTotals = ({
   let cgst = 0;
   let sgst = 0;
   let igst = 0;
+  const inrTaxMap = new Map();
   const foreignTaxMap = new Map();
 
   const invoiceLevelTaxEnabled = taxesLevel === INVOICE_LEVEL;
@@ -487,9 +506,21 @@ export const calculateInvoiceTotals = ({
     if (isInrInvoiceCurrency(currency) && !invoiceLevelTaxEnabled) {
       const taxRate = taxRates.find((entry) => entry.value === item.tax);
       if (taxRate) {
-        if (taxRate.cgst) cgst += (itemSubtotal * taxRate.cgst) / 100;
-        if (taxRate.sgst) sgst += (itemSubtotal * taxRate.sgst) / 100;
-        if (taxRate.igst) igst += (itemSubtotal * taxRate.igst) / 100;
+        const addInrTax = (name, rate) => {
+          const numericRate = Number(rate) || 0;
+          if (numericRate <= 0) return;
+          const amount = (itemSubtotal * numericRate) / 100;
+          const key = `${name}::${numericRate}`;
+          const existing = inrTaxMap.get(key) || { name, rate: numericRate, amount: 0 };
+          existing.amount += amount;
+          inrTaxMap.set(key, existing);
+          if (name === "CGST") cgst += amount;
+          if (name === "SGST") sgst += amount;
+          if (name === "IGST") igst += amount;
+        };
+        addInrTax("CGST", taxRate.cgst);
+        addInrTax("SGST", taxRate.sgst);
+        addInrTax("IGST", taxRate.igst);
       }
     }
   });
@@ -516,14 +547,27 @@ export const calculateInvoiceTotals = ({
     cgst *= discountFactor;
     sgst *= discountFactor;
     igst *= discountFactor;
+    inrTaxMap.forEach((entry) => {
+      entry.amount *= discountFactor;
+    });
   }
 
   if (isInrInvoiceCurrency(currency) && invoiceLevelTaxEnabled) {
     const taxRate = taxRates.find((entry) => entry.value === invoiceTax);
     if (taxRate) {
-      if (taxRate.cgst) cgst = (subTotal * taxRate.cgst) / 100;
-      if (taxRate.sgst) sgst = (subTotal * taxRate.sgst) / 100;
-      if (taxRate.igst) igst = (subTotal * taxRate.igst) / 100;
+      inrTaxMap.clear();
+      const addInvoiceTax = (name, rate) => {
+        const numericRate = Number(rate) || 0;
+        if (numericRate <= 0) return;
+        const amount = (subTotal * numericRate) / 100;
+        inrTaxMap.set(`${name}::${numericRate}`, { name, rate: numericRate, amount });
+        if (name === "CGST") cgst = amount;
+        if (name === "SGST") sgst = amount;
+        if (name === "IGST") igst = amount;
+      };
+      addInvoiceTax("CGST", taxRate.cgst);
+      addInvoiceTax("SGST", taxRate.sgst);
+      addInvoiceTax("IGST", taxRate.igst);
     }
   }
 
@@ -538,14 +582,29 @@ export const calculateInvoiceTotals = ({
       sgstRate = Number(taxRate.sgst) || 0;
       igstRate = Number(taxRate.igst) || 0;
     }
-  } else if (isInrInvoiceCurrency(currency) && subTotal > 0) {
-    if (cgst > 0) cgstRate = (cgst / subTotal) * 100;
-    if (sgst > 0) sgstRate = (sgst / subTotal) * 100;
-    if (igst > 0) igstRate = (igst / subTotal) * 100;
+  } else if (isInrInvoiceCurrency(currency)) {
+    const ratesFor = (name) =>
+      Array.from(inrTaxMap.values())
+        .filter((entry) => entry.name === name && entry.amount > 0)
+        .map((entry) => entry.rate);
+    const cgstRates = ratesFor("CGST");
+    const sgstRates = ratesFor("SGST");
+    const igstRates = ratesFor("IGST");
+    if (cgstRates.length === 1) cgstRate = cgstRates[0];
+    if (sgstRates.length === 1) sgstRate = sgstRates[0];
+    if (igstRates.length === 1) igstRate = igstRates[0];
   }
 
   let foreignTaxes = [];
   let foreignTax = 0;
+  const taxOrder = { CGST: 1, SGST: 2, IGST: 3 };
+  const inrTaxes = Array.from(inrTaxMap.values())
+    .filter((entry) => entry.amount > 0)
+    .sort(
+      (left, right) =>
+        (taxOrder[left.name] || 99) - (taxOrder[right.name] || 99) ||
+        left.rate - right.rate,
+    );
 
   if (!isInrInvoiceCurrency(currency)) {
     const parsedInvoiceTaxAmount = Number(invoiceTaxAmount);
@@ -615,6 +674,7 @@ export const calculateInvoiceTotals = ({
     cgstRate,
     sgstRate,
     igstRate,
+    inrTaxes,
     foreignTax,
     foreignTaxes,
     invoiceDiscountAmount: boundedInvoiceDiscountAmount,

@@ -62,7 +62,7 @@ const renderTdsCertificateRow = (cert, rowIndex, headers) => (
       }
 
       return (
-        <TableCell key={header.key} className={cn('px-3 py-3', header.cellClassName)}>
+        <TableCell key={header.key} className={cn('px-3 py-3 border border-table-border', header.cellClassName)}>
           {value}
         </TableCell>
       );
@@ -167,6 +167,7 @@ const CertificatesPanel = forwardRef(({ enabled = true }, ref) => {
           tableHeader={TDS_CERTIFICATES_TABLE_HEADER}
           tableData={tdsCertificates}
           renderRow={renderTdsCertificateRow}
+          bordered
           emptyMessage="No TDS certificates generated yet. Generate Form 16A for vendors."
         />
       </TaxSectionCard>

@@ -12,6 +12,14 @@ import { OrgBranchCell, VendorWithBranchCell } from "../../../components/common/
 import { TableCell, TableRow } from "../../../components/ui/table";
 import { formatCurrency } from "../../../utils/currency";
 import InvoiceDocumentTypeBadge from "../../invoices/components/InvoiceDocumentTypeBadge";
+import { cn } from "../../../lib/utils";
+
+const resolveNeedsApprovalAmount = (invoice = {}) =>
+  invoice.netAmount ??
+  invoice.net_amount ??
+  invoice.netPayable ??
+  invoice.net_payable ??
+  invoice.amount;
 
 const baseNeedsApprovalTableHeader = [
   { key: "invoiceNumber", title: "Invoice #", headerClassName: "bg-muted text-foreground", cellClassName: "font-medium" },
@@ -86,7 +94,7 @@ const NeedsApprovalTable = ({
 
           switch (header.key) {
             case "amount":
-              value = formatCurrency(invoice.amount, invoice.currency);
+              value = formatCurrency(resolveNeedsApprovalAmount(invoice), invoice.currency);
               break;
             case "invoiceNumber":
               value = invoice.invoiceNumber || "-";
@@ -199,7 +207,10 @@ const NeedsApprovalTable = ({
           }
 
           return (
-            <TableCell key={header.key} className={header.cellClassName}>
+            <TableCell
+              key={header.key}
+              className={cn("border border-table-border", header.cellClassName)}
+            >
               {value}
             </TableCell>
           );
@@ -222,6 +233,7 @@ const NeedsApprovalTable = ({
           tableContainerClassName="overflow-visible"
           headClassName="border-b border-border bg-muted shadow-sm"
           stickyHeader
+          bordered
           emptyMessage="No invoices need your approval"
           emptyTestId="no-approvals"
         />

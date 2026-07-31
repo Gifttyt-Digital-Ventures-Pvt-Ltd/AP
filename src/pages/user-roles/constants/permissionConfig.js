@@ -140,6 +140,13 @@ export const PERMISSION_GROUPS = [
       { id: "category-manage", label: "Manage (Add, Delete, Edit)" },
     ],
   },
+  {
+    title: "Department",
+    permissions: [
+      { id: "department-view", label: "View Only" },
+      { id: "department-manage", label: "Manage (Add, Delete, Edit)" },
+    ],
+  },
 ];
 
 // Human-readable permission labels ported from AP_User Roles ViewRoleDialog.
@@ -200,6 +207,8 @@ export const PERMISSION_LABELS = {
   "integrations-manage": "Integrations - Manage",
   "category-view": "Category - View Only",
   "category-manage": "Category - Manage (Add, Delete, Edit)",
+  "department-view": "Department - View Only",
+  "department-manage": "Department - Manage (Add, Delete, Edit)",
 };
 
 export const CAMPAIGN_PERMISSION_IDS = [

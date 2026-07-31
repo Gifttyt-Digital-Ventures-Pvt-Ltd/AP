@@ -954,8 +954,8 @@ const TallyIntegrationCard = ({ mode = "full" }) => {
                     variant="outline"
                     disabled={!currentConnectionId}
                   >
-                    <Link to={`/integrations/${currentConnectionId}`}>
-                      Manage Synced Data
+                    <Link to={`/integrations/${currentConnectionId}/sync-data`}>
+                      Sync ERP Data
                     </Link>
                   </Button>
                   <Button
