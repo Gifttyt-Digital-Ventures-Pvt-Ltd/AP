@@ -1,6 +1,7 @@
 import { formatCurrency as formatCurrencyAmount } from "../../../utils/currency";
 
 const TYPE_PRIORITY = {
+  PAYMENT_AMOUNT: 16,
   VENDOR_DEPARTMENT_AMOUNT_CATEGORY: 15,
   VENDOR_DEPARTMENT_CATEGORY: 14,
   VENDOR_DEPARTMENT_AMOUNT: 13,
@@ -31,6 +32,45 @@ const ruleMatchesInvoice = (rule, input) => {
   const maxMatch = rule.maxAmount === null || rule.maxAmount === undefined || input.amount <= Number(rule.maxAmount);
 
   return vendorMatch && deptMatch && categoryMatch && minMatch && maxMatch;
+};
+
+export const isPaymentWorkflowType = (type = "") =>
+  String(type || "").trim().toUpperCase() === "PAYMENT_AMOUNT";
+
+const rangesOverlap = (leftMin, leftMax, rightMin, rightMax) => {
+  const normalizedLeftMin = Number(leftMin);
+  const normalizedLeftMax =
+    leftMax === null || leftMax === undefined || leftMax === ""
+      ? Number.POSITIVE_INFINITY
+      : Number(leftMax);
+  const normalizedRightMin = Number(rightMin);
+  const normalizedRightMax =
+    rightMax === null || rightMax === undefined || rightMax === ""
+      ? Number.POSITIVE_INFINITY
+      : Number(rightMax);
+
+  if (
+    !Number.isFinite(normalizedLeftMin) ||
+    !Number.isFinite(normalizedLeftMax) ||
+    !Number.isFinite(normalizedRightMin) ||
+    !Number.isFinite(normalizedRightMax)
+  ) {
+    return false;
+  }
+
+  return normalizedLeftMin <= normalizedRightMax && normalizedRightMin <= normalizedLeftMax;
+};
+
+export const findOverlappingPaymentRule = (rules = [], draft = {}, editingRuleId = "") => {
+  if (!isPaymentWorkflowType(draft.type)) return null;
+
+  const draftCurrency = String(draft.currency || "INR").trim().toUpperCase();
+  return rules.find((rule) => {
+    if (!rule?.isActive || !isPaymentWorkflowType(rule.type)) return false;
+    if (editingRuleId && String(rule.id) === String(editingRuleId)) return false;
+    if (String(rule.currency || "INR").trim().toUpperCase() !== draftCurrency) return false;
+    return rangesOverlap(draft.minAmount, draft.maxAmount, rule.minAmount, rule.maxAmount);
+  }) || null;
 };
 
 export const sortRulesBySpecificity = (rules = []) => {
@@ -84,6 +124,16 @@ export const getConditionSummary = (rule) => {
   const departmentNames = Array.isArray(rule.departmentNames) ? rule.departmentNames : [];
   const categoryNames = Array.isArray(rule.categoryNames) ? rule.categoryNames : [];
   const ruleCurrency = rule.currency || 'INR';
+
+  if (isPaymentWorkflowType(rule.type)) {
+    if (rule.minAmount !== null && rule.minAmount !== undefined) {
+      parts.push(`≥ ${formatCurrencyAmount(rule.minAmount, ruleCurrency)}`);
+    }
+    if (rule.maxAmount !== null && rule.maxAmount !== undefined) {
+      parts.push(`≤ ${formatCurrencyAmount(rule.maxAmount, ruleCurrency)}`);
+    }
+    return parts.join(' · ') || 'All payment amounts';
+  }
 
   if (vendorNames.length > 0) parts.push(vendorNames.join(', '));
   if (departmentNames.length > 0) parts.push(departmentNames.join(', '));

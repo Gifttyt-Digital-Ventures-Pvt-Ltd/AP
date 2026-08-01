@@ -8,7 +8,9 @@ import {
 import { PERMISSION_LABELS } from "../pages/user-roles/constants/permissionConfig";
 import {
   ACTION_PERMISSION_RULES,
+  CONNECTED_BANKING_SECTION,
   FULL_ACCESS_PERMISSION,
+  isBankingCorporateEntitlementEnabled,
   resolveRouteCorporateEntitlementRule,
   resolveRoutePermissionRule,
 } from "../constants/rbacPolicy";
@@ -40,6 +42,7 @@ const RBACContext = createContext({
   isBranchCostAnalysisEnabled: false,
   isPaymentBatchesFeatureEnabled: false,
   isConnectedBankingEnabled: false,
+  isBankingEnabled: false,
   isBillingFeatureEnabled: false,
   isTokenBasedSubscription: false,
   subscriptionModel: "MONTHLY",
@@ -103,6 +106,9 @@ const FALLBACK_DIRECT_ROLE_PERMISSIONS = {
   FINANCE: ["campaign-manage"],
   ACCOUNTANT: [
     "credits-manage",
+    "payments-admin",
+    "payments-requester",
+    "payments-approver",
     "payments-manage",
     "payments-view",
     "payment-batches-manage",
@@ -376,9 +382,12 @@ export const RBACProvider = ({ children }) => {
   }, [allowedScreensSet, enabledSectionsSet]);
 
   const isConnectedBankingEnabled = useMemo(
-    () => isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING"),
-    [enabledSectionsSet],
+    () =>
+      Boolean(corporateScreens?.isConnectedBankingFeatureEnabled) ||
+      isBankingCorporateEntitlementEnabled(isCorporateSectionEnabled),
+    [corporateScreens?.isConnectedBankingFeatureEnabled, enabledSectionsSet],
   );
+  const isBankingEnabled = isConnectedBankingEnabled;
 
   const isTokenBasedSubscriptionEnabled = useMemo(
     () => Boolean(corporateScreens?.isTokenBasedSubscription),
@@ -432,7 +441,12 @@ export const RBACProvider = ({ children }) => {
     if (normalizedPath === "/user-roles" || normalizedPath.startsWith("/user-roles/")) {
       const canViewRoles = hasAnyPermission(["roles-view", "roles-manage"]);
       const canViewRoleUsers = hasAnyPermission(["roles-view", "roles-manage", "roles-manage-users"]);
-      const canViewWorkflow = hasAnyPermission(["approval-workflow-view", "approval-workflow-manage"]);
+      const canViewWorkflow = hasAnyPermission([
+        "approval-workflow-view",
+        "approval-workflow-manage",
+        "payment-approval-workflow-view",
+        "payment-approval-workflow-manage",
+      ]);
       const canViewCategories = hasAnyPermission(["category-view", "category-manage"]);
       const canViewDepartments = hasAnyPermission(["department-view", "department-manage"]);
       return (
@@ -457,7 +471,9 @@ export const RBACProvider = ({ children }) => {
         (hasAnyPermission(["notifications-manage", "NOTIFICATIONS MANAGE"]) &&
           isCorporateSectionEnabled("SETTINGS_NOTIFICATIONS")) ||
         (hasPermission("settings-org") && isCorporateSectionEnabled("SETTINGS_ORG_DETAILS")) ||
-        (hasAnyPermission(["settings-banking", "banking-full"]) && isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING")) ||
+        (hasAnyPermission(["settings-banking", "banking-full", "banking-manage", "banking-view", "payments-admin"]) &&
+          isBankingCorporateEntitlementEnabled(isCorporateSectionEnabled)) ||
+        (hasPermission("settings-interaction") && isCorporateSectionEnabled("SETTINGS_INTEGRATIONS")) ||
         (hasAnyPermission(["credits-view", "credits-ledger", "credits-manage", "VIEW_WALLET", "VIEW_LEDGER", "MANAGE_BILLING"]) &&
           isBillingFeatureEnabled)
       );
@@ -498,7 +514,7 @@ export const RBACProvider = ({ children }) => {
     if (actionKey.startsWith("campaigns.")) {
       return isCampaignFeatureEnabled;
     }
-    if (actionKey === "settings.createBankAccount") {
+    if (actionKey.startsWith("banking.")) {
       return isConnectedBankingEnabled;
     }
     if (actionKey === "settings.createOrganisation" || actionKey === "settings.updateOrganisation") {
@@ -553,6 +569,8 @@ export const RBACProvider = ({ children }) => {
     isBranchCostAnalysisEnabled,
     isPaymentBatchesFeatureEnabled,
     isConnectedBankingEnabled,
+    isBankingEnabled,
+    connectedBankingSection: CONNECTED_BANKING_SECTION,
     isBillingFeatureEnabled,
     isTokenBasedSubscription: isTokenBasedSubscriptionEnabled,
     subscriptionModel: corporateScreens?.subscriptionModel || "MONTHLY",

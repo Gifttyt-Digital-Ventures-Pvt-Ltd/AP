@@ -1,4 +1,5 @@
 import { toBankAccountUiPayload } from '../../../Services/utils/payloadMappers';
+import { BANK_ACCOUNT_VERIFICATION_STATUS } from '../constants';
 
 export const normalizeBankAccount = (account = {}) => toBankAccountUiPayload(account);
 
@@ -13,8 +14,25 @@ export const normalizeBankAccountList = (accounts = []) => {
 export const isBankAccountActive = (account = {}) =>
   account?.is_active !== false && account?.isActive !== false;
 
+export const getBankAccountVerificationStatus = (account = {}) =>
+  String(
+    account?.verificationStatus ??
+      account?.verification_status ??
+      account?.reviewStatus ??
+      account?.review_status ??
+      (String(account?.status || '').toUpperCase() === 'LINKED'
+        ? BANK_ACCOUNT_VERIFICATION_STATUS.APPROVED
+        : ''),
+  ).toUpperCase();
+
+export const isBankAccountApproved = (account = {}) =>
+  getBankAccountVerificationStatus(account) === BANK_ACCOUNT_VERIFICATION_STATUS.APPROVED;
+
+export const isBankAccountPaymentEligible = (account = {}) =>
+  isBankAccountApproved(account) && isBankAccountActive(account);
+
 export const getActiveBankAccounts = (accounts = []) =>
-  normalizeBankAccountList(accounts).filter(isBankAccountActive);
+  normalizeBankAccountList(accounts).filter(isBankAccountPaymentEligible);
 
 export const getPrimaryBankAccount = (accounts = []) => {
   const normalized = normalizeBankAccountList(accounts);
@@ -56,7 +74,10 @@ export const formatBankAccountOptionLabel = (account = {}) => {
   const bankName = account.bank_name || account.bankName || 'Bank';
   const accountType = formatBankAccountType(account.account_type || account.accountType);
   const maskedNumber = maskBankAccountNumber(account.account_number || account.accountNumber);
-  const statusLabel = isBankAccountActive(account) ? '' : ' · Inactive';
+  const verificationStatus = getBankAccountVerificationStatus(account);
+  const statusLabel = isBankAccountPaymentEligible(account)
+    ? ''
+    : ` · ${verificationStatus === BANK_ACCOUNT_VERIFICATION_STATUS.APPROVED ? 'Inactive' : 'Not verified'}`;
   return `${bankName} · ${accountType} · ${maskedNumber}${statusLabel}`;
 };
 
@@ -109,7 +130,26 @@ export const findBankAccountForBatch = (accounts = [], batch = {}) => {
   );
 };
 
-export const getDefaultBankAccountId = (accounts = []) => {
-  const primary = getPrimaryBankAccount(accounts);
-  return primary?.id ? String(primary.id) : '';
+export const normalizeBankAccountDuplicateKey = (account = {}) => {
+  const bank = String(account.bank ?? account.bankName ?? account.bank_name ?? '')
+    .trim()
+    .toUpperCase();
+  const accountNumber = String(account.accountNumber ?? account.account_number ?? '')
+    .trim()
+    .replace(/[\s-]/g, '');
+  const ifsc = String(account.ifsc ?? account.ifscCode ?? account.ifsc_code ?? '')
+    .trim()
+    .toUpperCase();
+  return [bank, accountNumber, ifsc].join('|');
+};
+
+export const findDuplicateBankAccount = (accounts = [], account = {}, excludeAccountId = null) => {
+  const targetKey = normalizeBankAccountDuplicateKey(account);
+  if (targetKey === '||') return null;
+  return (
+    normalizeBankAccountList(accounts).find((existing) => {
+      if (excludeAccountId && String(existing.id) === String(excludeAccountId)) return false;
+      return normalizeBankAccountDuplicateKey(existing) === targetKey;
+    }) ?? null
+  );
 };

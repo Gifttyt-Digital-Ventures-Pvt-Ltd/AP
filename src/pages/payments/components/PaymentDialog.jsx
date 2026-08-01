@@ -18,6 +18,10 @@ const getInvoiceOptionLabel = (invoice) =>
     invoice?.amount || 0,
   ).toLocaleString('en-IN')}`;
 
+const preventDialogOutsideDismiss = (event) => {
+  event.preventDefault();
+};
+
 // Dialog used to record a single payment against a pending invoice.
 const PaymentDialog = ({
   dialogOpen,
@@ -55,7 +59,11 @@ const PaymentDialog = ({
         Single Payment
       </Button>
     </DialogTrigger>
-    <DialogContent className="max-w-lg overflow-hidden" data-testid="payment-dialog">
+    <DialogContent
+      className="max-w-lg overflow-hidden"
+      data-testid="payment-dialog"
+      onInteractOutside={preventDialogOutsideDismiss}
+    >
       <DialogHeader>
         <DialogTitle>Record Payment</DialogTitle>
       </DialogHeader>
