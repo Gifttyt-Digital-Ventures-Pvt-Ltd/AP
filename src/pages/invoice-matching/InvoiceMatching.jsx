@@ -309,6 +309,7 @@ const normalizeInvoice = (invoice = {}) => ({
   ...invoice,
   id: invoice.id ?? invoice.invoiceId ?? invoice.invoice_id,
   invoiceNumber: invoice.invoiceNumber ?? invoice.invoice_number ?? invoice.number ?? "",
+  vendorId: invoice.vendorId ?? invoice.vendor_id ?? invoice.vendor?.id ?? "",
   vendorName: invoice.vendorName ?? invoice.vendor_name ?? "",
   totalAmount: Number(invoice.totalAmount ?? invoice.total_amount ?? invoice.amount ?? 0),
   remainingAmount: Number(
@@ -325,10 +326,21 @@ const isProformaDocument = (invoice = {}) =>
     String(invoice.documentType || "").trim().toUpperCase(),
   );
 
+const getVendorKey = (record = {}) =>
+  String(record.vendorId ?? record.vendor_id ?? record.vendor?.id ?? record.vendorName ?? record.vendor_name ?? "")
+    .trim()
+    .toLowerCase();
+
+const hasMixedVendors = (records = []) => {
+  const vendorKeys = records.map(getVendorKey).filter(Boolean);
+  return new Set(vendorKeys).size > 1;
+};
+
 const normalizePurchaseOrder = (po = {}) => ({
   ...po,
   id: po.id ?? po.poId ?? po.po_id ?? po.purchaseOrderId ?? po.purchase_order_id,
   poNumber: po.poNumber ?? po.po_number ?? po.number ?? "",
+  vendorId: po.vendorId ?? po.vendor_id ?? po.vendor?.id ?? "",
   vendorName: po.vendorName ?? po.vendor_name ?? po.vendor?.name ?? "",
   date: po.date ?? po.poDate ?? po.po_date ?? po.poDateOrReceivedDate,
   amount: Number(po.amount ?? po.poAmount ?? po.po_amount ?? 0),
@@ -344,6 +356,8 @@ const normalizeGrn = (grn = {}) => ({
   id: grn.id ?? grn.grnId ?? grn.grn_id,
   poId: grn.poId ?? grn.po_id ?? grn.purchaseOrderId ?? grn.purchase_order_id ?? "",
   grnNumber: grn.grnNumber ?? grn.grn_number ?? grn.number ?? "",
+  vendorId: grn.vendorId ?? grn.vendor_id ?? grn.vendor?.id ?? "",
+  vendorName: grn.vendorName ?? grn.vendor_name ?? grn.vendor?.name ?? "",
   amount: Number(grn.amount ?? grn.grnAmount ?? grn.grn_amount ?? 0),
   currency: grn.currency ?? "INR",
   receivedDate: grn.receivedDate ?? grn.received_date ?? grn.poDateOrReceivedDate,
@@ -745,6 +759,13 @@ const InvoiceMatching = () => {
   };
 
   const handleInvoiceChange = (invoiceId) => {
+    const nextInvoice = invoices.find((invoice) => invoice.id === invoiceId);
+    const currentPi = invoices.find((invoice) => invoice.id === matchForm.piId);
+    if (hasMixedVendors([nextInvoice, currentPi].filter(Boolean))) {
+      toast.error("Selected TI and PI must belong to the same vendor");
+      return;
+    }
+
     setMatchForm((current) => ({
       ...current,
       invoiceId,
@@ -753,23 +774,34 @@ const InvoiceMatching = () => {
   };
 
   const handleInvoiceToggle = (invoiceId, checked) => {
-    setMatchForm((current) => {
-      const currentIds = current.invoiceIds?.length
-        ? current.invoiceIds
-        : [current.invoiceId].filter(Boolean);
-      const nextIds = checked
-        ? [...new Set([...currentIds, invoiceId])]
-        : currentIds.filter((id) => id !== invoiceId);
+    const currentIds = matchForm.invoiceIds?.length
+      ? matchForm.invoiceIds
+      : [matchForm.invoiceId].filter(Boolean);
+    const nextIds = checked
+      ? [...new Set([...currentIds, invoiceId])]
+      : currentIds.filter((id) => id !== invoiceId);
+    const nextDocuments = invoices.filter((invoice) => nextIds.includes(invoice.id));
 
-      return {
-        ...current,
-        invoiceId: nextIds[0] || "",
-        invoiceIds: nextIds,
-      };
-    });
+    if (hasMixedVendors(nextDocuments)) {
+      toast.error("Selected invoices must belong to the same vendor");
+      return;
+    }
+
+    setMatchForm((current) => ({
+      ...current,
+      invoiceId: nextIds[0] || "",
+      invoiceIds: nextIds,
+    }));
   };
 
   const handlePiChange = (piId) => {
+    const nextPi = invoices.find((invoice) => invoice.id === piId);
+    const currentInvoice = invoices.find((invoice) => invoice.id === matchForm.invoiceId);
+    if (hasMixedVendors([currentInvoice, nextPi].filter(Boolean))) {
+      toast.error("Selected TI and PI must belong to the same vendor");
+      return;
+    }
+
     setMatchForm((current) => ({
       ...current,
       piId,
@@ -777,41 +809,48 @@ const InvoiceMatching = () => {
   };
 
   const handleDocumentToggle = (document, checked) => {
-    setMatchForm((current) => {
-      const currentIds = current.invoiceIds?.length
-        ? current.invoiceIds
-        : [current.invoiceId, current.piId].filter(Boolean);
-      const nextIds = checked
-        ? [...new Set([...currentIds, document.id])]
-        : currentIds.filter((id) => id !== document.id);
-      const selectedDocs = invoices.filter((invoice) => nextIds.includes(invoice.id));
-      const nextTaxInvoice = selectedDocs.find((invoice) => !isProformaDocument(invoice));
-      const nextPi = selectedDocs.find(isProformaDocument);
+    const currentIds = matchForm.invoiceIds?.length
+      ? matchForm.invoiceIds
+      : [matchForm.invoiceId, matchForm.piId].filter(Boolean);
+    const nextIds = checked
+      ? [...new Set([...currentIds, document.id])]
+      : currentIds.filter((id) => id !== document.id);
+    const selectedDocs = invoices.filter((invoice) => nextIds.includes(invoice.id));
+    const nextTaxInvoice = selectedDocs.find((invoice) => !isProformaDocument(invoice));
+    const nextPi = selectedDocs.find(isProformaDocument);
 
-      return {
-        ...current,
-        invoiceId: nextTaxInvoice?.id || "",
-        invoiceIds: nextIds,
-        piId: nextPi?.id || "",
-      };
-    });
+    if (hasMixedVendors(selectedDocs)) {
+      toast.error("Selected documents must belong to the same vendor");
+      return;
+    }
+
+    setMatchForm((current) => ({
+      ...current,
+      invoiceId: nextTaxInvoice?.id || "",
+      invoiceIds: nextIds,
+      piId: nextPi?.id || "",
+    }));
   };
 
   const handlePiToggle = (piId, checked) => {
-    setMatchForm((current) => {
-      const currentIds = current.invoiceIds?.length
-        ? current.invoiceIds
-        : [current.piId].filter(Boolean);
-      const nextIds = checked
-        ? [...new Set([...currentIds, piId])]
-        : currentIds.filter((id) => id !== piId);
+    const currentIds = matchForm.invoiceIds?.length
+      ? matchForm.invoiceIds
+      : [matchForm.piId].filter(Boolean);
+    const nextIds = checked
+      ? [...new Set([...currentIds, piId])]
+      : currentIds.filter((id) => id !== piId);
+    const nextDocuments = invoices.filter((invoice) => nextIds.includes(invoice.id));
 
-      return {
-        ...current,
-        invoiceIds: nextIds,
-        piId: nextIds[0] || "",
-      };
-    });
+    if (hasMixedVendors(nextDocuments)) {
+      toast.error("Selected PI documents must belong to the same vendor");
+      return;
+    }
+
+    setMatchForm((current) => ({
+      ...current,
+      invoiceIds: nextIds,
+      piId: nextIds[0] || "",
+    }));
   };
 
   const handlePoChange = (purchaseOrderId) => {
@@ -854,6 +893,10 @@ const InvoiceMatching = () => {
     }
     if (requirements.grn && !matchForm.grnId) {
       toast.error("Please select a GRN");
+      return;
+    }
+    if (hasMixedVendors([...selectedDocuments, selectedPo, selectedGrn].filter(Boolean))) {
+      toast.error("Selected documents, PO, and GRN must belong to the same vendor");
       return;
     }
 
