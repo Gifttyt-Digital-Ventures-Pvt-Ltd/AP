@@ -177,6 +177,32 @@ const normalizeScannedPurchaseOrder = (scanResponse = {}) => {
       scanResponse?.expectedDeliveryDate ??
       scanResponse?.expected_delivery_date,
     ),
+    reference_document_type:
+      scanResponse?.referenceDocumentType ??
+      scanResponse?.reference_document_type ??
+      scanResponse?.sourceDocumentType ??
+      scanResponse?.source_document_type ??
+      '',
+    reference_document_no:
+      scanResponse?.referenceDocumentNo ??
+      scanResponse?.reference_document_no ??
+      scanResponse?.referenceNo ??
+      scanResponse?.reference_no ??
+      scanResponse?.documentNumber ??
+      scanResponse?.document_number ??
+      '',
+    reference_document_id:
+      scanResponse?.referenceDocumentId ??
+      scanResponse?.reference_document_id ??
+      scanResponse?.sourceDocumentId ??
+      scanResponse?.source_document_id ??
+      '',
+    reference_document_name:
+      scanResponse?.referenceDocumentName ??
+      scanResponse?.reference_document_name ??
+      scanResponse?.originalFileName ??
+      scanResponse?.original_file_name ??
+      '',
     vendor_name: scanResponse?.vendorName ?? scanResponse?.vendor_name ?? '',
     vendor_gstin: normalizeGstin(scanResponse?.vendorGstin ?? scanResponse?.vendor_gstin),
     billing_address: scanResponse?.billingAddress ?? scanResponse?.billing_address ?? '',
@@ -234,6 +260,10 @@ export const initializePoFormFromScan = (
     po_date: scanned.po_date || new Date().toISOString().split('T')[0],
     valid_till: scanned.valid_till || '',
     expected_delivery_date: scanned.expected_delivery_date || '',
+    reference_document_type: scanned.reference_document_type || '',
+    reference_document_no: scanned.reference_document_no || '',
+    reference_document_id: scanned.reference_document_id || '',
+    reference_document_name: scanned.reference_document_name || '',
     currency,
     exchange_rate: '',
     place_of_supply: scanned.place_of_supply,
