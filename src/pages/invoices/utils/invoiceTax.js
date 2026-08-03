@@ -110,6 +110,7 @@ export const createDefaultLineItem = (currency = DEFAULT_CURRENCY) => {
     description: "",
     ledger: "",
     ledgerId: "",
+    ledgerName: "",
     accountGroupId: "",
     accountGroupName: "",
     groupId: "",
@@ -411,6 +412,7 @@ export const mapExtractedLineItemToForm = (
   return {
     description: item.description || "",
     ledger: item.ledger || item.ledgerName || item.ledger_name || "",
+    ledgerName: item.ledgerName || item.ledger_name || item.ledger || "",
     ledgerId: item.ledgerId || item.ledger_id || "",
     accountGroupId:
       item.accountGroupId || item.account_group_id || item.groupId || item.group_id || "",

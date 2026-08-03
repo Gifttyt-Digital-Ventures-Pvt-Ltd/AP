@@ -193,8 +193,17 @@ export const initializeInvoiceFormData = (
     extractedData?.billingAddress ||
     extractedData?.billingAddress ||
     vendorAddress;
+  const extractedGstin =
+    extractedData?.vendorGstin ||
+    extractedData?.gstin ||
+    extractedData?.billingGstin ||
+    "";
+  const extractedSourceOfSupply =
+    extractedData?.sourceOfSupply || extractedData?.placeOfSupply || "";
+  const extractedDestinationOfSupply =
+    extractedData?.destinationOfSupply || extractedData?.placeOfSupply || "";
 
-  return {
+  const formResult = {
     vendorName: extractedData?.vendorName || "",
     vendorId: matchedVendor?.id || "",
     vendorMatched: !!matchedVendor,
@@ -389,6 +398,32 @@ export const initializeInvoiceFormData = (
     linkedProformaInvoiceId: extractedData?.linkedProformaInvoiceId ?? "",
     linkedProformaInvoiceNumber: extractedData?.linkedProformaInvoiceNumber ?? "",
   };
+
+  // Baseline of what OCR actually extracted, so the checklist can tell a
+  // scanned value the user left untouched apart from one they typed over.
+  // Only fields OCR actually returned are included — fields it left blank
+  // (or defaults we filled in ourselves) have nothing to be "matched" against.
+  formResult.extractedSnapshot = extractedData
+    ? {
+        invoiceNumber: extractedData?.invoiceNumber || "",
+        invoiceDate: extractedData?.invoiceDate || "",
+        currency: extractedData?.currency
+          ? normalizeCurrencyCode(extractedData.currency)
+          : "",
+        vendorName: extractedData?.vendorName || "",
+        gstin: extractedGstin,
+        gstTreatment: extractedData?.gstTreatment || "",
+        sourceOfSupply: extractedSourceOfSupply,
+        destinationOfSupply: extractedDestinationOfSupply,
+        invoiceTax: extractedData?.invoiceTax || extractedData?.invoice_tax || "",
+        invoiceTaxName:
+          extractedData?.invoiceTaxName || extractedData?.invoice_tax_name || "",
+        invoiceTaxRate:
+          extractedData?.invoiceTaxRate ?? extractedData?.invoice_tax_rate ?? "",
+      }
+    : null;
+
+  return formResult;
 };
 
 export const buildToCreateInvoicePayload = (
