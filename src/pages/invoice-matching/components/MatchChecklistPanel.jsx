@@ -125,6 +125,21 @@ const titleCase = (value) =>
     .replace(/_/g, " ")
     .replace(/\b\w/g, (letter) => letter.toUpperCase());
 
+const MATCH_TYPE_LABELS = {
+  PO_INVOICE: "PO + Tax Invoice",
+  PO_PI: "PO + Proforma",
+  PO_PI_TI: "PO + PI + Tax Invoice",
+  THREE_WAY: "PO + PI/TI + GRN",
+  INVOICE_GRN: "PI/TI + GRN",
+  PO_GRN: "PO + GRN",
+  TWO_WAY: "PO + Tax Invoice",
+};
+
+const getMatchTypeLabel = (value) => {
+  const normalized = normalizeStatus(value);
+  return MATCH_TYPE_LABELS[normalized] || titleCase(normalized);
+};
+
 const getApiErrorMessage = (error, fallback) => {
   const code = error?.data?.code || error?.data?.errorCode;
   const mapped = {
@@ -1042,7 +1057,7 @@ const MatchChecklistPanel = ({ matchId, groupId, group, scope = "MATCH" }) => {
             <div className="min-w-0">
               <div className="flex flex-wrap items-center gap-2">
                 <StatusBadge status={status} />
-                <Badge variant="outline">{checklist.matchType === "THREE_WAY" ? "3-Way" : "2-Way"}</Badge>
+                <Badge variant="outline">{getMatchTypeLabel(checklist.matchType)}</Badge>
                 {isThreeWay && Number(checklist.grnPoolSize ?? checklist.grn_pool_size ?? 0) > 0 ? (
                   <Badge variant="outline">
                     {Number(checklist.grnPoolSize ?? checklist.grn_pool_size)} GRN

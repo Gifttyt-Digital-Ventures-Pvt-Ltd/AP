@@ -2447,8 +2447,8 @@ export const InvoiceForm = ({
                   </Label>
                   <p className="text-xs text-muted-foreground">
                     {isEdit
-                      ? "Optional. Existing PO/GRN selections are loaded on edit. Change them to update the match after save."
-                      : "Optional. Select a PO for 2-way matching; add a GRN for 3-way matching."}
+                      ? "Optional. Existing PO, PI, or GRN matching context is loaded on edit. Change the selection to update the match after save."
+                      : "Optional. Select a PO to match this document. Linked PI and GRN context will be resolved during matching."}
                   </p>
                   {formData?.matchingStatus ? (
                     <p className="mt-1 text-xs text-muted-foreground">
@@ -2524,7 +2524,7 @@ export const InvoiceForm = ({
                 </div>
                 {canUseThreeWayMatching ? (
                   <div>
-                    <Label className="text-xs">GRN</Label>
+                    <Label className="text-xs">GRN Pool Anchor</Label>
                     <AppSelect
                       value={formData.matchingGrnId || ""}
                       onChange={(event) =>
@@ -2542,7 +2542,7 @@ export const InvoiceForm = ({
                           ? "Select PO first"
                           : grnsLoading
                             ? "Loading GRNs..."
-                            : "Select GRN"
+                            : "Select GRN if required"
                       }
                       className="h-8 text-sm"
                       disabled={!selectedMatchingPoId || grnsLoading}
