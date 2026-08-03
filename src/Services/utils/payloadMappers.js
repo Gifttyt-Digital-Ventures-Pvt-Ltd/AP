@@ -407,23 +407,23 @@ export const toPaymentCreateApiPayload = (payment = {}) => {
 export const toRecordPaymentsApiPayload = (payment = {}) => {
   const invoiceNumbers = payment.invoice_numbers ?? payment.invoiceNumbers;
   const payload = {
-    invoice_numbers: Array.isArray(invoiceNumbers)
+    invoiceNumbers: Array.isArray(invoiceNumbers)
       ? invoiceNumbers.filter(Boolean)
       : [],
   };
   addStringIfPresent(
     payload,
-    "payment_date",
+    "paymentDate",
     payment.payment_date ?? payment.paymentDate,
   );
   addStringIfPresent(
     payload,
-    "payment_method",
+    "paymentMethod",
     payment.payment_method ?? payment.paymentMethod,
   );
   addStringIfPresent(
     payload,
-    "reference_number",
+    "referenceNumber",
     payment.reference_number ?? payment.referenceNumber,
   );
   return payload;
