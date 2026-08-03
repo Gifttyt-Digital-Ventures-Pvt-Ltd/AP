@@ -126,10 +126,20 @@ export const buildInvoiceEditFormData = (
     dueDate: dueDate || "",
     billingAddress:
       invoice.billingAddress ||
-      invoice.billingAddress ||
+      invoice.billing_address ||
       invoice.vendorAddress ||
-      invoice.vendorAddress ||
+      invoice.vendor_address ||
       "",
+    shippingAddress:
+      invoice.shippingAddress ||
+      invoice.shipping_address ||
+      "",
+    shippingSameAsBilling: Boolean(
+      (invoice.shippingAddress || invoice.shipping_address) &&
+        (invoice.billingAddress || invoice.billing_address) &&
+        String(invoice.shippingAddress || invoice.shipping_address).trim() ===
+          String(invoice.billingAddress || invoice.billing_address).trim(),
+    ),
     billingGstin:
       invoice.billingGstin ||
       invoice.billing_gstin ||

@@ -547,6 +547,10 @@ const InvoiceReadOnlyDetails = ({
           <DetailField label="Billing Address" value={formData.billingAddress} />
         )}
 
+        {formData.shippingAddress && (
+          <DetailField label="Shipping Address" value={formData.shippingAddress} />
+        )}
+
         <div className="grid grid-cols-2 gap-3">
           <DetailField label="GST Treatment" value={formData.gstTreatment} />
           <DetailField

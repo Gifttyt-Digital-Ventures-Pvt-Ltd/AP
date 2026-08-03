@@ -191,8 +191,12 @@ export const initializeInvoiceFormData = (
     "";
   const billingAddress =
     extractedData?.billingAddress ||
-    extractedData?.billingAddress ||
+    extractedData?.billing_address ||
     vendorAddress;
+  const shippingAddress =
+    extractedData?.shippingAddress ||
+    extractedData?.shipping_address ||
+    "";
   const extractedGstin =
     extractedData?.vendorGstin ||
     extractedData?.gstin ||
@@ -215,7 +219,12 @@ export const initializeInvoiceFormData = (
     invoiceDate,
     dueDate,
     billingAddress: billingAddress,
-    shippingAddress: extractedData?.shippingAddress || extractedData?.shippingAddress || "",
+    shippingAddress,
+    shippingSameAsBilling: Boolean(
+      billingAddress &&
+        shippingAddress &&
+        String(billingAddress).trim() === String(shippingAddress).trim(),
+    ),
     billingGstin:
       extractedData?.billingGstin ||
       extractedData?.billing_gstin ||
