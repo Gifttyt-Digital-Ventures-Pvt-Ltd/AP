@@ -9,10 +9,30 @@ import {
   DialogTitle,
 } from '../../../components/ui/dialog';
 import { Button } from '../../../components/ui/button';
+import AppSelect from '../../../components/common/AppSelect';
 import MeteredActionCostHint from '../../../components/credits/MeteredActionCostHint';
 import { CREDIT_ACTION_CODES } from '../../../constants/creditActions';
 import { useRBAC } from '../../../contexts/RBACContext';
 import { useMeteredActionEstimate } from '../../../hooks/useMeteredActionEstimate';
+
+export const PO_REFERENCE_DOCUMENT_TYPES = [
+  {
+    value: 'PI',
+    label: 'Customer Proforma Invoice (PI)',
+  },
+  {
+    value: 'CUSTOMER_PO',
+    label: 'Customer Purchase Order (PO)',
+  },
+  {
+    value: 'LOI',
+    label: 'Letter of Intent (LOI)',
+  },
+  {
+    value: 'EXCEL',
+    label: 'Excel',
+  },
+];
 
 const PoUploadDialog = ({
   open,
@@ -24,17 +44,19 @@ const PoUploadDialog = ({
   const inputRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
   const [pendingFile, setPendingFile] = useState(null);
+  const [referenceDocumentType, setReferenceDocumentType] = useState('PI');
   const estimate = useMeteredActionEstimate(CREDIT_ACTION_CODES.PO_UPLOAD, pendingFile ? 1 : 0);
 
   useEffect(() => {
     if (!open) {
       setPendingFile(null);
       setIsDragging(false);
+      setReferenceDocumentType('PI');
     }
   }, [open]);
 
   const uploadFile = async (file) => {
-    const shouldClose = await onFileSelected(file);
+    const shouldClose = await onFileSelected(file, { referenceDocumentType });
     if (shouldClose !== false) {
       setPendingFile(null);
       onOpenChange(false);
@@ -79,15 +101,33 @@ const PoUploadDialog = ({
         <DialogHeader>
           <DialogTitle>Upload Purchase Order</DialogTitle>
           <DialogDescription>
-            Upload a vendor PO document (PDF or image). Data will be extracted as-is — no internal PO format is applied.
+            Upload a customer reference document. Backend will extract PO draft data for review before save.
           </DialogDescription>
         </DialogHeader>
 
         <div className="rounded-lg border border-border bg-muted/20 p-5">
+          <div className="mb-4 space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">
+              Reference Document Type
+            </label>
+            <AppSelect
+              value={referenceDocumentType}
+              onChange={(event) => setReferenceDocumentType(event.target.value)}
+              options={PO_REFERENCE_DOCUMENT_TYPES}
+              className="h-9 bg-background text-sm"
+              data-testid="po-reference-document-type-select"
+            />
+            {referenceDocumentType === 'EXCEL' ? (
+              <p className="text-xs text-muted-foreground">
+                Excel import format is reserved for development and backend parser alignment.
+              </p>
+            ) : null}
+          </div>
+
           <input
             ref={inputRef}
             type="file"
-            accept="image/*,.pdf"
+            accept={referenceDocumentType === 'EXCEL' ? '.xls,.xlsx,.csv' : 'image/*,.pdf'}
             className="hidden"
             onChange={(event) => {
               handleFile(event.target.files);
@@ -130,10 +170,12 @@ const PoUploadDialog = ({
               <Upload className="h-8 w-8 text-primary" />
               <p className="mb-0 text-lg font-medium text-primary">Upload purchase order</p>
               <p className="mb-0 text-sm text-muted-foreground">
-                Click to upload or drag and drop a PO document
+                Click to upload or drag and drop the selected reference document
               </p>
               <p className="mb-0 text-xs text-muted-foreground">
-                PDF, PNG, and JPG formats are supported
+                {referenceDocumentType === 'EXCEL'
+                  ? 'XLS, XLSX, and CSV formats are reserved for development'
+                  : 'PDF, PNG, and JPG formats are supported'}
               </p>
             </div>
           ) : (

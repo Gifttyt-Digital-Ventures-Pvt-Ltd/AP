@@ -106,6 +106,10 @@ const createDefaultPoForm = (defaultCurrency = 'INR', formatId = 'default-format
   vendor_branch_name: '',
   vendor_branch_code: '',
   vendor_branch_gstin: '',
+  reference_document_type: '',
+  reference_document_no: '',
+  reference_document_id: '',
+  reference_document_name: '',
   po_date: new Date().toISOString().split('T')[0],
   valid_till: '',
   expected_delivery_date: '',
@@ -137,6 +141,10 @@ const buildPoEditForm = (po = {}, fallbackFormatId = 'default-format') => ({
   vendor_branch_name: po.vendor_branch_name || po.vendorBranchName || '',
   vendor_branch_code: po.vendor_branch_code || po.vendorBranchCode || '',
   vendor_branch_gstin: po.vendor_branch_gstin || po.vendorBranchGstin || '',
+  reference_document_type: po.reference_document_type || po.referenceDocumentType || '',
+  reference_document_no: po.reference_document_no || po.referenceDocumentNo || '',
+  reference_document_id: po.reference_document_id || po.referenceDocumentId || '',
+  reference_document_name: po.reference_document_name || po.referenceDocumentName || '',
   po_date: String(po.po_date || po.poDate || '').slice(0, 10) || new Date().toISOString().split('T')[0],
   valid_till: String(po.valid_till || po.validTill || '').slice(0, 10),
   expected_delivery_date: String(po.expected_delivery_date || po.expectedDeliveryDate || '').slice(0, 10),
@@ -958,7 +966,7 @@ const PurchaseOrdersPage = () => {
 
   const calculatePOTotal = () => calculatePOTotalFor(poForm);
 
-  const processUploadFile = async (file) => {
+  const processUploadFile = async (file, { referenceDocumentType = 'PI' } = {}) => {
     if (!guardAction('po.scan')) return false;
     if (!file) return false;
 
@@ -971,6 +979,7 @@ const PurchaseOrdersPage = () => {
 
     const formDataUpload = new FormData();
     formDataUpload.append('file', file);
+    formDataUpload.append('referenceDocumentType', referenceDocumentType);
 
     try {
       const response = await scanPurchaseOrder(formDataUpload).unwrap();
@@ -979,10 +988,20 @@ const PurchaseOrdersPage = () => {
         throw new Error('Scan API returned empty response');
       }
 
-      setUploadPoForm(initializePoFormFromScan(extracted, {
-        vendors,
-        defaultCurrency: activeFormatConfig.defaultCurrency,
-      }));
+      setUploadPoForm({
+        ...initializePoFormFromScan(extracted, {
+          vendors,
+          defaultCurrency: activeFormatConfig.defaultCurrency,
+        }),
+        reference_document_type:
+          extracted.referenceDocumentType ||
+          extracted.reference_document_type ||
+          referenceDocumentType,
+        reference_document_name:
+          extracted.referenceDocumentName ||
+          extracted.reference_document_name ||
+          file.name,
+      });
       toast.success('Purchase order scanned successfully');
     } catch (error) {
       if (handleCreditError(error)) {
@@ -995,10 +1014,14 @@ const PurchaseOrdersPage = () => {
         error?.data?.message ||
         error?.message ||
         'Failed to scan purchase order';
-      setUploadPoForm(initializePoFormFromScan({}, {
-        vendors,
-        defaultCurrency: activeFormatConfig.defaultCurrency,
-      }));
+      setUploadPoForm({
+        ...initializePoFormFromScan({}, {
+          vendors,
+          defaultCurrency: activeFormatConfig.defaultCurrency,
+        }),
+        reference_document_type: referenceDocumentType,
+        reference_document_name: file.name,
+      });
       toast.warning(
         <div className="space-y-2">
           <p className="font-bold text-base">Scan Failed</p>
@@ -1014,8 +1037,8 @@ const PurchaseOrdersPage = () => {
     return true;
   };
 
-  const handleUploadPickerFile = async (file) => {
-    await processUploadFile(file);
+  const handleUploadPickerFile = async (file, options) => {
+    await processUploadFile(file, options);
     return false;
   };
 
