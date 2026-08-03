@@ -1185,7 +1185,7 @@ const InvoiceMatching = () => {
                 break;
               case "matchType":
                 value = (
-                  <Badge variant="outline">{getMatchTypeLabel(group.matchType)}</Badge>
+                  <Badge variant="outline" className={'whitespace-nowrap'}>{getMatchTypeLabel(group.matchType)}</Badge>
                 );
                 break;
               case "poAmount":
