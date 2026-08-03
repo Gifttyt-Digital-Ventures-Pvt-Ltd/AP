@@ -1492,6 +1492,13 @@ const InvoicesPage = () => {
           }
         : {}),
       billingAddress: item.invoicePayload.billingAddress || "",
+      shippingAddress: item.invoicePayload.shippingAddress || "",
+      shippingSameAsBilling: Boolean(
+        item.invoicePayload.billingAddress &&
+          item.invoicePayload.shippingAddress &&
+          String(item.invoicePayload.billingAddress).trim() ===
+            String(item.invoicePayload.shippingAddress).trim(),
+      ),
       gstin: item.invoicePayload.gstin || "",
       sourceOfSupply: item.invoicePayload.sourceOfSupply || "",
       destinationOfSupply: item.invoicePayload.destinationOfSupply || "",

@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
+import { Checkbox } from "../../../components/ui/checkbox";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import {
@@ -669,6 +670,21 @@ export const InvoiceForm = ({
   };
   const billingGstSatisfied =
     !requireBillingGst || Boolean(selectedBillingGst?.gst);
+  const shippingSameAsBilling = Boolean(formData?.shippingSameAsBilling);
+  const handleBillingAddressChange = (value) => {
+    setFormData({
+      ...formData,
+      billingAddress: value,
+      ...(shippingSameAsBilling ? { shippingAddress: value } : {}),
+    });
+  };
+  const handleShippingSameAsBillingChange = (checked) => {
+    setFormData({
+      ...formData,
+      shippingSameAsBilling: checked,
+      ...(checked ? { shippingAddress: formData.billingAddress || "" } : {}),
+    });
+  };
   const isInvoiceLevelDiscount = isInvoiceLevelSelection(formData?.discountsLevel);
   const isInvoiceLevelTax = isInvoiceLevelSelection(formData?.taxesLevel);
   const showLineItemDiscount = isLineItemLevelSelection(formData?.discountsLevel);
@@ -2367,13 +2383,44 @@ export const InvoiceForm = ({
 
               <Label className="text-xs">Billing Address</Label>
               <textarea
-                value={formData.billingAddress}
-                onChange={(e) =>
-                  setFormData({ ...formData, billingAddress: e.target.value })
-                }
+                value={formData.billingAddress || ""}
+                onChange={(e) => handleBillingAddressChange(e.target.value)}
                 placeholder="Enter billing address"
                 className="w-full min-h-[50px] rounded-md border border-input bg-background px-2 py-1.5 text-xs resize-none"
               />
+
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="invoice-shipping-same-as-billing"
+                    checked={shippingSameAsBilling}
+                    onCheckedChange={(value) =>
+                      handleShippingSameAsBillingChange(Boolean(value))
+                    }
+                    data-testid="invoice-shipping-same-as-billing"
+                  />
+                  <Label
+                    htmlFor="invoice-shipping-same-as-billing"
+                    className="cursor-pointer text-xs text-muted-foreground"
+                  >
+                    Shipping address is same as billing address
+                  </Label>
+                </div>
+                <Label className="text-xs">Shipping Address</Label>
+                <textarea
+                  value={formData.shippingAddress || ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      shippingAddress: e.target.value,
+                      shippingSameAsBilling: false,
+                    })
+                  }
+                  placeholder="Enter shipping address"
+                  disabled={shippingSameAsBilling}
+                  className="w-full min-h-[50px] rounded-md border border-input bg-background px-2 py-1.5 text-xs resize-none disabled:cursor-not-allowed disabled:bg-muted/60"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-2">
