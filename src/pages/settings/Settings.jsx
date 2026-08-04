@@ -29,16 +29,12 @@ import {
 import useBankingSetup from '../banking/hooks/useBankingSetup';
 import AccountStatusCard from '../banking/components/AccountStatusCard';
 import AccountLinkCard from '../banking/components/AccountLinkCard';
-import BeneficiariesTable from '../banking/components/BeneficiariesTable';
-import BeneficiaryForm from '../banking/components/BeneficiaryForm';
 import BankingSetupSteps from '../banking/components/BankingSetupSteps';
 import {
   useLinkBankingAccountMutation,
   useUpdateBankingAccountMutation,
   useDeleteBankingAccountMutation,
   useUpdateBankingAccountStatusMutation,
-  useRegisterBeneficiaryMutation,
-  useValidateBeneficiaryMutation,
 } from '../../Services/apis/connectedBankingApi';
 import {
   findDuplicateBankAccount,
@@ -101,19 +97,14 @@ const Settings = () => {
     isAccountLinked,
     paymentReadyAccounts,
     accounts,
-    beneficiaries,
     setupStatus,
     refetchAccounts,
-    refetchBeneficiaries,
   } = useBankingSetup({ skip: !canViewBankingSettings || !isBankingEnabled });
   const [linkBankingAccount, { isLoading: linkingAccount }] = useLinkBankingAccountMutation();
   const [updateBankingAccount, { isLoading: updatingAccount }] = useUpdateBankingAccountMutation();
   const [deleteBankingAccount, { isLoading: deletingAccount }] = useDeleteBankingAccountMutation();
   const [updateBankingAccountStatus, { isLoading: updatingAccountStatus }] = useUpdateBankingAccountStatusMutation();
-  const [validateBeneficiary, { isLoading: validatingBeneficiary }] = useValidateBeneficiaryMutation();
-  const [registerBeneficiary, { isLoading: savingBeneficiary }] = useRegisterBeneficiaryMutation();
   const canManageBanking = canPerformAction('banking.link');
-  const canManageBeneficiaries = canPerformAction('banking.addBeneficiary');
   // Organisation Details state
   const [orgDetails, setOrgDetails] = useState(null);
   const [orgSaving, setOrgSaving] = useState(false);
@@ -426,56 +417,6 @@ const Settings = () => {
     } catch (error) {
       toast.error(error?.data?.message || error?.data?.detail || 'Failed to update bank account status');
     }
-  };
-
-  const handleVerifyBeneficiary = async (payload) => {
-    if (!guardAction('banking.verifyBeneficiary')) return null;
-    try {
-      const response = await validateBeneficiary(payload).unwrap();
-      toast.success('Beneficiary verified');
-      return response;
-    } catch (error) {
-      toast.error(error?.data?.message || error?.data?.detail || 'Beneficiary verification failed');
-      return null;
-    }
-  };
-
-  const handleSaveBeneficiary = async (payload) => {
-    if (!guardAction('banking.addBeneficiary')) return false;
-    try {
-      await registerBeneficiary(payload).unwrap();
-      await refetchBeneficiaries();
-      toast.success('Beneficiary saved successfully');
-      return true;
-    } catch (error) {
-      toast.error(error?.data?.message || error?.data?.detail || 'Failed to save beneficiary');
-      return false;
-    }
-  };
-
-  const handleRetryBeneficiary = async (beneficiary) => {
-    const payload = {
-      bankAccountId:
-        beneficiary.bankAccountId ||
-        beneficiary.bank_account_id ||
-        displayAccounts[0]?.id ||
-        displayAccounts[0]?.accountNumber,
-      name: beneficiary.name || beneficiary.beneficiaryName || '',
-      accountNumber: beneficiary.accountNumber || beneficiary.account_number || '',
-      ifsc: beneficiary.ifsc || beneficiary.ifscCode || beneficiary.ifsc_code || '',
-      vendorId: beneficiary.vendorId || beneficiary.vendor_id || undefined,
-      payeeType: 'ACCOUNT',
-    };
-    const verified = await handleVerifyBeneficiary(payload);
-    if (!verified) return false;
-    return handleSaveBeneficiary({
-      ...payload,
-      validationReference:
-        verified.validationReference ||
-        verified.referenceId ||
-        verified.correlationId,
-      verified: true,
-    });
   };
 
   return (
@@ -863,28 +804,6 @@ const Settings = () => {
                   />
                 ) : null}
               </div>
-              {hasPaymentReadyAccount ? (
-                <div className="space-y-4">
-                  {canManageBeneficiaries ? (
-                    <BeneficiaryForm
-                      accounts={paymentReadyAccounts}
-                      canManage={canManageBeneficiaries}
-                      validating={validatingBeneficiary}
-                      saving={savingBeneficiary}
-                      onVerify={handleVerifyBeneficiary}
-                      onSave={handleSaveBeneficiary}
-                    />
-                  ) : null}
-                  <div>
-                    <h4 className="mb-3 text-base font-semibold">Beneficiaries</h4>
-                    <BeneficiariesTable
-                      beneficiaries={beneficiaries}
-                      canManage={canManageBeneficiaries}
-                      onRegister={handleRetryBeneficiary}
-                    />
-                  </div>
-                </div>
-              ) : null}
             </div>
           )}
         </TabsContent>}
