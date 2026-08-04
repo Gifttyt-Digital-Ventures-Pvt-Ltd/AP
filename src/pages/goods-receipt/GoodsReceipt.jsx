@@ -11,6 +11,7 @@ import { Button } from '../../components/ui/button';
 import RefreshButton from '../../components/common/RefreshButton';
 import { useSidebar } from '../../components/Layout';
 import { useActionGuard } from '../../hooks/useActionGuard';
+import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useCreditErrorHandler } from '../../contexts/CreditErrorContext';
 import { useRBAC } from '../../contexts/RBACContext';
 import { useMeteredActionEstimate } from '../../hooks/useMeteredActionEstimate';
@@ -217,7 +218,19 @@ const GoodsReceipt = () => {
 
   const hasPiSubscription = useProformaInvoiceSubscription().isPiSubscriptionEnabled;
 
-  const { data: grnsResponse, isLoading: grnsLoading, refetch: refetchGrns } = useGetGrnsQuery();
+  const [grnSearch, setGrnSearch] = useState('');
+  const debouncedGrnSearch = useDebouncedValue(grnSearch.trim(), 300);
+  const [grnSort, setGrnSort] = useState({ value: 'created_at', direction: 'desc' });
+  const grnQueryParams = useMemo(
+    () => ({
+      ...(debouncedGrnSearch ? { search: debouncedGrnSearch } : {}),
+      sortBy: grnSort.value,
+      sortDirection: grnSort.direction,
+    }),
+    [debouncedGrnSearch, grnSort],
+  );
+
+  const { data: grnsResponse, isLoading: grnsLoading, refetch: refetchGrns } = useGetGrnsQuery(grnQueryParams);
   const { data: vendorsData = [] } = useGetVendorsQuery();
   const { data: formatConfigResponse, refetch: refetchFormatConfig } = useGetGrnFormatConfigQuery();
   const {
@@ -1270,9 +1283,12 @@ const GoodsReceipt = () => {
 
       <GrnListTab
         grns={grns}
-        pendingPoCount={purchaseOrders.length}
         canCreate={canCreateGrn}
         canApprove={canPostGrn}
+        search={grnSearch}
+        setSearch={setGrnSearch}
+        grnSort={grnSort}
+        setGrnSort={setGrnSort}
         onCreate={() => setGrnCreateOptionOpen(true)}
         onView={(grn) => openGrnDetail(grn)}
         onEdit={(grn) => openGrnDetail(grn, { edit: true })}

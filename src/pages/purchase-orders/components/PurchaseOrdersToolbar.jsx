@@ -1,21 +1,40 @@
 import React from "react";
-import { CheckCircle, Clock, FileText, IndianRupee, Plus, Settings2, Upload } from "lucide-react";
+import { Plus, Search, Settings2, Upload } from "lucide-react";
 import { Button } from "../../../components/ui/button";
-import { Card, CardContent } from "../../../components/ui/card";
+import { Input } from "../../../components/ui/input";
 import RefreshButton from "../../../components/common/RefreshButton";
+import TableSortButton from "../../../components/common/TableSortButton";
+
+const poSortOptions = [
+  { value: "created_at", label: "Upload date", defaultDirection: "desc" },
+  { value: "po_date", label: "PO Date", defaultDirection: "desc" },
+  { value: "total_amount", label: "Amount", defaultDirection: "desc" },
+];
 
 const PurchaseOrdersToolbar = ({
   setShowCreateDialog,
   setShowUploadPicker,
   setShowBuilderDialog,
   stats,
-  formatCurrency,
   canManagePo,
   canUploadPo = false,
   activeFormat,
   onRefresh,
   refreshing = false,
+  searchQuery,
+  setSearchQuery,
+  statusFilter,
+  setStatusFilter,
+  poSort,
+  setPoSort,
 }) => {
+  const poQuickFilters = [
+    { value: "all", label: "All", count: stats.total },
+    { value: "Pending Approval", label: "Pending Approval", count: stats.pending },
+    { value: "Draft", label: "Draft", count: stats.draft },
+    { value: "Issued", label: "Issued", count: stats.issued },
+  ];
+
   return (
     <>
       <div className="flex justify-between items-center">
@@ -53,62 +72,39 @@ const PurchaseOrdersToolbar = ({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total POs</p>
-                <p className="text-2xl font-bold">{stats.total}</p>
-              </div>
-              <FileText className="h-8 w-8 text-muted-foreground" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Draft</p>
-                <p className="text-2xl font-bold">{stats.draft}</p>
-              </div>
-              <Clock className="h-8 w-8 text-gray-500" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Pending Approval</p>
-                <p className="text-2xl font-bold">{stats.pending}</p>
-              </div>
-              <Clock className="h-8 w-8 text-yellow-500" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Issued</p>
-                <p className="text-2xl font-bold">{stats.issued}</p>
-              </div>
-              <CheckCircle className="h-8 w-8 text-green-500" />
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-muted-foreground">Total Value</p>
-                <p className="text-xl font-bold">{formatCurrency(stats.totalValue)}</p>
-              </div>
-              <IndianRupee className="h-8 w-8 text-primary" />
-            </div>
-          </CardContent>
-        </Card>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap gap-2 mt-6 ">
+          {poQuickFilters.map(({ value, label, count }) => (
+            <Button
+              key={value}
+              type="button"
+              size="sm"
+              variant={statusFilter === value ? "default" : "outline"}
+              onClick={() => setStatusFilter(value)}
+              data-testid={`po-filter-${value}`}
+            >
+              {label} ({count})
+            </Button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-full sm:w-64 sm:max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search PO number or vendor..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+              data-testid="search-po-input"
+            />
+          </div>
+          <TableSortButton
+            options={poSortOptions}
+            value={poSort.value}
+            direction={poSort.direction}
+            onChange={setPoSort}
+          />
+        </div>
       </div>
     </>
   );

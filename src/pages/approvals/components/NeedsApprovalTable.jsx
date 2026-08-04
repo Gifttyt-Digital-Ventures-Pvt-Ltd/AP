@@ -49,9 +49,10 @@ const baseNeedsApprovalTableHeader = [
   },
 ];
 
-// Table of invoices that require current user's approval action.
+// Table of invoices in a given approval-workflow stage (pending approval or pending checker).
 const NeedsApprovalTable = ({
-  myPendingInvoices,
+  invoices,
+  emptyMessage = "No invoices in this queue",
   getApprovalProgress,
   safeFormatDate,
   handleApprovalAction,
@@ -227,22 +228,22 @@ const NeedsApprovalTable = ({
       <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-thin-muted">
         <AppDataTable
           tableHeader={tableHeaders}
-          tableData={myPendingInvoices}
+          tableData={invoices}
           renderRow={renderNeedsApprovalRow}
           tableClassName="min-w-[1300px]"
           tableContainerClassName="overflow-visible"
           headClassName="border-b border-border bg-muted shadow-sm"
           stickyHeader
           bordered
-          emptyMessage="No invoices need your approval"
+          emptyMessage={emptyMessage}
           emptyTestId="no-approvals"
         />
       </div>
       <div className="mt-auto flex shrink-0 border-t border-border p-4">
         <p className="text-sm text-muted-foreground" data-testid="needs-approval-table-summary">
-          {myPendingInvoices.length === 0
-            ? "No invoices need your approval"
-            : `Showing ${myPendingInvoices.length.toLocaleString("en-IN")} invoice${myPendingInvoices.length === 1 ? "" : "s"} needing your approval`}
+          {invoices.length === 0
+            ? emptyMessage
+            : `Showing ${invoices.length.toLocaleString("en-IN")} invoice${invoices.length === 1 ? "" : "s"}`}
         </p>
       </div>
     </div>

@@ -10,20 +10,22 @@ import {
   useLazyGetInvoiceHistoryQuery,
 } from '../../Services/apis/invoicesVendorsApi';
 import { toInvoiceUiPayload, EMPTY_INVOICE_LIST_RESPONSE, getInvoiceListItems } from '../../Services/utils/payloadMappers';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
+import { Tabs, TabsContent } from '../../components/ui/tabs';
+import { Button } from '../../components/ui/button';
+import { Input } from '../../components/ui/input';
+import { Search } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
-import { useAuth } from '../../contexts/AuthContext';
 import { useRBAC } from '../../contexts/RBACContext';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useCurrencyFilter } from '../../hooks/useCurrencyFilter';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import CurrencySelector from '../../components/common/CurrencySelector';
 import RefreshButton from '../../components/common/RefreshButton';
+import TableSortButton from '../../components/common/TableSortButton';
 import { CURRENCY_SCREENS } from '../../utils/currency';
 import { INVOICE_LIST_PAGE_SIZE } from '../invoices/constants';
 import NeedsApprovalTable from './components/NeedsApprovalTable';
-import PendingInvoicesTable from './components/PendingInvoicesTable';
 import AllInvoicesTable from './components/AllInvoicesTable';
 import InvoiceHistorySheet from './components/InvoiceHistorySheet';
 import ApprovalDialog from './components/ApprovalDialog';
@@ -34,7 +36,6 @@ import { normalizeInvoiceHistoryEntries } from '../invoices/utils/invoiceHistory
 import {
   getInvoiceStatusBadgeClass,
   isInvoiceAwaitingApproval,
-  isInvoicePaid,
   NEEDS_CORRECTION_ACTION,
   normalizeApprovalAction,
   normalizeWorkflowStatus,
@@ -52,10 +53,13 @@ const safeFormatDate = (value, pattern = 'dd MMM yy') => {
   return Number.isNaN(date.getTime()) ? '-' : format(date, pattern);
 };
 
+const approvalsSortOptions = [
+  { value: 'uploadDate', label: 'Upload date', defaultDirection: 'desc' },
+];
+
 const Approvals = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const handledNotificationRef = useRef(null);
-  const { user } = useAuth();
   const { isCategoryFeatureEnabled, isCampaignFeatureEnabled, corporateScreens, isBranchEnabled } = useRBAC();
   const { canPerformAction } = useActionGuard();
   const canCheckInvoices = canPerformAction('invoices.check');
@@ -73,29 +77,44 @@ const Approvals = () => {
     queryArgs: approvalQueryArgs,
     currencyParam,
   } = useCurrencyFilter(currencyScreen);
-  const [allTabSearchTerm, setAllTabSearchTerm] = useState('');
+  const [approvalsSearchTerm, setApprovalsSearchTerm] = useState('');
+  const [approvalsSort, setApprovalsSort] = useState({ value: 'uploadDate', direction: 'desc' });
   const [allTabPageOffset, setAllTabPageOffset] = useState(0);
-  const debouncedAllTabSearch = useDebouncedValue(allTabSearchTerm.trim(), 300);
+  const debouncedApprovalsSearch = useDebouncedValue(approvalsSearchTerm.trim(), 300);
 
   useEffect(() => {
     setAllTabPageOffset(0);
-  }, [debouncedAllTabSearch, currencyParam]);
+  }, [debouncedApprovalsSearch, approvalsSort, currencyParam]);
+
+  const sharedFilterQueryArgs = useMemo(
+    () => ({
+      ...(debouncedApprovalsSearch ? { search: debouncedApprovalsSearch } : {}),
+      sortBy: approvalsSort.value,
+      sortDirection: approvalsSort.direction,
+    }),
+    [debouncedApprovalsSearch, approvalsSort],
+  );
+
+  const pendingApprovalsQueryArgs = useMemo(
+    () => ({ ...approvalQueryArgs, ...sharedFilterQueryArgs }),
+    [approvalQueryArgs, sharedFilterQueryArgs],
+  );
 
   const allInvoicesQueryArgs = useMemo(
     () => ({
       ...approvalQueryArgs,
+      ...sharedFilterQueryArgs,
       context: 'APPROVALS_ALL',
       limit: INVOICE_LIST_PAGE_SIZE,
       offset: allTabPageOffset,
-      ...(debouncedAllTabSearch ? { search: debouncedAllTabSearch } : {}),
     }),
-    [approvalQueryArgs, allTabPageOffset, debouncedAllTabSearch],
+    [approvalQueryArgs, sharedFilterQueryArgs, allTabPageOffset],
   );
 
   const { data: pendingApprovalsData = [], refetch: refetchPendingApprovals } =
-    useGetPendingApprovalsQuery(approvalQueryArgs);
+    useGetPendingApprovalsQuery(pendingApprovalsQueryArgs);
   const { data: pendingCheckerData = [], refetch: refetchPendingChecker } =
-    useGetPendingCheckerInvoicesQuery(approvalQueryArgs);
+    useGetPendingCheckerInvoicesQuery(pendingApprovalsQueryArgs);
   const {
     data: allInvoicesListData = EMPTY_INVOICE_LIST_RESPONSE,
     isFetching: allInvoicesFetching,
@@ -116,7 +135,7 @@ const Approvals = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historySheetOpen, setHistorySheetOpen] = useState(false);
   const [historySheetInvoice, setHistorySheetInvoice] = useState(null);
-  const [activeTab, setActiveTab] = useState('needs-approval');
+  const [activeTab, setActiveTab] = useState('pending-approval');
 
   const handleRefreshApprovals = async () => {
     try {
@@ -146,14 +165,12 @@ const Approvals = () => {
 
   const normalizeInvoice = (invoice = {}) => toInvoiceUiPayload(invoice);
 
-  const pendingInvoicesList = [
-    ...(Array.isArray(pendingApprovalsData) ? pendingApprovalsData : []),
-    ...(Array.isArray(pendingCheckerData) ? pendingCheckerData : [])
-  ];
-  
-  // Deduplicate in case an invoice appears in both (shouldn't happen, but safe)
-  const uniquePendingInvoices = Array.from(new Map(pendingInvoicesList.map(item => [item.id, item])).values());
-  const pendingInvoices = uniquePendingInvoices.map(normalizeInvoice);
+  const pendingApprovalInvoices = (
+    Array.isArray(pendingApprovalsData) ? pendingApprovalsData : []
+  ).map(normalizeInvoice);
+  const pendingCheckerInvoices = (
+    Array.isArray(pendingCheckerData) ? pendingCheckerData : []
+  ).map(normalizeInvoice);
   const allInvoices = getInvoiceListItems(allInvoicesListData);
 
   const allInvoicesPagination = useMemo(() => {
@@ -266,7 +283,7 @@ const Approvals = () => {
   const viewApprovalStatus = normalizeWorkflowStatus(viewInvoice?.status);
   const viewInvoiceIsCheckerAction = viewApprovalStatus === 'Pending Checker';
   const viewInvoiceCanAct =
-    activeTab === 'needs-approval' &&
+    (activeTab === 'pending-approval' || activeTab === 'pending-checker') &&
     Boolean(viewInvoice) &&
     isInvoiceAwaitingApproval(viewInvoice.status) &&
     (viewInvoiceIsCheckerAction ? canCheckInvoices : canApproveInvoices);
@@ -375,30 +392,6 @@ const Approvals = () => {
 
   const formatStatus = (status) => normalizeWorkflowStatus(status);
 
-  const myPendingInvoices = pendingInvoices
-    .filter((invoice) => isInvoiceAwaitingApproval(invoice.status))
-    .filter((invoice) => {
-      const status = normalizeWorkflowStatus(invoice.status);
-      const userRole = user?.role?.toUpperCase();
-      if (userRole === 'CHECKER') return status === 'Pending Checker';
-      if (userRole === 'APPROVER') {
-        return status === 'Pending Approver' || status === 'Pending Approval';
-      }
-      return true;
-    });
-
-  const otherPendingInvoices = pendingInvoices.filter((invoice) => {
-    const status = normalizeWorkflowStatus(invoice.status);
-    if (isInvoicePaid(status) || status === 'Rejected') return false;
-
-    const userRole = user?.role?.toUpperCase();
-    if (userRole === 'CHECKER') return status !== 'Pending Checker';
-    if (userRole === 'APPROVER') {
-      return status !== 'Pending Approver' && status !== 'Pending Approval';
-    }
-    return false;
-  });
-
   const notificationSource = searchParams.get('source');
   const notificationAction = searchParams.get('action');
   const notificationTab = searchParams.get('tab');
@@ -406,8 +399,11 @@ const Approvals = () => {
   const notificationWeakEntity = searchParams.get('weakEntity') === '1';
 
   useEffect(() => {
-    if (notificationSource === 'notification' && notificationTab === 'needs-approval') {
-      setActiveTab('needs-approval');
+    if (
+      notificationSource === 'notification' &&
+      (notificationTab === 'pending-approval' || notificationTab === 'pending-checker')
+    ) {
+      setActiveTab(notificationTab);
     }
   }, [notificationSource, notificationTab]);
 
@@ -424,7 +420,7 @@ const Approvals = () => {
     if (handledNotificationRef.current === notificationKey) return;
     handledNotificationRef.current = notificationKey;
 
-    const loadedInvoice = [...myPendingInvoices, ...otherPendingInvoices, ...allInvoices].find(
+    const loadedInvoice = [...pendingApprovalInvoices, ...pendingCheckerInvoices, ...allInvoices].find(
       (invoice) => String(invoice?.id) === String(notificationInvoiceId),
     );
 
@@ -448,11 +444,11 @@ const Approvals = () => {
     allInvoices,
     getInvoice,
     handleViewInvoice,
-    myPendingInvoices,
+    pendingApprovalInvoices,
     notificationAction,
     notificationInvoiceId,
     notificationSource,
-    otherPendingInvoices,
+    pendingCheckerInvoices,
     notificationWeakEntity,
   ]);
 
@@ -492,25 +488,54 @@ const Approvals = () => {
         className="flex min-h-0 flex-1 flex-col gap-6"
         data-testid="approval-tabs"
       >
-        <TabsList className="shrink-0 w-fit">
-          <TabsTrigger value="needs-approval" data-testid="tab-needs-approval">
-            Needs your approval
-          </TabsTrigger>
-          <TabsTrigger value="pending" data-testid="tab-pending">
-            Pending
-          </TabsTrigger>
-          <TabsTrigger value="all" data-testid="tab-all">
-            All
-          </TabsTrigger>
-        </TabsList>
+        <div className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap gap-2">
+            {[
+              { value: 'pending-approval', label: 'Pending Approval', count: pendingApprovalInvoices.length },
+              { value: 'pending-checker', label: 'Pending Checker', count: pendingCheckerInvoices.length },
+              { value: 'all', label: 'All', count: allInvoicesPagination.total },
+            ].map(({ value, label, count }) => (
+              <Button
+                key={value}
+                type="button"
+                size="sm"
+                variant={activeTab === value ? 'default' : 'outline'}
+                onClick={() => setActiveTab(value)}
+                data-testid={`tab-${value}`}
+              >
+                {label} ({count})
+              </Button>
+            ))}
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="relative w-full sm:w-64 sm:max-w-xs">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Search invoice, PO, or vendor..."
+                value={approvalsSearchTerm}
+                onChange={(event) => setApprovalsSearchTerm(event.target.value)}
+                className="pl-10"
+                data-testid="approvals-search-input"
+              />
+            </div>
+            <TableSortButton
+              options={approvalsSortOptions}
+              value={approvalsSort.value}
+              direction={approvalsSort.direction}
+              onChange={setApprovalsSort}
+            />
+          </div>
+        </div>
 
         <div className="relative min-h-0 flex-1">
           <TabsContent
-            value="needs-approval"
+            value="pending-approval"
             className="absolute inset-0 mt-0 flex min-h-0 flex-col focus-visible:outline-none data-[state=inactive]:hidden"
           >
             <NeedsApprovalTable
-              myPendingInvoices={myPendingInvoices}
+              invoices={pendingApprovalInvoices}
+              emptyMessage="No invoices pending approval"
               getApprovalProgress={getApprovalProgress}
               safeFormatDate={safeFormatDate}
               handleApprovalAction={handleApprovalAction}
@@ -525,17 +550,20 @@ const Approvals = () => {
           </TabsContent>
 
           <TabsContent
-            value="pending"
+            value="pending-checker"
             className="absolute inset-0 mt-0 flex min-h-0 flex-col focus-visible:outline-none data-[state=inactive]:hidden"
           >
-            <PendingInvoicesTable
-              otherPendingInvoices={otherPendingInvoices}
-              getStatusBadgeClass={getStatusBadgeClass}
-              formatStatus={formatStatus}
+            <NeedsApprovalTable
+              invoices={pendingCheckerInvoices}
+              emptyMessage="No invoices pending checker verification"
               getApprovalProgress={getApprovalProgress}
               safeFormatDate={safeFormatDate}
+              handleApprovalAction={handleApprovalAction}
               handleViewInvoice={handleViewInvoice}
               handleOpenInvoiceHistory={handleOpenInvoiceHistory}
+              canApproveInvoices={canApproveInvoices}
+              canCheckInvoices={canCheckInvoices}
+              showApprovalProgress={canApproveInvoices}
               showRefNoField
               showBranchField={isBranchEnabled}
             />
@@ -547,8 +575,6 @@ const Approvals = () => {
           >
             <AllInvoicesTable
               allInvoices={allInvoices}
-              searchTerm={allTabSearchTerm}
-              setSearchTerm={setAllTabSearchTerm}
               pagination={allInvoicesPagination}
               visiblePageNumbers={visibleAllInvoicePageNumbers}
               onPageChange={goToAllInvoicesPage}

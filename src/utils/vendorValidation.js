@@ -373,7 +373,7 @@ export const getBulkVendorUploadValidationErrors = (vendor = {}, { rowIndex = nu
   const name = String(vendor.name || '').trim();
 
   if (!name) {
-    errors.push(`${prefix}Company Name is required`);
+    errors.push(`${prefix}Vendor Name is required`);
   }
 
   return [...errors, ...getVendorFormatValidationErrors(vendor, { prefix })];

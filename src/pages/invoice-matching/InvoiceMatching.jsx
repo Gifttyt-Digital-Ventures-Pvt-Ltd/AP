@@ -37,6 +37,7 @@ import {
 } from "../../components/ui/table";
 import AppDataTable from "../../components/common/AppDataTable";
 import RefreshButton from "../../components/common/RefreshButton";
+import TableSortButton from "../../components/common/TableSortButton";
 import { Textarea } from "../../components/ui/textarea";
 import { cn } from "../../lib/utils";
 import { toast } from "sonner";
@@ -58,6 +59,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useActionGuard } from "../../hooks/useActionGuard";
+import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { useCreditErrorHandler } from "../../contexts/CreditErrorContext";
 import MeteredActionCostHint from "../../components/credits/MeteredActionCostHint";
 import { useMeteredActionEstimate } from "../../hooks/useMeteredActionEstimate";
@@ -68,19 +70,14 @@ import MatchingInvoiceCountBadge from "./components/MatchingInvoiceCountBadge";
 import MatchChecklistPanel from "./components/MatchChecklistPanel";
 import { extractPageContent, extractMatchingGrns } from "../../Services/utils/payloadMappers";
 
-const STATUS_OPTIONS = [
-  { value: "ALL", label: "All Statuses" },
-  { value: "MATCHED", label: "Matched" },
-  { value: "PARTIAL_MATCH", label: "Partial Match" },
-  { value: "MISMATCH", label: "Mismatch" },
-  { value: "RESOLVED", label: "Resolved" },
-  { value: "EXCEPTION", label: "Exception" },
-];
-
 const MATCH_TYPE_OPTIONS = [
-  { value: "ALL", label: "All Types" },
+  { value: "ALL", label: "Match Type" },
   { value: "TWO_WAY", label: "2 Way" },
   { value: "THREE_WAY", label: "3 Way" },
+];
+
+const matchSortOptions = [
+  { value: "createdAt", label: "Upload date", defaultDirection: "desc" },
 ];
 
 const matchingTableHeader = [
@@ -331,11 +328,11 @@ const InvoiceMatching = () => {
     status: "ALL",
     matchType: "ALL",
     search: "",
-    needsAttention: false,
     sortBy: "createdAt",
     sortDir: "desc",
   });
   const [searchInput, setSearchInput] = useState("");
+  const debouncedSearchInput = useDebouncedValue(searchInput.trim(), 300);
   const [showMatchDialog, setShowMatchDialog] = useState(false);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [showGroupChecklistDialog, setShowGroupChecklistDialog] = useState(false);
@@ -435,6 +432,21 @@ const InvoiceMatching = () => {
   const availableMatchTypeOptions = canUseThreeWayMatching
     ? MATCH_TYPE_OPTIONS
     : MATCH_TYPE_OPTIONS.filter((option) => option.value !== "THREE_WAY");
+  const matchQuickFilters = [
+    { value: "ALL", label: "All", count: Number(summary.totalMatchings ?? 0) },
+    { value: "MATCHED", label: "Matched", count: Number(summary.matched ?? 0) },
+    { value: "PARTIAL_MATCH", label: "Partially Matched", count: Number(summary.partialMatch ?? 0) },
+    { value: "MISMATCH", label: "Mismatch", count: Number(summary.mismatch ?? 0) },
+    { value: "RESOLVED", label: "Resolved", count: Number(summary.resolved ?? 0) },
+  ];
+
+  useEffect(() => {
+    setQuery((current) =>
+      current.search === debouncedSearchInput
+        ? current
+        : { ...current, page: 0, search: debouncedSearchInput },
+    );
+  }, [debouncedSearchInput]);
 
   useEffect(() => {
     if (canUseThreeWayMatching) return;
@@ -954,98 +966,51 @@ const InvoiceMatching = () => {
         </div>
       </div>
 
-      <div className="grid shrink-0 grid-cols-1 gap-4 md:grid-cols-4 lg:grid-cols-7">
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">Total</p>
-            <p className="text-2xl font-bold">{Number(summary.totalMatchings ?? 0)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">Matched</p>
-            <p className="text-2xl font-bold text-green-600">{Number(summary.matched ?? 0)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">Partial</p>
-            <p className="text-2xl font-bold text-yellow-600">{Number(summary.partialMatch ?? 0)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">Mismatch</p>
-            <p className="text-2xl font-bold text-red-600">{Number(summary.mismatch ?? 0)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">Resolved</p>
-            <p className="text-2xl font-bold text-blue-600">{Number(summary.resolved ?? 0)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">2 Way</p>
-            <p className="text-2xl font-bold">{Number(summary.twoWayMatches ?? 0)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">3 Way</p>
-            <p className="text-2xl font-bold">{Number(summary.threeWayMatches ?? 0)}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="flex shrink-0 flex-col gap-3 md:flex-row md:items-center">
-        <div className="relative flex-1 md:max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search invoice, PO, or vendor..."
-            value={searchInput}
-            onChange={(event) => setSearchInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") updateQuery({ search: searchInput.trim() });
-            }}
-            className="pl-10"
-            data-testid="search-matching-input"
+      <div className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap gap-2">
+          {matchQuickFilters.map(({ value, label, count }) => (
+            <Button
+              key={value}
+              type="button"
+              size="sm"
+              variant={query.status === value ? "default" : "outline"}
+              onClick={() => updateQuery({ status: value })}
+              data-testid={`match-filter-${value}`}
+            >
+              {label} ({count})
+            </Button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-full sm:w-64 sm:max-w-xs">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search invoice, PO, or vendor..."
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              className="pl-10"
+              data-testid="search-matching-input"
+            />
+          </div>
+          <Select value={query.matchType} onValueChange={(matchType) => updateQuery({ matchType })}>
+            <SelectTrigger className="w-full md:w-40" data-testid="match-type-filter">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {availableMatchTypeOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <TableSortButton
+            options={matchSortOptions}
+            value={query.sortBy}
+            direction={query.sortDir}
+            onChange={({ value, direction }) => updateQuery({ sortBy: value, sortDir: direction })}
           />
         </div>
-        <Button variant="outline" onClick={() => updateQuery({ search: searchInput.trim() })}>
-          Search
-        </Button>
-        <Select value={query.status} onValueChange={(status) => updateQuery({ status })}>
-          <SelectTrigger className="w-full md:w-48" data-testid="status-filter">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTIONS.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={query.matchType} onValueChange={(matchType) => updateQuery({ matchType })}>
-          <SelectTrigger className="w-full md:w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {availableMatchTypeOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button
-          variant={query.needsAttention ? "default" : "outline"}
-          onClick={() => updateQuery({ needsAttention: !query.needsAttention })}
-        >
-          Needs Attention
-        </Button>
       </div>
 
       {/* Bounded to the remaining height so the table can scroll its rows internally with a

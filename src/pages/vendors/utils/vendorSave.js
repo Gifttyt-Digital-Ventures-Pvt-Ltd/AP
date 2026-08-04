@@ -32,9 +32,6 @@ export const sanitizeGstRegistrationsForSave = (registrations = []) =>
         trade_name,
         legalName,
         legal_name,
-        registrationType,
-        registration_type,
-        regType,
         registrationDate,
         registration_date,
         regStartDate,
@@ -69,7 +66,14 @@ export const sanitizeVendorBranchesForSave = (branches = []) =>
 
 export const normalizeVendorForSave = (vendor = {}) => {
   const sanitized = stripVendorLevelAddressAndBank(vendor);
-  const { tdsMappings, vendor_branches, branches, ...restSanitized } = sanitized;
+  const {
+    id,
+    vendor_id,
+    tdsMappings,
+    vendor_branches,
+    branches,
+    ...restSanitized
+  } = sanitized;
   delete restSanitized.tdsCertificates;
   delete restSanitized.tdsDetailsEdited;
   const tdsMapping = sanitizeVendorTdsForSave(restSanitized.tdsMapping ?? tdsMappings);

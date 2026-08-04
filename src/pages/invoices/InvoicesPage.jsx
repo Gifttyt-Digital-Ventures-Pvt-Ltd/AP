@@ -269,9 +269,9 @@ const baseInvoiceTableHeader = [
     key: "invoiceNumber",
     title: "Invoice #",
     headerClassName:
-      "p-3 text-left text-xs font-medium sticky left-[var(--invoice-sticky-col3)] right-0 border-r-2 border-r-shadow-2xl",
+      "p-3 text-left text-xs font-medium sticky left-[var(--invoice-sticky-col3)] shadow-[inset_-1px_0_0_0_hsl(var(--border)),4px_0_8px_-4px_rgba(0,0,0,0.12)]",
     cellClassName:
-      "p-3 text-sm font-medium sticky left-[var(--invoice-sticky-col3)] bg-inherit border-r-2 border-r-shadow-2xl",
+      "p-3 text-sm font-medium sticky left-[var(--invoice-sticky-col3)] bg-inherit shadow-[inset_-1px_0_0_0_hsl(var(--border)),4px_0_8px_-4px_rgba(0,0,0,0.12)]",
   },
   {
     key: "source",
@@ -391,7 +391,9 @@ const InvoicesPage = () => {
   const canUseThreeWayMatching =
     showInvoiceMatchingSelection && hasGrnSubscription;
   const { showIntegrationColumn } = useZohoIntegrationActive();
-  const showErpIntegrationFields = isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
+  const showErpIntegrationFields = isCorporateSectionEnabled(
+    "SETTINGS_INTEGRATIONS",
+  );
   const { data: corporateUserContext = null } =
     useGetCorporateUserDetailsQuery();
   const invoiceUserEmail =
@@ -1579,8 +1581,12 @@ const InvoicesPage = () => {
           vendorId: resolvedVendorId,
           vendorRequestSubmitted,
           amount: parseNumericInput(bulkEditForm.amount, 0),
-          lineItemMode: isSummaryOnly ? LINE_ITEM_MODE_SUMMARY_ONLY : LINE_ITEM_MODE_DETAILED,
-          lineItemsRemoved: isSummaryOnly ? bulkEditForm.lineItemsRemoved === true : false,
+          lineItemMode: isSummaryOnly
+            ? LINE_ITEM_MODE_SUMMARY_ONLY
+            : LINE_ITEM_MODE_DETAILED,
+          lineItemsRemoved: isSummaryOnly
+            ? bulkEditForm.lineItemsRemoved === true
+            : false,
           lineItems: isSummaryOnly
             ? []
             : normalizeLineItemsForTaxLevel({
@@ -1696,7 +1702,9 @@ const InvoicesPage = () => {
       let igst = 0;
       let foreignTax = 0;
       if (invoiceLevelTaxEnabled && isInrInvoiceCurrency(currency)) {
-        const taxRate = TAX_RATES.find((entry) => entry.value === formData?.invoiceTax);
+        const taxRate = TAX_RATES.find(
+          (entry) => entry.value === formData?.invoiceTax,
+        );
         if (taxRate) {
           cgst = (taxableSubTotal * (Number(taxRate.cgst) || 0)) / 100;
           sgst = (taxableSubTotal * (Number(taxRate.sgst) || 0)) / 100;
@@ -1704,7 +1712,9 @@ const InvoicesPage = () => {
         }
       } else if (invoiceLevelTaxEnabled) {
         foreignTax =
-          (taxableSubTotal * (parseNumericInput(formData?.invoiceTaxRate, 0) || 0)) / 100;
+          (taxableSubTotal *
+            (parseNumericInput(formData?.invoiceTaxRate, 0) || 0)) /
+          100;
       }
       const totalTaxAmount = invoiceLevelTaxEnabled
         ? cgst + sgst + igst + foreignTax
@@ -1719,13 +1729,21 @@ const InvoicesPage = () => {
         cgstRate: 0,
         sgstRate: 0,
         igstRate: 0,
-        inrTaxes: isInrInvoiceCurrency(currency) && totalTaxAmount > 0
-          ? [{ name: "Total Tax", rate: 0, amount: totalTaxAmount }]
-          : [],
+        inrTaxes:
+          isInrInvoiceCurrency(currency) && totalTaxAmount > 0
+            ? [{ name: "Total Tax", rate: 0, amount: totalTaxAmount }]
+            : [],
         foreignTax: isInrInvoiceCurrency(currency) ? 0 : totalTaxAmount,
-        foreignTaxes: !isInrInvoiceCurrency(currency) && totalTaxAmount > 0
-          ? [{ name: formData?.invoiceTaxName || "Tax", rate: 0, amount: totalTaxAmount }]
-          : [],
+        foreignTaxes:
+          !isInrInvoiceCurrency(currency) && totalTaxAmount > 0
+            ? [
+                {
+                  name: formData?.invoiceTaxName || "Tax",
+                  rate: 0,
+                  amount: totalTaxAmount,
+                },
+              ]
+            : [],
         invoiceDiscountAmount: boundedInvoiceDiscountAmount,
         roundOff,
         total,
@@ -1788,14 +1806,19 @@ const InvoicesPage = () => {
         calculateLineItemSubtotal: (item) =>
           prev.discountsLevel === INVOICE_LEVEL
             ? parseNumericInput(item.lineTotal ?? item.amount, 0) ||
-              parseNumericInput(item.quantity, 0) * parseNumericInput(item.unitRate, 0)
+              parseNumericInput(item.quantity, 0) *
+                parseNumericInput(item.unitRate, 0)
             : resolveLineItemSubtotal(item),
         taxRates: TAX_RATES,
         invoiceTaxAmount: prev.scannedTaxAmount,
         invoiceTaxName:
-          prev.taxesLevel === INVOICE_LEVEL ? prev.invoiceTaxName : prev.scannedTaxName,
+          prev.taxesLevel === INVOICE_LEVEL
+            ? prev.invoiceTaxName
+            : prev.scannedTaxName,
         invoiceTaxRate:
-          prev.taxesLevel === INVOICE_LEVEL ? prev.invoiceTaxRate : prev.scannedTaxRate,
+          prev.taxesLevel === INVOICE_LEVEL
+            ? prev.invoiceTaxRate
+            : prev.scannedTaxRate,
         invoiceTax: prev.invoiceTax,
         taxesLevel: prev.taxesLevel,
         discountsLevel: prev.discountsLevel,
@@ -1924,8 +1947,7 @@ const InvoicesPage = () => {
     const totals = calculateTotals(data.lineItems, data.currency);
     const resolvedVendorId =
       data.vendorId || findVendorByName(data.vendorName)?.id || "";
-    const isSummaryOnly =
-      data.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
+    const isSummaryOnly = data.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
     const updateLineItems = isSummaryOnly
       ? []
       : normalizeLineItemsForTaxLevel({
@@ -1957,7 +1979,9 @@ const InvoicesPage = () => {
       ? (() => {
           const tdsRate = resolveTdsRate(data.tds, data.tdsRate);
           return tdsRate
-            ? Math.round(((parseNumericInput(data.subTotal, 0) * tdsRate) / 100) * 100) / 100
+            ? Math.round(
+                ((parseNumericInput(data.subTotal, 0) * tdsRate) / 100) * 100,
+              ) / 100
             : null;
         })()
       : computeTdsAmount(
@@ -2165,8 +2189,7 @@ const InvoicesPage = () => {
     if (!formData) return;
 
     const totals = calculateTotals(formData.lineItems);
-    const isSummaryOnly =
-      formData.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
+    const isSummaryOnly = formData.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
     const createLineItems = isSummaryOnly
       ? []
       : normalizeLineItemsForTaxLevel({
@@ -2181,7 +2204,10 @@ const InvoicesPage = () => {
       ? (() => {
           const tdsRate = resolveTdsRate(formData.tds, formData.tdsRate);
           return tdsRate
-            ? Math.round(((parseNumericInput(formData.subTotal, 0) * tdsRate) / 100) * 100) / 100
+            ? Math.round(
+                ((parseNumericInput(formData.subTotal, 0) * tdsRate) / 100) *
+                  100,
+              ) / 100
             : null;
         })()
       : computeTdsAmount(
@@ -2347,12 +2373,15 @@ const InvoicesPage = () => {
     }
   };
 
-  const closeViewDialog = useCallback((open) => {
-    setViewDialogOpen(open);
-    if (!open) {
-      clearNotificationQueryParams(searchParams, setSearchParams);
-    }
-  }, [searchParams, setSearchParams]);
+  const closeViewDialog = useCallback(
+    (open) => {
+      setViewDialogOpen(open);
+      if (!open) {
+        clearNotificationQueryParams(searchParams, setSearchParams);
+      }
+    },
+    [searchParams, setSearchParams],
+  );
 
   const notificationSource = searchParams.get("source");
   const notificationAction = searchParams.get("action");
@@ -2383,7 +2412,9 @@ const InvoicesPage = () => {
     }
 
     if (notificationWeakEntity) {
-      toast.warning("Could not open the exact item. Showing the related module instead.");
+      toast.warning(
+        "Could not open the exact item. Showing the related module instead.",
+      );
       return;
     }
 
@@ -2391,7 +2422,9 @@ const InvoicesPage = () => {
       .unwrap()
       .then((invoice) => handleViewInvoice(invoice))
       .catch(() => {
-        toast.warning("Could not open the exact item. Showing the related module instead.");
+        toast.warning(
+          "Could not open the exact item. Showing the related module instead.",
+        );
       });
   }, [
     getInvoice,
@@ -2987,7 +3020,10 @@ const InvoicesPage = () => {
             return (
               <TableCell
                 key={header.key}
-                className={cn("border border-border", header.cellClassName)}
+                className={cn(
+                  "border border-table-border",
+                  header.cellClassName,
+                )}
                 onClick={
                   header.key === "documentType"
                     ? (event) => event.stopPropagation()
@@ -3029,10 +3065,15 @@ const InvoicesPage = () => {
         if (isSummaryOnly) {
           const subTotal = parseNumericInput(bulkEditForm?.subTotal, 0);
           const roundOff = parseNumericInput(
-            bulkEditForm?.roundOff ?? bulkEditForm?.round_off ?? bulkEditForm?.roundoff,
+            bulkEditForm?.roundOff ??
+              bulkEditForm?.round_off ??
+              bulkEditForm?.roundoff,
             0,
           );
-          const discountValue = parseNumericInput(bulkEditForm?.invoiceDiscount, 0);
+          const discountValue = parseNumericInput(
+            bulkEditForm?.invoiceDiscount,
+            0,
+          );
           const invoiceDiscountAmount =
             bulkEditForm?.invoiceDiscountType === "%"
               ? (subTotal * discountValue) / 100
@@ -3042,13 +3083,16 @@ const InvoicesPage = () => {
             Math.min(invoiceDiscountAmount, subTotal),
           );
           const taxableSubTotal = subTotal - boundedInvoiceDiscountAmount;
-          const invoiceLevelTaxEnabled = bulkEditForm?.taxesLevel === INVOICE_LEVEL;
+          const invoiceLevelTaxEnabled =
+            bulkEditForm?.taxesLevel === INVOICE_LEVEL;
           let cgst = 0;
           let sgst = 0;
           let igst = 0;
           let foreignTax = 0;
           if (invoiceLevelTaxEnabled && isInrInvoiceCurrency(currency)) {
-            const taxRate = TAX_RATES.find((entry) => entry.value === bulkEditForm?.invoiceTax);
+            const taxRate = TAX_RATES.find(
+              (entry) => entry.value === bulkEditForm?.invoiceTax,
+            );
             if (taxRate) {
               cgst = (taxableSubTotal * (Number(taxRate.cgst) || 0)) / 100;
               sgst = (taxableSubTotal * (Number(taxRate.sgst) || 0)) / 100;
@@ -3056,7 +3100,9 @@ const InvoicesPage = () => {
             }
           } else if (invoiceLevelTaxEnabled) {
             foreignTax =
-              (taxableSubTotal * (parseNumericInput(bulkEditForm?.invoiceTaxRate, 0) || 0)) / 100;
+              (taxableSubTotal *
+                (parseNumericInput(bulkEditForm?.invoiceTaxRate, 0) || 0)) /
+              100;
           }
           const totalTaxAmount = invoiceLevelTaxEnabled
             ? cgst + sgst + igst + foreignTax
@@ -3067,13 +3113,21 @@ const InvoicesPage = () => {
             cgst,
             sgst,
             igst,
-            inrTaxes: isInrInvoiceCurrency(currency) && totalTaxAmount > 0
-              ? [{ name: "Total Tax", rate: 0, amount: totalTaxAmount }]
-              : [],
+            inrTaxes:
+              isInrInvoiceCurrency(currency) && totalTaxAmount > 0
+                ? [{ name: "Total Tax", rate: 0, amount: totalTaxAmount }]
+                : [],
             foreignTax: isInrInvoiceCurrency(currency) ? 0 : totalTaxAmount,
-            foreignTaxes: !isInrInvoiceCurrency(currency) && totalTaxAmount > 0
-              ? [{ name: bulkEditForm?.invoiceTaxName || "Tax", rate: 0, amount: totalTaxAmount }]
-              : [],
+            foreignTaxes:
+              !isInrInvoiceCurrency(currency) && totalTaxAmount > 0
+                ? [
+                    {
+                      name: bulkEditForm?.invoiceTaxName || "Tax",
+                      rate: 0,
+                      amount: totalTaxAmount,
+                    },
+                  ]
+                : [],
             invoiceDiscountAmount: boundedInvoiceDiscountAmount,
             roundOff,
             total: taxableSubTotal + totalTaxAmount + roundOff,
@@ -3149,7 +3203,10 @@ const InvoicesPage = () => {
             currency: prev.currency || DEFAULT_CURRENCY,
             calculateLineItemSubtotal: (item) => {
               if (prev.discountsLevel === INVOICE_LEVEL) {
-                const lineTotal = parseNumericInput(item.lineTotal ?? item.amount, 0);
+                const lineTotal = parseNumericInput(
+                  item.lineTotal ?? item.amount,
+                  0,
+                );
                 if (lineTotal > 0) return lineTotal;
                 return (
                   parseNumericInput(item.quantity, 0) *
@@ -3161,9 +3218,13 @@ const InvoicesPage = () => {
             taxRates: TAX_RATES,
             invoiceTaxAmount: prev.scannedTaxAmount,
             invoiceTaxName:
-              prev.taxesLevel === INVOICE_LEVEL ? prev.invoiceTaxName : prev.scannedTaxName,
+              prev.taxesLevel === INVOICE_LEVEL
+                ? prev.invoiceTaxName
+                : prev.scannedTaxName,
             invoiceTaxRate:
-              prev.taxesLevel === INVOICE_LEVEL ? prev.invoiceTaxRate : prev.scannedTaxRate,
+              prev.taxesLevel === INVOICE_LEVEL
+                ? prev.invoiceTaxRate
+                : prev.scannedTaxRate,
             invoiceTax: prev.invoiceTax,
             taxesLevel: prev.taxesLevel,
             discountsLevel: prev.discountsLevel,
@@ -3395,11 +3456,11 @@ const InvoicesPage = () => {
                         event.preventDefault();
                         goToInvoicePage(invoiceCurrentPage - 1);
                       }}
-                      className={
-                        invoiceCurrentPage === 0
-                          ? "pointer-events-none opacity-50"
-                          : undefined
-                      }
+                      className={cn(
+                        "h-7 gap-1 pl-2 pr-2.5 text-xs",
+                        invoiceCurrentPage === 0 &&
+                          "pointer-events-none opacity-50",
+                      )}
                       data-testid="invoice-pagination-previous"
                     />
                   </PaginationItem>

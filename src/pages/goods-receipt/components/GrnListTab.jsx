@@ -1,15 +1,8 @@
-import { useMemo, useState } from 'react';
-import { Edit, Eye, Plus, CheckCircle2, Unlock } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Edit, Eye, Plus, CheckCircle2, Search, Unlock } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import { Input } from '../../../components/ui/input';
 import { Card } from '../../../components/ui/card';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../../../components/ui/select';
 import {
   Table,
   TableBody,
@@ -18,39 +11,28 @@ import {
   TableHeader,
   TableRow,
 } from '../../../components/ui/table';
-import GrnStatsCards from './GrnStatsCards';
+import TableSortButton from '../../../components/common/TableSortButton';
 import GrnStatusBadge from './GrnStatusBadge';
 import GrnSourceBadge from './GrnSourceBadge';
-import { GRN_PAGE_SIZE, GRN_SOURCE, GRN_STATUS } from '../constants';
+import { GRN_PAGE_SIZE, GRN_STATUS } from '../constants';
 import { formatDate } from '../utils';
 import {
   getAccountingUnlockRequestStatus,
   isAccountingReadyLocked,
 } from '../../../utils/accountingLock';
 
-const STATUS_FILTER_OPTIONS = [
-  { value: 'all', label: 'All Statuses' },
-  { value: GRN_STATUS.DRAFT, label: 'Draft' },
-  { value: GRN_STATUS.PENDING_APPROVAL, label: 'Pending Approval' },
-  { value: GRN_STATUS.SENT_BACK, label: 'Sent Back' },
-  { value: GRN_STATUS.APPROVED, label: 'Approved' },
-  { value: GRN_STATUS.REJECTED, label: 'Rejected' },
-  { value: GRN_STATUS.CANCELLED, label: 'Cancelled' },
-];
-
-const SOURCE_FILTER_OPTIONS = [
-  { value: 'all', label: 'All Sources' },
-  { value: GRN_SOURCE.PO, label: 'PO' },
-  { value: GRN_SOURCE.STANDALONE, label: 'Standalone' },
-  { value: GRN_SOURCE.UPLOAD, label: 'Uploaded' },
-  { value: GRN_SOURCE.FROM_PI, label: 'From PI' },
+const grnSortOptions = [
+  { value: 'created_at', label: 'Upload date', defaultDirection: 'desc' },
 ];
 
 const GrnListTab = ({
   grns = [],
-  pendingPoCount = 0,
   canCreate = false,
   canApprove = false,
+  search = '',
+  setSearch,
+  grnSort = { value: 'created_at', direction: 'desc' },
+  setGrnSort,
   onCreate,
   onView,
   onEdit,
@@ -58,32 +40,46 @@ const GrnListTab = ({
   onRequestUnlock,
   requestingUnlock = false,
 }) => {
-  const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
-  const [sourceFilter, setSourceFilter] = useState('all');
-  const [vendorFilter, setVendorFilter] = useState('all');
   const [page, setPage] = useState(0);
 
-  const vendors = useMemo(
-    () => [...new Set(grns.map((grn) => grn.vendor_name).filter(Boolean))].sort(),
+  useEffect(() => {
+    setPage(0);
+  }, [search, statusFilter, grnSort]);
+
+  const grnQuickFilters = useMemo(
+    () => [
+      { value: 'all', label: 'All', count: grns.length },
+      {
+        value: GRN_STATUS.PENDING_APPROVAL,
+        label: 'Pending Approval',
+        count: grns.filter((grn) => grn.status === GRN_STATUS.PENDING_APPROVAL).length,
+      },
+      {
+        value: GRN_STATUS.APPROVED,
+        label: 'Approved',
+        count: grns.filter((grn) => grn.status === GRN_STATUS.APPROVED).length,
+      },
+      {
+        value: GRN_STATUS.DRAFT,
+        label: 'Draft',
+        count: grns.filter((grn) => grn.status === GRN_STATUS.DRAFT).length,
+      },
+    ],
     [grns],
   );
 
+  // Search and sort are now applied server-side (see GoodsReceipt.jsx's grnQueryParams).
+  // Status stays a client-side filter on the already-fetched page so the quick-filter
+  // counts above stay stable regardless of which status button is active — sending
+  // status to the server would narrow `grns` itself and collapse the other counts,
+  // the same bug fixed for the Vendors page's quick filters.
   const filtered = useMemo(
     () =>
-      grns.filter((grn) => {
-        const query = search.trim().toLowerCase();
-        const matchesSearch =
-          !query ||
-          grn.grn_number?.toLowerCase().includes(query) ||
-          grn.po_number?.toLowerCase().includes(query) ||
-          grn.vendor_name?.toLowerCase().includes(query);
-        const matchesStatus = statusFilter === 'all' || grn.status === statusFilter;
-        const matchesSource = sourceFilter === 'all' || grn.source_type === sourceFilter;
-        const matchesVendor = vendorFilter === 'all' || grn.vendor_name === vendorFilter;
-        return matchesSearch && matchesStatus && matchesSource && matchesVendor;
-      }),
-    [grns, search, statusFilter, sourceFilter, vendorFilter],
+      statusFilter === 'all'
+        ? grns
+        : grns.filter((grn) => grn.status === statusFilter),
+    [grns, statusFilter],
   );
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / GRN_PAGE_SIZE));
@@ -92,99 +88,59 @@ const GrnListTab = ({
 
   return (
     <div className="space-y-4">
-      <GrnStatsCards grns={grns} pendingPoCount={pendingPoCount} />
-
-      <Card className="p-4">
-        <div className="flex flex-wrap items-center gap-3">
-          <Input
-            placeholder="Search GRN, PO, vendor…"
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setPage(0);
-            }}
-            className="max-w-xs"
-            data-testid="search-grn-input"
-          />
-          <Select
-            value={statusFilter}
-            onValueChange={(value) => {
-              setStatusFilter(value);
-              setPage(0);
-            }}
-          >
-            <SelectTrigger className="w-44">
-              <SelectValue placeholder="Status" />
-            </SelectTrigger>
-            <SelectContent>
-              {STATUS_FILTER_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={sourceFilter}
-            onValueChange={(value) => {
-              setSourceFilter(value);
-              setPage(0);
-            }}
-          >
-            <SelectTrigger className="w-40">
-              <SelectValue placeholder="Source" />
-            </SelectTrigger>
-            <SelectContent>
-              {SOURCE_FILTER_OPTIONS.map((option) => (
-                <SelectItem key={option.value} value={option.value}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Select
-            value={vendorFilter}
-            onValueChange={(value) => {
-              setVendorFilter(value);
-              setPage(0);
-            }}
-          >
-            <SelectTrigger className="w-48">
-              <SelectValue placeholder="Vendor" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Vendors</SelectItem>
-              {vendors.map((vendor) => (
-                <SelectItem key={vendor} value={vendor}>
-                  {vendor}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <span className="ml-auto text-sm text-muted-foreground">
-            {filtered.length} GRN{filtered.length === 1 ? '' : 's'}
-          </span>
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap gap-2">
+          {grnQuickFilters.map(({ value, label, count }) => (
+            <Button
+              key={value}
+              type="button"
+              size="sm"
+              variant={statusFilter === value ? 'default' : 'outline'}
+              onClick={() => setStatusFilter(value)}
+              data-testid={`grn-filter-${value}`}
+            >
+              {label} ({count})
+            </Button>
+          ))}
         </div>
-      </Card>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-full sm:w-64 sm:max-w-xs">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search GRN number or vendor…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="pl-10"
+              data-testid="search-grn-input"
+            />
+          </div>
+          <TableSortButton
+            options={grnSortOptions}
+            value={grnSort.value}
+            direction={grnSort.direction}
+            onChange={setGrnSort}
+          />
+        </div>
+      </div>
 
       <Card className="overflow-hidden">
         <Table className="border-separate border-spacing-0">
           <TableHeader>
-            <TableRow>
-              <TableHead className="border border-border">GRN Number</TableHead>
-              <TableHead className="border border-border">Date</TableHead>
-              <TableHead className="border border-border">Vendor</TableHead>
-              <TableHead className="border border-border">PO Reference</TableHead>
-              <TableHead className="border border-border">Source</TableHead>
-              <TableHead className="border border-border">Status</TableHead>
-              <TableHead className="border border-border text-center">Lines</TableHead>
-              <TableHead className="border border-border">Actions</TableHead>
+            <TableRow className="bg-muted">
+              <TableHead className="border border-table-border text-foreground">GRN Number</TableHead>
+              <TableHead className="border border-table-border text-foreground">Date</TableHead>
+              <TableHead className="border border-table-border text-foreground">Vendor</TableHead>
+              <TableHead className="border border-table-border text-foreground">PO Reference</TableHead>
+              <TableHead className="border border-table-border text-foreground">Source</TableHead>
+              <TableHead className="border border-table-border text-foreground">Status</TableHead>
+              <TableHead className="border border-table-border text-center text-foreground">Lines</TableHead>
+              <TableHead className="border border-table-border text-foreground">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {pageData.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="border border-border py-12 text-center text-muted-foreground">
+                <TableCell colSpan={8} className="border border-table-border py-12 text-center text-muted-foreground">
                   No goods receipts found.{' '}
                   {canCreate && (
                     <Button variant="link" className="px-1" onClick={onCreate}>
@@ -195,37 +151,58 @@ const GrnListTab = ({
               </TableRow>
             ) : (
               pageData.map((grn) => (
-                <TableRow key={grn.id} data-testid={`grn-row-${grn?.id ?? 'unknown'}`}>
-                  <TableCell className="border border-border font-semibold text-primary">{grn.grn_number}</TableCell>
-                  <TableCell className="border border-border text-muted-foreground">{formatDate(grn.receipt_date)}</TableCell>
-                  <TableCell className="border border-border">{grn.vendor_name || '—'}</TableCell>
-                  <TableCell className="border border-border">
+                <TableRow
+                  key={grn.id}
+                  className="cursor-pointer hover:bg-muted"
+                  onClick={() => onView(grn)}
+                  data-testid={`grn-row-${grn?.id ?? 'unknown'}`}
+                >
+                  <TableCell className="border border-table-border font-semibold text-primary">{grn.grn_number}</TableCell>
+                  <TableCell className="border border-table-border text-muted-foreground">{formatDate(grn.receipt_date)}</TableCell>
+                  <TableCell className="border border-table-border">{grn.vendor_name || '—'}</TableCell>
+                  <TableCell className="border border-table-border">
                     {grn.po_number ? (
                       <span className="font-medium text-blue-600">{grn.po_number}</span>
                     ) : (
                       '—'
                     )}
                   </TableCell>
-                  <TableCell className="border border-border">
+                  <TableCell className="border border-table-border">
                     <GrnSourceBadge source={grn.source_type} />
                   </TableCell>
-                  <TableCell className="border border-border">
+                  <TableCell className="border border-table-border">
                     <GrnStatusBadge status={grn.status} />
                   </TableCell>
-                  <TableCell className="border border-border text-center">
+                  <TableCell className="border border-table-border text-center">
                     <span className="inline-flex min-w-[1.75rem] justify-center rounded-full bg-primary/10 px-2 py-0.5 text-xs font-bold text-primary">
                       {grn.line_items?.length || 0}
                     </span>
                   </TableCell>
-                  <TableCell className="border border-border">
+                  <TableCell className="border border-table-border">
                     <div className="flex gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => onView(grn)} data-testid={`view-grn-${grn?.id ?? 'unknown'}`}>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          onView(grn);
+                        }}
+                        data-testid={`view-grn-${grn?.id ?? 'unknown'}`}
+                      >
                         <Eye className="mr-1 h-4 w-4" />
                         View
                       </Button>
                       {[GRN_STATUS.DRAFT, GRN_STATUS.SENT_BACK].includes(grn.status) &&
                         !isAccountingReadyLocked(grn) && (
-                        <Button variant="outline" size="sm" onClick={() => onEdit(grn)} data-testid={`edit-grn-${grn?.id ?? 'unknown'}`}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onEdit(grn);
+                          }}
+                          data-testid={`edit-grn-${grn?.id ?? 'unknown'}`}
+                        >
                           <Edit className="mr-1 h-4 w-4" />
                           Edit
                         </Button>
@@ -236,7 +213,10 @@ const GrnListTab = ({
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => onRequestUnlock?.(grn)}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onRequestUnlock?.(grn);
+                          }}
                           disabled={requestingUnlock}
                           title="Request accounting unlock"
                           data-testid={`request-unlock-grn-${grn?.id ?? 'unknown'}`}
@@ -245,7 +225,14 @@ const GrnListTab = ({
                         </Button>
                       )}
                       {canApprove && grn.status === GRN_STATUS.PENDING_APPROVAL && (
-                        <Button variant="outline" size="sm" onClick={() => onReview(grn)}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onReview(grn);
+                          }}
+                        >
                           <CheckCircle2 className="mr-1 h-4 w-4" />
                           Review
                         </Button>
