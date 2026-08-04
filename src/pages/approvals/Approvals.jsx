@@ -121,8 +121,10 @@ const Approvals = () => {
     refetch: refetchInvoices,
   } = useGetInvoicesQuery(allInvoicesQueryArgs);
   const approvalsRefreshing = allInvoicesFetching;
-  const [approveInvoice] = useApproveInvoiceMutation();
-  const [checkInvoice] = useCheckInvoiceMutation();
+  const [approveInvoice, { isLoading: approveInvoiceLoading }] =
+    useApproveInvoiceMutation();
+  const [checkInvoice, { isLoading: checkInvoiceLoading }] =
+    useCheckInvoiceMutation();
   const [getInvoice] = useLazyGetInvoiceQuery();
   const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
 
@@ -329,6 +331,8 @@ const Approvals = () => {
     });
 
   const submitApproval = async () => {
+    if (approveInvoiceLoading || checkInvoiceLoading) return;
+
     try {
       const isChecker =
         normalizeWorkflowStatus(selectedInvoice.status) === 'Pending Checker';
@@ -600,6 +604,7 @@ const Approvals = () => {
         comments={comments}
         setComments={setComments}
         submitApproval={submitApproval}
+        isSubmitting={approveInvoiceLoading || checkInvoiceLoading}
       />
 
       <InvoiceHistorySheet
