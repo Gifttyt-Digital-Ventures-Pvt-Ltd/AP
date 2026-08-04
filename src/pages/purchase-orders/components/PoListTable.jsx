@@ -1,9 +1,7 @@
 import React, { useMemo } from "react";
-import { CheckCircle2, Eye, Pencil, Search, Send, Unlock } from "lucide-react";
+import { CheckCircle2, Eye, Pencil, Send, Unlock } from "lucide-react";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
-import { Input } from "../../../components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import AppDataTable from "../../../components/common/AppDataTable";
 import { OrgBranchCell, VendorWithBranchCell } from "../../../components/common/BranchTableCells";
@@ -14,9 +12,10 @@ import {
 } from "../../../utils/accountingLock";
 
 const basePoTableHeader = [
+  { key: "srNo", title: "Sr. No", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm font-medium" },
   { key: "po_number", title: "PO Number", headerClassName: "bg-muted text-foreground", cellClassName: "font-medium" },
-  { key: "orgBranch", title: "Branch", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm" },
   { key: "vendor_name", title: "Vendor", headerClassName: "bg-muted text-foreground" },
+  { key: "orgBranch", title: "Branch", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm" },
   { key: "po_date", title: "PO Date", headerClassName: "bg-muted text-foreground" },
   { key: "expected_delivery_date", title: "Delivery Date", headerClassName: "bg-muted text-foreground" },
   { key: "total_amount", title: "Amount", headerClassName: "bg-muted text-foreground" },
@@ -25,10 +24,6 @@ const basePoTableHeader = [
 ];
 
 const PoListTable = ({
-  searchQuery,
-  setSearchQuery,
-  statusFilter,
-  setStatusFilter,
   filteredOrders,
   totalOrders = 0,
   formatDate,
@@ -58,13 +53,20 @@ const PoListTable = ({
   const renderPoRow = (po, rowIndex, headers) => (
     <TableRow
       key={po.id ?? rowIndex}
-      className={cn(rowIndex % 2 === 1 && "bg-muted/20")}
+      className="cursor-pointer hover:bg-muted"
+      onClick={() => {
+        setSelectedPO(po);
+        setShowViewDialog(true);
+      }}
       data-testid={`po-row-${po?.id ?? 'unknown'}`}
     >
       {headers.map((header) => {
         let value;
 
         switch (header.key) {
+          case "srNo":
+            value = rowIndex + 1;
+            break;
           case "vendor_name":
             value = <VendorWithBranchCell record={po} vendorName={po.vendor_name} />;
             break;
@@ -198,33 +200,6 @@ const PoListTable = ({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">
-      <div className="flex shrink-0 flex-col gap-3 sm:flex-row sm:items-center">
-        <div className="relative flex-1 max-w-sm">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Search PO number or vendor..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
-            data-testid="search-po-input"
-          />
-        </div>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-48" data-testid="status-filter">
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            <SelectItem value="Draft">Draft</SelectItem>
-            <SelectItem value="Pending Approval">Pending Approval</SelectItem>
-            <SelectItem value="Issued">Issued</SelectItem>
-            <SelectItem value="Amended">Amended</SelectItem>
-            <SelectItem value="Rejected">Rejected</SelectItem>
-            <SelectItem value="Cancelled">Cancelled</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
-
       <div
         className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm"
         data-testid="purchase-orders-table"

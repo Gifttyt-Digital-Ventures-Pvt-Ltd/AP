@@ -109,6 +109,7 @@ export const extractMatchingGrns = (response) => ({
 
 export const toVendorApiPayload = (vendor = {}) => {
   const {
+    vendorId,
     name,
     trade_name,
     tradeName,
@@ -160,6 +161,29 @@ export const toVendorApiPayload = (vendor = {}) => {
     vendor_branches,
     branchDetails,
     branch_details,
+    bankAccounts,
+    paymentTerms,
+    modeOfDelivery,
+    deliveryTerms,
+    vendorStatus,
+    oneTimeVendor,
+    foreignVendor,
+    udyamRegistrationNo,
+    msmeCategory,
+    iecNumber,
+    tan,
+    tin,
+    stc,
+    stRegistrationNumber,
+    panStatus,
+    panReferenceNo,
+    natureOfAssessee,
+    tcsGroup,
+    specifiedPerson206AB,
+    tdsGroup,
+    lowNilDeductionCertificateNo,
+    certificateValidity,
+    tdsApplicable,
   } = vendor;
 
   const resolvedMsme = parseMsmeValue(msme);
@@ -174,8 +198,10 @@ export const toVendorApiPayload = (vendor = {}) => {
   const resolvedVendorBranches =
     vendorBranches ?? vendor_branches ?? branchDetails ?? branch_details ?? undefined;
   const resolvedDocuments = documents ?? vendorDocuments ?? vendor_documents ?? undefined;
+  const resolvedBankAccounts = bankAccounts ?? undefined;
 
   return {
+    vendorId,
     name,
     tradeName: tradeName ?? trade_name,
     vendorType: vendorType ?? vendor_type,
@@ -201,6 +227,28 @@ export const toVendorApiPayload = (vendor = {}) => {
     contactPerson: contactPerson ?? contact_person,
     website,
     notes,
+    paymentTerms,
+    modeOfDelivery,
+    deliveryTerms,
+    vendorStatus,
+    oneTimeVendor: Boolean(oneTimeVendor),
+    foreignVendor: Boolean(foreignVendor),
+    udyamRegistrationNo,
+    msmeCategory,
+    iecNumber,
+    tan,
+    tin,
+    stc,
+    stRegistrationNumber,
+    panStatus,
+    panReferenceNo,
+    natureOfAssessee,
+    tcsGroup,
+    specifiedPerson206AB: Boolean(specifiedPerson206AB),
+    tdsGroup,
+    lowNilDeductionCertificateNo,
+    certificateValidity,
+    tdsApplicable: Boolean(tdsApplicable),
     ...(resolvedDocuments !== undefined ? { documents: resolvedDocuments } : {}),
     ...(resolvedGstRegistrations !== undefined
       ? { gstRegistrations: resolvedGstRegistrations }
@@ -208,6 +256,7 @@ export const toVendorApiPayload = (vendor = {}) => {
     ...(resolvedVendorBranches !== undefined
       ? { vendorBranches: resolvedVendorBranches }
       : {}),
+    ...(resolvedBankAccounts !== undefined ? { bankAccounts: resolvedBankAccounts } : {}),
     ...(resolvedTdsMapping ? { tdsMapping: resolvedTdsMapping } : {}),
     ...(status ? { status } : {}),
     ...(action ? { action } : {}),
@@ -322,6 +371,14 @@ export const toVendorUiPayload = (vendor = {}) => ({
   created_by_id: vendor.created_by_id ?? vendor.createdById,
   created_by: vendor.created_by ?? vendor.createdBy,
   createdAt: vendor.createdAt ?? vendor.created_at ?? null,
+  updatedAt:
+    vendor.updatedAt ??
+    vendor.updated_at ??
+    vendor.modifiedAt ??
+    vendor.modified_at ??
+    vendor.lastModifiedAt ??
+    vendor.last_modified_at ??
+    null,
   requested_by_email: vendor.requested_by_email ?? vendor.requestedByEmail,
   requested_by: vendor.requested_by ?? vendor.requestedBy,
 });

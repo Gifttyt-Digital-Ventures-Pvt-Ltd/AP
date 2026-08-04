@@ -358,6 +358,7 @@ const PurchaseOrdersPage = () => {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
+  const [poSort, setPoSort] = useState({ value: 'created_at', direction: 'desc' });
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [showBuilderDialog, setShowBuilderDialog] = useState(false);
@@ -1168,13 +1169,26 @@ const PurchaseOrdersPage = () => {
   const calculateUploadLineTotal = (item) => computeLineTotal(item, uploadPoForm?.currency);
   const calculateUploadPOTotal = () => resolvePoTotals(uploadPoForm || {}).total_amount;
 
-  const filteredOrders = purchaseOrders.filter((po) => {
-    const matchesSearch =
-      po.po_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      po.vendor_name?.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === 'all' || po.status === statusFilter;
-    return matchesSearch && matchesStatus;
-  });
+  const filteredOrders = purchaseOrders
+    .filter((po) => {
+      const matchesSearch =
+        po.po_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        po.vendor_name?.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesStatus = statusFilter === 'all' || po.status === statusFilter;
+      return matchesSearch && matchesStatus;
+    })
+    .sort((a, b) => {
+      const resolveSortValue = (po) => {
+        if (poSort.value === 'total_amount') return Number(po?.total_amount) || 0;
+        if (poSort.value === 'created_at') {
+          return new Date(po?.created_at || po?.createdAt || 0).getTime() || 0;
+        }
+        return new Date(po?.[poSort.value] || 0).getTime() || 0;
+      };
+      const valueA = resolveSortValue(a);
+      const valueB = resolveSortValue(b);
+      return poSort.direction === 'asc' ? valueA - valueB : valueB - valueA;
+    });
 
   const stats = {
     total: purchaseOrders.length,
@@ -1257,7 +1271,6 @@ const PurchaseOrdersPage = () => {
         <PurchaseOrdersToolbar
           setShowBuilderDialog={openBuilderDialog}
           stats={stats}
-          formatCurrency={formatCurrency}
           canManagePo={canManagePo}
           canUploadPo={canUploadPo}
           createMenuOpen={createMenuOpen}
@@ -1270,14 +1283,16 @@ const PurchaseOrdersPage = () => {
           activeFormat={activeFormatConfig}
           onRefresh={fetchData}
           refreshing={loading}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          statusFilter={statusFilter}
+          setStatusFilter={setStatusFilter}
+          poSort={poSort}
+          setPoSort={setPoSort}
         />
       </div>
 
       <PoListTable
-        searchQuery={searchQuery}
-        setSearchQuery={setSearchQuery}
-        statusFilter={statusFilter}
-        setStatusFilter={setStatusFilter}
         filteredOrders={filteredOrders}
         totalOrders={purchaseOrders.length}
         formatDate={formatDate}

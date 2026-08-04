@@ -96,6 +96,7 @@ const VendorDocumentsPanel = ({
   disabled = false,
   readOnly = false,
   visibleDocumentTypes = null,
+  gridClassName = null,
 }) => {
   const normalizedDocuments = normalizeVendorDocuments(documents);
   const documentTypes = Array.isArray(visibleDocumentTypes) && visibleDocumentTypes.length > 0
@@ -151,7 +152,7 @@ const VendorDocumentsPanel = ({
   }
 
   return (
-    <div className="space-y-3">
+    <div className={gridClassName || 'space-y-3'}>
       {documentTypes.map(({ key, label }) => (
         <VendorDocumentRow
           key={key}

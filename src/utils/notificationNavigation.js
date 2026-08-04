@@ -73,7 +73,12 @@ export const resolveNotificationNavigation = (notification) => {
   }
   if (targetModule === "APPROVALS") {
     setParam("invoiceId", entityId);
-    params.set("tab", "needs-approval");
+    params.set(
+      "tab",
+      workflowStage === "CHECKER" || recipientContext === "CHECKER"
+        ? "pending-checker"
+        : "pending-approval",
+    );
     return buildTarget("/approvals", params);
   }
   if (targetModule === "INVOICES") {
@@ -116,7 +121,12 @@ export const resolveNotificationNavigation = (notification) => {
     )
   ) {
     setParam("invoiceId", entityId);
-    params.set("tab", "needs-approval");
+    params.set(
+      "tab",
+      workflowStage === "CHECKER" || recipientContext === "CHECKER"
+        ? "pending-checker"
+        : "pending-approval",
+    );
     return buildTarget("/approvals", params);
   }
 
