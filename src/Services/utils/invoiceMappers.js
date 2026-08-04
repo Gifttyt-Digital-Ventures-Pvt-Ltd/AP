@@ -20,6 +20,12 @@ const roundMoney = (value) => {
   return Number.isFinite(numeric) ? Math.round(numeric * 100) / 100 : value;
 };
 
+const toNullableMoney = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const rounded = roundMoney(value);
+  return Number.isFinite(Number(rounded)) ? Number(rounded) : null;
+};
+
 const normalizeDepartmentId = (value) => {
   if (value === "" || value === null || value === undefined) return undefined;
   const numeric = Number(value);
@@ -275,6 +281,11 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
       pickInvoiceField(invoice, "gstAmount", "gst_amount"),
     invoiceDate: pickInvoiceField(invoice, "invoiceDate", "invoice_date"),
     dueDate: pickInvoiceField(invoice, "dueDate", "due_date"),
+    isFunded: Boolean(pickInvoiceField(invoice, "isFunded", "is_funded", false)),
+    orgAmount: toNullableMoney(pickInvoiceField(invoice, "orgAmount", "org_amount", null)),
+    financierAmount: toNullableMoney(
+      pickInvoiceField(invoice, "financierAmount", "financier_amount", null),
+    ),
     ...normalizeInvoiceOverdueFields(invoice),
     totalAmount,
     amount: totalAmount ?? invoice.netAmount ?? invoice.net_amount,
@@ -560,6 +571,15 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
       pickInvoiceField(invoice, "invoiceDate", "invoice_date", ""),
     ),
     dueDate: dueDate || null,
+    isFunded: Boolean(pickInvoiceField(invoice, "isFunded", "is_funded", false)),
+    orgAmount: Boolean(pickInvoiceField(invoice, "isFunded", "is_funded", false))
+      ? toNullableMoney(pickInvoiceField(invoice, "orgAmount", "org_amount", null))
+      : null,
+    financierAmount: Boolean(pickInvoiceField(invoice, "isFunded", "is_funded", false))
+      ? toNullableMoney(
+          pickInvoiceField(invoice, "financierAmount", "financier_amount", null),
+        )
+      : null,
     totalAmount,
     amount: resolvedNetAmount,
     netAmount: resolvedNetAmount,

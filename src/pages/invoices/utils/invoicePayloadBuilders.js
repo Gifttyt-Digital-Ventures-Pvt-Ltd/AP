@@ -218,6 +218,15 @@ export const initializeInvoiceFormData = (
     invoiceNumber: extractedData?.invoiceNumber || "",
     invoiceDate,
     dueDate,
+    isFunded: Boolean(extractedData?.isFunded ?? extractedData?.is_funded ?? false),
+    orgAmount:
+      extractedData?.orgAmount ??
+      extractedData?.org_amount ??
+      "",
+    financierAmount:
+      extractedData?.financierAmount ??
+      extractedData?.financier_amount ??
+      "",
     billingAddress: billingAddress,
     shippingAddress,
     shippingSameAsBilling: Boolean(

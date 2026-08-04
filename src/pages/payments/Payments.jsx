@@ -75,6 +75,7 @@ import { useMeteredActionEstimate } from '../../hooks/useMeteredActionEstimate';
 import { useRBAC } from '../../contexts/RBACContext';
 import { useCurrencyFilter } from '../../hooks/useCurrencyFilter';
 import { CURRENCY_SCREENS } from '../../utils/currency';
+import { isInvoiceFundingEnabled as isInvoiceFundingEnabledForCorporate } from '../../utils/invoiceConfiguration';
 import { OrgBranchCell, VendorWithBranchCell } from '../../components/common/BranchTableCells';
 import { clearNotificationQueryParams } from '../../utils/notificationQueryParams';
 
@@ -1113,8 +1114,16 @@ const Payments = () => {
     isCategoryFeatureEnabled,
     isCampaignFeatureEnabled,
     isBranchEnabled,
+    corporateScreens,
     hasPermission,
   } = useRBAC();
+  const showInvoiceFunding = useMemo(
+    () =>
+      isInvoiceFundingEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
   const {
     currencies,
     selectedCurrency,
@@ -2296,6 +2305,7 @@ const Payments = () => {
         isCategoryFeatureEnabled={isCategoryFeatureEnabled}
         showCampaignField={isCampaignFeatureEnabled}
         isCampaignFeatureEnabled={isCampaignFeatureEnabled}
+        showInvoiceFunding={showInvoiceFunding}
       />
     </div>
   );

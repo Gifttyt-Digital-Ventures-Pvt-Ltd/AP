@@ -59,6 +59,7 @@ import {
   buildInvoiceCategoryPayload,
   buildInvoiceMultipartPayload,
   buildToCreateInvoicePayload,
+  calculateInvoiceDataTotals,
   computeTdsAmount,
   initializeInvoiceFormData,
   mapBulkLineItemToEditForm,
@@ -76,6 +77,10 @@ import {
 import { findVendorByInvoiceName } from "./utils/vendorMatching";
 import { syncInvoiceMatchingOnSave } from "./utils/invoiceMatchingFlow";
 import { getInvoiceFileUrl } from "./utils/invoicePreview";
+import {
+  getInvoiceFundingSplitError,
+  isInvoiceFundingSplitValid,
+} from "./utils/invoiceFunding";
 import { clearNotificationQueryParams } from "../../utils/notificationQueryParams";
 import {
   EMPTY_INVOICE_LIST_RESPONSE,
@@ -181,6 +186,7 @@ import {
   isCheckerEditEnabled as isCheckerEditEnabledForCorporate,
   isCheckerEditForbiddenError,
   isInvoiceLineItemRemovalEnabled,
+  isInvoiceFundingEnabled as isInvoiceFundingEnabledForCorporate,
   isNetPayableEditEnabled as isNetPayableEditEnabledForCorporate,
   isRefNoEnabled as isRefNoEnabledForCorporate,
 } from "../../utils/invoiceConfiguration";
@@ -682,6 +688,13 @@ const InvoicesPage = () => {
   const allowInvoiceLineItemRemoval = useMemo(
     () =>
       isInvoiceLineItemRemovalEnabled(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const showInvoiceFunding = useMemo(
+    () =>
+      isInvoiceFundingEnabledForCorporate(
         corporateScreens?.activeInvoiceConfiguration ?? [],
       ),
     [corporateScreens?.activeInvoiceConfiguration],
@@ -1570,6 +1583,7 @@ const InvoicesPage = () => {
     if (!bulkEditForm || !bulkEditItemId) return;
 
     if (!validateMandatoryPayload(bulkEditForm)) return;
+    if (!validateFundingSplit(bulkEditForm, calculateInvoiceDataTotals(bulkEditForm))) return;
 
     const matchedVendorId = findVendorByName(bulkEditForm.vendorName)?.id || "";
     const resolvedVendorId = bulkEditForm.vendorId || matchedVendorId;
@@ -1917,6 +1931,17 @@ const InvoicesPage = () => {
     return true;
   };
 
+  const validateFundingSplit = (payload, totals) => {
+    const fundingError = getInvoiceFundingSplitError(
+      payload,
+      totals?.total ?? calculateInvoiceDataTotals(payload)?.total,
+      { enabled: showInvoiceFunding },
+    );
+    if (!fundingError) return true;
+    toast.error(fundingError);
+    return false;
+  };
+
   const validateSavedInvoiceEdit = (
     payload,
     { requireBillingGst = false } = {},
@@ -1941,6 +1966,11 @@ const InvoicesPage = () => {
   const canSubmitSavedDraft = (payload) =>
     Boolean(payload?.vendorName?.trim()) &&
     (Boolean(payload?.vendorId) || Boolean(payload?.vendorRequestSubmitted)) &&
+    isInvoiceFundingSplitValid(
+      payload,
+      calculateInvoiceDataTotals(payload)?.total,
+      { enabled: showInvoiceFunding },
+    ) &&
     !invoiceMandatoryFieldsLoading &&
     isInvoiceMandatoryFieldsSatisfied(
       payload,
@@ -2194,6 +2224,7 @@ const InvoicesPage = () => {
     if (!formData) return;
 
     const totals = calculateTotals(formData.lineItems);
+    if (!validateFundingSplit(formData, totals)) return;
     const isSummaryOnly = formData.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
     const createLineItems = isSummaryOnly
       ? []
@@ -2516,6 +2547,8 @@ const InvoicesPage = () => {
     if (!selectedInvoice || !formData) return;
 
     const isSavedDraft = isSavedInvoiceStatus(selectedInvoice.status);
+    const updateTotals = calculateTotals(formData.lineItems || [], formData.currency);
+    if (!validateFundingSplit(formData, updateTotals)) return;
     if (isSavedDraft) {
       if (!validateSavedInvoiceEdit(formData)) return;
     } else {
@@ -2567,6 +2600,8 @@ const InvoicesPage = () => {
       toast.error("You do not have permission to submit this invoice");
       return;
     }
+    const forwardTotals = calculateTotals(formData.lineItems || [], formData.currency);
+    if (!validateFundingSplit(formData, forwardTotals)) return;
     if (!validateSavedInvoiceEdit(formData)) return;
 
     try {
@@ -2761,6 +2796,7 @@ const InvoicesPage = () => {
         showBillingGst={isEdit || Boolean(uploadedFile)}
         requireBillingGst={false}
         showBranchField={isBranchEnabled}
+        showInvoiceFunding={showInvoiceFunding}
         showInvoiceMatching={showInvoiceMatchingSelection}
         canUseThreeWayMatching={canUseThreeWayMatching}
         showProformaInvoiceFields={showProformaInvoiceFields}
@@ -3290,6 +3326,7 @@ const InvoicesPage = () => {
       showCategoryField={isCategoryFeatureEnabled}
       showCampaignField={isCampaignFeatureEnabled}
       currencyOptions={invoiceCurrencyOptions}
+      showInvoiceFunding={showInvoiceFunding}
       GST_TREATMENTS={GST_TREATMENTS}
       INDIAN_STATES={INDIAN_STATES}
       LEDGER_OPTIONS={LEDGER_OPTIONS}
@@ -3552,6 +3589,7 @@ const InvoicesPage = () => {
         isCategoryFeatureEnabled={isCategoryFeatureEnabled}
         isCampaignFeatureEnabled={isCampaignFeatureEnabled}
         showRefNoField={isRefNoEnabled}
+        showInvoiceFunding={showInvoiceFunding}
         invoiceMandatoryFields={invoiceMandatoryFields}
         bulkEditOpen={bulkEditOpen}
         setBulkEditOpen={setBulkEditOpen}
