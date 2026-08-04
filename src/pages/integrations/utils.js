@@ -84,7 +84,15 @@ export const getConnectionId = (connection = {}) =>
   connection.id || connection.connectionId || connection.connection_id;
 
 export const getConnectionStatus = (connection = {}) =>
-  String(connection.status || connection.connectionStatus || "UNKNOWN").toUpperCase();
+  String(
+    connection.status ||
+      connection.connectionStatus ||
+      connection.connection_status ||
+      connection.data?.status ||
+      connection.data?.connectionStatus ||
+      connection.data?.connection_status ||
+      "UNKNOWN",
+  ).toUpperCase();
 
 export const isBlockingConnection = (connection = {}) =>
   BLOCKING_CONNECTION_STATUSES.has(getConnectionStatus(connection));

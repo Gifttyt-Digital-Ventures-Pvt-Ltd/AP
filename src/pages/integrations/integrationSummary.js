@@ -28,6 +28,12 @@ const asBoolean = (value) => value === true;
 
 const normalizeStatus = (value) => {
   const normalized = String(value || "").toUpperCase();
+  if (normalized === "AWAITING_ORG_SELECTION") {
+    return INTEGRATION_CONNECTION_STATUS.ACTION_REQUIRED;
+  }
+  if (normalized === "PENDING" || normalized === "PENDING_AUTHORIZATION" || normalized === "AUTHORIZING") {
+    return INTEGRATION_CONNECTION_STATUS.CONNECTING;
+  }
   return VALID_CONNECTION_STATUSES.has(normalized)
     ? normalized
     : INTEGRATION_CONNECTION_STATUS.DISCONNECTED;

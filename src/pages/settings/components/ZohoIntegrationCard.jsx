@@ -1,30 +1,42 @@
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { toast } from "sonner";
 import {
   AlertCircle,
   ArrowRight,
   Check,
+  Database,
   Loader2,
   Plug,
   RefreshCw,
-  Settings as SettingsIcon,
+  Unplug,
   XCircle,
 } from "lucide-react";
 
 import {
   useGetApIntegrationSummaryQuery,
+  useDisconnectZohoConnectionMutation,
   useGetIntegrationProvidersQuery,
   useGetIntegrationSyncStatusQuery,
 } from "../../../Services/apis/integrationsApi";
 import { Button } from "../../../components/ui/button";
-import { OBJECT_LABELS } from "../../integrations/constants";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "../../../components/ui/alert-dialog";
+import { useActionGuard } from "../../../hooks/useActionGuard";
 import {
   formatDateTime,
+  getErrorText,
   getProviderKey,
-  normalizeObjects,
   normalizeProviders,
   normalizeSyncRows,
-  titleize,
 } from "../../integrations/utils";
 import {
   ERP_PROVIDER,
@@ -82,6 +94,8 @@ const badgeToneClass = (tone, connected) => {
 };
 
 const ZohoIntegrationCard = () => {
+  const { guardAction, canPerformAction } = useActionGuard();
+  const [disconnectDialogOpen, setDisconnectDialogOpen] = useState(false);
   const { data: providersResponse, isLoading: providersLoading } = useGetIntegrationProvidersQuery();
   const {
     data: integrationSummary,
@@ -89,6 +103,8 @@ const ZohoIntegrationCard = () => {
     isError: summaryError,
     refetch: refetchSummary,
   } = useGetApIntegrationSummaryQuery();
+  const [disconnectZoho, { isLoading: disconnecting }] =
+    useDisconnectZohoConnectionMutation();
 
   const providers = useMemo(() => normalizeProviders(providersResponse), [providersResponse]);
   const zohoProvider =
@@ -101,18 +117,6 @@ const ZohoIntegrationCard = () => {
   const connectionStatus =
     zohoIntegration?.connectionStatus || INTEGRATION_CONNECTION_STATUS.DISCONNECTED;
   const headerStatus = getHeaderStatus(zohoIntegration);
-  const syncItems = useMemo(() => {
-    const syncOrder = zohoProvider?.syncOrder || [];
-    const objects = normalizeObjects(zohoProvider);
-    const orderedObjects =
-      syncOrder.length > 0
-        ? syncOrder
-            .map((objectKey) => objects.find(([key]) => key === objectKey))
-            .filter(Boolean)
-        : objects;
-    return orderedObjects.map(([objectKey]) => OBJECT_LABELS[objectKey] || titleize(objectKey));
-  }, [zohoProvider]);
-
   const { data: syncResponse, isLoading: syncLoading } = useGetIntegrationSyncStatusQuery(connectionId, {
     skip:
       !connectionId ||
@@ -145,143 +149,189 @@ const ZohoIntegrationCard = () => {
     "Organization pending";
   const tokenExpiresAt = zohoIntegration?.details?.tokenExpiresAt;
 
+  const handleDisconnectClick = () => {
+    if (!connectionId) return;
+    if (!guardAction("integrations.disconnect")) return;
+    setDisconnectDialogOpen(true);
+  };
+
+  const confirmDisconnect = async () => {
+    if (!connectionId) return;
+    try {
+      await disconnectZoho(connectionId).unwrap();
+      toast.success("Zoho Books disconnected");
+      setDisconnectDialogOpen(false);
+      await refetchSummary();
+    } catch (error) {
+      toast.error(getErrorText(error, "Failed to disconnect Zoho Books"));
+    }
+  };
+
   return (
-    <div
-      className="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
-      data-testid="zoho-integration-card"
-    >
+    <>
       <div
-        className={`flex items-center justify-between border-b px-6 py-4 ${headerToneClass(
-          headerStatus.tone,
-          headerStatus.connected,
-        )}`}
+        className="overflow-hidden rounded-xl border border-border bg-card shadow-sm"
+        data-testid="zoho-integration-card"
       >
-        <div className="flex items-center gap-3">
-          <ZohoBooksLogo />
-        </div>
         <div
-          className={`flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium ${badgeToneClass(
+          className={`flex items-center justify-between border-b px-6 py-4 ${headerToneClass(
             headerStatus.tone,
             headerStatus.connected,
           )}`}
         >
-          {headerStatus.connected ? (
-            <Check className="h-4 w-4" />
-          ) : headerStatus.tone === "error" ? (
-            <AlertCircle className="h-4 w-4" />
-          ) : (
-            <XCircle className="h-4 w-4" />
-          )}
-          {headerStatus.label}
+          <div className="flex items-center gap-3">
+            <ZohoBooksLogo />
+          </div>
+          <div
+            className={`flex items-center gap-2 rounded-full px-3 py-1 text-sm font-medium ${badgeToneClass(
+              headerStatus.tone,
+              headerStatus.connected,
+            )}`}
+          >
+            {headerStatus.connected ? (
+              <Check className="h-4 w-4" />
+            ) : headerStatus.tone === "error" ? (
+              <AlertCircle className="h-4 w-4" />
+            ) : (
+              <XCircle className="h-4 w-4" />
+            )}
+            {headerStatus.label}
+          </div>
         </div>
-      </div>
 
-      <div className="p-6">
-        {isLoading ? (
-          <div className="flex min-h-[220px] items-center justify-center">
-            <Loader2 className="h-6 w-6 animate-spin text-primary" />
-          </div>
-        ) : summaryError ? (
-          <div className="space-y-4">
-            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-              Unable to load Zoho integration summary.
+        <div className="p-6">
+          {isLoading ? (
+            <div className="flex min-h-[220px] items-center justify-center">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
             </div>
-            <Button variant="outline" className="w-full" onClick={() => refetchSummary()}>
-              <RefreshCw className="mr-2 h-4 w-4" />
-              Retry
-            </Button>
-          </div>
-        ) : (
-          <>
-            {zohoIntegration && connectionStatus === INTEGRATION_CONNECTION_STATUS.CONNECTED ? (
-              <div className="mb-4 space-y-1 rounded-lg border border-border bg-muted/30 p-3 text-sm">
-                <p className="text-gray-800">
-                  <span className="font-medium">Organization:</span> {organizationName}
-                </p>
-                <p className="text-gray-600">
-                  <span className="font-medium">Last sync:</span>{" "}
-                  {syncSummaryLoading ? "Loading..." : formatDateTime(lastSyncAt)}
-                </p>
-                {canShowTokenExpiryWarning(zohoIntegration) ? (
-                  <p className="text-gray-600">
-                    <span className="font-medium">Token expires:</span>{" "}
-                    {formatDateTime(tokenExpiresAt)}
-                  </p>
-                ) : null}
+          ) : summaryError ? (
+            <div className="space-y-4">
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                Unable to load Zoho integration summary.
               </div>
-            ) : null}
+              <Button variant="outline" className="w-full" onClick={() => refetchSummary()}>
+                <RefreshCw className="mr-2 h-4 w-4" />
+                Retry
+              </Button>
+            </div>
+          ) : (
+            <>
+              {zohoIntegration && connectionStatus === INTEGRATION_CONNECTION_STATUS.CONNECTED ? (
+                <div className="mb-4 space-y-1 rounded-lg border border-border bg-muted/30 p-3 text-sm">
+                  <p className="text-gray-800">
+                    <span className="font-medium">Organization:</span> {organizationName}
+                  </p>
+                  <p className="text-gray-600">
+                    <span className="font-medium">Last sync:</span>{" "}
+                    {syncSummaryLoading ? "Loading..." : formatDateTime(lastSyncAt)}
+                  </p>
+                  {canShowTokenExpiryWarning(zohoIntegration) ? (
+                    <p className="text-gray-600">
+                      <span className="font-medium">Token expires:</span>{" "}
+                      {formatDateTime(tokenExpiresAt)}
+                    </p>
+                  ) : null}
+                </div>
+              ) : null}
 
-            <h4 className="mb-3 font-semibold text-gray-800">We&apos;ll sync your:</h4>
-            <ul className="mb-6 space-y-2">
-              {syncItems.map((item) => (
-                <li key={item} className="flex items-center gap-2 text-sm text-gray-600">
-                  <span className="h-1.5 w-1.5 rounded-full bg-gray-400" />
-                  {item}
-                </li>
-              ))}
-            </ul>
-
-            {!zohoIntegration ? (
-              activeNonZohoErp ? (
-                <Button disabled className="w-full bg-blue-600 text-white hover:bg-blue-700">
-                  <Plug className="mr-2 h-4 w-4" />
-                  Disconnect current ERP first
-                </Button>
-              ) : (
-                <Button asChild className="w-full bg-blue-600 text-white hover:bg-blue-700">
-                  <Link to="/integrations/connect/ZOHO_BOOKS">
+              {!zohoIntegration ? (
+                activeNonZohoErp ? (
+                  <Button disabled className="w-full bg-blue-600 text-white hover:bg-blue-700">
                     <Plug className="mr-2 h-4 w-4" />
-                    Connect Zoho
-                  </Link>
-                </Button>
-              )
-            ) : connectionStatus === INTEGRATION_CONNECTION_STATUS.CONNECTED ? (
-              <div className="space-y-3">
-                <div className="flex gap-3">
-                  <Button asChild variant="outline" className="flex-1">
+                    Disconnect current ERP first
+                  </Button>
+                ) : (
+                  <Button asChild className="w-full bg-blue-600 text-white hover:bg-blue-700">
+                    <Link to="/integrations/connect/ZOHO_BOOKS">
+                      <Plug className="mr-2 h-4 w-4" />
+                      Connect Zoho
+                    </Link>
+                  </Button>
+                )
+              ) : connectionStatus === INTEGRATION_CONNECTION_STATUS.CONNECTED ? (
+                <div className="space-y-3">
+                  <Button asChild className="w-full bg-blue-600 text-white hover:bg-blue-700">
+                    <Link to="/integrations/erp/zoho/dashboard">
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Open Dashboard
+                    </Link>
+                  </Button>
+                  <Button asChild className="w-full bg-blue-600 text-white hover:bg-blue-700">
+                    <Link to={`/integrations/${connectionId}/sync-data`}>
+                      <Database className="mr-2 h-4 w-4" />
+                      Sync ERP Data
+                    </Link>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800"
+                    disabled={
+                      disconnecting || !canPerformAction("integrations.disconnect")
+                    }
+                    onClick={handleDisconnectClick}
+                  >
+                    {disconnecting ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Unplug className="mr-2 h-4 w-4" />
+                    )}
+                    Disconnect Zoho
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <Button asChild className="w-full bg-blue-600 text-white hover:bg-blue-700">
+                    <Link
+                      to={`/integrations/connect/ZOHO_BOOKS?connectionId=${connectionId}`}
+                    >
+                      <Plug className="mr-2 h-4 w-4" />
+                      {connectionStatus === INTEGRATION_CONNECTION_STATUS.ACTION_REQUIRED
+                        ? "Select organization"
+                        : "Resume setup"}
+                    </Link>
+                  </Button>
+                  <Button asChild variant="outline" className="w-full">
                     <Link to="/integrations">
                       <ArrowRight className="mr-2 h-4 w-4" />
                       Open Integrations
                     </Link>
                   </Button>
-                  <Button asChild variant="outline" className="flex-1">
-                    <Link to={`/integrations/${connectionId}/mapping`}>
-                      <SettingsIcon className="mr-2 h-4 w-4" />
-                      Configure
-                    </Link>
-                  </Button>
                 </div>
-                <Button asChild className="w-full bg-blue-600 text-white hover:bg-blue-700">
-                  <Link to={`/integrations/${connectionId}`}>
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    Open Dashboard
-                  </Link>
-                </Button>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                <Button asChild className="w-full bg-blue-600 text-white hover:bg-blue-700">
-                  <Link
-                    to={`/integrations/connect/ZOHO_BOOKS?connectionId=${connectionId}`}
-                  >
-                    <Plug className="mr-2 h-4 w-4" />
-                    {connectionStatus === INTEGRATION_CONNECTION_STATUS.ACTION_REQUIRED
-                      ? "Select organization"
-                      : "Resume setup"}
-                  </Link>
-                </Button>
-                <Button asChild variant="outline" className="w-full">
-                  <Link to="/integrations">
-                    <ArrowRight className="mr-2 h-4 w-4" />
-                    Open Integrations
-                  </Link>
-                </Button>
-              </div>
-            )}
-          </>
-        )}
+              )}
+            </>
+          )}
+        </div>
       </div>
-    </div>
+      <AlertDialog
+        open={disconnectDialogOpen}
+        onOpenChange={(open) => {
+          if (!disconnecting) setDisconnectDialogOpen(open);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Disconnect Zoho Books?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will revoke the Zoho connection and stop Zoho sync until you reconnect it.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={disconnecting}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 text-white hover:bg-red-700"
+              disabled={disconnecting}
+              onClick={(event) => {
+                event.preventDefault();
+                confirmDisconnect();
+              }}
+            >
+              {disconnecting ? "Disconnecting..." : "Disconnect"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };
 

@@ -54,6 +54,65 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
         body,
       }),
     }),
+    getPayruns: builder.query({
+      query: (params) => ({ url: "/payruns", method: "GET", params }),
+      transformResponse: extractListResponse,
+      providesTags: ["Payments"],
+    }),
+    createPayrun: builder.mutation({
+      query: (body) => ({
+        url: "/payruns",
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Payments", "Invoices", "Dashboard", "Reports", ...CREDIT_INVALIDATION_TAGS],
+    }),
+    approvePayrun: builder.mutation({
+      query: ({ payrunId, ...body }) => ({
+        url: `/payruns/${payrunId}/approve`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Payments", "Dashboard", "Reports"],
+    }),
+    rejectPayrun: builder.mutation({
+      query: ({ payrunId, ...body }) => ({
+        url: `/payruns/${payrunId}/reject`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Payments", "Dashboard", "Reports"],
+    }),
+    cancelPayrun: builder.mutation({
+      query: ({ payrunId, ...body }) => ({
+        url: `/payruns/${payrunId}/cancel`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Payments", "Invoices", "Dashboard", "Reports", ...CREDIT_INVALIDATION_TAGS],
+    }),
+    requestPayrunReleaseOtp: builder.mutation({
+      query: ({ payrunId, ...body }) => ({
+        url: `/payruns/${payrunId}/release-otp`,
+        method: "POST",
+        body,
+      }),
+    }),
+    resendPayrunReleaseOtp: builder.mutation({
+      query: ({ payrunId, ...body }) => ({
+        url: `/payruns/${payrunId}/release-otp/resend`,
+        method: "POST",
+        body,
+      }),
+    }),
+    releasePayrun: builder.mutation({
+      query: ({ payrunId, ...body }) => ({
+        url: `/payruns/${payrunId}/release`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Payments", "Invoices", "Dashboard", "Reports", ...CREDIT_INVALIDATION_TAGS],
+    }),
     getBankAccounts: builder.query({
       query: () => ({ url: "/bank-accounts", method: "GET" }),
       transformResponse: (response) =>
@@ -80,6 +139,14 @@ export const {
   useBulkReleasePaymentsMutation,
   useRecordPaymentsMutation,
   useGeneratePendingPaymentInvoiceReportMutation,
+  useGetPayrunsQuery,
+  useCreatePayrunMutation,
+  useApprovePayrunMutation,
+  useRejectPayrunMutation,
+  useCancelPayrunMutation,
+  useRequestPayrunReleaseOtpMutation,
+  useResendPayrunReleaseOtpMutation,
+  useReleasePayrunMutation,
   useGetBankAccountsQuery,
   useCreateBankAccountMutation,
 } = approvalsPaymentsBankingApi;

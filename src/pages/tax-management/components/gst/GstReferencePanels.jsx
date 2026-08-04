@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { Button } from "../../../../components/ui/button";
 import { Input } from "../../../../components/ui/input";
+import AppDataTable from "../../../../components/common/AppDataTable";
 import {
   Table,
   TableBody,
@@ -35,7 +36,6 @@ import { cn } from "../../../../lib/utils";
 import {
   TaxAlertBanner,
   TaxApiMeta,
-  TaxCompactTable,
   TaxComplianceIndicator,
   TaxDetailGrid,
   TaxDrawer,
@@ -639,16 +639,17 @@ export const GstReconciliationPanel = () => {
           />
         ) : (
           <>
-            <TaxCompactTable
+            <AppDataTable
               rows={historyRows}
-              getRowKey={(row, index) =>
+              rowKey={(row, index) =>
                 `${getAnalyticsJobId(getAnalyticsJob(row)) || row?.requestedAt || index}-${index}`
               }
               emptyMessage="No reconciliation reports found."
+              bordered
               columns={[
                 {
                   key: "requestedAt",
-                  title: "Generated On",
+                  header: "Generated On",
                   render: (row) =>
                     formatAnalyticsDateTime(
                       row?.requestedAt ?? getAnalyticsJob(row)?.fetchDateTime,
@@ -656,24 +657,24 @@ export const GstReconciliationPanel = () => {
                 },
                 {
                   key: "completedAt",
-                  title: "Completed On",
+                  header: "Completed On",
                   render: (row) =>
                     formatAnalyticsDateTime(getAnalyticsJob(row)?.completedAt),
                 },
                 {
                   key: "supplierName",
-                  title: "Supplier",
+                  header: "Supplier",
                   render: (row) =>
                     getAnalyticsJob(row)?.supplierName || "All Suppliers",
                 },
                 {
                   key: "period",
-                  title: "Period",
+                  header: "Period",
                   render: (row) => formatAnalyticsPeriod(getAnalyticsJob(row)),
                 },
                 {
                   key: "criteria",
-                  title: "Criteria",
+                  header: "Criteria",
                   render: (row) =>
                     getAnalyticsJob(row)?.reconciliationCriteria || "—",
                 },
@@ -681,7 +682,7 @@ export const GstReconciliationPanel = () => {
                   ? [
                       {
                         key: "filingPreference",
-                        title: "Filing Preference",
+                        header: "Filing Preference",
                         render: (row) =>
                           getAnalyticsJob(row)?.filingPreference || "—",
                       },
@@ -689,14 +690,14 @@ export const GstReconciliationPanel = () => {
                   : []),
                 {
                   key: "status",
-                  title: "Status",
+                  header: "Status",
                   render: (row) => (
                     <TaxStatusBadge status={getAnalyticsJob(row)?.status} />
                   ),
                 },
                 {
                   key: "download",
-                  title: "Report",
+                  header: "Report",
                   render: (row) => {
                     const job = getAnalyticsJob(row);
                     return (
@@ -983,42 +984,43 @@ export const GstReturnsPanel = () => {
               />
             ) : (
               <>
-                <TaxCompactTable
+                <AppDataTable
                   rows={records}
-                  getRowKey={(row, index) =>
+                  rowKey={(row, index) =>
                     `${row.returnType}-${row.returnPeriod}-${index}`
                   }
+                  bordered
                   columns={[
                     {
                       key: "returnType",
-                      title: "Return Type",
+                      header: "Return Type",
                       cellClassName: "font-medium text-primary",
                     },
                     {
                       key: "returnPeriod",
-                      title: "Return Period",
+                      header: "Return Period",
                       render: (row) => formatRetPeriod(row.returnPeriod),
                     },
                     {
                       key: "arn",
-                      title: "ARN",
+                      header: "ARN",
                       render: (row) => row.arn || "—",
                       cellClassName: "font-mono text-xs",
                     },
-                    { key: "filedDate", title: "Filed Date" },
+                    { key: "filedDate", header: "Filed Date" },
                     {
                       key: "filingMode",
-                      title: "Filing Mode",
+                      header: "Filing Mode",
                       cellClassName: "text-muted-foreground",
                     },
                     {
                       key: "status",
-                      title: "Status",
+                      header: "Status",
                       render: (row) => <TaxStatusBadge status={row.status} />,
                     },
                     {
                       key: "valid",
-                      title: "Valid",
+                      header: "Valid",
                       render: (row) => <TaxValidBadge valid={row.valid} />,
                     },
                   ]}

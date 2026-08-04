@@ -482,7 +482,7 @@ const ManageSyncedData = ({
     setImportedOnly(false);
     setActiveCategoryCode(category.code);
     if (!embedded && connectionId) {
-      navigate(`/integrations/${connectionId}/${category.code}`);
+      navigate(`/integrations/${connectionId}/sync-data/${category.code}`);
     }
   };
 
@@ -490,7 +490,7 @@ const ManageSyncedData = ({
     setImportedOnly(true);
     setActiveCategoryCode(category.code);
     if (!embedded && connectionId) {
-      navigate(`/integrations/${connectionId}/${category.code}`);
+      navigate(`/integrations/${connectionId}/sync-data/${category.code}`);
     }
   };
 
@@ -498,7 +498,7 @@ const ManageSyncedData = ({
     setActiveCategoryCode("");
     setImportedOnly(false);
     if (!embedded && categoryCode) {
-      navigate(`/integrations/${connectionId}`);
+      navigate(`/integrations/${connectionId}/sync-data`);
     }
   };
 

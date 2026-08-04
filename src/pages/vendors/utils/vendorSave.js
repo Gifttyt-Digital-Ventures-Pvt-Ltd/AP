@@ -3,6 +3,7 @@ import {
   sanitizeVendorDocumentsForSave,
 } from './vendorDocuments';
 import { sanitizeVendorTdsForSave } from './vendorTds';
+import { toVendorApiPayload } from '../../../Services/utils/payloadMappers';
 
 const stripVendorLevelAddressAndBank = (vendor = {}) => {
   const {
@@ -159,9 +160,12 @@ export const hasVendorMultipartFiles = (vendor = {}) => {
 
 const buildVendorJsonPayload = (vendor = {}, overrides = {}) => {
   const pendingCertificates = normalizePendingTdsCertificates(vendor.tdsCertificates);
-  return {
+  const payload = {
     ...normalizeVendorForSave(vendor),
     ...overrides,
+  };
+  return {
+    ...toVendorApiPayload(payload),
     ...(pendingCertificates.length > 0 ? { tdsCertificates: pendingCertificates } : {}),
   };
 };

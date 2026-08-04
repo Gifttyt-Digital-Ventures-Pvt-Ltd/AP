@@ -282,6 +282,7 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
     billingAddress:
       pickInvoiceField(invoice, "billingAddress", "billing_address") ??
       pickInvoiceField(invoice, "vendorAddress", "vendor_address"),
+    shippingAddress: pickInvoiceField(invoice, "shippingAddress", "shipping_address", ""),
     billingGstin: pickInvoiceField(invoice, "billingGstin", "billing_gstin", ""),
     vendorAddress: pickInvoiceField(invoice, "vendorAddress", "vendor_address"),
     gstTreatment: pickInvoiceField(invoice, "gstTreatment", "gst_treatment"),

@@ -62,9 +62,12 @@ const PendingPaymentsTab = ({
   onToggleInvoice,
   onSelectAllInvoices,
   onOpenRecordPayment,
+  onOpenCreateBatch,
   onOpenInvoiceReport,
   canRecordPayment = false,
+  canCreateBatch = false,
   canDownloadInvoiceReport = false,
+  paymentActionLabel = 'Record Payment',
   safeFormatDate,
   handleViewInvoice,
   handleDownloadInvoice,
@@ -203,7 +206,7 @@ const PendingPaymentsTab = ({
         return (
           <TableCell
             key={header.key}
-            className={cn('border border-border', header.cellClassName)}
+            className={cn('border border-table-border', header.cellClassName)}
           >
             {value}
           </TableCell>
@@ -254,6 +257,16 @@ const PendingPaymentsTab = ({
               </Button>
             )}
 
+            {canCreateBatch && (
+              <Button
+                size="sm"
+                onClick={onOpenCreateBatch}
+                data-testid="open-create-payment-batch-dialog"
+              >
+                Create Payment Batch
+              </Button>
+            )}
+
             {showRecordPaymentSelection && canRecordPayment && (
               <Button
                 size="sm"
@@ -261,7 +274,7 @@ const PendingPaymentsTab = ({
                 disabled={selectedInvoiceIds.length === 0}
                 data-testid="open-record-payment-dialog"
               >
-                Record Payment
+                {paymentActionLabel}
               </Button>
             )}
           </div>

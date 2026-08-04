@@ -423,6 +423,7 @@ const normalizeCorporateScreensResponse = (response = {}) => {
     isCategoryFeatureEnabled: enabledSections.has("CATEGORY_ALL"),
     isDepartmentFeatureEnabled: enabledSections.has("DEPARTMENT_ALL"),
     isCampaignFeatureEnabled: enabledSections.has("CAMPAIGN_ALL"),
+    isConnectedBankingFeatureEnabled: enabledSections.has("SETTINGS_CONNECTED_BANKING"),
     vendorFieldConfiguration:
       vendorFieldConfiguration.length > 0
         ? vendorFieldConfiguration

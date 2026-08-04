@@ -1,4 +1,25 @@
+import { DOCUMENT_TYPE, normalizeDocumentType } from '../constants/proformaInvoice';
+
 const trimId = (value) => String(value ?? '').trim();
+
+const resolveRequestedMatchType = ({
+  documentType,
+  linkedProformaInvoiceId,
+  grnId,
+  canUseThreeWayMatching = false,
+}) => {
+  if (canUseThreeWayMatching && grnId) return 'THREE_WAY';
+
+  const normalizedDocumentType = normalizeDocumentType(documentType);
+  if (normalizedDocumentType === DOCUMENT_TYPE.PROFORMA_INVOICE) return 'PO_PI';
+  if (trimId(linkedProformaInvoiceId)) return 'PO_PI_TI';
+  return 'PO_INVOICE';
+};
+
+const resolveMatchedDocType = (documentType) =>
+  normalizeDocumentType(documentType) === DOCUMENT_TYPE.PROFORMA_INVOICE
+    ? 'PROFORMA_INVOICE'
+    : 'TAX_INVOICE';
 
 export const emptyInvoiceMatchingFormState = () => ({
   matchingPurchaseOrderId: '',
@@ -53,16 +74,34 @@ export const buildInvoiceMatchingRequestBody = ({
   invoiceId,
   purchaseOrderId,
   grnId,
+  documentType,
+  linkedProformaInvoiceId,
   canUseThreeWayMatching = false,
 }) => {
   const resolvedGrnId = canUseThreeWayMatching && grnId ? grnId : null;
+  const matchType = resolveRequestedMatchType({
+    documentType,
+    linkedProformaInvoiceId,
+    grnId: resolvedGrnId,
+    canUseThreeWayMatching,
+  });
+  const matchedDocType = resolveMatchedDocType(documentType);
 
-  return {
+  const body = {
     invoiceId,
     purchaseOrderId,
     grnId: resolvedGrnId,
-    matchType: resolvedGrnId ? 'THREE_WAY' : 'TWO_WAY',
+    matchType,
+    matchedDocType,
   };
+
+  if (matchType === 'PO_PI' && invoiceId) {
+    body.piId = invoiceId;
+  } else if (matchType === 'PO_PI_TI' && linkedProformaInvoiceId) {
+    body.piId = linkedProformaInvoiceId;
+  }
+
+  return body;
 };
 
 /**
@@ -103,6 +142,8 @@ export const syncInvoiceMatchingOnSave = async (
     invoiceId,
     purchaseOrderId,
     grnId,
+    documentType: formData.documentType,
+    linkedProformaInvoiceId: formData.linkedProformaInvoiceId,
     canUseThreeWayMatching,
   });
 

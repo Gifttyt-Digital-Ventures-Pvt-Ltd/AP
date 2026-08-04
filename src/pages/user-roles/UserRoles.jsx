@@ -59,12 +59,18 @@ import ViewRoleDialog from "./components/ViewRoleDialog";
 import RolesTab from "./components/RolesTab";
 import UsersTable from "./components/UsersTable";
 import ApprovalWorkflowTab from "./components/ApprovalWorkflowTab";
+import PaymentApprovalWorkflowTab from "./components/PaymentApprovalWorkflowTab";
 import CategoriesTab from "./components/CategoriesTab";
 import DepartmentsTab from "./components/DepartmentsTab";
 import UserDetailsDialog from "./components/UserDetailsDialog";
 import BulkUsersUploadDialog from "./components/BulkUsersUploadDialog";
 import { useActionGuard } from "../../hooks/useActionGuard";
 import { FULL_ACCESS_PERMISSION } from "../../constants/rbacPolicy";
+
+// TODO(payment-workflow-api): remove after backend custom-role screens expose
+// PAYMENTS ADMIN/REQUESTER/APPROVER and PAYMENT_APPROVAL_WORKFLOW VIEW/MANAGE.
+const ENABLE_LOCAL_PAYMENTS_ROLE_ENTITLEMENT = false;
+const ENABLE_LOCAL_PAYMENT_WORKFLOW_ROLE_ENTITLEMENT = false;
 
 const UserRoles = () => {
   const [activeTab, setActiveTab] = useState("users");
@@ -115,6 +121,7 @@ const UserRoles = () => {
     isDepartmentFeatureEnabled,
     isCampaignFeatureEnabled,
     isBillingFeatureEnabled,
+    isConnectedBankingEnabled,
   } = useRBAC();
   const { guardAction } = useActionGuard();
   const navigate = useNavigate();
@@ -129,6 +136,11 @@ const UserRoles = () => {
     hasPermission("approval-workflow-view") ||
     hasPermission("approval-workflow-manage");
   const canManageWorkflow = hasPermission("approval-workflow-manage");
+  const canViewPaymentWorkflow =
+    hasPermission("payment-approval-workflow-view") ||
+    hasPermission("payment-approval-workflow-manage");
+  const canManagePaymentWorkflow =
+    hasPermission("payment-approval-workflow-manage");
   const canViewCategories =
     hasPermission("category-view") || hasPermission("category-manage");
   const canViewDepartments =
@@ -145,12 +157,16 @@ const UserRoles = () => {
   const canViewWorkflowTab =
     canViewWorkflow &&
     isCorporateSectionEnabled("MANAGE_ROLE_APPROVAL_WORKFLOW");
+  const canViewPaymentWorkflowTab =
+    canViewPaymentWorkflow &&
+    isCorporateSectionEnabled("MANAGE_ROLE_APPROVAL_WORKFLOW");
   const canViewCategoriesTab = canViewCategories && canUseManageRoleCategories;
   const canViewDepartmentsTab = canViewDepartments && canUseManageRoleDepartments;
   const canViewUserRolesModule =
     canViewUsersTab ||
     canViewRolesTab ||
     canViewWorkflowTab ||
+    canViewPaymentWorkflowTab ||
     canViewCategoriesTab ||
     canViewDepartmentsTab;
   const shouldSkipUsersAndRoles =
@@ -236,6 +252,7 @@ const UserRoles = () => {
     if (canViewUsersTab) availableTabs.push("users");
     if (canViewRolesTab) availableTabs.push("roles");
     if (canViewWorkflowTab) availableTabs.push("workflow");
+    if (canViewPaymentWorkflowTab) availableTabs.push("payment-workflow");
     if (canViewCategoriesTab) availableTabs.push("categories");
     if (canViewDepartmentsTab) availableTabs.push("departments");
     if (availableTabs.length === 0) return;
@@ -247,6 +264,7 @@ const UserRoles = () => {
     canViewUsersTab,
     canViewRolesTab,
     canViewWorkflowTab,
+    canViewPaymentWorkflowTab,
     canViewCategoriesTab,
     canViewDepartmentsTab,
   ]);
@@ -362,7 +380,7 @@ const UserRoles = () => {
         if (backendEntry.permissionType === "ORG")
           return isCorporateSectionEnabled("SETTINGS_ORG_DETAILS");
         if (backendEntry.permissionType === "BANKING")
-          return isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING");
+          return isConnectedBankingEnabled;
         if (backendEntry.permissionType === "INTERACTION")
           return (
             isCorporateSectionEnabled("SETTINGS_INTEGRATIONS") ||
@@ -380,8 +398,16 @@ const UserRoles = () => {
       }
       if (backendEntry.screen === "PAYMENTS") {
         return (
+          ENABLE_LOCAL_PAYMENTS_ROLE_ENTITLEMENT ||
           isCorporateScreenAllowed("PAYMENTS") &&
           isCorporateSectionEnabled("PAYMENTS_ALL")
+        );
+      }
+      if (backendEntry.screen === "PAYMENT_APPROVAL_WORKFLOW") {
+        return (
+          ENABLE_LOCAL_PAYMENT_WORKFLOW_ROLE_ENTITLEMENT ||
+          (isCorporateScreenAllowed("PAYMENTS") &&
+            isCorporateSectionEnabled("PAYMENTS_ALL"))
         );
       }
       if (backendEntry.screen === "PAYMENT_BATCHES") {
@@ -390,8 +416,12 @@ const UserRoles = () => {
           isCorporateSectionEnabled("PAYMENT_BATCHES_ALL")
         );
       }
-      if (backendEntry.screen === "BANKING") {
-        return isCorporateSectionEnabled("SETTINGS_CONNECTED_BANKING");
+      if (
+        backendEntry.screen === "BANKING" ||
+        backendEntry.screen === "CONNECTED_BANKING" ||
+        (backendEntry.screen === "SETTINGS" && backendEntry.permissionType === "BANKING")
+      ) {
+        return isConnectedBankingEnabled;
       }
       if (
         backendEntry.screen === "INTEGRATIONS" ||
@@ -413,6 +443,7 @@ const UserRoles = () => {
     },
     [
       isCampaignFeatureEnabled,
+      isConnectedBankingEnabled,
       canUseManageRoleCategories,
       canUseBillingSettings,
       isCorporateScreenAllowed,
@@ -476,6 +507,17 @@ const UserRoles = () => {
       keys.add("CREDITS:MANAGE_BILLING");
       keys.add("SETTINGS:BILLING");
       keys.add("SETTINGS:MANAGE_BILLING");
+    }
+
+    if (ENABLE_LOCAL_PAYMENT_WORKFLOW_ROLE_ENTITLEMENT) {
+      keys.add("PAYMENT_APPROVAL_WORKFLOW:VIEW");
+      keys.add("PAYMENT_APPROVAL_WORKFLOW:MANAGE");
+    }
+
+    if (ENABLE_LOCAL_PAYMENTS_ROLE_ENTITLEMENT) {
+      keys.add("PAYMENTS:ADMIN");
+      keys.add("PAYMENTS:REQUESTER");
+      keys.add("PAYMENTS:APPROVER");
     }
 
     if (
@@ -552,6 +594,17 @@ const UserRoles = () => {
 
     if (canUseBillingSettings) {
       keys.add("credits-manage");
+    }
+
+    if (ENABLE_LOCAL_PAYMENT_WORKFLOW_ROLE_ENTITLEMENT) {
+      keys.add("payment-approval-workflow-view");
+      keys.add("payment-approval-workflow-manage");
+    }
+
+    if (ENABLE_LOCAL_PAYMENTS_ROLE_ENTITLEMENT) {
+      keys.add("payments-admin");
+      keys.add("payments-requester");
+      keys.add("payments-approver");
     }
 
     if (
@@ -1334,6 +1387,15 @@ const UserRoles = () => {
               Approval Workflow
             </TabsTrigger>
           )}
+          {canViewPaymentWorkflowTab && (
+            <TabsTrigger
+              value="payment-workflow"
+              data-testid="tab-payment-approval-workflow"
+            >
+              <GitBranch className="h-4 w-4 mr-2" />
+              Payment Approval Workflow
+            </TabsTrigger>
+          )}
           {canViewCategoriesTab && (
             <TabsTrigger value="categories" data-testid="tab-categories">
               Categories
@@ -1381,6 +1443,14 @@ const UserRoles = () => {
               canManageWorkflow={canManageWorkflow}
               categoryEnabled={isCategoryFeatureEnabled}
               departmentEnabled={isDepartmentFeatureEnabled}
+            />
+          </TabsContent>
+        )}
+
+        {canViewPaymentWorkflowTab && (
+          <TabsContent value="payment-workflow">
+            <PaymentApprovalWorkflowTab
+              canManageWorkflow={canManagePaymentWorkflow}
             />
           </TabsContent>
         )}

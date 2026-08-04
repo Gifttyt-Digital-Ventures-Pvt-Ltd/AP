@@ -1,9 +1,10 @@
 import React from "react";
-import { Plus, Search, Settings2, Upload } from "lucide-react";
+import { Search, Settings2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
 import RefreshButton from "../../../components/common/RefreshButton";
 import TableSortButton from "../../../components/common/TableSortButton";
+import PoCreateMenu from "./PoCreateMenu";
 
 const poSortOptions = [
   { value: "created_at", label: "Upload date", defaultDirection: "desc" },
@@ -12,12 +13,13 @@ const poSortOptions = [
 ];
 
 const PurchaseOrdersToolbar = ({
-  setShowCreateDialog,
-  setShowUploadPicker,
   setShowBuilderDialog,
   stats,
   canManagePo,
   canUploadPo = false,
+  createMenuOpen = false,
+  onToggleCreateMenu,
+  onSelectCreateOption,
   activeFormat,
   onRefresh,
   refreshing = false,
@@ -57,16 +59,12 @@ const PurchaseOrdersToolbar = ({
                 <Settings2 className="h-4 w-4 mr-2" />
                 Format Builder
               </Button>
-              {canUploadPo ? (
-                <Button variant="outline" onClick={() => setShowUploadPicker(true)} data-testid="upload-po-btn">
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload PO
-                </Button>
-              ) : null}
-              <Button onClick={() => setShowCreateDialog(true)} data-testid="create-po-btn">
-                <Plus className="h-4 w-4 mr-2" />
-                Create PO
-              </Button>
+              <PoCreateMenu
+                open={createMenuOpen}
+                onToggle={onToggleCreateMenu}
+                onSelect={onSelectCreateOption}
+                canUploadPo={canUploadPo}
+              />
             </>
           )}
         </div>

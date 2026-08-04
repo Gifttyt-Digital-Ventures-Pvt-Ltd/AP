@@ -13,7 +13,6 @@ import {
   SelectValue,
 } from '../../../components/ui/select';
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '../../../components/ui/sheet';
-import { humanizeGstEnum } from '../utils/gstApiMappers';
 import {
   Table,
   TableBody,
@@ -22,6 +21,7 @@ import {
   TableHeader,
   TableRow,
 } from '../../../components/ui/table';
+import { humanizeGstEnum } from '../utils/gstApiMappers';
 import { cn } from '../../../lib/utils';
 
 export const TaxKpiCard = ({ label, value, sub, icon: Icon, tone = 'default' }) => {

@@ -390,10 +390,8 @@ const InvoicesPage = () => {
     isInvoiceMatchingEnabled && hasPurchaseOrderSubscription;
   const canUseThreeWayMatching =
     showInvoiceMatchingSelection && hasGrnSubscription;
-  const { showIntegrationColumn } = useZohoIntegrationActive();
-  const showErpIntegrationFields = isCorporateSectionEnabled(
-    "SETTINGS_INTEGRATIONS",
-  );
+  const { hasConnectedZoho, showIntegrationColumn } = useZohoIntegrationActive();
+  const showErpIntegrationFields = isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
   const { data: corporateUserContext = null } =
     useGetCorporateUserDetailsQuery();
   const invoiceUserEmail =
@@ -1494,6 +1492,13 @@ const InvoicesPage = () => {
           }
         : {}),
       billingAddress: item.invoicePayload.billingAddress || "",
+      shippingAddress: item.invoicePayload.shippingAddress || "",
+      shippingSameAsBilling: Boolean(
+        item.invoicePayload.billingAddress &&
+          item.invoicePayload.shippingAddress &&
+          String(item.invoicePayload.billingAddress).trim() ===
+            String(item.invoicePayload.shippingAddress).trim(),
+      ),
       gstin: item.invoicePayload.gstin || "",
       sourceOfSupply: item.invoicePayload.sourceOfSupply || "",
       destinationOfSupply: item.invoicePayload.destinationOfSupply || "",
@@ -2514,13 +2519,7 @@ const InvoicesPage = () => {
     if (isSavedDraft) {
       if (!validateSavedInvoiceEdit(formData)) return;
     } else {
-      if (!String(formData.billingGstin || "").trim()) {
-        toast.error(
-          "Select a billing GSTIN from Organisation Details before updating invoice",
-        );
-        return;
-      }
-      if (!validateMandatoryPayload(formData)) return;
+    if (!validateMandatoryPayload(formData)) return;
     }
 
     try {
@@ -2564,18 +2563,11 @@ const InvoicesPage = () => {
     if (!guardAction("invoices.update")) return;
     if (!selectedInvoice || !formData) return;
     if (!isSavedInvoiceStatus(selectedInvoice.status)) return;
-    if (!String(formData.billingGstin || "").trim()) {
-      toast.error(
-        "Select a billing GSTIN from Organisation Details before submitting invoice",
-      );
-      return;
-    }
     if (!canForwardSavedInvoice(selectedInvoice, invoiceEditContext)) {
       toast.error("You do not have permission to submit this invoice");
       return;
     }
-    if (!validateSavedInvoiceEdit(formData, { requireBillingGst: true }))
-      return;
+    if (!validateSavedInvoiceEdit(formData)) return;
 
     try {
       const updateResponse = await updateInvoice({
@@ -2767,12 +2759,13 @@ const InvoicesPage = () => {
         LEDGER_OPTIONS={LEDGER_OPTIONS}
         TAX_RATES={TAX_RATES}
         showBillingGst={isEdit || Boolean(uploadedFile)}
-        requireBillingGst={isEdit && !isSavedDraft}
+        requireBillingGst={false}
         showBranchField={isBranchEnabled}
         showInvoiceMatching={showInvoiceMatchingSelection}
         canUseThreeWayMatching={canUseThreeWayMatching}
         showProformaInvoiceFields={showProformaInvoiceFields}
         showErpIntegrationFields={showErpIntegrationFields}
+        includeLedgerAccountGroups={hasConnectedZoho}
       />
     );
   };
@@ -2851,10 +2844,28 @@ const InvoicesPage = () => {
                 value = <IntegrationSourceBadge record={invoice} />;
                 break;
               case "originalFileName":
-                value = invoice.originalFileName || "-";
+                value = (
+                  <ClippedTextWithTooltip
+                    text={invoice.originalFileName}
+                    maxWidthClass="max-w-[200px]"
+                  />
+                );
+                break;
+              case "invoiceNumber":
+                value = (
+                  <ClippedTextWithTooltip
+                    text={invoice.invoiceNumber}
+                    maxWidthClass="max-w-[160px]"
+                  />
+                );
                 break;
               case "refNo":
-                value = invoice.refNo || "-";
+                value = (
+                  <ClippedTextWithTooltip
+                    text={invoice.refNo}
+                    maxWidthClass="max-w-[160px]"
+                  />
+                );
                 break;
               case "orgBranch":
                 value = <OrgBranchCell record={invoice} />;
@@ -3020,10 +3031,7 @@ const InvoicesPage = () => {
             return (
               <TableCell
                 key={header.key}
-                className={cn(
-                  "border border-table-border",
-                  header.cellClassName,
-                )}
+                className={cn("border border-table-border", header.cellClassName)}
                 onClick={
                   header.key === "documentType"
                     ? (event) => event.stopPropagation()
@@ -3287,6 +3295,7 @@ const InvoicesPage = () => {
       LEDGER_OPTIONS={LEDGER_OPTIONS}
       TAX_RATES={TAX_RATES}
       showErpIntegrationFields={showErpIntegrationFields}
+      includeLedgerAccountGroups={hasConnectedZoho}
     />
   );
 
@@ -3437,18 +3446,18 @@ const InvoicesPage = () => {
             emptyTestId="no-invoices"
           />
         </div>
-        <div className="mt-auto flex shrink-0 flex-col gap-3 border-t border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="mt-auto flex shrink-0 flex-col gap-2 border-t border-border px-4 py-2 sm:flex-row sm:items-center sm:justify-between">
           {invoiceTotalPages > 0 ? (
             <>
               <p
-                className="text-sm text-muted-foreground"
+                className="text-xs text-muted-foreground"
                 data-testid="invoice-pagination-summary"
               >
                 Showing {invoiceStartRecord}-{invoiceEndRecord} of{" "}
                 {invoiceTotal.toLocaleString("en-IN")}
               </p>
               <Pagination className="mx-0 w-auto justify-start sm:justify-end">
-                <PaginationContent>
+                <PaginationContent className="gap-0.5">
                   <PaginationItem>
                     <PaginationPrevious
                       href="#"
@@ -3458,8 +3467,7 @@ const InvoicesPage = () => {
                       }}
                       className={cn(
                         "h-7 gap-1 pl-2 pr-2.5 text-xs",
-                        invoiceCurrentPage === 0 &&
-                          "pointer-events-none opacity-50",
+                        invoiceCurrentPage === 0 && "pointer-events-none opacity-50",
                       )}
                       data-testid="invoice-pagination-previous"
                     />
@@ -3473,6 +3481,7 @@ const InvoicesPage = () => {
                           event.preventDefault();
                           goToInvoicePage(pageNumber);
                         }}
+                        className="h-7 w-7 text-xs"
                         data-testid={`invoice-pagination-page-${pageNumber + 1}`}
                       >
                         {pageNumber + 1}
@@ -3486,12 +3495,12 @@ const InvoicesPage = () => {
                         event.preventDefault();
                         goToInvoicePage(invoiceCurrentPage + 1);
                       }}
-                      className={
+                      className={cn(
+                        "h-7 gap-1 pl-2.5 pr-2 text-xs",
                         !invoiceHasMore &&
-                        invoiceCurrentPage >= invoiceTotalPages - 1
-                          ? "pointer-events-none opacity-50"
-                          : undefined
-                      }
+                          invoiceCurrentPage >= invoiceTotalPages - 1 &&
+                          "pointer-events-none opacity-50",
+                      )}
                       data-testid="invoice-pagination-next"
                     />
                   </PaginationItem>

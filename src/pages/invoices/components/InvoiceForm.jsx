@@ -1,6 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Building2, CheckCircle2, ChevronsUpDown, Loader2, Plus, Trash2, X } from "lucide-react";
+import {
+  Building2,
+  CheckCircle2,
+  ChevronDown,
+  ChevronsUpDown,
+  Loader2,
+  Plus,
+  Trash2,
+  X,
+} from "lucide-react";
+import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
+import { Checkbox } from "../../../components/ui/checkbox";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import {
@@ -63,16 +74,16 @@ import {
   normalizeGstRegistrationsFromApi,
   normalizeOrganisationBranchesFromApi,
 } from "../../../utils/organisationGst";
-import { extractPageContent, extractMatchingGrns } from "../../../Services/utils/payloadMappers";
+import {
+  extractPageContent,
+  extractMatchingGrns,
+} from "../../../Services/utils/payloadMappers";
 import {
   useGetAvailableGrnsQuery,
   useGetAvailablePurchaseOrdersQuery,
 } from "../../../Services/apis/invoiceMatchingApi";
 import { mergeSelectedMatchingOption } from "../utils/invoiceMatchingFlow";
-import {
-  formatTdsDisplayLabel,
-  resolveTdsRate,
-} from "../utils/tds";
+import { formatTdsDisplayLabel, resolveTdsRate } from "../utils/tds";
 import { buildInvoiceTdsStateFromVendor } from "../../vendors/utils/vendorTds";
 import TdsSelectionField from "./TdsSelectionField";
 import {
@@ -87,7 +98,10 @@ import {
 import InvoiceDocumentTypeFields from "./InvoiceDocumentTypeFields";
 import ProformaInvoicePicker from "./ProformaInvoicePicker";
 import PiLinkValidationCard from "./PiLinkValidationCard";
-import { DOCUMENT_TYPE, normalizeDocumentType } from "../constants/proformaInvoice";
+import {
+  DOCUMENT_TYPE,
+  normalizeDocumentType,
+} from "../constants/proformaInvoice";
 import { useGetEligiblePisForGrnQuery } from "../../../Services/apis/goodsReceiptApi";
 import {
   useLazyGetProformaInvoiceSuggestionsQuery,
@@ -195,7 +209,8 @@ const resolveRoundOff = (data = {}) =>
 
 const normalizePurchaseOrderOption = (po = {}) => ({
   ...po,
-  id: po.id ?? po.poId ?? po.po_id ?? po.purchaseOrderId ?? po.purchase_order_id,
+  id:
+    po.id ?? po.poId ?? po.po_id ?? po.purchaseOrderId ?? po.purchase_order_id,
   poNumber: po.poNumber ?? po.po_number ?? po.number ?? "",
   amount: Number(po.amount ?? po.poAmount ?? po.po_amount ?? 0),
   currency: po.currency ?? DEFAULT_CURRENCY,
@@ -216,12 +231,55 @@ const getVendorBranchOptionValue = (branch = {}) => {
   return name ? `name:${name}` : "";
 };
 
+const getVendorRawBranches = (vendor = {}) => {
+  const branches =
+    vendor?.vendorBranches ??
+    vendor?.vendor_branches ??
+    vendor?.branchDetails ??
+    vendor?.branch_details ??
+    [];
+  return Array.isArray(branches) ? branches : [];
+};
+
+const getVendorFirstBranchWithGstin = (vendor = {}) => {
+  const branches = getVendorRawBranches(vendor);
+  for (const branch of branches) {
+    const gstin = String(
+      branch?.gstin ??
+        branch?.mappedGstin ??
+        branch?.mapped_gstin ??
+        branch?.billingGstin ??
+        "",
+    )
+      .trim()
+      .toUpperCase();
+    if (gstin) {
+      return {
+        gstin,
+        branchName: String(
+          branch?.branchName ?? branch?.branch_name ?? branch?.name ?? "",
+        ).trim(),
+        branchCode: String(
+          branch?.branchCode ?? branch?.branch_code ?? branch?.code ?? "",
+        )
+          .trim()
+          .toUpperCase(),
+      };
+    }
+  }
+  return null;
+};
+
 const formatVendorBranchOptionLabel = (branch = {}) => {
   const name = branch.branchName || "";
   const code = branch.branchCode || "";
   if (name && code) return `${name} (${code})`;
   return name || code || "Branch";
 };
+
+// AppSelect/Radix Select can't use an empty-string item value, so "no branch
+// selected" is represented by this sentinel instead of a blank option.
+const VENDOR_BRANCH_NONE_VALUE = "__vendor_branch_none__";
 
 export const InvoiceForm = ({
   formData,
@@ -271,6 +329,7 @@ export const InvoiceForm = ({
   canUseThreeWayMatching = false,
   showProformaInvoiceFields = false,
   showErpIntegrationFields = false,
+  includeLedgerAccountGroups = false,
 }) => {
   const canShowBranchField = showBillingGst && showBranchField;
   const {
@@ -281,27 +340,31 @@ export const InvoiceForm = ({
   } = useGetOrganisationGstCredentialsQuery(undefined, {
     skip: !showBillingGst,
   });
-  const {
-    data: organisationData,
-    isFetching: organisationFetching,
-  } = useGetOrganisationQuery(undefined, {
-    skip: !showBillingGst,
-  });
+  const { data: organisationData, isFetching: organisationFetching } =
+    useGetOrganisationQuery(undefined, {
+      skip: !showBillingGst,
+    });
   const { isTdsSubscriptionEnabled } = useTdsSubscription();
   const { data: coaData } = useGetCoaTreeQuery(undefined, {
     skip: !showErpIntegrationFields,
   });
-  const { data: backendVoucherTypeOptions = [] } = useGetAccountingVoucherTypesQuery(undefined, {
-    skip: !showErpIntegrationFields,
-  });
+  const { data: backendVoucherTypeOptions = [] } =
+    useGetAccountingVoucherTypesQuery(undefined, {
+      skip: !showErpIntegrationFields,
+    });
   const [vendorPickerOpen, setVendorPickerOpen] = useState(false);
   const [vendorQuery, setVendorQuery] = useState("");
   const vendorAnchorRef = useRef(null);
+  const vendorSwitchTriggerRef = useRef(null);
+  const [gstinPickerOpen, setGstinPickerOpen] = useState(false);
+  const gstinTriggerRef = useRef(null);
   const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false);
   const [currencyQuery, setCurrencyQuery] = useState("");
+  const currencyTriggerRef = useRef(null);
   const [removeLineItemsDialogOpen, setRemoveLineItemsDialogOpen] = useState(false);
   const [accountGroupSearchByRow, setAccountGroupSearchByRow] = useState({});
-  const [accountGroupPickerOpenByRow, setAccountGroupPickerOpenByRow] = useState({});
+  const [accountGroupPickerOpenByRow, setAccountGroupPickerOpenByRow] =
+    useState({});
   const [isNetPayableManuallyEdited, setIsNetPayableManuallyEdited] = useState(false);
 
   const filteredVendorOptions = useMemo(() => {
@@ -310,7 +373,9 @@ export const InvoiceForm = ({
       .trim();
     const options = Array.isArray(vendorOptions) ? vendorOptions : [];
     if (!query) return options;
-    return options.filter((vendor) => vendorMatchesInvoiceNameQuery(vendor, query));
+    return options.filter((vendor) =>
+      vendorMatchesInvoiceNameQuery(vendor, query),
+    );
   }, [vendorOptions, vendorQuery]);
 
   useEffect(() => {
@@ -325,7 +390,12 @@ export const InvoiceForm = ({
       return findVendorByName(formData.vendorName);
     }
     return null;
-  }, [formData?.vendorId, formData?.vendorName, findVendorById, findVendorByName]);
+  }, [
+    formData?.vendorId,
+    formData?.vendorName,
+    findVendorById,
+    findVendorByName,
+  ]);
 
   const vendorBranches = useMemo(() => {
     const branches =
@@ -337,8 +407,12 @@ export const InvoiceForm = ({
     if (!Array.isArray(branches)) return [];
     return branches
       .map((branch) => ({
-        branchName: String(branch.branchName ?? branch.branch_name ?? branch.name ?? "").trim(),
-        branchCode: String(branch.branchCode ?? branch.branch_code ?? branch.code ?? "")
+        branchName: String(
+          branch.branchName ?? branch.branch_name ?? branch.name ?? "",
+        ).trim(),
+        branchCode: String(
+          branch.branchCode ?? branch.branch_code ?? branch.code ?? "",
+        )
           .trim()
           .toUpperCase(),
         gstin: String(
@@ -355,31 +429,40 @@ export const InvoiceForm = ({
   }, [selectedVendor]);
 
   const vendorBranchOptions = useMemo(
-    () =>
-      vendorBranches.map((branch) => ({
+    () => [
+      { value: VENDOR_BRANCH_NONE_VALUE, label: "N/A" },
+      ...vendorBranches.map((branch) => ({
         value: getVendorBranchOptionValue(branch),
         label: formatVendorBranchOptionLabel(branch),
       })),
+    ],
     [vendorBranches],
   );
 
   const selectedVendorBranchValue = useMemo(() => {
     const code = String(formData?.vendorBranchCode || "").trim();
     if (code) {
-      const byCode = vendorBranches.find((branch) => branch.branchCode === code);
+      const byCode = vendorBranches.find(
+        (branch) => branch.branchCode === code,
+      );
       if (byCode) return getVendorBranchOptionValue(byCode);
     }
     const name = String(formData?.vendorBranchName || "").trim();
     if (name) {
-      const byName = vendorBranches.find((branch) => branch.branchName === name);
+      const byName = vendorBranches.find(
+        (branch) => branch.branchName === name,
+      );
       if (byName) return getVendorBranchOptionValue(byName);
     }
     return "";
   }, [formData?.vendorBranchCode, formData?.vendorBranchName, vendorBranches]);
 
   const msmePaymentDue = normalizeMsmePaymentDue(formData);
-  const vendorIsMsme = Boolean(selectedVendor?.msme) || msmePaymentDue.vendorIsMsme;
-  const msmeMaxDueDate = vendorIsMsme ? computeMsmeMaxDueDate(formData?.invoiceDate) : "";
+  const vendorIsMsme =
+    Boolean(selectedVendor?.msme) || msmePaymentDue.vendorIsMsme;
+  const msmeMaxDueDate = vendorIsMsme
+    ? computeMsmeMaxDueDate(formData?.invoiceDate)
+    : "";
 
   const resolvedCurrencyOptions = useMemo(
     () =>
@@ -480,21 +563,21 @@ export const InvoiceForm = ({
   const organisationGstBusy =
     organisationGstLoading || organisationGstFetching || organisationFetching;
   const branchBusy = organisationFetching;
+  const hasOrganisationGstOptions = billingGstOptions.length > 0;
+  const billingGstRequired = requireBillingGst && hasOrganisationGstOptions;
 
   useEffect(() => {
     if (!showBillingGst || organisationGstBusy || !formData) return;
-    if ((organisationGstError && billingGstEntries.length === 0) || billingGstEntries.length === 0) {
-      if (formData.billingGstin) {
-        setFormData((prev) => ({
-          ...prev,
-          billingGstin: "",
-        }));
-      }
+    if (organisationGstError || organisationGstCredentials.length === 0) {
       return;
     }
 
-    const currentBillingGst = String(formData.billingGstin || "").trim().toUpperCase();
-    const matchedCurrent = billingGstEntries.find((entry) => entry.gst === currentBillingGst);
+    const currentBillingGst = String(formData.billingGstin || "")
+      .trim()
+      .toUpperCase();
+    const matchedCurrent = billingGstEntries.find(
+      (entry) => entry.gst === currentBillingGst,
+    );
     if (matchedCurrent) {
       if (formData.billingGstin !== matchedCurrent.gst) {
         setFormData((prev) => ({
@@ -535,14 +618,20 @@ export const InvoiceForm = ({
   const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
   const isGstinRequired = useInrTax && formData?.gstTreatment !== "N/A";
   const selectedBillingGst = billingGstEntries.find(
-    (entry) => entry.gst === String(formData?.billingGstin || "").trim().toUpperCase(),
+    (entry) =>
+      entry.gst ===
+      String(formData?.billingGstin || "")
+        .trim()
+        .toUpperCase(),
   );
   const selectedBranchCode = String(formData?.branchCode || "").trim();
   const selectedBranch = organisationBranches.find(
     (branch) => branch.branchCode === selectedBranchCode,
   );
   const applyBranchSelection = (branchCode) => {
-    const branch = organisationBranches.find((entry) => entry.branchCode === branchCode);
+    const branch = organisationBranches.find(
+      (entry) => entry.branchCode === branchCode,
+    );
     setFormData((prev) => {
       if (!prev) return prev;
       return {
@@ -579,25 +668,32 @@ export const InvoiceForm = ({
       };
     });
   };
-  const clearVendorBranchSelection = () => {
-    setFormData((prev) =>
-      prev
-        ? {
-            ...prev,
-            vendorBranchCode: "",
-            vendorBranchName: "",
-            vendorBranchGstin: "",
-          }
-        : prev,
-    );
+  const billingGstSatisfied =
+    !requireBillingGst || Boolean(selectedBillingGst?.gst);
+  const shippingSameAsBilling = Boolean(formData?.shippingSameAsBilling);
+  const handleBillingAddressChange = (value) => {
+    setFormData({
+      ...formData,
+      billingAddress: value,
+      ...(shippingSameAsBilling ? { shippingAddress: value } : {}),
+    });
   };
-  const billingGstSatisfied = !requireBillingGst || Boolean(selectedBillingGst?.gst);
+  const handleShippingSameAsBillingChange = (checked) => {
+    setFormData({
+      ...formData,
+      shippingSameAsBilling: checked,
+      ...(checked ? { shippingAddress: formData.billingAddress || "" } : {}),
+    });
+  };
   const isInvoiceLevelDiscount = isInvoiceLevelSelection(formData?.discountsLevel);
   const isInvoiceLevelTax = isInvoiceLevelSelection(formData?.taxesLevel);
   const showLineItemDiscount = isLineItemLevelSelection(formData?.discountsLevel);
   const accountGroupOptions = useMemo(
-    () => buildGroupBranchOptionsFromCoa(coaData?.tree || []),
-    [coaData?.tree],
+    () =>
+      buildGroupBranchOptionsFromCoa(coaData?.tree || [], {
+        includeLedgers: includeLedgerAccountGroups,
+      }),
+    [coaData?.tree, includeLedgerAccountGroups],
   );
   const voucherTypeOptions = backendVoucherTypeOptions;
   const lineItemHeaders = lineItemTableHeader
@@ -632,15 +728,20 @@ export const InvoiceForm = ({
   const { data: eligiblePis = [] } = useGetEligiblePisForGrnQuery(undefined, {
     skip: !showProformaInvoiceFields,
   });
-  const [fetchPiSuggestions, { data: apiPiSuggestions = [], isFetching: piSuggestionsLoading }] =
-    useLazyGetProformaInvoiceSuggestionsQuery();
+  const [
+    fetchPiSuggestions,
+    { data: apiPiSuggestions = [], isFetching: piSuggestionsLoading },
+  ] = useLazyGetProformaInvoiceSuggestionsQuery();
   const [validatePiLink, { isLoading: piLinkValidationLoading }] =
     useValidateProformaInvoiceLinkMutation();
   const [piLinkValidation, setPiLinkValidation] = useState(null);
 
   useEffect(() => {
     if (!showProformaInvoiceFields) return undefined;
-    if ((formData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE) !== DOCUMENT_TYPE.TAX_INVOICE) {
+    if (
+      (formData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE) !==
+      DOCUMENT_TYPE.TAX_INVOICE
+    ) {
       return undefined;
     }
     if (!formData?.vendorId && !formData?.vendorName) return undefined;
@@ -695,7 +796,8 @@ export const InvoiceForm = ({
   const selectedProformaInvoice = useMemo(
     () =>
       piSuggestions.find(
-        (pi) => String(pi.id) === String(formData?.linkedProformaInvoiceId ?? ""),
+        (pi) =>
+          String(pi.id) === String(formData?.linkedProformaInvoiceId ?? ""),
       ) ?? null,
     [piSuggestions, formData?.linkedProformaInvoiceId],
   );
@@ -732,7 +834,10 @@ export const InvoiceForm = ({
       setPiLinkValidation(null);
       return undefined;
     }
-    if ((formData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE) !== DOCUMENT_TYPE.TAX_INVOICE) {
+    if (
+      (formData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE) !==
+      DOCUMENT_TYPE.TAX_INVOICE
+    ) {
       setPiLinkValidation(null);
       return undefined;
     }
@@ -839,17 +944,17 @@ export const InvoiceForm = ({
     skip: !shouldLoadPurchaseOrders,
   });
   const selectedMatchingPoId = formData?.matchingPurchaseOrderId || "";
-  const {
-    data: availableGrnsData = {},
-    isFetching: grnsLoading,
-  } = useGetAvailableGrnsQuery(selectedMatchingPoId, {
-    skip:
-      !showInvoiceMatching ||
-      !canUseThreeWayMatching ||
-      !selectedMatchingPoId,
-  });
+  const { data: availableGrnsData = {}, isFetching: grnsLoading } =
+    useGetAvailableGrnsQuery(selectedMatchingPoId, {
+      skip:
+        !showInvoiceMatching ||
+        !canUseThreeWayMatching ||
+        !selectedMatchingPoId,
+    });
   const availablePurchaseOrders = useMemo(() => {
-    const items = extractPageContent(availablePurchaseOrdersData).map(normalizePurchaseOrderOption);
+    const items = extractPageContent(availablePurchaseOrdersData).map(
+      normalizePurchaseOrderOption,
+    );
     return mergeSelectedMatchingOption(items, selectedMatchingPoId, {
       id: selectedMatchingPoId,
       poNumber: formData?.matchingPoNumber || selectedMatchingPoId,
@@ -862,23 +967,25 @@ export const InvoiceForm = ({
   ]);
   const availableGrns = useMemo(() => {
     const { items } = extractMatchingGrns(availableGrnsData);
-    return mergeSelectedMatchingOption(items.map(normalizeGrnOption), formData?.matchingGrnId, {
-      id: formData?.matchingGrnId,
-      grnNumber: formData?.matchingGrnNumber || formData?.matchingGrnId,
-      amount: 0,
-    });
-  }, [
-    availableGrnsData,
-    formData?.matchingGrnId,
-    formData?.matchingGrnNumber,
-  ]);
+    return mergeSelectedMatchingOption(
+      items.map(normalizeGrnOption),
+      formData?.matchingGrnId,
+      {
+        id: formData?.matchingGrnId,
+        grnNumber: formData?.matchingGrnNumber || formData?.matchingGrnId,
+        amount: 0,
+      },
+    );
+  }, [availableGrnsData, formData?.matchingGrnId, formData?.matchingGrnNumber]);
   const matchingGrnsAvailability = useMemo(
     () => extractMatchingGrns(availableGrnsData),
     [availableGrnsData],
   );
   const roundOffValue = resolveRoundOff(formData || {});
   const totalTax = useInrTax
-    ? (Number(totals.cgst) || 0) + (Number(totals.sgst) || 0) + (Number(totals.igst) || 0)
+    ? (Number(totals.cgst) || 0) +
+      (Number(totals.sgst) || 0) +
+      (Number(totals.igst) || 0)
     : (totals.foreignTaxes || []).reduce(
         (sum, entry) => sum + (Number(entry.amount) || 0),
         0,
@@ -909,9 +1016,13 @@ export const InvoiceForm = ({
     isError: tdsPreviewError,
     refetch: refetchTdsPreview,
   } = useGetInvoiceTdsPreviewQuery(debouncedTdsPreviewArgs, {
-    skip: !isTdsSubscriptionEnabled || !invoiceIdForTdsPreview || !formData?.tdsSectionCode,
+    skip:
+      !isTdsSubscriptionEnabled ||
+      !invoiceIdForTdsPreview ||
+      !formData?.tdsSectionCode,
   });
-  const fallbackTdsAmount = Math.round(((totals.subTotal * tdsRate) / 100) * 100) / 100;
+  const fallbackTdsAmount =
+    Math.round(((totals.subTotal * tdsRate) / 100) * 100) / 100;
   const fallbackNetPayable = Math.max(
     Math.round((totals.total - fallbackTdsAmount) * 100) / 100,
     0,
@@ -919,7 +1030,9 @@ export const InvoiceForm = ({
   const tdsAmount = getTdsPreviewAmount(tdsPreview, fallbackTdsAmount);
   const calculatedNetPayable = fallbackNetPayable;
   const manualNetPayable =
-    formData.netAmount !== undefined && formData.netAmount !== null && formData.netAmount !== ""
+    formData.netAmount !== undefined &&
+    formData.netAmount !== null &&
+    formData.netAmount !== ""
       ? Number(formData.netAmount)
       : null;
   const hasManualNetPayableValue =
@@ -965,6 +1078,12 @@ export const InvoiceForm = ({
   const applyVendorNameChange = (newName) => {
     const matched = findVendorByName(newName);
     const matchedIsMsme = Boolean(matched?.msme);
+    const matchedGstin = matched?.gstin
+      ? String(matched.gstin).trim().toUpperCase()
+      : "";
+    const defaultBranch = matchedGstin
+      ? null
+      : getVendorFirstBranchWithGstin(matched);
     setFormData({
       ...formData,
       vendorName: newName,
@@ -972,9 +1091,7 @@ export const InvoiceForm = ({
       vendorMatched: !!matched,
       vendorRequestPending: Boolean(matched?.isPendingApproval),
       vendorRequestSubmitted: matched ? formData.vendorRequestSubmitted : false,
-      gstin: matched?.gstin
-        ? String(matched.gstin).trim().toUpperCase()
-        : formData.gstin,
+      gstin: matchedGstin || defaultBranch?.gstin || "",
       dueDate: normalizeDueDateForInvoice({
         invoiceDate: formData.invoiceDate,
         dueDate: formData.dueDate,
@@ -986,9 +1103,9 @@ export const InvoiceForm = ({
       campaignReferenceNumber: "",
       matchingPurchaseOrderId: "",
       matchingGrnId: "",
-      vendorBranchCode: "",
-      vendorBranchName: "",
-      vendorBranchGstin: "",
+      vendorBranchCode: defaultBranch?.branchCode || "",
+      vendorBranchName: defaultBranch?.branchName || "",
+      vendorBranchGstin: defaultBranch?.gstin || "",
       ...buildInvoiceTdsStateFromVendor(matched),
     });
   };
@@ -1052,7 +1169,9 @@ export const InvoiceForm = ({
           case "accountGroup":
             {
               const accountGroupSearch = accountGroupSearchByRow[index] || "";
-              const isAccountGroupPickerOpen = Boolean(accountGroupPickerOpenByRow[index]);
+              const isAccountGroupPickerOpen = Boolean(
+                accountGroupPickerOpenByRow[index],
+              );
               const visibleAccountGroupOptions = accountGroupSearch.trim()
                 ? accountGroupOptions.filter((option) => {
                     const query = accountGroupSearch.trim().toLowerCase();
@@ -1068,9 +1187,13 @@ export const InvoiceForm = ({
                   })
                 : accountGroupOptions;
               const selectedAccountGroupValue =
+                item.ledgerId ||
                 item.accountGroupId ||
                 item.groupId ||
-                findAccountingOption(accountGroupOptions, item.accountGroupName || item.groupName)?.value ||
+                findAccountingOption(
+                  accountGroupOptions,
+                  item.ledgerName || item.ledger || item.accountGroupName || item.groupName,
+                )?.value ||
                 "";
               const selectedAccountGroup = findAccountingOption(
                 accountGroupOptions,
@@ -1086,9 +1209,13 @@ export const InvoiceForm = ({
                             ? {
                                 ...lineItem,
                                 accountGroupId: selected?.accountGroupId || "",
-                                accountGroupName: selected?.accountGroupName || "",
+                                accountGroupName:
+                                  selected?.accountGroupName || "",
                                 groupId: selected?.groupId || "",
                                 groupName: selected?.groupName || "",
+                                ledgerId: selected?.ledgerId || "",
+                                ledgerName: selected?.ledgerName || "",
+                                ledger: selected?.ledgerName || "",
                                 expenseType: selected?.expenseType || lineItem.expenseType || "",
                               }
                             : lineItem,
@@ -1096,8 +1223,14 @@ export const InvoiceForm = ({
                       }
                     : prev,
                 );
-                setAccountGroupSearchByRow((prev) => ({ ...prev, [index]: "" }));
-                setAccountGroupPickerOpenByRow((prev) => ({ ...prev, [index]: false }));
+                setAccountGroupSearchByRow((prev) => ({
+                  ...prev,
+                  [index]: "",
+                }));
+                setAccountGroupPickerOpenByRow((prev) => ({
+                  ...prev,
+                  [index]: false,
+                }));
               };
               value = (
                 <Popover
@@ -1123,6 +1256,8 @@ export const InvoiceForm = ({
                     >
                       <span className="truncate">
                         {selectedAccountGroup?.accountGroupName ||
+                          item.ledgerName ||
+                          item.ledger ||
                           item.accountGroupName ||
                           item.groupName ||
                           "Select group"}
@@ -1161,7 +1296,8 @@ export const InvoiceForm = ({
                             onClick={() => applyAccountGroupSelection(option)}
                             className={cn(
                               "flex w-full rounded px-2 py-1.5 text-left text-xs hover:bg-muted",
-                              selectedAccountGroupValue === option.value && "bg-muted",
+                              selectedAccountGroupValue === option.value &&
+                                "bg-muted",
                             )}
                           >
                             {Number(option.hierarchyLevel || 0) > 0 ? (
@@ -1201,6 +1337,11 @@ export const InvoiceForm = ({
                                     {option.status}
                                   </span>
                                 ) : null}
+                                {option.optionType === "ledger" ? (
+                                  <span className="shrink-0 rounded-full bg-emerald-50 px-1.5 py-0.5 text-[9px] uppercase text-emerald-700">
+                                    Ledger
+                                  </span>
+                                ) : null}
                               </span>
                               {option.parentPath ? (
                                 <span className="block truncate text-[10px] text-muted-foreground">
@@ -1237,7 +1378,11 @@ export const InvoiceForm = ({
               <AppSelect
                 value={normalizeExpenseType(item.expenseType) || ""}
                 onChange={(e) =>
-                  updateLineItem(index, "expenseType", normalizeExpenseType(e.target.value))
+                  updateLineItem(
+                    index,
+                    "expenseType",
+                    normalizeExpenseType(e.target.value),
+                  )
                 }
                 options={EXPENSE_TYPE_OPTIONS}
                 placeholder="Select type"
@@ -1365,7 +1510,7 @@ export const InvoiceForm = ({
               const taxableAmount = calculateLineItemSubtotal(item);
               const rate = useInrTax
                 ? parseTaxRateFromLabel(item.tax)
-                : (Number(item.taxRate) || parseTaxRateFromLabel(item.tax) || 0);
+                : Number(item.taxRate) || parseTaxRateFromLabel(item.tax) || 0;
               const taxAmount = (taxableAmount * rate) / 100;
               value = formatAmount(taxAmount);
             }
@@ -1375,8 +1520,10 @@ export const InvoiceForm = ({
               const taxableAmount = calculateLineItemSubtotal(item);
               const rate = useInrTax
                 ? parseTaxRateFromLabel(item.tax)
-                : (Number(item.taxRate) || parseTaxRateFromLabel(item.tax) || 0);
-              const taxAmount = isInvoiceLevelTax ? 0 : (taxableAmount * rate) / 100;
+                : Number(item.taxRate) || parseTaxRateFromLabel(item.tax) || 0;
+              const taxAmount = isInvoiceLevelTax
+                ? 0
+                : (taxableAmount * rate) / 100;
               value = formatAmount(taxableAmount + taxAmount);
             }
             break;
@@ -1412,72 +1559,146 @@ export const InvoiceForm = ({
     <div className="flex flex-row items-stretch gap-4 w-full h-full min-h-0 min-w-0">
       <div className="flex-1 min-w-0 flex flex-col min-h-0">
         <div className="flex-1 overflow-y-auto space-y-4 pr-3 pb-2 scrollbar-thin-muted">
-          {formData.vendorName &&
-            formData.vendorRequestSubmitted &&
-            !formData.vendorMatched && (
-              <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-blue-600" />
-                <p className="text-xs text-blue-700">
-                  <span className="font-medium">Vendor request submitted:</span>{" "}
-                  "{formData.vendorName}" (you can{" "}
-                  {isEdit ? "save this invoice" : "add this invoice"} while
-                  approval is pending)
-                </p>
-              </div>
-            )}
-
-          {formData.vendorName &&
-            !formData.vendorMatched &&
-            !formData.vendorRequestSubmitted && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-amber-600" />
-                  <div>
-                    <p className="font-medium text-amber-800 text-xs">
-                      Vendor does not match
-                    </p>
-                    <p className="text-[11px] text-amber-600">
-                      "{formData.vendorName}" does not match any vendor in the
-                      system
-                    </p>
-                  </div>
-                </div>
-                <Button
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleAddVendorFromInvoice();
-                  }}
-                  className="bg-amber-600 hover:bg-amber-700 text-white h-7 text-xs"
-                  size="sm"
-                  data-testid="request-vendor-from-invoice-btn"
-                  disabled={!canAddVendor}
-                >
-                  <Plus className="h-3 w-3 mr-1" />
-                  Request Vendor
-                </Button>
-              </div>
-            )}
-
-          {formData.vendorName && formData.vendorMatched && (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2 flex items-center gap-2">
-              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-              <p className="text-xs text-emerald-700">
-                <span className="font-medium">
-                  {formData.vendorRequestPending
-                    ? "Vendor linked (pending approval):"
-                    : "Vendor matched:"}
-                </span>{" "}
-                "{formData.vendorName}"
-              </p>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-lg font-semibold text-foreground">
+                {isEdit ? "Edit Invoice" : "New Invoice"}
+              </h2>
+              <Badge
+                variant="outline"
+                className="border-blue-200 bg-blue-50 text-blue-700"
+                data-testid="source-select"
+              >
+                {formData.source || "Upload"}
+              </Badge>
             </div>
-          )}
+            {showErpIntegrationFields && (
+              <div className="w-full sm:w-56">
+                <AppSelect
+                  value={formData.voucherType || ""}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      voucherType: e.target.value,
+                    })
+                  }
+                  options={voucherTypeOptions}
+                  placeholder="Select voucher type"
+                  className="h-9 text-sm focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
+                  data-testid="invoice-header-voucher-type-select"
+                />
+              </div>
+            )}
+          </div>
+
+          {showBillingGst ? (
+            <div className="space-y-3">
+              <div
+                className={`grid grid-cols-1 gap-3 ${canShowBranchField ? "md:grid-cols-2" : ""}`}
+              >
+                <div>
+                  <RequiredLabel
+                    required={requireBillingGst}
+                    className="text-sm"
+                  >
+                    ORG GSTIN
+                  </RequiredLabel>
+                  <AppSelect
+                    value={formData.billingGstin || ""}
+                    onChange={(event) => {
+                      const nextGst = event.target.value;
+                      const matched = billingGstEntries.find(
+                        (entry) => entry.gst === nextGst,
+                      );
+                      setFormData({
+                        ...formData,
+                        billingGstin: matched?.gst || "",
+                      });
+                    }}
+                    options={billingGstOptions}
+                    placeholder={
+                      organisationGstBusy
+                        ? "Loading organisation GSTINs..."
+                        : "Select billing GSTIN"
+                    }
+                    className="h-8 text-sm"
+                    disabled={
+                      organisationGstBusy || billingGstOptions.length === 0
+                    }
+                    data-testid="invoice-preview-billing-gst-select"
+                  />
+                </div>
+
+                {canShowBranchField ? (
+                  <div>
+                    <Label className="text-sm">ORG Branch (Optional)</Label>
+                    <div className="flex items-center gap-2">
+                      <div className="min-w-0 flex-1">
+                        <AppSelect
+                          value={selectedBranchCode}
+                          onChange={(event) =>
+                            applyBranchSelection(event.target.value)
+                          }
+                          options={branchOptions}
+                          placeholder={
+                            branchBusy ? "Loading branches..." : "Select branch"
+                          }
+                          className="h-8 text-sm"
+                          disabled={branchBusy || branchOptions.length === 0}
+                          data-testid="invoice-preview-branch-select"
+                        />
+                      </div>
+                      {selectedBranchCode ? (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={clearBranchSelection}
+                          className="h-8 shrink-0 px-2 text-xs"
+                        >
+                          Clear
+                        </Button>
+                      ) : null}
+                    </div>
+                    {branchOptions.length === 0 && !branchBusy ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        Configure branches in Settings &gt; Organisation
+                        Details.
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+              {organisationGstError ? (
+                <p className="mt-1 text-xs text-destructive">
+                  Failed to load organisation GSTINs. Add invoice is blocked
+                  until this loads.
+                </p>
+              ) : billingGstOptions.length === 0 && !organisationGstBusy ? (
+                <p className="mt-1 text-xs text-destructive">
+                  Add an organisation GSTIN in Settings &gt; Organisation
+                  Details before proceeding.
+                </p>
+              ) : !billingGstSatisfied ? (
+                <p className="mt-1 text-xs text-destructive">
+                  Select a billing GSTIN configured in Organisation Details.
+                </p>
+              ) : (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Billing GSTIN must be one of this organisation's configured
+                  GST registrations.
+                </p>
+              )}
+            </div>
+          ) : null}
 
           {showProformaInvoiceFields && (
             <div className="space-y-4">
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <InvoiceDocumentTypeFields
-                  documentType={formData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE}
+                  documentType={
+                    formData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE
+                  }
                   onDocumentTypeChange={handleDocumentTypeChange}
                   disabled={isEdit}
                 />
@@ -1504,20 +1725,189 @@ export const InvoiceForm = ({
           )}
 
           <div className="space-y-3">
-            <h3 className="text-sm font-semibold text-gray-800">
+            <h3 className="text-md font-semibold text-gray-800">
               Vendor Details
             </h3>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <RequiredLabel required>Vendor Name</RequiredLabel>
+
+            {formData.vendorName &&
+              formData.vendorRequestSubmitted &&
+              !formData.vendorMatched && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 text-blue-600" />
+                  <p className="text-xs text-blue-700">
+                    <span className="font-medium">Vendor request submitted:</span>{" "}
+                    "{formData.vendorName}" (you can{" "}
+                    {isEdit ? "save this invoice" : "add this invoice"} while
+                    approval is pending)
+                  </p>
+                </div>
+              )}
+
+            {formData.vendorName &&
+              !formData.vendorMatched &&
+              !formData.vendorRequestSubmitted && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="h-4 w-4 text-amber-600" />
+                    <div>
+                      <p className="font-medium text-amber-800 text-xs">
+                        Vendor does not match
+                      </p>
+                      <p className="text-[11px] text-amber-600">
+                        "{formData.vendorName}" does not match any vendor in the
+                        system
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleAddVendorFromInvoice();
+                    }}
+                    className="bg-amber-600 hover:bg-amber-700 text-white h-7 text-xs"
+                    size="sm"
+                    data-testid="request-vendor-from-invoice-btn"
+                    disabled={!canAddVendor}
+                  >
+                    <Plus className="h-3 w-3 mr-1" />
+                    Request Vendor
+                  </Button>
+                </div>
+              )}
+
+            {formData.vendorName && formData.vendorMatched && (
+              <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2 flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                <p className="text-xs text-emerald-700">
+                  <span className="font-medium">
+                    {formData.vendorRequestPending
+                      ? "Vendor linked (pending approval):"
+                      : "Vendor matched:"}
+                  </span>{" "}
+                  "{formData.vendorName}"
+                </p>
+              </div>
+            )}
+
+            <div className="rounded-lg border border-border bg-accent/70 p-3 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0 space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-semibold text-foreground">
+                      {formData.vendorName || "No vendor selected"}
+                    </span>
+                    {vendorIsMsme && (
+                      <Badge
+                        variant="outline"
+                        className="shrink-0 border-blue-200 bg-blue-50 text-blue-700"
+                      >
+                        MSME
+                      </Badge>
+                    )}
+                  </div>
+                  <Popover
+                    open={gstinPickerOpen}
+                    onOpenChange={setGstinPickerOpen}
+                  >
+                    <PopoverAnchor asChild>
+                      <button
+                        ref={gstinTriggerRef}
+                        type="button"
+                        onClick={() => {
+                          if (vendorBranches.length > 0)
+                            setGstinPickerOpen((open) => !open);
+                        }}
+                        className="flex items-center gap-1 text-sm text-muted-foreground"
+                        data-testid="invoice-vendor-gstin-trigger"
+                      >
+                        <span className="truncate">
+                          GSTIN No. - {formData.gstin || "-"}
+                        </span>
+                        {vendorBranches.length > 0 && (
+                          <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                        )}
+                      </button>
+                    </PopoverAnchor>
+                    {vendorBranches.length > 0 && (
+                      <PopoverContent
+                        className="z-[120] min-w-[260px] w-[var(--radix-popover-trigger-width)] p-0"
+                        align="start"
+                        onOpenAutoFocus={(event) => event.preventDefault()}
+                        onInteractOutside={(event) => {
+                          if (gstinTriggerRef.current?.contains(event.target)) {
+                            event.preventDefault();
+                          }
+                        }}
+                      >
+                        <div className="max-h-56 overflow-y-auto overscroll-contain py-1">
+                          {vendorBranches.map((branch) => (
+                            <button
+                              key={getVendorBranchOptionValue(branch)}
+                              type="button"
+                              className={cn(
+                                "flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent",
+                                selectedVendorBranchValue &&
+                                  getVendorBranchOptionValue(branch) ===
+                                    selectedVendorBranchValue &&
+                                  "bg-accent",
+                              )}
+                              onMouseDown={(event) => event.preventDefault()}
+                              onClick={() => {
+                                applyVendorBranchSelection(
+                                  getVendorBranchOptionValue(branch),
+                                );
+                                setGstinPickerOpen(false);
+                              }}
+                            >
+                              <span className="truncate">
+                                {branch.gstin || "-"}
+                                {branch.branchName
+                                  ? ` - ${branch.branchName}`
+                                  : ""}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </PopoverContent>
+                    )}
+                  </Popover>
+                </div>
                 <Popover
                   open={vendorPickerOpen}
                   onOpenChange={setVendorPickerOpen}
                 >
                   <PopoverAnchor asChild>
+                    <button
+                      ref={vendorSwitchTriggerRef}
+                      type="button"
+                      onClick={() => {
+                        setVendorQuery("");
+                        setVendorPickerOpen((open) => !open);
+                      }}
+                      className="flex shrink-0 items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-sm text-foreground"
+                      data-testid="invoice-switch-vendor-btn"
+                    >
+                      Switch Vendor
+                      <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                    </button>
+                  </PopoverAnchor>
+                  <PopoverContent
+                    className="z-[120] min-w-[260px] overflow-y-auto w-[var(--radix-popover-trigger-width)] p-0"
+                    align="end"
+                    onOpenAutoFocus={(event) => event.preventDefault()}
+                    onInteractOutside={(event) => {
+                      if (
+                        vendorAnchorRef.current?.contains(event.target) ||
+                        vendorSwitchTriggerRef.current?.contains(event.target)
+                      ) {
+                        event.preventDefault();
+                      }
+                    }}
+                  >
                     <div className="relative" ref={vendorAnchorRef}>
                       <Input
-                        value={formData.vendorName || ""}
+                        value={vendorQuery}
                         onChange={(e) => {
                           setVendorQuery(e.target.value);
                           applyVendorNameChange(e.target.value);
@@ -1528,7 +1918,7 @@ export const InvoiceForm = ({
                           setVendorPickerOpen(true);
                         }}
                         placeholder="Select or enter vendor"
-                        className="pr-16 h-8 text-sm"
+                        className="pr-16 h-8 text-sm border-0 border-b rounded-none focus-visible:ring-0"
                         autoComplete="off"
                       />
                       <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
@@ -1555,17 +1945,6 @@ export const InvoiceForm = ({
                         </button>
                       </div>
                     </div>
-                  </PopoverAnchor>
-                  <PopoverContent
-                    className="z-[120] min-w-[260px] overflow-y-auto w-[var(--radix-popover-trigger-width)] p-0"
-                    align="start"
-                    onOpenAutoFocus={(event) => event.preventDefault()}
-                    onInteractOutside={(event) => {
-                      if (vendorAnchorRef.current?.contains(event.target)) {
-                        event.preventDefault();
-                      }
-                    }}
-                  >
                     <div
                       className="max-h-56 overflow-y-auto overscroll-contain py-1"
                       onWheel={(event) => {
@@ -1586,8 +1965,10 @@ export const InvoiceForm = ({
                             type="button"
                             className={cn(
                               "flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent",
-                              vendorMatchesInvoiceName(vendor, formData.vendorName) &&
-                                "bg-accent",
+                              vendorMatchesInvoiceName(
+                                vendor,
+                                formData.vendorName,
+                              ) && "bg-accent",
                             )}
                             onMouseDown={(event) => event.preventDefault()}
                             onClick={() => {
@@ -1608,61 +1989,86 @@ export const InvoiceForm = ({
                     </div>
                   </PopoverContent>
                 </Popover>
-                {formData.vendorMatched && vendorBranchOptions.length > 0 ? (
-                  <div className="mt-3">
-                    <Label className="text-xs">Vendor Branch (Optional)</Label>
-                    <div className="flex items-center gap-2">
-                      <div className="min-w-0 flex-1">
-                        <AppSelect
-                          value={selectedVendorBranchValue}
-                          onChange={(event) => applyVendorBranchSelection(event.target.value)}
-                          options={vendorBranchOptions}
-                          placeholder="Select vendor branch"
-                          className="h-8 text-sm"
-                          data-testid="invoice-vendor-branch-select"
-                        />
-                      </div>
-                      {selectedVendorBranchValue ? (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={clearVendorBranchSelection}
-                          className="h-8 shrink-0 px-2 text-xs"
-                        >
-                          Clear
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
               </div>
+
+              <div className="grid grid-cols-2 gap-3 border-t border-border pt-3">
                 <div>
-                  <RequiredLabel required>Inovoice/Bill Number</RequiredLabel>
-                  <Input
-                    value={formData.invoiceNumber}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        invoiceNumber: e.target.value,
-                      })
-                    }
-                    placeholder="Invoice number"
-                    className="h-8 text-sm"
-                  />
+                  {formData.vendorMatched && vendorBranches.length > 0 ? (
+                    <>
+                      <Label className="text-xs">
+                        Vendor Branch (Optional)
+                      </Label>
+                      <AppSelect
+                        value={selectedVendorBranchValue || VENDOR_BRANCH_NONE_VALUE}
+                        onChange={(event) =>
+                          applyVendorBranchSelection(event.target.value)
+                        }
+                        options={vendorBranchOptions}
+                        placeholder="Select vendor branch"
+                        className="h-8 text-sm"
+                        data-testid="invoice-vendor-branch-select"
+                      />
+                    </>
+                  ) : (
+                    <>
+                      <RequiredLabel required>GST Treatment</RequiredLabel>
+                      <AppSelect
+                        value={formData.gstTreatment}
+                        onChange={(e) =>
+                          setFormData({ ...formData, gstTreatment: e.target.value })
+                        }
+                        options={GST_TREATMENTS}
+                        className="h-8 text-sm"
+                      />
+                    </>
+                  )}
                 </div>
-              <div className="col-span-2">
-                <InvoiceCampaignFields
-                  formData={formData}
-                  setFormData={setFormData}
-                  showCampaignField={showCampaignField}
-                  lockedCampaign={lockedCampaign}
-                  lockedCampaignPrefill={lockedCampaignPrefill}
-                />
+                <div>
+                  {formData.vendorMatched && vendorBranchOptions.length > 0 ? (
+                    <>
+                      <RequiredLabel required>GST Treatment</RequiredLabel>
+                      <AppSelect
+                        value={formData.gstTreatment}
+                        onChange={(e) =>
+                          setFormData({ ...formData, gstTreatment: e.target.value })
+                        }
+                        options={GST_TREATMENTS}
+                        className="h-8 text-sm"
+                      />
+                    </>
+                  ) : null}
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-2 gap-3">
+            <InvoiceCampaignFields
+              formData={formData}
+              setFormData={setFormData}
+              showCampaignField={showCampaignField}
+              lockedCampaign={lockedCampaign}
+              lockedCampaignPrefill={lockedCampaignPrefill}
+            />
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="text-md font-semibold text-gray-800">
+              Invoice Details
+            </h3>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <RequiredLabel required>Inovoice/Bill Number</RequiredLabel>
+                <Input
+                  value={formData.invoiceNumber}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      invoiceNumber: e.target.value,
+                    })
+                  }
+                  placeholder="Invoice number"
+                  className="h-8 text-sm"
+                />
+              </div>
               <div>
                 <RequiredLabel required>Billing Date</RequiredLabel>
                 <Input
@@ -1703,7 +2109,12 @@ export const InvoiceForm = ({
                   }}
                   className="h-8 text-sm"
                 />
-                {isEdit ? <InvoiceDueDateIndicators invoice={formData} className="mt-2" /> : null}
+                {isEdit ? (
+                  <InvoiceDueDateIndicators
+                    invoice={formData}
+                    className="mt-2"
+                  />
+                ) : null}
               </div>
             </div>
 
@@ -1927,7 +2338,7 @@ export const InvoiceForm = ({
                     ) : null}
 
                     <div>
-                      <RequiredLabel required={requireBillingGst}>Billing GSTIN</RequiredLabel>
+                      <RequiredLabel required={billingGstRequired}>Billing GSTIN</RequiredLabel>
                       <AppSelect
                         value={formData.billingGstin || ""}
                         onChange={(event) => {
@@ -1950,13 +2361,13 @@ export const InvoiceForm = ({
                       />
                     </div>
                   </div>
-                  {organisationGstError && billingGstOptions.length === 0 ? (
-                    <p className="mt-1 text-xs text-destructive">
-                      Failed to load organisation GSTINs. Add invoice is blocked until this loads.
+                  {organisationGstError ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Failed to load organisation GSTINs. You can continue without Billing GSTIN.
                     </p>
                   ) : billingGstOptions.length === 0 && !organisationGstBusy ? (
-                    <p className="mt-1 text-xs text-destructive">
-                      Add an organisation GSTIN in Settings &gt; Organisation Details before proceeding.
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Billing GSTIN is optional because this organisation has no configured GST registrations.
                     </p>
                   ) : !billingGstSatisfied ? (
                     <p className="mt-1 text-xs text-destructive">
@@ -1972,152 +2383,42 @@ export const InvoiceForm = ({
 
               <Label className="text-xs">Billing Address</Label>
               <textarea
-                value={formData.billingAddress}
-                onChange={(e) =>
-                  setFormData({ ...formData, billingAddress: e.target.value })
-                }
+                value={formData.billingAddress || ""}
+                onChange={(e) => handleBillingAddressChange(e.target.value)}
                 placeholder="Enter billing address"
                 className="w-full min-h-[50px] rounded-md border border-input bg-background px-2 py-1.5 text-xs resize-none"
               />
-            </div>
 
-            {showInvoiceMatching && (
-              <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <Label className="text-xs font-medium">Invoice Matching</Label>
-                    <p className="text-xs text-muted-foreground">
-                      {isEdit
-                        ? "Optional. Existing PO/GRN selections are loaded on edit. Change them to update the match after save."
-                        : "Optional. Select a PO for 2-way matching; add a GRN for 3-way matching."}
-                    </p>
-                    {formData?.matchingStatus ? (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        Current match status:{" "}
-                        <span className="font-medium text-foreground">{formData.matchingStatus}</span>
-                      </p>
-                    ) : null}
-                  </div>
-                  {selectedMatchingPoId ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      className="h-7 px-2 text-xs"
-                      onClick={() =>
-                        setFormData({
-                          ...formData,
-                          matchingPurchaseOrderId: "",
-                          matchingGrnId: "",
-                        })
-                      }
-                    >
-                      <X className="mr-1 h-3 w-3" />
-                      Clear
-                    </Button>
-                  ) : null}
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center gap-2">
+                  <Checkbox
+                    id="invoice-shipping-same-as-billing"
+                    checked={shippingSameAsBilling}
+                    onCheckedChange={(value) =>
+                      handleShippingSameAsBillingChange(Boolean(value))
+                    }
+                    data-testid="invoice-shipping-same-as-billing"
+                  />
+                  <Label
+                    htmlFor="invoice-shipping-same-as-billing"
+                    className="cursor-pointer text-xs text-muted-foreground"
+                  >
+                    Shipping address is same as billing address
+                  </Label>
                 </div>
-                <div className={canUseThreeWayMatching ? "grid gap-3 md:grid-cols-2" : "grid gap-3"}>
-                  <div>
-                    <Label className="text-xs">Purchase Order</Label>
-                    <AppSelect
-                      value={selectedMatchingPoId}
-                      onChange={(event) =>
-                        setFormData({
-                          ...formData,
-                          matchingPurchaseOrderId: event.target.value,
-                          matchingGrnId: "",
-                        })
-                      }
-                      options={availablePurchaseOrders.map((po) => ({
-                        value: po.id,
-                        label: `${po.poNumber || "PO"} - ${formatAmount(po.amount)}`,
-                      }))}
-                      placeholder={
-                        !invoiceMatchingPoQuery.vendorName &&
-                        !invoiceMatchingPoQuery.vendorId
-                          ? "Select vendor first"
-                          : purchaseOrdersLoading
-                            ? "Loading purchase orders..."
-                            : "Select purchase order"
-                      }
-                      className="h-8 text-sm"
-                      disabled={!shouldLoadPurchaseOrders || purchaseOrdersLoading}
-                    />
-                    {shouldLoadPurchaseOrders && !purchaseOrdersLoading && availablePurchaseOrders.length === 0 ? (
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        No available purchase orders found for this vendor and invoice amount.
-                      </p>
-                    ) : null}
-                  </div>
-                  {canUseThreeWayMatching ? (
-                    <div>
-                      <Label className="text-xs">GRN</Label>
-                      <AppSelect
-                        value={formData.matchingGrnId || ""}
-                        onChange={(event) =>
-                          setFormData({
-                            ...formData,
-                            matchingGrnId: event.target.value,
-                          })
-                        }
-                        options={availableGrns.map((grn) => ({
-                          value: grn.id,
-                          label: `${grn.grnNumber || "GRN"} - ${formatAmount(grn.amount)}`,
-                        }))}
-                        placeholder={
-                          !selectedMatchingPoId
-                            ? "Select PO first"
-                            : grnsLoading
-                              ? "Loading GRNs..."
-                              : "Select GRN"
-                        }
-                        className="h-8 text-sm"
-                        disabled={!selectedMatchingPoId || grnsLoading}
-                      />
-                      {selectedMatchingPoId && !grnsLoading && availableGrns.length === 0 ? (
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {matchingGrnsAvailability.hasGrns === false
-                            ? "No approved GRNs are available for this purchase order yet."
-                            : "No available GRNs found for the selected purchase order."}
-                        </p>
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <RequiredLabel required>GST Treatment</RequiredLabel>
-                <AppSelect
-                  value={formData.gstTreatment}
-                  onChange={(e) =>
-                    setFormData({ ...formData, gstTreatment: e.target.value })
-                  }
-                  options={GST_TREATMENTS}
-                  className="h-8 text-sm"
-                />
-              </div>
-              <div>
-                <RequiredLabel required={isGstinRequired}>
-                  {isGstinRequired ? "Vendor GSTIN" : "Vendor GSTIN / Tax ID"}
-                </RequiredLabel>
-                <Input
-                  value={formData.gstin}
+                <Label className="text-xs">Shipping Address</Label>
+                <textarea
+                  value={formData.shippingAddress || ""}
                   onChange={(e) =>
                     setFormData({
                       ...formData,
-                      gstin: e.target.value.toUpperCase(),
+                      shippingAddress: e.target.value,
+                      shippingSameAsBilling: false,
                     })
                   }
-                  placeholder={
-                    isGstinRequired
-                      ? "Enter GSTIN"
-                      : "Enter GSTIN / Tax ID (Optional)"
-                  }
-                  className="h-8 text-sm"
+                  placeholder="Enter shipping address"
+                  disabled={shippingSameAsBilling}
+                  className="w-full min-h-[50px] rounded-md border border-input bg-background px-2 py-1.5 text-xs resize-none disabled:cursor-not-allowed disabled:bg-muted/60"
                 />
               </div>
             </div>
@@ -2182,53 +2483,134 @@ export const InvoiceForm = ({
                 )}
               </div>
             </div>
+          </div>
 
-            <div>
-              <RequiredLabel required>Source</RequiredLabel>
-              <Input
-                value={formData.source || "Upload"}
-                readOnly
-                disabled
-                className="h-8 text-sm bg-muted"
-                data-testid="source-select"
-              />
-            </div>
-
-            {showErpIntegrationFields && (
-              <div className="grid grid-cols-2 gap-3">
+          {showInvoiceMatching && (
+            <div className="rounded-lg border border-border bg-accent/70 p-3 space-y-3">
+              <div className="flex items-start justify-between gap-3">
                 <div>
-                  <RequiredLabel>Voucher Type</RequiredLabel>
-                  <AppSelect
-                    value={formData.voucherType || ""}
-                    onChange={(e) =>
+                  <Label className="text-md font-medium">
+                    Invoice Matching
+                  </Label>
+                  <p className="text-xs text-muted-foreground">
+                    {isEdit
+                      ? "Optional. Existing PO, PI, or GRN matching context is loaded on edit. Change the selection to update the match after save."
+                      : "Optional. Select a PO to match this document. Linked PI and GRN context will be resolved during matching."}
+                  </p>
+                  {formData?.matchingStatus ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Current match status:{" "}
+                      <span className="font-medium text-foreground">
+                        {formData.matchingStatus}
+                      </span>
+                    </p>
+                  ) : null}
+                </div>
+                {selectedMatchingPoId ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 px-2 text-xs"
+                    onClick={() =>
                       setFormData({
                         ...formData,
-                        voucherType: e.target.value,
+                        matchingPurchaseOrderId: "",
+                        matchingGrnId: "",
                       })
                     }
-                    options={voucherTypeOptions}
-                    placeholder="Select voucher type"
-                    className="h-8 text-sm"
-                  />
-                </div>
-                <div>
-                  <RequiredLabel>Narration</RequiredLabel>
-                  <Input
-                    value={formData.tdsNarration || ""}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        tdsNarration: e.target.value,
-                      })
-                    }
-                    placeholder="Narration for TDS Register"
-                    className="h-8 text-sm"
-                  />
-                </div>
+                  >
+                    <X className="mr-1 h-3 w-3" />
+                    Clear
+                  </Button>
+                ) : null}
               </div>
-            )}
+              <div
+                className={
+                  canUseThreeWayMatching
+                    ? "grid gap-3 md:grid-cols-2"
+                    : "grid gap-3"
+                }
+              >
+                <div>
+                  <Label className="text-xs">Purchase Order</Label>
+                  <AppSelect
+                    value={selectedMatchingPoId}
+                    onChange={(event) =>
+                      setFormData({
+                        ...formData,
+                        matchingPurchaseOrderId: event.target.value,
+                        matchingGrnId: "",
+                      })
+                    }
+                    options={availablePurchaseOrders.map((po) => ({
+                      value: po.id,
+                      label: `${po.poNumber || "PO"} - ${formatAmount(po.amount)}`,
+                    }))}
+                    placeholder={
+                      !invoiceMatchingPoQuery.vendorName &&
+                      !invoiceMatchingPoQuery.vendorId
+                        ? "Select vendor first"
+                        : purchaseOrdersLoading
+                          ? "Loading purchase orders..."
+                          : "Select purchase order"
+                    }
+                    className="h-8 text-sm"
+                    disabled={
+                      !shouldLoadPurchaseOrders || purchaseOrdersLoading
+                    }
+                  />
+                  {shouldLoadPurchaseOrders &&
+                  !purchaseOrdersLoading &&
+                  availablePurchaseOrders.length === 0 ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      No available purchase orders found for this vendor and
+                      invoice amount.
+                    </p>
+                  ) : null}
+                </div>
+                {canUseThreeWayMatching ? (
+                  <div>
+                    <Label className="text-xs">GRN Pool Anchor</Label>
+                    <AppSelect
+                      value={formData.matchingGrnId || ""}
+                      onChange={(event) =>
+                        setFormData({
+                          ...formData,
+                          matchingGrnId: event.target.value,
+                        })
+                      }
+                      options={availableGrns.map((grn) => ({
+                        value: grn.id,
+                        label: `${grn.grnNumber || "GRN"} - ${formatAmount(grn.amount)}`,
+                      }))}
+                      placeholder={
+                        !selectedMatchingPoId
+                          ? "Select PO first"
+                          : grnsLoading
+                            ? "Loading GRNs..."
+                            : "Select GRN if required"
+                      }
+                      className="h-8 text-sm"
+                      disabled={!selectedMatchingPoId || grnsLoading}
+                    />
+                    {selectedMatchingPoId &&
+                    !grnsLoading &&
+                    availableGrns.length === 0 ? (
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {matchingGrnsAvailability.hasGrns === false
+                          ? "No approved GRNs are available for this purchase order yet."
+                          : "No available GRNs found for the selected purchase order."}
+                      </p>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          )}
 
-            <div className="flex gap-6 text-xs">
+          <div className="flex items-center justify-between gap-6 text-xs">
+            <div className="flex gap-6">
               <div className="flex items-center gap-1.5">
                 <span className="text-gray-600">Discounts:</span>
                 <AppSelect
@@ -2262,6 +2644,91 @@ export const InvoiceForm = ({
                 />
               </div>
             </div>
+
+            <Popover
+              open={currencyPickerOpen}
+              onOpenChange={setCurrencyPickerOpen}
+            >
+              <PopoverAnchor asChild>
+                <button
+                  ref={currencyTriggerRef}
+                  type="button"
+                  onClick={() => setCurrencyPickerOpen((open) => !open)}
+                  className="flex shrink-0 items-center gap-2 rounded-md border border-input bg-background px-3 py-1.5 text-sm font-medium text-foreground"
+                  data-testid="invoice-currency-trigger"
+                >
+                  Currency - {invoiceCurrency}
+                  <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                </button>
+              </PopoverAnchor>
+              <PopoverContent
+                className="min-w-[220px] w-[var(--radix-popover-trigger-width)] p-0"
+                align="end"
+                onOpenAutoFocus={(event) => event.preventDefault()}
+                onInteractOutside={(event) => {
+                  if (currencyTriggerRef.current?.contains(event.target)) {
+                    event.preventDefault();
+                  }
+                }}
+              >
+                <div className="border-b border-border p-2">
+                  <Input
+                    id="invoice-form-currency"
+                    value={currencyQuery}
+                    onChange={(e) => {
+                      const next = e.target.value
+                        .toUpperCase()
+                        .replace(/[^A-Z]/g, "")
+                        .slice(0, 3);
+                      setCurrencyQuery(next);
+                      if (next.length === 3) {
+                        applyInvoiceCurrencyChange(next);
+                      }
+                    }}
+                    onFocus={() => setCurrencyQuery("")}
+                    onBlur={() => {
+                      const normalized = normalizeCurrencyCode(currencyQuery);
+                      if (String(currencyQuery || "").trim().length === 3) {
+                        applyInvoiceCurrencyChange(normalized);
+                      } else {
+                        setCurrencyQuery(formData.currency || DEFAULT_CURRENCY);
+                      }
+                    }}
+                    placeholder="Select or type code (e.g. USD)"
+                    className="h-8 text-sm uppercase"
+                    autoComplete="off"
+                    maxLength={3}
+                  />
+                </div>
+                <div className="max-h-56 overflow-y-auto py-1">
+                  {filteredCurrencyOptions.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-muted-foreground">
+                      {String(currencyQuery || "").trim().length === 3
+                        ? `Use ${normalizeCurrencyCode(currencyQuery)} (press Tab to apply)`
+                        : "No matching currencies — type a 3-letter ISO code"}
+                    </p>
+                  ) : (
+                    filteredCurrencyOptions.map((code) => (
+                      <button
+                        key={code}
+                        type="button"
+                        className={cn(
+                          "flex w-full items-center px-3 py-2 text-left text-sm hover:bg-accent",
+                          invoiceCurrency === code && "bg-accent",
+                        )}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => {
+                          applyInvoiceCurrencyChange(code);
+                          setCurrencyPickerOpen(false);
+                        }}
+                      >
+                        {code}
+                      </button>
+                    ))
+                  )}
+                </div>
+              </PopoverContent>
+            </Popover>
           </div>
 
           <div className="space-y-3">
@@ -2590,6 +3057,19 @@ export const InvoiceForm = ({
                   inputClassName="h-6 w-16 px-1 text-xs"
                   testIdPrefix="invoice-tds"
                 />
+                {showErpIntegrationFields && (
+                  <Input
+                    value={formData.tdsNarration || ""}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        tdsNarration: e.target.value,
+                      })
+                    }
+                    placeholder="TDS Narration"
+                    className="h-8 max-w-[220px] text-sm bg-white"
+                  />
+                )}
               </div>
               <span className="shrink-0 pt-1">{formatAmount(tdsAmount)}</span>
             </div>
@@ -2604,7 +3084,11 @@ export const InvoiceForm = ({
                   type="number"
                   min="0"
                   step="0.01"
-                  value={hasManualNetPayableValue ? formData.netAmount : formatNumericInputValue(netPayable)}
+                  value={
+                    hasManualNetPayableValue
+                      ? formData.netAmount
+                      : formatNumericInputValue(netPayable)
+                  }
                   onChange={(event) => {
                     setIsNetPayableManuallyEdited(true);
                     setFormData({

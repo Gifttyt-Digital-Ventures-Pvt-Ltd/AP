@@ -18,7 +18,10 @@ import {
   useSyncCoaMutation,
 } from "../../../Services/apis/accountingApi";
 import { useGetApIntegrationSummaryQuery } from "../../../Services/apis/integrationsApi";
-import { selectIsErpConnected } from "../../integrations/integrationSummary";
+import {
+  selectErpIntegration,
+  selectIsErpConnected,
+} from "../../integrations/integrationSummary";
 import { ACC_STATUS } from "../constants";
 import {
   flattenLedgersFromTree,
@@ -49,6 +52,7 @@ const AccountingDashboard = () => {
   const erpConnectionsLoading =
     integrationSummaryLoading || integrationSummaryFetching;
   const hasActiveErpConnection = selectIsErpConnected(integrationSummary);
+  const activeErpProvider = selectErpIntegration(integrationSummary).provider;
   const [syncCoa, { isLoading: syncing }] = useSyncCoaMutation();
 
   const ledgers = useMemo(
@@ -187,6 +191,7 @@ const AccountingDashboard = () => {
       <ReadyForAccountingQueue
         erpSyncAvailable={hasActiveErpConnection}
         erpStatusLoading={erpConnectionsLoading}
+        activeErpProvider={activeErpProvider}
       />
     </PageShell>
   );

@@ -54,21 +54,31 @@ const AppDataTable = ({
   striped = true,
   tableContainerClassName = "",
   bordered = false,
+  onRowClick,
 }) => {
   const resolvedColumns =
     tableHeader?.map((header, index) => {
-      const isObjectHeader = header && typeof header === "object" && !React.isValidElement(header);
-      const key = isObjectHeader ? header.key || header.id || `column-${index}` : header || `column-${index}`;
+      const isObjectHeader =
+        header && typeof header === "object" && !React.isValidElement(header);
+      const key = isObjectHeader
+        ? header.key || header.id || `column-${index}`
+        : header || `column-${index}`;
       const columnConfig = columns.find((column) => column.key === key) || {};
       return {
         ...columnConfig,
         key,
         header: isObjectHeader
-          ? header.title ?? header.header ?? header.label ?? ""
+          ? (header.title ?? header.header ?? header.label ?? "")
           : header,
-        headerClassName: isObjectHeader ? header.headerClassName ?? columnConfig.headerClassName : columnConfig.headerClassName,
-        cellClassName: isObjectHeader ? header.cellClassName ?? columnConfig.cellClassName : columnConfig.cellClassName,
-        render: isObjectHeader ? header.render ?? columnConfig.render : columnConfig.render,
+        headerClassName: isObjectHeader
+          ? (header.headerClassName ?? columnConfig.headerClassName)
+          : columnConfig.headerClassName,
+        cellClassName: isObjectHeader
+          ? (header.cellClassName ?? columnConfig.cellClassName)
+          : columnConfig.cellClassName,
+        render: isObjectHeader
+          ? (header.render ?? columnConfig.render)
+          : columnConfig.render,
       };
     }) || columns;
   const resolvedRows = Array.isArray(tableData)
@@ -83,7 +93,7 @@ const AppDataTable = ({
 
   return (
     <Table
-      className={cn("border-separate border-spacing-0", tableClassName)}
+      className={cn("border-collapse", tableClassName)}
       containerClassName={tableContainerClassName}
     >
       <TableHeader
@@ -99,7 +109,7 @@ const AppDataTable = ({
               key={column.key || column.header}
               className={cn(
                 "h-10 whitespace-nowrap bg-muted/100 px-3 text-xs font-medium text-foreground",
-                bordered ? "border border-border" : "border-0",
+                bordered ? "border border-table-border" : "border-0",
                 index === 0 && "rounded-l-md",
                 index === resolvedColumns.length - 1 && "rounded-r-md",
                 column.headerClassName,
@@ -136,7 +146,7 @@ const AppDataTable = ({
                   key={column.key || column.header}
                   className={cn(
                     "px-3 py-3",
-                    bordered && "border border-border",
+                    bordered && "border border-table-border",
                     column.cellClassName,
                   )}
                 >
@@ -184,12 +194,16 @@ const AppDataTable = ({
                 : (row?.[rowKey] ?? index);
             const computedClassName = [
               striped && index % 2 === 1 ? "bg-muted/20" : "",
+              onRowClick && "cursor-pointer hover:bg-muted/50",
               rowClassName,
               getRowClassName ? getRowClassName(row, index) : "",
             ]
               .filter(Boolean)
               .join(" ");
-            const rowProps = getRowProps ? getRowProps(row, index) : {};
+            const rowProps = {
+              ...(onRowClick ? { onClick: () => onRowClick(row) } : {}),
+              ...(getRowProps ? getRowProps(row, index) : {}),
+            };
 
             return (
               <TableRow key={key} className={computedClassName} {...rowProps}>
@@ -198,7 +212,7 @@ const AppDataTable = ({
                     key={column.key || column.header}
                     className={cn(
                       "px-3 py-3",
-                      bordered && "border border-border",
+                      bordered && "border border-table-border",
                       column.cellClassName,
                     )}
                   >

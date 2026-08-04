@@ -22,10 +22,10 @@ const Vendors = lazy(() => import("./pages/vendors/Vendors"));
 const InvoicesPage = lazy(() => import("./pages/invoices/InvoicesPage"));
 const Approvals = lazy(() => import("./pages/approvals/Approvals"));
 const Payments = lazy(() => import("./pages/payments/Payments"));
-const Banking = lazy(() => import("./pages/banking/Banking"));
+const ConnectedBanking = lazy(() => import("./pages/banking/ConnectedBanking"));
 const UserRoles = lazy(() => import("./pages/user-roles/UserRoles"));
 const Profile = lazy(() => import("./pages/profile/Profile"));
-const TransactionsPage = lazy(() => import("./pages/transactions/TransactionsPage"));
+const TransactionsRoute = lazy(() => import("./pages/transactions/TransactionsRoute"));
 const PurchaseOrdersPage = lazy(() => import("./pages/purchase-orders/PurchaseOrdersPage"));
 const GoodsReceipt = lazy(() => import("./pages/goods-receipt/GoodsReceipt"));
 const InvoiceMatching = lazy(() => import("./pages/invoice-matching/InvoiceMatching"));
@@ -36,12 +36,14 @@ const Settings = lazy(() => import("./pages/settings/Settings"));
 const TaxManagement = lazy(() => import("./pages/tax-management/TaxManagement"));
 const Reports = lazy(() => import("./pages/reports/Reports"));
 const AuditTrail = lazy(() => import("./pages/audit-trail/AuditTrail"));
+const ConnectionSettings = lazy(() => import("./pages/integrations/components/ConnectionSettings"));
 const ConnectionWizard = lazy(() => import("./pages/integrations/components/ConnectionWizard"));
 const GmailIntegrationPage = lazy(() => import("./pages/integrations/components/GmailIntegrationPage"));
 const IntegrationLanding = lazy(() => import("./pages/integrations/components/IntegrationLanding"));
 const ManageSyncedDataRoute = lazy(() => import("./pages/integrations/components/ManageSyncedDataRoute"));
 const MappingEditor = lazy(() => import("./pages/integrations/components/MappingEditor"));
 const ObjectReview = lazy(() => import("./pages/integrations/components/ObjectReview"));
+const ProviderSyncDashboardRoute = lazy(() => import("./pages/integrations/components/ProviderSyncDashboardRoute"));
 const SyncLogs = lazy(() => import("./pages/integrations/components/SyncLogs"));
 const TallyIntegrationPage = lazy(() => import("./pages/integrations/components/TallyIntegrationPage"));
 const ZohoIntegrationPage = lazy(() => import("./pages/integrations/components/ZohoIntegrationPage"));
@@ -60,18 +62,10 @@ const withPageFallback = (page) => (
   <Suspense fallback={<PageFallback />}>{page}</Suspense>
 );
 
-const LegacySyncDataRedirect = () => {
-  const { connectionId, categoryCode } = useParams();
-  return (
-    <Navigate
-      to={
-        categoryCode
-          ? `/integrations/${connectionId}/${categoryCode}`
-          : `/integrations/${connectionId}`
-      }
-      replace
-    />
-  );
+const LegacyIntegrationConnectRedirect = () => {
+  const { provider } = useParams();
+  const location = useLocation();
+  return <Navigate to={`/integrations/connect/${provider}${location.search || ""}`} replace />;
 };
 
 const ProtectedRoute = () => {
@@ -248,7 +242,7 @@ function AppContent() {
           <Route path="/invoices" element={withPageFallback(<InvoicesPage />)} />
           <Route path="/approvals" element={withPageFallback(<Approvals />)} />
           <Route path="/payments" element={withPageFallback(<Payments />)} />
-          <Route path="/banking" element={withPageFallback(<Banking />)} />
+          <Route path="/banking" element={withPageFallback(<ConnectedBanking />)} />
           <Route path="/settings" element={withPageFallback(<Settings />)} />
           <Route path="/settings/integrations" element={<Navigate to="/integrations" replace />} />
           <Route
@@ -260,7 +254,7 @@ function AppContent() {
           <Route path="/settings/integrations/tally" element={<Navigate to="/integrations/erp/tally" replace />} />
           <Route path="/user-roles" element={withPageFallback(<UserRoles />)} />
           <Route path="/profile" element={withPageFallback(<Profile />)} />
-          <Route path="/transactions" element={withPageFallback(<TransactionsPage />)} />
+          <Route path="/transactions" element={withPageFallback(<TransactionsRoute />)} />
           <Route path="/purchase-orders" element={withPageFallback(<PurchaseOrdersPage />)} />
           <Route path="/goods-receipt" element={withPageFallback(<GoodsReceipt />)} />
           <Route path="/tax-management" element={withPageFallback(<TaxManagement />)} />
@@ -272,19 +266,27 @@ function AppContent() {
           <Route path="/integrations" element={withPageFallback(<IntegrationLanding />)} />
           <Route path="/integrations/gmail" element={withPageFallback(<GmailIntegrationPage />)} />
           <Route path="/integrations/erp/zoho" element={withPageFallback(<ZohoIntegrationPage />)} />
+          <Route
+            path="/integrations/erp/zoho/dashboard"
+            element={withPageFallback(<ProviderSyncDashboardRoute provider="ZOHO_BOOKS" />)}
+          />
           <Route path="/integrations/erp/tally" element={withPageFallback(<TallyIntegrationPage />)} />
+          <Route path="/integrations/erp/tally/dashboard" element={withPageFallback(<TallyIntegrationPage />)} />
           <Route path="/integrations/connect/:provider" element={withPageFallback(<ConnectionWizard />)} />
           <Route path="/accounting" element={withPageFallback(<Accounting />)} />
           <Route path="/accounting/chart-of-accounts" element={withPageFallback(<Accounting />)} />
           <Route path="/accounting/ledger-explorer" element={withPageFallback(<Accounting />)} />
           <Route path="/accounting/ledger-explorer/:ledgerId" element={withPageFallback(<Accounting />)} />
-          <Route path="/integrations/:connectionId/sync-data" element={<LegacySyncDataRedirect />} />
-          <Route path="/integrations/:connectionId/sync-data/:categoryCode" element={<LegacySyncDataRedirect />} />
+          <Route path="/accounts-payable/integrations/connect/:provider" element={<LegacyIntegrationConnectRedirect />} />
+          <Route path="/accounts-payables/integrations/connect/:provider" element={<LegacyIntegrationConnectRedirect />} />
           <Route path="/integrations/:connectionId/mapping" element={withPageFallback(<MappingEditor />)} />
           <Route path="/integrations/:connectionId/objects/:object" element={withPageFallback(<ObjectReview />)} />
           <Route path="/integrations/:connectionId/logs" element={withPageFallback(<SyncLogs />)} />
-          <Route path="/integrations/:connectionId" element={withPageFallback(<ManageSyncedDataRoute />)} />
-          <Route path="/integrations/:connectionId/:categoryCode" element={withPageFallback(<ManageSyncedDataRoute />)} />
+          <Route path="/integrations/:connectionId/settings" element={withPageFallback(<ConnectionSettings />)} />
+          <Route path="/integrations/:connectionId/sync-data" element={withPageFallback(<ManageSyncedDataRoute />)} />
+          <Route path="/integrations/:connectionId/sync-data/:categoryCode" element={withPageFallback(<ManageSyncedDataRoute />)} />
+          <Route path="/integration/:connectionId/sync-data" element={withPageFallback(<ManageSyncedDataRoute />)} />
+          <Route path="/integration/:connectionId/sync-data/:categoryCode" element={withPageFallback(<ManageSyncedDataRoute />)} />
           <Route path="/" element={<DefaultProtectedRoute />} />
         </Route>
       </Routes>

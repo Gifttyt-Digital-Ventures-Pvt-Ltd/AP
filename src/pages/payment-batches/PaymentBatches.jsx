@@ -15,6 +15,7 @@ import ConnectedBankAccountsPanel, {
 import {
   findBankAccountForBatch,
   formatBankAccountSummaryLine,
+  getActiveBankAccounts,
 } from '../banking/utils/bankAccounts';
 import { useRBAC } from '../../contexts/RBACContext';
 import { Button } from '../../components/ui/button';
@@ -156,7 +157,7 @@ const PaymentBatches = () => {
   const { handleCreditError } = useCreditErrorHandler();
 
   const batches = Array.isArray(batchesData) ? batchesData.map(normalizeBatch) : [];
-  const bankAccounts = Array.isArray(bankAccountsData) ? bankAccountsData : [];
+  const bankAccounts = getActiveBankAccounts(Array.isArray(bankAccountsData) ? bankAccountsData : []);
   const loading = batchesLoading || statsLoading;
 
   const [activeTab, setActiveTab] = useState('all');

@@ -42,6 +42,7 @@ import {
 import AppDataTable from "../../../components/common/AppDataTable";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import { cn } from "../../../lib/utils";
+import { Badge } from "../../../components/ui/badge";
 
 const formatDisplayDate = (value) => {
   if (!value) return "-";
@@ -326,6 +327,36 @@ const InvoiceReadOnlyDetails = ({
     return taxableAmount + taxAmount;
   };
 
+  const renderAccountingGroupValue = (item = {}) => {
+    const ledgerName = item.ledgerName || item.ledger || item.ledger_name || "";
+    const groupName =
+      item.accountGroupName ||
+      item.account_group_name ||
+      item.groupName ||
+      item.group_name ||
+      "";
+
+    if (!ledgerName && !groupName) return "-";
+
+    return (
+      <div className="min-w-0 space-y-1">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate font-medium">{ledgerName || groupName}</span>
+          {ledgerName ? (
+            <Badge variant="secondary" className="shrink-0 px-1.5 py-0 text-[9px] uppercase">
+              Ledger
+            </Badge>
+          ) : null}
+        </div>
+        {ledgerName && groupName && ledgerName !== groupName ? (
+          <p className="truncate text-[10px] text-muted-foreground">
+            Group: {groupName}
+          </p>
+        ) : null}
+      </div>
+    );
+  };
+
   const readOnlyLineItemHeaders = (() => {
     const headers = [
       {
@@ -424,7 +455,7 @@ const InvoiceReadOnlyDetails = ({
             );
             break;
           case "accountGroup":
-            value = item.accountGroupName || item.groupName || item.ledger || "-";
+            value = renderAccountingGroupValue(item);
             break;
           case "expenseType":
             value = item.expenseType || "-";
@@ -514,6 +545,10 @@ const InvoiceReadOnlyDetails = ({
 
         {formData.billingAddress && (
           <DetailField label="Billing Address" value={formData.billingAddress} />
+        )}
+
+        {formData.shippingAddress && (
+          <DetailField label="Shipping Address" value={formData.shippingAddress} />
         )}
 
         <div className="grid grid-cols-2 gap-3">

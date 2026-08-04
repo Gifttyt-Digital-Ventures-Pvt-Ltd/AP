@@ -57,6 +57,7 @@ import PoDetailsDialog from './components/PoDetailsDialog';
 import PoApprovalDialog from './components/PoApprovalDialog';
 import PoUploadDialog from './components/PoUploadDialog';
 import PoUploadSection from './components/PoUploadSection';
+import { PO_CREATE_OPTIONS } from './components/PoCreateMenu';
 import { InvoicePdfPreview } from '../invoices/components/InvoicePdfPreview';
 import RequestVendorDialog from '../invoices/components/RequestVendorDialog';
 import {
@@ -359,6 +360,7 @@ const PurchaseOrdersPage = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [poSort, setPoSort] = useState({ value: 'created_at', direction: 'desc' });
   const [showCreateDialog, setShowCreateDialog] = useState(false);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [showBuilderDialog, setShowBuilderDialog] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showApprovalDialog, setShowApprovalDialog] = useState(false);
@@ -753,6 +755,20 @@ const PurchaseOrdersPage = () => {
   const openBuilderDialog = (open) => {
     if (open) setBuilderDraftConfig(makeFormatConfig(activeFormatConfig, 'default-format', 'Standard GST Format', tenantBranding));
     setShowBuilderDialog(open);
+  };
+
+  const handleSelectCreateOption = (option) => {
+    setCreateMenuOpen(false);
+    if (option === PO_CREATE_OPTIONS.UPLOAD) {
+      if (!canUploadPo) {
+        toast.error('PO upload is not available for your organisation');
+        return;
+      }
+      setShowUploadPicker(true);
+      return;
+    }
+
+    setShowCreateDialog(true);
   };
 
   const saveBuilderConfig = async () => {
@@ -1253,12 +1269,17 @@ const PurchaseOrdersPage = () => {
     <div className="flex min-h-0 flex-1 flex-col gap-6" data-testid="purchase-orders-page">
       <div className="shrink-0">
         <PurchaseOrdersToolbar
-          setShowCreateDialog={setShowCreateDialog}
-          setShowUploadPicker={setShowUploadPicker}
           setShowBuilderDialog={openBuilderDialog}
           stats={stats}
           canManagePo={canManagePo}
           canUploadPo={canUploadPo}
+          createMenuOpen={createMenuOpen}
+          onToggleCreateMenu={(open) =>
+            setCreateMenuOpen((prev) =>
+              typeof open === 'boolean' ? open : !prev,
+            )
+          }
+          onSelectCreateOption={handleSelectCreateOption}
           activeFormat={activeFormatConfig}
           onRefresh={fetchData}
           refreshing={loading}

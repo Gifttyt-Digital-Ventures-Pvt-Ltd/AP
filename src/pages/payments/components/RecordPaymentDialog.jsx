@@ -42,6 +42,10 @@ const ClippedInvoiceLabel = ({ invoice }) => {
   );
 };
 
+const preventDialogOutsideDismiss = (event) => {
+  event.preventDefault();
+};
+
 // Confirm record-payment for invoices selected on the pending list.
 const RecordPaymentDialog = ({
   open,
@@ -63,7 +67,11 @@ const RecordPaymentDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100vw-2rem)] max-w-lg overflow-hidden" data-testid="record-payment-dialog">
+      <DialogContent
+        className="w-[calc(100vw-2rem)] max-w-lg overflow-hidden"
+        data-testid="record-payment-dialog"
+        onInteractOutside={preventDialogOutsideDismiss}
+      >
         <DialogHeader>
           <DialogTitle>Record Payment</DialogTitle>
         </DialogHeader>

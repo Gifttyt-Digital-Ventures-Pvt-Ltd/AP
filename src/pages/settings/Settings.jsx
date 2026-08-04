@@ -1,10 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
-  useGetBankAccountsQuery,
-  useCreateBankAccountMutation,
-} from '../../Services/apis/approvalsPaymentsBankingApi';
-import {
   useGetOrganisationQuery,
   useCreateOrganisationMutation,
   useUpdateOrganisationMutation,
@@ -15,7 +11,6 @@ import { Label } from '../../components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import { Building2, CheckCircle, Copy, Globe, Loader2, Mail, MapPin, Phone, Save } from 'lucide-react';
 import { toast } from 'sonner';
-import BankAccountDialog from './components/BankAccountDialog';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useRBAC } from '../../contexts/RBACContext';
 import CreditsPage from '../credits/CreditsPage';
@@ -31,13 +26,28 @@ import {
   validateGstRegistrations,
   validateOrganisationBranches,
 } from '../../utils/organisationGst';
+import useBankingSetup from '../banking/hooks/useBankingSetup';
+import AccountStatusCard from '../banking/components/AccountStatusCard';
+import AccountLinkCard from '../banking/components/AccountLinkCard';
+import BeneficiariesTable from '../banking/components/BeneficiariesTable';
+import BeneficiaryForm from '../banking/components/BeneficiaryForm';
+import BankingSetupSteps from '../banking/components/BankingSetupSteps';
 import {
-  formatBankAccountType,
-  isBankAccountActive,
-  maskBankAccountNumber,
+  useLinkBankingAccountMutation,
+  useUpdateBankingAccountMutation,
+  useDeleteBankingAccountMutation,
+  useUpdateBankingAccountStatusMutation,
+  useRegisterBeneficiaryMutation,
+  useValidateBeneficiaryMutation,
+} from '../../Services/apis/connectedBankingApi';
+import {
+  findDuplicateBankAccount,
+  getBankAccountVerificationStatus,
 } from '../banking/utils/bankAccounts';
+import { BANK_ACCOUNT_VERIFICATION_STATUS, BANKING_SETUP_STATUS, GATE_STATE } from '../banking/constants';
 
 const ORGANISATION_DETAILS_FORM_ID = 'organisation-details-form';
+
 const Settings = () => {
   const {
     corporateScreens,
@@ -47,11 +57,12 @@ const Settings = () => {
     isCorporateAdmin,
     isBranchEnabled: isBranchConfigurationEnabled,
     isBranchSqFtEnabled: isBranchSqFtConfigurationEnabled,
+    isBankingEnabled,
   } = useRBAC();
   const navigate = useNavigate();
   const canViewBankingSettings =
-    hasAnyPermission(['settings-banking', 'banking-full']) &&
-    isCorporateSectionEnabled('SETTINGS_CONNECTED_BANKING');
+    hasAnyPermission(['settings-banking', 'banking-full', 'banking-manage', 'banking-view', 'payments-admin']) &&
+    isBankingEnabled;
   const canViewOrganisationSettings =
     hasAnyPermission(['settings-org']) &&
     isCorporateSectionEnabled('SETTINGS_ORG_DETAILS');
@@ -77,33 +88,32 @@ const Settings = () => {
   const [searchParams] = useSearchParams();
   const [activeSettingsTab, setActiveSettingsTab] = useState('');
   const {
-    data: bankAccountsData = [],
-    isError: bankAccountsError,
-    refetch: refetchBankAccounts,
-  } = useGetBankAccountsQuery(undefined, { skip: !canViewBankingSettings });
-  const {
     data: organisationData,
     isLoading: organisationLoading,
     isFetching: organisationFetching,
     error: organisationError,
     refetch: refetchOrganisation,
   } = useGetOrganisationQuery(undefined, { skip: !canViewOrganisationSettings });
-  const [createBankAccount] = useCreateBankAccountMutation();
   const [createOrganisation] = useCreateOrganisationMutation();
   const [updateOrganisation] = useUpdateOrganisationMutation();
   const { guardAction, canPerformAction } = useActionGuard();
-  const bankAccounts = useMemo(
-    () => (Array.isArray(bankAccountsData) ? bankAccountsData : []),
-    [bankAccountsData],
-  );
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    account_name: '',
-    account_number: '',
-    bank_name: '',
-    account_type: 'Checking',
-    currency: 'INR'
-  });
+  const {
+    isAccountLinked,
+    paymentReadyAccounts,
+    accounts,
+    beneficiaries,
+    setupStatus,
+    refetchAccounts,
+    refetchBeneficiaries,
+  } = useBankingSetup({ skip: !canViewBankingSettings || !isBankingEnabled });
+  const [linkBankingAccount, { isLoading: linkingAccount }] = useLinkBankingAccountMutation();
+  const [updateBankingAccount, { isLoading: updatingAccount }] = useUpdateBankingAccountMutation();
+  const [deleteBankingAccount, { isLoading: deletingAccount }] = useDeleteBankingAccountMutation();
+  const [updateBankingAccountStatus, { isLoading: updatingAccountStatus }] = useUpdateBankingAccountStatusMutation();
+  const [validateBeneficiary, { isLoading: validatingBeneficiary }] = useValidateBeneficiaryMutation();
+  const [registerBeneficiary, { isLoading: savingBeneficiary }] = useRegisterBeneficiaryMutation();
+  const canManageBanking = canPerformAction('banking.link');
+  const canManageBeneficiaries = canPerformAction('banking.addBeneficiary');
   // Organisation Details state
   const [orgDetails, setOrgDetails] = useState(null);
   const [orgSaving, setOrgSaving] = useState(false);
@@ -130,7 +140,7 @@ const Settings = () => {
     ifsc_code: '',
     account_holder_name: ''
   });
-  const canCreateBankAccount = canPerformAction('settings.createBankAccount');
+  const [editingRejectedAccount, setEditingRejectedAccount] = useState(null);
   const canCreateOrganisationDetails = canPerformAction('settings.createOrganisation');
   const canUpdateOrganisationDetails = canPerformAction('settings.updateOrganisation');
   const canSaveOrganisation = orgDetails ? canUpdateOrganisationDetails : canCreateOrganisationDetails;
@@ -152,6 +162,13 @@ const Settings = () => {
       setActiveSettingsTab(availableSettingsTabs[0]);
     }
   }, [activeSettingsTab, availableSettingsTabs]);
+
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && availableSettingsTabs.includes(tab)) {
+      setActiveSettingsTab(tab);
+    }
+  }, [searchParams, availableSettingsTabs]);
 
   useEffect(() => {
     if (organisationData) {
@@ -193,12 +210,6 @@ const Settings = () => {
       setOrgDetails(null);
     }
   }, [organisationData, orgDetails]);
-
-  useEffect(() => {
-    if (bankAccountsError) {
-      toast.error('Failed to load bank accounts');
-    }
-  }, [bankAccountsError]);
 
   useEffect(() => {
     if (organisationError?.status && organisationError.status !== 404) {
@@ -283,30 +294,6 @@ const Settings = () => {
     }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!guardAction('settings.createBankAccount')) return;
-    try {
-      await createBankAccount(formData).unwrap();
-      toast.success('Bank account added successfully');
-      setDialogOpen(false);
-      resetForm();
-      refetchBankAccounts();
-    } catch (error) {
-      toast.error('Failed to add bank account');
-    }
-  };
-
-  const resetForm = () => {
-    setFormData({
-      account_name: '',
-      account_number: '',
-      bank_name: '',
-      account_type: 'Checking',
-      currency: 'INR'
-    });
-  };
-
   const organisationSaveLabel = orgDetails ? 'Update Details' : 'Save Details';
 
   const renderOrganisationSaveButton = ({
@@ -344,6 +331,151 @@ const Settings = () => {
     } catch (error) {
       toast.error('Failed to copy platform email');
     }
+  };
+
+  const displayAccounts = accounts;
+  const displayIsAccountLinked = isAccountLinked;
+  const hasPaymentReadyAccount = paymentReadyAccounts.length > 0;
+  const displayGateState = hasPaymentReadyAccount
+    ? GATE_STATE.READY
+    : setupStatus === BANKING_SETUP_STATUS.PENDING_VERIFICATION
+      ? GATE_STATE.PENDING_VERIFICATION
+      : setupStatus === BANKING_SETUP_STATUS.ACTION_REQUIRED
+        ? GATE_STATE.ACTION_REQUIRED
+        : displayIsAccountLinked
+          ? GATE_STATE.CONFIGURED
+          : GATE_STATE.ACCOUNT_PENDING;
+  const displayIsSetupReady = hasPaymentReadyAccount;
+
+  const handleLinkAccount = async ({ accountId, bank, bankName, accountName, accountType, accountNumber, ifsc }) => {
+    if (!guardAction('banking.link')) return;
+    const duplicate = findDuplicateBankAccount(
+      displayAccounts,
+      { bank, bankName, accountNumber, ifsc },
+      accountId,
+    );
+    if (duplicate) {
+      toast.error('This bank account has already been submitted by your corporate.');
+      return;
+    }
+    try {
+      const payload = {
+        bank,
+        bankName,
+        accountName,
+        accountType,
+        accountNumber,
+        ifsc,
+      };
+      if (accountId) {
+        const currentStatus = getBankAccountVerificationStatus(editingRejectedAccount || {});
+        if (currentStatus !== BANK_ACCOUNT_VERIFICATION_STATUS.REJECTED) {
+          toast.error('Only rejected bank account requests can be edited.');
+          return;
+        }
+        await updateBankingAccount({ accountId, ...payload }).unwrap();
+        toast.success('Bank account request saved and resubmitted.');
+        setEditingRejectedAccount(null);
+      } else {
+        await linkBankingAccount(payload).unwrap();
+        toast.success('Bank account verification request submitted successfully.');
+      }
+      await refetchAccounts();
+    } catch (error) {
+      toast.error(error?.data?.message || error?.data?.detail || 'Failed to submit bank account verification request');
+    }
+  };
+
+  const handleDeleteRejectedAccount = async (account) => {
+    if (!guardAction('banking.link')) return;
+    if (getBankAccountVerificationStatus(account) !== BANK_ACCOUNT_VERIFICATION_STATUS.REJECTED) {
+      toast.error('Only rejected bank account requests can be deleted.');
+      return;
+    }
+    try {
+      await deleteBankingAccount(account.id).unwrap();
+      if (String(editingRejectedAccount?.id) === String(account.id)) {
+        setEditingRejectedAccount(null);
+      }
+      await refetchAccounts();
+      toast.success('Rejected bank account request deleted.');
+    } catch (error) {
+      toast.error(error?.data?.message || error?.data?.detail || 'Failed to delete bank account request');
+    }
+  };
+
+  const handleToggleAccountActive = async (account, isActive, reason = '') => {
+    if (!guardAction('banking.link')) return;
+    if (getBankAccountVerificationStatus(account) !== BANK_ACCOUNT_VERIFICATION_STATUS.APPROVED) {
+      toast.error('Only approved bank accounts can be activated or deactivated.');
+      return;
+    }
+    const deactivationReason = reason.trim();
+    if (!isActive && !deactivationReason) {
+      toast.error('Deactivation reason is required.');
+      return;
+    }
+    try {
+      await updateBankingAccountStatus({
+        accountId: account.id,
+        isActive,
+        reason: !isActive ? deactivationReason : undefined,
+      }).unwrap();
+      await refetchAccounts();
+      toast.success(isActive ? 'Bank account activated.' : 'Bank account deactivated.');
+    } catch (error) {
+      toast.error(error?.data?.message || error?.data?.detail || 'Failed to update bank account status');
+    }
+  };
+
+  const handleVerifyBeneficiary = async (payload) => {
+    if (!guardAction('banking.verifyBeneficiary')) return null;
+    try {
+      const response = await validateBeneficiary(payload).unwrap();
+      toast.success('Beneficiary verified');
+      return response;
+    } catch (error) {
+      toast.error(error?.data?.message || error?.data?.detail || 'Beneficiary verification failed');
+      return null;
+    }
+  };
+
+  const handleSaveBeneficiary = async (payload) => {
+    if (!guardAction('banking.addBeneficiary')) return false;
+    try {
+      await registerBeneficiary(payload).unwrap();
+      await refetchBeneficiaries();
+      toast.success('Beneficiary saved successfully');
+      return true;
+    } catch (error) {
+      toast.error(error?.data?.message || error?.data?.detail || 'Failed to save beneficiary');
+      return false;
+    }
+  };
+
+  const handleRetryBeneficiary = async (beneficiary) => {
+    const payload = {
+      bankAccountId:
+        beneficiary.bankAccountId ||
+        beneficiary.bank_account_id ||
+        displayAccounts[0]?.id ||
+        displayAccounts[0]?.accountNumber,
+      name: beneficiary.name || beneficiary.beneficiaryName || '',
+      accountNumber: beneficiary.accountNumber || beneficiary.account_number || '',
+      ifsc: beneficiary.ifsc || beneficiary.ifscCode || beneficiary.ifsc_code || '',
+      vendorId: beneficiary.vendorId || beneficiary.vendor_id || undefined,
+      payeeType: 'ACCOUNT',
+    };
+    const verified = await handleVerifyBeneficiary(payload);
+    if (!verified) return false;
+    return handleSaveBeneficiary({
+      ...payload,
+      validationReference:
+        verified.validationReference ||
+        verified.referenceId ||
+        verified.correlationId,
+      verified: true,
+    });
   };
 
   return (
@@ -682,58 +814,79 @@ const Settings = () => {
         </TabsContent>}
 
         {canViewBankingSettings && <TabsContent value="banking">
-          <div className="bg-card border border-border rounded-lg p-6 shadow-sm">
-            <div className="flex justify-between items-center mb-6">
-              <div>
-                <h3 className="text-xl font-semibold font-['Manrope'] mb-1">Bank Accounts</h3>
-                <p className="text-sm text-muted-foreground">Connect your bank accounts for seamless payments</p>
+          {isBankingEnabled && (
+            <div className="bg-card border border-border rounded-lg p-6 shadow-sm mb-6 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-xl font-semibold font-['Manrope'] mb-1">Connected Banking</h3>
+                  <p className="text-sm text-muted-foreground">
+                    Submit bank account details for Optifii verification before using them for payments.
+                  </p>
+                </div>
+                <Button variant="outline" onClick={() => navigate('/banking')}>
+                  Open Banking
+                </Button>
               </div>
-                            <BankAccountDialog
-                dialogOpen={dialogOpen}
-                setDialogOpen={setDialogOpen}
-                resetForm={resetForm}
-                formData={formData}
-                setFormData={setFormData}
-                handleSubmit={handleSubmit}
-                canCreateBankAccount={canCreateBankAccount}
-              />
-            </div>
-
-            <div className="space-y-4">
-              {bankAccounts.map((account) => (
-                <div
-                  key={account?.id ?? account?.account_number ?? account?.account_name ?? 'unknown'}
-                  className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
-                  data-testid={`bank-account-${account?.id ?? 'unknown'}`}
-                >
-                  <div>
-                    <h4 className="font-medium">{account?.account_name || 'Bank account'}</h4>
-                    <p className="text-sm text-muted-foreground">
-                      {[account?.bank_name, formatBankAccountType(account?.account_type)]
-                        .filter(Boolean)
-                        .join(' · ') || '—'}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {maskBankAccountNumber(account?.account_number)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className="text-sm font-semibold">{account?.currency || '—'}</span>
-                    <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                      isBankAccountActive(account) ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-800'
-                    }`}>
-                      {isBankAccountActive(account) ? 'Active' : 'Inactive'}
-                    </span>
-                  </div>
-                </div>
-              ))}
-              {bankAccounts.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground" data-testid="no-bank-accounts">
-                  No bank accounts connected. Add one to get started.
-                </div>
+              {displayIsSetupReady ? null : setupStatus === BANKING_SETUP_STATUS.PENDING_VERIFICATION ? (
+                <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                  Bank account verification is pending.
+                </p>
+              ) : setupStatus === BANKING_SETUP_STATUS.ACTION_REQUIRED ? (
+                <p className="text-sm text-red-800 bg-red-50 border border-red-200 rounded-md px-3 py-2">
+                  A bank account request was rejected. Review the reason, then edit and resubmit or delete the request.
+                </p>
+              ) : (
+                <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                  Submit bank account details for verification before releasing payouts.
+                </p>
               )}
+              <BankingSetupSteps gateState={displayGateState} />
+              <div className="grid gap-4 md:grid-cols-2">
+                {displayIsAccountLinked ? (
+                  <AccountStatusCard
+                    accounts={displayAccounts}
+                    canManage={canManageBanking}
+                    actionLoading={updatingAccountStatus || deletingAccount}
+                    onEditRejected={setEditingRejectedAccount}
+                    onDeleteRejected={handleDeleteRejectedAccount}
+                    onToggleActive={handleToggleAccountActive}
+                  />
+                ) : null}
+                {canManageBanking ? (
+                  <AccountLinkCard
+                    canManage={canManageBanking}
+                    linking={linkingAccount || updatingAccount}
+                    initialAccount={editingRejectedAccount}
+                    mode={editingRejectedAccount ? 'resubmit' : 'submit'}
+                    onCancel={() => setEditingRejectedAccount(null)}
+                    onLinkAccount={handleLinkAccount}
+                  />
+                ) : null}
+              </div>
+              {hasPaymentReadyAccount ? (
+                <div className="space-y-4">
+                  {canManageBeneficiaries ? (
+                    <BeneficiaryForm
+                      accounts={paymentReadyAccounts}
+                      canManage={canManageBeneficiaries}
+                      validating={validatingBeneficiary}
+                      saving={savingBeneficiary}
+                      onVerify={handleVerifyBeneficiary}
+                      onSave={handleSaveBeneficiary}
+                    />
+                  ) : null}
+                  <div>
+                    <h4 className="mb-3 text-base font-semibold">Beneficiaries</h4>
+                    <BeneficiariesTable
+                      beneficiaries={beneficiaries}
+                      canManage={canManageBeneficiaries}
+                      onRegister={handleRetryBeneficiary}
+                    />
+                  </div>
+                </div>
+              ) : null}
             </div>
-          </div>
+          )}
         </TabsContent>}
 
         {canViewBillingSettings && <TabsContent value="billing">

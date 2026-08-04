@@ -1,5 +1,11 @@
 export const FULL_ACCESS_PERMISSION = "FULL_ACCESS";
 
+// Connected Banking is a SETTINGS section in corporate-screens (not a separate BANKING screen).
+export const CONNECTED_BANKING_SECTION = "SETTINGS_CONNECTED_BANKING";
+
+export const isBankingCorporateEntitlementEnabled = (isCorporateSectionEnabled) =>
+  isCorporateSectionEnabled(CONNECTED_BANKING_SECTION);
+
 export const ROUTE_PERMISSION_RULES = {
   "/dashboard": { anyOf: ["dashboard-view"] },
   "/vendors": { anyOf: ["vendors-view", "vendors-manage", "vendors-approve"] },
@@ -15,7 +21,9 @@ export const ROUTE_PERMISSION_RULES = {
     ],
   },
   "/invoice-matching": { anyOf: ["matching-view", "matching-manage"] },
-  "/transactions": { anyOf: ["banking-view", "banking-full"] },
+  "/transactions": {
+    anyOf: ["banking-view", "banking-manage", "banking-full", "payments-view", "payments-admin"],
+  },
   "/approvals": {
     anyOf: [
       "invoice-checker",
@@ -25,9 +33,17 @@ export const ROUTE_PERMISSION_RULES = {
       // "payments-manage",
     ],
   },
-  "/payments": { anyOf: ["payments-view", "payments-manage"] },
+  "/payments": {
+    anyOf: [
+      "payments-view",
+      "payments-manage",
+      "payments-admin",
+      "payments-requester",
+      "payments-approver",
+    ],
+  },
   "/payment-batches": {
-    anyOf: ["payment-batches-view", "payment-batches-manage"],
+    anyOf: ["payment-batches-view", "payment-batches-manage", "payments-admin"],
   },
   "/tax-management": { anyOf: ["tax-view", "tax-manage"] },
   "/accounting": {
@@ -47,7 +63,7 @@ export const ROUTE_PERMISSION_RULES = {
   "/integrations/connect": {
     anyOf: ["integrations-manage"],
   },
-  "/banking": { anyOf: ["banking-view", "banking-full"] },
+  "/banking": { anyOf: ["banking-view", "banking-manage", "banking-full", "payments-admin"] },
   "/notifications": {},
   "/user-roles": {
     anyOf: [
@@ -56,6 +72,8 @@ export const ROUTE_PERMISSION_RULES = {
       "roles-manage-users",
       "approval-workflow-view",
       "approval-workflow-manage",
+      "payment-approval-workflow-view",
+      "payment-approval-workflow-manage",
       "category-view",
       "category-manage",
       "department-view",
@@ -66,6 +84,10 @@ export const ROUTE_PERMISSION_RULES = {
     anyOf: [
       "settings-org",
       "settings-banking",
+      "banking-view",
+      "banking-manage",
+      "banking-full",
+      "payments-admin",
       "notifications-manage",
       "credits-view",
       "credits-ledger",
@@ -95,7 +117,6 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
     screen: "INVOICE_MATCHING",
     anySections: ["INVOICE_MATCHING_ALL"],
   },
-  "/transactions": { screen: "BANKING", anySections: ["BANKING_ALL"] },
   "/approvals": { screen: "APPROVAL", anySections: ["APPROVAL_ALL"] },
   "/payments": { screen: "PAYMENTS", anySections: ["PAYMENTS_ALL"] },
   "/payment-batches": {
@@ -129,7 +150,10 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
   "/integrations/erp": {
     anySections: ["SETTINGS_INTEGRATIONS"],
   },
-  "/banking": { anySections: ["SETTINGS_CONNECTED_BANKING"] },
+  "/banking": {
+    screen: "SETTINGS",
+    anySections: [CONNECTED_BANKING_SECTION],
+  },
   "/notifications": {
     screen: "SETTINGS",
     anySections: ["SETTINGS_NOTIFICATIONS"],
@@ -219,15 +243,29 @@ export const ACTION_PERMISSION_RULES = {
   "matching.edit": { anyOf: ["matching-manage"] },
   "matching.exception": { anyOf: ["matching-manage"] },
 
-  "payments.releaseBulk": { anyOf: ["payments-manage"] },
+  "payments.releaseBulk": { anyOf: ["payments-manage", "payments-admin"] },
   "payments.create": { anyOf: ["payments-manage"] },
-  "payments.createBatch": { anyOf: ["payment-batches-manage"] },
+  "payments.createPayrun": { anyOf: ["payments-requester", "payments-manage"] },
+  "payments.createBatch": { anyOf: ["payment-batches-manage", "payments-admin"] },
+  "payments.approvePayrun": { anyOf: ["payments-approver", "payments-admin", "payments-manage"] },
+  "payments.rejectPayrun": { anyOf: ["payments-approver", "payments-admin", "payments-manage"] },
+  "payments.cancelPayrun": { anyOf: ["payments-requester", "payments-manage"] },
+  "payments.releasePayrun": { anyOf: ["payments-admin", "payments-manage"] },
 
-  "paymentBatches.process": { anyOf: ["payment-batches-manage"] },
-  "paymentBatches.markProcessed": { anyOf: ["payment-batches-manage"] },
-  "paymentBatches.generateFile": { anyOf: ["payment-batches-manage"] },
+  "banking.link": { anyOf: ["banking-manage", "banking-full", "settings-banking", "payments-admin"] },
+  "banking.cibRegister": { anyOf: ["banking-manage", "banking-full", "settings-banking", "payments-admin"] },
+  "banking.addBeneficiary": {
+    anyOf: ["beneficiary-manage", "banking-full", "banking-manage", "payments-admin"],
+  },
+  "banking.verifyBeneficiary": {
+    anyOf: ["beneficiary-manage", "banking-full", "banking-manage", "payments-admin"],
+  },
+  "banking.releasePayout": { anyOf: ["payments-manage", "payments-admin", "payouts-release"] },
 
-  "settings.createBankAccount": { anyOf: ["settings-banking", "banking-full"] },
+  "paymentBatches.process": { anyOf: ["payment-batches-manage", "payments-admin"] },
+  "paymentBatches.markProcessed": { anyOf: ["payment-batches-manage", "payments-admin"] },
+  "paymentBatches.generateFile": { anyOf: ["payment-batches-manage", "payments-admin"] },
+
   "settings.createOrganisation": { anyOf: ["settings-org"] },
   "settings.updateOrganisation": { anyOf: ["settings-org"] },
   "billing.requestTokens": { anyOf: ["credits-manage", "MANAGE_BILLING"] },
@@ -242,13 +280,15 @@ export const ACTION_PERMISSION_RULES = {
   "tax.calculateTds": { anyOf: ["tax-manage"] },
   "tax.generateForm16a": { anyOf: ["tax-manage"] },
 
-  "transactions.uploadStatement": { anyOf: ["banking-full"] },
-  "transactions.deleteStatement": { anyOf: ["banking-full"] },
-  "transactions.update": { anyOf: ["banking-full"] },
-  "transactions.review": { anyOf: ["banking-full"] },
-  "transactions.undo": { anyOf: ["banking-full"] },
-  "transactions.uploadVoucher": { anyOf: ["banking-full"] },
-  "transactions.linkInvoice": { anyOf: ["banking-full"] },
+  "transactions.uploadStatement": {
+    anyOf: ["banking-view", "banking-manage", "banking-full", "payments-view", "payments-admin"],
+  },
+  "transactions.deleteStatement": { anyOf: ["banking-manage", "banking-full"] },
+  "transactions.update": { anyOf: ["banking-manage", "banking-full"] },
+  "transactions.review": { anyOf: ["banking-manage", "banking-full"] },
+  "transactions.undo": { anyOf: ["banking-manage", "banking-full"] },
+  "transactions.uploadVoucher": { anyOf: ["banking-manage", "banking-full"] },
+  "transactions.linkInvoice": { anyOf: ["banking-manage", "banking-full"] },
 
   "integrations.connect": { anyOf: ["integrations-manage"] },
   "integrations.disconnect": { anyOf: ["integrations-manage"] },
@@ -299,6 +339,16 @@ export const ACTION_PERMISSION_RULES = {
   "workflow.switch": { anyOf: ["approval-workflow-manage"] },
   "workflow.test": {
     anyOf: ["approval-workflow-view", "approval-workflow-manage"],
+  },
+  "paymentWorkflow.create": { anyOf: ["payment-approval-workflow-manage"] },
+  "paymentWorkflow.update": { anyOf: ["payment-approval-workflow-manage"] },
+  "paymentWorkflow.delete": { anyOf: ["payment-approval-workflow-manage"] },
+  "paymentWorkflow.switch": { anyOf: ["payment-approval-workflow-manage"] },
+  "paymentWorkflow.view": {
+    anyOf: [
+      "payment-approval-workflow-view",
+      "payment-approval-workflow-manage",
+    ],
   },
 };
 
