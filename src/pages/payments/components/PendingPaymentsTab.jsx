@@ -13,8 +13,31 @@ import {
   formatInvoiceAmount,
   sumInvoiceAmountsByCurrency,
 } from '../../invoices/utils/invoiceAmounts';
-import { OrgBranchCell, VendorWithBranchCell } from '../../../components/common/BranchTableCells';
 import { cn } from '../../../lib/utils';
+
+const clippedText = (value) => {
+  const text = String(value || '-');
+  return (
+    <span className="block min-w-0 truncate" title={text}>
+      {text}
+    </span>
+  );
+};
+
+const getBranchLabel = (record = {}) => {
+  const name = record.branchName ?? record.branch_name ?? '';
+  const code = record.branchCode ?? record.branch_code ?? '';
+  if (name && code) return `${name} (${code})`;
+  return name || code || '-';
+};
+
+const getVendorLabel = (record = {}) => {
+  const name = record.vendorName ?? record.vendor_name ?? '-';
+  const branchName = record.vendorBranchName ?? record.vendor_branch_name ?? '';
+  const branchCode = record.vendorBranchCode ?? record.vendor_branch_code ?? '';
+  const branch = branchName && branchCode ? `${branchName} (${branchCode})` : branchName || branchCode;
+  return branch ? `${name} - ${branch}` : name;
+};
 
 const renderCurrencyTotals = (totals, className) => {
   if (totals.length === 0) {
@@ -41,13 +64,13 @@ const renderCurrencyTotals = (totals, className) => {
 };
 
 const basePendingPaymentTableHeader = [
-  { key: 'invoiceNumber', title: 'Invoice #', headerClassName: 'bg-muted text-foreground', cellClassName: "  font-medium" },
-  { key: 'orgBranch', title: 'Branch', headerClassName: 'bg-muted text-foreground', cellClassName: 'text-sm' },
+  { key: 'invoiceNumber', title: 'Invoice #', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'font-medium text-left' },
+  { key: 'orgBranch', title: 'Branch', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'text-sm text-left' },
   { key: 'vendorName', title: 'Vendor', headerClassName: 'bg-muted text-foreground' },
-  { key: 'amount', title: 'Amount', headerClassName: 'bg-muted text-foreground', cellClassName: "  font-semibold" },
-  { key: 'invoiceDate', title: 'Invoice Date', headerClassName: 'bg-muted text-foreground', cellClassName: 'text-sm text-muted-foreground' },
-  { key: 'dueDate', title: 'Due Date', headerClassName: 'bg-muted text-foreground', cellClassName: 'text-sm text-muted-foreground' },
-  { key: 'status', title: 'Status', headerClassName: 'bg-muted text-foreground' },
+  { key: 'amount', title: 'Net Payable', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'font-semibold text-left' },
+  { key: 'invoiceDate', title: 'Invoice Date', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'text-sm text-muted-foreground text-left' },
+  { key: 'dueDate', title: 'Due Date', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'text-sm text-muted-foreground text-left' },
+  { key: 'status', title: 'Status', headerClassName: 'bg-muted text-foreground text-left' },
   { key: 'actions', title: 'Actions', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'text-left' },
 ];
 
@@ -74,6 +97,7 @@ const PendingPaymentsTab = ({
   canCancelInvoice,
   handleCancelInvoice,
   showBranchField = false,
+  paginationFooter = null,
 }) => {
   const { showIntegrationColumn } = useZohoIntegrationActive();
   const pendingPaymentTableHeader = useMemo(() => {
@@ -122,30 +146,32 @@ const PendingPaymentsTab = ({
                     data-testid={`pending-invoice-select-${invoice?.id ?? 'unknown'}`}
                   />
                 </div>
-                <span>{invoice.invoiceNumber || '-'}</span>
+                {clippedText(invoice.invoiceNumber)}
               </div>
             ) : (
-              invoice.invoiceNumber || '-'
+              clippedText(invoice.invoiceNumber)
             );
             break;
           case 'vendorName':
-            value = <VendorWithBranchCell record={invoice} />;
+            value = clippedText(getVendorLabel(invoice));
             break;
           case 'orgBranch':
-            value = <OrgBranchCell record={invoice} />;
+            value = clippedText(getBranchLabel(invoice));
             break;
           case 'amount':
-            value = formatInvoiceAmount(invoice, invoice.amount || 0);
+            value = clippedText(formatInvoiceAmount(invoice, invoice.amount || 0));
             break;
           case 'invoiceDate':
-            value = safeFormatDate(invoice.invoiceDate);
+            value = clippedText(safeFormatDate(invoice.invoiceDate));
             break;
           case 'dueDate':
             value = (
-              <InvoiceDueDateCell
-                invoice={invoice}
-                formattedDueDate={safeFormatDate(invoice.dueDate)}
-              />
+              <span className="block min-w-0 truncate" title={safeFormatDate(invoice.dueDate)}>
+                <InvoiceDueDateCell
+                  invoice={invoice}
+                  formattedDueDate={safeFormatDate(invoice.dueDate)}
+                />
+              </span>
             );
             break;
           case 'status':
@@ -200,13 +226,13 @@ const PendingPaymentsTab = ({
             );
             break;
           default:
-            value = invoice?.[header.key] || '-';
+            value = clippedText(invoice?.[header.key]);
         }
 
         return (
           <TableCell
             key={header.key}
-            className={cn('border border-table-border', header.cellClassName)}
+            className={cn('max-w-[180px] overflow-hidden whitespace-nowrap border border-table-border text-left align-middle', header.cellClassName)}
           >
             {value}
           </TableCell>
@@ -293,7 +319,7 @@ const PendingPaymentsTab = ({
             showCheckbox={showRecordPaymentSelection}
             isChecked={allSelected}
             onSelectAllChange={onSelectAllInvoices}
-            tableClassName="min-w-[1100px]"
+            tableClassName="min-w-[1100px] table-fixed"
             tableContainerClassName="overflow-visible"
             headClassName="border-b border-border bg-muted shadow-sm"
             stickyHeader
@@ -302,13 +328,15 @@ const PendingPaymentsTab = ({
             emptyTestId="no-pending-payments"
           />
         </div>
-        <div className="mt-auto flex shrink-0 border-t border-border p-4">
-          <p className="text-sm text-muted-foreground" data-testid="pending-payments-table-summary">
-            {filteredPendingInvoices.length === invoices.length
-              ? `Showing ${filteredPendingInvoices.length.toLocaleString('en-IN')} pending invoice${filteredPendingInvoices.length === 1 ? '' : 's'}`
-              : `Showing ${filteredPendingInvoices.length.toLocaleString('en-IN')} of ${invoices.length.toLocaleString('en-IN')} pending invoices`}
-          </p>
-        </div>
+        {paginationFooter || (
+          <div className="mt-auto flex shrink-0 border-t border-border p-4">
+            <p className="text-sm text-muted-foreground" data-testid="pending-payments-table-summary">
+              {filteredPendingInvoices.length === invoices.length
+                ? `Showing ${filteredPendingInvoices.length.toLocaleString('en-IN')} pending invoice${filteredPendingInvoices.length === 1 ? '' : 's'}`
+                : `Showing ${filteredPendingInvoices.length.toLocaleString('en-IN')} of ${invoices.length.toLocaleString('en-IN')} pending invoices`}
+            </p>
+          </div>
+        )}
       </div>
     </div>
   );
