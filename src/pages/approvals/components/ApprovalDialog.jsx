@@ -2,7 +2,7 @@ import React from 'react';
 import { Button } from '../../../components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
 import { Label } from '../../../components/ui/label';
-import { CheckCircle, RotateCcw, XCircle } from 'lucide-react';
+import { CheckCircle, Loader2, RotateCcw, XCircle } from 'lucide-react';
 import { NEEDS_CORRECTION_ACTION } from '../../../utils/approvalWorkflow';
 import { formatCurrency } from '../../../utils/currency';
 import ClippedTextWithTooltip from '../../../components/common/ClippedTextWithTooltip';
@@ -18,8 +18,14 @@ const ApprovalDialog = ({
   comments,
   setComments,
   submitApproval,
+  isSubmitting = false,
 }) => (
-  <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+  <Dialog
+    open={dialogOpen}
+    onOpenChange={(open) => {
+      if (!isSubmitting) setDialogOpen(open);
+    }}
+  >
     <DialogContent data-testid="approval-dialog">
       <DialogHeader>
         <DialogTitle>
@@ -66,6 +72,7 @@ const ApprovalDialog = ({
             id="comments"
             value={comments}
             onChange={(e) => setComments(e.target.value)}
+            disabled={isSubmitting}
             className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm"
             placeholder="Add any comments..."
             data-testid="approval-comments"
@@ -77,12 +84,23 @@ const ApprovalDialog = ({
             variant="outline"
             className="flex-1"
             onClick={() => setDialogOpen(false)}
+            disabled={isSubmitting}
             data-testid="approval-cancel"
           >
             Cancel
           </Button>
-          <Button className="flex-1" onClick={submitApproval} data-testid="approval-confirm">
-            {actionType === 'Approved' || actionType === 'Checked' ? (
+          <Button
+            className="flex-1"
+            onClick={submitApproval}
+            disabled={isSubmitting}
+            data-testid="approval-confirm"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Processing...
+              </>
+            ) : actionType === 'Approved' || actionType === 'Checked' ? (
               <>
                 <CheckCircle className="h-4 w-4 mr-2" />
                 {actionType === 'Checked' ? 'Verify' : 'Approve'}
