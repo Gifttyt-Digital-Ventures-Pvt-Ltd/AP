@@ -381,6 +381,7 @@ const AccountingQueuePreviewDialog = ({ open, onOpenChange, detail }) => {
         canCancel={() => false}
         handleCancelInvoice={() => {}}
         showProformaInvoiceFields={objectType === "PI"}
+        showErpIntegrationFields
         showAccountingLockBanner={false}
       />
     );
