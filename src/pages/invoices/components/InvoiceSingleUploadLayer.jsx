@@ -18,6 +18,7 @@ import {
 } from "../../../Services/utils/payloadMappers";
 import { useAuth } from "../../../contexts/AuthContext";
 import { useRBAC } from "../../../contexts/RBACContext";
+import { isInvoiceFundingEnabled } from "../../../utils/invoiceConfiguration";
 import { useActionGuard } from "../../../hooks/useActionGuard";
 import useZohoIntegrationActive from "../../../hooks/useZohoIntegrationActive";
 import { useCreditErrorHandler } from "../../../contexts/CreditErrorContext";
@@ -73,6 +74,10 @@ import {
 } from "../utils/invoiceBulkUtils";
 import { findVendorByInvoiceName } from "../utils/vendorMatching";
 import { getInvoiceDueDateValidationErrorForInvoice } from "../utils/msmePaymentDue";
+import {
+  getInvoiceFundingSplitError,
+  isInvoiceFundingSplitValid,
+} from "../utils/invoiceFunding";
 import { useCurrencyFilter } from "../../../hooks/useCurrencyFilter";
 import { CURRENCY_SCREENS } from "../../../utils/currency";
 import { getInvoiceVendorRequestValidationErrors } from "../../../utils/vendorValidation";
@@ -123,7 +128,18 @@ const InvoiceSingleUploadLayer = ({
   prefillCampaignRef.current = prefillCampaign;
 
   const { user } = useAuth();
-  const { isCategoryFeatureEnabled, isDepartmentFeatureEnabled, isCampaignFeatureEnabled, isBranchEnabled, isCorporateScreenAllowed, isCorporateSectionEnabled } = useRBAC();
+  const {
+    corporateScreens,
+    isCategoryFeatureEnabled,
+    isDepartmentFeatureEnabled,
+    isCampaignFeatureEnabled,
+    isBranchEnabled,
+    isCorporateScreenAllowed,
+    isCorporateSectionEnabled,
+  } = useRBAC();
+  const showInvoiceFunding = isInvoiceFundingEnabled(
+    corporateScreens?.activeInvoiceConfiguration ?? [],
+  );
   const hasPurchaseOrderSubscription =
     isCorporateScreenAllowed("PURCHASE_ORDER") &&
     (isCorporateSectionEnabled("PURCHASE_ORDER_ALL") ||
@@ -511,6 +527,13 @@ const InvoiceSingleUploadLayer = ({
     if (!formData) return;
 
     const totals = calculateTotals(formData.lineItems);
+    const fundingError = getInvoiceFundingSplitError(formData, totals?.total, {
+      enabled: showInvoiceFunding,
+    });
+    if (fundingError) {
+      toast.error(fundingError);
+      return;
+    }
     const resolvedVendorId =
       formData.vendorId ||
       prefillRef.current?.vendorId ||
@@ -635,6 +658,11 @@ const InvoiceSingleUploadLayer = ({
     canManageInvoices &&
     !invoiceMandatoryFieldsLoading &&
     Boolean(formData) &&
+    isInvoiceFundingSplitValid(
+      formData,
+      calculateTotals(formData?.lineItems || [], formData?.currency)?.total,
+      { enabled: showInvoiceFunding },
+    ) &&
     isInvoiceMandatoryFieldsSatisfied(formData, invoiceMandatoryFields, mandatoryFieldOptions) &&
     (Boolean(formData?.vendorId) ||
       Boolean(prefillRef.current?.vendorId) ||
@@ -764,6 +792,7 @@ const InvoiceSingleUploadLayer = ({
       showBillingGst={Boolean(uploadedFile)}
       requireBillingGst={false}
       showBranchField={isBranchEnabled}
+      showInvoiceFunding={showInvoiceFunding}
       showProformaInvoiceFields={isPiSubscriptionEnabled}
       showInvoiceMatching={showInvoiceMatchingSelection}
       canUseThreeWayMatching={canUseThreeWayMatching}

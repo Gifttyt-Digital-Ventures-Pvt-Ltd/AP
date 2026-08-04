@@ -43,6 +43,7 @@ import {
 import { getApprovalProgress } from './utils/approvalProgress';
 import { useApprovalsInvoiceEdit } from './hooks/useApprovalsInvoiceEdit';
 import {
+  isInvoiceFundingEnabled as isInvoiceFundingEnabledForCorporate,
   isRefNoEnabled as isRefNoEnabledForCorporate,
 } from '../../utils/invoiceConfiguration';
 import { clearNotificationQueryParams } from '../../utils/notificationQueryParams';
@@ -160,6 +161,13 @@ const Approvals = () => {
   const isRefNoEnabled = useMemo(
     () =>
       isRefNoEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const showInvoiceFunding = useMemo(
+    () =>
+      isInvoiceFundingEnabledForCorporate(
         corporateScreens?.activeInvoiceConfiguration ?? [],
       ),
     [corporateScreens?.activeInvoiceConfiguration],
@@ -636,6 +644,7 @@ const Approvals = () => {
         showCampaignField={isCampaignFeatureEnabled}
         isCampaignFeatureEnabled={isCampaignFeatureEnabled}
         showRefNoField={isRefNoEnabled}
+        showInvoiceFunding={showInvoiceFunding}
         findVendorByName={findVendorByName}
         findVendorById={findVendorById}
         approvalActionConfig={viewApprovalActionConfig}

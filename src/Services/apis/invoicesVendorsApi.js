@@ -119,6 +119,19 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
       transformResponse: (response) => normalizeApprovalHistoryEntries(response),
       providesTags: ["Invoices"],
     }),
+    getInvoiceFundingHistory: builder.query({
+      query: (id) => ({
+        url: `/invoices/${id}/funding-history`,
+        method: "GET",
+      }),
+      transformResponse: (response) => {
+        if (Array.isArray(response)) return response;
+        if (Array.isArray(response?.data)) return response.data;
+        if (Array.isArray(response?.history)) return response.history;
+        return [];
+      },
+      providesTags: (_result, _error, id) => [{ type: "Invoices", id }],
+    }),
     getPendingCheckerInvoices: builder.query({
       query: (params) => ({ url: "/checker/pending", method: "GET", params }),
       transformResponse: (response) =>
@@ -259,6 +272,7 @@ export const {
   useApproveInvoiceMutation,
   useGetInvoiceHistoryQuery,
   useLazyGetInvoiceHistoryQuery,
+  useGetInvoiceFundingHistoryQuery,
   useGetPendingCheckerInvoicesQuery,
   useCheckInvoiceMutation,
   useGetVendorsQuery,

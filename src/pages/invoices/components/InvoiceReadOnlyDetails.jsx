@@ -87,6 +87,7 @@ const InvoiceReadOnlyDetails = ({
   getStatusBadgeClass,
   canCancelLinkedInvoice = false,
   onCancelLinkedInvoice,
+  showInvoiceFunding = false,
 }) => {
   const formData = useMemo(
     () =>
@@ -133,11 +134,14 @@ const InvoiceReadOnlyDetails = ({
     },
     { skip: !isTdsSubscriptionEnabled || !invoiceIdForTdsPreview || !readOnlyTdsSectionCode },
   );
-
   if (!formData) return null;
 
   const msmePaymentDue = normalizeMsmePaymentDue(invoice);
   const invoiceCurrency = normalizeCurrencyCode(formData.currency);
+  const isFunded = Boolean(formData.isFunded ?? invoice?.isFunded ?? invoice?.is_funded);
+  const orgAmount = Number(formData.orgAmount ?? invoice?.orgAmount ?? invoice?.org_amount ?? 0) || 0;
+  const financierAmount =
+    Number(formData.financierAmount ?? invoice?.financierAmount ?? invoice?.financier_amount ?? 0) || 0;
   const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
   const isSummaryOnlyInvoice =
     formData.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
@@ -542,6 +546,27 @@ const InvoiceReadOnlyDetails = ({
             </>
           )}
         </div>
+
+        {showInvoiceFunding ? (
+          <div className="rounded-lg border border-border bg-muted/20 p-3">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-gray-800">Funding</h3>
+              <Badge variant={isFunded ? "default" : "secondary"}>
+                {isFunded ? "Funded" : "Non-Funded"}
+              </Badge>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <DetailField
+                label="Organization Funded Amount"
+                value={isFunded ? formatAmount(orgAmount) : "-"}
+              />
+              <DetailField
+                label="Financier Funded Amount"
+                value={isFunded ? formatAmount(financierAmount) : "-"}
+              />
+            </div>
+          </div>
+        ) : null}
 
         {formData.billingAddress && (
           <DetailField label="Billing Address" value={formData.billingAddress} />

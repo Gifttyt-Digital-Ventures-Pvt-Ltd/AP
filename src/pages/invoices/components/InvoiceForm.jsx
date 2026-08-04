@@ -58,6 +58,7 @@ import {
   formatNumericInputValue,
   sanitizeNumericInput,
 } from "../utils/numericInput";
+import { getInvoiceFundingSplitError } from "../utils/invoiceFunding";
 import InvoiceChecklist from "./InvoiceFormChecklist";
 import InvoiceCampaignFields from "./InvoiceCampaignFields";
 import LineItemsSummary, { LineItemsSectionHeader } from "./LineItemsSummary";
@@ -324,6 +325,7 @@ export const InvoiceForm = ({
   showBillingGst = false,
   requireBillingGst = false,
   showBranchField = false,
+  showInvoiceFunding = false,
   showInvoiceMatching = false,
   canUseThreeWayMatching = false,
   showProformaInvoiceFields = false,
@@ -718,6 +720,38 @@ export const InvoiceForm = ({
       : "min-w-[1040px]";
   const formatAmount = (amount) => formatCurrency(amount, invoiceCurrency);
   const totals = calculateTotals(formData?.lineItems || [], invoiceCurrency);
+  const fundingInvoiceTotal = Math.max(Number(totals?.total) || 0, 0);
+  const roundFundingAmount = (value) =>
+    Math.round((Number(value) || 0) * 100) / 100;
+  const formatFundingAmount = (value) => {
+    const rounded = roundFundingAmount(value);
+    return Number.isFinite(rounded) ? String(rounded) : "";
+  };
+  const getComplementFundingAmount = (value) =>
+    formatFundingAmount(Math.max(fundingInvoiceTotal - roundFundingAmount(value), 0));
+  const handleFundingAmountChange = (field, value) => {
+    const sanitizedValue = sanitizeNumericInput(value, {
+      maxDecimalPlaces: 2,
+    });
+    const enteredAmount = Math.min(
+      roundFundingAmount(sanitizedValue),
+      fundingInvoiceTotal,
+    );
+    const normalizedValue =
+      sanitizedValue === "" ? "" : formatFundingAmount(enteredAmount);
+    const oppositeField =
+      field === "orgAmount" ? "financierAmount" : "orgAmount";
+    setFormData((prev) => ({
+      ...prev,
+      [field]: normalizedValue,
+      [oppositeField]: getComplementFundingAmount(enteredAmount),
+    }));
+  };
+  const fundingSplitError = getInvoiceFundingSplitError(
+    formData,
+    fundingInvoiceTotal,
+    { enabled: showInvoiceFunding },
+  );
 
   const { data: eligiblePis = [] } = useGetEligiblePisForGrnQuery(undefined, {
     skip: !showProformaInvoiceFields,
@@ -2085,7 +2119,7 @@ export const InvoiceForm = ({
                     }));
                   }}
                   className="h-8 text-sm"
-                />
+                  />
                 {isEdit ? (
                   <InvoiceDueDateIndicators
                     invoice={formData}
@@ -2094,6 +2128,103 @@ export const InvoiceForm = ({
                 ) : null}
               </div>
             </div>
+
+            {showInvoiceFunding ? (
+              <div className="rounded-lg border border-border bg-muted/20 p-3">
+                <div className="mb-3 flex items-start justify-between gap-3">
+                  <div>
+                    <Label className="text-sm font-medium text-gray-800">
+                      Funding
+                    </Label>
+                    <p className="text-xs text-muted-foreground">
+                      Capture the split between organization-funded and financier-funded amount.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Checkbox
+                      id="invoice-is-funded"
+                      checked={Boolean(formData.isFunded)}
+                      onCheckedChange={(value) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          isFunded: Boolean(value),
+                          ...(value
+                            ? {
+                                orgAmount:
+                                  prev.orgAmount !== "" &&
+                                  prev.orgAmount !== null &&
+                                  prev.orgAmount !== undefined
+                                    ? formatFundingAmount(
+                                        Math.min(
+                                          roundFundingAmount(prev.orgAmount),
+                                          fundingInvoiceTotal,
+                                        ),
+                                      )
+                                    : formatFundingAmount(fundingInvoiceTotal),
+                                financierAmount:
+                                  prev.orgAmount !== "" &&
+                                  prev.orgAmount !== null &&
+                                  prev.orgAmount !== undefined
+                                    ? getComplementFundingAmount(prev.orgAmount)
+                                    : "0",
+                              }
+                            : {
+                                orgAmount: "",
+                                financierAmount: "",
+                              }),
+                        }))
+                      }
+                      data-testid="invoice-is-funded"
+                    />
+                    <Label
+                      htmlFor="invoice-is-funded"
+                      className="cursor-pointer text-xs font-medium"
+                    >
+                      Funded invoice
+                    </Label>
+                  </div>
+                </div>
+                <div className="grid gap-3 md:grid-cols-2">
+                  <div>
+                    <Label className="text-xs">Organization Funded Amount</Label>
+                    <Input
+                      value={formatNumericInputValue(formData.orgAmount)}
+                      onChange={(event) =>
+                        handleFundingAmountChange(
+                          "orgAmount",
+                          event.target.value,
+                        )
+                      }
+                      placeholder="0.00"
+                      disabled={!formData.isFunded}
+                      className="h-8 text-sm disabled:cursor-not-allowed disabled:bg-muted/60"
+                      inputMode="decimal"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-xs">Financier Funded Amount</Label>
+                    <Input
+                      value={formatNumericInputValue(formData.financierAmount)}
+                      onChange={(event) =>
+                        handleFundingAmountChange(
+                          "financierAmount",
+                          event.target.value,
+                        )
+                      }
+                      placeholder="0.00"
+                      disabled={!formData.isFunded}
+                      className="h-8 text-sm disabled:cursor-not-allowed disabled:bg-muted/60"
+                      inputMode="decimal"
+                    />
+                  </div>
+                </div>
+                {fundingSplitError ? (
+                  <p className="mt-2 text-xs font-medium text-destructive">
+                    {fundingSplitError}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
 
             <div className="grid grid-cols-2 gap-3">
               {showDepartmentField && (
@@ -2931,7 +3062,7 @@ export const InvoiceForm = ({
             <Button
               onClick={isEdit ? handleUpdateInvoice : handleAddInvoice}
               className="flex-1"
-              disabled={!canSubmit || isSubmitting}
+              disabled={!canSubmit || isSubmitting || Boolean(fundingSplitError)}
             >
               {isSubmitting ? (
                 <>

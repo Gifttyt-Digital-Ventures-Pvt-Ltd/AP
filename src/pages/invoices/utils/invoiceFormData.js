@@ -124,6 +124,15 @@ export const buildInvoiceEditFormData = (
     invoiceNumber: invoice.invoiceNumber || invoice.invoiceNumber || "",
     invoiceDate: invoiceDate || format(new Date(), "yyyy-MM-dd"),
     dueDate: dueDate || "",
+    isFunded: Boolean(invoice.isFunded ?? invoice.is_funded ?? false),
+    orgAmount:
+      invoice.orgAmount ??
+      invoice.org_amount ??
+      "",
+    financierAmount:
+      invoice.financierAmount ??
+      invoice.financier_amount ??
+      "",
     billingAddress:
       invoice.billingAddress ||
       invoice.billing_address ||

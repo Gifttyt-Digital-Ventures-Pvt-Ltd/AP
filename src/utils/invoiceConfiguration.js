@@ -4,6 +4,7 @@ export const INVOICE_CONFIG_SECTIONS = {
   BRANCH: 'BRANCH',
   SQ_FT: 'SQ_FT',
   NET_PAYABLE_EDIT: 'NET_PAYABLE_EDIT',
+  INVOICE_FUNDING: 'INVOICE_FUNDING',
   ALLOW_INVOICE_LINE_ITEM_REMOVAL: 'ALLOW_INVOICE_LINE_ITEM_REMOVAL',
 };
 
@@ -30,6 +31,11 @@ export const DEFAULT_INVOICE_CONFIGURATION = [
     displayName: 'Edit Net Payable',
     screen: 'INVOICE',
     section: INVOICE_CONFIG_SECTIONS.NET_PAYABLE_EDIT,
+  },
+  {
+    displayName: 'Invoice Funding',
+    screen: 'INVOICE',
+    section: INVOICE_CONFIG_SECTIONS.INVOICE_FUNDING,
   },
   {
     displayName: 'Allow Summary Only invoices',
@@ -108,6 +114,12 @@ export const isRefNoEnabled = (activeInvoiceConfiguration = []) =>
 export const isNetPayableEditEnabled = (activeInvoiceConfiguration = []) =>
   isInvoiceConfigurationEnabled(
     INVOICE_CONFIG_SECTIONS.NET_PAYABLE_EDIT,
+    activeInvoiceConfiguration,
+  );
+
+export const isInvoiceFundingEnabled = (activeInvoiceConfiguration = []) =>
+  isInvoiceConfigurationEnabled(
+    INVOICE_CONFIG_SECTIONS.INVOICE_FUNDING,
     activeInvoiceConfiguration,
   );
 

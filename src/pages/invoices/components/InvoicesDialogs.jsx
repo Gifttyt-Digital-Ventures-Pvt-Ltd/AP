@@ -42,6 +42,7 @@ const InvoicesDialogs = (props) => {
     isCategoryFeatureEnabled,
     isCampaignFeatureEnabled,
     showRefNoField = false,
+    showInvoiceFunding = false,
     invoiceMandatoryFields,
     bulkEditOpen,
     setBulkEditOpen,
@@ -160,6 +161,7 @@ const InvoicesDialogs = (props) => {
         showCampaignField={isCampaignFeatureEnabled}
         isCampaignFeatureEnabled={isCampaignFeatureEnabled}
         showRefNoField={showRefNoField}
+        showInvoiceFunding={showInvoiceFunding}
         findVendorByName={findVendorByName}
         findVendorById={findVendorById}
         departmentMandatory={invoiceMandatoryFields?.department}
