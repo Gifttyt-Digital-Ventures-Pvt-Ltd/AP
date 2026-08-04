@@ -110,7 +110,6 @@ import {
 import { useDebouncedValue } from "../../../hooks/useDebouncedValue";
 import useTdsSubscription from "../../../hooks/useTdsSubscription";
 import {
-  useGetAccountingVoucherTypesQuery,
   useGetCoaTreeQuery,
 } from "../../../Services/apis/accountingApi";
 import {
@@ -348,10 +347,6 @@ export const InvoiceForm = ({
   const { data: coaData } = useGetCoaTreeQuery(undefined, {
     skip: !showErpIntegrationFields,
   });
-  const { data: backendVoucherTypeOptions = [] } =
-    useGetAccountingVoucherTypesQuery(undefined, {
-      skip: !showErpIntegrationFields,
-    });
   const [vendorPickerOpen, setVendorPickerOpen] = useState(false);
   const [vendorQuery, setVendorQuery] = useState("");
   const vendorAnchorRef = useRef(null);
@@ -695,7 +690,6 @@ export const InvoiceForm = ({
       }),
     [coaData?.tree, includeLedgerAccountGroups],
   );
-  const voucherTypeOptions = backendVoucherTypeOptions;
   const lineItemHeaders = lineItemTableHeader
     .filter(
       (column) =>
@@ -1572,23 +1566,6 @@ export const InvoiceForm = ({
                 {formData.source || "Upload"}
               </Badge>
             </div>
-            {showErpIntegrationFields && (
-              <div className="w-full sm:w-56">
-                <AppSelect
-                  value={formData.voucherType || ""}
-                  onChange={(e) =>
-                    setFormData({
-                      ...formData,
-                      voucherType: e.target.value,
-                    })
-                  }
-                  options={voucherTypeOptions}
-                  placeholder="Select voucher type"
-                  className="h-9 text-sm focus:ring-0 focus-visible:ring-0 focus-visible:ring-offset-0"
-                  data-testid="invoice-header-voucher-type-select"
-                />
-              </div>
-            )}
           </div>
 
           {showBillingGst ? (
@@ -2119,93 +2096,6 @@ export const InvoiceForm = ({
             </div>
 
             <div className="grid grid-cols-2 gap-3">
-              <div>
-                <RequiredLabel required>Currency</RequiredLabel>
-                <Popover
-                  open={currencyPickerOpen}
-                  onOpenChange={setCurrencyPickerOpen}
-                >
-                  <PopoverAnchor asChild>
-                    <div className="relative">
-                      <Input
-                        id="invoice-form-currency"
-                        value={currencyQuery}
-                        onChange={(e) => {
-                          const next = e.target.value
-                            .toUpperCase()
-                            .replace(/[^A-Z]/g, "")
-                            .slice(0, 3);
-                          setCurrencyQuery(next);
-                          setCurrencyPickerOpen(true);
-                          if (next.length === 3) {
-                            applyInvoiceCurrencyChange(next);
-                          }
-                        }}
-                        onFocus={() => setCurrencyPickerOpen(true)}
-                        onBlur={() => {
-                          const normalized =
-                            normalizeCurrencyCode(currencyQuery);
-                          if (String(currencyQuery || "").trim().length === 3) {
-                            applyInvoiceCurrencyChange(normalized);
-                          } else {
-                            setCurrencyQuery(
-                              formData.currency || DEFAULT_CURRENCY,
-                            );
-                          }
-                        }}
-                        placeholder="Select or type code (e.g. USD)"
-                        className="pr-10 h-8 text-sm uppercase"
-                        autoComplete="off"
-                        maxLength={3}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setCurrencyPickerOpen((open) => !open)}
-                        className="absolute right-1 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1"
-                        aria-label="Show currency list"
-                      >
-                        <ChevronsUpDown className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </PopoverAnchor>
-                  <PopoverContent
-                    className="w-[var(--radix-popover-trigger-width)] p-0"
-                    align="start"
-                    onOpenAutoFocus={(event) => event.preventDefault()}
-                  >
-                    <div className="max-h-56 overflow-y-auto py-1">
-                      {filteredCurrencyOptions.length === 0 ? (
-                        <p className="px-3 py-2 text-xs text-muted-foreground">
-                          {String(currencyQuery || "").trim().length === 3
-                            ? `Use ${normalizeCurrencyCode(currencyQuery)} (press Tab to apply)`
-                            : "No matching currencies — type a 3-letter ISO code"}
-                        </p>
-                      ) : (
-                        filteredCurrencyOptions.map((code) => (
-                          <button
-                            key={code}
-                            type="button"
-                            className={cn(
-                              "flex w-full items-center px-3 py-2 text-left text-sm hover:bg-accent",
-                              invoiceCurrency === code && "bg-accent",
-                            )}
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => {
-                              applyInvoiceCurrencyChange(code);
-                              setCurrencyPickerOpen(false);
-                            }}
-                          >
-                            {code}
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
               {showDepartmentField && (
                 <div>
                   <RequiredLabel required={departmentMandatory}>
@@ -2293,94 +2183,6 @@ export const InvoiceForm = ({
             </div>
 
             <div>
-              {showBillingGst ? (
-                <div className="mb-3 space-y-3">
-                  <div className={`grid grid-cols-1 gap-3 ${canShowBranchField ? 'md:grid-cols-2' : ''}`}>
-                    {canShowBranchField ? (
-                      <div>
-                        <Label className="text-xs">Branch (Optional)</Label>
-                        <div className="flex items-center gap-2">
-                          <div className="min-w-0 flex-1">
-                            <AppSelect
-                              value={selectedBranchCode}
-                              onChange={(event) => applyBranchSelection(event.target.value)}
-                              options={branchOptions}
-                              placeholder={branchBusy ? "Loading branches..." : "Select branch"}
-                              className="h-8 text-sm"
-                              disabled={branchBusy || branchOptions.length === 0}
-                              data-testid="invoice-preview-branch-select"
-                            />
-                          </div>
-                          {selectedBranchCode ? (
-                            <Button
-                              type="button"
-                              variant="outline"
-                              size="sm"
-                              onClick={clearBranchSelection}
-                              className="h-8 shrink-0 px-2 text-xs"
-                            >
-                              Clear
-                            </Button>
-                          ) : null}
-                        </div>
-                        {branchOptions.length === 0 && !branchBusy ? (
-                          <p className="mt-1 text-xs text-muted-foreground">
-                            Configure branches in Settings &gt; Organisation Details.
-                          </p>
-                        ) : 
-                        //selectedBranch?.billingGstin ? (
-                        //   <p className="mt-1 text-xs text-muted-foreground">
-                        //     Billing GSTIN is mapped from the selected branch.
-                        //   </p>
-                        // ) : 
-                         null}
-                      </div>
-                    ) : null}
-
-                    <div>
-                      <RequiredLabel required={billingGstRequired}>Billing GSTIN</RequiredLabel>
-                      <AppSelect
-                        value={formData.billingGstin || ""}
-                        onChange={(event) => {
-                          const nextGst = event.target.value;
-                          const matched = billingGstEntries.find((entry) => entry.gst === nextGst);
-                          setFormData({
-                            ...formData,
-                            billingGstin: matched?.gst || "",
-                          });
-                        }}
-                        options={billingGstOptions}
-                        placeholder={
-                          organisationGstBusy
-                            ? "Loading organisation GSTINs..."
-                            : "Select billing GSTIN"
-                        }
-                        className="h-8 text-sm"
-                        disabled={organisationGstBusy || billingGstOptions.length === 0}
-                        data-testid="invoice-preview-billing-gst-select"
-                      />
-                    </div>
-                  </div>
-                  {organisationGstError ? (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Failed to load organisation GSTINs. You can continue without Billing GSTIN.
-                    </p>
-                  ) : billingGstOptions.length === 0 && !organisationGstBusy ? (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Billing GSTIN is optional because this organisation has no configured GST registrations.
-                    </p>
-                  ) : !billingGstSatisfied ? (
-                    <p className="mt-1 text-xs text-destructive">
-                      Select a billing GSTIN configured in Organisation Details.
-                    </p>
-                  ) : (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Billing GSTIN must be one of this organisation's configured GST registrations.
-                    </p>
-                  )}
-                </div>
-              ) : null}
-
               <Label className="text-xs">Billing Address</Label>
               <textarea
                 value={formData.billingAddress || ""}
