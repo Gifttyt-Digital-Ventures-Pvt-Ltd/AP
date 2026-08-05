@@ -1091,22 +1091,61 @@ const Payments = () => {
     return null;
   };
 
-  const loadPaymentInvoice = async (payment) => {
-    const invoice = resolvePaymentInvoice(payment);
-    if (invoice) return invoice;
+  const getInvoicePreviewId = (invoice) => (
+    invoice?.id ??
+    invoice?.invoiceId ??
+    invoice?.invoice_id
+  );
 
-    const invoiceId = payment?.invoice_id ?? payment?.invoiceId;
-    if (!invoiceId) return null;
+  const getPaymentInvoicePreviewId = (payment) => (
+    payment?.invoice_id ??
+    payment?.invoiceId ??
+    payment?.invoice?.id ??
+    payment?.invoice?.invoiceId ??
+    payment?.invoice?.invoice_id ??
+    payment?.invoiceDetails?.id ??
+    payment?.invoiceDetails?.invoiceId ??
+    payment?.invoiceDetails?.invoice_id ??
+    payment?.invoice_details?.id ??
+    payment?.invoice_details?.invoiceId ??
+    payment?.invoice_details?.invoice_id
+  );
+
+  const loadInvoiceDetailsForPreview = async (invoiceId, fallbackInvoice = null) => {
+    const preparedFallback = fallbackInvoice ? toInvoiceUiPayload(fallbackInvoice) : null;
+    if (!invoiceId) return preparedFallback;
 
     try {
-      return toInvoiceUiPayload(await getInvoice(invoiceId).unwrap());
-    } catch {
-      return null;
+      const invoiceDetails = await getInvoice(invoiceId).unwrap();
+      return {
+        ...(preparedFallback || {}),
+        ...toInvoiceUiPayload(invoiceDetails),
+      };
+    } catch (error) {
+      console.error('Failed to fetch invoice details:', error);
+      toast.error('Failed to load invoice details');
+      return preparedFallback;
     }
   };
 
-  const handleViewInvoice = async (invoice, initialTab = 'details') => {
-    const preparedInvoice = toInvoiceUiPayload(invoice);
+  const loadPaymentInvoice = async (payment) => {
+    const fallbackInvoice = resolvePaymentInvoice(payment);
+    const invoiceId = getPaymentInvoicePreviewId(payment) ?? getInvoicePreviewId(fallbackInvoice);
+    return loadInvoiceDetailsForPreview(invoiceId, fallbackInvoice);
+  };
+
+  const handleViewInvoice = async (invoice, initialTab = 'details', options = {}) => {
+    const preparedInvoice = options.skipDetailFetch
+      ? toInvoiceUiPayload(invoice)
+      : await loadInvoiceDetailsForPreview(
+        getInvoicePreviewId(invoice),
+        invoice,
+      );
+    if (!preparedInvoice) {
+      toast.error('Invoice details are not available');
+      return;
+    }
+
     setViewInvoice(preparedInvoice);
     setViewDialogOpen(true);
     setViewTab(initialTab);
@@ -1115,7 +1154,13 @@ const Payments = () => {
     setLoadingHistory(true);
 
     try {
-      const response = await getInvoiceHistory(invoice.id).unwrap();
+      const historyInvoiceId = getInvoicePreviewId(preparedInvoice) ?? getInvoicePreviewId(invoice);
+      if (!historyInvoiceId) {
+        setInvoiceHistory([]);
+        return;
+      }
+
+      const response = await getInvoiceHistory(historyInvoiceId).unwrap();
       let historyEntries = Array.isArray(response)
         ? response
         : normalizeInvoiceHistoryEntries(response);
@@ -1123,9 +1168,7 @@ const Payments = () => {
       if (historyEntries.length === 0) {
         const approvalRecords =
           preparedInvoice.approvalRecords ||
-          preparedInvoice.approvalRecords ||
-          invoice.approvalRecords ||
-          invoice.approvalRecords;
+          invoice?.approvalRecords;
         if (Array.isArray(approvalRecords) && approvalRecords.length > 0) {
           historyEntries = normalizeInvoiceHistoryEntries(approvalRecords);
         }
@@ -1146,7 +1189,7 @@ const Payments = () => {
       toast.error('Invoice details are not available');
       return;
     }
-    await handleViewInvoice(invoice, initialTab);
+    await handleViewInvoice(invoice, initialTab, { skipDetailFetch: true });
   };
 
   const closePaymentViewDialog = useCallback((open) => {
