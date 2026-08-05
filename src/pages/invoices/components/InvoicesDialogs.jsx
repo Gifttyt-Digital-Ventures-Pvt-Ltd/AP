@@ -74,6 +74,8 @@ const InvoicesDialogs = (props) => {
     findVendorById,
     showProformaInvoiceFields = false,
     showErpIntegrationFields = false,
+    showInternalChecklist = false,
+    internalChecklistItems,
     onMapTaxInvoice,
     onViewLinkedInvoice,
     allInvoices = [],
@@ -168,6 +170,8 @@ const InvoicesDialogs = (props) => {
         categoryMandatory={invoiceMandatoryFields?.category}
         showProformaInvoiceFields={showProformaInvoiceFields}
         showErpIntegrationFields={showErpIntegrationFields}
+        showInternalChecklist={showInternalChecklist}
+        internalChecklistItems={internalChecklistItems}
         onMapTaxInvoice={onMapTaxInvoice}
         onViewLinkedInvoice={onViewLinkedInvoice}
         allInvoices={allInvoices}

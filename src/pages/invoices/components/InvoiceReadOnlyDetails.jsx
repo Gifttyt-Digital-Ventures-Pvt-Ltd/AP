@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
+import { Checkbox } from "../../../components/ui/checkbox";
 import { Label } from "../../../components/ui/label";
 import { formatCurrency, normalizeCurrencyCode } from "../../../utils/currency";
 import { useGetInvoiceTdsPreviewQuery } from "../../../Services/apis/taxApi";
@@ -43,6 +44,8 @@ import AppDataTable from "../../../components/common/AppDataTable";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import { cn } from "../../../lib/utils";
 import { Badge } from "../../../components/ui/badge";
+import { partitionInternalChecklistValues } from "../utils/internalChecklist";
+import { INTERNAL_CHECKLIST_ITEMS } from "../constants/internalChecklist";
 
 const formatDisplayDate = (value) => {
   if (!value) return "-";
@@ -81,6 +84,8 @@ const InvoiceReadOnlyDetails = ({
   isCampaignFeatureEnabled = false,
   showProformaInvoiceFields = false,
   showErpIntegrationFields = false,
+  showInternalChecklist = false,
+  internalChecklistItems = INTERNAL_CHECKLIST_ITEMS,
   onMapTaxInvoice,
   onViewLinkedInvoice,
   allInvoices = [],
@@ -792,6 +797,77 @@ const InvoiceReadOnlyDetails = ({
           )}
         </div>
       )}
+
+      {showInternalChecklist && (() => {
+        const { active: activeChecklist, orphaned: orphanedChecklist } =
+          partitionInternalChecklistValues(formData.internalChecklist, internalChecklistItems);
+        const activeById = new Map(activeChecklist.map((entry) => [String(entry.itemId), entry]));
+
+        if (activeChecklist.length === 0 && orphanedChecklist.length === 0) return null;
+
+        return (
+          <div className="space-y-3 pt-4 border-t">
+            <h3 className="text-sm font-semibold">Internal Checklist</h3>
+            {internalChecklistItems.length > 0 && (
+              <div className="space-y-2">
+                {internalChecklistItems.map((item) => {
+                  const value = activeById.get(String(item.id));
+                  return (
+                    <div
+                      key={item.id}
+                      className="flex items-start gap-2"
+                      data-testid={`internal-checklist-view-${item.id}`}
+                    >
+                      <Checkbox checked={Boolean(value?.isChecked)} disabled className="mt-0.5" />
+                      <div className="min-w-0 space-y-0.5">
+                        <p className="text-sm font-medium">{item.label}</p>
+                        {value?.note ? (
+                          <p className="text-xs text-muted-foreground break-words">
+                            <span className="font-medium text-foreground">Note: </span>
+                            {value.note}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {orphanedChecklist.length > 0 && (
+              <div
+                className="space-y-2 rounded-lg border border-dashed border-border bg-muted/30 p-3"
+                data-testid="internal-checklist-view-orphaned-section"
+              >
+                <p className="text-xs font-medium text-muted-foreground">
+                  Retired checklist items (kept for history)
+                </p>
+                <div className="space-y-2">
+                  {orphanedChecklist.map((entry) => (
+                    <div
+                      key={entry.itemId}
+                      className="flex items-start gap-2"
+                      data-testid={`internal-checklist-view-orphaned-${entry.itemId}`}
+                    >
+                      <Checkbox checked={Boolean(entry.isChecked)} disabled className="mt-0.5" />
+                      <div className="min-w-0 space-y-0.5">
+                        <p className="text-xs text-muted-foreground">
+                          Checklist item (ID: {entry.itemId})
+                        </p>
+                        {entry.note ? (
+                          <p className="text-xs text-foreground break-words">
+                            <span className="font-medium">Note: </span>
+                            {entry.note}
+                          </p>
+                        ) : null}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* <div className="pt-2 border-t">
         <div className="flex items-center gap-2 text-sm text-muted-foreground">

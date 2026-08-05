@@ -61,6 +61,7 @@ import {
 import { getInvoiceFundingSplitError } from "../utils/invoiceFunding";
 import InvoiceChecklist from "./InvoiceFormChecklist";
 import InvoiceCampaignFields from "./InvoiceCampaignFields";
+import InternalChecklistSection from "./InternalChecklistSection";
 import LineItemsSummary, { LineItemsSectionHeader } from "./LineItemsSummary";
 import {
   computeLineItemsSummary,
@@ -84,6 +85,8 @@ import {
   useGetAvailablePurchaseOrdersQuery,
 } from "../../../Services/apis/invoiceMatchingApi";
 import { mergeSelectedMatchingOption } from "../utils/invoiceMatchingFlow";
+import { buildInternalChecklistState } from "../utils/internalChecklist";
+import { INTERNAL_CHECKLIST_ITEMS } from "../constants/internalChecklist";
 import { formatTdsDisplayLabel, resolveTdsRate } from "../utils/tds";
 import { buildInvoiceTdsStateFromVendor } from "../../vendors/utils/vendorTds";
 import TdsSelectionField from "./TdsSelectionField";
@@ -296,6 +299,8 @@ export const InvoiceForm = ({
   addLineItem,
   removeAllLineItems,
   allowInvoiceLineItemRemoval = false,
+  showInternalChecklist = false,
+  internalChecklistItems = INTERNAL_CHECKLIST_ITEMS,
   calculateLineItemSubtotal,
   setEditDialogOpen,
   setUploadedFile,
@@ -681,6 +686,13 @@ export const InvoiceForm = ({
       shippingSameAsBilling: checked,
       ...(checked ? { shippingAddress: formData.billingAddress || "" } : {}),
     });
+  };
+  const internalChecklistValues = buildInternalChecklistState(
+    formData?.internalChecklist,
+    internalChecklistItems,
+  );
+  const handleInternalChecklistChange = (nextInternalChecklist) => {
+    setFormData((prev) => ({ ...prev, internalChecklist: nextInternalChecklist }));
   };
   const isInvoiceLevelDiscount = isInvoiceLevelSelection(formData?.discountsLevel);
   const isInvoiceLevelTax = isInvoiceLevelSelection(formData?.taxesLevel);
@@ -3039,6 +3051,14 @@ export const InvoiceForm = ({
               )}
             </div>
           </div>
+
+          {showInternalChecklist && (
+            <InternalChecklistSection
+              items={internalChecklistItems}
+              values={internalChecklistValues}
+              onChange={handleInternalChecklistChange}
+            />
+          )}
         </div>
 
         {!hideActions && (

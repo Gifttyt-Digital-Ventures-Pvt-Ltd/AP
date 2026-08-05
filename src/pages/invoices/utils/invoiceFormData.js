@@ -16,6 +16,7 @@ import {
 } from "./invoiceTax";
 import { buildTdsValue } from "./tds";
 import { resolveLineItemsExpanded } from "./lineItemsSummary";
+import { buildInternalChecklistState } from "./internalChecklist";
 
 export const resolveVendorGstin = (vendor = {}) =>
   String(vendor?.gstin ?? vendor?.gstIn ?? "").trim();
@@ -332,5 +333,8 @@ export const buildInvoiceEditFormData = (
       invoice.linkedProformaInvoiceId ?? invoice.linked_proforma_invoice_id ?? "",
     linkedProformaInvoiceNumber:
       invoice.linkedProformaInvoiceNumber ?? invoice.linked_proforma_invoice_number ?? "",
+    internalChecklist: buildInternalChecklistState(
+      invoice.internalChecklist ?? invoice.internal_checklist,
+    ),
   };
 };
