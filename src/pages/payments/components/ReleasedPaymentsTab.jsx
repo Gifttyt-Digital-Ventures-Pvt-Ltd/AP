@@ -36,6 +36,7 @@ const getVendorLabel = (record = {}, fallbackVendorName) => {
 
 const baseReleasedPaymentTableHeader = [
   { key: 'invoiceNumber', title: 'Invoice #', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'font-medium text-left' },
+  { key: 'batchId', title: 'Batch', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'font-medium text-left' },
   { key: 'orgBranch', title: 'Branch', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'text-sm text-left' },
   { key: 'vendorName', title: 'Vendor', headerClassName: 'bg-muted text-foreground text-left' },
   { key: 'amount', title: 'Amount', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'font-semibold text-left' },
@@ -54,19 +55,22 @@ const ReleasedPaymentsTab = ({
   handleViewPaymentInvoice,
   handleDownloadPaymentInvoice,
   showBranchField = false,
+  showBatchField = false,
   paginationFooter = null,
 }) => {
   const { showIntegrationColumn } = useZohoIntegrationActive();
   const releasedPaymentTableHeader = useMemo(() => {
-    const headers = showBranchField
-      ? baseReleasedPaymentTableHeader
-      : baseReleasedPaymentTableHeader.filter((header) => header.key !== 'orgBranch');
+    const headers = baseReleasedPaymentTableHeader.filter((header) => {
+      if (header.key === 'orgBranch') return showBranchField;
+      if (header.key === 'batchId') return showBatchField;
+      return true;
+    });
     return withIntegrationTableHeader(headers, showIntegrationColumn).map((column) =>
       column.key === 'integration'
         ? { ...column, headerClassName: 'bg-muted text-foreground text-left' }
         : column,
     );
-  }, [showBranchField, showIntegrationColumn]);
+  }, [showBatchField, showBranchField, showIntegrationColumn]);
 
   const renderReleasedPaymentRow = (payment, rowIndex, headers) => (
     <TableRow key={payment.id ?? rowIndex} data-testid={`payment-row-${payment?.id ?? 'unknown'}`}>
