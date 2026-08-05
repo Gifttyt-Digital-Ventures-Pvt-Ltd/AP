@@ -73,6 +73,7 @@ import PaymentsHeader from './components/PaymentsHeader';
 import RecordPaymentDialog from './components/RecordPaymentDialog';
 import useBankingSetup from '../banking/hooks/useBankingSetup';
 import { getLinkedAccounts } from '../banking/utils/accountFormatters';
+import { useGetBankingAccountBalanceQuery } from '../../Services/apis/connectedBankingApi';
 import PendingPaymentsTab from './components/PendingPaymentsTab';
 import PendingPaymentReportDialog from './components/PendingPaymentReportDialog';
 import ReleasedPaymentsTab from './components/ReleasedPaymentsTab';
@@ -245,6 +246,23 @@ const getPaymentModeRecommendation = (amount = 0) => {
   };
 };
 
+const getBeneficiaryReleaseStatusMeta = (status = '') => {
+  const normalized = String(status || 'UNVERIFIED').trim().toUpperCase();
+  if (normalized === 'VERIFIED') {
+    return {
+      label: 'Verified',
+      ready: true,
+      className: 'bg-emerald-100 text-emerald-800',
+    };
+  }
+
+  return {
+    label: 'Unverified',
+    ready: false,
+    className: 'bg-amber-100 text-amber-800',
+  };
+};
+
 const getInvoiceBeneficiaryAccounts = (invoice = {}) => {
   const accounts =
     invoice.beneficiaryAccounts ||
@@ -256,30 +274,37 @@ const getInvoiceBeneficiaryAccounts = (invoice = {}) => {
     [];
 
   if (Array.isArray(accounts) && accounts.length > 0) {
-    return accounts.map((account, index) => ({
-      id:
-        account.id ||
-        account.beneficiaryId ||
-        account.beneficiary_id ||
-        account.accountId ||
-        account.account_id ||
-        `${invoice.id || invoice.invoiceNumber}-beneficiary-${index}`,
-      bankName: account.bankName || account.bank_name || account.bank || invoice.vendorBankName || '-',
-      accountNumber:
-        account.accountNumber ||
-        account.account_number ||
-        account.vendorAccountNumber ||
-        account.vendor_account_number ||
-        '-',
-      ifsc:
-        account.ifsc ||
-        account.ifscCode ||
-        account.ifsc_code ||
-        account.vendorIfscCode ||
-        account.vendor_ifsc_code ||
-        '-',
-      status: account.status || account.validationStatus || account.validation_status || 'Verified',
-    }));
+    return accounts.map((account, index) => {
+      const status = account.status || account.validationStatus || account.validation_status || 'UNVERIFIED';
+      const statusMeta = getBeneficiaryReleaseStatusMeta(status);
+      return {
+        id:
+          account.id ||
+          account.beneficiaryId ||
+          account.beneficiary_id ||
+          account.accountId ||
+          account.account_id ||
+          `${invoice.id || invoice.invoiceNumber}-beneficiary-${index}`,
+        bankName: account.bankName || account.bank_name || account.bank || invoice.vendorBankName || '-',
+        accountNumber:
+          account.accountNumber ||
+          account.account_number ||
+          account.vendorAccountNumber ||
+          account.vendor_account_number ||
+          '-',
+        ifsc:
+          account.ifsc ||
+          account.ifscCode ||
+          account.ifsc_code ||
+          account.vendorIfscCode ||
+          account.vendor_ifsc_code ||
+          '-',
+        status,
+        statusLabel: statusMeta.label,
+        statusClassName: statusMeta.className,
+        releaseReady: statusMeta.ready,
+      };
+    });
   }
 
   const bankName = invoice.vendorBankName || invoice.vendor_bank_name || invoice.bankName || invoice.bank_name;
@@ -302,11 +327,17 @@ const getInvoiceBeneficiaryAccounts = (invoice = {}) => {
     bankName: bankName || '-',
     accountNumber: accountNumber || '-',
     ifsc: ifsc || '-',
-    status: 'Verified',
+    status: 'UNVERIFIED',
+    statusLabel: 'Unverified',
+    statusClassName: 'bg-amber-100 text-amber-800',
+    releaseReady: false,
   }];
 };
 
 const getBeneficiaryAccountKey = (invoiceId, accountId) => `${invoiceId}::${accountId}`;
+
+const getReleaseBankAccountId = (account) =>
+  account?.id || account?.bankAccountId || account?.accountNumber || account?.account_number;
 
 const PayrunStatusBadge = ({ status }) => (
   <span className={`inline-flex items-center whitespace-nowrap rounded-full border px-2 py-1 text-xs font-medium ${PAYRUN_STATUS_CLASS[status] || PAYRUN_STATUS_CLASS.Processing}`}>
@@ -960,19 +991,9 @@ const RequestPaymentDialog = ({
                       {clippedTableText(formatMoney(row.amountDue))}
                     </TableCell>
                     <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
-                      <Input
-                        type="number"
-                        min="0"
-                        max={row.holdGst ? Math.max(0, row.amountDue - row.gstAmount) : row.amountDue}
-                        value={row.requestedAmount}
-                        onChange={(event) =>
-                          updateRow(row.id, (current) => ({
-                            ...current,
-                            requestedAmount: Number(event.target.value || 0),
-                          }))
-                        }
-                        className="w-36 text-left"
-                      />
+                      <span className="font-medium text-slate-900">
+                        {formatMoney(row.requestedAmount)}
+                      </span>
                     </TableCell>
                     <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
                       <Button
@@ -1270,6 +1291,15 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
   const [releasePayrunPayment, { isLoading: releasingPayrun }] = useReleasePayrunMutation();
   const totalDebitAmount = Number(payrun?.totalAmount || 0);
   const paymentModeRecommendation = getPaymentModeRecommendation(totalDebitAmount);
+  const selectedAccount = bankAccounts.find((account) => String(getReleaseBankAccountId(account)) === String(bankAccountId));
+  const selectedBalanceAccountId = selectedAccount ? String(getReleaseBankAccountId(selectedAccount)) : '';
+  const {
+    data: selectedAccountBalance,
+    isFetching: isBalanceFetching,
+    refetch: refetchSelectedAccountBalance,
+  } = useGetBankingAccountBalanceQuery(selectedBalanceAccountId, {
+    skip: !open || !selectedBalanceAccountId,
+  });
 
   useEffect(() => {
     if (!open) return;
@@ -1300,7 +1330,7 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
   useEffect(() => {
     if (!open || !bankAccountId) return;
     const stillEligible = bankAccounts.some(
-      (account) => String(account.id || account.accountNumber) === String(bankAccountId),
+      (account) => String(getReleaseBankAccountId(account)) === String(bankAccountId),
     );
     if (!stillEligible) {
       setBankAccountId('');
@@ -1312,6 +1342,14 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
   }, [bankAccountId, bankAccounts, open]);
 
   useEffect(() => {
+    if (!open) return;
+    setOtpSent(false);
+    setOtp('');
+    setOtpRequestId('');
+    setOtpCooldownSeconds(0);
+  }, [bankAccountId, open]);
+
+  useEffect(() => {
     if (!open || !otpSent || otpCooldownSeconds <= 0) return undefined;
     const timer = window.setTimeout(() => {
       setOtpCooldownSeconds((seconds) => Math.max(0, seconds - 1));
@@ -1320,12 +1358,16 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
   }, [open, otpCooldownSeconds, otpSent]);
 
   if (!payrun) return null;
-  const selectedAccount = bankAccounts.find((account) => String(account.id || account.accountNumber) === String(bankAccountId));
   const hasEligibleBankAccount = bankAccounts.length > 0;
   const releaseSteps = ['Verify Beneficiaries', 'Debit Account', 'Review & Release'];
   const paymentModes = ['IMPS', 'NEFT', 'RTGS'];
   const chargeAmount = 0;
-  const availableBalance = selectedAccount?.availableBalance ?? selectedAccount?.available_balance ?? selectedAccount?.balance;
+  const fallbackAvailableBalance = selectedAccount?.availableBalance ?? selectedAccount?.available_balance ?? selectedAccount?.balance;
+  const availableBalance =
+    selectedAccountBalance?.availableBalance ??
+    selectedAccountBalance?.available_balance ??
+    selectedAccountBalance?.balance ??
+    fallbackAvailableBalance;
   const balanceAfter =
     availableBalance === undefined || availableBalance === null
       ? null
@@ -1358,7 +1400,21 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
       </span>
     </div>
   );
-  const canContinueReleaseStep = step === 1 || (step === 2 && hasEligibleBankAccount && selectedAccount);
+
+  const getSelectedBeneficiaryForInvoice = (invoice) => {
+    const beneficiaryAccounts = getInvoiceBeneficiaryAccounts(invoice);
+    const selectedBeneficiaryId = selectedBeneficiaryAccounts[invoice.id] || beneficiaryAccounts[0]?.id || '';
+
+    return (
+      beneficiaryAccounts.find((account) => String(account.id) === String(selectedBeneficiaryId)) ||
+      beneficiaryAccounts[0] ||
+      null
+    );
+  };
+
+  const hasReleaseInvoices = Array.isArray(payrun.invoices) && payrun.invoices.length > 0;
+  const canContinueReleaseStep =
+    (step === 1 && hasReleaseInvoices) || (step === 2 && hasEligibleBankAccount && selectedAccount && !isBalanceFetching);
 
   const getPayrunId = () => payrun.payrunId || payrun.id;
   const getOtpRequestId = (response) =>
@@ -1367,8 +1423,6 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
     response?.otp_request_id ||
     response?.data?.otp_request_id ||
     '';
-  const getBankAccountId = (account) =>
-    account?.id || account?.bankAccountId || account?.accountNumber || account?.account_number;
   const requestOtp = async ({ resend = false } = {}) => {
     if (!selectedAccount) {
       toast.error('Select an active verified bank account before requesting OTP');
@@ -1380,9 +1434,28 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
       return false;
     }
     try {
+      if (selectedBalanceAccountId) {
+        const balanceResult = await refetchSelectedAccountBalance();
+        const latestBalance =
+          balanceResult?.data?.availableBalance ??
+          balanceResult?.data?.available_balance ??
+          balanceResult?.data?.balance ??
+          null;
+
+        if (latestBalance === null || latestBalance === undefined) {
+          toast.error('Unable to fetch the latest bank balance. Please try again.');
+          return false;
+        }
+
+        if (Number(latestBalance || 0) < totalDebitAmount + chargeAmount) {
+          toast.error('Insufficient bank balance for this payment release.');
+          return false;
+        }
+      }
+
       const payload = {
         payrunId,
-        bankAccountId: getBankAccountId(selectedAccount),
+        bankAccountId: getReleaseBankAccountId(selectedAccount),
         paymentMode: mode,
         amount: Number(payrun.totalAmount || 0),
       };
@@ -1423,7 +1496,7 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
     try {
       releaseResponse = await releasePayrunPayment({
         payrunId,
-        bankAccountId: getBankAccountId(selectedAccount),
+        bankAccountId: getReleaseBankAccountId(selectedAccount),
         paymentMode: mode,
         otpRequestId,
         otp: otp.trim(),
@@ -1526,10 +1599,7 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
                   renderRow={(invoice) => {
                         const beneficiaryAccounts = getInvoiceBeneficiaryAccounts(invoice);
                         const selectedBeneficiaryId = selectedBeneficiaryAccounts[invoice.id] || beneficiaryAccounts[0]?.id || '';
-                        const selectedBeneficiary =
-                          beneficiaryAccounts.find((account) => String(account.id) === String(selectedBeneficiaryId)) ||
-                          beneficiaryAccounts[0] ||
-                          {};
+                        const selectedBeneficiary = getSelectedBeneficiaryForInvoice(invoice) || {};
                         const hasMultipleAccounts = beneficiaryAccounts.length > 1;
 
                         return (
@@ -1584,8 +1654,12 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
                               {clippedTableText(formatMoney(invoice.requestedAmount))}
                             </TableCell>
                             <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left">
-                              <span className="rounded-full bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-800">
-                                {selectedBeneficiary.status || 'Verified'}
+                              <span
+                                className={`rounded-full px-2 py-1 text-xs font-medium ${
+                                  selectedBeneficiary.statusClassName || 'bg-slate-100 text-slate-700'
+                                }`}
+                              >
+                                {selectedBeneficiary.statusLabel || selectedBeneficiary.status || 'Not Verified'}
                               </span>
                             </TableCell>
                           </TableRow>
@@ -1626,11 +1700,12 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
                     <Label className="text-[13px] font-medium text-slate-700">Pay From</Label>
                     <div className="mt-2 max-h-56 space-y-2 overflow-y-auto pr-1">
                       {bankAccounts.map((account) => {
-                        const accountId = String(account.id || account.accountNumber);
+                        const accountId = String(getReleaseBankAccountId(account));
                         const active = String(bankAccountId) === accountId;
                         const accountBankName = account.label || account.bankName || account.bank || 'IDFC Bank';
                         const accountDisplay = account.maskedAccountNumber || account.accountNumber || 'Account';
-                        const accountBalance = account.availableBalance ?? account.available_balance ?? account.balance;
+                        const fallbackAccountBalance = account.availableBalance ?? account.available_balance ?? account.balance;
+                        const accountBalance = active ? availableBalance : fallbackAccountBalance;
                         const accountInitials = String(accountBankName)
                           .split(/\s+/)
                           .map((part) => part[0])
@@ -1657,7 +1732,12 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
                                 {accountBankName} · {accountDisplay}
                               </p>
                               <p className="mt-0.5 text-xs text-slate-500">
-                                Available: {accountBalance === undefined || accountBalance === null ? '-' : formatMoney(accountBalance)}
+                                Available:{' '}
+                                {active && isBalanceFetching
+                                  ? 'Fetching...'
+                                  : accountBalance === undefined || accountBalance === null
+                                    ? '-'
+                                    : formatMoney(accountBalance)}
                               </p>
                             </div>
                             <span
@@ -1732,7 +1812,9 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
                   {renderReleaseRow('Total Debit', formatMoney(totalDebitAmount + chargeAmount))}
                   {renderReleaseRow(
                     'Balance After',
-                    balanceAfter === null
+                    isBalanceFetching
+                      ? 'Fetching...'
+                      : balanceAfter === null
                       ? '-'
                       : balanceAfter < 0
                         ? 'Insufficient funds'
