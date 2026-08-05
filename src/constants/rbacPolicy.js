@@ -1,7 +1,7 @@
 export const FULL_ACCESS_PERMISSION = "FULL_ACCESS";
 
-// Connected Banking is a SETTINGS section in corporate-screens (not a separate BANKING screen).
-export const CONNECTED_BANKING_SECTION = "SETTINGS_CONNECTED_BANKING";
+// Connected Banking runtime is controlled by the dedicated subscription section.
+export const CONNECTED_BANKING_SECTION = "CONNECTED_BANKING_ALL";
 
 export const isBankingCorporateEntitlementEnabled = (isCorporateSectionEnabled) =>
   isCorporateSectionEnabled(CONNECTED_BANKING_SECTION);
@@ -151,7 +151,6 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
     anySections: ["SETTINGS_INTEGRATIONS"],
   },
   "/banking": {
-    screen: "SETTINGS",
     anySections: [CONNECTED_BANKING_SECTION],
   },
   "/notifications": {
@@ -172,7 +171,7 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
     screen: "SETTINGS",
     anySections: [
       "SETTINGS_ORG_DETAILS",
-      "SETTINGS_CONNECTED_BANKING",
+      CONNECTED_BANKING_SECTION,
       "SETTINGS_BILLING",
       "CREDITS_ALL",
       "WALLET_ALL",

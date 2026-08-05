@@ -150,6 +150,9 @@ const UserRoles = () => {
   const canUseManageRoleDepartments =
     isDepartmentFeatureEnabled && isCorporateSectionEnabled("DEPARTMENT_ALL");
   const canUseBillingSettings = isBillingFeatureEnabled;
+  const canUsePaymentApprovalWorkflow =
+    isConnectedBankingEnabled &&
+    isCorporateSectionEnabled("MANAGE_ROLE_APPROVAL_WORKFLOW");
   const canViewUsersTab =
     canViewUserRecords && isCorporateSectionEnabled("MANAGE_ROLE_USERS");
   const canViewRolesTab =
@@ -159,7 +162,7 @@ const UserRoles = () => {
     isCorporateSectionEnabled("MANAGE_ROLE_APPROVAL_WORKFLOW");
   const canViewPaymentWorkflowTab =
     canViewPaymentWorkflow &&
-    isCorporateSectionEnabled("MANAGE_ROLE_APPROVAL_WORKFLOW");
+    canUsePaymentApprovalWorkflow;
   const canViewCategoriesTab = canViewCategories && canUseManageRoleCategories;
   const canViewDepartmentsTab = canViewDepartments && canUseManageRoleDepartments;
   const canViewUserRolesModule =
@@ -404,11 +407,7 @@ const UserRoles = () => {
         );
       }
       if (backendEntry.screen === "PAYMENT_APPROVAL_WORKFLOW") {
-        return (
-          ENABLE_LOCAL_PAYMENT_WORKFLOW_ROLE_ENTITLEMENT ||
-          (isCorporateScreenAllowed("PAYMENTS") &&
-            isCorporateSectionEnabled("PAYMENTS_ALL"))
-        );
+        return canUsePaymentApprovalWorkflow;
       }
       if (backendEntry.screen === "PAYMENT_BATCHES") {
         return (
@@ -509,7 +508,7 @@ const UserRoles = () => {
       keys.add("SETTINGS:MANAGE_BILLING");
     }
 
-    if (ENABLE_LOCAL_PAYMENT_WORKFLOW_ROLE_ENTITLEMENT) {
+    if (ENABLE_LOCAL_PAYMENT_WORKFLOW_ROLE_ENTITLEMENT && canUsePaymentApprovalWorkflow) {
       keys.add("PAYMENT_APPROVAL_WORKFLOW:VIEW");
       keys.add("PAYMENT_APPROVAL_WORKFLOW:MANAGE");
     }
@@ -596,7 +595,7 @@ const UserRoles = () => {
       keys.add("credits-manage");
     }
 
-    if (ENABLE_LOCAL_PAYMENT_WORKFLOW_ROLE_ENTITLEMENT) {
+    if (ENABLE_LOCAL_PAYMENT_WORKFLOW_ROLE_ENTITLEMENT && canUsePaymentApprovalWorkflow) {
       keys.add("payment-approval-workflow-view");
       keys.add("payment-approval-workflow-manage");
     }

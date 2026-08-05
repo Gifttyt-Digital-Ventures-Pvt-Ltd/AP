@@ -441,12 +441,13 @@ export const RBACProvider = ({ children }) => {
     if (normalizedPath === "/user-roles" || normalizedPath.startsWith("/user-roles/")) {
       const canViewRoles = hasAnyPermission(["roles-view", "roles-manage"]);
       const canViewRoleUsers = hasAnyPermission(["roles-view", "roles-manage", "roles-manage-users"]);
-      const canViewWorkflow = hasAnyPermission([
-        "approval-workflow-view",
-        "approval-workflow-manage",
-        "payment-approval-workflow-view",
-        "payment-approval-workflow-manage",
-      ]);
+      const canViewWorkflow =
+        hasAnyPermission(["approval-workflow-view", "approval-workflow-manage"]) ||
+        (isConnectedBankingEnabled &&
+          hasAnyPermission([
+            "payment-approval-workflow-view",
+            "payment-approval-workflow-manage",
+          ]));
       const canViewCategories = hasAnyPermission(["category-view", "category-manage"]);
       const canViewDepartments = hasAnyPermission(["department-view", "department-manage"]);
       return (
@@ -516,6 +517,12 @@ export const RBACProvider = ({ children }) => {
     }
     if (actionKey.startsWith("banking.")) {
       return isConnectedBankingEnabled;
+    }
+    if (actionKey.startsWith("paymentWorkflow.")) {
+      return (
+        isConnectedBankingEnabled &&
+        isCorporateSectionEnabled("MANAGE_ROLE_APPROVAL_WORKFLOW")
+      );
     }
     if (actionKey === "settings.createOrganisation" || actionKey === "settings.updateOrganisation") {
       return isCorporateSectionEnabled("SETTINGS_ORG_DETAILS");
