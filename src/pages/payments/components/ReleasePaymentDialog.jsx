@@ -195,7 +195,7 @@ const OtpVerificationPanel = ({
   resendingOtp,
   releasingPayrun,
 }) => {
-  const digits = otp.padEnd(6, '').slice(0, 6).split('');
+  const digits = Array.from({ length: 6 }, (_, index) => otp[index] || '');
   const recipientName = getOtpRecipientName(payrun);
   const recipientMobile = getOtpRecipientMobile(payrun);
 
@@ -206,13 +206,13 @@ const OtpVerificationPanel = ({
     setOtp(nextDigits.join('').trim());
 
     if (digit && index < 5) {
-      document.getElementById(`release-otp-${index + 1}`)?.focus();
+      document.getElementById(`release-otp-${index + 2}`)?.focus();
     }
   };
 
   const handleKeyDown = (index, event) => {
     if (event.key === 'Backspace' && !digits[index] && index > 0) {
-      document.getElementById(`release-otp-${index - 1}`)?.focus();
+      document.getElementById(`release-otp-${index}`)?.focus();
     }
   };
 
@@ -221,7 +221,7 @@ const OtpVerificationPanel = ({
     const pasted = event.clipboardData.getData('text').replace(/\D/g, '').slice(0, 6);
     if (!pasted) return;
     setOtp(pasted);
-    document.getElementById(`release-otp-${Math.min(pasted.length, 6) - 1}`)?.focus();
+    document.getElementById(`release-otp-${Math.min(pasted.length, 6)}`)?.focus();
   };
 
   return (
@@ -239,13 +239,13 @@ const OtpVerificationPanel = ({
         {digits.map((digit, index) => (
           <Input
             key={`otp-${index}`}
-            id={`release-otp-${index}`}
+            id={`release-otp-${index + 1}`}
             value={digit}
             inputMode="numeric"
             maxLength={1}
             onChange={(event) => updateDigit(index, event.target.value)}
             onKeyDown={(event) => handleKeyDown(index, event)}
-            className="h-14 w-12 rounded-xl border-slate-200 text-center text-xl font-semibold shadow-sm focus-visible:ring-violet-600 sm:w-14"
+            className="h-14 w-12 flex-none rounded-xl border-2 border-slate-200 bg-white p-0 text-center text-xl font-semibold text-slate-950 shadow-sm focus-visible:border-violet-500 focus-visible:ring-2 focus-visible:ring-violet-200 sm:w-14"
             aria-label={`OTP digit ${index + 1}`}
           />
         ))}
