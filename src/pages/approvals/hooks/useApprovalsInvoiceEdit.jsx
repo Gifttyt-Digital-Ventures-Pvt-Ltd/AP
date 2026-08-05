@@ -70,8 +70,10 @@ import { getInvoiceVendorRequestValidationErrors } from "../../../utils/vendorVa
 import {
   isCheckerEditEnabled as isCheckerEditEnabledForCorporate,
   isCheckerEditForbiddenError,
+  isInternalChecklistEnabled as isInternalChecklistEnabledForCorporate,
   isNetPayableEditEnabled as isNetPayableEditEnabledForCorporate,
 } from "../../../utils/invoiceConfiguration";
+import { getActiveInternalChecklistItems } from "../../invoices/utils/internalChecklist";
 import {
   buildCurrentUserIdentity,
   canEditInvoice,
@@ -203,6 +205,20 @@ export const useApprovalsInvoiceEdit = ({
         corporateScreens?.activeInvoiceConfiguration ?? [],
       ),
     [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const isInternalChecklistEnabled = useMemo(
+    () =>
+      isInternalChecklistEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const internalChecklistItems = useMemo(
+    () =>
+      getActiveInternalChecklistItems(
+        corporateScreens?.activeInternalChecklistItems ?? [],
+      ),
+    [corporateScreens?.activeInternalChecklistItems],
   );
 
   const invoiceEditContext = useMemo(
@@ -650,6 +666,8 @@ export const useApprovalsInvoiceEdit = ({
         setEditDialogOpen={setEditDialogOpen}
         handleUpdateInvoice={handleUpdateInvoice}
         canEditNetPayable={isNetPayableEditEnabled}
+        showInternalChecklist={isInternalChecklistEnabled}
+        internalChecklistItems={internalChecklistItems}
         canAddVendor={canAddVendors}
         canSubmit={
           isEdit

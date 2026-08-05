@@ -18,6 +18,7 @@ import {
 } from "./invoiceTax";
 import { parseNumericInput } from "./numericInput";
 import { resolveTdsRate } from "./tds";
+import { buildInternalChecklistState } from "./internalChecklist";
 import { normalizeDueDateForInvoice, resolveVendorIsMsme } from "./msmePaymentDue";
 
 export const computeTdsAmount = (
@@ -415,6 +416,9 @@ export const initializeInvoiceFormData = (
     documentType: extractedData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE,
     linkedProformaInvoiceId: extractedData?.linkedProformaInvoiceId ?? "",
     linkedProformaInvoiceNumber: extractedData?.linkedProformaInvoiceNumber ?? "",
+    internalChecklist: buildInternalChecklistState(
+      extractedData?.internalChecklist ?? extractedData?.internal_checklist,
+    ),
   };
 
   // Baseline of what OCR actually extracted, so the checklist can tell a

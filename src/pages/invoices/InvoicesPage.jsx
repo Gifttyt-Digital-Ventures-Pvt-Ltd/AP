@@ -56,6 +56,10 @@ import { parseNumericInput } from "./utils/numericInput";
 import { buildInvoiceEditFormData } from "./utils/invoiceFormData";
 import { normalizeInvoiceHistoryEntries } from "./utils/invoiceHistory";
 import {
+  buildInternalChecklistState,
+  getActiveInternalChecklistItems,
+} from "./utils/internalChecklist";
+import {
   buildInvoiceCategoryPayload,
   buildInvoiceMultipartPayload,
   buildToCreateInvoicePayload,
@@ -185,6 +189,7 @@ import {
 import {
   isCheckerEditEnabled as isCheckerEditEnabledForCorporate,
   isCheckerEditForbiddenError,
+  isInternalChecklistEnabled as isInternalChecklistEnabledForCorporate,
   isInvoiceLineItemRemovalEnabled,
   isInvoiceFundingEnabled as isInvoiceFundingEnabledForCorporate,
   isNetPayableEditEnabled as isNetPayableEditEnabledForCorporate,
@@ -698,6 +703,20 @@ const InvoicesPage = () => {
         corporateScreens?.activeInvoiceConfiguration ?? [],
       ),
     [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const isInternalChecklistEnabled = useMemo(
+    () =>
+      isInternalChecklistEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const internalChecklistItems = useMemo(
+    () =>
+      getActiveInternalChecklistItems(
+        corporateScreens?.activeInternalChecklistItems ?? [],
+      ),
+    [corporateScreens?.activeInternalChecklistItems],
   );
   const updateInvoiceColumnFilter = useCallback((key, value) => {
     setInvoiceColumnFilters((prev) => ({
@@ -1548,6 +1567,7 @@ const InvoicesPage = () => {
           : (item.invoicePayload.lineItems || []).map((line) =>
               mapBulkLineItemToEditForm(line, item.invoicePayload.currency),
             ),
+      internalChecklist: buildInternalChecklistState(item.invoicePayload.internalChecklist),
     });
     setBulkEditOpen(true);
   };
@@ -2739,6 +2759,8 @@ const InvoicesPage = () => {
         addLineItem={addLineItem}
         removeAllLineItems={removeAllInvoiceLineItems}
         allowInvoiceLineItemRemoval={allowInvoiceLineItemRemoval}
+        showInternalChecklist={isInternalChecklistEnabled}
+        internalChecklistItems={internalChecklistItems}
         calculateLineItemSubtotal={calculateLineItemSubtotal}
         setEditDialogOpen={setEditDialogOpen}
         setUploadedFile={setUploadedFile}
@@ -3295,6 +3317,8 @@ const InvoicesPage = () => {
         });
       }}
       allowInvoiceLineItemRemoval={allowInvoiceLineItemRemoval}
+      showInternalChecklist={isInternalChecklistEnabled}
+      internalChecklistItems={internalChecklistItems}
       calculateLineItemSubtotal={(item) => {
         if (bulkEditForm?.discountsLevel === INVOICE_LEVEL) {
           const lineTotal = parseNumericInput(item.lineTotal ?? item.amount, 0);
@@ -3621,6 +3645,8 @@ const InvoicesPage = () => {
         findVendorById={findVendorById}
         showProformaInvoiceFields={showProformaInvoiceFields}
         showErpIntegrationFields={showErpIntegrationFields}
+        showInternalChecklist={isInternalChecklistEnabled}
+        internalChecklistItems={internalChecklistItems}
         onMapTaxInvoice={handleMapTaxInvoice}
         onViewLinkedInvoice={handleViewLinkedInvoice}
         allInvoices={invoices}

@@ -451,6 +451,11 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
       invoice.cancel_disabled_reason ??
       invoice.cancellationDisabledReason ??
       "",
+    internalChecklist: Array.isArray(
+      pickInvoiceField(invoice, "internalChecklist", "internal_checklist"),
+    )
+      ? pickInvoiceField(invoice, "internalChecklist", "internal_checklist")
+      : [],
     ...normalizeMsmePaymentDue(invoice),
   };
 };
@@ -693,6 +698,11 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
       invoice.lineItemsExpanded ??
       invoice.line_items_expanded ??
       true,
+    internalChecklist: Array.isArray(
+      pickInvoiceField(invoice, "internalChecklist", "internal_checklist"),
+    )
+      ? pickInvoiceField(invoice, "internalChecklist", "internal_checklist")
+      : [],
   };
 };
 

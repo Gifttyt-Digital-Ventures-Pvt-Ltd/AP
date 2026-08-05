@@ -171,6 +171,8 @@ const ViewDialog = ({
   categoryMandatory = false,
   showProformaInvoiceFields = false,
   showErpIntegrationFields = false,
+  showInternalChecklist = false,
+  internalChecklistItems,
   onMapTaxInvoice,
   onViewLinkedInvoice,
   allInvoices = [],
@@ -349,6 +351,8 @@ const ViewDialog = ({
                           findVendorById={findVendorById}
                           showProformaInvoiceFields={showProformaInvoiceFields}
                           showErpIntegrationFields={showErpIntegrationFields}
+                          showInternalChecklist={showInternalChecklist}
+                          internalChecklistItems={internalChecklistItems}
                           onMapTaxInvoice={onMapTaxInvoice}
                           onViewLinkedInvoice={onViewLinkedInvoice}
                           allInvoices={allInvoices}

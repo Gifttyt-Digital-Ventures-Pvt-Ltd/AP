@@ -62,6 +62,8 @@ import {
   extractApiErrorDetail,
   resolveInitialInvoiceStatus,
 } from "../../../utils/approvalWorkflow";
+import { isInternalChecklistEnabled as isInternalChecklistEnabledForCorporate } from "../../../utils/invoiceConfiguration";
+import { getActiveInternalChecklistItems } from "../utils/internalChecklist";
 import { InvoiceForm } from "./InvoiceForm";
 import { InvoicePdfPreview } from "./InvoicePdfPreview";
 import UploadSection from "./UploadSection";
@@ -151,6 +153,12 @@ const InvoiceSingleUploadLayer = ({
     isCorporateScreenAllowed("INVOICE_MATCHING") &&
     isCorporateSectionEnabled("INVOICE_MATCHING_ALL");
   const showErpIntegrationFields = isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
+  const showInternalChecklist = isInternalChecklistEnabledForCorporate(
+    corporateScreens?.activeInvoiceConfiguration ?? [],
+  );
+  const internalChecklistItems = getActiveInternalChecklistItems(
+    corporateScreens?.activeInternalChecklistItems ?? [],
+  );
   const { hasConnectedZoho } = useZohoIntegrationActive();
   const showInvoiceMatchingSelection =
     isInvoiceMatchingEnabled && hasPurchaseOrderSubscription;
@@ -797,6 +805,8 @@ const InvoiceSingleUploadLayer = ({
       showInvoiceMatching={showInvoiceMatchingSelection}
       canUseThreeWayMatching={canUseThreeWayMatching}
       showErpIntegrationFields={showErpIntegrationFields}
+      showInternalChecklist={showInternalChecklist}
+      internalChecklistItems={internalChecklistItems}
       includeLedgerAccountGroups={hasConnectedZoho}
     />
   );
