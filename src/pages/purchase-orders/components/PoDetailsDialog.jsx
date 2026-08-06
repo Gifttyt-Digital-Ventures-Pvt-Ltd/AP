@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Building2,
   CheckCircle,
@@ -30,10 +30,20 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../../components/ui/tabs";
+import { Label } from "../../../components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../components/ui/select";
+import { Textarea } from "../../../components/ui/textarea";
 import {
   isFormatFieldEnabled,
   isFormatSectionEnabled,
 } from "../utils";
+import { DELIVERY_STATUS_OPTIONS } from "../constants";
 import PoLogo from "./PoLogo";
 import { OrgBranchDetail, VendorBranchDetail } from "../../../components/common/BranchTableCells";
 import AccountingLockBanner from "../../../components/AccountingLockBanner";
@@ -54,9 +64,18 @@ const PoDetailsDialog = ({
   canManagePo,
   canApprovePo,
   onEditPO,
+  onSaveDeliveryStatus,
+  savingDeliveryStatus,
 }) => {
   const selectedPoId = selectedPO?.id || selectedPO?.po_id || selectedPO?.poId;
   const [viewTab, setViewTab] = useState("details");
+  const [deliveryStatus, setDeliveryStatus] = useState(selectedPO?.delivery_status || "");
+  const [deliveryRemarks, setDeliveryRemarks] = useState(selectedPO?.delivery_remarks || "");
+
+  useEffect(() => {
+    setDeliveryStatus(selectedPO?.delivery_status || "");
+    setDeliveryRemarks(selectedPO?.delivery_remarks || "");
+  }, [selectedPoId]);
   const isDownloading = Boolean(
     selectedPoId && downloadingPoId === selectedPoId,
   );
@@ -490,6 +509,59 @@ const PoDetailsDialog = ({
                       <p>{selectedPO.remarks}</p>
                     </section>
                   )}
+
+                  <section className="mt-6 rounded border bg-slate-50/60 p-4 text-sm">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground mb-3">
+                      Asset Delivery Status
+                    </p>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-[260px_1fr]">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="po-delivery-status">Delivery Status</Label>
+                        <Select value={deliveryStatus} onValueChange={setDeliveryStatus}>
+                          <SelectTrigger id="po-delivery-status" className="bg-white" data-testid="delivery-status-select">
+                            <SelectValue placeholder="Select delivery status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {DELIVERY_STATUS_OPTIONS.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="po-delivery-remarks">Delivery Remarks</Label>
+                        <Textarea
+                          id="po-delivery-remarks"
+                          value={deliveryRemarks}
+                          onChange={(e) => setDeliveryRemarks(e.target.value)}
+                          rows={2}
+                          placeholder="Optional notes about asset delivery"
+                          className="bg-white"
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-3 flex justify-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={savingDeliveryStatus}
+                        data-testid="save-delivery-status-btn"
+                        onClick={() =>
+                          onSaveDeliveryStatus?.(selectedPO, {
+                            delivery_status: deliveryStatus || null,
+                            delivery_remarks: deliveryRemarks,
+                          })
+                        }
+                      >
+                        {savingDeliveryStatus && (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        )}
+                        Save Delivery Status
+                      </Button>
+                    </div>
+                  </section>
                 </div>
               </TabsContent>
 

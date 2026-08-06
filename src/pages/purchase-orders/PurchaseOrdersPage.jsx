@@ -369,6 +369,7 @@ const PurchaseOrdersPage = () => {
   const [createAction, setCreateAction] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [downloadingPoId, setDownloadingPoId] = useState(null);
+  const [savingDeliveryStatus, setSavingDeliveryStatus] = useState(false);
   const [approvalForm, setApprovalForm] = useState({ action: 'Approved', comments: '' });
   const [savedFormatConfigs, setSavedFormatConfigs] = useState(() => [makeFormatConfig(formatConfig)]);
   const [activeFormatId, setActiveFormatId] = useState('default-format');
@@ -687,6 +688,37 @@ const PurchaseOrdersPage = () => {
       toast.error(error?.data?.detail || error?.data?.message || 'Failed to get purchase order download link');
     } finally {
       setDownloadingPoId(null);
+    }
+  };
+
+  const handleSaveDeliveryStatus = async (po, { delivery_status, delivery_remarks }) => {
+    const poId = getPoId(po);
+    if (!poId) {
+      toast.error('Purchase order id is missing');
+      return;
+    }
+
+    setSavingDeliveryStatus(true);
+    try {
+      const selectedFormat =
+        savedFormatConfigs.find((config) => config.id === (po.po_format_id || po.poFormatId || po.formatConfigId)) ||
+        activeFormatConfig;
+      const form = {
+        ...buildPoEditForm(po, selectedFormat.id),
+        delivery_status,
+        delivery_remarks,
+      };
+      const payload = buildCreatePurchaseOrderPayload(form, selectedFormat);
+      const data = await updatePurchaseOrder({ id: poId, body: payload }).unwrap();
+      const updatedPo = getCreatedPo(data);
+      const normalizedUpdatedPo = normalizePurchaseOrder(updatedPo || {});
+      setSelectedPO((prev) => (prev ? { ...prev, ...normalizedUpdatedPo } : prev));
+      toast.success('Asset delivery status updated');
+      await refetchPurchaseOrders();
+    } catch (error) {
+      toast.error(error?.data?.detail || error?.data?.message || 'Failed to update asset delivery status');
+    } finally {
+      setSavingDeliveryStatus(false);
     }
   };
 
@@ -1369,6 +1401,8 @@ const PurchaseOrdersPage = () => {
         canManagePo={canManagePo}
         onEditPO={openEditPoDialog}
         canApprovePo={canApprovePo}
+        onSaveDeliveryStatus={handleSaveDeliveryStatus}
+        savingDeliveryStatus={savingDeliveryStatus}
       />
 
       <PoApprovalDialog
