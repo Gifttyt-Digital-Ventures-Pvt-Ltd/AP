@@ -1,4 +1,5 @@
 import React from 'react';
+import { Eye } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import {
   Sheet,
@@ -57,7 +58,28 @@ const getInvoiceStatusClass = (status = '') => {
   return 'bg-slate-50 text-slate-700 border-slate-200';
 };
 
-const PayrunDetailsSheet = ({ payrun, open, onOpenChange, onRelease, canReleasePayrun }) => {
+const getBeneficiaryStatusLabel = (status = '') => {
+  const value = String(status || '').trim().toLowerCase();
+  if (value === 'verified') return 'Verified';
+  if (value === 'unverified') return 'Unverified';
+  return '-';
+};
+
+const getBeneficiaryStatusClass = (status = '') => {
+  const value = String(status || '').trim().toLowerCase();
+  if (value === 'verified') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (value === 'unverified') return 'bg-amber-50 text-amber-700 border-amber-200';
+  return 'bg-slate-50 text-slate-700 border-slate-200';
+};
+
+const PayrunDetailsSheet = ({
+  payrun,
+  open,
+  onOpenChange,
+  onRelease,
+  onViewInvoice,
+  canReleasePayrun,
+}) => {
   if (!payrun) return null;
   const approvals = getPayrunApprovalRecords(payrun);
   const canShowReleaseAction = Boolean(payrun.allowedActions?.release) && canReleasePayrun;
@@ -66,8 +88,6 @@ const PayrunDetailsSheet = ({ payrun, open, onOpenChange, onRelease, canReleaseP
     ['Created On', safeFormatDate(payrun.createdOn, 'dd MMM yyyy')],
     ['Approval Route', payrun.approvalRoute || '-'],
     ['Approval Owner', payrun.admin?.name || '-'],
-    ['Approvers', payrun.approvers?.length ? payrun.approvers.map((item) => item.name).join(', ') : '-'],
-    ['Comments', payrun.remarks || '-'],
   ];
 
   const renderDrawerSection = (title, children) => (
@@ -119,7 +139,7 @@ const PayrunDetailsSheet = ({ payrun, open, onOpenChange, onRelease, canReleaseP
           {renderDrawerSection(
             'Payrun Summary',
             detailRows.map(([label, value]) =>
-              renderDrawerRow(label, value, { alignTop: label === 'Comments' || label === 'Approvers' }),
+              renderDrawerRow(label, value),
             ),
           )}
 
@@ -133,14 +153,34 @@ const PayrunDetailsSheet = ({ payrun, open, onOpenChange, onRelease, canReleaseP
                       <p className="m-0 truncate text-[13px] font-semibold text-primary">{invoice.invoiceNumber}</p>
                       <p className="mt-0.5 truncate text-[13px] font-medium text-slate-900">{invoice.vendorName}</p>
                     </div>
-                    <p className="shrink-0 text-right text-[13px] font-bold text-slate-900">
-                      {formatMoney(invoice.requestedAmount)}
-                    </p>
+                    <div className="flex shrink-0 items-start gap-2">
+                      <p className="m-0 text-right text-[13px] font-bold text-slate-900">
+                        {formatMoney(invoice.requestedAmount)}
+                      </p>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => onViewInvoice?.(invoice)}
+                        title="View Invoice"
+                        className="h-7 w-7 p-0"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-500">
-                    <span>GST Held: {invoice.holdGst ? formatMoney(invoice.gstAmount) : '-'}</span>
-                    <span className="text-right">UTR: {invoice.utr || '-'}</span>
-                    <span className="col-span-2 truncate">Bank: {invoice.bankDetails || '-'}</span>
+                    <span>GST Hold: {invoice.holdGst ? 'Yes' : 'No'}</span>
+                    <span className="text-right">GST Amount: {formatMoney(invoice.gstAmount)}</span>
+                    <span className="col-span-2">UTR: {invoice.utr || '-'}</span>
+                    <span className="col-span-2 truncate" title={invoice.bankDetails || undefined}>
+                      Beneficiary Bank: {invoice.bankDetails || '-'}
+                    </span>
+                    <span className="col-span-2 inline-flex items-center gap-2">
+                      <span>Beneficiary Status:</span>
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${getBeneficiaryStatusClass(invoice.beneficiaryStatus)}`}>
+                        {getBeneficiaryStatusLabel(invoice.beneficiaryStatus)}
+                      </span>
+                    </span>
                     <span className="col-span-2 inline-flex items-center gap-2">
                       <span>Status:</span>
                       <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${getInvoiceStatusClass(invoice.status)}`}>

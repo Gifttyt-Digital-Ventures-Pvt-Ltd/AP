@@ -1613,6 +1613,7 @@ const Payments = () => {
         open={payrunDetailsOpen}
         onOpenChange={setPayrunDetailsOpen}
         onRelease={openReleasePayrun}
+        onViewInvoice={handleViewInvoice}
         canReleasePayrun={canReleasePayrun}
       />
 

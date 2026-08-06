@@ -74,6 +74,19 @@ const toActionFlags = (actions = {}) => ({
   cancel: Boolean(actions.cancel ?? actions.canCancel),
 });
 
+const getBeneficiaryAccounts = (item = {}) => {
+  const accounts =
+    item.beneficiaryAccounts ||
+    item.beneficiary_accounts ||
+    item.vendorAccounts ||
+    item.vendor_accounts ||
+    item.bankAccounts ||
+    item.bank_accounts ||
+    [];
+
+  return Array.isArray(accounts) ? accounts : accounts ? [accounts] : [];
+};
+
 const PAYRUN_AUDIT_LABELS = {
   payrun_created: 'Batch Created',
   sent_for_approval: 'Sent for Approval',
@@ -380,6 +393,11 @@ export const normalizePayrun = (payrun = {}) => {
   const items = payrun.items || payrun.invoices || payrun.payrunItems || payrun.payrun_items || [];
   const approvals = payrun.approvals || payrun.approvalRecords || payrun.approval_records || [];
   const auditLog = payrun.auditLog || payrun.audit_log || payrun.timeline || [];
+  const createdEvent = auditLog.find((entry) =>
+    ['payrun_created', 'batch_created', 'created'].includes(
+      String(entry.event || entry.action || entry.label || '').trim().toLowerCase(),
+    ),
+  );
   const allowedActions =
     payrun.allowedActions ||
     payrun.allowed_actions ||
@@ -400,7 +418,14 @@ export const normalizePayrun = (payrun = {}) => {
       payrun.created_by_name ||
       payrun.createdBy ||
       '-',
-    createdOn: payrun.createdAt || payrun.created_at || payrun.createdOn || payrun.created_on,
+    createdOn:
+      payrun.createdAt ||
+      payrun.created_at ||
+      payrun.createdOn ||
+      payrun.created_on ||
+      createdEvent?.createdAt ||
+      createdEvent?.created_at ||
+      createdEvent?.at,
     admin: admin
       ? {
           id: admin.userId || admin.user_id || admin.employeeId || admin.id,
@@ -425,40 +450,61 @@ export const normalizePayrun = (payrun = {}) => {
     workflowId: route.workflowId || route.workflow_id || payrun.workflowId || payrun.workflow_id,
     status: normalizePayrunStatus(payrun.status),
     allowedActions: toActionFlags(allowedActions),
-    invoices: items.map((item) => ({
-      ...item,
-      id: item.invoiceId || item.invoice_id || item.id || item.payrunItemId || item.payrun_item_id,
-      payrunItemId: item.payrunItemId || item.payrun_item_id,
-      invoiceNumber: item.invoiceNumber || item.invoice_number || '-',
-      vendorId: item.vendorId || item.vendor_id,
-      vendorName: item.vendorName || item.vendor_name || item.vendor?.name || '-',
-      requestedAmount: Number(item.requestedAmount || item.requested_amount || item.paymentAmount || item.payment_amount || item.amount || 0),
-      gstAmount: Number(item.gstAmount || item.gst_amount || 0),
-      holdGst: Boolean(item.holdGst ?? item.hold_gst),
-      bankDetails: item.bankDetails || item.bank_details,
-      vendorBankName: item.vendorBankName || item.vendor_bank_name || item.bankName || item.bank_name,
-      vendorAccountNumber:
+    invoices: items.map((item) => {
+      const beneficiaryAccounts = getBeneficiaryAccounts(item);
+      const primaryBeneficiaryAccount = beneficiaryAccounts[0] || {};
+      const vendorBankName =
+        item.vendorBankName ||
+        item.vendor_bank_name ||
+        item.bankName ||
+        item.bank_name ||
+        primaryBeneficiaryAccount.bankName ||
+        primaryBeneficiaryAccount.bank_name;
+      const vendorAccountNumber =
         item.vendorAccountNumber ||
         item.vendor_account_number ||
         item.accountNumber ||
-        item.account_number,
-      vendorIfscCode:
+        item.account_number ||
+        primaryBeneficiaryAccount.accountNumber ||
+        primaryBeneficiaryAccount.account_number;
+      const vendorIfscCode =
         item.vendorIfscCode ||
         item.vendor_ifsc_code ||
         item.ifscCode ||
         item.ifsc_code ||
-        item.ifsc,
-      beneficiaryAccounts:
-        item.beneficiaryAccounts ||
-        item.beneficiary_accounts ||
-        item.vendorAccounts ||
-        item.vendor_accounts ||
-        item.bankAccounts ||
-        item.bank_accounts ||
-        [],
-      utr: item.utr || item.utrNumber || item.utr_number,
-      paidOn: item.paidOn || item.paid_on,
-    })),
+        item.ifsc ||
+        primaryBeneficiaryAccount.ifscCode ||
+        primaryBeneficiaryAccount.ifsc_code ||
+        primaryBeneficiaryAccount.ifsc;
+      const beneficiaryStatus =
+        item.beneficiaryStatus ||
+        item.beneficiary_status ||
+        primaryBeneficiaryAccount.status;
+      const bankDetails =
+        item.bankDetails ||
+        item.bank_details ||
+        [vendorBankName, vendorAccountNumber, vendorIfscCode].filter(Boolean).join(' · ');
+
+      return {
+        ...item,
+        id: item.invoiceId || item.invoice_id || item.id || item.payrunItemId || item.payrun_item_id,
+        payrunItemId: item.payrunItemId || item.payrun_item_id,
+        invoiceNumber: item.invoiceNumber || item.invoice_number || '-',
+        vendorId: item.vendorId || item.vendor_id,
+        vendorName: item.vendorName || item.vendor_name || item.vendor?.name || '-',
+        requestedAmount: Number(item.requestedAmount || item.requested_amount || item.paymentAmount || item.payment_amount || item.amount || 0),
+        gstAmount: Number(item.gstAmount || item.gst_amount || 0),
+        holdGst: Boolean(item.holdGst ?? item.hold_gst),
+        bankDetails,
+        vendorBankName,
+        vendorAccountNumber,
+        vendorIfscCode,
+        beneficiaryStatus,
+        beneficiaryAccounts,
+        utr: item.utr || item.utrNumber || item.utr_number,
+        paidOn: item.paidOn || item.paid_on,
+      };
+    }),
     totalAmount: Number(payrun.totalPaymentAmount || payrun.total_payment_amount || payrun.totalAmount || payrun.total_amount || 0),
     timeline: auditLog.map((entry) => ({
       label: formatPayrunAuditLabel(entry.label || entry.event || entry.action),

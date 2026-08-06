@@ -63,7 +63,7 @@ export const getIntegrationBadgePresentation = (record = {}) => {
     hasZohoExternalId(provenance.externalIds)
   ) {
     return {
-      label: "Optifii · Synced",
+      label: "Synced",
       tone: "synced",
       tooltip: provenance.lastSyncedAt
         ? `Synced with Zoho Books. Last synced ${new Date(provenance.lastSyncedAt).toLocaleString("en-IN")}.`
