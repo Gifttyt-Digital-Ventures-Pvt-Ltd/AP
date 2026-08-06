@@ -222,6 +222,8 @@ export const normalizePurchaseOrder = (po = {}) => ({
   freight_terms: po.freight_terms ?? po.freightTerms ?? "",
   payment_terms: po.payment_terms ?? po.paymentTerms ?? "",
   remarks: po.remarks ?? "",
+  delivery_status: po.delivery_status ?? po.deliveryStatus ?? null,
+  delivery_remarks: po.delivery_remarks ?? po.deliveryRemarks ?? "",
   created_by_name: po.created_by_name ?? po.createdByName ?? "",
   approval_records: po.approval_records ?? po.approvalRecords ?? po.approvals ?? [],
 });
@@ -297,6 +299,8 @@ export const buildCreatePurchaseOrderPayload = (form = {}, formatConfig = null) 
     shipToAddress: shipBillOn("ship_to_address") ? form.shipping_address || null : null,
     billingAddress: shipBillOn("billing_address") ? form.billing_address || null : null,
     remarks: form.remarks || "",
+    deliveryStatus: form.delivery_status || null,
+    deliveryRemarks: form.delivery_remarks || "",
     ...(includeTotal(form.subtotal) ? { subtotal: Number(form.subtotal) } : {}),
     ...(includeTotal(form.total_discount) ? { totalDiscount: Number(form.total_discount) } : {}),
     ...(includeTotal(form.total_taxable_value) ? { totalTaxableValue: Number(form.total_taxable_value) } : {}),

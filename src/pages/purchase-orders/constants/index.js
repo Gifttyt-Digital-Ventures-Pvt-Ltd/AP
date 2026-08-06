@@ -10,3 +10,10 @@ export const statusColors = {
   Rejected: "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300",
   "Sent Back": "bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200",
 };
+
+export const DELIVERY_STATUS_OPTIONS = [
+  { value: "INVOICE_RECEIVED_ASSET_NOT_DELIVERED", label: "Invoice Received – Asset Not Delivered" },
+  { value: "PARTIALLY_DELIVERED", label: "Partially Delivered" },
+  { value: "DELIVERED", label: "Delivered" },
+  { value: "ASSET_DELIVERED_INVOICE_AWAITED", label: "Asset Delivered – Invoice Awaited" },
+];
