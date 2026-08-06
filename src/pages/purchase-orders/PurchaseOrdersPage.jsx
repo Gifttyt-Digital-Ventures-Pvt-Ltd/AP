@@ -13,6 +13,7 @@ import {
   useCreatePurchaseOrderFormatConfigMutation,
   useUpdatePurchaseOrderFormatConfigMutation,
   useDeletePurchaseOrderFormatConfigMutation,
+  useSetDefaultPurchaseOrderFormatConfigMutation,
   useSavePurchaseOrderDraftMutation,
   useCreatePurchaseOrderMutation,
   useUpdatePurchaseOrderMutation,
@@ -327,6 +328,7 @@ const PurchaseOrdersPage = () => {
   const [createPurchaseOrderFormatConfig] = useCreatePurchaseOrderFormatConfigMutation();
   const [updatePurchaseOrderFormatConfig] = useUpdatePurchaseOrderFormatConfigMutation();
   const [deletePurchaseOrderFormatConfig] = useDeletePurchaseOrderFormatConfigMutation();
+  const [setDefaultPurchaseOrderFormatConfig] = useSetDefaultPurchaseOrderFormatConfigMutation();
   const [savePurchaseOrderDraft] = useSavePurchaseOrderDraftMutation();
   const [createPurchaseOrder] = useCreatePurchaseOrderMutation();
   const [updatePurchaseOrder] = useUpdatePurchaseOrderMutation();
@@ -887,6 +889,37 @@ const PurchaseOrdersPage = () => {
     }
   };
 
+  const setBuilderFormatAsDefault = async () => {
+    const targetFormatId = builderDraftConfig.id;
+    if (!targetFormatId || isUnsavedFormat(targetFormatId)) {
+      toast.error('Save this PO format before setting it as default');
+      return;
+    }
+    if (builderDraftConfig.isDefault) {
+      toast.info('This PO format is already the default');
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await setDefaultPurchaseOrderFormatConfig(targetFormatId).unwrap();
+      setSavedFormatConfigs((prev) =>
+        prev.map((config) => ({
+          ...config,
+          isDefault: config.id === targetFormatId,
+        })),
+      );
+      setBuilderDraftConfig((prev) => ({ ...prev, isDefault: true }));
+      setActiveFormatId(targetFormatId);
+      await Promise.all([refetchFormatConfigs(), refetchFormatConfig()]);
+      toast.success('Default PO format updated');
+    } catch (error) {
+      toast.error(error?.data?.detail || error?.data?.message || 'Failed to set default PO format');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const applyPoFormat = (formatId) => {
     const selectedFormat = savedFormatConfigs.find((config) => config.id === formatId);
     if (!selectedFormat) return;
@@ -1351,6 +1384,8 @@ const PurchaseOrdersPage = () => {
         onSelectFormat={selectBuilderFormat}
         onCreateFormat={createNewBuilderFormat}
         onDeleteFormat={deleteBuilderFormat}
+        onSetDefault={setBuilderFormatAsDefault}
+        settingDefault={submitting}
         onSave={saveBuilderConfig}
       />
 

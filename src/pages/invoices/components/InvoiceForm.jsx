@@ -687,6 +687,24 @@ export const InvoiceForm = ({
       ...(checked ? { shippingAddress: formData.billingAddress || "" } : {}),
     });
   };
+  const clearExtractedAmountOverrides = (data = {}) => ({
+    ...data,
+    scannedTaxAmount: undefined,
+    scannedTaxName: undefined,
+    scannedTaxRate: undefined,
+    scannedTotal: undefined,
+    invoiceTotal: undefined,
+    netAmount: undefined,
+  });
+  const updateCalculatedFormData = (patch) => {
+    setIsNetPayableManuallyEdited(false);
+    setFormData((prev) => {
+      if (!prev) return prev;
+      const next =
+        typeof patch === "function" ? patch(prev) : { ...prev, ...patch };
+      return clearExtractedAmountOverrides(next);
+    });
+  };
   const internalChecklistValues = buildInternalChecklistState(
     formData?.internalChecklist,
     internalChecklistItems,
@@ -2561,7 +2579,9 @@ export const InvoiceForm = ({
                 <AppSelect
                   value={formData.discountsLevel}
                   onChange={(e) =>
-                    setFormData({ ...formData, discountsLevel: e.target.value })
+                    updateCalculatedFormData({
+                      discountsLevel: e.target.value,
+                    })
                   }
                   options={[LINE_ITEM_LEVEL, INVOICE_LEVEL]}
                   className="h-6 w-auto border-none bg-transparent pl-0 pr-6 text-xs text-blue-600 shadow-none"
@@ -2572,16 +2592,11 @@ export const InvoiceForm = ({
                 <AppSelect
                   value={formData.taxesLevel || LINE_ITEM_LEVEL}
                   onChange={(e) =>
-                    setFormData({
-                      ...formData,
+                    updateCalculatedFormData({
                       taxesLevel: e.target.value,
                       invoiceTax: formData.invoiceTax || DEFAULT_INR_TAX,
                       invoiceTaxName: formData.invoiceTaxName || "Tax",
                       invoiceTaxRate: formData.invoiceTaxRate ?? "",
-                      scannedTaxAmount: undefined,
-                      scannedTaxName: undefined,
-                      scannedTaxRate: undefined,
-                      scannedTotal: undefined,
                     })
                   }
                   options={[LINE_ITEM_LEVEL, INVOICE_LEVEL]}
@@ -2708,8 +2723,7 @@ export const InvoiceForm = ({
                       step="1"
                       value={formData.removedLineItemsCount ?? removedLineItemsCount}
                       onChange={(event) =>
-                        setFormData({
-                          ...formData,
+                        updateCalculatedFormData({
                           removedLineItemsCount: sanitizeNumericInput(event.target.value),
                         })
                       }
@@ -2725,8 +2739,7 @@ export const InvoiceForm = ({
 	                      step="0.01"
 	                      value={summarySubTotalValue}
                       onChange={(event) =>
-                        setFormData({
-                          ...formData,
+                        updateCalculatedFormData({
                           subTotal: sanitizeNumericInput(event.target.value),
                         })
                       }
@@ -2743,8 +2756,7 @@ export const InvoiceForm = ({
                           inputMode="decimal"
                           value={formatNumericInputValue(formData.invoiceDiscount)}
                           onChange={(event) =>
-                            setFormData({
-                              ...formData,
+                            updateCalculatedFormData({
                               invoiceDiscount: sanitizeNumericInput(event.target.value),
                             })
                           }
@@ -2754,8 +2766,7 @@ export const InvoiceForm = ({
                         <AppSelect
                           value={formData.invoiceDiscountType || "%"}
                           onChange={(event) =>
-                            setFormData({
-                              ...formData,
+                            updateCalculatedFormData({
                               invoiceDiscountType: event.target.value,
                             })
                           }
@@ -2778,8 +2789,7 @@ export const InvoiceForm = ({
 	                        step="0.01"
 	                        value={summaryTaxValue}
 	                        onChange={(event) =>
-	                          setFormData({
-	                            ...formData,
+	                          updateCalculatedFormData({
 	                            totalTaxAmount: sanitizeNumericInput(event.target.value),
 	                          })
 	                        }
@@ -2855,7 +2865,7 @@ export const InvoiceForm = ({
                   <AppSelect
                     value={formData.invoiceTax || DEFAULT_INR_TAX}
                     onChange={(e) =>
-                      setFormData({ ...formData, invoiceTax: e.target.value })
+                      updateCalculatedFormData({ invoiceTax: e.target.value })
                     }
                     options={TAX_RATES}
                     className="h-8 max-w-[300px] text-sm"
@@ -2868,8 +2878,7 @@ export const InvoiceForm = ({
                     <Input
                       value={formData.invoiceTaxName || ""}
                       onChange={(e) =>
-                        setFormData({
-                          ...formData,
+                        updateCalculatedFormData({
                           invoiceTaxName: e.target.value,
                         })
                       }
@@ -2884,8 +2893,7 @@ export const InvoiceForm = ({
                       inputMode="decimal"
                       value={formatNumericInputValue(formData.invoiceTaxRate)}
                       onChange={(e) =>
-                        setFormData({
-                          ...formData,
+                        updateCalculatedFormData({
                           invoiceTaxRate: sanitizeNumericInput(e.target.value),
                         })
                       }
@@ -2918,8 +2926,7 @@ export const InvoiceForm = ({
                     inputMode="decimal"
                     value={formatNumericInputValue(formData.invoiceDiscount)}
                     onChange={(e) =>
-                      setFormData({
-                        ...formData,
+                      updateCalculatedFormData({
                         invoiceDiscount: sanitizeNumericInput(e.target.value),
                       })
                     }
@@ -2928,8 +2935,7 @@ export const InvoiceForm = ({
                   <AppSelect
                     value={formData.invoiceDiscountType || "%"}
                     onChange={(e) =>
-                      setFormData({
-                        ...formData,
+                      updateCalculatedFormData({
                         invoiceDiscountType: e.target.value,
                       })
                     }
@@ -2987,14 +2993,11 @@ export const InvoiceForm = ({
                 <TdsSelectionField
                   value={formData.tds || ""}
                   onChange={(selection) => {
-                    setIsNetPayableManuallyEdited(false);
-                    setFormData({
-                      ...formData,
+                    updateCalculatedFormData({
                       tds: selection.tds,
                       tdsSectionId: selection.tdsSectionId,
                       tdsSectionCode: selection.tdsSectionCode,
                       tdsRate: selection.tdsRate,
-                      netAmount: undefined,
                     });
                   }}
                   showLabel={false}

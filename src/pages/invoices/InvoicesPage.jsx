@@ -1891,6 +1891,7 @@ const InvoicesPage = () => {
     scannedTaxName: undefined,
     scannedTaxRate: undefined,
     scannedTotal: undefined,
+    invoiceTotal: undefined,
   });
 
   const updateLineItem = (index, field, value) => {

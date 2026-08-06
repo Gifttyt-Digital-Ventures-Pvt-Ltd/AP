@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import { Eye, FileText, ImageIcon, Loader2, Lock, Save, Trash2, Upload } from "lucide-react";
+import { Eye, FileText, ImageIcon, Loader2, Lock, Save, Star, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "../../../components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "../../../components/ui/dialog";
@@ -45,6 +45,8 @@ const PoFormatBuilderDialog = ({
   onSelectFormat,
   onCreateFormat,
   onDeleteFormat,
+  onSetDefault,
+  settingDefault = false,
   onSave,
 }) => {
   const poLogoFileInputRef = useRef(null);
@@ -201,11 +203,31 @@ const PoFormatBuilderDialog = ({
                   <SelectContent>
                     {formatOptions.map((format) => (
                       <SelectItem key={format.id} value={format.id}>
-                        {format.name} ({format.defaultCurrency})
+                        {format.name} ({format.defaultCurrency}){format.isDefault ? " - Default" : ""}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs text-muted-foreground">
+                    {draftConfig.isDefault ? "Default for new POs" : "Not the default format"}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={onSetDefault}
+                    disabled={settingDefault || draftConfig.isDefault || String(draftConfig.id || "").startsWith("new-format-")}
+                    data-testid="po-builder-set-default"
+                  >
+                    {settingDefault ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Star className="mr-2 h-4 w-4" />
+                    )}
+                    Make Default
+                  </Button>
+                </div>
               </div>
 
               <div className="space-y-2">
