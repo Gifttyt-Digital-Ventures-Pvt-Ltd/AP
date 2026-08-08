@@ -88,6 +88,11 @@ const RequestPaymentDialog = ({
     );
   }, [invoices, open]);
 
+  const getPayableAmount = (row) =>
+    Math.max(0, Number(row.amountDue || 0) - (row.holdGst ? Number(row.gstAmount || 0) : 0));
+
+  const getPaymentAmount = (row) => Number(row.requestedAmount || 0);
+
   const totalRequested = rows.reduce((sum, row) => sum + Number(row.requestedAmount || 0), 0);
 
   const updateRow = (rowId, updater) => {
@@ -109,7 +114,7 @@ const RequestPaymentDialog = ({
         requestedAmount: Number(row.requestedAmount || 0),
         holdGst: row.holdGst,
         gstAmount: row.holdGst ? Number(row.gstAmount || 0) : 0,
-        paymentAmount: Number(row.requestedAmount || 0) - (row.holdGst ? Number(row.gstAmount || 0) : 0),
+        paymentAmount: getPaymentAmount(row),
       })),
     });
   };
@@ -162,9 +167,10 @@ const RequestPaymentDialog = ({
                         updateRow(row.id, (current) => ({
                           ...current,
                           holdGst: Boolean(checked),
-                          requestedAmount: Boolean(checked)
-                            ? Math.max(0, current.amountDue - current.gstAmount)
-                            : current.amountDue,
+                          requestedAmount: getPayableAmount({
+                            ...current,
+                            holdGst: Boolean(checked),
+                          }),
                         }))
                       }
                     />
