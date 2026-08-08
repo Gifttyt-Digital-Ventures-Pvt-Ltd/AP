@@ -173,6 +173,9 @@ const ViewDialog = ({
   showErpIntegrationFields = false,
   showInternalChecklist = false,
   internalChecklistItems,
+  canEditInternalChecklist = false,
+  onSaveInternalChecklist,
+  savingInternalChecklist = false,
   onMapTaxInvoice,
   onViewLinkedInvoice,
   allInvoices = [],
@@ -353,6 +356,9 @@ const ViewDialog = ({
                           showErpIntegrationFields={showErpIntegrationFields}
                           showInternalChecklist={showInternalChecklist}
                           internalChecklistItems={internalChecklistItems}
+                          canEditInternalChecklist={canEditInternalChecklist}
+                          onSaveInternalChecklist={onSaveInternalChecklist}
+                          savingInternalChecklist={savingInternalChecklist}
                           onMapTaxInvoice={onMapTaxInvoice}
                           onViewLinkedInvoice={onViewLinkedInvoice}
                           allInvoices={allInvoices}

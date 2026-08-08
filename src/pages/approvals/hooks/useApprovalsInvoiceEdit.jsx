@@ -15,6 +15,7 @@ import {
   useGetVendorsQuery,
   useRequestVendorAdditionMutation,
   useUpdateInvoiceMutation,
+  useUpdateInvoiceInternalChecklistMutation,
   useCheckInvoiceMutation,
 } from "../../../Services/apis/invoicesVendorsApi";
 import {
@@ -89,6 +90,7 @@ export const useApprovalsInvoiceEdit = ({
   currencies = [],
   currencyParam,
   onRefresh,
+  onInternalChecklistSaved,
   renderPdfPreview,
   pdfZoom,
   viewPreviewError,
@@ -150,6 +152,8 @@ export const useApprovalsInvoiceEdit = ({
 
   const [updateInvoice, { isLoading: updateInvoiceLoading }] =
     useUpdateInvoiceMutation();
+  const [updateInvoiceInternalChecklist, { isLoading: savingInternalChecklist }] =
+    useUpdateInvoiceInternalChecklistMutation();
   const [checkInvoice, { isLoading: checkInvoiceLoading }] =
     useCheckInvoiceMutation();
   const [requestVendorAddition, { isLoading: requestVendorLoading }] =
@@ -220,6 +224,11 @@ export const useApprovalsInvoiceEdit = ({
       ),
     [corporateScreens?.activeInternalChecklistItems],
   );
+  // Internal Checklist stays editable after the invoice itself becomes
+  // read-only (e.g. Approved) — Maker/Admin/Master Admin only, no Checker.
+  // Reuses the same role signals already computed above rather than a new
+  // RBAC permission key.
+  const canEditInternalChecklist = canManageInvoices || isCorporateAdmin || isMasterAdmin;
 
   const invoiceEditContext = useMemo(
     () => ({
@@ -521,6 +530,26 @@ export const useApprovalsInvoiceEdit = ({
     setEditDialogOpen(true);
   };
 
+  const handleSaveInternalChecklist = async (invoice, nextChecklist) => {
+    if (!canEditInternalChecklist) {
+      toast.error("You do not have permission to edit the internal checklist");
+      return;
+    }
+    const invoiceId = invoice?.id;
+    if (!invoiceId) return;
+
+    try {
+      await updateInvoiceInternalChecklist({
+        id: invoiceId,
+        body: { internalChecklist: nextChecklist },
+      }).unwrap();
+      toast.success("Internal checklist updated");
+      await onInternalChecklistSaved?.(invoice);
+    } catch (error) {
+      toast.error(extractApiErrorDetail(error) || "Failed to update internal checklist");
+    }
+  };
+
   const handleUpdateInvoice = async () => {
     if (!guardAction("invoices.update")) return;
     if (!editingInvoice || !formData) return;
@@ -769,5 +798,10 @@ export const useApprovalsInvoiceEdit = ({
     findVendorByName,
     findVendorById,
     editDialogs,
+    showInternalChecklist: isInternalChecklistEnabled,
+    internalChecklistItems,
+    canEditInternalChecklist,
+    handleSaveInternalChecklist,
+    savingInternalChecklist,
   };
 };

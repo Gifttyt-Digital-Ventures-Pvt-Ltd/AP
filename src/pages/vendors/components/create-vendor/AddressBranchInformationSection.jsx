@@ -4,6 +4,7 @@ import { Button } from "../../../../components/ui/button";
 import { Input } from "../../../../components/ui/input";
 import { Label } from "../../../../components/ui/label";
 import { VENDOR_FIELD_SECTIONS } from "../../../../utils/vendorFieldConfig";
+import { getVendorFieldErrorClassName } from "../../../../utils/vendorValidation";
 import FetchVendorResultsPreview from "../FetchVendorResultsPreview";
 import CreateVendorGstinsEditor from "./CreateVendorGstinsEditor";
 import CreateVendorBranchesEditor from "./CreateVendorBranchesEditor";
@@ -51,8 +52,10 @@ const AddressBranchInformationSection = ({
   updateVendorBranches,
   isVendorFetchReady,
   isEditMode = false,
+  fieldErrors = {},
 }) => {
   const [legacyOpen, setLegacyOpen] = useState(true);
+  const errorClass = (key) => getVendorFieldErrorClassName(fieldErrors, key);
 
   return (
     <div className="-mx-6 border-b border-border px-10">
@@ -220,7 +223,7 @@ const AddressBranchInformationSection = ({
                   value={formData.iecNumber || ""}
                   onChange={(event) => updateField("iecNumber", event.target.value.toUpperCase())}
                   placeholder="Import Export Code"
-                  className="mt-1.5 uppercase"
+                  className={`mt-1.5 uppercase ${errorClass("iecNumber")}`}
                 />
               </div>
               <div className="flex-1">
@@ -229,7 +232,7 @@ const AddressBranchInformationSection = ({
                   value={formData.tan || ""}
                   onChange={(event) => updateField("tan", event.target.value.toUpperCase())}
                   placeholder="Tax Deduction Account Number"
-                  className="mt-1.5 uppercase"
+                  className={`mt-1.5 uppercase ${errorClass("tan")}`}
                 />
               </div>
               <div className="flex-1">
@@ -238,7 +241,7 @@ const AddressBranchInformationSection = ({
                   value={formData.tin || ""}
                   onChange={(event) => updateField("tin", event.target.value)}
                   placeholder="Legacy VAT ID"
-                  className="mt-1.5"
+                  className={`mt-1.5 ${errorClass("tin")}`}
                 />
               </div>
             </div>
@@ -250,7 +253,7 @@ const AddressBranchInformationSection = ({
                   value={formData.stc || ""}
                   onChange={(event) => updateField("stc", event.target.value)}
                   placeholder="Legacy Service Tax Code"
-                  className="mt-1.5"
+                  className={`mt-1.5 ${errorClass("stc")}`}
                 />
               </div>
               <div className="flex-1">
@@ -259,7 +262,7 @@ const AddressBranchInformationSection = ({
                   value={formData.stRegistrationNumber || ""}
                   onChange={(event) => updateField("stRegistrationNumber", event.target.value)}
                   placeholder="Legacy Sales Tax reg. no."
-                  className="mt-1.5"
+                  className={`mt-1.5 ${errorClass("stRegistrationNumber")}`}
                 />
               </div>
               <div className="flex-1" />

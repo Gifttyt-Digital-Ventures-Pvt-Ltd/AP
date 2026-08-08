@@ -5,6 +5,7 @@ import { Label } from "../../../../components/ui/label";
 import { Switch } from "../../../../components/ui/switch";
 import AppSelect from "../../../../components/common/AppSelect";
 import { VENDOR_FIELD_SECTIONS } from "../../../../utils/vendorFieldConfig";
+import { getVendorFieldErrorClassName } from "../../../../utils/vendorValidation";
 import { useGetTdsSectionsQuery } from "../../../../Services/apis/taxApi";
 import { DEFAULT_TDS_SECTIONS } from "../../../invoices/utils/tds";
 
@@ -52,8 +53,10 @@ const TaxInformationSection = ({
   labelFor,
   submitting,
   isEditMode = false,
+  fieldErrors = {},
 }) => {
   const tdsApplicable = Boolean(formData.tdsApplicable);
+  const errorClass = (key) => getVendorFieldErrorClassName(fieldErrors, key);
   const { data: tdsSectionsData = [] } = useGetTdsSectionsQuery();
   const tdsGroupOptions = useMemo(
     () => buildTdsSectionOptions(tdsSectionsData),
@@ -91,7 +94,7 @@ const TaxInformationSection = ({
               value={formData.pan || ""}
               onChange={(event) => updateField("pan", event.target.value.toUpperCase())}
               placeholder="e.g., ABCDE1234F"
-              className="mt-1.5 font-mono uppercase"
+              className={`mt-1.5 font-mono uppercase ${errorClass("pan")}`}
               maxLength={10}
               required
             />
@@ -103,7 +106,7 @@ const TaxInformationSection = ({
               onChange={(event) => updateField("panStatus", event.target.value)}
               options={PAN_STATUS_OPTIONS}
               placeholder="Select PAN Status"
-              className="mt-1.5"
+              className={`mt-1.5 ${errorClass("panStatus")}`}
             />
           </div>
         </div>
@@ -115,7 +118,7 @@ const TaxInformationSection = ({
               value={formData.panReferenceNo || ""}
               onChange={(event) => updateField("panReferenceNo", event.target.value)}
               placeholder="e.g., PAN-REF-0042"
-              className="mt-1.5"
+              className={`mt-1.5 ${errorClass("panReferenceNo")}`}
             />
           </div>
           <div className="flex-1">
@@ -125,7 +128,7 @@ const TaxInformationSection = ({
               onChange={(event) => updateField("natureOfAssessee", event.target.value)}
               options={NATURE_OF_ASSESSEE_OPTIONS}
               placeholder="Select Nature of Assessee"
-              className="mt-1.5"
+              className={`mt-1.5 ${errorClass("natureOfAssessee")}`}
             />
           </div>
         </div>
@@ -162,7 +165,7 @@ const TaxInformationSection = ({
                 onChange={(event) => updateField("tdsGroup", event.target.value)}
                 options={tdsGroupOptions}
                 placeholder="Select TDS Group"
-                className="mt-1.5"
+                className={`mt-1.5 ${errorClass("tdsGroup")}`}
               />
             </div>
             <div className="flex-1">
@@ -172,7 +175,7 @@ const TaxInformationSection = ({
                 onChange={(event) => updateField("tcsGroup", event.target.value)}
                 options={TCS_GROUP_OPTIONS}
                 placeholder="Select TCS Group"
-                className="mt-1.5"
+                className={`mt-1.5 ${errorClass("tcsGroup")}`}
               />
             </div>
           </div>
@@ -191,7 +194,7 @@ const TaxInformationSection = ({
                   updateField("lowNilDeductionCertificateNo", event.target.value)
                 }
                 placeholder="e.g., LDC-0042"
-                className="mt-1.5"
+                className={`mt-1.5 ${errorClass("lowNilDeductionCertificateNo")}`}
               />
             </div>
             <div className="flex-1">
@@ -200,7 +203,7 @@ const TaxInformationSection = ({
                 type="date"
                 value={formData.certificateValidity || ""}
                 onChange={(event) => updateField("certificateValidity", event.target.value)}
-                className="mt-1.5"
+                className={`mt-1.5 ${errorClass("certificateValidity")}`}
               />
             </div>
           </div>

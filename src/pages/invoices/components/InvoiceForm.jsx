@@ -2479,7 +2479,9 @@ export const InvoiceForm = ({
                       setFormData({
                         ...formData,
                         matchingPurchaseOrderId: "",
+                        matchingPoNumber: "",
                         matchingGrnId: "",
+                        matchingGrnNumber: "",
                       })
                     }
                   >
@@ -2499,13 +2501,18 @@ export const InvoiceForm = ({
                   <Label className="text-xs">Purchase Order</Label>
                   <AppSelect
                     value={selectedMatchingPoId}
-                    onChange={(event) =>
+                    onChange={(event) => {
+                      const selectedPo = availablePurchaseOrders.find(
+                        (po) => String(po.id) === String(event.target.value),
+                      );
                       setFormData({
                         ...formData,
                         matchingPurchaseOrderId: event.target.value,
+                        matchingPoNumber: selectedPo?.poNumber || "",
                         matchingGrnId: "",
-                      })
-                    }
+                        matchingGrnNumber: "",
+                      });
+                    }}
                     options={availablePurchaseOrders.map((po) => ({
                       value: po.id,
                       label: `${po.poNumber || "PO"} - ${formatAmount(po.amount)}`,
@@ -2537,12 +2544,16 @@ export const InvoiceForm = ({
                     <Label className="text-xs">GRN Pool Anchor</Label>
                     <AppSelect
                       value={formData.matchingGrnId || ""}
-                      onChange={(event) =>
+                      onChange={(event) => {
+                        const selectedGrn = availableGrns.find(
+                          (grn) => String(grn.id) === String(event.target.value),
+                        );
                         setFormData({
                           ...formData,
                           matchingGrnId: event.target.value,
-                        })
-                      }
+                          matchingGrnNumber: selectedGrn?.grnNumber || "",
+                        });
+                      }}
                       options={availableGrns.map((grn) => ({
                         value: grn.id,
                         label: `${grn.grnNumber || "GRN"} - ${formatAmount(grn.amount)}`,

@@ -1,25 +1,42 @@
-import React from "react";
-import { FileText } from "lucide-react";
+import React, { useState } from "react";
+import { Eye, FileText } from "lucide-react";
+import { Button } from "../../../../components/ui/button";
 import {
   VENDOR_DOCUMENT_TYPES,
   formatVendorDocumentSize,
   normalizeVendorDocuments,
 } from "../../utils/vendorDocuments";
+import VendorDocumentPreviewDialog from "../VendorDocumentPreviewDialog";
 
-const ViewDocumentRow = ({ label, document }) => (
+const ViewDocumentRow = ({ label, document, onView }) => (
   <div className="rounded-lg border border-border bg-background p-3">
     <div className="min-w-0">
       <p className="text-sm font-medium text-foreground">{label}</p>
       {document ? (
-        <div className="mt-2 flex items-start gap-2 text-sm">
-          <FileText className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-          <div className="min-w-0">
-            <p className="truncate font-medium text-foreground">{document.fileName}</p>
-            <p className="text-xs text-muted-foreground">
-              {formatVendorDocumentSize(document.fileSize)}
-              {document.mimeType ? ` · ${document.mimeType}` : ""}
-            </p>
+        <div className="mt-2 flex items-start justify-between gap-2">
+          <div className="flex min-w-0 items-start gap-2 text-sm">
+            <FileText className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+            <div className="min-w-0">
+              <p className="truncate font-medium text-foreground">{document.fileName}</p>
+              <p className="text-xs text-muted-foreground">
+                {formatVendorDocumentSize(document.fileSize)}
+                {document.mimeType ? ` · ${document.mimeType}` : ""}
+              </p>
+            </div>
           </div>
+          {document.fileUrl ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              onClick={onView}
+              data-testid="vendor-document-view-btn"
+            >
+              <Eye className="mr-2 h-4 w-4" />
+              View
+            </Button>
+          ) : null}
         </div>
       ) : (
         <p className="mt-2 text-xs text-muted-foreground">No file uploaded</p>
@@ -34,6 +51,7 @@ const ViewAttachmentsSection = ({ documents, visibleDocumentTypes, showDocuments
     Array.isArray(visibleDocumentTypes) && visibleDocumentTypes.length > 0
       ? visibleDocumentTypes
       : VENDOR_DOCUMENT_TYPES;
+  const [previewDoc, setPreviewDoc] = useState(null);
 
   return (
     <div className="-mx-6 border-b border-border px-10">
@@ -58,11 +76,23 @@ const ViewAttachmentsSection = ({ documents, visibleDocumentTypes, showDocuments
           </div>
           <div className="grid w-full grid-cols-1 gap-4 sm:grid-cols-2">
             {documentTypes.map(({ key, label }) => (
-              <ViewDocumentRow key={key} label={label} document={normalizedDocuments[key]} />
+              <ViewDocumentRow
+                key={key}
+                label={label}
+                document={normalizedDocuments[key]}
+                onView={() => setPreviewDoc({ label, document: normalizedDocuments[key] })}
+              />
             ))}
           </div>
         </div>
       ) : null}
+
+      <VendorDocumentPreviewDialog
+        open={Boolean(previewDoc)}
+        onOpenChange={(open) => !open && setPreviewDoc(null)}
+        label={previewDoc?.label}
+        document={previewDoc?.document}
+      />
     </div>
   );
 };
