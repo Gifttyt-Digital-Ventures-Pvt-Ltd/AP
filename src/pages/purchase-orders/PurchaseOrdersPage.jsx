@@ -57,6 +57,7 @@ import PoDetailsDialog from './components/PoDetailsDialog';
 import PoApprovalDialog from './components/PoApprovalDialog';
 import PoUploadDialog from './components/PoUploadDialog';
 import PoUploadSection from './components/PoUploadSection';
+import PoSpreadsheetPreview from './components/PoSpreadsheetPreview';
 import { PO_CREATE_OPTIONS } from './components/PoCreateMenu';
 import { InvoicePdfPreview } from '../invoices/components/InvoicePdfPreview';
 import RequestVendorDialog from '../invoices/components/RequestVendorDialog';
@@ -77,6 +78,18 @@ import { getInvoiceVendorRequestValidationErrors } from '../../utils/vendorValid
 import { clearNotificationQueryParams } from '../../utils/notificationQueryParams';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? '';
+
+const isSpreadsheetUploadFile = (file = {}) => {
+  const fileName = String(file?.name || '').toLowerCase();
+  return (
+    fileName.endsWith('.xls') ||
+    fileName.endsWith('.xlsx') ||
+    fileName.endsWith('.csv') ||
+    file?.type?.includes('spreadsheet') ||
+    file?.type?.includes('excel') ||
+    file?.type?.includes('csv')
+  );
+};
 
 const createEmptyLineItem = (currency = 'INR') =>
   sanitizeLineItemForCurrency(
@@ -1429,14 +1442,18 @@ const PurchaseOrdersPage = () => {
           onSaveDraft={() => handleUploadSave({ submitForApproval: false })}
           onSubmitForApproval={() => handleUploadSave({ submitForApproval: true })}
           renderDocumentPreview={() => (
-            <InvoicePdfPreview
-              fileURL={uploadFileURL}
-              file={uploadFile}
-              zoom={pdfZoom}
-              imageError={uploadPreviewError}
-              setImageError={setUploadPreviewError}
-              setPdfZoom={setPdfZoom}
-            />
+            isSpreadsheetUploadFile(uploadFile) ? (
+              <PoSpreadsheetPreview file={uploadFile} fileURL={uploadFileURL} />
+            ) : (
+              <InvoicePdfPreview
+                fileURL={uploadFileURL}
+                file={uploadFile}
+                zoom={pdfZoom}
+                imageError={uploadPreviewError}
+                setImageError={setUploadPreviewError}
+                setPdfZoom={setPdfZoom}
+              />
+            )
           )}
           renderPoForm={() => (
             uploadPoForm ? (

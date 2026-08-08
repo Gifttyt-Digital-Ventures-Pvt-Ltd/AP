@@ -21,8 +21,8 @@ import { buildTdsValue } from "../../invoices/utils/tds";
 import AppSelect from "../../../components/common/AppSelect";
 
 const PO_REFERENCE_DOCUMENT_TYPE_OPTIONS = [
-  { value: "PI", label: "Customer Proforma Invoice (PI)" },
-  { value: "CUSTOMER_PO", label: "Customer Purchase Order (PO)" },
+  { value: "PI", label: "Proforma Invoice (PI)" },
+  { value: "CUSTOMER_PO", label: "Purchase Order (PO)" },
   { value: "LOI", label: "Letter of Intent (LOI)" },
   { value: "EXCEL", label: "Excel" },
 ];

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Upload, X } from 'lucide-react';
+import * as XLSX from '@e965/xlsx';
+import { Download, Upload, X } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -18,11 +19,11 @@ import { useMeteredActionEstimate } from '../../../hooks/useMeteredActionEstimat
 export const PO_REFERENCE_DOCUMENT_TYPES = [
   {
     value: 'PI',
-    label: 'Customer Proforma Invoice (PI)',
+    label: 'Proforma Invoice (PI)',
   },
   {
     value: 'CUSTOMER_PO',
-    label: 'Customer Purchase Order (PO)',
+    label: 'Purchase Order (PO)',
   },
   {
     value: 'LOI',
@@ -33,6 +34,142 @@ export const PO_REFERENCE_DOCUMENT_TYPES = [
     label: 'Excel',
   },
 ];
+
+const PO_EXCEL_LINE_ITEM_HEADERS = [
+  'Line item No.',
+  'Item Code',
+  'Description',
+  'HSN/SAC Code',
+  'UoM',
+  'Order Qty',
+  'Rate/Unit',
+  'Freight/Unit',
+  'Discount (%)',
+  'CGST (%)',
+  'SGST (%)',
+  'IGST (%)',
+  'Total Amount',
+  'Taxable Amount',
+];
+
+const PO_EXCEL_TEMPLATE_ROWS = [
+  ['Vendor Details'],
+  ['Vendor Name', ''],
+  ['Vendor Address', ''],
+  ['City', ''],
+  ['State', ''],
+  ['Country', 'India'],
+  ['Contact Person', ''],
+  ['Phone Number', ''],
+  ['Email ID', ''],
+  ['GSTIN', ''],
+  ['PAN Number', ''],
+  [],
+  ['Bill To'],
+  ['Bill to', ''],
+  [],
+  ['Ship To'],
+  ['Shipping Address', ''],
+  [],
+  ['Order Details'],
+  ['Order Type', ''],
+  ['Order Number', ''],
+  ['Reference Document No.', ''],
+  ['Order Status', ''],
+  ['Date of Approval', ''],
+  ['Purchase Requisition Number', ''],
+  ['Date of PR', ''],
+  ['CAS no. & date', ''],
+  ['PO Type', ''],
+  ['Delivery Date', ''],
+  ['Currency', 'INR'],
+  [],
+  PO_EXCEL_LINE_ITEM_HEADERS,
+  [1, '', '', '', '', '', '', '', '', '', '', '', '', ''],
+  [2, '', '', '', '', '', '', '', '', '', '', '', '', ''],
+  [3, '', '', '', '', '', '', '', '', '', '', '', '', ''],
+  [4, '', '', '', '', '', '', '', '', '', '', '', '', ''],
+  [5, '', '', '', '', '', '', '', '', '', '', '', '', ''],
+  [],
+  ['Terms and Conditions'],
+  ['Payment Terms', ''],
+  ['Delivery Terms', ''],
+  ['Freight Charges', ''],
+  ['Packing Charges', ''],
+  ['Forwarding Charges', ''],
+  ['Unloading at Sandhar', ''],
+  ['Transit Insurance', ''],
+  ['Mode of Shipment', ''],
+  ['Installation & commissioning', ''],
+  ['Training', ''],
+  ['Despatch Through', ''],
+  ['WARRANTY', ''],
+  ['Special Instructions', ''],
+];
+
+const PO_EXCEL_GUIDE_ROWS = [
+  ['Field', 'Guidance'],
+  ['Vendor Name', 'Required. Vendor name as per the customer reference document.'],
+  ['Vendor Address', 'Optional but recommended. Full supplier/vendor address.'],
+  ['GSTIN', 'Optional. Used to match the vendor GST registration when available.'],
+  ['PAN Number', 'Optional. Used as vendor PAN when available.'],
+  ['Bill to', 'Optional. Buyer billing address.'],
+  ['Shipping Address', 'Optional. Delivery/shipping address.'],
+  ['Order Number', 'Required when available in the source document.'],
+  ['Reference Document No.', 'Optional. PI, customer PO, LOI, or Excel source document number.'],
+  ['Delivery Date', 'Optional. Use DD-MM-YYYY or YYYY-MM-DD.'],
+  ['Currency', 'Optional. Defaults to INR when blank.'],
+  ['Line item No.', 'Required for each line item row. Use sequential numbers.'],
+  ['Description', 'Required for each line item row.'],
+  ['Order Qty', 'Required for each line item row. Numeric only.'],
+  ['Rate/Unit', 'Required for each line item row. Numeric only.'],
+  ['Discount (%)', 'Optional. Numeric percentage.'],
+  ['CGST (%) / SGST (%)', 'Use for intra-state GST split. Example: 9 and 9 for 18% GST.'],
+  ['IGST (%)', 'Use for inter-state GST. Example: 18. Do not combine with CGST/SGST on the same row.'],
+  ['Total Amount', 'Optional. Backend may recalculate from qty/rate/tax when blank.'],
+  ['Taxable Amount', 'Optional. Backend may recalculate when blank.'],
+  ['Guide sheet', 'Informational only. Backend should parse Sheet1.'],
+];
+
+const downloadPoExcelTemplate = () => {
+  const workbook = XLSX.utils.book_new();
+  const detailsSheet = XLSX.utils.aoa_to_sheet(PO_EXCEL_TEMPLATE_ROWS);
+  detailsSheet['!cols'] = [
+    { wch: 26 },
+    { wch: 26 },
+    { wch: 36 },
+    { wch: 16 },
+    { wch: 14 },
+    { wch: 12 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 16 },
+    { wch: 16 },
+  ];
+
+  const guideSheet = XLSX.utils.aoa_to_sheet(PO_EXCEL_GUIDE_ROWS);
+  guideSheet['!cols'] = [{ wch: 28 }, { wch: 92 }];
+
+  XLSX.utils.book_append_sheet(workbook, detailsSheet, 'Sheet1');
+  XLSX.utils.book_append_sheet(workbook, guideSheet, 'Guide');
+
+  const bytes = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([bytes], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'PO_Upload_Format.xlsx';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+};
 
 const PoUploadDialog = ({
   open,
@@ -118,9 +255,22 @@ const PoUploadDialog = ({
               data-testid="po-reference-document-type-select"
             />
             {referenceDocumentType === 'EXCEL' ? (
-              <p className="text-xs text-muted-foreground">
-                Excel import format is reserved for development and backend parser alignment.
-              </p>
+              <div className="mt-3 flex flex-col gap-2 rounded-md border border-border bg-background p-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="mb-0 text-xs text-muted-foreground">
+                  Download the template, fill Sheet1, and keep the Guide sheet for field help.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="w-full justify-center sm:w-auto"
+                  onClick={downloadPoExcelTemplate}
+                  data-testid="download-po-excel-template-btn"
+                >
+                  <Download className="mr-2 h-4 w-4" />
+                  Download template
+                </Button>
+              </div>
             ) : null}
           </div>
 
@@ -174,7 +324,7 @@ const PoUploadDialog = ({
               </p>
               <p className="mb-0 text-xs text-muted-foreground">
                 {referenceDocumentType === 'EXCEL'
-                  ? 'XLS, XLSX, and CSV formats are reserved for development'
+                  ? 'XLS, XLSX, and CSV formats are supported'
                   : 'PDF, PNG, and JPG formats are supported'}
               </p>
             </div>
