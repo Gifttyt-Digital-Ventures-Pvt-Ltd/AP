@@ -58,6 +58,9 @@ const createEditableGrnForm = (grn = {}, formatConfig = {}) => {
     vendor_name: source.vendor_name || source.vendorName || '',
     po_id: source.po_id || source.poId || '',
     po_number: source.po_number || source.poNumber || '',
+    currency: source.currency || source.currencyCode || 'INR',
+    convertToInr: Boolean(source.convertToInr ?? source.convert_to_inr ?? false),
+    matchingInrValue: source.matchingInrValue ?? source.matching_inr_value ?? '',
     receipt_date: toDateInputValue(source.receipt_date || source.receiptDate),
     received_at_location: source.received_at_location || source.receivedAtLocation || '',
     delivery_note_number:
@@ -220,7 +223,12 @@ const GrnDetailDialog = ({
                 </div>
                 <div>
                   <p className="text-xs uppercase text-muted-foreground">Total Received Value</p>
-                  <p className="font-medium">{formatCurrency(grn.total_received_value)}</p>
+                  <p className="font-medium">{formatCurrency(grn.total_received_value, grn.currency)}</p>
+                  {grn.convertToInr && Number(grn.matchingInrValue) > 0 ? (
+                    <p className="text-xs font-medium text-primary">
+                      Converted INR Amount: {formatCurrency(grn.matchingInrValue, 'INR')}
+                    </p>
+                  ) : null}
                 </div>
               </CardContent>
             </Card>
@@ -369,7 +377,7 @@ const GrnDetailDialog = ({
                             </span>
                           )}
                         </TableCell>
-                        <TableCell>{formatCurrency(item.line_amount)}</TableCell>
+                        <TableCell>{formatCurrency(item.line_amount, grn.currency)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>

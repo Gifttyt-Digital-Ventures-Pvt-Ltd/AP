@@ -20,6 +20,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '../../../components/ui/tooltip';
+import { formatCurrency } from '../../../utils/currency';
 
 const ClippedInvoiceLabel = ({ invoice }) => {
   const invoiceNumber = String(invoice?.invoiceNumber || '').trim() || '-';
@@ -57,6 +58,7 @@ const RecordPaymentDialog = ({
   submitting = false,
 }) => {
   const selectedTotal = selectedInvoices.reduce((sum, invoice) => sum + (invoice.amount || 0), 0);
+  const hasConvertedInvoice = selectedInvoices.some((invoice) => Boolean(invoice.convertToInr));
   const maxPaymentDate = useMemo(() => {
     const now = new Date();
     const year = now.getFullYear();
@@ -91,8 +93,13 @@ const RecordPaymentDialog = ({
                         <ClippedInvoiceLabel invoice={invoice} />
                       </div>
                       <span className="shrink-0 whitespace-nowrap text-muted-foreground">
-                        ₹{Number(invoice.amount || 0).toLocaleString('en-IN')}
+                        {formatCurrency(invoice.amount || 0, invoice.currency || 'INR')}
                       </span>
+                      {invoice.convertToInr && Number(invoice.matchingInrValue) > 0 ? (
+                        <span className="col-span-2 text-xs text-muted-foreground">
+                          Converted INR Amount: {formatCurrency(invoice.matchingInrValue, 'INR')}
+                        </span>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
@@ -101,7 +108,7 @@ const RecordPaymentDialog = ({
               )}
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Total: ₹{selectedTotal.toLocaleString('en-IN')} · Status will be set to <strong>PAID</strong>
+              Total: {hasConvertedInvoice ? 'INR payment required' : formatCurrency(selectedTotal, selectedInvoices[0]?.currency || 'INR')} · Status will be set to <strong>PAID</strong>
             </p>
           </div>
 
@@ -152,6 +159,24 @@ const RecordPaymentDialog = ({
               data-testid="record-payment-reference-input"
             />
           </div>
+
+          {hasConvertedInvoice ? (
+            <div>
+              <Label htmlFor="record-payment-actual-inr">Actual INR Amount *</Label>
+              <Input
+                id="record-payment-actual-inr"
+                type="number"
+                min="0"
+                step="0.01"
+                value={formData.actualInrAmount || ''}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, actualInrAmount: e.target.value }))
+                }
+                placeholder="Enter settlement amount in INR"
+                data-testid="record-payment-actual-inr-input"
+              />
+            </div>
+          ) : null}
 
           <Button
             type="submit"

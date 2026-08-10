@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { Label } from "../../../components/ui/label";
 import { formatCurrency, normalizeCurrencyCode } from "../../../utils/currency";
+import { ConvertedInrAmountSummary } from "../../../components/common/InrConversionFields";
 import { useGetInvoiceTdsPreviewQuery } from "../../../Services/apis/taxApi";
 import useTdsSubscription from "../../../hooks/useTdsSubscription";
 import { TAX_RATES } from "../constants";
@@ -772,6 +773,11 @@ const InvoiceReadOnlyDetails = ({
             {formatAmount(netPayable)}
           </span>
         </div>
+        <ConvertedInrAmountSummary
+          convertToInr={formData.convertToInr ?? invoice?.convertToInr}
+          matchingInrValue={formData.matchingInrValue ?? invoice?.matchingInrValue}
+          className="flex justify-between text-sm font-semibold text-primary"
+        />
       </div>
 
       {showProformaInvoiceFields && isProformaInvoice(invoice) && (

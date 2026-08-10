@@ -81,6 +81,7 @@ import ViewDialog from '../invoices/components/ViewDialog';
 import { InvoicePdfPreview } from '../invoices/components/InvoicePdfPreview';
 import { getInvoiceFileUrl, openInvoiceFileDownload } from '../invoices/utils/invoicePreview';
 import { normalizeInvoiceHistoryEntries } from '../invoices/utils/invoiceHistory';
+import { formatInvoiceAmount } from '../invoices/utils/invoiceAmounts';
 import { getInvoiceStatusBadgeClass } from '../../utils/approvalWorkflow';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useCreditErrorHandler } from '../../contexts/CreditErrorContext';
@@ -450,6 +451,7 @@ const Payments = () => {
     paymentDate: '',
     payment_method: 'Bank Transfer',
     reference_number: '',
+    actualInrAmount: '',
   });
   const [createBatchForm, setCreateBatchForm] = useState({
     payment_method: 'NEFT',
@@ -500,6 +502,7 @@ const Payments = () => {
       payment.utrNumber ??
       payment.utr_number ??
       payment.utr,
+    actualInrAmount: payment.actualInrAmount ?? payment.actual_inr_amount,
   });
 
   const normalizeInvoice = (invoice = {}) => ({
@@ -750,11 +753,15 @@ const Payments = () => {
       paymentDate: '',
       payment_method: 'Bank Transfer',
       reference_number: '',
+      actualInrAmount: '',
     });
   };
 
   const selectedRecordPaymentInvoices = payableInvoices.filter((invoice) =>
     recordPaymentInvoiceIds.includes(invoice.id),
+  );
+  const selectedRecordPaymentHasConvertedInvoice = selectedRecordPaymentInvoices.some(
+    (invoice) => Boolean(invoice.convertToInr),
   );
 
   const openPaymentReportDialog = () => {
@@ -1024,16 +1031,34 @@ const Payments = () => {
       toast.error('Payment method is required');
       return;
     }
+    if (selectedRecordPaymentHasConvertedInvoice) {
+      const actualInrAmount = Number(recordPaymentForm.actualInrAmount);
+      if (!Number.isFinite(actualInrAmount) || actualInrAmount <= 0) {
+        toast.error('Actual INR Amount is required for converted foreign invoices');
+        return;
+      }
+    }
 
     const referenceNumber = String(recordPaymentForm.reference_number || '').trim();
 
     setRecordingPayments(true);
     try {
+      const actualInrAmount = selectedRecordPaymentHasConvertedInvoice
+        ? Number(recordPaymentForm.actualInrAmount)
+        : null;
       const response = await recordPayments({
         invoiceNumbers,
         paymentDate: new Date(recordPaymentForm.paymentDate).toISOString(),
         paymentMethod: recordPaymentForm.payment_method,
         ...(referenceNumber ? { referenceNumber } : {}),
+        ...(selectedRecordPaymentHasConvertedInvoice
+          ? {
+              currency: 'INR',
+              amount: actualInrAmount,
+              paymentAmount: actualInrAmount,
+              actualInrAmount,
+            }
+          : {}),
       }).unwrap();
       toast.success(response?.message || 'Payments recorded successfully (PAID)');
       await refetchPendingPaymentInvoices();
@@ -1338,7 +1363,19 @@ const Payments = () => {
             );
             break;
           case 'amount':
-            value = clippedTableText(`₹${Number(invoice.amount || 0).toLocaleString('en-IN')}`);
+            value = (
+              <div className="space-y-0.5">
+                {clippedTableText(formatInvoiceAmount(invoice, invoice.amount || 0))}
+                {invoice.convertToInr && Number(invoice.matchingInrValue) > 0 ? (
+                  <div className="text-xs text-muted-foreground">
+                    Converted INR Amount: {formatInvoiceAmount(
+                      { currency: 'INR' },
+                      invoice.matchingInrValue,
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            );
             break;
           case 'vendorName':
             value = clippedTableText(getRecordVendorLabel(invoice));

@@ -117,6 +117,7 @@ import {
   isProformaInvoice,
 } from "./constants/proformaInvoice";
 import { useProformaInvoiceSubscription } from "../../hooks/useProformaInvoiceSubscription";
+import useForeignCurrencyInrConversionSubscription from "../../hooks/useForeignCurrencyInrConversionSubscription";
 import {
   filterInvoicesForDocumentTab,
   getLinkedTaxInvoiceCount,
@@ -131,6 +132,9 @@ import {
 } from "./utils/invoiceAmounts";
 import { getInvoiceDueDateValidationErrorForInvoice } from "./utils/msmePaymentDue";
 import InvoiceDueDateCell from "./components/InvoiceDueDateCell";
+import {
+  getInrConversionValidationError,
+} from "../../components/common/InrConversionFields";
 import {
   Ban,
   Sparkles,
@@ -182,6 +186,7 @@ import {
 } from "../../Services/apis/invoiceMatchingApi";
 import {
   CURRENCY_SCREENS,
+  CURRENCY_FILTER_ALL,
   DEFAULT_CURRENCY,
   normalizeCurrencyCode,
 } from "../../utils/currency";
@@ -400,11 +405,10 @@ const InvoicesPage = () => {
     isInvoiceMatchingEnabled && hasPurchaseOrderSubscription;
   const canUseThreeWayMatching =
     showInvoiceMatchingSelection && hasGrnSubscription;
-  const { hasConnectedZoho, showIntegrationColumn } =
-    useZohoIntegrationActive();
-  const showErpIntegrationFields = isCorporateSectionEnabled(
-    "SETTINGS_INTEGRATIONS",
-  );
+  const { hasConnectedZoho, showIntegrationColumn } = useZohoIntegrationActive();
+  const showErpIntegrationFields = isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
+  const { isForeignCurrencyInrConversionEnabled } =
+    useForeignCurrencyInrConversionSubscription();
   const { data: corporateUserContext = null } =
     useGetCorporateUserDetailsQuery();
   const invoiceUserEmail =
@@ -417,9 +421,11 @@ const InvoicesPage = () => {
     currencies,
     selectedCurrency,
     setSelectedCurrency,
-    currencyParam,
-    queryArgs: currencyQueryArgs,
-  } = useCurrencyFilter(CURRENCY_SCREENS.INVOICE);
+	    currencyParam,
+	    queryArgs: currencyQueryArgs,
+	  } = useCurrencyFilter(CURRENCY_SCREENS.INVOICE, {
+	    defaultCurrency: CURRENCY_FILTER_ALL,
+	  });
   const invoiceCurrencyOptions = useMemo(
     () => currencies.filter((currency) => currency !== "ALL"),
     [currencies],
@@ -1996,6 +2002,16 @@ const InvoicesPage = () => {
       toast.error("Please select or request a vendor before saving");
       return false;
     }
+    const conversionError = getInrConversionValidationError({
+      currency: payload.currency,
+      enabled: isForeignCurrencyInrConversionEnabled,
+      convertToInr: payload.convertToInr,
+      matchingInrValue: payload.matchingInrValue,
+    });
+    if (conversionError) {
+      toast.error(conversionError);
+      return false;
+    }
     return validateMandatoryPayload(payload);
   };
 
@@ -2007,6 +2023,12 @@ const InvoicesPage = () => {
       calculateInvoiceDataTotals(payload)?.total,
       { enabled: showInvoiceFunding },
     ) &&
+    !getInrConversionValidationError({
+      currency: payload.currency,
+      enabled: isForeignCurrencyInrConversionEnabled,
+      convertToInr: payload.convertToInr,
+      matchingInrValue: payload.matchingInrValue,
+    }) &&
     !invoiceMandatoryFieldsLoading &&
     isInvoiceMandatoryFieldsSatisfied(
       payload,
@@ -2995,9 +3017,20 @@ const InvoicesPage = () => {
                 );
                 break;
               case "netAmount":
-                value = formatInvoiceAmount(
-                  invoice,
-                  getInvoiceNetAmount(invoice),
+	                value = (
+	                  <div className="space-y-0.5 leading-tight">
+	                    <div className="font-semibold">
+	                      {formatInvoiceAmount(invoice, getInvoiceNetAmount(invoice))}
+	                    </div>
+	                    {invoice.convertToInr && Number(invoice.matchingInrValue) > 0 ? (
+	                      <div className="whitespace-nowrap text-[11px] font-normal text-muted-foreground">
+	                        INR: {formatInvoiceAmount(
+	                          { currency: "INR" },
+	                          invoice.matchingInrValue,
+	                        )}
+                      </div>
+                    ) : null}
+                  </div>
                 );
                 break;
               case "approvalWorkflowName":
@@ -3483,44 +3516,59 @@ const InvoicesPage = () => {
         onUploadNew={handleMapTaxInvoiceUpload}
       />
 
-      <div className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        {showProformaInvoiceFields && (
-          <div className="flex flex-wrap gap-2">
-            {INVOICE_DOCUMENT_TYPE_TABS.map(({ value, label }) => (
-              <Button
-                key={value}
-                type="button"
-                size="sm"
-                variant={
-                  invoiceDocumentTypeTab === value ? "default" : "outline"
-                }
-                onClick={() => setInvoiceDocumentTypeTab(value)}
-                data-testid={`invoice-document-tab-${value}`}
-              >
-                {label}
-              </Button>
-            ))}
-          </div>
-        )}
-        <div className="flex flex-wrap gap-2">
-          {invoiceQuickFilters.map(({ value, label, count }) => (
-            <Button
-              key={value}
-              type="button"
-              size="sm"
-              variant={invoiceStatusFilter === value ? "default" : "outline"}
-              onClick={() => {
-                setInvoiceStatusFilter(value);
-                updateInvoiceColumnFilter("statuses", []);
-              }}
-              data-testid={`invoice-filter-${value}`}
-            >
-              {count != null ? `${label} (${count})` : label}
-            </Button>
-          ))}
-          <div className="relative w-full sm:w-64 sm:max-w-xs">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
+	      <div className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+	        <div className="flex flex-wrap gap-2">
+	          {showProformaInvoiceFields
+	            ? INVOICE_DOCUMENT_TYPE_TABS.map(({ value, label }) => (
+	                <Button
+	                  key={value}
+	                  type="button"
+	                  size="sm"
+	                  variant={
+	                    invoiceDocumentTypeTab === value ? "default" : "outline"
+	                  }
+	                  onClick={() => setInvoiceDocumentTypeTab(value)}
+	                  data-testid={`invoice-document-tab-${value}`}
+	                >
+	                  {label}
+	                </Button>
+	              ))
+	            : invoiceQuickFilters.map(({ value, label, count }) => (
+	                <Button
+	                  key={value}
+	                  type="button"
+	                  size="sm"
+	                  variant={invoiceStatusFilter === value ? "default" : "outline"}
+	                  onClick={() => {
+	                    setInvoiceStatusFilter(value);
+	                    updateInvoiceColumnFilter("statuses", []);
+	                  }}
+	                  data-testid={`invoice-filter-${value}`}
+	                >
+	                  {count != null ? `${label} (${count})` : label}
+	                </Button>
+	              ))}
+	        </div>
+	        <div className="flex flex-wrap gap-2 lg:justify-end">
+	          {showProformaInvoiceFields &&
+	            invoiceQuickFilters.map(({ value, label, count }) => (
+	              <Button
+	                key={value}
+	                type="button"
+	                size="sm"
+	                variant={invoiceStatusFilter === value ? "default" : "outline"}
+	                onClick={() => {
+	                  setInvoiceStatusFilter(value);
+	                  updateInvoiceColumnFilter("statuses", []);
+	                }}
+	                data-testid={`invoice-filter-${value}`}
+	              >
+	                {count != null ? `${label} (${count})` : label}
+	              </Button>
+	            ))}
+	          <div className="relative w-full sm:w-64 sm:max-w-xs">
+	            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+	            <Input
               placeholder="Search vendor, invoice #, ref no, amount..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}

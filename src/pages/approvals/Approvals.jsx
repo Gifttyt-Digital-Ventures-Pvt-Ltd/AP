@@ -23,7 +23,7 @@ import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import CurrencySelector from '../../components/common/CurrencySelector';
 import RefreshButton from '../../components/common/RefreshButton';
 import TableSortButton from '../../components/common/TableSortButton';
-import { CURRENCY_SCREENS } from '../../utils/currency';
+import { CURRENCY_FILTER_ALL, CURRENCY_SCREENS } from '../../utils/currency';
 import { INVOICE_LIST_PAGE_SIZE } from '../invoices/constants';
 import NeedsApprovalTable from './components/NeedsApprovalTable';
 import AllInvoicesTable from './components/AllInvoicesTable';
@@ -74,10 +74,12 @@ const Approvals = () => {
   const {
     currencies,
     selectedCurrency,
-    setSelectedCurrency,
-    queryArgs: approvalQueryArgs,
-    currencyParam,
-  } = useCurrencyFilter(currencyScreen);
+	    setSelectedCurrency,
+	    queryArgs: approvalQueryArgs,
+	    currencyParam,
+	  } = useCurrencyFilter(currencyScreen, {
+	    defaultCurrency: CURRENCY_FILTER_ALL,
+	  });
   const [approvalsSearchTerm, setApprovalsSearchTerm] = useState('');
   const [approvalsSort, setApprovalsSort] = useState({ value: 'uploadDate', direction: 'desc' });
   const [allTabPageOffset, setAllTabPageOffset] = useState(0);

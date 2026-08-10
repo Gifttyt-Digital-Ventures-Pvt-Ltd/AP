@@ -83,7 +83,19 @@ const ReleasedPaymentsTab = ({
             const amount = invoice
               ? formatInvoiceAmount(invoice, payment.amount || 0)
               : formatCurrency(payment.amount || 0, payment.currency || 'INR');
-            value = clippedText(amount);
+            value = (
+              <div className="space-y-0.5">
+                {clippedText(amount)}
+                {Number(payment.actualInrAmount ?? payment.actual_inr_amount) > 0 ? (
+                  <div className="text-xs text-muted-foreground">
+                    Actual INR Amount: {formatCurrency(
+                      payment.actualInrAmount ?? payment.actual_inr_amount,
+                      'INR',
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            );
             break;
           }
           case 'paymentDate':

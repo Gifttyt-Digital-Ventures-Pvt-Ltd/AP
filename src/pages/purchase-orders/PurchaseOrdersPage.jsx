@@ -70,6 +70,11 @@ import { getVendorGstRegistrations } from '../vendors/components/VendorGstRegist
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useCreditErrorHandler } from '../../contexts/CreditErrorContext';
 import { useRBAC } from '../../contexts/RBACContext';
+import useForeignCurrencyInrConversionSubscription from '../../hooks/useForeignCurrencyInrConversionSubscription';
+import {
+  getInrConversionValidationError,
+  normalizeConversionStateForCurrency,
+} from '../../components/common/InrConversionFields';
 import { useSidebar } from '../../components/Layout';
 import { useMeteredActionEstimate } from '../../hooks/useMeteredActionEstimate';
 import { CREDIT_ACTION_CODES } from '../../constants/creditActions';
@@ -129,6 +134,8 @@ const createDefaultPoForm = (defaultCurrency = 'INR', formatId = 'default-format
   expected_delivery_date: '',
   currency: defaultCurrency,
   exchange_rate: '',
+  convertToInr: undefined,
+  matchingInrValue: '',
   place_of_supply: '',
   shipping_address: '',
   billing_address: '',
@@ -164,6 +171,8 @@ const buildPoEditForm = (po = {}, fallbackFormatId = 'default-format') => ({
   expected_delivery_date: String(po.expected_delivery_date || po.expectedDeliveryDate || '').slice(0, 10),
   currency: po.currency || 'INR',
   exchange_rate: po.exchange_rate || po.exchangeRate || '',
+  convertToInr: Boolean(po.convertToInr ?? po.convert_to_inr ?? false),
+  matchingInrValue: po.matchingInrValue ?? po.matching_inr_value ?? '',
   place_of_supply: po.place_of_supply || po.placeOfSupply || '',
   shipping_address: po.shipping_address || po.shipToAddress || po.shippingAddress || '',
   billing_address: po.billing_address || po.billingAddress || '',
@@ -297,6 +306,7 @@ const PurchaseOrdersPage = () => {
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
   const { isCorporateSectionEnabled, isBranchEnabled } = useRBAC();
+  const { isForeignCurrencyInrConversionEnabled } = useForeignCurrencyInrConversionSubscription();
   const { setHideSidebar } = useSidebar();
   const canManagePo = canPerformAction('po.create');
   const canSubmitPo = canPerformAction('po.submit');
@@ -569,6 +579,16 @@ const PurchaseOrdersPage = () => {
     }
     if (!isInrCurrency(form.currency) && !Number(form.exchange_rate)) {
       toast.error('Exchange rate is required for foreign-currency purchase orders');
+      return false;
+    }
+    const conversionError = getInrConversionValidationError({
+      currency: form.currency,
+      enabled: isForeignCurrencyInrConversionEnabled,
+      convertToInr: form.convertToInr,
+      matchingInrValue: form.matchingInrValue,
+    });
+    if (conversionError) {
+      toast.error(conversionError);
       return false;
     }
     if (tdsEnabled && form.tds_applicable && !(Number(form.tds_percent) > 0)) {
@@ -1018,7 +1038,7 @@ const PurchaseOrdersPage = () => {
 
   const updatePoCurrency = (currency) => {
     setPoForm((prev) => ({
-      ...prev,
+      ...normalizeConversionStateForCurrency(prev, currency, isForeignCurrencyInrConversionEnabled),
       currency,
       exchange_rate: isInrCurrency(currency) ? '' : prev.exchange_rate,
       place_of_supply: isInrCurrency(currency) ? prev.place_of_supply : '',
@@ -1240,7 +1260,7 @@ const PurchaseOrdersPage = () => {
 
   const updateUploadPoCurrency = (currency) => {
     setUploadPoForm((prev) => ({
-      ...prev,
+      ...normalizeConversionStateForCurrency(prev, currency, isForeignCurrencyInrConversionEnabled),
       currency,
       exchange_rate: isInrCurrency(currency) ? '' : prev.exchange_rate,
       place_of_supply: isInrCurrency(currency) ? prev.place_of_supply : '',

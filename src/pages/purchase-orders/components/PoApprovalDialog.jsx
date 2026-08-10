@@ -30,6 +30,12 @@ const PoApprovalDialog = ({
               <p><strong>PO Number:</strong> {selectedPO.po_number}</p>
               <p><strong>Vendor:</strong> {selectedPO.vendor_name}</p>
               <p><strong>Amount:</strong> {formatCurrency(selectedPO.total_amount, selectedPO.currency)}</p>
+              {selectedPO.convertToInr && Number(selectedPO.matchingInrValue) > 0 ? (
+                <p>
+                  <strong>Converted INR Amount:</strong>{" "}
+                  {formatCurrency(selectedPO.matchingInrValue, "INR")}
+                </p>
+              ) : null}
               <p><strong>Current Level:</strong> {selectedPO.current_approval_level || 1}</p>
             </div>
 

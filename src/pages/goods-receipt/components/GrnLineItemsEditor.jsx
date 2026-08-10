@@ -22,6 +22,7 @@ const GrnLineItemsEditor = ({
   poLinked = false,
   formatConfig,
   readOnly = false,
+  currency = 'INR',
 }) => {
   const updateLine = (index, field, value) => {
     const next = lines.map((line, lineIndex) => {
@@ -282,7 +283,7 @@ const GrnLineItemsEditor = ({
                   )}
                   {showAmount && (
                     <TableCell className="text-right tabular-nums">
-                      {formatCurrency(lineAmount)}
+                      {formatCurrency(lineAmount, currency)}
                     </TableCell>
                   )}
                   {showGstRate && (
@@ -352,13 +353,13 @@ const GrnLineItemsEditor = ({
         {showValuation && (
           <>
             <span>
-              Taxable: <strong>{formatCurrency(taxableAmount)}</strong>
+              Taxable: <strong>{formatCurrency(taxableAmount, currency)}</strong>
             </span>
             <span>
-              GST: <strong>{formatCurrency(taxAmount)}</strong>
+              GST: <strong>{formatCurrency(taxAmount, currency)}</strong>
             </span>
             <span>
-              Total: <strong>{formatCurrency(taxableAmount + taxAmount)}</strong>
+              Total: <strong>{formatCurrency(taxableAmount + taxAmount, currency)}</strong>
             </span>
           </>
         )}

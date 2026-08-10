@@ -22,6 +22,7 @@ import {
   useResendPayrunReleaseOtpMutation,
 } from '../../../Services/apis/approvalsPaymentsBankingApi';
 import { useGetBankingAccountBalanceQuery } from '../../../Services/apis/connectedBankingApi';
+import { DEFAULT_CURRENCY, formatCurrency } from '../../../utils/currency';
 
 const OTP_RESEND_COOLDOWN_SECONDS = 30;
 
@@ -29,11 +30,11 @@ const preventDialogOutsideDismiss = (event) => {
   event.preventDefault();
 };
 
-const formatMoney = (value) =>
-  `₹${Number(value || 0).toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+const formatMoney = (value, currency = DEFAULT_CURRENCY) =>
+  formatCurrency(Number(value || 0), currency);
+
+const getInvoicePaymentCurrency = (invoice = {}, fallbackCurrency = DEFAULT_CURRENCY) =>
+  invoice.convertToInr ? DEFAULT_CURRENCY : invoice.currency || fallbackCurrency;
 
 const clippedTableText = (value, className = '') => {
   const text = String(value || '-');
@@ -300,6 +301,7 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
   const [resendReleaseOtp, { isLoading: resendingOtp }] = useResendPayrunReleaseOtpMutation();
   const [releasePayrunPayment, { isLoading: releasingPayrun }] = useReleasePayrunMutation();
   const totalDebitAmount = Number(payrun?.totalAmount || 0);
+  const payrunCurrency = payrun?.currency || DEFAULT_CURRENCY;
   const paymentModeRecommendation = getPaymentModeRecommendation(totalDebitAmount);
   const selectedAccount = bankAccounts.find((account) => String(getReleaseBankAccountId(account)) === String(bankAccountId));
   const selectedBalanceAccountId = selectedAccount ? String(getReleaseBankAccountId(selectedAccount)) : '';
@@ -463,6 +465,7 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
         bankAccountId: getReleaseBankAccountId(selectedAccount),
         paymentMode: mode,
         amount: Number(payrun.totalAmount || 0),
+        currency: payrunCurrency,
       };
       const response = resend
         ? await resendReleaseOtp({ ...payload, otpRequestId }).unwrap()
@@ -602,7 +605,7 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
 
           <div className="rounded-xl border border-primary/20 bg-primary/5 px-[18px] py-4">
             <p className="mb-0.5 text-xs text-slate-500">Total Debit</p>
-            <p className="m-0 text-[22px] font-extrabold text-slate-900">{formatMoney(totalDebitAmount)}</p>
+            <p className="m-0 text-[22px] font-extrabold text-slate-900">{formatMoney(totalDebitAmount, payrunCurrency)}</p>
           </div>
 
           {step === 1 && (
@@ -679,7 +682,7 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
                           {clippedTableText(selectedBeneficiary.ifsc)}
                         </TableCell>
                         <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left font-semibold text-slate-900">
-                          {clippedTableText(formatMoney(invoice.requestedAmount))}
+                          {clippedTableText(formatMoney(invoice.requestedAmount, getInvoicePaymentCurrency(invoice, payrunCurrency)))}
                         </TableCell>
                         <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left">
                           <span
@@ -820,7 +823,7 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
                     </div>
                     <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[12.5px] text-blue-900">
                       Recommended: <strong>{paymentModeRecommendation.recommendedMode}</strong> for this batch amount of{' '}
-                      <strong>{formatMoney(totalDebitAmount)}</strong> ({paymentModeRecommendation.reason})
+                      <strong>{formatMoney(totalDebitAmount, payrunCurrency)}</strong> ({paymentModeRecommendation.reason})
                     </div>
                   </div>
                 </div>,
@@ -836,7 +839,7 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
                   {showBatchField ? renderReleaseRow('Batch', payrun.batchId || payrun.payrunNumber || '-') : null}
                   {renderReleaseRow('Debit Account', selectedAccount ? `${bankName} · ${accountNumber}` : '-')}
                   {renderReleaseRow('Payment Mode', mode)}
-                  {renderReleaseRow('Invoice Amount', formatMoney(totalDebitAmount))}
+                  {renderReleaseRow('Invoice Amount', formatMoney(totalDebitAmount, payrunCurrency))}
                   {renderReleaseRow(`Charges (${mode})`, chargeAmount > 0 ? formatMoney(chargeAmount) : 'Free')}
                   {renderReleaseRow('Total Debit', formatMoney(totalDebitAmount + chargeAmount))}
                   {renderReleaseRow(
