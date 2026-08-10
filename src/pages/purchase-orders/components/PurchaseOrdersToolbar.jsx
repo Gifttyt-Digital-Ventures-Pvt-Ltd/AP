@@ -2,9 +2,16 @@ import React from "react";
 import { Search, Settings2 } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Input } from "../../../components/ui/input";
+import AppSelect from "../../../components/common/AppSelect";
 import RefreshButton from "../../../components/common/RefreshButton";
 import TableSortButton from "../../../components/common/TableSortButton";
 import PoCreateMenu from "./PoCreateMenu";
+import { DELIVERY_STATUS_OPTIONS } from "../constants";
+
+const deliveryStatusFilterOptions = [
+  { value: "all", label: "Delivery Status" },
+  ...DELIVERY_STATUS_OPTIONS,
+];
 
 const poSortOptions = [
   { value: "created_at", label: "Upload date", defaultDirection: "desc" },
@@ -27,6 +34,8 @@ const PurchaseOrdersToolbar = ({
   setSearchQuery,
   statusFilter,
   setStatusFilter,
+  deliveryStatusFilter = "all",
+  setDeliveryStatusFilter,
   poSort,
   setPoSort,
 }) => {
@@ -96,6 +105,13 @@ const PurchaseOrdersToolbar = ({
               data-testid="search-po-input"
             />
           </div>
+          <AppSelect
+            value={deliveryStatusFilter}
+            onChange={(e) => setDeliveryStatusFilter(e.target.value)}
+            options={deliveryStatusFilterOptions}
+            className="w-full sm:w-56"
+            data-testid="po-delivery-status-filter"
+          />
           <TableSortButton
             options={poSortOptions}
             value={poSort.value}

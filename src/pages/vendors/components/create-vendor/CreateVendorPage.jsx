@@ -11,6 +11,8 @@ import {
   VENDOR_FIELD_SECTIONS,
 } from "../../../../utils/vendorFieldConfig";
 import {
+  getVendorFieldErrorClassName,
+  getVendorFieldErrorMap,
   getVendorGstVerificationErrors,
   getVendorGstinFormatError,
   getVendorValidationErrors,
@@ -165,6 +167,7 @@ const CreateVendorPage = ({
     validGstin: null,
   });
   const [gstVerificationAttempted, setGstVerificationAttempted] = useState(false);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [fetchGstinQuery, setFetchGstinQuery] = useState("");
   const [lastFetchMode, setLastFetchMode] = useState("gstin");
   const [fetchMessage, setFetchMessage] = useState("");
@@ -192,6 +195,9 @@ const CreateVendorPage = ({
 
   const gstRegistrations = normalizeFormGstRegistrations(formData.gstRegistrations);
   const vendorBranches = normalizeVendorBranches(formData.vendorBranches);
+  const fieldErrors = submitAttempted
+    ? getVendorFieldErrorMap(formData, { activeVendorFields, vendorFieldConfiguration })
+    : {};
 
   const updateVendorBranches = (branches) => {
     setFormData((prev) => ({ ...prev, vendorBranches: normalizeVendorBranches(branches) }));
@@ -287,6 +293,7 @@ const CreateVendorPage = ({
     setFetchedRecords(result.records);
     setSelectedFetchedGstins(new Set(result.records.map((record) => record.gstin)));
     setLastFetchMode(result.mode || "gstin");
+    setFetchGstinQuery("");
     clearFetchFeedback();
   };
 
@@ -353,6 +360,8 @@ const CreateVendorPage = ({
   const handleFormSubmit = (event) => {
     event.preventDefault();
     if (!formData) return;
+
+    setSubmitAttempted(true);
 
     const validationErrors = getVendorValidationErrors(formData, {
       activeVendorFields,
@@ -446,6 +455,7 @@ const CreateVendorPage = ({
                   isRequired={isRequired}
                   labelFor={labelFor}
                   isEditMode={isEditMode}
+                  fieldErrors={fieldErrors}
                 />
               </div>
 
@@ -477,6 +487,7 @@ const CreateVendorPage = ({
                   updateVendorBranches={updateVendorBranches}
                   isVendorFetchReady={isVendorFetchReady}
                   isEditMode={isEditMode}
+                  fieldErrors={fieldErrors}
                 />
               </div>
 
@@ -508,7 +519,7 @@ const CreateVendorPage = ({
                           }
                           placeholder={placeholder}
                           required={isRequired(section)}
-                          className="mt-1.5"
+                          className={`mt-1.5 ${getVendorFieldErrorClassName(fieldErrors, key)}`}
                         />
                       </div>
                     ))}
@@ -534,7 +545,7 @@ const CreateVendorPage = ({
                           }
                           placeholder={placeholder}
                           required={isRequired(section)}
-                          className="mt-1.5"
+                          className={`mt-1.5 ${getVendorFieldErrorClassName(fieldErrors, key)}`}
                         />
                       </div>
                     ))}
@@ -551,6 +562,7 @@ const CreateVendorPage = ({
                   labelFor={labelFor}
                   submitting={submitting}
                   isEditMode={isEditMode}
+                  fieldErrors={fieldErrors}
                 />
               </div>
 
@@ -578,6 +590,7 @@ const CreateVendorPage = ({
                   notes={formData.notes}
                   onNotesChange={(notes) => updateField("notes", notes)}
                   isRequired={isRequired}
+                  fieldErrors={fieldErrors}
                 />
               </div>
             </div>

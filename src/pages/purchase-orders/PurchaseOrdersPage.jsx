@@ -317,11 +317,15 @@ const PurchaseOrdersPage = () => {
   );
   const canApprovePo = canPerformAction('po.approve');
 
+  const [deliveryStatusFilter, setDeliveryStatusFilter] = useState('all');
+  const purchaseOrdersQueryParams =
+    deliveryStatusFilter === 'all' ? undefined : { deliveryStatus: deliveryStatusFilter };
+
   const {
     data: purchaseOrdersData = [],
     isLoading: purchaseOrdersLoading,
     refetch: refetchPurchaseOrders,
-  } = useGetPurchaseOrdersQuery();
+  } = useGetPurchaseOrdersQuery(purchaseOrdersQueryParams);
   const {
     data: formatConfigData,
     isLoading: formatConfigLoading,
@@ -1408,6 +1412,8 @@ const PurchaseOrdersPage = () => {
           setSearchQuery={setSearchQuery}
           statusFilter={statusFilter}
           setStatusFilter={setStatusFilter}
+          deliveryStatusFilter={deliveryStatusFilter}
+          setDeliveryStatusFilter={setDeliveryStatusFilter}
           poSort={poSort}
           setPoSort={setPoSort}
         />

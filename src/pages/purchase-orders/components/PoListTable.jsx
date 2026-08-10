@@ -10,6 +10,8 @@ import {
   getAccountingUnlockRequestStatus,
   isAccountingReadyLocked,
 } from "../../../utils/accountingLock";
+import { DELIVERY_STATUS_OPTIONS, deliveryStatusColors } from "../constants";
+import PoDeliveryDateCell from "./PoDeliveryDateCell";
 
 const basePoTableHeader = [
   { key: "srNo", title: "Sr. No", headerClassName: "bg-muted text-foreground", cellClassName: "text-sm font-medium" },
@@ -20,8 +22,12 @@ const basePoTableHeader = [
   { key: "expected_delivery_date", title: "Delivery Date", headerClassName: "bg-muted text-foreground" },
   { key: "total_amount", title: "Amount", headerClassName: "bg-muted text-foreground" },
   { key: "status", title: "Status", headerClassName: "bg-muted text-foreground" },
+  { key: "deliveryStatus", title: "Delivery Status", headerClassName: "bg-muted text-foreground" },
   { key: "actions", title: "Actions", headerClassName: "bg-muted text-left text-foreground", cellClassName: "text-left" },
 ];
+
+const getDeliveryStatusLabel = (deliveryStatus) =>
+  DELIVERY_STATUS_OPTIONS.find((option) => option.value === deliveryStatus)?.label;
 
 const PoListTable = ({
   filteredOrders,
@@ -77,7 +83,9 @@ const PoListTable = ({
             value = formatDate(po.po_date);
             break;
           case "expected_delivery_date":
-            value = formatDate(po.expected_delivery_date);
+            value = (
+              <PoDeliveryDateCell po={po} formattedDate={formatDate(po.expected_delivery_date)} />
+            );
             break;
           case "total_amount":
             value = (
@@ -101,6 +109,20 @@ const PoListTable = ({
               </Badge>
             );
             break;
+          case "deliveryStatus": {
+            const deliveryStatusLabel = getDeliveryStatusLabel(po.delivery_status);
+            value = deliveryStatusLabel ? (
+              <Badge
+                variant="outline"
+                className={`border-0 font-semibold ${deliveryStatusColors[po.delivery_status] || ""}`}
+              >
+                {deliveryStatusLabel}
+              </Badge>
+            ) : (
+              "-"
+            );
+            break;
+          }
           case "actions":
             value = (
               <div className="flex items-center justify-start gap-1 whitespace-nowrap">

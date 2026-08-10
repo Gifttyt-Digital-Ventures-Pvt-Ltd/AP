@@ -29,13 +29,42 @@ const normalizeDocumentEntry = (entry) => {
   const fileName = String(entry.fileName || entry.file_name || entry.name || '').trim();
   if (!fileName) return null;
 
+  const fileUrl = String(
+    entry.fileUrl ||
+      entry.file_url ||
+      entry.url ||
+      entry.documentUrl ||
+      entry.document_url ||
+      entry.downloadUrl ||
+      entry.download_url ||
+      entry.viewUrl ||
+      entry.view_url ||
+      entry.path ||
+      '',
+  ).trim();
+
   return {
     fileName,
     fileSize: Number(entry.fileSize ?? entry.file_size ?? entry.size ?? 0) || 0,
     mimeType: String(entry.mimeType || entry.mime_type || entry.type || '').trim(),
     uploadedAt: entry.uploadedAt || entry.uploaded_at || entry.createdAt || entry.created_at || null,
+    fileUrl: fileUrl || null,
     ...(typeof File !== 'undefined' && entry._file instanceof File ? { _file: entry._file } : {}),
   };
+};
+
+const DOCUMENT_BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? '';
+
+/** Resolves a possibly-relative vendor document URL against the API host, for opening in a new tab. */
+export const resolveVendorDocumentUrl = (url) => {
+  if (!url) return '';
+  if (/^https?:\/\//i.test(url)) return url;
+  const baseUrl = DOCUMENT_BACKEND_URL || (typeof window !== 'undefined' ? window.location.origin : '');
+  try {
+    return new URL(url, baseUrl).toString();
+  } catch {
+    return url;
+  }
 };
 
 export const normalizeVendorDocuments = (documents = {}) => {
