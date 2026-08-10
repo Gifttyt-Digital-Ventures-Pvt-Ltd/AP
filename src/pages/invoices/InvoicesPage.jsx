@@ -19,6 +19,7 @@ import {
   useLazyGetInvoiceQuery,
   useLazyGetInvoiceHistoryQuery,
   useUpdateInvoiceMutation,
+  useUpdateInvoiceInternalChecklistMutation,
   useForwardInvoiceMutation,
   useDeleteInvoiceMutation,
   useCancelInvoiceMutation,
@@ -93,9 +94,7 @@ import {
   getInvoiceListItems,
   mergeInvoiceVendorOptions,
 } from "../../Services/utils/payloadMappers";
-import {
-  useGetCorporateUserDetailsQuery,
-} from "../../Services/apis/corporateApi";
+import { useGetCorporateUserDetailsQuery } from "../../Services/apis/corporateApi";
 import { useGetCategoriesForInvoiceQuery } from "../../Services/apis/categoriesApi";
 import { useGetDepartmentsForInvoiceQuery } from "../../Services/apis/departmentsApi";
 import { useAuth } from "../../contexts/AuthContext";
@@ -272,7 +271,7 @@ const baseInvoiceTableHeader = [
     key: "vendorName",
     title: "Vendor",
     headerClassName:
-      "p-3 text-left text-xs font-medium sticky left-[var(--invoice-sticky-col2)] ",
+      "p-3 text-left text-xs font-medium sticky left-[var(--invoice-sticky-col2)]",
     cellClassName:
       "p-3 text-sm sticky left-[var(--invoice-sticky-col2)]  bg-inherit ",
   },
@@ -401,8 +400,11 @@ const InvoicesPage = () => {
     isInvoiceMatchingEnabled && hasPurchaseOrderSubscription;
   const canUseThreeWayMatching =
     showInvoiceMatchingSelection && hasGrnSubscription;
-  const { hasConnectedZoho, showIntegrationColumn } = useZohoIntegrationActive();
-  const showErpIntegrationFields = isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
+  const { hasConnectedZoho, showIntegrationColumn } =
+    useZohoIntegrationActive();
+  const showErpIntegrationFields = isCorporateSectionEnabled(
+    "SETTINGS_INTEGRATIONS",
+  );
   const { data: corporateUserContext = null } =
     useGetCorporateUserDetailsQuery();
   const invoiceUserEmail =
@@ -580,6 +582,8 @@ const InvoicesPage = () => {
   const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
   const [updateInvoice, { isLoading: updateInvoiceLoading }] =
     useUpdateInvoiceMutation();
+  const [updateInvoiceInternalChecklist, { isLoading: savingInternalChecklist }] =
+    useUpdateInvoiceInternalChecklistMutation();
   const [performInvoiceMatch, { isLoading: performMatchingLoading }] =
     usePerformInvoiceMatchMutation();
   const [editInvoiceMatch, { isLoading: editMatchingLoading }] =
@@ -669,6 +673,11 @@ const InvoicesPage = () => {
   const canCheckInvoices = canPerformAction("invoices.check");
   const canAddVendors = canPerformAction("invoices.addVendor");
   const isMasterAdmin = hasPermission("master-admin");
+  // Internal Checklist stays editable after the invoice itself becomes
+  // read-only (e.g. Approved) — Maker/Admin/Master Admin only, no Checker.
+  // Reuses the same role signals as everywhere else in this file rather than
+  // a new RBAC permission key.
+  const canEditInternalChecklist = canManageInvoices || isCorporateAdmin || isMasterAdmin;
   const isCheckerEditEnabled = useMemo(
     () =>
       isCheckerEditEnabledForCorporate(
@@ -1527,9 +1536,9 @@ const InvoicesPage = () => {
       shippingAddress: item.invoicePayload.shippingAddress || "",
       shippingSameAsBilling: Boolean(
         item.invoicePayload.billingAddress &&
-          item.invoicePayload.shippingAddress &&
-          String(item.invoicePayload.billingAddress).trim() ===
-            String(item.invoicePayload.shippingAddress).trim(),
+        item.invoicePayload.shippingAddress &&
+        String(item.invoicePayload.billingAddress).trim() ===
+          String(item.invoicePayload.shippingAddress).trim(),
       ),
       gstin: item.invoicePayload.gstin || "",
       sourceOfSupply: item.invoicePayload.sourceOfSupply || "",
@@ -1603,7 +1612,13 @@ const InvoicesPage = () => {
     if (!bulkEditForm || !bulkEditItemId) return;
 
     if (!validateMandatoryPayload(bulkEditForm)) return;
-    if (!validateFundingSplit(bulkEditForm, calculateInvoiceDataTotals(bulkEditForm))) return;
+    if (
+      !validateFundingSplit(
+        bulkEditForm,
+        calculateInvoiceDataTotals(bulkEditForm),
+      )
+    )
+      return;
 
     const matchedVendorId = findVendorByName(bulkEditForm.vendorName)?.id || "";
     const resolvedVendorId = bulkEditForm.vendorId || matchedVendorId;
@@ -2398,36 +2413,42 @@ const InvoicesPage = () => {
     });
   }, []);
 
+  const fetchInvoiceHistory = useCallback(
+    async (invoice) => {
+      setLoadingHistory(true);
+      try {
+        const response = await getInvoiceHistory(invoice.id).unwrap();
+        let normalizedHistory = Array.isArray(response)
+          ? response
+          : normalizeInvoiceHistoryEntries(response);
+
+        if (
+          normalizedHistory.length === 0 &&
+          (Array.isArray(invoice.approvalRecords) ||
+            Array.isArray(invoice.approvalRecords))
+        ) {
+          normalizedHistory = normalizeInvoiceHistoryEntries(
+            invoice.approvalRecords || invoice.approvalRecords,
+          );
+        }
+
+        setInvoiceHistory(normalizedHistory);
+      } catch (error) {
+        console.error("Failed to fetch invoice history:", error);
+        toast.error("Failed to load invoice history");
+      } finally {
+        setLoadingHistory(false);
+      }
+    },
+    [getInvoiceHistory],
+  );
+
   const handleViewInvoice = async (invoice) => {
     setSelectedInvoice(invoice);
     setViewDialogOpen(true);
     setViewTab("details");
     setInvoiceHistory([]);
-
-    setLoadingHistory(true);
-    try {
-      const response = await getInvoiceHistory(invoice.id).unwrap();
-      let normalizedHistory = Array.isArray(response)
-        ? response
-        : normalizeInvoiceHistoryEntries(response);
-
-      if (
-        normalizedHistory.length === 0 &&
-        (Array.isArray(invoice.approvalRecords) ||
-          Array.isArray(invoice.approvalRecords))
-      ) {
-        normalizedHistory = normalizeInvoiceHistoryEntries(
-          invoice.approvalRecords || invoice.approvalRecords,
-        );
-      }
-
-      setInvoiceHistory(normalizedHistory);
-    } catch (error) {
-      console.error("Failed to fetch invoice history:", error);
-      toast.error("Failed to load invoice history");
-    } finally {
-      setLoadingHistory(false);
-    }
+    await fetchInvoiceHistory(invoice);
   };
 
   const closeViewDialog = useCallback(
@@ -2568,12 +2589,15 @@ const InvoicesPage = () => {
     if (!selectedInvoice || !formData) return;
 
     const isSavedDraft = isSavedInvoiceStatus(selectedInvoice.status);
-    const updateTotals = calculateTotals(formData.lineItems || [], formData.currency);
+    const updateTotals = calculateTotals(
+      formData.lineItems || [],
+      formData.currency,
+    );
     if (!validateFundingSplit(formData, updateTotals)) return;
     if (isSavedDraft) {
       if (!validateSavedInvoiceEdit(formData)) return;
     } else {
-    if (!validateMandatoryPayload(formData)) return;
+      if (!validateMandatoryPayload(formData)) return;
     }
 
     try {
@@ -2613,6 +2637,26 @@ const InvoicesPage = () => {
     }
   };
 
+  const handleSaveInternalChecklist = async (invoice, nextChecklist) => {
+    if (!canEditInternalChecklist) {
+      toast.error("You do not have permission to edit the internal checklist");
+      return;
+    }
+    const invoiceId = invoice?.id;
+    if (!invoiceId) return;
+
+    try {
+      await updateInvoiceInternalChecklist({
+        id: invoiceId,
+        body: { internalChecklist: nextChecklist },
+      }).unwrap();
+      toast.success("Internal checklist updated");
+      await fetchInvoiceHistory(invoice);
+    } catch (error) {
+      toast.error(extractApiErrorDetail(error) || "Failed to update internal checklist");
+    }
+  };
+
   const handleForwardSavedInvoice = async () => {
     if (!guardAction("invoices.update")) return;
     if (!selectedInvoice || !formData) return;
@@ -2621,7 +2665,10 @@ const InvoicesPage = () => {
       toast.error("You do not have permission to submit this invoice");
       return;
     }
-    const forwardTotals = calculateTotals(formData.lineItems || [], formData.currency);
+    const forwardTotals = calculateTotals(
+      formData.lineItems || [],
+      formData.currency,
+    );
     if (!validateFundingSplit(formData, forwardTotals)) return;
     if (!validateSavedInvoiceEdit(formData)) return;
 
@@ -3090,7 +3137,10 @@ const InvoicesPage = () => {
             return (
               <TableCell
                 key={header.key}
-                className={cn("border border-table-border", header.cellClassName)}
+                className={cn(
+                  "border border-table-border",
+                  header.cellClassName,
+                )}
                 onClick={
                   header.key === "documentType"
                     ? (event) => event.stopPropagation()
@@ -3529,7 +3579,8 @@ const InvoicesPage = () => {
                       }}
                       className={cn(
                         "h-7 gap-1 pl-2 pr-2.5 text-xs",
-                        invoiceCurrentPage === 0 && "pointer-events-none opacity-50",
+                        invoiceCurrentPage === 0 &&
+                          "pointer-events-none opacity-50",
                       )}
                       data-testid="invoice-pagination-previous"
                     />
@@ -3648,6 +3699,9 @@ const InvoicesPage = () => {
         showErpIntegrationFields={showErpIntegrationFields}
         showInternalChecklist={isInternalChecklistEnabled}
         internalChecklistItems={internalChecklistItems}
+        canEditInternalChecklist={canEditInternalChecklist}
+        onSaveInternalChecklist={handleSaveInternalChecklist}
+        savingInternalChecklist={savingInternalChecklist}
         onMapTaxInvoice={handleMapTaxInvoice}
         onViewLinkedInvoice={handleViewLinkedInvoice}
         allInvoices={invoices}

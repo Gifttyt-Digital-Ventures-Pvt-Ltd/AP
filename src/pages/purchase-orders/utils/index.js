@@ -228,6 +228,7 @@ export const normalizePurchaseOrder = (po = {}) => ({
   remarks: po.remarks ?? "",
   delivery_status: po.delivery_status ?? po.deliveryStatus ?? null,
   delivery_remarks: po.delivery_remarks ?? po.deliveryRemarks ?? "",
+  overdue_days: Number(po.overdue_days ?? po.overdueDays ?? 0) || 0,
   created_by_name: po.created_by_name ?? po.createdByName ?? "",
   approval_records: po.approval_records ?? po.approvalRecords ?? po.approvals ?? [],
 });

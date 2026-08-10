@@ -475,6 +475,7 @@ const Vendors = () => {
   const [singleVendorCreateOpen, setSingleVendorCreateOpen] = useState(false);
   const { setHideSidebar } = useSidebar();
   const [vendorUploadOptionOpen, setVendorUploadOptionOpen] = useState(false);
+  const vendorUploadOptionRef = useRef(null);
   const [multipleVendorUploadOpen, setMultipleVendorUploadOpen] =
     useState(false);
   const [editingVendor, setEditingVendor] = useState(null);
@@ -538,6 +539,26 @@ const Vendors = () => {
       toast.error("Failed to load vendors");
     }
   }, [vendorsError]);
+
+  useEffect(() => {
+    if (!vendorUploadOptionOpen) return undefined;
+
+    const handlePointerDown = (event) => {
+      if (vendorUploadOptionRef.current?.contains(event.target)) return;
+      setVendorUploadOptionOpen(false);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") setVendorUploadOptionOpen(false);
+    };
+
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [vendorUploadOptionOpen]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -1617,7 +1638,7 @@ const Vendors = () => {
             Refresh
           </RefreshButton>
           {canCreateVendor && (
-            <div className="relative">
+            <div className="relative" ref={vendorUploadOptionRef}>
               <Button
                 data-testid="new-vendor-button"
                 onClick={() => setVendorUploadOptionOpen((prev) => !prev)}
