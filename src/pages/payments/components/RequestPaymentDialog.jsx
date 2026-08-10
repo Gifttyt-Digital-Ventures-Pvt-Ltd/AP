@@ -43,13 +43,17 @@ const getInvoiceRequestedAmount = (invoice = {}, amountDue = 0, convertToInr = f
   const actualInrAmount = getInvoiceActualInrAmount(invoice);
   if (actualInrAmount > 0) return actualInrAmount;
 
-  return Number(
+  const requestedAmount = Number(
     invoice.requestedAmount ??
       invoice.requested_amount ??
       invoice.paymentAmount ??
       invoice.payment_amount ??
       0,
   );
+
+  if (requestedAmount > 0) return requestedAmount;
+
+  return getConvertedInrAmount(invoice);
 };
 
 const resolvePayrunCurrency = (rows = []) => {
