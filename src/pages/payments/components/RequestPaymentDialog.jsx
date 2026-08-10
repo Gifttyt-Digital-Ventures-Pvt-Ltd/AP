@@ -14,16 +14,50 @@ import { Checkbox } from '../../../components/ui/checkbox';
 import AppDataTable from '../../../components/common/AppDataTable';
 import { TableCell, TableRow } from '../../../components/ui/table';
 import { cn } from '../../../lib/utils';
+import { DEFAULT_CURRENCY, formatCurrency, normalizeCurrencyCode } from '../../../utils/currency';
 
 const preventDialogOutsideDismiss = (event) => {
   event.preventDefault();
 };
 
-const formatMoney = (value) =>
-  `₹${Number(value || 0).toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+const formatMoney = (value, currency = DEFAULT_CURRENCY) =>
+  formatCurrency(Number(value || 0), currency);
+
+const getInvoiceCurrency = (invoice = {}) =>
+  normalizeCurrencyCode(invoice.currency ?? invoice.currencyCode ?? invoice.currency_code);
+
+const getPaymentCurrency = (row = {}) =>
+  row.convertToInr ? DEFAULT_CURRENCY : getInvoiceCurrency(row);
+
+const isInrRow = (row = {}) => getInvoiceCurrency(row) === DEFAULT_CURRENCY;
+
+const getConvertedInrAmount = (invoice = {}) =>
+  Number(invoice.matchingInrValue ?? invoice.matching_inr_value ?? 0);
+
+const getInvoiceActualInrAmount = (invoice = {}) =>
+  Number(invoice.actualInrAmount ?? invoice.actual_inr_amount ?? 0);
+
+const getInvoiceRequestedAmount = (invoice = {}, amountDue = 0, convertToInr = false) => {
+  if (!convertToInr) return amountDue;
+
+  const actualInrAmount = getInvoiceActualInrAmount(invoice);
+  if (actualInrAmount > 0) return actualInrAmount;
+
+  return Number(
+    invoice.requestedAmount ??
+      invoice.requested_amount ??
+      invoice.paymentAmount ??
+      invoice.payment_amount ??
+      0,
+  );
+};
+
+const resolvePayrunCurrency = (rows = []) => {
+  if (rows.some((row) => row.convertToInr)) return DEFAULT_CURRENCY;
+
+  const currencies = [...new Set(rows.map((row) => getPaymentCurrency(row)))];
+  return currencies.length === 1 ? currencies[0] : DEFAULT_CURRENCY;
+};
 
 const clippedTableText = (value, className = '') => {
   const text = String(value || '-');
@@ -73,15 +107,22 @@ const RequestPaymentDialog = ({
       invoices.map((invoice) => {
         const amountDue = getInvoiceAmount(invoice);
         const gstAmount = getInvoiceGstAmount(invoice);
+        const currency = getInvoiceCurrency(invoice);
+        const convertToInr = Boolean(invoice.convertToInr ?? invoice.convert_to_inr);
+        const matchingInrValue = getConvertedInrAmount(invoice);
+        const requestedAmount = getInvoiceRequestedAmount(invoice, amountDue, convertToInr);
         return {
           id: invoice.id,
           vendorName: invoice.vendorName || '-',
           invoiceNumber: invoice.invoiceNumber || '-',
+          currency,
+          convertToInr,
+          matchingInrValue,
           gstValid: true,
           holdGst: false,
           gstAmount,
           amountDue,
-          requestedAmount: amountDue,
+          requestedAmount,
           bankDetails: invoice.accountNumber || invoice.bankAccount || 'Beneficiary verified',
         };
       }),
@@ -105,16 +146,28 @@ const RequestPaymentDialog = ({
       return;
     }
 
+    const missingInrAmountRow = rows.find(
+      (row) => row.convertToInr && Number(row.requestedAmount || 0) <= 0,
+    );
+    if (missingInrAmountRow) {
+      toast.error(`Actual INR Amount is required for ${missingInrAmountRow.invoiceNumber}`);
+      return;
+    }
+
     onCreate({
-      currency: 'INR',
+      currency: resolvePayrunCurrency(rows),
       remarks,
       items: rows.map((row) => ({
         invoiceId: row.id,
         invoiceNumber: row.invoiceNumber,
+        currency: getPaymentCurrency(row),
         requestedAmount: Number(row.requestedAmount || 0),
         holdGst: row.holdGst,
         gstAmount: row.holdGst ? Number(row.gstAmount || 0) : 0,
         paymentAmount: getPaymentAmount(row),
+        ...(row.convertToInr
+          ? { actualInrAmount: Number(row.requestedAmount || 0) }
+          : {}),
       })),
     });
   };
@@ -137,7 +190,7 @@ const RequestPaymentDialog = ({
                 { key: 'invoiceNumber', title: 'Invoice' },
                 { key: 'gstValidation', title: 'GST Validation' },
                 { key: 'holdGst', title: 'Hold GST' },
-                { key: 'gstAmount', title: 'GST Amount', headerClassName: 'text-left', cellClassName: 'text-left' },
+                { key: 'gstAmount', title: 'Tax Amount', headerClassName: 'text-left', cellClassName: 'text-left' },
                 { key: 'amountDue', title: 'Net Payable', headerClassName: 'text-left', cellClassName: 'text-left font-medium' },
                 { key: 'requestedAmount', title: 'Requested Amount', headerClassName: 'text-left', cellClassName: 'text-left' },
                 { key: 'actions', title: '' },
@@ -161,40 +214,55 @@ const RequestPaymentDialog = ({
                     </span>
                   </TableCell>
                   <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
-                    <Checkbox
-                      checked={row.holdGst}
-                      onCheckedChange={(checked) =>
-                        updateRow(row.id, (current) => ({
-                          ...current,
-                          holdGst: Boolean(checked),
-                          requestedAmount: getPayableAmount({
+                    {isInrRow(row) ? (
+                      <Checkbox
+                        checked={row.holdGst}
+                        onCheckedChange={(checked) =>
+                          updateRow(row.id, (current) => ({
                             ...current,
                             holdGst: Boolean(checked),
-                          }),
-                        }))
-                      }
-                    />
+                            requestedAmount: getPayableAmount({
+                              ...current,
+                              holdGst: Boolean(checked),
+                            }),
+                          }))
+                        }
+                      />
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
                   </TableCell>
                   <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
-                    {clippedTableText(formatMoney(row.gstAmount))}
+                    {clippedTableText(formatMoney(row.gstAmount, row.currency))}
                   </TableCell>
-                  <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3 py-3 text-left font-medium">
-                    {clippedTableText(formatMoney(row.amountDue))}
+                  <TableCell className="max-w-[180px] overflow-hidden px-3 py-3 text-left font-medium">
+                    <div className="min-w-0 space-y-0.5 leading-tight">
+                      {clippedTableText(formatMoney(row.amountDue, row.currency))}
+                      {row.convertToInr && row.matchingInrValue > 0 ? (
+                        <span className="block truncate text-[11px] font-normal text-muted-foreground">
+                          INR: {formatMoney(row.matchingInrValue, DEFAULT_CURRENCY)}
+                        </span>
+                      ) : null}
+                    </div>
                   </TableCell>
                   <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
                     <span className="font-medium text-slate-900">
-                      {formatMoney(row.requestedAmount)}
+                      {formatMoney(row.requestedAmount, getPaymentCurrency(row))}
                     </span>
                   </TableCell>
                   <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setRows((prev) => prev.filter((item) => item.id !== row.id))}
-                    >
-                      Remove
-                    </Button>
+                    {isInrRow(row) ? (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setRows((prev) => prev.filter((item) => item.id !== row.id))}
+                      >
+                        Remove
+                      </Button>
+                    ) : (
+                      <span className="text-muted-foreground">-</span>
+                    )}
                   </TableCell>
                 </TableRow>
               )}
@@ -202,7 +270,7 @@ const RequestPaymentDialog = ({
           </div>
           <div className="flex items-center justify-end rounded-lg bg-muted px-4 py-3">
             <span className="text-sm text-muted-foreground">Total Requested Amount:&nbsp;</span>
-            <strong>{formatMoney(totalRequested)}</strong>
+            <strong>{formatMoney(totalRequested, resolvePayrunCurrency(rows))}</strong>
           </div>
           <div className="space-y-2">
             <Label>Remarks</Label>

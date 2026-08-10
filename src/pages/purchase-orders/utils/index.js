@@ -189,6 +189,8 @@ export const normalizePurchaseOrder = (po = {}) => ({
   expected_delivery_date: po.expected_delivery_date ?? po.expectedDeliveryDate,
   currency: po.currency ?? "INR",
   exchange_rate: po.exchange_rate ?? po.exchangeRate ?? "",
+  convertToInr: Boolean(po.convertToInr ?? po.convert_to_inr ?? false),
+  matchingInrValue: po.matchingInrValue ?? po.matching_inr_value ?? "",
   tax_mode: po.tax_mode ?? po.taxMode ?? getTaxMode(po.currency ?? "INR"),
   tds_applicable: po.tds_applicable ?? po.isTdsApplicable ?? false,
   tds_section: po.tds_section ?? po.tdsSection ?? "",
@@ -296,6 +298,12 @@ export const buildCreatePurchaseOrderPayload = (form = {}, formatConfig = null) 
     validTill: headerOn("valid_till") ? form.valid_till || null : null,
     currency,
     exchangeRate: isInr ? null : Number(form.exchange_rate) || null,
+    ...(form.convertToInr !== undefined
+      ? {
+          convertToInr: Boolean(form.convertToInr),
+          matchingInrValue: form.convertToInr ? Number(form.matchingInrValue) || null : null,
+        }
+      : {}),
     placeOfSupply: isInr && shipBillOn("place_of_supply") ? form.place_of_supply || null : null,
     expectedDeliveryDate: form.expected_delivery_date || null,
     deliveryTerms: paymentOn("delivery_terms") ? form.delivery_terms || "" : "",

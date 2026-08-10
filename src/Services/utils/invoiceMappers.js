@@ -263,6 +263,8 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
   return {
     ...invoice,
     currency: normalizeCurrencyCode(invoice.currency ?? invoice.currencyCode ?? DEFAULT_CURRENCY),
+    convertToInr: Boolean(invoice.convertToInr ?? invoice.convert_to_inr ?? false),
+    matchingInrValue: pickInvoiceField(invoice, "matchingInrValue", "matching_inr_value", ""),
     invoiceNumber: pickInvoiceField(invoice, "invoiceNumber", "invoice_number", ""),
     refNo: pickInvoiceField(invoice, "refNo", "ref_no", "") || null,
     vendorId: pickInvoiceField(invoice, "vendorId", "vendor_id", ""),
@@ -609,6 +611,14 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
       normalizeCurrencyCode(
         pickInvoiceField(invoice, "currency", "currency_code", ""),
       ) || DEFAULT_CURRENCY,
+    ...(pickInvoiceField(invoice, "convertToInr", "convert_to_inr") !== undefined
+      ? {
+          convertToInr: Boolean(pickInvoiceField(invoice, "convertToInr", "convert_to_inr", false)),
+          matchingInrValue: Boolean(pickInvoiceField(invoice, "convertToInr", "convert_to_inr", false))
+            ? toNullableMoney(pickInvoiceField(invoice, "matchingInrValue", "matching_inr_value", null))
+            : null,
+        }
+      : {}),
     memo:
       invoice.memo ??
       invoice.description ??

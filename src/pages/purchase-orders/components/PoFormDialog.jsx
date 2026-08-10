@@ -19,6 +19,9 @@ import { TAX_RATES } from "../../invoices/constants";
 import { parseTaxRateFromLabel } from "../../invoices/utils/invoiceTax";
 import { buildTdsValue } from "../../invoices/utils/tds";
 import AppSelect from "../../../components/common/AppSelect";
+import InrConversionFields, {
+  ConvertedInrAmountSummary,
+} from "../../../components/common/InrConversionFields";
 
 const PO_REFERENCE_DOCUMENT_TYPE_OPTIONS = [
   { value: "PI", label: "Proforma Invoice (PI)" },
@@ -1070,6 +1073,25 @@ const PoFormDialog = ({
                         </div>
                       </>
                     )}
+                    <ConvertedInrAmountSummary
+                      convertToInr={poForm.convertToInr}
+                      matchingInrValue={poForm.matchingInrValue}
+                      className="mt-2 flex justify-between border-t pt-2 text-sm font-semibold text-primary"
+                    />
+                    {!isPreviewing ? (
+                      <InrConversionFields
+                        currency={poForm.currency}
+                        convertToInr={poForm.convertToInr}
+                        matchingInrValue={poForm.matchingInrValue}
+                        onChange={(conversion) =>
+                          setPoForm((prev) => ({
+                            ...prev,
+                            ...conversion,
+                          }))
+                        }
+                        className="mt-3"
+                      />
+                    ) : null}
                   </section>
                 )}
               </div>

@@ -475,6 +475,12 @@ const PoDetailsDialog = ({
                           {formatCurrency(selectedPO.total_amount, poCurrency)}
                         </span>
                       </div>
+                      {selectedPO.convertToInr && Number(selectedPO.matchingInrValue) > 0 ? (
+                        <div className="mt-2 flex justify-between text-sm font-semibold text-primary">
+                          <span>Converted INR Amount</span>
+                          <span>{formatCurrency(selectedPO.matchingInrValue, "INR")}</span>
+                        </div>
+                      ) : null}
                       {selectedPO.tds_amount > 0 && (
                         <>
                           <div className="mt-2 flex justify-between text-muted-foreground">

@@ -150,6 +150,21 @@ const formatCurrency = (amount, currency = "INR") =>
     minimumFractionDigits: 2,
   }).format(Number(amount || 0));
 
+const renderAmountWithConversion = (amount, currency = "INR", record = {}) => (
+  <div className="space-y-0.5">
+    <div>{formatCurrency(amount, currency)}</div>
+    {record.convertToInr && Number(record.matchingInrValue) > 0 ? (
+      <div className="text-xs text-muted-foreground">
+        Converted INR Amount: {formatCurrency(record.matchingInrValue, "INR")}
+      </div>
+    ) : null}
+    {record.matchingReadinessStatus === "AWAITING_INR_VALUE" ||
+    record.readinessStatus === "AWAITING_INR_VALUE" ? (
+      <div className="text-xs font-medium text-amber-700">Awaiting INR Value</div>
+    ) : null}
+  </div>
+);
+
 const formatDate = (dateStr) => {
   if (!dateStr) return "-";
   const date = new Date(dateStr);
@@ -217,9 +232,14 @@ const normalizeMatching = (match = {}) => ({
   poNumber: match.poNumber ?? match.po_number ?? match.purchaseOrder?.number ?? "",
   grnNumber: match.grnNumber ?? match.grn_number ?? match.grn?.number ?? "",
   matchType: normalizeMatchType(match.matchType ?? match.match_type),
+  currency: match.currency ?? match.currencyCode ?? match.invoice?.currency ?? match.purchaseOrder?.currency ?? "INR",
   invoiceAmount: Number(match.invoiceAmount ?? match.invoice_amount ?? match.invoice?.amount ?? 0),
   poAmount: Number(match.poAmount ?? match.po_amount ?? match.purchaseOrder?.amount ?? 0),
   grnAmount: Number(match.grnAmount ?? match.grn_amount ?? match.grn?.amount ?? 0),
+  convertToInr: Boolean(match.convertToInr ?? match.convert_to_inr ?? false),
+  matchingInrValue: match.matchingInrValue ?? match.matching_inr_value ?? "",
+  matchingReadinessStatus:
+    match.matchingReadinessStatus ?? match.matching_readiness_status ?? match.readinessStatus ?? match.readiness_status,
   varianceAmount: Number(match.varianceAmount ?? match.variance_amount ?? 0),
   variancePercentage: Number(match.variancePercentage ?? match.variance_percentage ?? 0),
   grnVarianceAmount: Number(match.grnVarianceAmount ?? match.grn_variance_amount ?? 0),
@@ -248,7 +268,11 @@ const normalizeMatchingGroup = (group = {}) => {
       vendorName: flatMatch.vendorName,
       grnNumber: flatMatch.grnNumber,
       matchType: flatMatch.matchType,
+      currency: group.currency ?? group.currencyCode ?? flatMatch.currency ?? "INR",
       poAmount: flatMatch.poAmount,
+      convertToInr: flatMatch.convertToInr,
+      matchingInrValue: flatMatch.matchingInrValue,
+      matchingReadinessStatus: flatMatch.matchingReadinessStatus,
       cumulativeInvoiceAmount: flatMatch.invoiceAmount,
       varianceAmount: flatMatch.varianceAmount,
       variancePercentage: flatMatch.variancePercentage,
@@ -276,7 +300,14 @@ const normalizeMatchingGroup = (group = {}) => {
     vendorName: group.vendorName ?? group.vendor_name ?? latestMatch.vendorName ?? "",
     grnNumber: group.grnNumber ?? group.grn_number ?? latestMatch.grnNumber ?? "",
     matchType: normalizeMatchType(group.matchType ?? group.match_type ?? latestMatch.matchType),
+    currency: group.currency ?? group.currencyCode ?? latestMatch.currency ?? "INR",
     poAmount: Number(group.poAmount ?? group.po_amount ?? latestMatch.poAmount ?? 0),
+    convertToInr: Boolean(group.convertToInr ?? group.convert_to_inr ?? latestMatch.convertToInr ?? false),
+    matchingInrValue: group.matchingInrValue ?? group.matching_inr_value ?? latestMatch.matchingInrValue ?? "",
+    matchingReadinessStatus:
+      group.matchingReadinessStatus ??
+      group.matching_readiness_status ??
+      latestMatch.matchingReadinessStatus,
     cumulativeInvoiceAmount: Number(
       group.cumulativeInvoiceAmount ??
         group.cumulative_invoice_amount ??
@@ -342,6 +373,9 @@ const normalizePurchaseOrder = (po = {}) => ({
   date: po.date ?? po.poDate ?? po.po_date ?? po.poDateOrReceivedDate,
   amount: Number(po.amount ?? po.poAmount ?? po.po_amount ?? 0),
   currency: po.currency ?? "INR",
+  convertToInr: Boolean(po.convertToInr ?? po.convert_to_inr ?? false),
+  matchingInrValue: po.matchingInrValue ?? po.matching_inr_value ?? "",
+  readinessStatus: po.readinessStatus ?? po.readiness_status,
   varianceAmount: Number(po.varianceAmount ?? po.variance_amount ?? 0),
   variancePercentage: Number(po.variancePercentage ?? po.variance_percentage ?? 0),
   recommendation: po.recommendation ?? po.recommendationStatus ?? po.recommendation_status ?? "",
@@ -357,6 +391,9 @@ const normalizeGrn = (grn = {}) => ({
   vendorName: grn.vendorName ?? grn.vendor_name ?? grn.vendor?.name ?? "",
   amount: Number(grn.amount ?? grn.grnAmount ?? grn.grn_amount ?? 0),
   currency: grn.currency ?? "INR",
+  convertToInr: Boolean(grn.convertToInr ?? grn.convert_to_inr ?? false),
+  matchingInrValue: grn.matchingInrValue ?? grn.matching_inr_value ?? "",
+  readinessStatus: grn.readinessStatus ?? grn.readiness_status,
   receivedDate: grn.receivedDate ?? grn.received_date ?? grn.poDateOrReceivedDate,
   recommendation: grn.recommendation ?? grn.recommendationStatus ?? grn.recommendation_status ?? "",
   recommendationReason: grn.recommendationReason ?? grn.recommendation_reason ?? "",
@@ -1201,12 +1238,14 @@ const InvoiceMatching = () => {
                 );
                 break;
               case "poAmount":
-                value = formatCurrency(group.poAmount);
+                value = renderAmountWithConversion(group.poAmount, group.currency, group);
                 break;
               case "matchedAmount":
                 value = (
                   <div>
-                    <div className="font-medium">{formatCurrency(group.cumulativeInvoiceAmount)}</div>
+                    <div className="font-medium">
+                      {renderAmountWithConversion(group.cumulativeInvoiceAmount, group.currency, group)}
+                    </div>
                     <div className="mt-1 h-1.5 w-32 overflow-hidden rounded-full bg-muted">
                       <div className="h-full rounded-full bg-primary" style={{ width: `${progressValue}%` }} />
                     </div>
@@ -1282,7 +1321,7 @@ const InvoiceMatching = () => {
             value = formatDate(po.date);
             break;
           case "amount":
-            value = formatCurrency(po.amount, po.currency);
+            value = renderAmountWithConversion(po.amount, po.currency, po);
             break;
           case "variance":
             value = `${formatCurrency(po.varianceAmount, po.currency)} (${formatPercent(po.variancePercentage)}%)`;
@@ -1823,7 +1862,9 @@ const InvoiceMatching = () => {
                   </div>
                   <div>
                     <p className="text-muted-foreground">Amount</p>
-                    <p className="font-medium">{formatCurrency(selectedGrn.amount, selectedGrn.currency)}</p>
+                    <div className="font-medium">
+                      {renderAmountWithConversion(selectedGrn.amount, selectedGrn.currency, selectedGrn)}
+                    </div>
                   </div>
                 </CardContent>
               </Card>

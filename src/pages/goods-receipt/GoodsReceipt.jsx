@@ -14,6 +14,11 @@ import { useActionGuard } from '../../hooks/useActionGuard';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useCreditErrorHandler } from '../../contexts/CreditErrorContext';
 import { useRBAC } from '../../contexts/RBACContext';
+import useForeignCurrencyInrConversionSubscription from '../../hooks/useForeignCurrencyInrConversionSubscription';
+import {
+  getInrConversionValidationError,
+  isForeignCurrency,
+} from '../../components/common/InrConversionFields';
 import { useMeteredActionEstimate } from '../../hooks/useMeteredActionEstimate';
 import { useProformaInvoiceSubscription } from '../../hooks/useProformaInvoiceSubscription';
 import { CREDIT_ACTION_CODES } from '../../constants/creditActions';
@@ -214,6 +219,7 @@ const GoodsReceipt = () => {
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
   const { isCorporateScreenAllowed, isCorporateSectionEnabled } = useRBAC();
+  const { isForeignCurrencyInrConversionEnabled } = useForeignCurrencyInrConversionSubscription();
   const { setHideSidebar } = useSidebar();
 
   const hasPiSubscription = useProformaInvoiceSubscription().isPiSubscriptionEnabled;
@@ -539,12 +545,19 @@ const GoodsReceipt = () => {
       const hasPendingQty = lineItems.some((line) => Number(line.pending_quantity) > 0);
 
       setSelectedPo(po);
+      const inheritPoConversion =
+        isForeignCurrency(po.currency) &&
+        Boolean(po.convertToInr) &&
+        Number(po.matchingInrValue) > 0;
       setGrnForm((current) => ({
         ...current,
         source_type: GRN_SOURCE.PO,
         po_id: poId,
         vendor_id: po.vendor_id,
         vendor_name: po.vendor_name,
+        currency: po.currency || 'INR',
+        convertToInr: inheritPoConversion,
+        matchingInrValue: null,
         received_at_location: po.shipping_address || current.received_at_location,
         bill_to_name: po.billing_name || current.bill_to_name,
         bill_to_gstin: po.billing_gstin || current.bill_to_gstin,
@@ -585,6 +598,16 @@ const GoodsReceipt = () => {
       !grnForm.vendor_id
     ) {
       toast.error('Please select a vendor');
+      return;
+    }
+    const conversionError = getInrConversionValidationError({
+      currency: grnForm.currency,
+      enabled: isForeignCurrencyInrConversionEnabled,
+      convertToInr: grnForm.convertToInr,
+      matchingInrValue: grnForm.matchingInrValue,
+    });
+    if (conversionError) {
+      toast.error(conversionError);
       return;
     }
 
@@ -776,6 +799,16 @@ const GoodsReceipt = () => {
     });
     if (validationError) {
       toast.error(validationError);
+      return;
+    }
+    const conversionError = getInrConversionValidationError({
+      currency: draftGrn.currency,
+      enabled: isForeignCurrencyInrConversionEnabled,
+      convertToInr: draftGrn.convertToInr,
+      matchingInrValue: draftGrn.matchingInrValue,
+    });
+    if (conversionError) {
+      toast.error(conversionError);
       return;
     }
 

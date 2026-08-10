@@ -286,6 +286,8 @@ export const buildInvoiceEditFormData = (
       invoice.net_payable ??
       "",
     currency: editCurrency,
+    convertToInr: Boolean(invoice.convertToInr ?? invoice.convert_to_inr ?? false),
+    matchingInrValue: invoice.matchingInrValue ?? invoice.matching_inr_value ?? "",
     roundOff:
       invoice.roundOff ??
       invoice.round_off ??

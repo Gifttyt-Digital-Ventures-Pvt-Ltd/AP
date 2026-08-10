@@ -483,6 +483,14 @@ export const toRecordPaymentsApiPayload = (payment = {}) => {
     "referenceNumber",
     payment.reference_number ?? payment.referenceNumber,
   );
+  addStringIfPresent(payload, "currency", payment.currency);
+  const actualInrAmount = payment.actualInrAmount ?? payment.actual_inr_amount;
+  if (actualInrAmount !== undefined && actualInrAmount !== null && actualInrAmount !== "") {
+    const inrAmount = Number(actualInrAmount);
+    payload.actualInrAmount = inrAmount;
+    payload.amount = inrAmount;
+    payload.paymentAmount = inrAmount;
+  }
   return payload;
 };
 

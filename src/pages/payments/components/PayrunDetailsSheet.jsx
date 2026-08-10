@@ -13,6 +13,7 @@ import {
   PayrunStatusBadge,
   getPayrunApprovalRecords,
 } from './payrunUtils';
+import { DEFAULT_CURRENCY, formatCurrency } from '../../../utils/currency';
 
 const preventDialogOutsideDismiss = (event) => {
   event.preventDefault();
@@ -30,11 +31,11 @@ const safeFormatDate = (value, pattern = 'dd MMM yy') => {
       }).format(date);
 };
 
-const formatMoney = (value) =>
-  `₹${Number(value || 0).toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+const formatMoney = (value, currency = DEFAULT_CURRENCY) =>
+  formatCurrency(Number(value || 0), currency);
+
+const getInvoicePaymentCurrency = (invoice = {}) =>
+  invoice.convertToInr ? DEFAULT_CURRENCY : invoice.currency || DEFAULT_CURRENCY;
 
 const getInvoiceStatusLabel = (status = '') => {
   const value = String(status || 'ready').trim().toLowerCase();
@@ -130,7 +131,7 @@ const PayrunDetailsSheet = ({
           <div className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/20 bg-primary/5 px-[18px] py-4">
             <div>
               <p className="mb-0.5 text-xs text-slate-500">Amount</p>
-              <p className="m-0 text-[22px] font-extrabold text-slate-900">{formatMoney(payrun.totalAmount)}</p>
+              <p className="m-0 text-[22px] font-extrabold text-slate-900">{formatMoney(payrun.totalAmount, payrun.currency)}</p>
             </div>
           </div>
 
@@ -155,7 +156,7 @@ const PayrunDetailsSheet = ({
                     </div>
                     <div className="flex shrink-0 items-start gap-2">
                       <p className="m-0 text-right text-[13px] font-bold text-slate-900">
-                        {formatMoney(invoice.requestedAmount)}
+                        {formatMoney(invoice.requestedAmount, getInvoicePaymentCurrency(invoice))}
                       </p>
                       <Button
                         variant="ghost"
@@ -169,8 +170,18 @@ const PayrunDetailsSheet = ({
                     </div>
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-500">
-                    <span>GST Hold: {invoice.holdGst ? 'Yes' : 'No'}</span>
-                    <span className="text-right">GST Amount: {formatMoney(invoice.gstAmount)}</span>
+                    {invoice.convertToInr && Number(invoice.matchingInrValue) > 0 ? (
+                      <span className="col-span-2">
+                        Converted INR Amount: {formatMoney(invoice.matchingInrValue)}
+                      </span>
+                    ) : null}
+                    {Number(invoice.actualInrAmount) > 0 ? (
+                      <span className="col-span-2">
+                        Actual INR Amount: {formatMoney(invoice.actualInrAmount)}
+                      </span>
+                    ) : null}
+                    <span>Tax Hold: {invoice.holdGst ? 'Yes' : 'No'}</span>
+                    <span className="text-right">Tax Amount: {formatMoney(invoice.gstAmount, invoice.currency)}</span>
                     <span className="col-span-2">UTR: {invoice.utr || '-'}</span>
                     <span className="col-span-2 truncate" title={invoice.bankDetails || undefined}>
                       Beneficiary Bank: {invoice.bankDetails || '-'}

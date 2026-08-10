@@ -15,20 +15,28 @@ export const useCurrencyFilter = (
   const { data: availableCurrencies = [], isLoading, isError } =
     useGetAvailableCurrenciesQuery(screen, { skip: !screen });
 
-  const currencies = useMemo(() => {
-    let list =
-      Array.isArray(availableCurrencies) && availableCurrencies.length > 0
-        ? availableCurrencies.map(normalizeCurrencyCode)
-        : [...FALLBACK_CURRENCIES];
+	  const currencies = useMemo(() => {
+	    let list =
+	      Array.isArray(availableCurrencies) && availableCurrencies.length > 0
+	        ? availableCurrencies.map(normalizeCurrencyCode)
+	        : [...FALLBACK_CURRENCIES];
 
-    if (excludeAll) {
-      list = list.filter(
-        (currency) => normalizeCurrencyCode(currency) !== CURRENCY_FILTER_ALL,
-      );
-    }
+	    if (
+	      !excludeAll &&
+	      normalizeCurrencyCode(defaultCurrency) === CURRENCY_FILTER_ALL &&
+	      !list.includes(CURRENCY_FILTER_ALL)
+	    ) {
+	      list = [CURRENCY_FILTER_ALL, ...list];
+	    }
 
-    return list;
-  }, [availableCurrencies, excludeAll]);
+	    if (excludeAll) {
+	      list = list.filter(
+	        (currency) => normalizeCurrencyCode(currency) !== CURRENCY_FILTER_ALL,
+	      );
+	    }
+
+	    return list;
+	  }, [availableCurrencies, defaultCurrency, excludeAll]);
 
   const effectiveSelectedCurrency = useMemo(() => {
     const normalized = normalizeCurrencyCode(selectedCurrency);

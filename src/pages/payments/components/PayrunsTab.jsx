@@ -4,16 +4,14 @@ import { Button } from '../../../components/ui/button';
 import AppDataTable from '../../../components/common/AppDataTable';
 import { TableCell, TableRow } from '../../../components/ui/table';
 import { cn } from '../../../lib/utils';
+import { DEFAULT_CURRENCY, formatCurrency } from '../../../utils/currency';
 import {
   PayrunStatusBadge,
   getPayrunApprovalRecords,
 } from './payrunUtils';
 
-const formatMoney = (value) =>
-  `₹${Number(value || 0).toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+const formatMoney = (value, currency = DEFAULT_CURRENCY) =>
+  formatCurrency(Number(value || 0), currency);
 
 const clippedTableText = (value, className = '') => {
   const text = String(value || '-');
@@ -72,7 +70,7 @@ const PayrunsTab = ({
               {clippedTableText(payrun.invoices.length)}
             </TableCell>
             <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3 py-3 text-left font-semibold">
-              {clippedTableText(formatMoney(payrun.totalAmount))}
+              {clippedTableText(formatMoney(payrun.totalAmount, payrun.currency))}
             </TableCell>
             <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
               {clippedTableText(payrun.approvalRoute || payrun.admin?.name || '-')}
