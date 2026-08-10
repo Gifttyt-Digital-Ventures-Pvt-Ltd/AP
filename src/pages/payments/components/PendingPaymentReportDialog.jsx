@@ -16,6 +16,15 @@ import { formatInvoiceAmount } from '../../invoices/utils/invoiceAmounts';
 
 const safeLower = (value) => String(value ?? '').toLowerCase();
 
+const hasAdvanceAdjustment = (invoice = {}) =>
+  Boolean(
+    invoice.hasAdvanceAdjustment ||
+      invoice.advanceAdjustedTotal != null ||
+      invoice.advance_adjusted_total != null ||
+      invoice.netPayableAfterAdvance != null ||
+      invoice.net_payable_after_advance != null,
+  );
+
 const PendingPaymentReportDialog = ({
   open,
   onOpenChange,
@@ -144,7 +153,19 @@ const PendingPaymentReportDialog = ({
                         </p>
                       </div>
                       <div className="text-right text-sm font-semibold text-foreground">
-                        {formatInvoiceAmount(invoice, invoice.amount || invoice.total || 0)}
+                        <div className="space-y-0.5">
+                          <div>{formatInvoiceAmount(invoice, invoice.amount || invoice.total || 0)}</div>
+                          {hasAdvanceAdjustment(invoice) ? (
+                            <div className="text-[11px] font-normal text-muted-foreground">
+                              Adj: -{formatInvoiceAmount(
+                                invoice,
+                                invoice.advanceAdjustedTotal ??
+                                  invoice.advance_adjusted_total ??
+                                  0,
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
                       </div>
                     </div>
                   );

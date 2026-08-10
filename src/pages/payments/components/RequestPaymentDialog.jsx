@@ -70,7 +70,11 @@ const clippedTableText = (value, className = '') => {
 
 const getInvoiceAmount = (invoice = {}) =>
   Number(
-    invoice.netAmount ??
+    invoice.payableAmount ??
+      invoice.payable_amount ??
+      invoice.netPayableAfterAdvance ??
+      invoice.net_payable_after_advance ??
+      invoice.netAmount ??
       invoice.net_amount ??
       invoice.netPayable ??
       invoice.net_payable ??
@@ -80,6 +84,12 @@ const getInvoiceAmount = (invoice = {}) =>
       invoice.amountDue ??
       0,
   );
+
+const getAdvanceAdjustedTotal = (invoice = {}) =>
+  Number(invoice.advanceAdjustedTotal ?? invoice.advance_adjusted_total ?? 0);
+
+const getNetPayableAfterAdvance = (invoice = {}) =>
+  Number(invoice.netPayableAfterAdvance ?? invoice.net_payable_after_advance ?? 0);
 
 const getInvoiceGstAmount = (invoice = {}) =>
   Number(
@@ -123,6 +133,21 @@ const RequestPaymentDialog = ({
           gstAmount,
           amountDue,
           requestedAmount,
+          originalAmount:
+            invoice.originalAmount ??
+            invoice.original_amount ??
+            invoice.totalAmount ??
+            invoice.total_amount ??
+            invoice.amount,
+          advanceAdjustedTotal: getAdvanceAdjustedTotal(invoice),
+          netPayableAfterAdvance: getNetPayableAfterAdvance(invoice),
+          hasAdvanceAdjustment: Boolean(
+            invoice.hasAdvanceAdjustment ||
+              invoice.advanceAdjustedTotal != null ||
+              invoice.advance_adjusted_total != null ||
+              invoice.netPayableAfterAdvance != null ||
+              invoice.net_payable_after_advance != null,
+          ),
           bankDetails: invoice.accountNumber || invoice.bankAccount || 'Beneficiary verified',
         };
       }),
@@ -238,6 +263,21 @@ const RequestPaymentDialog = ({
                   <TableCell className="max-w-[180px] overflow-hidden px-3 py-3 text-left font-medium">
                     <div className="min-w-0 space-y-0.5 leading-tight">
                       {clippedTableText(formatMoney(row.amountDue, row.currency))}
+                      {row.hasAdvanceAdjustment ? (
+                        <>
+                          <span className="block truncate text-[11px] font-normal text-muted-foreground">
+                            Original: {formatMoney(row.originalAmount, row.currency)}
+                          </span>
+                          <span className="block truncate text-[11px] font-normal text-muted-foreground">
+                            Advance Adjusted: -{formatMoney(row.advanceAdjustedTotal, row.currency)}
+                          </span>
+                          {row.netPayableAfterAdvance > 0 ? (
+                            <span className="block truncate text-[11px] font-normal text-muted-foreground">
+                              After Advance: {formatMoney(row.netPayableAfterAdvance, row.currency)}
+                            </span>
+                          ) : null}
+                        </>
+                      ) : null}
                       {row.convertToInr && row.matchingInrValue > 0 ? (
                         <span className="block truncate text-[11px] font-normal text-muted-foreground">
                           INR: {formatMoney(row.matchingInrValue, DEFAULT_CURRENCY)}

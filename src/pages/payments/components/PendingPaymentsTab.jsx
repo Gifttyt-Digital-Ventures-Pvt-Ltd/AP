@@ -14,6 +14,11 @@ import {
   sumInvoiceAmountsByCurrency,
 } from '../../invoices/utils/invoiceAmounts';
 import { cn } from '../../../lib/utils';
+import {
+  getPayableDisplayLabel,
+  getSelectablePayableRows,
+  isPayableSelectable,
+} from '../utils/payableRows';
 
 const clippedText = (value) => {
   const text = String(value || '-');
@@ -110,7 +115,8 @@ const PendingPaymentsTab = ({
         : column,
     );
   }, [showBranchField, showIntegrationColumn]);
-  const selectedInvoices = invoices.filter((invoice) => selectedInvoiceIds.includes(invoice.id));
+  const selectableInvoices = useMemo(() => getSelectablePayableRows(invoices), [invoices]);
+  const selectedInvoices = selectableInvoices.filter((invoice) => selectedInvoiceIds.includes(invoice.id));
   const totalPendingByCurrency = useMemo(
     () => sumInvoiceAmountsByCurrency(invoices),
     [invoices],
@@ -119,9 +125,38 @@ const PendingPaymentsTab = ({
     () => sumInvoiceAmountsByCurrency(selectedInvoices),
     [selectedInvoices],
   );
-  const allSelected = invoices.length > 0 && selectedInvoiceIds.length === invoices.length;
+  const allSelected =
+    selectableInvoices.length > 0 &&
+    selectedInvoiceIds.length === selectableInvoices.length;
 
-  const renderPendingPaymentRow = (invoice, rowIndex, headers) => (
+  const renderAmountCell = (invoice) => {
+    if (!invoice.hasAdvanceAdjustment) {
+      return clippedText(formatInvoiceAmount(invoice, invoice.amount || 0));
+    }
+
+    return (
+      <div className="min-w-0 space-y-0.5 leading-tight">
+        {invoice.originalAmount !== null && invoice.originalAmount !== undefined ? (
+          <span className="block truncate text-[11px] font-normal text-muted-foreground">
+            Original: {formatInvoiceAmount(invoice, invoice.originalAmount)}
+          </span>
+        ) : null}
+        {invoice.advanceAdjustedTotal !== null && invoice.advanceAdjustedTotal !== undefined ? (
+          <span className="block truncate text-[11px] font-normal text-muted-foreground">
+            Advance Adjusted: -{formatInvoiceAmount(invoice, invoice.advanceAdjustedTotal)}
+          </span>
+        ) : null}
+        <span className="block truncate font-semibold">
+          Net Payable: {formatInvoiceAmount(invoice, invoice.amount || 0)}
+        </span>
+      </div>
+    );
+  };
+
+  const renderPendingPaymentRow = (invoice, rowIndex, headers) => {
+    const selectable = isPayableSelectable(invoice);
+
+    return (
     <TableRow
       key={invoice.id ?? rowIndex}
       data-testid={`pending-invoice-row-${invoice?.id ?? 'unknown'}`}
@@ -129,7 +164,7 @@ const PendingPaymentsTab = ({
         showRecordPaymentSelection && selectedInvoiceIds.includes(invoice.id) ? 'bg-primary/10' : ''
       }
       onClick={
-        showRecordPaymentSelection ? () => onToggleInvoice?.(invoice.id) : undefined
+        showRecordPaymentSelection && selectable ? () => onToggleInvoice?.(invoice.id) : undefined
       }
     >
       {headers.map((header) => {
@@ -143,13 +178,27 @@ const PendingPaymentsTab = ({
                   <Checkbox
                     checked={selectedInvoiceIds.includes(invoice.id)}
                     onCheckedChange={() => onToggleInvoice?.(invoice.id)}
+                    disabled={!selectable}
+                    title={!selectable ? invoice.disabledReason : undefined}
                     data-testid={`pending-invoice-select-${invoice?.id ?? 'unknown'}`}
                   />
                 </div>
-                {clippedText(invoice.invoiceNumber)}
+                <div className="min-w-0">
+                  {invoice.sourceType && invoice.sourceType !== 'INVOICE' ? (
+                    <span className="mb-0.5 inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                      {invoice.sourceType}
+                    </span>
+                  ) : null}
+                  {clippedText(getPayableDisplayLabel(invoice))}
+                  {!selectable ? (
+                    <span className="block truncate text-[11px] text-muted-foreground" title={invoice.disabledReason}>
+                      {invoice.disabledReason}
+                    </span>
+                  ) : null}
+                </div>
               </div>
             ) : (
-              clippedText(invoice.invoiceNumber)
+              clippedText(getPayableDisplayLabel(invoice))
             );
             break;
           case 'vendorName':
@@ -159,7 +208,7 @@ const PendingPaymentsTab = ({
             value = clippedText(getBranchLabel(invoice));
             break;
           case 'amount':
-            value = clippedText(formatInvoiceAmount(invoice, invoice.amount || 0));
+            value = renderAmountCell(invoice);
             break;
           case 'invoiceDate':
             value = clippedText(safeFormatDate(invoice.invoiceDate));
@@ -177,7 +226,7 @@ const PendingPaymentsTab = ({
           case 'status':
             value = (
               <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border bg-blue-100 text-blue-800 border-blue-200">
-                Pending Payment
+                {invoice.sourceType === 'INVOICE' ? 'Pending Payment' : invoice.status || 'Pending Payment'}
               </span>
             );
             break;
@@ -190,37 +239,43 @@ const PendingPaymentsTab = ({
                 className="flex justify-start gap-1"
                 onClick={(event) => event.stopPropagation()}
               >
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleViewInvoice?.(invoice)}
-                  data-testid={`view-pending-invoice-${invoice?.id ?? 'unknown'}`}
-                  title="View Invoice"
-                  className="h-8 w-8 p-0"
-                >
-                  <Eye className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleDownloadInvoice?.(invoice)}
-                  data-testid={`download-pending-invoice-${invoice?.id ?? 'unknown'}`}
-                  title="Download Invoice"
-                  className="h-8 w-8 p-0"
-                >
-                  <Download className="h-4 w-4" />
-                </Button>
-                {canCancelInvoice?.(invoice) && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleCancelInvoice?.(invoice)}
-                    data-testid={`cancel-pending-invoice-${invoice?.id ?? 'unknown'}`}
-                    title="Cancel Invoice"
-                    className="h-8 w-8 p-0"
-                  >
-                    <Ban className="h-4 w-4 text-destructive" />
-                  </Button>
+                {invoice.sourceType === 'INVOICE' ? (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleViewInvoice?.(invoice)}
+                      data-testid={`view-pending-invoice-${invoice?.id ?? 'unknown'}`}
+                      title="View Invoice"
+                      className="h-8 w-8 p-0"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDownloadInvoice?.(invoice)}
+                      data-testid={`download-pending-invoice-${invoice?.id ?? 'unknown'}`}
+                      title="Download Invoice"
+                      className="h-8 w-8 p-0"
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
+                    {canCancelInvoice?.(invoice) && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleCancelInvoice?.(invoice)}
+                        data-testid={`cancel-pending-invoice-${invoice?.id ?? 'unknown'}`}
+                        title="Cancel Invoice"
+                        className="h-8 w-8 p-0"
+                      >
+                        <Ban className="h-4 w-4 text-destructive" />
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-xs text-muted-foreground">Read only</span>
                 )}
               </div>
             );
@@ -240,6 +295,7 @@ const PendingPaymentsTab = ({
       })}
     </TableRow>
   );
+  };
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">

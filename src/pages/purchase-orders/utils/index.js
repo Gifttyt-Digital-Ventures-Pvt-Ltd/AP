@@ -1,4 +1,8 @@
 import { formatCurrency as formatCurrencyAmount } from "../../../utils/currency";
+import {
+  buildPaymentSchedulePayload,
+  normalizePaymentScheduleRows,
+} from "./poPaymentSchedule";
 
 export const SUPPORTED_PO_CURRENCIES = ["INR", "USD", "EUR", "GBP"];
 export const DEFAULT_PO_TEMPLATE_CODE = "T1";
@@ -232,6 +236,7 @@ export const normalizePurchaseOrder = (po = {}) => ({
   delivery_remarks: po.delivery_remarks ?? po.deliveryRemarks ?? "",
   created_by_name: po.created_by_name ?? po.createdByName ?? "",
   approval_records: po.approval_records ?? po.approvalRecords ?? po.approvals ?? [],
+  paymentSchedule: normalizePaymentScheduleRows(po),
 });
 
 export const sanitizeLineItemForCurrency = (item = {}, currency = "INR") => {
@@ -263,7 +268,11 @@ export const isFormatFieldEnabled = (formatConfig = {}, sectionKey = "", fieldKe
   return field ? Boolean(field.isEnabled) : true;
 };
 
-export const buildCreatePurchaseOrderPayload = (form = {}, formatConfig = null) => {
+export const buildCreatePurchaseOrderPayload = (
+  form = {},
+  formatConfig = null,
+  { includePaymentSchedule = false } = {},
+) => {
   const currency = form.currency || "INR";
   const isInr = isInrCurrency(currency);
   const poNumber = String(form.po_number || "").trim();
@@ -274,6 +283,10 @@ export const buildCreatePurchaseOrderPayload = (form = {}, formatConfig = null) 
   const lineOn = (key) => !formatConfig || isFormatFieldEnabled(formatConfig, "LINE_ITEM", key);
   const tdsApplicable = isInr && taxTotalsOn("is_tds_applicable") && Boolean(form.tds_applicable);
   const includeTotal = (value) => value !== undefined && value !== null && value !== "";
+
+  const paymentSchedule = includePaymentSchedule
+    ? buildPaymentSchedulePayload(form.paymentSchedule || [])
+    : [];
 
   return {
     ...(poNumber ? { poNumber } : {}),
@@ -365,5 +378,6 @@ export const buildCreatePurchaseOrderPayload = (form = {}, formatConfig = null) 
         ...(includeTotal(item.cess_amount) ? { cessAmount: Number(item.cess_amount) } : {}),
       };
     }),
+    ...(includePaymentSchedule ? { paymentSchedule } : {}),
   };
 };

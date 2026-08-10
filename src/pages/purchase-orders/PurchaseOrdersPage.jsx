@@ -50,12 +50,18 @@ import {
   computeLineTotal,
   resolvePoTotals,
 } from './utils/poTotals';
+import {
+  getPaymentScheduleSummary,
+  normalizePaymentScheduleRows,
+  validatePaymentScheduleRows,
+} from './utils/poPaymentSchedule';
 import PurchaseOrdersToolbar from './components/PurchaseOrdersToolbar';
 import PoListTable from './components/PoListTable';
 import PoFormDialog from './components/PoFormDialog';
 import PoFormatBuilderDialog from './components/PoFormatBuilderDialog';
 import PoDetailsDialog from './components/PoDetailsDialog';
 import PoApprovalDialog from './components/PoApprovalDialog';
+import RaiseAdvanceDialog from './components/RaiseAdvanceDialog';
 import PoUploadDialog from './components/PoUploadDialog';
 import PoUploadSection from './components/PoUploadSection';
 import PoSpreadsheetPreview from './components/PoSpreadsheetPreview';
@@ -71,6 +77,8 @@ import { useActionGuard } from '../../hooks/useActionGuard';
 import { useCreditErrorHandler } from '../../contexts/CreditErrorContext';
 import { useRBAC } from '../../contexts/RBACContext';
 import useForeignCurrencyInrConversionSubscription from '../../hooks/useForeignCurrencyInrConversionSubscription';
+import usePaymentTermsSubscription from '../../hooks/usePaymentTermsSubscription';
+import useVendorAdvancesSubscription from '../../hooks/useVendorAdvancesSubscription';
 import {
   getInrConversionValidationError,
   normalizeConversionStateForCurrency,
@@ -84,6 +92,7 @@ import { getInvoiceVendorRequestValidationErrors } from '../../utils/vendorValid
 import { clearNotificationQueryParams } from '../../utils/notificationQueryParams';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? '';
+const EMPTY_LIST = [];
 
 const isSpreadsheetUploadFile = (file = {}) => {
   const fileName = String(file?.name || '').toLowerCase();
@@ -307,6 +316,8 @@ const PurchaseOrdersPage = () => {
   const { handleCreditError } = useCreditErrorHandler();
   const { isCorporateSectionEnabled, isBranchEnabled } = useRBAC();
   const { isForeignCurrencyInrConversionEnabled } = useForeignCurrencyInrConversionSubscription();
+  const { isPaymentTermsEnabled } = usePaymentTermsSubscription();
+  const { isVendorAdvancesEnabled } = useVendorAdvancesSubscription();
   const { setHideSidebar } = useSidebar();
   const canManagePo = canPerformAction('po.create');
   const canSubmitPo = canPerformAction('po.submit');
@@ -318,7 +329,7 @@ const PurchaseOrdersPage = () => {
   const canApprovePo = canPerformAction('po.approve');
 
   const {
-    data: purchaseOrdersData = [],
+    data: purchaseOrdersData = EMPTY_LIST,
     isLoading: purchaseOrdersLoading,
     refetch: refetchPurchaseOrders,
   } = useGetPurchaseOrdersQuery();
@@ -328,12 +339,12 @@ const PurchaseOrdersPage = () => {
     refetch: refetchFormatConfig,
   } = useGetPurchaseOrderFormatConfigQuery();
   const {
-    data: formatConfigsData = [],
+    data: formatConfigsData = EMPTY_LIST,
     isLoading: formatConfigsLoading,
     refetch: refetchFormatConfigs,
   } = useGetPurchaseOrderFormatConfigsQuery();
   const {
-    data: vendorsData = [],
+    data: vendorsData = EMPTY_LIST,
     isLoading: vendorsLoading,
     refetch: refetchVendors,
   } = useGetVendorsQuery();
@@ -397,7 +408,9 @@ const PurchaseOrdersPage = () => {
   const [showBuilderDialog, setShowBuilderDialog] = useState(false);
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showApprovalDialog, setShowApprovalDialog] = useState(false);
+  const [showRaiseAdvanceDialog, setShowRaiseAdvanceDialog] = useState(false);
   const [selectedPO, setSelectedPO] = useState(null);
+  const [advancePo, setAdvancePo] = useState(null);
   const [editingPO, setEditingPO] = useState(null);
   const [createAction, setCreateAction] = useState(null);
   const [submitting, setSubmitting] = useState(false);
@@ -415,8 +428,26 @@ const PurchaseOrdersPage = () => {
     savedFormatConfigs[0] ||
     makeFormatConfig(DEFAULT_PO_FORMAT_CONFIG, 'default-format', 'Standard GST Format', tenantBranding);
 
+  const createPoFormForFormat = useCallback(
+    (defaultCurrency, formatId) => {
+      const form = createDefaultPoForm(defaultCurrency, formatId);
+      return isPaymentTermsEnabled ? { ...form, paymentSchedule: [] } : form;
+    },
+    [isPaymentTermsEnabled],
+  );
+
+  const buildEditablePoForm = useCallback(
+    (po, fallbackFormatId) => {
+      const form = buildPoEditForm(po, fallbackFormatId);
+      return isPaymentTermsEnabled
+        ? { ...form, paymentSchedule: normalizePaymentScheduleRows(po) }
+        : form;
+    },
+    [isPaymentTermsEnabled],
+  );
+
   const [poForm, setPoForm] = useState(() =>
-    createDefaultPoForm(activeFormatConfig.defaultCurrency, activeFormatConfig.id),
+    createPoFormForFormat(activeFormatConfig.defaultCurrency, activeFormatConfig.id),
   );
 
   useEffect(() => {
@@ -498,19 +529,24 @@ const PurchaseOrdersPage = () => {
         prev.line_items.length === 1 &&
         !prev.line_items[0]?.item_description;
 
-      if (untouched) return createDefaultPoForm(resolvedActiveFormat.defaultCurrency, resolvedActiveFormat.id);
+      if (untouched) {
+        const nextForm = createPoFormForFormat(resolvedActiveFormat.defaultCurrency, resolvedActiveFormat.id);
+        return JSON.stringify(prev) === JSON.stringify(nextForm) ? prev : nextForm;
+      }
       if (nextFormats.some((config) => config.id === prev.po_format_id)) return prev;
-      return {
+      const nextForm = {
         ...prev,
         po_format_id: resolvedActiveFormat.id,
         currency: resolvedActiveFormat.defaultCurrency,
         line_items: prev.line_items.map((item) => sanitizeLineItemForCurrency(item, resolvedActiveFormat.defaultCurrency)),
       };
+      return JSON.stringify(prev) === JSON.stringify(nextForm) ? prev : nextForm;
     });
   }, [
     formatConfigData,
     formatConfigsData,
     activeFormatId,
+    createPoFormForFormat,
     tenantBranding.companyName,
     tenantBranding.logoUrl,
     tenantBranding.logoS3Key,
@@ -591,6 +627,21 @@ const PurchaseOrdersPage = () => {
       toast.error('Please select a valid TDS rate');
       return false;
     }
+    if (isPaymentTermsEnabled) {
+      const paymentSchedule = form.paymentSchedule || [];
+      const scheduleErrors = validatePaymentScheduleRows(paymentSchedule);
+      if (scheduleErrors.length > 0) {
+        toast.error(scheduleErrors[0]);
+        return false;
+      }
+      const scheduleSummary = getPaymentScheduleSummary(
+        paymentSchedule,
+        resolvePoTotals(form).total_amount,
+      );
+      if (paymentSchedule.length > 0 && Math.abs(scheduleSummary.difference) > 0.009) {
+        toast.warning('Payment Schedule total does not match the PO gross total. Draft save is allowed; backend remains authoritative.');
+      }
+    }
     return true;
   };
 
@@ -602,7 +653,11 @@ const PurchaseOrdersPage = () => {
     const selectedFormat = isUpload
       ? null
       : savedFormatConfigs.find((config) => config.id === form.po_format_id) || activeFormatConfig;
-    const payload = buildCreatePurchaseOrderPayload(form, selectedFormat);
+    const payload = buildCreatePurchaseOrderPayload(
+      form,
+      selectedFormat,
+      { includePaymentSchedule: isPaymentTermsEnabled },
+    );
     const data = submitForApproval
       ? await createPurchaseOrder(payload).unwrap()
       : await savePurchaseOrderDraft(payload).unwrap();
@@ -634,7 +689,11 @@ const PurchaseOrdersPage = () => {
     setCreateAction(submitForApproval ? 'submit' : 'draft');
     try {
       const selectedFormat = savedFormatConfigs.find((config) => config.id === poForm.po_format_id) || activeFormatConfig;
-      const payload = buildCreatePurchaseOrderPayload(poForm, selectedFormat);
+      const payload = buildCreatePurchaseOrderPayload(
+        poForm,
+        selectedFormat,
+        { includePaymentSchedule: isPaymentTermsEnabled },
+      );
       const editingPoId = getPoId(editingPO);
 
       if (editingPoId) {
@@ -665,7 +724,7 @@ const PurchaseOrdersPage = () => {
       resetForm();
     } catch (error) {
       if (handleCreditError(error)) return;
-      toast.error(error?.data?.detail || error?.data?.message || 'Failed to save purchase order');
+      toast.error(extractApiErrorDetail(error) || 'Failed to save purchase order');
     } finally {
       setCreateAction(null);
     }
@@ -686,7 +745,7 @@ const PurchaseOrdersPage = () => {
       setShowViewDialog(false);
       fetchData();
     } catch (error) {
-      toast.error(error?.data?.detail || error?.data?.message || 'Failed to submit for approval');
+      toast.error(extractApiErrorDetail(error) || 'Failed to submit for approval');
     } finally {
       setSubmitting(false);
     }
@@ -705,7 +764,7 @@ const PurchaseOrdersPage = () => {
       setApprovalForm({ action: 'Approved', comments: '' });
       fetchData();
     } catch (error) {
-      toast.error(error?.data?.detail || error?.data?.message || 'Failed to process approval');
+      toast.error(extractApiErrorDetail(error) || 'Failed to process approval');
     } finally {
       setSubmitting(false);
     }
@@ -747,11 +806,15 @@ const PurchaseOrdersPage = () => {
         savedFormatConfigs.find((config) => config.id === (po.po_format_id || po.poFormatId || po.formatConfigId)) ||
         activeFormatConfig;
       const form = {
-        ...buildPoEditForm(po, selectedFormat.id),
+        ...buildEditablePoForm(po, selectedFormat.id),
         delivery_status,
         delivery_remarks,
       };
-      const payload = buildCreatePurchaseOrderPayload(form, selectedFormat);
+      const payload = buildCreatePurchaseOrderPayload(
+        form,
+        selectedFormat,
+        { includePaymentSchedule: isPaymentTermsEnabled },
+      );
       const data = await updatePurchaseOrder({ id: poId, body: payload }).unwrap();
       const updatedPo = getCreatedPo(data);
       const normalizedUpdatedPo = normalizePurchaseOrder(updatedPo || {});
@@ -766,7 +829,7 @@ const PurchaseOrdersPage = () => {
   };
 
   const resetForm = () => {
-    setPoForm(createDefaultPoForm(activeFormatConfig.defaultCurrency, activeFormatConfig.id));
+    setPoForm(createPoFormForFormat(activeFormatConfig.defaultCurrency, activeFormatConfig.id));
   };
 
   const openEditPoDialog = (po) => {
@@ -779,7 +842,7 @@ const PurchaseOrdersPage = () => {
       savedFormatConfigs.find((config) => config.id === (po.po_format_id || po.poFormatId || po.formatConfigId)) ||
       activeFormatConfig;
     setEditingPO(po);
-    setPoForm(buildPoEditForm(po, selectedFormat.id));
+    setPoForm(buildEditablePoForm(po, selectedFormat.id));
     setShowViewDialog(false);
     setShowCreateDialog(true);
   };
@@ -790,6 +853,12 @@ const PurchaseOrdersPage = () => {
     setApprovalForm({ action, comments: '' });
     setShowViewDialog(false);
     setShowApprovalDialog(true);
+  };
+
+  const openRaiseAdvanceDialog = (po) => {
+    if (!isVendorAdvancesEnabled || !po) return;
+    setAdvancePo(po);
+    setShowRaiseAdvanceDialog(true);
   };
 
   const submitPoFromRow = (po) => {
@@ -890,7 +959,7 @@ const PurchaseOrdersPage = () => {
       setShowBuilderDialog(false);
       setPoForm((prev) => {
         const untouched = !prev.vendor_id && prev.line_items.length === 1 && !prev.line_items[0]?.item_description;
-        return untouched ? createDefaultPoForm(savedConfig.defaultCurrency, savedConfig.id) : { ...prev, po_format_id: savedConfig.id };
+        return untouched ? createPoFormForFormat(savedConfig.defaultCurrency, savedConfig.id) : { ...prev, po_format_id: savedConfig.id };
       });
       await Promise.all([refetchFormatConfigs(), refetchFormatConfig()]);
       toast.success(`PO format "${savedConfig.name}" saved`);
@@ -1460,6 +1529,7 @@ const PurchaseOrdersPage = () => {
         createAction={createAction}
         showBranchField={isBranchEnabled}
         organisationBranches={organisationBranches}
+        isPaymentTermsEnabled={isPaymentTermsEnabled}
       />
 
       <PoFormatBuilderDialog
@@ -1494,6 +1564,8 @@ const PurchaseOrdersPage = () => {
         canApprovePo={canApprovePo}
         onSaveDeliveryStatus={handleSaveDeliveryStatus}
         savingDeliveryStatus={savingDeliveryStatus}
+        canRaiseAdvance={isVendorAdvancesEnabled}
+        onRaiseAdvance={openRaiseAdvanceDialog}
       />
 
       <PoApprovalDialog
@@ -1506,6 +1578,15 @@ const PurchaseOrdersPage = () => {
         handleApproval={handleApproval}
         submitting={submitting}
         canApprovePo={canApprovePo}
+      />
+
+      <RaiseAdvanceDialog
+        open={showRaiseAdvanceDialog}
+        onOpenChange={(open) => {
+          setShowRaiseAdvanceDialog(open);
+          if (!open) setAdvancePo(null);
+        }}
+        purchaseOrder={advancePo}
       />
 
       {canUploadPo ? (
