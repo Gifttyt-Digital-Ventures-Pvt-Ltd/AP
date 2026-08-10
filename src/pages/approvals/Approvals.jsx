@@ -8,6 +8,8 @@ import {
   useCheckInvoiceMutation,
   useLazyGetInvoiceQuery,
   useLazyGetInvoiceHistoryQuery,
+  useGetInvoiceAdvanceAdjustmentProposalQuery,
+  useConfirmInvoiceAdvanceAdjustmentMutation,
 } from '../../Services/apis/invoicesVendorsApi';
 import { toInvoiceUiPayload, EMPTY_INVOICE_LIST_RESPONSE, getInvoiceListItems } from '../../Services/utils/payloadMappers';
 import { Tabs, TabsContent } from '../../components/ui/tabs';
@@ -39,9 +41,14 @@ import {
   NEEDS_CORRECTION_ACTION,
   normalizeApprovalAction,
   normalizeWorkflowStatus,
+  extractApiErrorDetail,
 } from '../../utils/approvalWorkflow';
 import { getApprovalProgress } from './utils/approvalProgress';
 import { useApprovalsInvoiceEdit } from './hooks/useApprovalsInvoiceEdit';
+import useVendorAdvancesSubscription from '../../hooks/useVendorAdvancesSubscription';
+import {
+  buildAdvanceAdjustmentConfirmPayload,
+} from '../invoices/utils/advanceAdjustment';
 import {
   isInvoiceFundingEnabled as isInvoiceFundingEnabledForCorporate,
   isRefNoEnabled as isRefNoEnabledForCorporate,
@@ -63,6 +70,7 @@ const Approvals = () => {
   const handledNotificationRef = useRef(null);
   const { isCategoryFeatureEnabled, isCampaignFeatureEnabled, corporateScreens, isBranchEnabled } = useRBAC();
   const { canPerformAction } = useActionGuard();
+  const { isVendorAdvancesEnabled } = useVendorAdvancesSubscription();
   const canCheckInvoices = canPerformAction('invoices.check');
   const canApproveInvoices = canPerformAction('invoices.approve');
 
@@ -128,6 +136,8 @@ const Approvals = () => {
     useApproveInvoiceMutation();
   const [checkInvoice, { isLoading: checkInvoiceLoading }] =
     useCheckInvoiceMutation();
+  const [confirmInvoiceAdvanceAdjustment, { isLoading: confirmAdvanceAdjustmentLoading }] =
+    useConfirmInvoiceAdvanceAdjustmentMutation();
   const [getInvoice] = useLazyGetInvoiceQuery();
   const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
 
@@ -158,7 +168,38 @@ const Approvals = () => {
   const [pdfZoom, setPdfZoom] = useState(100);
   const [comments, setComments] = useState('');
   const [actionType, setActionType] = useState('');
+  const [advanceAdjustmentConfirmed, setAdvanceAdjustmentConfirmed] = useState(false);
   const canPerformApprovalActions = canApproveInvoices || canCheckInvoices;
+  const selectedInvoiceId =
+    selectedInvoice?.id ?? selectedInvoice?.invoiceId ?? selectedInvoice?.invoice_id;
+  const normalizedDialogAction = normalizeApprovalAction(actionType);
+  const isPositiveApprovalAction =
+    normalizedDialogAction === 'Approved' || normalizedDialogAction === 'Checked';
+  const shouldCheckAdvanceAdjustment = Boolean(
+    dialogOpen &&
+      isVendorAdvancesEnabled &&
+      selectedInvoiceId &&
+      isPositiveApprovalAction,
+  );
+  const {
+    data: advanceAdjustmentProposal = null,
+    isFetching: advanceAdjustmentLoading,
+    isError: advanceAdjustmentError,
+    refetch: refetchAdvanceAdjustmentProposal,
+  } = useGetInvoiceAdvanceAdjustmentProposalQuery(selectedInvoiceId, {
+    skip: !shouldCheckAdvanceAdjustment,
+  });
+  const isAdvanceAdjustmentConfirmed =
+    advanceAdjustmentConfirmed || Boolean(advanceAdjustmentProposal?.confirmed);
+  const requiresAdvanceAdjustmentConfirmation = Boolean(
+    shouldCheckAdvanceAdjustment &&
+      advanceAdjustmentProposal?.requiresConfirmation &&
+      !isAdvanceAdjustmentConfirmed,
+  );
+
+  useEffect(() => {
+    setAdvanceAdjustmentConfirmed(false);
+  }, [selectedInvoiceId, normalizedDialogAction, dialogOpen]);
 
   const isRefNoEnabled = useMemo(
     () =>
@@ -353,6 +394,10 @@ const Approvals = () => {
 
   const submitApproval = async () => {
     if (approveInvoiceLoading || checkInvoiceLoading) return;
+    if (requiresAdvanceAdjustmentConfirmation) {
+      toast.error('Confirm advance adjustment before approving invoice');
+      return;
+    }
 
     try {
       const isChecker =
@@ -408,8 +453,32 @@ const Approvals = () => {
       } catch {
         // No-op: keep optimistic success toast even if background refetch fails.
       }
-    } catch {
-      toast.error(`Failed to ${actionType} invoice`);
+    } catch (error) {
+      toast.error(
+        extractApiErrorDetail(error) || `Failed to ${actionType} invoice`,
+      );
+    }
+  };
+
+  const handleConfirmAdvanceAdjustment = async () => {
+    if (!selectedInvoiceId || !advanceAdjustmentProposal) return;
+
+    try {
+      await confirmInvoiceAdvanceAdjustment({
+        id: selectedInvoiceId,
+        body: buildAdvanceAdjustmentConfirmPayload(advanceAdjustmentProposal),
+      }).unwrap();
+      setAdvanceAdjustmentConfirmed(true);
+      toast.success('Advance adjustment confirmed');
+      try {
+        await refetchAdvanceAdjustmentProposal();
+      } catch {
+        // Confirmation has succeeded; keep the dialog state usable if refresh fails.
+      }
+    } catch (error) {
+      toast.error(
+        extractApiErrorDetail(error) || 'Failed to confirm advance adjustment',
+      );
     }
   };
 
@@ -626,6 +695,13 @@ const Approvals = () => {
         setComments={setComments}
         submitApproval={submitApproval}
         isSubmitting={approveInvoiceLoading || checkInvoiceLoading}
+        showAdvanceAdjustment={shouldCheckAdvanceAdjustment}
+        advanceAdjustmentProposal={advanceAdjustmentProposal}
+        isAdvanceAdjustmentLoading={advanceAdjustmentLoading}
+        isAdvanceAdjustmentError={advanceAdjustmentError}
+        isAdvanceAdjustmentConfirmed={isAdvanceAdjustmentConfirmed}
+        isConfirmingAdvanceAdjustment={confirmAdvanceAdjustmentLoading}
+        onConfirmAdvanceAdjustment={handleConfirmAdvanceAdjustment}
       />
 
       <InvoiceHistorySheet

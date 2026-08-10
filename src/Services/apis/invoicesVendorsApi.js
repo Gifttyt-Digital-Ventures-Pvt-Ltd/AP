@@ -10,6 +10,7 @@ import {
   normalizeInvoiceFilterOptions,
 } from "../utils/payloadMappers";
 import { normalizeApprovalHistoryEntries } from "../../pages/invoices/utils/invoiceHistory";
+import { normalizeAdvanceAdjustmentProposal } from "../../pages/invoices/utils/advanceAdjustment";
 import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
 
 const unwrapVendorList = extractListResponse;
@@ -130,6 +131,29 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
         body,
       }),
       invalidatesTags: ["Invoices", "Approvals", "Dashboard", "Reports"],
+    }),
+    getInvoiceAdvanceAdjustmentProposal: builder.query({
+      query: (id) => ({
+        url: `/invoices/${id}/advance-adjustments/propose`,
+        method: "GET",
+      }),
+      transformResponse: normalizeAdvanceAdjustmentProposal,
+      providesTags: (_result, _error, id) => [{ type: "Invoices", id }],
+    }),
+    confirmInvoiceAdvanceAdjustment: builder.mutation({
+      query: ({ id, body }) => ({
+        url: `/invoices/${id}/advance-adjustments/confirm`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: (_result, _error, { id }) => [
+        { type: "Invoices", id },
+        "Invoices",
+        "Approvals",
+        "Dashboard",
+        "Reports",
+        "VendorAdvances",
+      ],
     }),
     getInvoiceHistory: builder.query({
       query: (id) => ({ url: `/invoices/${id}/history`, method: "GET" }),
@@ -289,6 +313,8 @@ export const {
   useScanInvoiceMutation,
   useBulkUploadInvoicesMutation,
   useApproveInvoiceMutation,
+  useGetInvoiceAdvanceAdjustmentProposalQuery,
+  useConfirmInvoiceAdvanceAdjustmentMutation,
   useGetInvoiceHistoryQuery,
   useLazyGetInvoiceHistoryQuery,
   useGetInvoiceFundingHistoryQuery,

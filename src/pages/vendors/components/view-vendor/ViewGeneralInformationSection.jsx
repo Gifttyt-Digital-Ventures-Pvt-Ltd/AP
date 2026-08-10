@@ -1,5 +1,6 @@
 import React from "react";
 import { Label } from "../../../../components/ui/label";
+import { formatCurrency } from "../../../../utils/currency";
 import { VENDOR_FIELD_SECTIONS } from "../../../../utils/vendorFieldConfig";
 import ReadOnlyField, { ReadOnlyValue } from "./ReadOnlyField";
 
@@ -15,6 +16,24 @@ const SubsectionHeading = ({ title, description }) => (
 );
 
 const yesNo = (value) => (value ? "Yes" : "No");
+
+const hasValue = (value) =>
+  value !== undefined && value !== null && value !== "";
+
+const getVendorBalance = (vendor = {}) =>
+  vendor.vendorBalance ??
+  vendor.vendor_balance ??
+  vendor.balance ??
+  vendor.currentBalance ??
+  vendor.current_balance ??
+  vendor.openingBalance ??
+  vendor.opening_balance;
+
+const formatVendorBalance = (vendor = {}) => {
+  const balance = getVendorBalance(vendor);
+  if (!hasValue(balance)) return "";
+  return formatCurrency(balance, vendor.currency || "INR");
+};
 
 const ViewGeneralInformationSection = ({ formData, labelFor }) => {
   const nameLabel =
@@ -106,7 +125,7 @@ const ViewGeneralInformationSection = ({ formData, labelFor }) => {
             />
             <ReadOnlyField
               label="Vendor Balance"
-              value={formData.currency || "INR"}
+              value={formatVendorBalance(formData)}
               className="flex-1"
             />
           </div>

@@ -24,6 +24,7 @@ import ViewBankDetailsSection from "./ViewBankDetailsSection";
 import ViewAttachmentsSection from "./ViewAttachmentsSection";
 import ViewNotesSection from "./ViewNotesSection";
 import ReadOnlyField from "./ReadOnlyField";
+import AdvanceContextPanel from "../../../../components/vendor-advances/AdvanceContextPanel";
 
 const NAV_SECTIONS = [
   {
@@ -195,6 +196,14 @@ const ViewVendorPage = ({ formData, onClose, onEdit, embedded = false }) => {
                   <div id="general-information" className="scroll-mt-4">
                     <ViewGeneralInformationSection formData={formData} labelFor={labelFor} />
                   </div>
+
+                  <AdvanceContextPanel
+                    source={formData}
+                    title="Vendor Advance Balance"
+                    description="Read-only vendor advance balance and PO-wise context from backend."
+                    currency={formData.currency || "INR"}
+                    className="-mx-6 px-10"
+                  />
 
                   <div id="address-branch-information" className="scroll-mt-4">
                     <ViewAddressBranchInformationSection

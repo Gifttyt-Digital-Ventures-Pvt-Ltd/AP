@@ -14,6 +14,7 @@ import {
   getPayrunApprovalRecords,
 } from './payrunUtils';
 import { DEFAULT_CURRENCY, formatCurrency } from '../../../utils/currency';
+import { getPayableDisplayLabel } from '../utils/payableRows';
 
 const preventDialogOutsideDismiss = (event) => {
   event.preventDefault();
@@ -84,6 +85,7 @@ const PayrunDetailsSheet = ({
   if (!payrun) return null;
   const approvals = getPayrunApprovalRecords(payrun);
   const canShowReleaseAction = Boolean(payrun.allowedActions?.release) && canReleasePayrun;
+  const hasSourceAwareRows = payrun.invoices.some((invoice) => invoice.sourceType && invoice.sourceType !== 'INVOICE');
   const detailRows = [
     ['Created By', payrun.createdBy],
     ['Created On', safeFormatDate(payrun.createdOn, 'dd MMM yyyy')],
@@ -123,7 +125,7 @@ const PayrunDetailsSheet = ({
             <PayrunStatusBadge status={payrun.status} />
           </div>
           <p className="mt-1 text-[13px] text-slate-500">
-            {payrun.batchId} · {payrun.invoices.length} invoice{payrun.invoices.length === 1 ? '' : 's'}
+            {payrun.batchId} · {payrun.invoices.length} {hasSourceAwareRows ? 'payable' : 'invoice'}{payrun.invoices.length === 1 ? '' : 's'}
           </p>
         </SheetHeader>
 
@@ -145,28 +147,50 @@ const PayrunDetailsSheet = ({
           )}
 
           {renderDrawerSection(
-            'Invoices',
+            hasSourceAwareRows ? 'Payables' : 'Invoices',
             <>
               {payrun.invoices.map((invoice) => (
                 <div key={invoice.id} className="border-b border-slate-100 px-3.5 py-3 last:border-b-0">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="m-0 truncate text-[13px] font-semibold text-primary">{invoice.invoiceNumber}</p>
+                      {invoice.sourceType && invoice.sourceType !== 'INVOICE' ? (
+                        <span className="mb-1 inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                          {invoice.sourceType}
+                        </span>
+                      ) : null}
+                      <p className="m-0 truncate text-[13px] font-semibold text-primary">{getPayableDisplayLabel(invoice)}</p>
                       <p className="mt-0.5 truncate text-[13px] font-medium text-slate-900">{invoice.vendorName}</p>
+                      {invoice.poNumber ? (
+                        <p className="mt-0.5 truncate text-xs text-slate-500">PO: {invoice.poNumber}</p>
+                      ) : null}
+                      {invoice.sourceType === 'OBLIGATION' && invoice.triggerStage ? (
+                        <p className="mt-0.5 truncate text-xs text-slate-500">
+                          Trigger: {invoice.triggerStage}
+                        </p>
+                      ) : null}
                     </div>
                     <div className="flex shrink-0 items-start gap-2">
-                      <p className="m-0 text-right text-[13px] font-bold text-slate-900">
-                        {formatMoney(invoice.requestedAmount, getInvoicePaymentCurrency(invoice))}
-                      </p>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => onViewInvoice?.(invoice)}
-                        title="View Invoice"
-                        className="h-7 w-7 p-0"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
+                      <div className="text-right">
+                        <p className="m-0 text-[13px] font-bold text-slate-900">
+                          {formatMoney(invoice.requestedAmount, getInvoicePaymentCurrency(invoice))}
+                        </p>
+                        {invoice.hasAdvanceAdjustment ? (
+                          <p className="mt-0.5 text-[11px] font-normal text-slate-500">
+                            Adj: -{formatMoney(invoice.advanceAdjustedTotal, invoice.currency)}
+                          </p>
+                        ) : null}
+                      </div>
+                      {invoice.sourceType === 'INVOICE' ? (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onViewInvoice?.(invoice)}
+                          title="View Invoice"
+                          className="h-7 w-7 p-0"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
                   <div className="mt-2 grid grid-cols-2 gap-2 text-xs text-slate-500">

@@ -47,6 +47,7 @@ import { Badge } from "../../../components/ui/badge";
 import { buildInternalChecklistState } from "../utils/internalChecklist";
 import { INTERNAL_CHECKLIST_ITEMS } from "../constants/internalChecklist";
 import InternalChecklistSection from "./InternalChecklistSection";
+import { normalizeHistoricalAdvanceAdjustment } from "../utils/advanceAdjustment";
 
 const formatDisplayDate = (value) => {
   if (!value) return "-";
@@ -171,6 +172,7 @@ const InvoiceReadOnlyDetails = ({
   const isInvoiceLevelTax = isInvoiceLevelSelection(formData.taxesLevel);
   const showLineItemDiscount = isLineItemLevelSelection(formData.discountsLevel);
   const formatAmount = (amount) => formatCurrency(amount, invoiceCurrency);
+  const advanceAdjustment = normalizeHistoricalAdvanceAdjustment(invoice);
 
   const calculateLineItemSubtotal = (item) => {
     if (isInvoiceLevelDiscount) {
@@ -773,6 +775,45 @@ const InvoiceReadOnlyDetails = ({
             {formatAmount(netPayable)}
           </span>
         </div>
+        {advanceAdjustment.hasAdjustmentContext && (
+          <div className="space-y-1.5 rounded-md border border-border bg-muted/30 p-3">
+            <div className="flex justify-between text-xs">
+              <span>Advance Adjusted Total</span>
+              <span className="font-medium">
+                {formatAmount(advanceAdjustment.advanceAdjustedTotal ?? 0)}
+              </span>
+            </div>
+            {advanceAdjustment.netPayableAfterAdvance !== null && (
+              <div className="flex justify-between text-sm font-bold">
+                <span>Net Payable After Advance</span>
+                <span className="text-primary">
+                  {formatAmount(advanceAdjustment.netPayableAfterAdvance)}
+                </span>
+              </div>
+            )}
+            {advanceAdjustment.adjustedAdvances.length > 0 && (
+              <div className="space-y-1 border-t border-border pt-1.5 text-xs text-muted-foreground">
+                {advanceAdjustment.adjustedAdvances.map((advance, index) => (
+                  <div
+                    key={`${advance.advanceId ?? advance.referenceNumber ?? index}`}
+                    className="flex justify-between gap-3"
+                  >
+                    <span className="truncate">
+                      {advance.referenceNumber || advance.advanceId || "Advance"}
+                    </span>
+                    <span className="shrink-0">
+                      {formatAmount(
+                        advance.adjustedAmount ??
+                          advance.proposedAdjustedAmount ??
+                          0,
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         <ConvertedInrAmountSummary
           convertToInr={formData.convertToInr ?? invoice?.convertToInr}
           matchingInrValue={formData.matchingInrValue ?? invoice?.matchingInrValue}

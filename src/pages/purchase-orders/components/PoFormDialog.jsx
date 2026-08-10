@@ -22,6 +22,7 @@ import AppSelect from "../../../components/common/AppSelect";
 import InrConversionFields, {
   ConvertedInrAmountSummary,
 } from "../../../components/common/InrConversionFields";
+import PoPaymentScheduleSection from "./PoPaymentScheduleSection";
 
 const PO_REFERENCE_DOCUMENT_TYPE_OPTIONS = [
   { value: "PI", label: "Proforma Invoice (PI)" },
@@ -190,6 +191,7 @@ const PoFormDialog = ({
   requestingVendor = false,
   showBranchField = false,
   organisationBranches = [],
+  isPaymentTermsEnabled = false,
 }) => {
   const [previewAction, setPreviewAction] = useState(null);
 
@@ -947,6 +949,21 @@ const PoFormDialog = ({
                   </div>
                 </section>
               )}
+
+              {isPaymentTermsEnabled ? (
+                <PoPaymentScheduleSection
+                  rows={poForm.paymentSchedule || []}
+                  poGrossTotal={displayTotal}
+                  formatCurrency={formatPoCurrency}
+                  readOnly={isPreviewing}
+                  onChange={(paymentSchedule) =>
+                    setPoForm((prev) => ({
+                      ...prev,
+                      paymentSchedule,
+                    }))
+                  }
+                />
+              ) : null}
 
               <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-[1fr_320px]">
                 {sectionOn("PAYMENT") && (
