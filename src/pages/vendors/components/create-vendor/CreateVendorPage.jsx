@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Loader2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "../../../../components/ui/button";
@@ -7,6 +7,7 @@ import { Label } from "../../../../components/ui/label";
 import { useRBAC } from "../../../../contexts/RBACContext";
 import {
   getVendorFieldDisplayName,
+  getVendorFormRequiredFields,
   isVendorFieldRequired,
   VENDOR_FIELD_SECTIONS,
 } from "../../../../utils/vendorFieldConfig";
@@ -43,6 +44,7 @@ import GeneralInformationSection from "./GeneralInformationSection";
 import AddressBranchInformationSection from "./AddressBranchInformationSection";
 import TaxInformationSection from "./TaxInformationSection";
 import BankDetailsSection from "./BankDetailsSection";
+import { validateVendorBankAccounts } from "./VendorBankDetailsEditor";
 import AttachmentsSection from "./AttachmentsSection";
 import NotesSection from "./NotesSection";
 
@@ -155,8 +157,13 @@ const CreateVendorPage = ({
     corporateScreens?.activeVendorVerification,
   );
   const showPortalFetch = gstVerificationEnabled;
+  const requiredVendorFields = useMemo(
+    () => getVendorFormRequiredFields(activeVendorFields, formData),
+    [activeVendorFields, formData],
+  );
 
-  const isRequired = (sectionId) => isVendorFieldRequired(sectionId, activeVendorFields);
+  const isRequired = (sectionId) => isVendorFieldRequired(sectionId, requiredVendorFields);
+  const isApiFieldRequired = (sectionId) => isVendorFieldRequired(sectionId, activeVendorFields);
   const labelFor = (sectionId, fallback = "") =>
     getVendorFieldDisplayName(sectionId, vendorFieldConfiguration) || fallback;
   const updateField = (field, value) => setFormData((prev) => ({ ...prev, [field]: value }));
@@ -196,7 +203,7 @@ const CreateVendorPage = ({
   const gstRegistrations = normalizeFormGstRegistrations(formData.gstRegistrations);
   const vendorBranches = normalizeVendorBranches(formData.vendorBranches);
   const fieldErrors = submitAttempted
-    ? getVendorFieldErrorMap(formData, { activeVendorFields, vendorFieldConfiguration })
+    ? getVendorFieldErrorMap(formData, { activeVendorFields: requiredVendorFields, vendorFieldConfiguration })
     : {};
 
   const updateVendorBranches = (branches) => {
@@ -364,7 +371,7 @@ const CreateVendorPage = ({
     setSubmitAttempted(true);
 
     const validationErrors = getVendorValidationErrors(formData, {
-      activeVendorFields,
+      activeVendorFields: requiredVendorFields,
       vendorFieldConfiguration,
     });
     if (validationErrors.length > 0) {
@@ -394,6 +401,15 @@ const CreateVendorPage = ({
       toast.error(
         getVendorGstinFormatError(incompleteRegistrations[0].gstin) || "Invalid GSTIN in a registration block.",
       );
+      return;
+    }
+
+    const vendorBankError = validateVendorBankAccounts(formData.bankAccounts, {
+      foreignVendor: Boolean(formData.foreignVendor),
+      isRequired: isApiFieldRequired,
+    });
+    if (vendorBankError) {
+      toast.error(vendorBankError);
       return;
     }
 
@@ -486,6 +502,7 @@ const CreateVendorPage = ({
                   removeGstRegistration={removeGstRegistration}
                   updateVendorBranches={updateVendorBranches}
                   isVendorFetchReady={isVendorFetchReady}
+                  isApiFieldRequired={isApiFieldRequired}
                   isEditMode={isEditMode}
                   fieldErrors={fieldErrors}
                 />
@@ -571,7 +588,7 @@ const CreateVendorPage = ({
                   bankAccounts={formData.bankAccounts || []}
                   onChange={(bankAccounts) => updateField("bankAccounts", bankAccounts)}
                   foreignVendor={Boolean(formData.foreignVendor)}
-                  isRequired={isRequired}
+                  isRequired={isApiFieldRequired}
                 />
               </div>
 

@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   BookOpen,
-  Download,
   Eye,
   FileText,
   Loader2,
@@ -32,10 +31,8 @@ import {
   useBulkMarkAccountingReadyItemsMutation,
   useBulkSyncAccountingReadyItemsMutation,
   useDirectUnlockAccountingReadyItemMutation,
-  useDownloadAccountingSyncLogsMutation,
   useGetAccountingReadyQueueQuery,
   useLazyGetAccountingQueueItemDetailQuery,
-  useGetAccountingSyncLogsQuery,
   useMarkAccountingReadyItemMutation,
   useRetryAccountingReadyItemMutation,
   useSyncAccountingReadyItemMutation,
@@ -374,7 +371,6 @@ const ReadyForAccountingQueue = ({
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [syncingRowIds, setSyncingRowIds] = useState(() => new Set());
   const [bulkPushing, setBulkPushing] = useState(false);
-  const [showLogs, setShowLogs] = useState(false);
   const [manualRefreshing, setManualRefreshing] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewDetail, setPreviewDetail] = useState(null);
@@ -420,15 +416,6 @@ const ReadyForAccountingQueue = ({
   const isError = primaryQueueQuery.isError;
   const error = primaryQueueQuery.error;
   const refetch = primaryQueueQuery.refetch;
-  const {
-    data: logsData,
-    isLoading: logsLoading,
-    isFetching: logsFetching,
-    refetch: refetchLogs,
-  } = useGetAccountingSyncLogsQuery(
-    { objectType: activeObjectType, limit: PAGE_SIZE, offset: 0 },
-    { skip: !showLogs },
-  );
   const { data: tallyConnectionsData } = useGetTallyConnectionsQuery(undefined, {
     skip:
       activeStage !== ACCOUNTING_QUEUE_STAGE.ACCOUNTING_READY ||
@@ -446,8 +433,6 @@ const ReadyForAccountingQueue = ({
     useRetryAccountingReadyItemMutation();
   const [directUnlock, { isLoading: directUnlocking }] =
     useDirectUnlockAccountingReadyItemMutation();
-  const [downloadLogs, { isLoading: downloading }] =
-    useDownloadAccountingSyncLogsMutation();
   const [loadQueueItemDetail, { isFetching: previewFetching }] =
     useLazyGetAccountingQueueItemDetailQuery();
   const [triggerTallySync] = useTriggerTallySyncMutation();
@@ -455,7 +440,6 @@ const ReadyForAccountingQueue = ({
 
   const allItems = data?.items || [];
   const docs = allItems;
-  const logs = logsData?.items || logsData?.results || [];
   const total = Number(data?.total ?? docs.length) || 0;
   const limit = Number(data?.limit ?? PAGE_SIZE) || PAGE_SIZE;
   const offset = Number(data?.offset ?? pageOffset) || 0;
@@ -569,7 +553,7 @@ const ReadyForAccountingQueue = ({
     bulkSyncing ||
     retrying ||
     directUnlocking;
-  const refreshBusy = manualRefreshing || isFetching || (showLogs && logsFetching);
+  const refreshBusy = manualRefreshing || isFetching;
   const canMarkReadyAction = canPerformAction("accounting.ready.mark");
   const canSyncAction = canPerformAction("accounting.ready.sync");
   const canSelectInStage =
@@ -615,24 +599,15 @@ const ReadyForAccountingQueue = ({
     updateQueueUrlState({ offset: safeOffset });
   };
 
-  const refreshAfterAction = async ({
-    clearSelection = true,
-    refreshLogs = false,
-  } = {}) => {
+  const refreshAfterAction = async ({ clearSelection = true } = {}) => {
     if (clearSelection) setSelectedIds(new Set());
     await refetch();
-    if (refreshLogs && showLogs) {
-      await refetchLogs();
-    }
   };
 
   const handleManualRefresh = async () => {
     setManualRefreshing(true);
     try {
       await refetch();
-      if (showLogs) {
-        await refetchLogs();
-      }
       toast.success("Accounting queue refreshed");
     } catch (err) {
       toast.error(
@@ -720,7 +695,7 @@ const ReadyForAccountingQueue = ({
           ids: [item.objectId],
         }).unwrap();
         toast.success(result?.message || "Selected item queued for Tally push");
-        await refreshAfterAction({ clearSelection: false, refreshLogs: true });
+        await refreshAfterAction({ clearSelection: false });
       } catch (err) {
         toast.error(getAccountingErrorMessage(err, "Tally push failed"));
       } finally {
@@ -740,7 +715,7 @@ const ReadyForAccountingQueue = ({
           ids: [item.objectId],
         }).unwrap();
         showZohoPushToast(result, "Selected item queued for Zoho push");
-        await refreshAfterAction({ clearSelection: false, refreshLogs: true });
+        await refreshAfterAction({ clearSelection: false });
       } catch (err) {
         toast.error(getAccountingErrorMessage(err, "Zoho push failed"));
       } finally {
@@ -751,7 +726,7 @@ const ReadyForAccountingQueue = ({
     try {
       const result = await syncItem({ id: item.id }).unwrap();
       toast.success(result?.message || "Synced to ERP successfully");
-      await refreshAfterAction({ refreshLogs: true });
+      await refreshAfterAction({});
     } catch (err) {
       toast.error(getAccountingErrorMessage(err, "Sync failed"));
     } finally {
@@ -777,7 +752,7 @@ const ReadyForAccountingQueue = ({
           ids: [item.objectId],
         }).unwrap();
         showZohoPushToast(result, "Selected item queued for Zoho retry");
-        await refreshAfterAction({ clearSelection: false, refreshLogs: true });
+        await refreshAfterAction({ clearSelection: false });
       } catch (err) {
         toast.error(getAccountingErrorMessage(err, "Zoho retry failed"));
       } finally {
@@ -788,7 +763,7 @@ const ReadyForAccountingQueue = ({
     try {
       const result = await retryItem({ id: item.id }).unwrap();
       toast.success(result?.message || "Retry succeeded");
-      await refreshAfterAction({ clearSelection: false, refreshLogs: true });
+      await refreshAfterAction({ clearSelection: false });
     } catch (err) {
       toast.error(getAccountingErrorMessage(err, "Retry failed"));
     }
@@ -823,7 +798,7 @@ const ReadyForAccountingQueue = ({
               ? `Queued ${selectedEntityIds.length} selected item(s) for Tally push`
               : `${erpPushObjectType} push to Tally queued`),
         );
-        await refreshAfterAction({ clearSelection: false, refreshLogs: true });
+        await refreshAfterAction({ clearSelection: false });
       } catch (err) {
         toast.error(getAccountingErrorMessage(err, "Tally push failed"));
       } finally {
@@ -852,7 +827,7 @@ const ReadyForAccountingQueue = ({
             ? `Queued ${selectedEntityIds.length} selected item(s) for Zoho push`
             : `${erpPushObjectType} push to Zoho queued`,
         );
-        await refreshAfterAction({ clearSelection: false, refreshLogs: true });
+        await refreshAfterAction({ clearSelection: false });
       } catch (err) {
         toast.error(getAccountingErrorMessage(err, "Zoho push failed"));
       } finally {
@@ -870,7 +845,7 @@ const ReadyForAccountingQueue = ({
     try {
       const result = await bulkSync({ ids, mode: "SYNC" }).unwrap();
       toast.success(result?.message || `Pushed ${ids.length} item(s) to ERP`);
-      await refreshAfterAction({ refreshLogs: true });
+      await refreshAfterAction({});
     } catch (err) {
       toast.error(getAccountingErrorMessage(err, "Bulk sync failed"));
     } finally {
@@ -888,7 +863,7 @@ const ReadyForAccountingQueue = ({
     try {
       const result = await directUnlock({ id: item.id }).unwrap();
       toast.success(result?.message || "Item unlocked");
-      await refreshAfterAction({ refreshLogs: true });
+      await refreshAfterAction({});
     } catch (err) {
       toast.error(getAccountingErrorMessage(err, "Could not unlock item"));
     }
@@ -909,26 +884,6 @@ const ReadyForAccountingQueue = ({
     } catch (err) {
       toast.error(
         getAccountingErrorMessage(err, "Could not load item preview"),
-      );
-    }
-  };
-
-  const handleDownloadLogs = async () => {
-    if (!guardAction("accounting.syncLogs.download")) return;
-    try {
-      const blob = await downloadLogs({
-        objectType: activeObjectType,
-      }).unwrap();
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `accounting-sync-logs-${new Date().toISOString().slice(0, 10)}.csv`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-      toast.success("Sync logs downloaded");
-    } catch (err) {
-      toast.error(
-        getAccountingErrorMessage(err, "Failed to download sync logs"),
       );
     }
   };
@@ -1126,32 +1081,6 @@ const ReadyForAccountingQueue = ({
                 />
                 Refresh
               </Button>
-              {canPerformAction("accounting.syncLogs.view") ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 text-xs"
-                  onClick={() => setShowLogs((prev) => !prev)}
-                >
-                  {showLogs ? "Hide logs" : "Sync logs"}
-                </Button>
-              ) : null}
-              {canPerformAction("accounting.syncLogs.download") ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 text-xs"
-                  onClick={handleDownloadLogs}
-                  disabled={downloading}
-                >
-                  {downloading ? (
-                    <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <Download className="mr-1 h-3.5 w-3.5" />
-                  )}
-                  Export
-                </Button>
-              ) : null}
             </div>
 
             {selectedIds.size > 0 &&
@@ -1346,51 +1275,6 @@ const ReadyForAccountingQueue = ({
             </div>
           )}
 
-          {showLogs ? (
-            <div className="border-t p-4" data-testid="accounting-sync-logs">
-              <h4 className="mb-3 text-sm font-semibold">Sync logs</h4>
-              {logsLoading ? (
-                <div className="flex justify-center py-6">
-                  <Loader2 className="h-5 w-5 animate-spin text-primary" />
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {(Array.isArray(logs) ? logs : []).map((log) => (
-                    <div
-                      key={log.id || log.at}
-                      className="rounded-lg border bg-muted/20 p-3 text-sm"
-                    >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <span className="font-medium">
-                          {log.reference || log.docNo || "—"} ·{" "}
-                          {log.action || "sync"}
-                        </span>
-                        <Badge
-                          variant="outline"
-                          className={statusBadgeClass(log.status)}
-                        >
-                          {log.status}
-                        </Badge>
-                      </div>
-                      {log.message ? (
-                        <p className="mt-1 text-muted-foreground">
-                          {log.message}
-                        </p>
-                      ) : null}
-                      <p className="mt-1 text-xs text-muted-foreground">
-                        {formatDateTime(log.at || log.createdAt)}
-                      </p>
-                    </div>
-                  ))}
-                  {(Array.isArray(logs) ? logs : []).length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      No sync logs yet.
-                    </p>
-                  ) : null}
-                </div>
-              )}
-            </div>
-          ) : null}
         </CardContent>
       </Card>
       <AccountingQueuePreviewDialog

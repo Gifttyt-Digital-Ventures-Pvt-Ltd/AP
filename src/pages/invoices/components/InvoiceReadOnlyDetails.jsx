@@ -48,6 +48,7 @@ import { buildInternalChecklistState } from "../utils/internalChecklist";
 import { INTERNAL_CHECKLIST_ITEMS } from "../constants/internalChecklist";
 import { normalizeHistoricalAdvanceAdjustment } from "../utils/advanceAdjustment";
 import InternalChecklistSection from "./InternalChecklistSection";
+import { normalizeHistoricalAdvanceAdjustment } from "../utils/advanceAdjustment";
 
 const formatDisplayDate = (value) => {
   if (!value) return "-";

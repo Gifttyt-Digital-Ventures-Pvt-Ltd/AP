@@ -48,7 +48,7 @@ const CreateVendorBranchesEditor = ({ branches = [], gstRegistrations = [], onCh
           <div className="flex w-full flex-col items-start gap-6">
             <div className="flex w-full items-start gap-4">
               <div className="flex-1">
-                <Label>Branch Name *</Label>
+                <Label>Branch Name{rows.length > 0 ? " *" : ""}</Label>
                 <Input
                   value={row.branchName || ""}
                   onChange={(event) => updateRow(row.id, "branchName", event.target.value)}
@@ -79,7 +79,7 @@ const CreateVendorBranchesEditor = ({ branches = [], gstRegistrations = [], onCh
             </div>
 
             <div className="w-full">
-              <Label>Address Line 1 *</Label>
+              <Label>Address Line 1</Label>
               <Input
                 value={row.addressLine1 || ""}
                 onChange={(event) => updateRow(row.id, "addressLine1", event.target.value)}
@@ -99,7 +99,7 @@ const CreateVendorBranchesEditor = ({ branches = [], gstRegistrations = [], onCh
                 />
               </div>
               <div className="flex-1">
-                <Label>City *</Label>
+                <Label>City</Label>
                 <Input
                   value={row.city || ""}
                   onChange={(event) => updateRow(row.id, "city", event.target.value)}
@@ -120,7 +120,7 @@ const CreateVendorBranchesEditor = ({ branches = [], gstRegistrations = [], onCh
 
             <div className="flex w-full items-start gap-4">
               <div className="flex-1">
-                <Label>State *</Label>
+                <Label>State</Label>
                 <Input
                   value={row.state || ""}
                   onChange={(event) => updateRow(row.id, "state", event.target.value)}
@@ -129,7 +129,7 @@ const CreateVendorBranchesEditor = ({ branches = [], gstRegistrations = [], onCh
                 />
               </div>
               <div className="flex-1">
-                <Label>Pincode *</Label>
+                <Label>Pincode</Label>
                 <Input
                   value={row.pincode || ""}
                   onChange={(event) => updateRow(row.id, "pincode", event.target.value)}

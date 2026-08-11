@@ -285,6 +285,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
         { type: "Vendors", id: "LIST" },
         { type: "Vendors", id: "PENDING" },
         { type: "Vendors", id },
+        "Invoices",
         "Dashboard",
         "Reports",
       ],

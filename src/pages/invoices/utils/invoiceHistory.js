@@ -8,14 +8,18 @@ export const extractRawHistory = (response) => {
   if (Array.isArray(response)) return response;
 
   const candidates = [
+    response?.items,
     response?.history,
+    response?.logs,
     response?.records,
     response?.approvalRecords,
     response?.approvalRecords,
     response?.data,
+    response?.data?.items,
     response?.results,
     response?.content,
     response?.data?.history,
+    response?.data?.logs,
     response?.data?.records,
     response?.data?.approvalRecords,
     response?.data?.approvalRecords,
@@ -87,6 +91,10 @@ const resolveHistoryUserName = (entry = {}, level = "") => {
     return entry.user_name || entry.userName;
   }
 
+  if (entry.actorName || entry.actor_name) {
+    return entry.actorName || entry.actor_name;
+  }
+
   if (entry.approver_name || entry.approverName) {
     return entry.approver_name || entry.approverName;
   }
@@ -151,16 +159,19 @@ export const normalizeApprovalHistoryEntries = (response) => {
       action_description:
         entry.action_description ||
         entry.actionDescription ||
+        entry.description ||
         buildHistoryActionDescription(action_type, user_name, level),
       timestamp:
         entry.timestamp ||
         entry.createdAt ||
-        entry.createdAt ||
+        entry.created_at ||
         new Date().toISOString(),
       user_name,
       user_role:
         entry.user_role ||
         entry.userRole ||
+        entry.actorRole ||
+        entry.actor_role ||
         level ||
         "-",
       comments,

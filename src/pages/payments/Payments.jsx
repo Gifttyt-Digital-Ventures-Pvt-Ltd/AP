@@ -948,11 +948,15 @@ const Payments = () => {
   const confirmApprovalDecision = async (payrun, type, comments) => {
     const isReject = type === 'reject';
     const pendingApproval = getPayrunApprovalRecords(payrun).find((approval) => approval.status === 'Pending');
+    const invoiceIds = (payrun.invoices || [])
+      .map((invoice) => invoice.invoiceId || invoice.invoice_id || invoice.id)
+      .filter((id) => id !== undefined && id !== null);
     try {
       const action = isReject ? rejectPayrun : approvePayrun;
       await action({
         payrunId: payrun.payrunId || payrun.id,
         approvalId: pendingApproval?.id,
+        invoiceIds,
         comments,
       }).unwrap();
       setApprovalDecisionOpen(false);

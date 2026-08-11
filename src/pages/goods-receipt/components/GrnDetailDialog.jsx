@@ -4,6 +4,7 @@ import {
   ClipboardCheck,
   Download,
   FileCheck,
+  History,
   Loader2,
   RotateCcw,
   Save,
@@ -28,6 +29,12 @@ import {
   DialogTitle,
 } from '../../../components/ui/dialog';
 import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from '../../../components/ui/tabs';
+import {
   Table,
   TableBody,
   TableCell,
@@ -39,7 +46,9 @@ import GrnStatusBadge from './GrnStatusBadge';
 import GrnSourceBadge from './GrnSourceBadge';
 import GrnCreateFormFields from './GrnCreateFormFields';
 import AccountingLockBanner from '../../../components/AccountingLockBanner';
+import ApprovalHistoryTimeline from '../../../components/common/ApprovalHistoryTimeline';
 import { isAccountingReadyLocked } from '../../../utils/accountingLock';
+import { useGetGrnHistoryQuery } from '../../../Services/apis/goodsReceiptApi';
 import { GRN_SOURCE, GRN_STATUS } from '../constants';
 import { formatCurrency, formatDate } from '../utils';
 
@@ -96,10 +105,19 @@ const GrnDetailDialog = ({
   downloadingPdf = false,
 }) => {
   const [editMode, setEditMode] = useState(false);
+  const [viewTab, setViewTab] = useState('details');
   const [draftForm, setDraftForm] = useState(() => createEditableGrnForm(grn, formatConfig));
+  const grnId = grn?.id || grn?.grn_id || grn?.grnId;
+  const {
+    data: grnHistory = [],
+    isLoading: loadingGrnHistory,
+  } = useGetGrnHistoryQuery(grnId, {
+    skip: !open || !grnId,
+  });
 
   useEffect(() => {
     if (!open || !grn) return;
+    setViewTab('details');
     setEditMode(Boolean(initialEditMode));
     setDraftForm(createEditableGrnForm(grn, formatConfig));
   }, [formatConfig, grn, initialEditMode, open]);
@@ -169,21 +187,31 @@ const GrnDetailDialog = ({
             )}
           </div>
 
-          {grn.status === GRN_STATUS.PENDING_APPROVAL && canApprove && (
-            <Card className="border-amber-200 bg-amber-50/50">
-              <CardHeader className="py-3">
-                <CardTitle className="text-sm text-amber-900">Pending your approval</CardTitle>
-              </CardHeader>
-              <CardContent className="pb-4">
-                <Button onClick={() => onOpenReview?.(grn)} data-testid="review-grn-btn">
-                  <CheckCircle2 className="mr-2 h-4 w-4" />
-                  Review GRN
-                </Button>
-              </CardContent>
-            </Card>
-          )}
+          <Tabs value={viewTab} onValueChange={setViewTab} className="space-y-4">
+            <TabsList className="grid w-full max-w-sm grid-cols-2">
+              <TabsTrigger value="details">Details</TabsTrigger>
+              <TabsTrigger value="history">
+                <History className="mr-1 h-4 w-4" />
+                History ({grnHistory.length})
+              </TabsTrigger>
+            </TabsList>
 
-          {grn.status === GRN_STATUS.SENT_BACK && (grn.send_back_reason || grn.reject_reason) && (
+            <TabsContent value="details" className="m-0 space-y-4">
+              {grn.status === GRN_STATUS.PENDING_APPROVAL && canApprove && (
+                <Card className="border-amber-200 bg-amber-50/50">
+                  <CardHeader className="py-3">
+                    <CardTitle className="text-sm text-amber-900">Pending your approval</CardTitle>
+                  </CardHeader>
+                  <CardContent className="pb-4">
+                    <Button onClick={() => onOpenReview?.(grn)} data-testid="review-grn-btn">
+                      <CheckCircle2 className="mr-2 h-4 w-4" />
+                      Review GRN
+                    </Button>
+                  </CardContent>
+                </Card>
+              )}
+
+              {grn.status === GRN_STATUS.SENT_BACK && (grn.send_back_reason || grn.reject_reason) && (
             <div className="flex gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900 dark:bg-amber-950/30">
               <RotateCcw className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
@@ -191,9 +219,9 @@ const GrnDetailDialog = ({
                 <p>{grn.send_back_reason || grn.reject_reason}</p>
               </div>
             </div>
-          )}
+              )}
 
-          {grn.status === GRN_STATUS.REJECTED && grn.reject_reason && (
+              {grn.status === GRN_STATUS.REJECTED && grn.reject_reason && (
             <div className="flex gap-2 rounded-lg bg-red-50 p-3 text-sm text-red-900 dark:bg-red-950/30">
               <XCircle className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
@@ -201,7 +229,7 @@ const GrnDetailDialog = ({
                 <p>{grn.reject_reason}</p>
               </div>
             </div>
-          )}
+              )}
 
           {!editMode && (
             <Card>
@@ -386,12 +414,22 @@ const GrnDetailDialog = ({
             </div>
           )}
 
-          {!editMode && grn.remarks && (
-            <div>
-              <Label className="text-sm text-muted-foreground">Remarks</Label>
-              <p className="mt-1 text-sm">{grn.remarks}</p>
-            </div>
-          )}
+              {!editMode && grn.remarks && (
+                <div>
+                  <Label className="text-sm text-muted-foreground">Remarks</Label>
+                  <p className="mt-1 text-sm">{grn.remarks}</p>
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="history" className="m-0">
+              <ApprovalHistoryTimeline
+                history={grnHistory}
+                loading={loadingGrnHistory}
+                emptyMessage="No GRN history records found"
+              />
+            </TabsContent>
+          </Tabs>
         </div>
 
         <DialogFooter className="gap-2 border-t px-6 py-4 sm:justify-between">

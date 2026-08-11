@@ -1,6 +1,7 @@
 import { serviceApi } from "../serviceApi";
 import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
 import { extractListResponse } from "../utils/payloadMappers";
+import { normalizeApprovalHistoryEntries } from "../../pages/invoices/utils/invoiceHistory";
 
 const getListData = extractListResponse;
 
@@ -58,6 +59,14 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
     getPurchaseOrderById: builder.query({
       query: (id) => ({ url: `/purchase-orders/${id}`, method: "GET" }),
       providesTags: (result, error, id) => provideEntityTag("PurchaseOrders", id, result),
+    }),
+    getPurchaseOrderHistory: builder.query({
+      query: (id) => ({ url: `/purchase-orders/${id}/history`, method: "GET" }),
+      transformResponse: (response) => normalizeApprovalHistoryEntries(response),
+      providesTags: (_result, _error, id) => [
+        { type: "PurchaseOrders", id },
+        { type: "PurchaseOrders", id: `HISTORY_${id}` },
+      ],
     }),
     // GET /purchase-orders/{id}/download
     // Returns a URL-like response: url/downloadUrl/documentUrl/fileUrl.
@@ -262,6 +271,7 @@ export const {
   useGetPurchaseOrdersQuery,
   useGetPendingPurchaseOrderApprovalsQuery,
   useGetPurchaseOrderByIdQuery,
+  useGetPurchaseOrderHistoryQuery,
   useLazyGetPurchaseOrderByIdQuery,
   useLazyGetPurchaseOrderDownloadUrlQuery,
   useGetPurchaseOrderFormatConfigQuery,

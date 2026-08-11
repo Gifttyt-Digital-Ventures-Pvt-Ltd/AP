@@ -1,6 +1,7 @@
 import { serviceApi } from "../serviceApi";
 import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
 import { extractListResponse } from "../utils/payloadMappers";
+import { normalizeApprovalHistoryEntries } from "../../pages/invoices/utils/invoiceHistory";
 
 const grnTags = ["GoodsReceipt"];
 
@@ -60,6 +61,14 @@ export const goodsReceiptApi = serviceApi.injectEndpoints({
       query: (id) => ({ url: `/grn/${id}`, method: "GET" }),
       transformResponse: normalizeGrnDetailResponse,
       providesTags: (_result, _error, id) => [{ type: "GoodsReceipt", id }],
+    }),
+    getGrnHistory: builder.query({
+      query: (id) => ({ url: `/grn/${id}/history`, method: "GET" }),
+      transformResponse: (response) => normalizeApprovalHistoryEntries(response),
+      providesTags: (_result, _error, id) => [
+        { type: "GoodsReceipt", id },
+        { type: "GoodsReceipt", id: `HISTORY_${id}` },
+      ],
     }),
     getGrnDownloadUrl: builder.mutation({
       query: (id) => ({
@@ -193,6 +202,7 @@ export const goodsReceiptApi = serviceApi.injectEndpoints({
 export const {
   useGetGrnsQuery,
   useGetGrnByIdQuery,
+  useGetGrnHistoryQuery,
   useLazyGetGrnByIdQuery,
   useGetGrnDownloadUrlMutation,
   useGetGrnFormatConfigQuery,
