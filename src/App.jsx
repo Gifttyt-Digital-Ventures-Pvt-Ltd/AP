@@ -27,6 +27,7 @@ const UserRoles = lazy(() => import("./pages/user-roles/UserRoles"));
 const Profile = lazy(() => import("./pages/profile/Profile"));
 const TransactionsRoute = lazy(() => import("./pages/transactions/TransactionsRoute"));
 const PurchaseOrdersPage = lazy(() => import("./pages/purchase-orders/PurchaseOrdersPage"));
+const OrderTrackingPage = lazy(() => import("./pages/order-tracking/OrderTrackingPage"));
 const GoodsReceipt = lazy(() => import("./pages/goods-receipt/GoodsReceipt"));
 const InvoiceMatching = lazy(() => import("./pages/invoice-matching/InvoiceMatching"));
 const PaymentBatches = lazy(() => import("./pages/payment-batches/PaymentBatches"));
@@ -256,6 +257,7 @@ function AppContent() {
           <Route path="/profile" element={withPageFallback(<Profile />)} />
           <Route path="/transactions" element={withPageFallback(<TransactionsRoute />)} />
           <Route path="/purchase-orders" element={withPageFallback(<PurchaseOrdersPage />)} />
+          <Route path="/order-tracking" element={withPageFallback(<OrderTrackingPage />)} />
           <Route path="/goods-receipt" element={withPageFallback(<GoodsReceipt />)} />
           <Route path="/tax-management" element={withPageFallback(<TaxManagement />)} />
           <Route path="/invoice-matching" element={withPageFallback(<InvoiceMatching />)} />

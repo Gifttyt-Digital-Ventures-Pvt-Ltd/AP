@@ -29,6 +29,13 @@ const mapPurchaseOrderPermission = (permissionType) => {
   return null;
 };
 
+const mapOrderTrackingPermission = (permissionType) => {
+  if (permissionType === "VIEW") return "order-tracking-view";
+  if (permissionType === "MANAGE") return "order-tracking-manage";
+  if (permissionType === "FULL") return ["order-tracking-view", "order-tracking-manage"];
+  return null;
+};
+
 const mapGrnPermission = (permissionType) => {
   if (permissionType === "VIEW") return "grn-view";
   if (permissionType === "MANAGE") return "grn-manage";
@@ -247,6 +254,10 @@ export const mapScreenPermissionToCanonical = (screenInput, permissionTypeInput)
     screen === "PO"
   ) {
     return mapPurchaseOrderPermission(permissionType);
+  }
+
+  if (screen === "ORDER_TRACKING") {
+    return mapOrderTrackingPermission(permissionType);
   }
 
   if (screen === "GRN" || screen === "GOODS_RECEIPT" || screen === "GOODS_RECEIPT_NOTE") {
