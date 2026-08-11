@@ -25,7 +25,6 @@ import { useGetBankingAccountBalanceQuery } from '../../../Services/apis/connect
 import { DEFAULT_CURRENCY, formatCurrency } from '../../../utils/currency';
 import { isBankAccountPaymentEligible } from '../../banking/utils/bankAccounts';
 import { getPayableDisplayLabel } from '../utils/payableRows';
-import { isBankAccountPaymentEligible } from '../../banking/utils/bankAccounts';
 
 const OTP_RESEND_COOLDOWN_SECONDS = 30;
 
