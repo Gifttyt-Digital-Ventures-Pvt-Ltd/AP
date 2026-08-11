@@ -16,6 +16,8 @@ export const CUSTOM_ROLE_PERMISSION_MAP = {
   "po-view": { screen: "PURCHASE_ORDER", permissionType: "VIEW" },
   "po-manage": { screen: "PURCHASE_ORDER", permissionType: "MANAGE" },
   "po-approve": { screen: "PURCHASE_ORDER", permissionType: "APPROVE" },
+  "order-tracking-view": { screen: "ORDER_TRACKING", permissionType: "VIEW" },
+  "order-tracking-manage": { screen: "ORDER_TRACKING", permissionType: "MANAGE" },
   "grn-view": { screen: "GRN", permissionType: "VIEW" },
   "grn-manage": { screen: "GRN", permissionType: "MANAGE" },
   "grn-approve": { screen: "GRN", permissionType: "APPROVE" },

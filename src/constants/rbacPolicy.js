@@ -13,6 +13,7 @@ export const ROUTE_PERMISSION_RULES = {
     anyOf: ["campaign-view", "campaign-manage", "campaign-approve"],
   },
   "/purchase-orders": { anyOf: ["po-view", "po-manage", "po-approve"] },
+  "/order-tracking": { anyOf: ["order-tracking-view", "order-tracking-manage"] },
   "/goods-receipt": { anyOf: ["grn-view", "grn-manage", "grn-approve"] },
   "/invoices": {
     anyOf: [
@@ -111,6 +112,15 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
       "PURCHASE_ORDER_ALL",
     ],
   },
+  // No "/order-tracking" entitlement rule (yet): unlike every other route
+  // here, ORDER_TRACKING isn't a real corporate screen in the backend yet
+  // (this whole feature is still frontend-only mock data), so no account's
+  // allowedScreens/enabledSections can ever contain it - not even Corp
+  // Admin/FULL_ACCESS, since that check has no such bypass. The
+  // "/order-tracking" entry in ROUTE_PERMISSION_RULES above still applies
+  // (FULL_ACCESS or a future "order-tracking-view" permission), so this is
+  // the only gate today. Add this entry back once backend registers
+  // ORDER_TRACKING/ORDER_TRACKING_ALL - see docs/order-tracking-api-contract.md §5.
   "/goods-receipt": { screen: "GRN", anySections: ["GRN_ALL"] },
   "/invoices": { screen: "INVOICE", anySections: ["INVOICES_ALL"] },
   "/invoice-matching": {
