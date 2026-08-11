@@ -118,12 +118,16 @@ const TaxInformationSection = ({
 
         <div className="flex w-full items-start gap-4">
           <div className="flex-1">
-            <Label>{labelFor(VENDOR_FIELD_SECTIONS.PAN_REFERENCE_NO, "PAN Reference No.")}</Label>
+            <Label>
+              {labelFor(VENDOR_FIELD_SECTIONS.PAN_REFERENCE_NO, "PAN Reference No.")}
+              {isRequired(VENDOR_FIELD_SECTIONS.PAN_REFERENCE_NO) ? " *" : ""}
+            </Label>
             <Input
               value={formData.panReferenceNo || ""}
               onChange={(event) => updateField("panReferenceNo", event.target.value)}
               placeholder="e.g., PAN-REF-0042"
               className={`mt-1.5 ${errorClass("panReferenceNo")}`}
+              required={isRequired(VENDOR_FIELD_SECTIONS.PAN_REFERENCE_NO)}
             />
           </div>
           <div className="flex-1">
@@ -210,6 +214,7 @@ const TaxInformationSection = ({
                 }
                 placeholder="e.g., LDC-0042"
                 className={`mt-1.5 ${errorClass("lowNilDeductionCertificateNo")}`}
+                required={isRequired(VENDOR_FIELD_SECTIONS.LOW_NIL_DEDUCTION_CERTIFICATE_NO)}
               />
             </div>
             <div className="flex-1">
@@ -222,6 +227,7 @@ const TaxInformationSection = ({
                 value={formData.certificateValidity || ""}
                 onChange={(event) => updateField("certificateValidity", event.target.value)}
                 className={`mt-1.5 ${errorClass("certificateValidity")}`}
+                required={isRequired(VENDOR_FIELD_SECTIONS.CERTIFICATE_VALIDITY)}
               />
             </div>
           </div>
