@@ -42,7 +42,6 @@ import {
   ChevronLeft,
   Building2,
   Shield,
-  ArrowLeftRight,
   ShoppingCart,
   Package,
   Truck,
@@ -134,9 +133,6 @@ export const Layout = ({ children }) => {
     ...(hasConnectedBankingFeature
       ? [{ icon: Landmark, label: "Banking", path: "/banking" }]
       : []),
-    ...(showConnectedBankingGroup
-      ? [{ icon: ArrowLeftRight, label: "Transactions", path: "/transactions" }]
-      : []),
   ];
 
   const menuSections = [
@@ -152,15 +148,6 @@ export const Layout = ({ children }) => {
         { icon: Package, label: "Goods Receipt", path: "/goods-receipt" },
         { icon: FileText, label: "Invoices", path: "/invoices" },
         { icon: Link2, label: "Invoice Matching", path: "/invoice-matching" },
-        ...(!showConnectedBankingGroup
-          ? [
-              {
-                icon: ArrowLeftRight,
-                label: "Transactions",
-                path: "/transactions",
-              },
-            ]
-          : []),
         { icon: CheckCircle, label: "Approvals", path: "/approvals" },
         { icon: CreditCard, label: "Payments", path: "/payments" },
         { icon: Layers, label: "Payment Batches", path: "/payment-batches" },
