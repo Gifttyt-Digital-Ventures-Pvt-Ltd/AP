@@ -4,6 +4,7 @@ import {
   isVendorFieldRequired,
   normalizeActiveVendorFields,
   VENDOR_FIELD_SECTIONS,
+  VENDOR_SECTION_TO_FORM_KEY,
 } from './vendorFieldConfig';
 
 const MSME_TRUE_VALUES = new Set(['yes', 'y', 'true', '1']);
@@ -373,7 +374,7 @@ export const getBulkVendorUploadValidationErrors = (vendor = {}, { rowIndex = nu
   const name = String(vendor.name || '').trim();
 
   if (!name) {
-    errors.push(`${prefix}Company Name is required`);
+    errors.push(`${prefix}Vendor Name is required`);
   }
 
   return [...errors, ...getVendorFormatValidationErrors(vendor, { prefix })];
@@ -414,6 +415,75 @@ export const getVendorValidationErrors = (
     ...getVendorFormatValidationErrors(vendor, { prefix }),
   ];
 };
+
+/**
+ * Field-level counterpart to getVendorValidationErrors/getVendorFormatValidationErrors —
+ * same required + format rules, keyed by form field name instead of collected into a
+ * message list. Drives per-field red-border highlighting on the Create/Edit Vendor page.
+ * Kept in lockstep with getVendorValidationErrors so a field never shows a red border
+ * without also being one of the reasons submission is blocked (and vice versa).
+ */
+export const getVendorFieldErrorMap = (
+  vendor = {},
+  { activeVendorFields = [], vendorFieldConfiguration = [] } = {},
+) => {
+  const errors = {};
+  const requiredSections = normalizeActiveVendorFields(activeVendorFields)
+    .filter((section) => !GST_REGISTRATION_OWNED_SECTIONS.has(section));
+
+  requiredSections.forEach((section) => {
+    const formKey = VENDOR_SECTION_TO_FORM_KEY[section];
+    if (!formKey) return;
+    if (!hasVendorFieldValue(section, vendor)) {
+      errors[formKey] = `${getVendorFieldDisplayName(section, vendorFieldConfiguration)} is required`;
+    }
+  });
+
+  const country = String(vendor.country || '').trim() || 'India';
+
+  const email = String(vendor.email || '').trim();
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    errors.email = 'Email is invalid';
+  }
+
+  const mobile = String(vendor.mobile || '').trim();
+  if (mobile && getDigitsOnly(mobile).length !== 10) {
+    errors.mobile = 'Mobile must be 10 digits';
+  }
+
+  const phone = String(vendor.phone || '').trim();
+  if (phone) {
+    const phoneDigits = getDigitsOnly(phone);
+    if (phoneDigits.length < 6 || phoneDigits.length > 15) {
+      errors.phone = 'Phone must be 6–15 digits';
+    }
+  }
+
+  const pan = String(vendor.pan || '').trim().toUpperCase();
+  if (pan) {
+    if (isIndiaCountry(country)) {
+      if (!isValidVendorPan(pan)) errors.pan = 'PAN format is invalid';
+    } else if (pan.length !== 10) {
+      errors.pan = 'PAN must be 10 characters';
+    }
+  }
+
+  const gstin = String(vendor.gstin || '').trim().toUpperCase();
+  if (gstin && isIndiaCountry(country) && !isValidVendorGstin(gstin)) {
+    errors.gstin = 'GSTIN format is invalid';
+  }
+
+  const vendorType = String(vendor.vendor_type || vendor.vendorType || '').trim();
+  if (vendorType && !['company', 'individual'].includes(vendorType.toLowerCase())) {
+    errors.vendor_type = 'Vendor type must be Company or Individual';
+  }
+
+  return errors;
+};
+
+/** className helper for wiring getVendorFieldErrorMap results onto Input/AppSelect fields. */
+export const getVendorFieldErrorClassName = (fieldErrors = {}, key) =>
+  fieldErrors?.[key] ? 'border-destructive focus-visible:ring-destructive' : '';
 
 /**
  * Validation for Request Vendor from invoice upload (single + bulk).

@@ -2,12 +2,13 @@ import React from 'react';
 import { Button } from '../../../components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../../components/ui/dialog';
 import { Label } from '../../../components/ui/label';
-import { CheckCircle, RotateCcw, XCircle } from 'lucide-react';
+import { CheckCircle, Loader2, RotateCcw, XCircle } from 'lucide-react';
 import { NEEDS_CORRECTION_ACTION } from '../../../utils/approvalWorkflow';
 import { formatCurrency } from '../../../utils/currency';
 import ClippedTextWithTooltip from '../../../components/common/ClippedTextWithTooltip';
 import InvoiceDocumentTypeBadge from '../../invoices/components/InvoiceDocumentTypeBadge';
 import { getDocumentTypeLabel } from '../../invoices/constants/proformaInvoice';
+import AdvanceAdjustmentSection from './AdvanceAdjustmentSection';
 
 // Confirmation dialog used for both approve and reject workflows.
 const ApprovalDialog = ({
@@ -18,9 +19,22 @@ const ApprovalDialog = ({
   comments,
   setComments,
   submitApproval,
+  isSubmitting = false,
+  showAdvanceAdjustment = false,
+  advanceAdjustmentProposal = null,
+  isAdvanceAdjustmentLoading = false,
+  isAdvanceAdjustmentError = false,
+  isAdvanceAdjustmentConfirmed = false,
+  isConfirmingAdvanceAdjustment = false,
+  onConfirmAdvanceAdjustment,
 }) => (
-  <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-    <DialogContent data-testid="approval-dialog">
+  <Dialog
+    open={dialogOpen}
+    onOpenChange={(open) => {
+      if (!isSubmitting && !isConfirmingAdvanceAdjustment) setDialogOpen(open);
+    }}
+  >
+    <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl" data-testid="approval-dialog">
       <DialogHeader>
         <DialogTitle>
           {actionType === 'Approved'
@@ -60,12 +74,25 @@ const ApprovalDialog = ({
           </div>
         )}
 
+        {showAdvanceAdjustment && (
+          <AdvanceAdjustmentSection
+            proposal={advanceAdjustmentProposal}
+            currency={selectedInvoice?.currency}
+            isLoading={isAdvanceAdjustmentLoading}
+            isError={isAdvanceAdjustmentError}
+            isConfirmed={isAdvanceAdjustmentConfirmed}
+            isConfirming={isConfirmingAdvanceAdjustment}
+            onConfirm={onConfirmAdvanceAdjustment}
+          />
+        )}
+
         <div>
           <Label htmlFor="comments">Comments (Optional)</Label>
           <textarea
             id="comments"
             value={comments}
             onChange={(e) => setComments(e.target.value)}
+            disabled={isSubmitting || isConfirmingAdvanceAdjustment}
             className="w-full min-h-[80px] rounded-md border border-input bg-background px-3 py-2 text-sm"
             placeholder="Add any comments..."
             data-testid="approval-comments"
@@ -77,12 +104,23 @@ const ApprovalDialog = ({
             variant="outline"
             className="flex-1"
             onClick={() => setDialogOpen(false)}
+            disabled={isSubmitting || isConfirmingAdvanceAdjustment}
             data-testid="approval-cancel"
           >
             Cancel
           </Button>
-          <Button className="flex-1" onClick={submitApproval} data-testid="approval-confirm">
-            {actionType === 'Approved' || actionType === 'Checked' ? (
+          <Button
+            className="flex-1"
+            onClick={submitApproval}
+            disabled={isSubmitting || isConfirmingAdvanceAdjustment}
+            data-testid="approval-confirm"
+          >
+            {isSubmitting ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Processing...
+              </>
+            ) : actionType === 'Approved' || actionType === 'Checked' ? (
               <>
                 <CheckCircle className="h-4 w-4 mr-2" />
                 {actionType === 'Checked' ? 'Verify' : 'Approve'}

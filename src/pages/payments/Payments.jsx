@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   useGetInvoicesQuery,
   useCancelInvoiceMutation,
@@ -8,13 +8,17 @@ import {
 } from '../../Services/apis/invoicesVendorsApi';
 import { toInvoiceUiPayload, EMPTY_INVOICE_LIST_RESPONSE, getInvoiceListItems } from '../../Services/utils/payloadMappers';
 import {
-  useGetPaymentsQuery,
+  useGetPendingPaymentsQuery,
+  useGetReleasedPaymentsQuery,
   useLazyGetPaymentQuery,
-  useGetBankAccountsQuery,
   useBulkReleasePaymentsMutation,
-  useCreatePaymentMutation,
   useGeneratePendingPaymentInvoiceReportMutation,
   useRecordPaymentsMutation,
+  useApprovePayrunMutation,
+  useCancelPayrunMutation,
+  useCreatePayrunMutation,
+  useGetPayrunsQuery,
+  useRejectPayrunMutation,
 } from '../../Services/apis/approvalsPaymentsBankingApi';
 import { useCreatePaymentBatchMutation } from '../../Services/apis/paymentBatchesApi';
 import { Button } from '../../components/ui/button';
@@ -32,6 +36,14 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../components/ui/tabs';
 import {
+  Pagination,
+  PaginationContent,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '../../components/ui/pagination';
+import {
   Dialog,
   DialogContent,
   DialogFooter,
@@ -44,23 +56,32 @@ import AppDataTable from '../../components/common/AppDataTable';
 import { TableCell, TableRow } from '../../components/ui/table';
 import { cn } from '../../lib/utils';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/ui/select';
-import { Search, Plus, Loader2 } from 'lucide-react';
+import { Search, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import PaymentsHeader from './components/PaymentsHeader';
-import PaymentDialog from './components/PaymentDialog';
 import RecordPaymentDialog from './components/RecordPaymentDialog';
+import RequestPaymentDialog from './components/RequestPaymentDialog';
+import useBankingSetup from '../banking/hooks/useBankingSetup';
+import { getLinkedAccounts } from '../banking/utils/accountFormatters';
 import PendingPaymentsTab from './components/PendingPaymentsTab';
 import PendingPaymentReportDialog from './components/PendingPaymentReportDialog';
 import ReleasedPaymentsTab from './components/ReleasedPaymentsTab';
+import PayrunsTab from './components/PayrunsTab';
+import PayrunDetailsSheet from './components/PayrunDetailsSheet';
+import ReleasePaymentDialog from './components/ReleasePaymentDialog';
+import {
+  DEFAULT_PAYRUN_APPROVAL_ROUTE,
+  getPayrunApprovalRecords,
+  normalizePayrun,
+} from './components/payrunUtils';
 import CancelInvoiceDialog from '../invoices/components/CancelInvoiceDialog';
-import ConnectedBankAccountsPanel from '../../components/banking/ConnectedBankAccountsPanel';
 import BankAccountSelectField from '../../components/banking/BankAccountSelectField';
-import { getDefaultBankAccountId } from '../banking/utils/bankAccounts';
 import ViewDialog from '../invoices/components/ViewDialog';
 import { InvoicePdfPreview } from '../invoices/components/InvoicePdfPreview';
 import { getInvoiceFileUrl, openInvoiceFileDownload } from '../invoices/utils/invoicePreview';
 import { normalizeInvoiceHistoryEntries } from '../invoices/utils/invoiceHistory';
+import { formatInvoiceAmount } from '../invoices/utils/invoiceAmounts';
 import { getInvoiceStatusBadgeClass } from '../../utils/approvalWorkflow';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useCreditErrorHandler } from '../../contexts/CreditErrorContext';
@@ -70,10 +91,20 @@ import { useMeteredActionEstimate } from '../../hooks/useMeteredActionEstimate';
 import { useRBAC } from '../../contexts/RBACContext';
 import { useCurrencyFilter } from '../../hooks/useCurrencyFilter';
 import { CURRENCY_SCREENS } from '../../utils/currency';
+import { isInvoiceFundingEnabled as isInvoiceFundingEnabledForCorporate } from '../../utils/invoiceConfiguration';
 import { OrgBranchCell, VendorWithBranchCell } from '../../components/common/BranchTableCells';
 import { clearNotificationQueryParams } from '../../utils/notificationQueryParams';
+import {
+  getSelectablePayableRows,
+  isPayableSelectable,
+  normalizePayableRow,
+} from './utils/payableRows';
 
 const safeLower = (value) => String(value ?? '').toLowerCase();
+
+const preventDialogOutsideDismiss = (event) => {
+  event.preventDefault();
+};
 
 const safeFormatDate = (value, pattern = 'dd MMM yy') => {
   if (!value) return '-';
@@ -81,11 +112,35 @@ const safeFormatDate = (value, pattern = 'dd MMM yy') => {
   return Number.isNaN(date.getTime()) ? '-' : format(date, pattern);
 };
 
+const clippedTableText = (value, className = '') => {
+  const text = String(value || '-');
+  return (
+    <span className={cn('block min-w-0 truncate text-left', className)} title={text}>
+      {text}
+    </span>
+  );
+};
+
+const getRecordBranchLabel = (record = {}) => {
+  const name = record.branchName ?? record.branch_name ?? '';
+  const code = record.branchCode ?? record.branch_code ?? '';
+  if (name && code) return `${name} (${code})`;
+  return name || code || '-';
+};
+
+const getRecordVendorLabel = (record = {}) => {
+  const name = record.vendorName ?? record.vendor_name ?? '-';
+  const branchName = record.vendorBranchName ?? record.vendor_branch_name ?? '';
+  const branchCode = record.vendorBranchCode ?? record.vendor_branch_code ?? '';
+  const branch = branchName && branchCode ? `${branchName} (${branchCode})` : branchName || branchCode;
+  return branch ? `${name} - ${branch}` : name;
+};
+
 const baseBatchInvoiceTableHeader = [
-  { key: 'invoiceNumber', title: 'Invoice', cellClassName: 'font-medium' },
-  { key: 'orgBranch', title: 'Branch', cellClassName: 'text-sm' },
-  { key: 'vendorName', title: 'Vendor' },
-  { key: 'amount', title: 'Amount' },
+  { key: 'invoiceNumber', title: 'Invoice', headerClassName: 'text-left', cellClassName: 'font-medium text-left' },
+  { key: 'orgBranch', title: 'Branch', headerClassName: 'text-left', cellClassName: 'text-sm text-left' },
+  { key: 'vendorName', title: 'Vendor', headerClassName: 'text-left', cellClassName: 'text-left' },
+  { key: 'amount', title: 'Amount', headerClassName: 'text-left', cellClassName: 'text-left' },
   { key: 'status', title: 'Status' },
 ];
 
@@ -100,6 +155,156 @@ const getInvoiceCancelCapability = (invoice = {}) =>
 const isInvoiceCancellable = (invoice = {}) => {
   const capability = getInvoiceCancelCapability(invoice);
   return capability === true;
+};
+
+const PAYMENTS_TAB_PAGE_SIZE = 25;
+
+const formatMoney = (value) =>
+  `₹${Number(value || 0).toLocaleString('en-IN', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
+
+const getPaymentTabPagination = (pageData = {}, fallbackLimit = PAYMENTS_TAB_PAGE_SIZE, itemCount = 0) => {
+  const normalizedPageData = pageData && typeof pageData === 'object' ? pageData : {};
+  const total = Number(normalizedPageData.total ?? itemCount) || 0;
+  const limit = Number(normalizedPageData.limit ?? fallbackLimit) || fallbackLimit;
+  const offset = Number(normalizedPageData.offset ?? 0) || 0;
+  const currentPage = limit > 0 ? Math.floor(offset / limit) : 0;
+  const totalPages = Number(normalizedPageData.totalPages) || (total > 0 ? Math.ceil(total / limit) : 0);
+
+  return {
+    total,
+    limit,
+    offset,
+    currentPage,
+    totalPages,
+    hasMore: Boolean(normalizedPageData.hasMore ?? offset + itemCount < total),
+    startRecord: total === 0 ? 0 : offset + 1,
+    endRecord: total === 0 ? 0 : Math.min(offset + itemCount, total),
+  };
+};
+
+const getVisiblePaymentPageNumbers = (currentPage, totalPages, maxVisible = 5) => {
+  if (totalPages <= 0) return [];
+  if (totalPages <= maxVisible) {
+    return Array.from({ length: totalPages }, (_, index) => index);
+  }
+  const start = Math.min(Math.max(currentPage - 2, 0), totalPages - maxVisible);
+  return Array.from({ length: maxVisible }, (_, index) => start + index);
+};
+
+const PaymentsTabPagination = ({ pagination, onPageChange, testIdPrefix }) => {
+  if (!pagination) return null;
+
+  if (pagination.totalPages <= 1) {
+    return (
+      <div className="flex shrink-0 border-t border-border p-4">
+        <p className="text-sm text-muted-foreground" data-testid={`${testIdPrefix}-pagination-summary`}>
+          Showing {pagination.startRecord}-{pagination.endRecord} of{' '}
+          {pagination.total.toLocaleString('en-IN')}
+        </p>
+      </div>
+    );
+  }
+
+  const visiblePageNumbers = getVisiblePaymentPageNumbers(
+    pagination.currentPage,
+    pagination.totalPages,
+  );
+
+  return (
+    <div className="flex shrink-0 flex-col gap-3 border-t border-border p-4 sm:flex-row sm:items-center sm:justify-between">
+      <p className="text-sm text-muted-foreground" data-testid={`${testIdPrefix}-pagination-summary`}>
+        Showing {pagination.startRecord}-{pagination.endRecord} of{' '}
+        {pagination.total.toLocaleString('en-IN')}
+      </p>
+      <Pagination className="mx-0 w-auto justify-start sm:justify-end">
+        <PaginationContent>
+          <PaginationItem>
+            <PaginationPrevious
+              href="#"
+              onClick={(event) => {
+                event.preventDefault();
+                onPageChange?.(pagination.currentPage - 1);
+              }}
+              className={pagination.currentPage === 0 ? 'pointer-events-none opacity-50' : undefined}
+              data-testid={`${testIdPrefix}-pagination-previous`}
+            />
+          </PaginationItem>
+          {visiblePageNumbers.map((pageNumber) => (
+            <PaginationItem key={pageNumber}>
+              <PaginationLink
+                href="#"
+                isActive={pageNumber === pagination.currentPage}
+                onClick={(event) => {
+                  event.preventDefault();
+                  onPageChange?.(pageNumber);
+                }}
+                data-testid={`${testIdPrefix}-pagination-page-${pageNumber + 1}`}
+              >
+                {pageNumber + 1}
+              </PaginationLink>
+            </PaginationItem>
+          ))}
+          <PaginationItem>
+            <PaginationNext
+              href="#"
+              onClick={(event) => {
+                event.preventDefault();
+                onPageChange?.(pagination.currentPage + 1);
+              }}
+              className={
+                !pagination.hasMore && pagination.currentPage >= pagination.totalPages - 1
+                  ? 'pointer-events-none opacity-50'
+                  : undefined
+              }
+              data-testid={`${testIdPrefix}-pagination-next`}
+            />
+          </PaginationItem>
+        </PaginationContent>
+      </Pagination>
+    </div>
+  );
+};
+
+const ApprovalDecisionDialog = ({ decision, open, onOpenChange, onConfirm }) => {
+  const [comments, setComments] = useState('');
+
+  useEffect(() => {
+    if (open) setComments('');
+  }, [open]);
+
+  if (!decision?.payrun) return null;
+  const isReject = decision.type === 'reject';
+
+  const submit = () => {
+    onConfirm(decision.payrun, decision.type, comments.trim());
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-lg" onInteractOutside={preventDialogOutsideDismiss}>
+        <DialogHeader>
+          <DialogTitle>{isReject ? 'Reject Payrun' : 'Approve Payrun'} - {decision.payrun.batchId}</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-2">
+          <Label>{isReject ? 'Rejection Comments' : 'Approval Comments'}</Label>
+          <Textarea
+            value={comments}
+            onChange={(event) => setComments(event.target.value)}
+            placeholder={isReject ? 'Add reason for rejection' : 'Add approval comments'}
+          />
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+          <Button variant={isReject ? 'destructive' : 'default'} onClick={submit}>
+            {isReject ? 'Reject' : 'Approve'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
 };
 
 const downloadSignedReport = async (downloadUrl, fileName) => {
@@ -141,52 +346,88 @@ const Payments = () => {
     isCategoryFeatureEnabled,
     isCampaignFeatureEnabled,
     isBranchEnabled,
+    corporateScreens,
+    hasPermission,
   } = useRBAC();
+  const showInvoiceFunding = useMemo(
+    () =>
+      isInvoiceFundingEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
   const {
     currencies,
     selectedCurrency,
     setSelectedCurrency,
     queryArgs: paymentQueryArgs,
   } = useCurrencyFilter(CURRENCY_SCREENS.PAYMENT, { excludeAll: true });
+  const [activePaymentTab, setActivePaymentTab] = useState('pending');
+  const [pendingPaymentsOffset, setPendingPaymentsOffset] = useState(0);
+  const [payrunsOffset, setPayrunsOffset] = useState(0);
+  const [releasedPaymentsOffset, setReleasedPaymentsOffset] = useState(0);
+  const shouldFetchPendingPayments = activePaymentTab === 'pending';
+  const shouldFetchPayruns = isConnectedBankingEnabled && activePaymentTab === 'payruns';
+  const shouldFetchReleasedPayments = activePaymentTab === 'released';
+  const pendingPaymentsQueryArgs = {
+    ...paymentQueryArgs,
+    limit: PAYMENTS_TAB_PAGE_SIZE,
+    offset: pendingPaymentsOffset,
+  };
+  const payrunsQueryArgs = {
+    ...paymentQueryArgs,
+    limit: PAYMENTS_TAB_PAGE_SIZE,
+    offset: payrunsOffset,
+  };
+  const releasedPaymentsQueryArgs = {
+    ...paymentQueryArgs,
+    limit: PAYMENTS_TAB_PAGE_SIZE,
+    offset: releasedPaymentsOffset,
+  };
+  const paymentCountQueryArgs = {
+    ...paymentQueryArgs,
+    limit: 1,
+    offset: 0,
+  };
   const invoiceQueryWithStatus = (status) => ({
     ...paymentQueryArgs,
     status,
   });
   const {
+    data: pendingPaymentInvoicesListData = [],
+    isError: invoicesError,
+    isFetching: pendingPaymentInvoicesFetching,
+    refetch: refetchPendingPaymentInvoices,
+  } = useGetPendingPaymentsQuery(pendingPaymentsQueryArgs, { skip: !shouldFetchPendingPayments });
+  const {
+    data: pendingPaymentCountData = null,
+  } = useGetPendingPaymentsQuery(paymentCountQueryArgs, { skip: shouldFetchPendingPayments });
+  const {
     data: paymentsData = [],
     isError: paymentsError,
     isFetching: paymentsFetching,
     refetch: refetchPayments,
-  } = useGetPaymentsQuery(paymentQueryArgs);
+  } = useGetReleasedPaymentsQuery(releasedPaymentsQueryArgs, { skip: !shouldFetchReleasedPayments });
   const {
-    data: pendingPaymentInvoicesListData = EMPTY_INVOICE_LIST_RESPONSE,
-    isError: invoicesError,
-    isFetching: pendingPaymentInvoicesFetching,
-    refetch: refetchPendingPaymentInvoices,
-  } = useGetInvoicesQuery(invoiceQueryWithStatus('Pending Payment'));
+    data: releasedPaymentsCountData = null,
+  } = useGetReleasedPaymentsQuery(paymentCountQueryArgs, { skip: shouldFetchReleasedPayments });
   const {
-    data: allInvoicesListData = EMPTY_INVOICE_LIST_RESPONSE,
-    isFetching: allInvoicesFetching,
-    refetch: refetchAllInvoices,
-  } = useGetInvoicesQuery(paymentQueryArgs);
+    data: payrunsData = [],
+    isFetching: payrunsFetching,
+    refetch: refetchPayruns,
+  } = useGetPayrunsQuery(payrunsQueryArgs, { skip: !shouldFetchPayruns });
+  const {
+    data: payrunsCountData = null,
+  } = useGetPayrunsQuery(paymentCountQueryArgs, { skip: !isConnectedBankingEnabled || shouldFetchPayruns });
   const {
     data: pendingApproverInvoicesListData = EMPTY_INVOICE_LIST_RESPONSE,
     isError: pendingApproverInvoicesError,
-    isFetching: pendingApproverInvoicesFetching,
     refetch: refetchPendingApproverInvoices,
   } = useGetInvoicesQuery(
     invoiceQueryWithStatus('Pending Approver'),
-    { skip: !isPaymentBatchesFeatureEnabled },
+    { skip: !isPaymentBatchesFeatureEnabled || !shouldFetchPendingPayments },
   );
-  const {
-    data: bankAccountsData = [],
-    isError: bankAccountsError,
-    isFetching: bankAccountsFetching,
-    refetch: refetchBankAccounts,
-  } = useGetBankAccountsQuery(undefined, { skip: !isConnectedBankingEnabled });
-
   const [bulkReleasePayments] = useBulkReleasePaymentsMutation();
-  const [createPayment] = useCreatePaymentMutation();
   const [recordPayments] = useRecordPaymentsMutation();
   const [generatePendingPaymentInvoiceReport] = useGeneratePendingPaymentInvoiceReportMutation();
   const [createPaymentBatch] = useCreatePaymentBatchMutation();
@@ -196,8 +437,10 @@ const Payments = () => {
   const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
+  const {
+    accounts,
+  } = useBankingSetup({ skip: !isConnectedBankingEnabled });
   const [searchTerm, setSearchTerm] = useState('');
-  const [dialogOpen, setDialogOpen] = useState(false);
   const [createBatchDialogOpen, setCreateBatchDialogOpen] = useState(false);
   const [recordPaymentDialogOpen, setRecordPaymentDialogOpen] = useState(false);
   const [paymentReportDialogOpen, setPaymentReportDialogOpen] = useState(false);
@@ -213,14 +456,7 @@ const Payments = () => {
     paymentDate: '',
     payment_method: 'Bank Transfer',
     reference_number: '',
-  });
-  const [formData, setFormData] = useState({
-    invoice_id: '',
-    paymentDate: '',
-    payment_method: 'Bank Transfer',
-    bank_account_id: '',
-    reference_number: '',
-    notes: '',
+    actualInrAmount: '',
   });
   const [createBatchForm, setCreateBatchForm] = useState({
     payment_method: 'NEFT',
@@ -235,43 +471,168 @@ const Payments = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [viewPreviewError, setViewPreviewError] = useState(false);
   const [pdfZoom, setPdfZoom] = useState(100);
+  const [requestPaymentOpen, setRequestPaymentOpen] = useState(false);
+  const [selectedPayrun, setSelectedPayrun] = useState(null);
+  const [payrunDetailsOpen, setPayrunDetailsOpen] = useState(false);
+  const [approvalDecision, setApprovalDecision] = useState(null);
+  const [approvalDecisionOpen, setApprovalDecisionOpen] = useState(false);
+  const [releasePayrun, setReleasePayrun] = useState(null);
+  const [releasePayrunOpen, setReleasePayrunOpen] = useState(false);
+  const [createPayrun, { isLoading: creatingPayrun }] = useCreatePayrunMutation();
+  const [approvePayrun] = useApprovePayrunMutation();
+  const [rejectPayrun] = useRejectPayrunMutation();
+  const [cancelPayrun] = useCancelPayrunMutation();
 
-  const normalizePayment = (payment = {}) => ({
-    ...payment,
-    invoice_id: payment.invoice_id ?? payment.invoiceId,
-    invoiceNumber: payment.invoiceNumber ?? payment.invoiceNumber,
-    vendorName: payment.vendorName ?? payment.vendorName,
-    paymentDate: payment.paymentDate ?? payment.paymentDate,
-    payment_method: payment.payment_method ?? payment.paymentMethod,
-    reference_number: payment.reference_number ?? payment.referenceNumber,
-  });
+  const normalizePayment = (payment = {}) => {
+    const payable = normalizePayableRow(payment);
+
+    return {
+      ...payable,
+      invoice_id: payment.invoice_id ?? payment.invoiceId,
+      invoiceNumber: payment.invoiceNumber ?? payment.invoice_number ?? payable.invoiceNumber,
+      vendorName: payment.vendorName ?? payment.vendor_name ?? payable.vendorName,
+      batchId:
+        payment.batchId ??
+        payment.batch_id ??
+        payment.batchNumber ??
+        payment.batch_number ??
+        payment.payrunNumber ??
+        payment.payrun_number ??
+        payment.payrunId ??
+        payment.payrun_id ??
+        payment.paymentBatchId ??
+        payment.payment_batch_id,
+      paymentDate: payment.paymentDate ?? payment.payment_date ?? payment.paidOn ?? payment.paid_on,
+      payment_method: payment.payment_method ?? payment.paymentMethod,
+      reference_number:
+        payment.reference_number ??
+        payment.referenceNumber ??
+        payment.utrNumber ??
+        payment.utr_number ??
+        payment.utr,
+      actualInrAmount: payment.actualInrAmount ?? payment.actual_inr_amount,
+    };
+  };
 
   const normalizeInvoice = (invoice = {}) => ({
     ...invoice,
-    invoiceNumber: invoice.invoiceNumber ?? invoice.invoiceNumber,
-    vendorName: invoice.vendorName ?? invoice.vendorName,
-    invoiceDate: invoice.invoiceDate ?? invoice.invoiceDate,
-    dueDate: invoice.dueDate ?? invoice.dueDate,
+    invoiceNumber: invoice.invoiceNumber ?? invoice.invoice_number,
+    vendorName: invoice.vendorName ?? invoice.vendor_name,
+    invoiceDate: invoice.invoiceDate ?? invoice.invoice_date,
+    dueDate: invoice.dueDate ?? invoice.due_date,
   });
+  const normalizePendingPaymentInvoice = (invoice = {}) => {
+    const normalized = toInvoiceUiPayload(invoice);
+    const payable = normalizePayableRow({
+      ...normalized,
+      ...invoice,
+    });
 
-  const payments = Array.isArray(paymentsData) ? paymentsData.map(normalizePayment) : [];
-  const pendingPaymentInvoices = getInvoiceListItems(pendingPaymentInvoicesListData).map((invoice) =>
-    toInvoiceUiPayload(invoice),
-  );
-  const allInvoices = useMemo(
-    () => getInvoiceListItems(allInvoicesListData).map((invoice) => toInvoiceUiPayload(invoice)),
-    [allInvoicesListData],
+    return {
+      ...normalized,
+      ...payable,
+      grossAmount:
+        invoice.totalAmount ??
+        invoice.total_amount ??
+        normalized.totalAmount ??
+        normalized.total_amount,
+      originalAmount: payable.originalAmount ?? invoice.amount ?? normalized.originalAmount,
+      amount: Number(payable.payableAmount ?? 0),
+      netAmount: Number(payable.payableAmount ?? 0),
+      netPayable: Number(payable.payableAmount ?? 0),
+      gstAmount: Number(invoice.gstAmount ?? invoice.gst_amount ?? normalized.gstAmount ?? 0),
+      vendorBankName: invoice.vendorBankName ?? invoice.vendor_bank_name ?? normalized.vendorBankName,
+      vendorAccountNumber:
+        invoice.vendorAccountNumber ??
+        invoice.vendor_account_number ??
+        normalized.vendorAccountNumber,
+      vendorIfscCode: invoice.vendorIfscCode ?? invoice.vendor_ifsc_code ?? normalized.vendorIfscCode,
+    };
+  };
+
+  const releasedPaymentItems = Array.isArray(paymentsData?.items) ? paymentsData.items : paymentsData;
+  const pendingPaymentItems = Array.isArray(pendingPaymentInvoicesListData?.items)
+    ? pendingPaymentInvoicesListData.items
+    : getInvoiceListItems(pendingPaymentInvoicesListData);
+  const payrunItems = Array.isArray(payrunsData?.items) ? payrunsData.items : payrunsData;
+  const payments = Array.isArray(releasedPaymentItems)
+    ? releasedPaymentItems.map(normalizePayment)
+    : [];
+  const pendingPaymentInvoices = pendingPaymentItems.map((invoice) =>
+    normalizePendingPaymentInvoice(invoice),
   );
   const pendingApproverInvoices = getInvoiceListItems(pendingApproverInvoicesListData).map((invoice) =>
     toInvoiceUiPayload(invoice),
   );
   const invoices = pendingPaymentInvoices;
+  const payruns = useMemo(
+    () => (Array.isArray(payrunItems) ? payrunItems.map(normalizePayrun) : []),
+    [payrunItems],
+  );
+  const payableInvoices = useMemo(
+    () => invoices,
+    [invoices],
+  );
+  const selectablePayableInvoices = useMemo(
+    () => getSelectablePayableRows(payableInvoices),
+    [payableInvoices],
+  );
+  const pendingPaymentsPagination = useMemo(
+    () =>
+      getPaymentTabPagination(
+        pendingPaymentInvoicesListData,
+        PAYMENTS_TAB_PAGE_SIZE,
+        payableInvoices.length,
+      ),
+    [pendingPaymentInvoicesListData, payableInvoices.length],
+  );
+  const payrunsPagination = useMemo(
+    () => getPaymentTabPagination(payrunsData, PAYMENTS_TAB_PAGE_SIZE, payruns.length),
+    [payrunsData, payruns.length],
+  );
+  const releasedPaymentsPagination = useMemo(
+    () => getPaymentTabPagination(paymentsData, PAYMENTS_TAB_PAGE_SIZE, payments.length),
+    [paymentsData, payments.length],
+  );
+  const pendingPaymentsCountPagination = useMemo(
+    () => getPaymentTabPagination(pendingPaymentCountData, PAYMENTS_TAB_PAGE_SIZE, payableInvoices.length),
+    [pendingPaymentCountData, payableInvoices.length],
+  );
+  const payrunsCountPagination = useMemo(
+    () => getPaymentTabPagination(payrunsCountData, PAYMENTS_TAB_PAGE_SIZE, payruns.length),
+    [payrunsCountData, payruns.length],
+  );
+  const releasedPaymentsCountPagination = useMemo(
+    () => getPaymentTabPagination(releasedPaymentsCountData, PAYMENTS_TAB_PAGE_SIZE, payments.length),
+    [releasedPaymentsCountData, payments.length],
+  );
+  const pendingPaymentsTabTotal = shouldFetchPendingPayments
+    ? pendingPaymentsPagination.total
+    : pendingPaymentsCountPagination.total;
+  const payrunsTabTotal = shouldFetchPayruns
+    ? payrunsPagination.total
+    : payrunsCountPagination.total;
+  const releasedPaymentsTabTotal = shouldFetchReleasedPayments
+    ? releasedPaymentsPagination.total
+    : releasedPaymentsCountPagination.total;
+  const goToPendingPaymentsPage = useCallback((pageIndex) => {
+    setPendingPaymentsOffset(Math.max(0, pageIndex) * PAYMENTS_TAB_PAGE_SIZE);
+  }, []);
+  const goToPayrunsPage = useCallback((pageIndex) => {
+    setPayrunsOffset(Math.max(0, pageIndex) * PAYMENTS_TAB_PAGE_SIZE);
+  }, []);
+  const goToReleasedPaymentsPage = useCallback((pageIndex) => {
+    setReleasedPaymentsOffset(Math.max(0, pageIndex) * PAYMENTS_TAB_PAGE_SIZE);
+  }, []);
   const bulkPaymentEstimate = useMeteredActionEstimate(
     CREDIT_ACTION_CODES.PAYMENT_PROCESSING,
-    invoices.length,
+    selectablePayableInvoices.length,
   );
-  const batchEligibleInvoices = [...pendingPaymentInvoices, ...pendingApproverInvoices];
-  const bankAccounts = Array.isArray(bankAccountsData) ? bankAccountsData : [];
+  const batchEligibleInvoices = [...selectablePayableInvoices, ...pendingApproverInvoices];
+  const bankAccounts = useMemo(
+    () => getLinkedAccounts(accounts),
+    [accounts],
+  );
   const batchInvoiceTableHeader = useMemo(
     () =>
       isBranchEnabled
@@ -280,53 +641,48 @@ const Payments = () => {
     [isBranchEnabled],
   );
 
-  useEffect(() => {
-    if (!createBatchDialogOpen || !isConnectedBankingEnabled || createBatchForm.bank_account_id) {
-      return;
-    }
-
-    const defaultBankAccountId = getDefaultBankAccountId(bankAccounts);
-    if (!defaultBankAccountId) return;
-
-    setCreateBatchForm((prev) => ({
-      ...prev,
-      bank_account_id: defaultBankAccountId,
-    }));
-  }, [
-    bankAccounts,
-    createBatchDialogOpen,
-    createBatchForm.bank_account_id,
-    isConnectedBankingEnabled,
-  ]);
-
-  const canManagePayments = canPerformAction('payments.create');
+  const hasLegacyPaymentManage = hasPermission('payments-manage');
+  const canPaymentAdmin = hasPermission('payments-admin') || hasLegacyPaymentManage;
+  const canPaymentRequester = hasPermission('payments-requester') || hasLegacyPaymentManage;
+  const canPaymentApprover = hasPermission('payments-approver') || canPaymentAdmin;
+  const canManagePayments = hasLegacyPaymentManage;
   const canBulkRelease = canPerformAction('payments.releaseBulk');
   const canCreateBatch =
     isPaymentBatchesFeatureEnabled && canPerformAction('payments.createBatch');
-  const showBankingBatchPaymentActions =
-    isConnectedBankingEnabled || isPaymentBatchesFeatureEnabled;
-  const showRecordPaymentFlow = !showBankingBatchPaymentActions;
-  const canShowSinglePayment = showBankingBatchPaymentActions && canManagePayments;
-  const canShowBulkRelease = showBankingBatchPaymentActions && canBulkRelease;
+  const canCreatePayrun = canPaymentRequester && canPerformAction('payments.createPayrun');
+  const canApprovePayrun = canPaymentApprover && canPerformAction('payments.approvePayrun');
+  const canCancelPayrun = canPaymentRequester && canPerformAction('payments.cancelPayrun');
+  const canReleasePayrun = canPaymentAdmin && canPerformAction('payments.releasePayrun');
+  const showPayrunFlow = isConnectedBankingEnabled;
+  const showRecordPaymentFlow = !showPayrunFlow && !isPaymentBatchesFeatureEnabled;
+  const canShowBulkRelease = isPaymentBatchesFeatureEnabled && canBulkRelease;
   const canShowRecordPayment = showRecordPaymentFlow && canManagePayments;
   const paymentsRefreshing =
-    paymentsFetching ||
-    pendingPaymentInvoicesFetching ||
-    allInvoicesFetching ||
-    pendingApproverInvoicesFetching ||
-    bankAccountsFetching;
+    (shouldFetchReleasedPayments && paymentsFetching) ||
+    (shouldFetchPendingPayments && pendingPaymentInvoicesFetching) ||
+    (shouldFetchPayruns && payrunsFetching);
+
+  useEffect(() => {
+    if (!showPayrunFlow && activePaymentTab === 'payruns') {
+      setActivePaymentTab('pending');
+    }
+  }, [activePaymentTab, showPayrunFlow]);
+
+  useEffect(() => {
+    setPendingPaymentsOffset(0);
+    setPayrunsOffset(0);
+    setReleasedPaymentsOffset(0);
+  }, [selectedCurrency]);
 
   const handleRefreshPayments = async () => {
     try {
-      await Promise.all([
-        refetchPayments(),
-        refetchPendingPaymentInvoices(),
-        refetchAllInvoices(),
-        isPaymentBatchesFeatureEnabled
-          ? refetchPendingApproverInvoices()
-          : Promise.resolve(),
-        isConnectedBankingEnabled ? refetchBankAccounts() : Promise.resolve(),
-      ]);
+      if (shouldFetchPendingPayments) {
+        await refetchPendingPaymentInvoices();
+      } else if (shouldFetchPayruns) {
+        await refetchPayruns();
+      } else if (shouldFetchReleasedPayments) {
+        await refetchPayments();
+      }
       toast.success('Payments refreshed');
     } catch {
       toast.error('Failed to refresh payments');
@@ -345,27 +701,14 @@ const Payments = () => {
     if (pendingApproverInvoicesError) toast.error('Failed to load pending approver invoices');
   }, [pendingApproverInvoicesError]);
 
-  useEffect(() => {
-    if (isConnectedBankingEnabled && bankAccountsError) {
-      toast.error('Failed to load bank accounts');
-    }
-  }, [bankAccountsError, isConnectedBankingEnabled]);
-
-  const resetForm = () => {
-    setFormData({
-      invoice_id: '',
-      paymentDate: '',
-      payment_method: 'Bank Transfer',
-      bank_account_id: '',
-      reference_number: '',
-      notes: '',
-    });
-  };
-
   const handleBulkRelease = async () => {
     if (!guardAction('payments.releaseBulk')) return;
-    if (invoices.length === 0) {
+    if (selectablePayableInvoices.length === 0) {
       toast.error('No pending payments to release');
+      return;
+    }
+    if (payableInvoices.some((invoice) => !isPayableSelectable(invoice))) {
+      toast.error('Some payable rows need backend source-aware payment support before release');
       return;
     }
 
@@ -381,31 +724,6 @@ const Payments = () => {
     } catch (error) {
       if (handleCreditError(error)) return;
       toast.error('Failed to release bulk payments');
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!guardAction('payments.create')) return;
-    if (isConnectedBankingEnabled && !formData.bank_account_id) {
-      toast.error('Please select a bank account');
-      return;
-    }
-    try {
-      const paymentPayload = {
-        ...formData,
-        paymentDate: new Date(formData.paymentDate).toISOString(),
-      };
-      if (!isConnectedBankingEnabled) {
-        delete paymentPayload.bank_account_id;
-      }
-      await createPayment(paymentPayload).unwrap();
-      toast.success('Payment recorded successfully');
-      setDialogOpen(false);
-      resetForm();
-    } catch (error) {
-      if (handleCreditError(error)) return;
-      toast.error(error?.data?.detail || 'Failed to record payment');
     }
   };
 
@@ -449,22 +767,26 @@ const Payments = () => {
       paymentDate: '',
       payment_method: 'Bank Transfer',
       reference_number: '',
+      actualInrAmount: '',
     });
   };
 
-  const selectedRecordPaymentInvoices = invoices.filter((invoice) =>
+  const selectedRecordPaymentInvoices = selectablePayableInvoices.filter((invoice) =>
     recordPaymentInvoiceIds.includes(invoice.id),
+  );
+  const selectedRecordPaymentHasConvertedInvoice = selectedRecordPaymentInvoices.some(
+    (invoice) => Boolean(invoice.convertToInr),
   );
 
   const openPaymentReportDialog = () => {
     if (!guardAction('payments.create')) return;
-    if (invoices.length === 0) {
+    if (selectablePayableInvoices.length === 0) {
       toast.error('No pending invoices available for report');
       return;
     }
 
     setPaymentReportInvoiceIds((prev) =>
-      prev.length > 0 ? prev : invoices.map((invoice) => invoice.id),
+      prev.length > 0 ? prev : selectablePayableInvoices.map((invoice) => invoice.id),
     );
     setPaymentReportDialogOpen(true);
   };
@@ -559,7 +881,7 @@ const Payments = () => {
       toast.success(response?.message || 'Invoice cancelled successfully');
       setInvoiceCancelTarget(null);
       setInvoiceCancelReason('');
-      await Promise.all([refetchPendingPaymentInvoices(), refetchAllInvoices()]);
+      await refetchPendingPaymentInvoices();
     } catch (error) {
       toast.error(error?.data?.detail || error?.data?.message || 'Failed to cancel invoice');
     }
@@ -578,7 +900,118 @@ const Payments = () => {
     setRecordPaymentDialogOpen(true);
   };
 
+  const openRequestPaymentDialog = () => {
+    if (!guardAction('payments.createPayrun')) return;
+    if (!canCreatePayrun) {
+      toast.error('You do not have permission to create payruns');
+      return;
+    }
+    if (recordPaymentInvoiceIds.length === 0) {
+      toast.error('Please select at least one invoice from the list');
+      return;
+    }
+    setRequestPaymentOpen(true);
+  };
+
+  const handleCreatePayrun = async (payload) => {
+    try {
+      const response = await createPayrun(payload).unwrap();
+      setRecordPaymentInvoiceIds([]);
+      setRequestPaymentOpen(false);
+      setActivePaymentTab('payruns');
+      toast.success(`${response?.payrunNumber || response?.payrun_number || 'Payrun'} created`);
+    } catch (error) {
+      toast.error(error?.data?.detail || error?.data?.message || 'Failed to create payrun');
+    }
+  };
+
+  const openApprovalDecision = (payrun, type) => {
+    if (!guardAction(type === 'reject' ? 'payments.rejectPayrun' : 'payments.approvePayrun')) return;
+    const actionKey = type === 'reject' ? 'reject' : 'approve';
+    if (!payrun.allowedActions?.[actionKey]) {
+      toast.error(`This payrun is not available to ${type}`);
+      return;
+    }
+    if (payrun.approvalRoute === DEFAULT_PAYRUN_APPROVAL_ROUTE && !canPaymentAdmin) {
+      toast.error('Only Admin or Master Admin can approve the generic admin route');
+      return;
+    }
+    const pendingApprovals = getPayrunApprovalRecords(payrun).filter((approval) => approval.status === 'Pending');
+    if (payrun.status !== 'Waiting For Approval' || pendingApprovals.length === 0) {
+      toast.error('This payrun has already been actioned');
+      return;
+    }
+    setApprovalDecision({ payrun, type });
+    setApprovalDecisionOpen(true);
+  };
+
+  const confirmApprovalDecision = async (payrun, type, comments) => {
+    const isReject = type === 'reject';
+    const pendingApproval = getPayrunApprovalRecords(payrun).find((approval) => approval.status === 'Pending');
+    const invoiceIds = (payrun.invoices || [])
+      .map((invoice) => invoice.invoiceId || invoice.invoice_id || invoice.id)
+      .filter((id) => id !== undefined && id !== null);
+    try {
+      const action = isReject ? rejectPayrun : approvePayrun;
+      await action({
+        payrunId: payrun.payrunId || payrun.id,
+        approvalId: pendingApproval?.id,
+        invoiceIds,
+        comments,
+      }).unwrap();
+      setApprovalDecisionOpen(false);
+      setApprovalDecision(null);
+      await refetchPayruns();
+      toast[isReject ? 'error' : 'success'](isReject ? 'Payrun rejected' : 'Payrun approved');
+    } catch (error) {
+      toast.error(error?.data?.detail || error?.data?.message || `Failed to ${isReject ? 'reject' : 'approve'} payrun`);
+    }
+  };
+
+  const handleCancelPayrun = async (payrun) => {
+    if (!guardAction('payments.cancelPayrun')) return;
+    if (!payrun.allowedActions?.cancel) {
+      toast.error('This payrun cannot be cancelled');
+      return;
+    }
+    try {
+      await cancelPayrun({
+        payrunId: payrun.payrunId || payrun.id,
+        comments: 'Cancelled by requester',
+      }).unwrap();
+      await refetchPayruns();
+      toast.success('Payrun cancelled');
+    } catch (error) {
+      toast.error(error?.data?.detail || error?.data?.message || 'Failed to cancel payrun');
+    }
+  };
+
+  const openPayrunDetails = (payrun) => {
+    setSelectedPayrun(payrun);
+    setPayrunDetailsOpen(true);
+  };
+
+  const openReleasePayrun = (payrun) => {
+    if (!guardAction('payments.releasePayrun')) return;
+    if (!payrun.allowedActions?.release) {
+      toast.error('This payrun is not available for release');
+      return;
+    }
+    setReleasePayrun(payrun);
+    setReleasePayrunOpen(true);
+  };
+
+  const handlePayrunPaid = async (paidPayrun) => {
+    setActivePaymentTab('released');
+    toast.success(`${paidPayrun.batchId} paid successfully`);
+  };
+
   const toggleRecordPaymentInvoice = (invoiceId) => {
+    const row = payableInvoices.find((invoice) => invoice.id === invoiceId);
+    if (row && !isPayableSelectable(row)) {
+      toast.error(row.disabledReason || 'This payable row is not available for payment yet');
+      return;
+    }
     setRecordPaymentInvoiceIds((prev) =>
       prev.includes(invoiceId)
         ? prev.filter((id) => id !== invoiceId)
@@ -588,7 +1021,9 @@ const Payments = () => {
 
   const selectAllRecordPaymentInvoices = () => {
     setRecordPaymentInvoiceIds((prev) =>
-      prev.length === invoices.length ? [] : invoices.map((invoice) => invoice.id),
+      prev.length === selectablePayableInvoices.length
+        ? []
+        : selectablePayableInvoices.map((invoice) => invoice.id),
     );
   };
 
@@ -621,16 +1056,34 @@ const Payments = () => {
       toast.error('Payment method is required');
       return;
     }
+    if (selectedRecordPaymentHasConvertedInvoice) {
+      const actualInrAmount = Number(recordPaymentForm.actualInrAmount);
+      if (!Number.isFinite(actualInrAmount) || actualInrAmount <= 0) {
+        toast.error('Actual INR Amount is required for converted foreign invoices');
+        return;
+      }
+    }
 
     const referenceNumber = String(recordPaymentForm.reference_number || '').trim();
 
     setRecordingPayments(true);
     try {
+      const actualInrAmount = selectedRecordPaymentHasConvertedInvoice
+        ? Number(recordPaymentForm.actualInrAmount)
+        : null;
       const response = await recordPayments({
         invoiceNumbers,
         paymentDate: new Date(recordPaymentForm.paymentDate).toISOString(),
         paymentMethod: recordPaymentForm.payment_method,
         ...(referenceNumber ? { referenceNumber } : {}),
+        ...(selectedRecordPaymentHasConvertedInvoice
+          ? {
+              currency: 'INR',
+              amount: actualInrAmount,
+              paymentAmount: actualInrAmount,
+              actualInrAmount,
+            }
+          : {}),
       }).unwrap();
       toast.success(response?.message || 'Payments recorded successfully (PAID)');
       await refetchPendingPaymentInvoices();
@@ -685,20 +1138,64 @@ const Payments = () => {
       normalizedPayment.invoiceDetails ??
       normalizedPayment.invoice_details;
     if (embeddedInvoice) return toInvoiceUiPayload(embeddedInvoice);
-    if (normalizedPayment.invoice_id) {
-      const matchById = allInvoices.find((invoice) => invoice.id === normalizedPayment.invoice_id);
-      if (matchById) return matchById;
-    }
-    if (normalizedPayment.invoiceNumber) {
-      return allInvoices.find(
-        (invoice) => invoice.invoiceNumber === normalizedPayment.invoiceNumber,
-      );
-    }
     return null;
   };
 
-  const handleViewInvoice = async (invoice, initialTab = 'details') => {
-    const preparedInvoice = toInvoiceUiPayload(invoice);
+  const getInvoicePreviewId = (invoice) => (
+    invoice?.id ??
+    invoice?.invoiceId ??
+    invoice?.invoice_id
+  );
+
+  const getPaymentInvoicePreviewId = (payment) => (
+    payment?.invoice_id ??
+    payment?.invoiceId ??
+    payment?.invoice?.id ??
+    payment?.invoice?.invoiceId ??
+    payment?.invoice?.invoice_id ??
+    payment?.invoiceDetails?.id ??
+    payment?.invoiceDetails?.invoiceId ??
+    payment?.invoiceDetails?.invoice_id ??
+    payment?.invoice_details?.id ??
+    payment?.invoice_details?.invoiceId ??
+    payment?.invoice_details?.invoice_id
+  );
+
+  const loadInvoiceDetailsForPreview = async (invoiceId, fallbackInvoice = null) => {
+    const preparedFallback = fallbackInvoice ? toInvoiceUiPayload(fallbackInvoice) : null;
+    if (!invoiceId) return preparedFallback;
+
+    try {
+      const invoiceDetails = await getInvoice(invoiceId).unwrap();
+      return {
+        ...(preparedFallback || {}),
+        ...toInvoiceUiPayload(invoiceDetails),
+      };
+    } catch (error) {
+      console.error('Failed to fetch invoice details:', error);
+      toast.error('Failed to load invoice details');
+      return preparedFallback;
+    }
+  };
+
+  const loadPaymentInvoice = async (payment) => {
+    const fallbackInvoice = resolvePaymentInvoice(payment);
+    const invoiceId = getPaymentInvoicePreviewId(payment) ?? getInvoicePreviewId(fallbackInvoice);
+    return loadInvoiceDetailsForPreview(invoiceId, fallbackInvoice);
+  };
+
+  const handleViewInvoice = async (invoice, initialTab = 'details', options = {}) => {
+    const preparedInvoice = options.skipDetailFetch
+      ? toInvoiceUiPayload(invoice)
+      : await loadInvoiceDetailsForPreview(
+        getInvoicePreviewId(invoice),
+        invoice,
+      );
+    if (!preparedInvoice) {
+      toast.error('Invoice details are not available');
+      return;
+    }
+
     setViewInvoice(preparedInvoice);
     setViewDialogOpen(true);
     setViewTab(initialTab);
@@ -707,7 +1204,13 @@ const Payments = () => {
     setLoadingHistory(true);
 
     try {
-      const response = await getInvoiceHistory(invoice.id).unwrap();
+      const historyInvoiceId = getInvoicePreviewId(preparedInvoice) ?? getInvoicePreviewId(invoice);
+      if (!historyInvoiceId) {
+        setInvoiceHistory([]);
+        return;
+      }
+
+      const response = await getInvoiceHistory(historyInvoiceId).unwrap();
       let historyEntries = Array.isArray(response)
         ? response
         : normalizeInvoiceHistoryEntries(response);
@@ -715,9 +1218,7 @@ const Payments = () => {
       if (historyEntries.length === 0) {
         const approvalRecords =
           preparedInvoice.approvalRecords ||
-          preparedInvoice.approvalRecords ||
-          invoice.approvalRecords ||
-          invoice.approvalRecords;
+          invoice?.approvalRecords;
         if (Array.isArray(approvalRecords) && approvalRecords.length > 0) {
           historyEntries = normalizeInvoiceHistoryEntries(approvalRecords);
         }
@@ -733,12 +1234,12 @@ const Payments = () => {
   };
 
   const handleViewPaymentInvoice = async (payment, initialTab = 'details') => {
-    const invoice = resolvePaymentInvoice(payment);
+    const invoice = await loadPaymentInvoice(payment);
     if (!invoice) {
       toast.error('Invoice details are not available');
       return;
     }
-    await handleViewInvoice(invoice, initialTab);
+    await handleViewInvoice(invoice, initialTab, { skipDetailFetch: true });
   };
 
   const closePaymentViewDialog = useCallback((open) => {
@@ -770,7 +1271,6 @@ const Payments = () => {
       const loadedInvoice = [
         ...pendingPaymentInvoices,
         ...pendingApproverInvoices,
-        ...allInvoices,
       ].find((invoice) => String(invoice.id) === String(notificationInvoiceId));
 
       if (loadedInvoice) {
@@ -813,7 +1313,6 @@ const Payments = () => {
         toast.warning('Payment details are not available yet.');
       });
   }, [
-    allInvoices,
     getInvoice,
     getPayment,
     notificationAction,
@@ -833,8 +1332,8 @@ const Payments = () => {
     }
   };
 
-  const handleDownloadPaymentInvoice = (payment) => {
-    const invoice = resolvePaymentInvoice(payment);
+  const handleDownloadPaymentInvoice = async (payment) => {
+    const invoice = await loadPaymentInvoice(payment);
     if (!invoice) {
       toast.error('Invoice file is not available');
       return;
@@ -852,11 +1351,20 @@ const Payments = () => {
     />
   );
 
-  const filteredPendingInvoices = invoices.filter(
+  const filteredPendingInvoices = payableInvoices.filter(
     (invoice) =>
       safeLower(invoice.vendorName).includes(safeLower(searchTerm)) ||
-      safeLower(invoice.invoiceNumber).includes(safeLower(searchTerm))
+      safeLower(invoice.invoiceNumber).includes(safeLower(searchTerm)) ||
+      safeLower(invoice.referenceNumber).includes(safeLower(searchTerm)) ||
+      safeLower(invoice.poNumber).includes(safeLower(searchTerm)) ||
+      safeLower(invoice.milestoneLabel).includes(safeLower(searchTerm))
   );
+  const filteredPayruns = payruns.filter((payrun) =>
+    safeLower(payrun.batchId).includes(safeLower(searchTerm)) ||
+    safeLower(payrun.createdBy).includes(safeLower(searchTerm)) ||
+    safeLower(payrun.admin?.name).includes(safeLower(searchTerm)),
+  );
+  const activePayruns = filteredPayruns.filter((payrun) => payrun.status !== 'Paid');
 
   const renderBatchInvoiceRow = (invoice, rowIndex, headers) => (
     <TableRow
@@ -878,27 +1386,39 @@ const Payments = () => {
                     disabled={!canCreateBatch}
                   />
                 </div>
-                <span>{invoice.invoiceNumber || '-'}</span>
+                {clippedTableText(invoice.invoiceNumber)}
               </div>
             );
             break;
           case 'amount':
-            value = `₹${Number(invoice.amount || 0).toLocaleString('en-IN')}`;
+            value = (
+              <div className="space-y-0.5">
+                {clippedTableText(formatInvoiceAmount(invoice, invoice.amount || 0))}
+                {invoice.convertToInr && Number(invoice.matchingInrValue) > 0 ? (
+                  <div className="text-xs text-muted-foreground">
+                    Converted INR Amount: {formatInvoiceAmount(
+                      { currency: 'INR' },
+                      invoice.matchingInrValue,
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            );
             break;
           case 'vendorName':
-            value = <VendorWithBranchCell record={invoice} />;
+            value = clippedTableText(getRecordVendorLabel(invoice));
             break;
           case 'orgBranch':
-            value = <OrgBranchCell record={invoice} />;
+            value = clippedTableText(getRecordBranchLabel(invoice));
             break;
           default:
-            value = invoice?.[header.key] || '-';
+            value = clippedTableText(invoice?.[header.key]);
         }
 
         return (
           <TableCell
             key={header.key}
-            className={cn('border border-table-border', header.cellClassName)}
+            className={cn('max-w-[180px] overflow-hidden whitespace-nowrap border border-table-border text-left align-middle', header.cellClassName)}
           >
             {value}
           </TableCell>
@@ -911,52 +1431,13 @@ const Payments = () => {
     <div className="flex min-h-0 flex-1 flex-col gap-3" data-testid="payments-page">
       <div className="shrink-0">
         <PaymentsHeader
-          invoicesCount={invoices.length}
-          handleBulkRelease={handleBulkRelease}
-          canBulkRelease={canShowBulkRelease}
           currencies={currencies}
           selectedCurrency={selectedCurrency}
           onCurrencyChange={setSelectedCurrency}
           onRefresh={handleRefreshPayments}
           refreshing={paymentsRefreshing}
-          batchDialogTrigger={canCreateBatch ? (
-            <Button
-              variant="default"
-              onClick={() => setCreateBatchDialogOpen(true)}
-              data-testid="open-create-batch-dialog"
-            >
-              <Plus className="h-4 w-4 mr-2" />
-              Create Batch
-            </Button>
-          ) : null}
-          paymentDialog={
-            canShowSinglePayment ? (
-              <PaymentDialog
-                dialogOpen={dialogOpen}
-                setDialogOpen={setDialogOpen}
-                resetForm={resetForm}
-                formData={formData}
-                setFormData={setFormData}
-                invoices={invoices}
-                bankAccounts={bankAccounts}
-                showBankAccountField={isConnectedBankingEnabled}
-                handleSubmit={handleSubmit}
-                canCreatePayment={canManagePayments}
-              />
-            ) : null
-          }
         />
       </div>
-
-      {isConnectedBankingEnabled ? (
-        <ConnectedBankAccountsPanel
-          accounts={bankAccounts}
-          loading={bankAccountsFetching}
-          className="shrink-0"
-          variant="compact"
-          defaultCollapsed
-        />
-      ) : null}
 
       {isPaymentBatchesFeatureEnabled && (
         <Dialog
@@ -966,7 +1447,10 @@ const Payments = () => {
             setCreateBatchDialogOpen(open);
           }}
         >
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent
+            className="max-w-4xl max-h-[90vh] overflow-y-auto"
+            onInteractOutside={preventDialogOutsideDismiss}
+          >
             <DialogHeader>
               <DialogTitle>Create Payment Batch</DialogTitle>
             </DialogHeader>
@@ -1025,6 +1509,7 @@ const Payments = () => {
                     showCheckbox
                     isChecked={allBatchInvoicesSelected}
                     onSelectAllChange={selectAllInvoices}
+                    tableClassName="table-fixed"
                     bordered
                     emptyMessage="No invoices available for batch creation"
                   />
@@ -1066,13 +1551,18 @@ const Payments = () => {
       </div>
 
       {/* Tabs are composed from feature components to keep page orchestration small. */}
-      <Tabs defaultValue="pending" className="flex min-h-0 flex-1 flex-col gap-3">
+      <Tabs value={activePaymentTab} onValueChange={setActivePaymentTab} className="flex min-h-0 flex-1 flex-col gap-3">
         <TabsList className="shrink-0 w-fit">
           <TabsTrigger value="pending" data-testid="tab-pending-payments">
-            Pending Payments ({invoices.length})
+            Pending Payments ({pendingPaymentsTabTotal})
           </TabsTrigger>
+          {showPayrunFlow && (
+            <TabsTrigger value="payruns" data-testid="tab-payruns">
+              Payruns ({payrunsTabTotal})
+            </TabsTrigger>
+          )}
           <TabsTrigger value="released" data-testid="tab-released-payments">
-            Released Payments ({payments.length})
+            Released Payments ({releasedPaymentsTabTotal})
           </TabsTrigger>
         </TabsList>
 
@@ -1082,17 +1572,30 @@ const Payments = () => {
             className="absolute inset-0 mt-0 flex min-h-0 flex-col focus-visible:outline-none data-[state=inactive]:hidden"
           >
             <PendingPaymentsTab
-              invoices={invoices}
+              invoices={payableInvoices}
               filteredPendingInvoices={filteredPendingInvoices}
               handleBulkRelease={handleBulkRelease}
-              canBulkRelease={canShowBulkRelease}
-              showRecordPaymentSelection={canShowRecordPayment}
+              canBulkRelease={showPayrunFlow ? false : canShowBulkRelease}
+              showRecordPaymentSelection={
+                canShowRecordPayment ||
+                (!showPayrunFlow && canCreateBatch) ||
+                (showPayrunFlow && canCreatePayrun)
+              }
               selectedInvoiceIds={recordPaymentInvoiceIds}
               onToggleInvoice={toggleRecordPaymentInvoice}
               onSelectAllInvoices={selectAllRecordPaymentInvoices}
-              onOpenRecordPayment={openRecordPaymentDialog}
+              onOpenRecordPayment={showPayrunFlow ? openRequestPaymentDialog : openRecordPaymentDialog}
+              onOpenCreateBatch={() => {
+                setCreateBatchForm((prev) => ({
+                  ...prev,
+                  invoice_ids: recordPaymentInvoiceIds,
+                }));
+                setCreateBatchDialogOpen(true);
+              }}
               onOpenInvoiceReport={openPaymentReportDialog}
-              canRecordPayment={canShowRecordPayment}
+              canRecordPayment={canShowRecordPayment || (showPayrunFlow && canCreatePayrun)}
+              canCreateBatch={!showPayrunFlow && canCreateBatch}
+              paymentActionLabel={showPayrunFlow ? 'Request Payment' : 'Record Payment'}
               canDownloadInvoiceReport={canManagePayments}
               safeFormatDate={safeFormatDate}
               handleViewInvoice={handleViewInvoice}
@@ -1102,8 +1605,40 @@ const Payments = () => {
               }
               handleCancelInvoice={handleCancelInvoice}
               showBranchField={isBranchEnabled}
+              paginationFooter={
+                <PaymentsTabPagination
+                  pagination={pendingPaymentsPagination}
+                  onPageChange={goToPendingPaymentsPage}
+                  testIdPrefix="pending-payments"
+                />
+              }
             />
           </TabsContent>
+
+          {showPayrunFlow && (
+            <TabsContent
+              value="payruns"
+              className="absolute inset-0 mt-0 flex min-h-0 flex-col focus-visible:outline-none data-[state=inactive]:hidden"
+            >
+              <PayrunsTab
+                payruns={activePayruns}
+                onView={openPayrunDetails}
+                onApprove={(payrun) => openApprovalDecision(payrun, 'approve')}
+                onReject={(payrun) => openApprovalDecision(payrun, 'reject')}
+                onRelease={openReleasePayrun}
+                onRetry={openReleasePayrun}
+                canApprovePayrun={canApprovePayrun}
+                canReleasePayrun={canReleasePayrun}
+                paginationFooter={
+                  <PaymentsTabPagination
+                    pagination={payrunsPagination}
+                    onPageChange={goToPayrunsPage}
+                    testIdPrefix="payruns"
+                  />
+                }
+              />
+            </TabsContent>
+          )}
 
           <TabsContent
             value="released"
@@ -1117,10 +1652,54 @@ const Payments = () => {
               handleViewPaymentInvoice={handleViewPaymentInvoice}
               handleDownloadPaymentInvoice={handleDownloadPaymentInvoice}
               showBranchField={isBranchEnabled}
+              showBatchField={isConnectedBankingEnabled || isPaymentBatchesFeatureEnabled}
+              paginationFooter={
+                <PaymentsTabPagination
+                  pagination={releasedPaymentsPagination}
+                  onPageChange={goToReleasedPaymentsPage}
+                  testIdPrefix="released-payments"
+                />
+              }
             />
           </TabsContent>
         </div>
       </Tabs>
+
+      <RequestPaymentDialog
+        open={requestPaymentOpen}
+        onOpenChange={setRequestPaymentOpen}
+        invoices={selectedRecordPaymentInvoices}
+        onCreate={handleCreatePayrun}
+        submitting={creatingPayrun}
+      />
+
+      <PayrunDetailsSheet
+        payrun={selectedPayrun}
+        open={payrunDetailsOpen}
+        onOpenChange={setPayrunDetailsOpen}
+        onRelease={openReleasePayrun}
+        onViewInvoice={handleViewInvoice}
+        canReleasePayrun={canReleasePayrun}
+      />
+
+      <ApprovalDecisionDialog
+        decision={approvalDecision}
+        open={approvalDecisionOpen}
+        onOpenChange={(open) => {
+          setApprovalDecisionOpen(open);
+          if (!open) setApprovalDecision(null);
+        }}
+        onConfirm={confirmApprovalDecision}
+      />
+
+      <ReleasePaymentDialog
+        payrun={releasePayrun}
+        open={releasePayrunOpen}
+        onOpenChange={setReleasePayrunOpen}
+        bankAccounts={bankAccounts}
+        showBatchField={isConnectedBankingEnabled || isPaymentBatchesFeatureEnabled}
+        onPaid={handlePayrunPaid}
+      />
 
       {canShowRecordPayment && (
         <RecordPaymentDialog
@@ -1141,7 +1720,7 @@ const Payments = () => {
       <PendingPaymentReportDialog
         open={paymentReportDialogOpen}
         onOpenChange={setPaymentReportDialogOpen}
-        invoices={invoices}
+        invoices={selectablePayableInvoices}
         selectedInvoiceIds={paymentReportInvoiceIds}
         onToggleInvoice={togglePaymentReportInvoice}
         onSelectAllInvoices={selectPaymentReportInvoices}
@@ -1166,12 +1745,12 @@ const Payments = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Release All Pending Payments?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to release payments for {invoices.length} invoices?
+              Are you sure you want to release payments for {selectablePayableInvoices.length} invoices?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <MeteredActionCostHint
             actionCode={CREDIT_ACTION_CODES.PAYMENT_PROCESSING}
-            unitCount={invoices.length}
+            unitCount={selectablePayableInvoices.length}
             className="mx-6 mb-2"
           />
           <AlertDialogFooter>
@@ -1205,6 +1784,7 @@ const Payments = () => {
         isCategoryFeatureEnabled={isCategoryFeatureEnabled}
         showCampaignField={isCampaignFeatureEnabled}
         isCampaignFeatureEnabled={isCampaignFeatureEnabled}
+        showInvoiceFunding={showInvoiceFunding}
       />
     </div>
   );

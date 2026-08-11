@@ -1,16 +1,13 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Building2,
-  CheckCircle,
-  Clock3,
   Download,
   FileText,
   History,
   Loader2,
   Package,
   Send,
-  User,
-  XCircle,
+  WalletCards,
 } from "lucide-react";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
@@ -30,14 +27,29 @@ import {
   TabsList,
   TabsTrigger,
 } from "../../../components/ui/tabs";
+import { Label } from "../../../components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../../../components/ui/select";
+import { Textarea } from "../../../components/ui/textarea";
 import {
   isFormatFieldEnabled,
   isFormatSectionEnabled,
 } from "../utils";
+import { DELIVERY_STATUS_OPTIONS } from "../constants";
 import PoLogo from "./PoLogo";
 import { OrgBranchDetail, VendorBranchDetail } from "../../../components/common/BranchTableCells";
 import AccountingLockBanner from "../../../components/AccountingLockBanner";
 import { isAccountingReadyLocked } from "../../../utils/accountingLock";
+import ApprovalHistoryTimeline from "../../../components/common/ApprovalHistoryTimeline";
+import { useGetPurchaseOrderHistoryQuery } from "../../../Services/apis/purchaseOrdersMasterDataApi";
+import PoPaymentScheduleSection from "./PoPaymentScheduleSection";
+import { normalizePaymentScheduleRows } from "../utils/poPaymentSchedule";
+import AdvanceContextPanel from "../../../components/vendor-advances/AdvanceContextPanel";
 
 const PoDetailsDialog = ({
   showViewDialog,
@@ -54,9 +66,31 @@ const PoDetailsDialog = ({
   canManagePo,
   canApprovePo,
   onEditPO,
+  onSaveDeliveryStatus,
+  savingDeliveryStatus,
+  canRaiseAdvance = false,
+  onRaiseAdvance,
 }) => {
-  const selectedPoId = selectedPO?.id || selectedPO?.po_id || selectedPO?.poId;
+  const selectedPoId =
+    selectedPO?.id ||
+    selectedPO?.po_id ||
+    selectedPO?.poId ||
+    selectedPO?.purchaseOrderId ||
+    selectedPO?.purchase_order_id;
   const [viewTab, setViewTab] = useState("details");
+  const [deliveryStatus, setDeliveryStatus] = useState(selectedPO?.delivery_status || "");
+  const [deliveryRemarks, setDeliveryRemarks] = useState(selectedPO?.delivery_remarks || "");
+  const {
+    data: approvalHistory = [],
+    isLoading: loadingApprovalHistory,
+  } = useGetPurchaseOrderHistoryQuery(selectedPoId, {
+    skip: !showViewDialog || !selectedPoId,
+  });
+
+  useEffect(() => {
+    setDeliveryStatus(selectedPO?.delivery_status || "");
+    setDeliveryRemarks(selectedPO?.delivery_remarks || "");
+  }, [selectedPoId]);
   const isDownloading = Boolean(
     selectedPoId && downloadingPoId === selectedPoId,
   );
@@ -64,6 +98,10 @@ const PoDetailsDialog = ({
   const isInr = poCurrency === "INR";
   const documentBorderClass = "border";
   const headerBorderClass = "border-b";
+  const paymentScheduleRows = useMemo(
+    () => normalizePaymentScheduleRows(selectedPO || {}),
+    [selectedPO],
+  );
 
   const selectedFormat =
     selectedPO?.formatConfigSnapshot ||
@@ -183,37 +221,6 @@ const PoDetailsDialog = ({
         ))}
       </TableRow>
     );
-  };
-
-  const approvalHistory = useMemo(() => {
-    const candidates = [
-      selectedPO?.approval_records,
-      selectedPO?.approvalRecords,
-      selectedPO?.approvals,
-    ];
-    const firstPopulated = candidates.find(
-      (entry) => Array.isArray(entry) && entry.length > 0,
-    );
-    if (firstPopulated) return firstPopulated;
-    return candidates.find(Array.isArray) || [];
-  }, [selectedPO]);
-
-  const getHistoryIcon = (action = "") => {
-    const normalized = String(action || "").toLowerCase();
-    if (normalized.includes("approve"))
-      return <CheckCircle className="h-4 w-4 text-emerald-700" />;
-    if (normalized.includes("reject"))
-      return <XCircle className="h-4 w-4 text-red-700" />;
-    return <Clock3 className="h-4 w-4 text-slate-600" />;
-  };
-
-  const getHistoryBadgeClass = (action = "") => {
-    const normalized = String(action || "").toLowerCase();
-    if (normalized.includes("approve"))
-      return "bg-emerald-100 text-emerald-800 border-emerald-200";
-    if (normalized.includes("reject"))
-      return "bg-red-100 text-red-800 border-red-200";
-    return "bg-slate-100 text-slate-700 border-slate-200";
   };
 
   return (
@@ -413,6 +420,23 @@ const PoDetailsDialog = ({
                     </section>
                   )}
 
+                  {paymentScheduleRows.length ? (
+                    <PoPaymentScheduleSection
+                      rows={paymentScheduleRows}
+                      poGrossTotal={Number(selectedPO.total_amount) || 0}
+                      formatCurrency={(amount) => formatCurrency(amount, poCurrency)}
+                      readOnly
+                    />
+                  ) : null}
+
+                  <AdvanceContextPanel
+                    source={selectedPO}
+                    title="PO Advance Context"
+                    description="Read-only PO-linked advance summary and history from backend."
+                    currency={poCurrency}
+                    className="mt-6"
+                  />
+
                   <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-[1fr_320px]">
                     {sectionOn("PAYMENT") && (
                       <section className="rounded border bg-slate-50/60 p-4">
@@ -456,6 +480,12 @@ const PoDetailsDialog = ({
                           {formatCurrency(selectedPO.total_amount, poCurrency)}
                         </span>
                       </div>
+                      {selectedPO.convertToInr && Number(selectedPO.matchingInrValue) > 0 ? (
+                        <div className="mt-2 flex justify-between text-sm font-semibold text-primary">
+                          <span>Converted INR Amount</span>
+                          <span>{formatCurrency(selectedPO.matchingInrValue, "INR")}</span>
+                        </div>
+                      ) : null}
                       {selectedPO.tds_amount > 0 && (
                         <>
                           <div className="mt-2 flex justify-between text-muted-foreground">
@@ -490,78 +520,68 @@ const PoDetailsDialog = ({
                       <p>{selectedPO.remarks}</p>
                     </section>
                   )}
+
+                  <section className="mt-6 rounded border bg-slate-50/60 p-4 text-sm">
+                    <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground mb-3">
+                      Asset Delivery Status
+                    </p>
+                    <div className="grid grid-cols-1 gap-4 md:grid-cols-[260px_1fr]">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="po-delivery-status">Delivery Status</Label>
+                        <Select value={deliveryStatus} onValueChange={setDeliveryStatus}>
+                          <SelectTrigger id="po-delivery-status" className="bg-white" data-testid="delivery-status-select">
+                            <SelectValue placeholder="Select delivery status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {DELIVERY_STATUS_OPTIONS.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>
+                                {option.label}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="po-delivery-remarks">Delivery Remarks</Label>
+                        <Textarea
+                          id="po-delivery-remarks"
+                          value={deliveryRemarks}
+                          onChange={(e) => setDeliveryRemarks(e.target.value)}
+                          rows={2}
+                          placeholder="Optional notes about asset delivery"
+                          className="bg-white"
+                        />
+                      </div>
+                    </div>
+                    <div className="mt-3 flex justify-end">
+                      <Button
+                        type="button"
+                        size="sm"
+                        disabled={savingDeliveryStatus}
+                        data-testid="save-delivery-status-btn"
+                        onClick={() =>
+                          onSaveDeliveryStatus?.(selectedPO, {
+                            delivery_status: deliveryStatus || null,
+                            delivery_remarks: deliveryRemarks,
+                          })
+                        }
+                      >
+                        {savingDeliveryStatus && (
+                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        )}
+                        Save Delivery Status
+                      </Button>
+                    </div>
+                  </section>
                 </div>
               </TabsContent>
 
               <TabsContent value="history" className="mt-4 space-y-4">
-                {approvalHistory.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg bg-white">
-                    <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No history records found</p>
-                  </div>
-                ) : (
-                  <div className="relative">
-                    <div className="absolute left-[19px] top-0 bottom-0 w-0.5 bg-border" />
-                    <div className="space-y-4">
-                      {approvalHistory.map((approval, idx) => {
-                        const action =
-                          approval.action || approval.status || "Updated";
-                        const actor =
-                          approval.userName ||
-                          approval.user_name ||
-                          approval.approver_name ||
-                          "-";
-                        const level =
-                          approval.level || approval.approval_level || "-";
-                        const timestamp =
-                          approval.timestamp || approval.created_at;
-
-                        return (
-                          <div key={idx} className="relative flex gap-4">
-                            <div className="relative z-10 w-10 h-10 rounded-full flex items-center justify-center border-2 border-background shadow-sm bg-white">
-                              {getHistoryIcon(action)}
-                            </div>
-                            <div className="flex-1 pb-4">
-                              <div className="bg-card border rounded-lg p-4 shadow-sm">
-                                <div className="flex items-start justify-between mb-2">
-                                  <span
-                                    className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium border ${getHistoryBadgeClass(action)}`}
-                                  >
-                                    {action}
-                                  </span>
-                                  {timestamp && (
-                                    <div className="text-right text-xs text-muted-foreground">
-                                      <p>{formatDate(timestamp)}</p>
-                                    </div>
-                                  )}
-                                </div>
-                                <p className="text-sm mb-3 font-bold"> {level}</p>
-                                {approval.comments && (
-                                  <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                                    <p className="text-xs font-medium text-slate-700">
-                                      Comments
-                                    </p>
-                                    <p className="mt-1 text-sm text-slate-900 whitespace-pre-line">
-                                      {approval.comments}
-                                    </p>
-                                  </div>
-                                )}
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                  <User className="h-3 w-3" />
-                                  <span className="font-medium">{actor}</span>
-                                  {/* <span>|</span>
-                                  <span className="bg-muted px-2 py-0.5 rounded">
-                                    Level {level}
-                                  </span> */}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+                <ApprovalHistoryTimeline
+                  history={approvalHistory}
+                  loading={loadingApprovalHistory}
+                  emptyMessage="No purchase order history records found"
+                />
               </TabsContent>
               </Tabs>
             </div>
@@ -587,6 +607,17 @@ const PoDetailsDialog = ({
               Download PO
             </Button>
           )}
+          {selectedPO && canRaiseAdvance ? (
+            <Button
+              variant="outline"
+              onClick={() => onRaiseAdvance?.(selectedPO)}
+              disabled={submitting}
+              data-testid="raise-advance-btn"
+            >
+              <WalletCards className="h-4 w-4 mr-2" />
+              Raise Advance
+            </Button>
+          ) : null}
           {["Draft", "Sent Back"].includes(selectedPO?.status) &&
             canManagePo &&
             !isAccountingReadyLocked(selectedPO) && (

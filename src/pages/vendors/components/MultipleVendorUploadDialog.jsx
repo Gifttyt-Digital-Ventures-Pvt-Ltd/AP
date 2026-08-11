@@ -74,9 +74,11 @@ const MultipleVendorUploadDialog = ({
         <DialogHeader>
           <DialogTitle>Multiple Vendor Upload</DialogTitle>
           <DialogDescription>
-            Upload a spreadsheet to import vendors in Saved status. Only company name is required
-            at import; complete GSTIN, bank, and documents by editing each vendor before submitting
-            for approval. See the Guide sheet in the sample spreadsheet for upload rules.
+            Upload a spreadsheet to import vendors in Saved status. Only vendor name is required
+            at import — GSTINs, bank accounts, and branches can all be added directly in the file
+            using the "Row Type" column (one row per GSTIN / bank account / branch, grouped by a
+            shared PAN), or completed later by editing each vendor before submitting for approval.
+            See the Guide sheet in the sample spreadsheet for the full rules.
           </DialogDescription>
         </DialogHeader>
         <MeteredActionCostHint actionCode={CREDIT_ACTION_CODES.VENDOR_UPLOAD} className="mb-4" />

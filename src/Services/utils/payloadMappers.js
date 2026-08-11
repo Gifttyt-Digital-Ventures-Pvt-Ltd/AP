@@ -109,6 +109,7 @@ export const extractMatchingGrns = (response) => ({
 
 export const toVendorApiPayload = (vendor = {}) => {
   const {
+    vendorId,
     name,
     trade_name,
     tradeName,
@@ -160,6 +161,29 @@ export const toVendorApiPayload = (vendor = {}) => {
     vendor_branches,
     branchDetails,
     branch_details,
+    bankAccounts,
+    paymentTerms,
+    modeOfDelivery,
+    deliveryTerms,
+    vendorStatus,
+    oneTimeVendor,
+    foreignVendor,
+    udyamRegistrationNo,
+    msmeCategory,
+    iecNumber,
+    tan,
+    tin,
+    stc,
+    stRegistrationNumber,
+    panStatus,
+    panReferenceNo,
+    natureOfAssessee,
+    tcsGroup,
+    specifiedPerson206AB,
+    tdsGroup,
+    lowNilDeductionCertificateNo,
+    certificateValidity,
+    tdsApplicable,
   } = vendor;
 
   const resolvedMsme = parseMsmeValue(msme);
@@ -174,8 +198,10 @@ export const toVendorApiPayload = (vendor = {}) => {
   const resolvedVendorBranches =
     vendorBranches ?? vendor_branches ?? branchDetails ?? branch_details ?? undefined;
   const resolvedDocuments = documents ?? vendorDocuments ?? vendor_documents ?? undefined;
+  const resolvedBankAccounts = bankAccounts ?? undefined;
 
   return {
+    vendorId,
     name,
     tradeName: tradeName ?? trade_name,
     vendorType: vendorType ?? vendor_type,
@@ -201,6 +227,28 @@ export const toVendorApiPayload = (vendor = {}) => {
     contactPerson: contactPerson ?? contact_person,
     website,
     notes,
+    paymentTerms,
+    modeOfDelivery,
+    deliveryTerms,
+    vendorStatus,
+    oneTimeVendor: Boolean(oneTimeVendor),
+    foreignVendor: Boolean(foreignVendor),
+    udyamRegistrationNo,
+    msmeCategory,
+    iecNumber,
+    tan,
+    tin,
+    stc,
+    stRegistrationNumber,
+    panStatus,
+    panReferenceNo,
+    natureOfAssessee,
+    tcsGroup,
+    specifiedPerson206AB: Boolean(specifiedPerson206AB),
+    tdsGroup,
+    lowNilDeductionCertificateNo,
+    certificateValidity,
+    tdsApplicable: Boolean(tdsApplicable),
     ...(resolvedDocuments !== undefined ? { documents: resolvedDocuments } : {}),
     ...(resolvedGstRegistrations !== undefined
       ? { gstRegistrations: resolvedGstRegistrations }
@@ -208,6 +256,7 @@ export const toVendorApiPayload = (vendor = {}) => {
     ...(resolvedVendorBranches !== undefined
       ? { vendorBranches: resolvedVendorBranches }
       : {}),
+    ...(resolvedBankAccounts !== undefined ? { bankAccounts: resolvedBankAccounts } : {}),
     ...(resolvedTdsMapping ? { tdsMapping: resolvedTdsMapping } : {}),
     ...(status ? { status } : {}),
     ...(action ? { action } : {}),
@@ -322,8 +371,26 @@ export const toVendorUiPayload = (vendor = {}) => ({
   created_by_id: vendor.created_by_id ?? vendor.createdById,
   created_by: vendor.created_by ?? vendor.createdBy,
   createdAt: vendor.createdAt ?? vendor.created_at ?? null,
+  updatedAt:
+    vendor.updatedAt ??
+    vendor.updated_at ??
+    vendor.modifiedAt ??
+    vendor.modified_at ??
+    vendor.lastModifiedAt ??
+    vendor.last_modified_at ??
+    null,
   requested_by_email: vendor.requested_by_email ?? vendor.requestedByEmail,
   requested_by: vendor.requested_by ?? vendor.requestedBy,
+  vendorAdvanceBalance: vendor.vendorAdvanceBalance ?? vendor.vendor_advance_balance,
+  outstandingAdvanceBalance:
+    vendor.outstandingAdvanceBalance ?? vendor.outstanding_advance_balance,
+  totalAdvancesPaid: vendor.totalAdvancesPaid ?? vendor.total_advances_paid,
+  totalAdvancesAdjusted:
+    vendor.totalAdvancesAdjusted ?? vendor.total_advances_adjusted,
+  totalAdvancesRefunded:
+    vendor.totalAdvancesRefunded ?? vendor.total_advances_refunded,
+  advanceSummary: vendor.advanceSummary ?? vendor.advance_summary,
+  advancesByPo: vendor.advancesByPo ?? vendor.advances_by_po,
 });
 
 export const extractVendorIdFromResponse = (response) => {
@@ -363,12 +430,17 @@ export const toBankAccountApiPayload = (account = {}) => {
 
 export const toBankAccountUiPayload = (account = {}) => ({
   ...account,
+  id: account.id ?? account.accountId ?? account.account_id ?? account.bankAccountId,
   account_name: account.account_name ?? account.accountName ?? "",
   account_number: account.account_number ?? account.accountNumber ?? "",
   bank_name: account.bank_name ?? account.bankName ?? "",
+  bank: account.bank ?? account.bankCode ?? account.bank_code ?? account.bankName ?? account.bank_name ?? "",
   account_type: account.account_type ?? account.accountType ?? "",
   ifsc_code: account.ifsc_code ?? account.ifscCode ?? "",
+  maskedAccountNumber: account.maskedAccountNumber ?? account.masked_account_number,
+  verificationStatus: account.verificationStatus ?? account.verification_status,
   is_active: account.is_active ?? account.isActive,
+  isActive: account.isActive ?? account.is_active,
 });
 
 export const toPaymentCreateApiPayload = (payment = {}) => {
@@ -402,25 +474,33 @@ export const toPaymentCreateApiPayload = (payment = {}) => {
 export const toRecordPaymentsApiPayload = (payment = {}) => {
   const invoiceNumbers = payment.invoice_numbers ?? payment.invoiceNumbers;
   const payload = {
-    invoice_numbers: Array.isArray(invoiceNumbers)
+    invoiceNumbers: Array.isArray(invoiceNumbers)
       ? invoiceNumbers.filter(Boolean)
       : [],
   };
   addStringIfPresent(
     payload,
-    "payment_date",
+    "paymentDate",
     payment.payment_date ?? payment.paymentDate,
   );
   addStringIfPresent(
     payload,
-    "payment_method",
+    "paymentMethod",
     payment.payment_method ?? payment.paymentMethod,
   );
   addStringIfPresent(
     payload,
-    "reference_number",
+    "referenceNumber",
     payment.reference_number ?? payment.referenceNumber,
   );
+  addStringIfPresent(payload, "currency", payment.currency);
+  const actualInrAmount = payment.actualInrAmount ?? payment.actual_inr_amount;
+  if (actualInrAmount !== undefined && actualInrAmount !== null && actualInrAmount !== "") {
+    const inrAmount = Number(actualInrAmount);
+    payload.actualInrAmount = inrAmount;
+    payload.amount = inrAmount;
+    payload.paymentAmount = inrAmount;
+  }
   return payload;
 };
 

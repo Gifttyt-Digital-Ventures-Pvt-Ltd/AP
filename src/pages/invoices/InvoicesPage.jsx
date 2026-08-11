@@ -19,6 +19,7 @@ import {
   useLazyGetInvoiceQuery,
   useLazyGetInvoiceHistoryQuery,
   useUpdateInvoiceMutation,
+  useUpdateInvoiceInternalChecklistMutation,
   useForwardInvoiceMutation,
   useDeleteInvoiceMutation,
   useCancelInvoiceMutation,
@@ -56,9 +57,14 @@ import { parseNumericInput } from "./utils/numericInput";
 import { buildInvoiceEditFormData } from "./utils/invoiceFormData";
 import { normalizeInvoiceHistoryEntries } from "./utils/invoiceHistory";
 import {
+  buildInternalChecklistState,
+  getActiveInternalChecklistItems,
+} from "./utils/internalChecklist";
+import {
   buildInvoiceCategoryPayload,
   buildInvoiceMultipartPayload,
   buildToCreateInvoicePayload,
+  calculateInvoiceDataTotals,
   computeTdsAmount,
   initializeInvoiceFormData,
   mapBulkLineItemToEditForm,
@@ -76,6 +82,10 @@ import {
 import { findVendorByInvoiceName } from "./utils/vendorMatching";
 import { syncInvoiceMatchingOnSave } from "./utils/invoiceMatchingFlow";
 import { getInvoiceFileUrl } from "./utils/invoicePreview";
+import {
+  getInvoiceFundingSplitError,
+  isInvoiceFundingSplitValid,
+} from "./utils/invoiceFunding";
 import { clearNotificationQueryParams } from "../../utils/notificationQueryParams";
 import {
   EMPTY_INVOICE_LIST_RESPONSE,
@@ -84,11 +94,9 @@ import {
   getInvoiceListItems,
   mergeInvoiceVendorOptions,
 } from "../../Services/utils/payloadMappers";
-import {
-  useGetCorporateDepartmentsQuery,
-  useGetCorporateUserDetailsQuery,
-} from "../../Services/apis/corporateApi";
+import { useGetCorporateUserDetailsQuery } from "../../Services/apis/corporateApi";
 import { useGetCategoriesForInvoiceQuery } from "../../Services/apis/categoriesApi";
+import { useGetDepartmentsForInvoiceQuery } from "../../Services/apis/departmentsApi";
 import { useAuth } from "../../contexts/AuthContext";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -109,6 +117,7 @@ import {
   isProformaInvoice,
 } from "./constants/proformaInvoice";
 import { useProformaInvoiceSubscription } from "../../hooks/useProformaInvoiceSubscription";
+import useForeignCurrencyInrConversionSubscription from "../../hooks/useForeignCurrencyInrConversionSubscription";
 import {
   filterInvoicesForDocumentTab,
   getLinkedTaxInvoiceCount,
@@ -123,6 +132,9 @@ import {
 } from "./utils/invoiceAmounts";
 import { getInvoiceDueDateValidationErrorForInvoice } from "./utils/msmePaymentDue";
 import InvoiceDueDateCell from "./components/InvoiceDueDateCell";
+import {
+  getInrConversionValidationError,
+} from "../../components/common/InrConversionFields";
 import {
   Ban,
   Sparkles,
@@ -174,13 +186,16 @@ import {
 } from "../../Services/apis/invoiceMatchingApi";
 import {
   CURRENCY_SCREENS,
+  CURRENCY_FILTER_ALL,
   DEFAULT_CURRENCY,
   normalizeCurrencyCode,
 } from "../../utils/currency";
 import {
   isCheckerEditEnabled as isCheckerEditEnabledForCorporate,
   isCheckerEditForbiddenError,
+  isInternalChecklistEnabled as isInternalChecklistEnabledForCorporate,
   isInvoiceLineItemRemovalEnabled,
+  isInvoiceFundingEnabled as isInvoiceFundingEnabledForCorporate,
   isNetPayableEditEnabled as isNetPayableEditEnabledForCorporate,
   isRefNoEnabled as isRefNoEnabledForCorporate,
 } from "../../utils/invoiceConfiguration";
@@ -261,7 +276,7 @@ const baseInvoiceTableHeader = [
     key: "vendorName",
     title: "Vendor",
     headerClassName:
-      "p-3 text-left text-xs font-medium sticky left-[var(--invoice-sticky-col2)] ",
+      "p-3 text-left text-xs font-medium sticky left-[var(--invoice-sticky-col2)]",
     cellClassName:
       "p-3 text-sm sticky left-[var(--invoice-sticky-col2)]  bg-inherit ",
   },
@@ -269,9 +284,9 @@ const baseInvoiceTableHeader = [
     key: "invoiceNumber",
     title: "Invoice #",
     headerClassName:
-      "p-3 text-left text-xs font-medium sticky left-[var(--invoice-sticky-col3)] right-0 border-r-2 border-r-shadow-2xl",
+      "p-3 text-left text-xs font-medium sticky left-[var(--invoice-sticky-col3)] shadow-[inset_-1px_0_0_0_hsl(var(--border)),4px_0_8px_-4px_rgba(0,0,0,0.12)]",
     cellClassName:
-      "p-3 text-sm font-medium sticky left-[var(--invoice-sticky-col3)] bg-inherit border-r-2 border-r-shadow-2xl",
+      "p-3 text-sm font-medium sticky left-[var(--invoice-sticky-col3)] bg-inherit shadow-[inset_-1px_0_0_0_hsl(var(--border)),4px_0_8px_-4px_rgba(0,0,0,0.12)]",
   },
   {
     key: "source",
@@ -366,6 +381,7 @@ const InvoicesPage = () => {
   const {
     corporateScreens,
     isCategoryFeatureEnabled,
+    isDepartmentFeatureEnabled,
     isCampaignFeatureEnabled,
     isCorporateAdmin,
     isCorporateScreenAllowed,
@@ -389,8 +405,10 @@ const InvoicesPage = () => {
     isInvoiceMatchingEnabled && hasPurchaseOrderSubscription;
   const canUseThreeWayMatching =
     showInvoiceMatchingSelection && hasGrnSubscription;
-  const { showIntegrationColumn } = useZohoIntegrationActive();
+  const { hasConnectedZoho, showIntegrationColumn } = useZohoIntegrationActive();
   const showErpIntegrationFields = isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
+  const { isForeignCurrencyInrConversionEnabled } =
+    useForeignCurrencyInrConversionSubscription();
   const { data: corporateUserContext = null } =
     useGetCorporateUserDetailsQuery();
   const invoiceUserEmail =
@@ -403,9 +421,11 @@ const InvoicesPage = () => {
     currencies,
     selectedCurrency,
     setSelectedCurrency,
-    currencyParam,
-    queryArgs: currencyQueryArgs,
-  } = useCurrencyFilter(CURRENCY_SCREENS.INVOICE);
+	    currencyParam,
+	    queryArgs: currencyQueryArgs,
+	  } = useCurrencyFilter(CURRENCY_SCREENS.INVOICE, {
+	    defaultCurrency: CURRENCY_FILTER_ALL,
+	  });
   const invoiceCurrencyOptions = useMemo(
     () => currencies.filter((currency) => currency !== "ALL"),
     [currencies],
@@ -518,7 +538,15 @@ const InvoicesPage = () => {
     isFetching: vendorsFetching,
     refetch: refetchVendors,
   } = useGetVendorsQuery();
-  const { data: departmentsData = [] } = useGetCorporateDepartmentsQuery();
+  const { data: departmentsData = [] } = useGetDepartmentsForInvoiceQuery(
+    {
+      userEmail: invoiceUserEmail,
+      ...(currencyParam ? { currency: currencyParam } : {}),
+    },
+    {
+      skip: !invoiceUserEmail || !isDepartmentFeatureEnabled,
+    },
+  );
   const {
     data: invoiceMandatoryFieldsData,
     isLoading: invoiceMandatoryFieldsLoading,
@@ -531,8 +559,11 @@ const InvoicesPage = () => {
     [invoiceMandatoryFieldsData],
   );
   const mandatoryFieldOptions = useMemo(
-    () => ({ showCategoryField: isCategoryFeatureEnabled }),
-    [isCategoryFeatureEnabled],
+    () => ({
+      showDepartmentField: isDepartmentFeatureEnabled,
+      showCategoryField: isCategoryFeatureEnabled,
+    }),
+    [isDepartmentFeatureEnabled, isCategoryFeatureEnabled],
   );
   const {
     data: invoiceCategoriesData = [],
@@ -557,6 +588,8 @@ const InvoicesPage = () => {
   const [getInvoiceHistory] = useLazyGetInvoiceHistoryQuery();
   const [updateInvoice, { isLoading: updateInvoiceLoading }] =
     useUpdateInvoiceMutation();
+  const [updateInvoiceInternalChecklist, { isLoading: savingInternalChecklist }] =
+    useUpdateInvoiceInternalChecklistMutation();
   const [performInvoiceMatch, { isLoading: performMatchingLoading }] =
     usePerformInvoiceMatchMutation();
   const [editInvoiceMatch, { isLoading: editMatchingLoading }] =
@@ -646,6 +679,11 @@ const InvoicesPage = () => {
   const canCheckInvoices = canPerformAction("invoices.check");
   const canAddVendors = canPerformAction("invoices.addVendor");
   const isMasterAdmin = hasPermission("master-admin");
+  // Internal Checklist stays editable after the invoice itself becomes
+  // read-only (e.g. Approved) — Maker/Admin/Master Admin only, no Checker.
+  // Reuses the same role signals as everywhere else in this file rather than
+  // a new RBAC permission key.
+  const canEditInternalChecklist = canManageInvoices || isCorporateAdmin || isMasterAdmin;
   const isCheckerEditEnabled = useMemo(
     () =>
       isCheckerEditEnabledForCorporate(
@@ -673,6 +711,27 @@ const InvoicesPage = () => {
         corporateScreens?.activeInvoiceConfiguration ?? [],
       ),
     [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const showInvoiceFunding = useMemo(
+    () =>
+      isInvoiceFundingEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const isInternalChecklistEnabled = useMemo(
+    () =>
+      isInternalChecklistEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const internalChecklistItems = useMemo(
+    () =>
+      getActiveInternalChecklistItems(
+        corporateScreens?.activeInternalChecklistItems ?? [],
+      ),
+    [corporateScreens?.activeInternalChecklistItems],
   );
   const updateInvoiceColumnFilter = useCallback((key, value) => {
     setInvoiceColumnFilters((prev) => ({
@@ -1480,6 +1539,13 @@ const InvoicesPage = () => {
           }
         : {}),
       billingAddress: item.invoicePayload.billingAddress || "",
+      shippingAddress: item.invoicePayload.shippingAddress || "",
+      shippingSameAsBilling: Boolean(
+        item.invoicePayload.billingAddress &&
+        item.invoicePayload.shippingAddress &&
+        String(item.invoicePayload.billingAddress).trim() ===
+          String(item.invoicePayload.shippingAddress).trim(),
+      ),
       gstin: item.invoicePayload.gstin || "",
       sourceOfSupply: item.invoicePayload.sourceOfSupply || "",
       destinationOfSupply: item.invoicePayload.destinationOfSupply || "",
@@ -1516,6 +1582,7 @@ const InvoicesPage = () => {
           : (item.invoicePayload.lineItems || []).map((line) =>
               mapBulkLineItemToEditForm(line, item.invoicePayload.currency),
             ),
+      internalChecklist: buildInternalChecklistState(item.invoicePayload.internalChecklist),
     });
     setBulkEditOpen(true);
   };
@@ -1551,6 +1618,13 @@ const InvoicesPage = () => {
     if (!bulkEditForm || !bulkEditItemId) return;
 
     if (!validateMandatoryPayload(bulkEditForm)) return;
+    if (
+      !validateFundingSplit(
+        bulkEditForm,
+        calculateInvoiceDataTotals(bulkEditForm),
+      )
+    )
+      return;
 
     const matchedVendorId = findVendorByName(bulkEditForm.vendorName)?.id || "";
     const resolvedVendorId = bulkEditForm.vendorId || matchedVendorId;
@@ -1567,8 +1641,12 @@ const InvoicesPage = () => {
           vendorId: resolvedVendorId,
           vendorRequestSubmitted,
           amount: parseNumericInput(bulkEditForm.amount, 0),
-          lineItemMode: isSummaryOnly ? LINE_ITEM_MODE_SUMMARY_ONLY : LINE_ITEM_MODE_DETAILED,
-          lineItemsRemoved: isSummaryOnly ? bulkEditForm.lineItemsRemoved === true : false,
+          lineItemMode: isSummaryOnly
+            ? LINE_ITEM_MODE_SUMMARY_ONLY
+            : LINE_ITEM_MODE_DETAILED,
+          lineItemsRemoved: isSummaryOnly
+            ? bulkEditForm.lineItemsRemoved === true
+            : false,
           lineItems: isSummaryOnly
             ? []
             : normalizeLineItemsForTaxLevel({
@@ -1684,7 +1762,9 @@ const InvoicesPage = () => {
       let igst = 0;
       let foreignTax = 0;
       if (invoiceLevelTaxEnabled && isInrInvoiceCurrency(currency)) {
-        const taxRate = TAX_RATES.find((entry) => entry.value === formData?.invoiceTax);
+        const taxRate = TAX_RATES.find(
+          (entry) => entry.value === formData?.invoiceTax,
+        );
         if (taxRate) {
           cgst = (taxableSubTotal * (Number(taxRate.cgst) || 0)) / 100;
           sgst = (taxableSubTotal * (Number(taxRate.sgst) || 0)) / 100;
@@ -1692,7 +1772,9 @@ const InvoicesPage = () => {
         }
       } else if (invoiceLevelTaxEnabled) {
         foreignTax =
-          (taxableSubTotal * (parseNumericInput(formData?.invoiceTaxRate, 0) || 0)) / 100;
+          (taxableSubTotal *
+            (parseNumericInput(formData?.invoiceTaxRate, 0) || 0)) /
+          100;
       }
       const totalTaxAmount = invoiceLevelTaxEnabled
         ? cgst + sgst + igst + foreignTax
@@ -1707,13 +1789,21 @@ const InvoicesPage = () => {
         cgstRate: 0,
         sgstRate: 0,
         igstRate: 0,
-        inrTaxes: isInrInvoiceCurrency(currency) && totalTaxAmount > 0
-          ? [{ name: "Total Tax", rate: 0, amount: totalTaxAmount }]
-          : [],
+        inrTaxes:
+          isInrInvoiceCurrency(currency) && totalTaxAmount > 0
+            ? [{ name: "Total Tax", rate: 0, amount: totalTaxAmount }]
+            : [],
         foreignTax: isInrInvoiceCurrency(currency) ? 0 : totalTaxAmount,
-        foreignTaxes: !isInrInvoiceCurrency(currency) && totalTaxAmount > 0
-          ? [{ name: formData?.invoiceTaxName || "Tax", rate: 0, amount: totalTaxAmount }]
-          : [],
+        foreignTaxes:
+          !isInrInvoiceCurrency(currency) && totalTaxAmount > 0
+            ? [
+                {
+                  name: formData?.invoiceTaxName || "Tax",
+                  rate: 0,
+                  amount: totalTaxAmount,
+                },
+              ]
+            : [],
         invoiceDiscountAmount: boundedInvoiceDiscountAmount,
         roundOff,
         total,
@@ -1776,14 +1866,19 @@ const InvoicesPage = () => {
         calculateLineItemSubtotal: (item) =>
           prev.discountsLevel === INVOICE_LEVEL
             ? parseNumericInput(item.lineTotal ?? item.amount, 0) ||
-              parseNumericInput(item.quantity, 0) * parseNumericInput(item.unitRate, 0)
+              parseNumericInput(item.quantity, 0) *
+                parseNumericInput(item.unitRate, 0)
             : resolveLineItemSubtotal(item),
         taxRates: TAX_RATES,
         invoiceTaxAmount: prev.scannedTaxAmount,
         invoiceTaxName:
-          prev.taxesLevel === INVOICE_LEVEL ? prev.invoiceTaxName : prev.scannedTaxName,
+          prev.taxesLevel === INVOICE_LEVEL
+            ? prev.invoiceTaxName
+            : prev.scannedTaxName,
         invoiceTaxRate:
-          prev.taxesLevel === INVOICE_LEVEL ? prev.invoiceTaxRate : prev.scannedTaxRate,
+          prev.taxesLevel === INVOICE_LEVEL
+            ? prev.invoiceTaxRate
+            : prev.scannedTaxRate,
         invoiceTax: prev.invoiceTax,
         taxesLevel: prev.taxesLevel,
         discountsLevel: prev.discountsLevel,
@@ -1817,6 +1912,7 @@ const InvoicesPage = () => {
     scannedTaxName: undefined,
     scannedTaxRate: undefined,
     scannedTotal: undefined,
+    invoiceTotal: undefined,
   });
 
   const updateLineItem = (index, field, value) => {
@@ -1877,6 +1973,17 @@ const InvoicesPage = () => {
     return true;
   };
 
+  const validateFundingSplit = (payload, totals) => {
+    const fundingError = getInvoiceFundingSplitError(
+      payload,
+      totals?.total ?? calculateInvoiceDataTotals(payload)?.total,
+      { enabled: showInvoiceFunding },
+    );
+    if (!fundingError) return true;
+    toast.error(fundingError);
+    return false;
+  };
+
   const validateSavedInvoiceEdit = (
     payload,
     { requireBillingGst = false } = {},
@@ -1895,12 +2002,33 @@ const InvoicesPage = () => {
       toast.error("Please select or request a vendor before saving");
       return false;
     }
+    const conversionError = getInrConversionValidationError({
+      currency: payload.currency,
+      enabled: isForeignCurrencyInrConversionEnabled,
+      convertToInr: payload.convertToInr,
+      matchingInrValue: payload.matchingInrValue,
+    });
+    if (conversionError) {
+      toast.error(conversionError);
+      return false;
+    }
     return validateMandatoryPayload(payload);
   };
 
   const canSubmitSavedDraft = (payload) =>
     Boolean(payload?.vendorName?.trim()) &&
     (Boolean(payload?.vendorId) || Boolean(payload?.vendorRequestSubmitted)) &&
+    isInvoiceFundingSplitValid(
+      payload,
+      calculateInvoiceDataTotals(payload)?.total,
+      { enabled: showInvoiceFunding },
+    ) &&
+    !getInrConversionValidationError({
+      currency: payload.currency,
+      enabled: isForeignCurrencyInrConversionEnabled,
+      convertToInr: payload.convertToInr,
+      matchingInrValue: payload.matchingInrValue,
+    }) &&
     !invoiceMandatoryFieldsLoading &&
     isInvoiceMandatoryFieldsSatisfied(
       payload,
@@ -1912,8 +2040,7 @@ const InvoicesPage = () => {
     const totals = calculateTotals(data.lineItems, data.currency);
     const resolvedVendorId =
       data.vendorId || findVendorByName(data.vendorName)?.id || "";
-    const isSummaryOnly =
-      data.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
+    const isSummaryOnly = data.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
     const updateLineItems = isSummaryOnly
       ? []
       : normalizeLineItemsForTaxLevel({
@@ -1945,7 +2072,9 @@ const InvoicesPage = () => {
       ? (() => {
           const tdsRate = resolveTdsRate(data.tds, data.tdsRate);
           return tdsRate
-            ? Math.round(((parseNumericInput(data.subTotal, 0) * tdsRate) / 100) * 100) / 100
+            ? Math.round(
+                ((parseNumericInput(data.subTotal, 0) * tdsRate) / 100) * 100,
+              ) / 100
             : null;
         })()
       : computeTdsAmount(
@@ -2153,8 +2282,8 @@ const InvoicesPage = () => {
     if (!formData) return;
 
     const totals = calculateTotals(formData.lineItems);
-    const isSummaryOnly =
-      formData.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
+    if (!validateFundingSplit(formData, totals)) return;
+    const isSummaryOnly = formData.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
     const createLineItems = isSummaryOnly
       ? []
       : normalizeLineItemsForTaxLevel({
@@ -2169,7 +2298,10 @@ const InvoicesPage = () => {
       ? (() => {
           const tdsRate = resolveTdsRate(formData.tds, formData.tdsRate);
           return tdsRate
-            ? Math.round(((parseNumericInput(formData.subTotal, 0) * tdsRate) / 100) * 100) / 100
+            ? Math.round(
+                ((parseNumericInput(formData.subTotal, 0) * tdsRate) / 100) *
+                  100,
+              ) / 100
             : null;
         })()
       : computeTdsAmount(
@@ -2303,44 +2435,53 @@ const InvoicesPage = () => {
     });
   }, []);
 
+  const fetchInvoiceHistory = useCallback(
+    async (invoice) => {
+      setLoadingHistory(true);
+      try {
+        const response = await getInvoiceHistory(invoice.id).unwrap();
+        let normalizedHistory = Array.isArray(response)
+          ? response
+          : normalizeInvoiceHistoryEntries(response);
+
+        if (
+          normalizedHistory.length === 0 &&
+          (Array.isArray(invoice.approvalRecords) ||
+            Array.isArray(invoice.approvalRecords))
+        ) {
+          normalizedHistory = normalizeInvoiceHistoryEntries(
+            invoice.approvalRecords || invoice.approvalRecords,
+          );
+        }
+
+        setInvoiceHistory(normalizedHistory);
+      } catch (error) {
+        console.error("Failed to fetch invoice history:", error);
+        toast.error("Failed to load invoice history");
+      } finally {
+        setLoadingHistory(false);
+      }
+    },
+    [getInvoiceHistory],
+  );
+
   const handleViewInvoice = async (invoice) => {
     setSelectedInvoice(invoice);
     setViewDialogOpen(true);
     setViewTab("details");
     setInvoiceHistory([]);
-
-    setLoadingHistory(true);
-    try {
-      const response = await getInvoiceHistory(invoice.id).unwrap();
-      let normalizedHistory = Array.isArray(response)
-        ? response
-        : normalizeInvoiceHistoryEntries(response);
-
-      if (
-        normalizedHistory.length === 0 &&
-        (Array.isArray(invoice.approvalRecords) ||
-          Array.isArray(invoice.approvalRecords))
-      ) {
-        normalizedHistory = normalizeInvoiceHistoryEntries(
-          invoice.approvalRecords || invoice.approvalRecords,
-        );
-      }
-
-      setInvoiceHistory(normalizedHistory);
-    } catch (error) {
-      console.error("Failed to fetch invoice history:", error);
-      toast.error("Failed to load invoice history");
-    } finally {
-      setLoadingHistory(false);
-    }
+    await fetchInvoiceHistory(invoice);
   };
 
-  const closeViewDialog = useCallback((open) => {
-    setViewDialogOpen(open);
-    if (!open) {
-      clearNotificationQueryParams(searchParams, setSearchParams);
-    }
-  }, [searchParams, setSearchParams]);
+  const closeViewDialog = useCallback(
+    (open) => {
+      setViewDialogOpen(open);
+      if (!open) {
+        clearNotificationQueryParams(searchParams, setSearchParams);
+      }
+    },
+    [searchParams, setSearchParams],
+  );
 
   const notificationSource = searchParams.get("source");
   const notificationAction = searchParams.get("action");
@@ -2371,7 +2512,9 @@ const InvoicesPage = () => {
     }
 
     if (notificationWeakEntity) {
-      toast.warning("Could not open the exact item. Showing the related module instead.");
+      toast.warning(
+        "Could not open the exact item. Showing the related module instead.",
+      );
       return;
     }
 
@@ -2379,7 +2522,9 @@ const InvoicesPage = () => {
       .unwrap()
       .then((invoice) => handleViewInvoice(invoice))
       .catch(() => {
-        toast.warning("Could not open the exact item. Showing the related module instead.");
+        toast.warning(
+          "Could not open the exact item. Showing the related module instead.",
+        );
       });
   }, [
     getInvoice,
@@ -2466,15 +2611,14 @@ const InvoicesPage = () => {
     if (!selectedInvoice || !formData) return;
 
     const isSavedDraft = isSavedInvoiceStatus(selectedInvoice.status);
+    const updateTotals = calculateTotals(
+      formData.lineItems || [],
+      formData.currency,
+    );
+    if (!validateFundingSplit(formData, updateTotals)) return;
     if (isSavedDraft) {
       if (!validateSavedInvoiceEdit(formData)) return;
     } else {
-      if (!String(formData.billingGstin || "").trim()) {
-        toast.error(
-          "Select a billing GSTIN from Organisation Details before updating invoice",
-        );
-        return;
-      }
       if (!validateMandatoryPayload(formData)) return;
     }
 
@@ -2515,22 +2659,40 @@ const InvoicesPage = () => {
     }
   };
 
+  const handleSaveInternalChecklist = async (invoice, nextChecklist) => {
+    if (!canEditInternalChecklist) {
+      toast.error("You do not have permission to edit the internal checklist");
+      return;
+    }
+    const invoiceId = invoice?.id;
+    if (!invoiceId) return;
+
+    try {
+      await updateInvoiceInternalChecklist({
+        id: invoiceId,
+        body: { internalChecklist: nextChecklist },
+      }).unwrap();
+      toast.success("Internal checklist updated");
+      await fetchInvoiceHistory(invoice);
+    } catch (error) {
+      toast.error(extractApiErrorDetail(error) || "Failed to update internal checklist");
+    }
+  };
+
   const handleForwardSavedInvoice = async () => {
     if (!guardAction("invoices.update")) return;
     if (!selectedInvoice || !formData) return;
     if (!isSavedInvoiceStatus(selectedInvoice.status)) return;
-    if (!String(formData.billingGstin || "").trim()) {
-      toast.error(
-        "Select a billing GSTIN from Organisation Details before submitting invoice",
-      );
-      return;
-    }
     if (!canForwardSavedInvoice(selectedInvoice, invoiceEditContext)) {
       toast.error("You do not have permission to submit this invoice");
       return;
     }
-    if (!validateSavedInvoiceEdit(formData, { requireBillingGst: true }))
-      return;
+    const forwardTotals = calculateTotals(
+      formData.lineItems || [],
+      formData.currency,
+    );
+    if (!validateFundingSplit(formData, forwardTotals)) return;
+    if (!validateSavedInvoiceEdit(formData)) return;
 
     try {
       const updateResponse = await updateInvoice({
@@ -2667,6 +2829,8 @@ const InvoicesPage = () => {
         addLineItem={addLineItem}
         removeAllLineItems={removeAllInvoiceLineItems}
         allowInvoiceLineItemRemoval={allowInvoiceLineItemRemoval}
+        showInternalChecklist={isInternalChecklistEnabled}
+        internalChecklistItems={internalChecklistItems}
         calculateLineItemSubtotal={calculateLineItemSubtotal}
         setEditDialogOpen={setEditDialogOpen}
         setUploadedFile={setUploadedFile}
@@ -2713,6 +2877,7 @@ const InvoicesPage = () => {
         invoiceCategoriesLoading={
           invoiceCategoriesLoading || invoiceCategoriesFetching
         }
+        showDepartmentField={isDepartmentFeatureEnabled}
         showCategoryField={isCategoryFeatureEnabled}
         showCampaignField={isCampaignFeatureEnabled}
         currencyOptions={invoiceCurrencyOptions}
@@ -2721,12 +2886,14 @@ const InvoicesPage = () => {
         LEDGER_OPTIONS={LEDGER_OPTIONS}
         TAX_RATES={TAX_RATES}
         showBillingGst={isEdit || Boolean(uploadedFile)}
-        requireBillingGst={isEdit && !isSavedDraft}
+        requireBillingGst={false}
         showBranchField={isBranchEnabled}
+        showInvoiceFunding={showInvoiceFunding}
         showInvoiceMatching={showInvoiceMatchingSelection}
         canUseThreeWayMatching={canUseThreeWayMatching}
         showProformaInvoiceFields={showProformaInvoiceFields}
         showErpIntegrationFields={showErpIntegrationFields}
+        includeLedgerAccountGroups={hasConnectedZoho}
       />
     );
   };
@@ -2850,9 +3017,20 @@ const InvoicesPage = () => {
                 );
                 break;
               case "netAmount":
-                value = formatInvoiceAmount(
-                  invoice,
-                  getInvoiceNetAmount(invoice),
+	                value = (
+	                  <div className="space-y-0.5 leading-tight">
+	                    <div className="font-semibold">
+	                      {formatInvoiceAmount(invoice, getInvoiceNetAmount(invoice))}
+	                    </div>
+	                    {invoice.convertToInr && Number(invoice.matchingInrValue) > 0 ? (
+	                      <div className="whitespace-nowrap text-[11px] font-normal text-muted-foreground">
+	                        INR: {formatInvoiceAmount(
+	                          { currency: "INR" },
+	                          invoice.matchingInrValue,
+	                        )}
+                      </div>
+                    ) : null}
+                  </div>
                 );
                 break;
               case "approvalWorkflowName":
@@ -2992,7 +3170,10 @@ const InvoicesPage = () => {
             return (
               <TableCell
                 key={header.key}
-                className={cn("border border-table-border", header.cellClassName)}
+                className={cn(
+                  "border border-table-border",
+                  header.cellClassName,
+                )}
                 onClick={
                   header.key === "documentType"
                     ? (event) => event.stopPropagation()
@@ -3034,10 +3215,15 @@ const InvoicesPage = () => {
         if (isSummaryOnly) {
           const subTotal = parseNumericInput(bulkEditForm?.subTotal, 0);
           const roundOff = parseNumericInput(
-            bulkEditForm?.roundOff ?? bulkEditForm?.round_off ?? bulkEditForm?.roundoff,
+            bulkEditForm?.roundOff ??
+              bulkEditForm?.round_off ??
+              bulkEditForm?.roundoff,
             0,
           );
-          const discountValue = parseNumericInput(bulkEditForm?.invoiceDiscount, 0);
+          const discountValue = parseNumericInput(
+            bulkEditForm?.invoiceDiscount,
+            0,
+          );
           const invoiceDiscountAmount =
             bulkEditForm?.invoiceDiscountType === "%"
               ? (subTotal * discountValue) / 100
@@ -3047,13 +3233,16 @@ const InvoicesPage = () => {
             Math.min(invoiceDiscountAmount, subTotal),
           );
           const taxableSubTotal = subTotal - boundedInvoiceDiscountAmount;
-          const invoiceLevelTaxEnabled = bulkEditForm?.taxesLevel === INVOICE_LEVEL;
+          const invoiceLevelTaxEnabled =
+            bulkEditForm?.taxesLevel === INVOICE_LEVEL;
           let cgst = 0;
           let sgst = 0;
           let igst = 0;
           let foreignTax = 0;
           if (invoiceLevelTaxEnabled && isInrInvoiceCurrency(currency)) {
-            const taxRate = TAX_RATES.find((entry) => entry.value === bulkEditForm?.invoiceTax);
+            const taxRate = TAX_RATES.find(
+              (entry) => entry.value === bulkEditForm?.invoiceTax,
+            );
             if (taxRate) {
               cgst = (taxableSubTotal * (Number(taxRate.cgst) || 0)) / 100;
               sgst = (taxableSubTotal * (Number(taxRate.sgst) || 0)) / 100;
@@ -3061,7 +3250,9 @@ const InvoicesPage = () => {
             }
           } else if (invoiceLevelTaxEnabled) {
             foreignTax =
-              (taxableSubTotal * (parseNumericInput(bulkEditForm?.invoiceTaxRate, 0) || 0)) / 100;
+              (taxableSubTotal *
+                (parseNumericInput(bulkEditForm?.invoiceTaxRate, 0) || 0)) /
+              100;
           }
           const totalTaxAmount = invoiceLevelTaxEnabled
             ? cgst + sgst + igst + foreignTax
@@ -3072,13 +3263,21 @@ const InvoicesPage = () => {
             cgst,
             sgst,
             igst,
-            inrTaxes: isInrInvoiceCurrency(currency) && totalTaxAmount > 0
-              ? [{ name: "Total Tax", rate: 0, amount: totalTaxAmount }]
-              : [],
+            inrTaxes:
+              isInrInvoiceCurrency(currency) && totalTaxAmount > 0
+                ? [{ name: "Total Tax", rate: 0, amount: totalTaxAmount }]
+                : [],
             foreignTax: isInrInvoiceCurrency(currency) ? 0 : totalTaxAmount,
-            foreignTaxes: !isInrInvoiceCurrency(currency) && totalTaxAmount > 0
-              ? [{ name: bulkEditForm?.invoiceTaxName || "Tax", rate: 0, amount: totalTaxAmount }]
-              : [],
+            foreignTaxes:
+              !isInrInvoiceCurrency(currency) && totalTaxAmount > 0
+                ? [
+                    {
+                      name: bulkEditForm?.invoiceTaxName || "Tax",
+                      rate: 0,
+                      amount: totalTaxAmount,
+                    },
+                  ]
+                : [],
             invoiceDiscountAmount: boundedInvoiceDiscountAmount,
             roundOff,
             total: taxableSubTotal + totalTaxAmount + roundOff,
@@ -3154,7 +3353,10 @@ const InvoicesPage = () => {
             currency: prev.currency || DEFAULT_CURRENCY,
             calculateLineItemSubtotal: (item) => {
               if (prev.discountsLevel === INVOICE_LEVEL) {
-                const lineTotal = parseNumericInput(item.lineTotal ?? item.amount, 0);
+                const lineTotal = parseNumericInput(
+                  item.lineTotal ?? item.amount,
+                  0,
+                );
                 if (lineTotal > 0) return lineTotal;
                 return (
                   parseNumericInput(item.quantity, 0) *
@@ -3166,9 +3368,13 @@ const InvoicesPage = () => {
             taxRates: TAX_RATES,
             invoiceTaxAmount: prev.scannedTaxAmount,
             invoiceTaxName:
-              prev.taxesLevel === INVOICE_LEVEL ? prev.invoiceTaxName : prev.scannedTaxName,
+              prev.taxesLevel === INVOICE_LEVEL
+                ? prev.invoiceTaxName
+                : prev.scannedTaxName,
             invoiceTaxRate:
-              prev.taxesLevel === INVOICE_LEVEL ? prev.invoiceTaxRate : prev.scannedTaxRate,
+              prev.taxesLevel === INVOICE_LEVEL
+                ? prev.invoiceTaxRate
+                : prev.scannedTaxRate,
             invoiceTax: prev.invoiceTax,
             taxesLevel: prev.taxesLevel,
             discountsLevel: prev.discountsLevel,
@@ -3195,6 +3401,8 @@ const InvoicesPage = () => {
         });
       }}
       allowInvoiceLineItemRemoval={allowInvoiceLineItemRemoval}
+      showInternalChecklist={isInternalChecklistEnabled}
+      internalChecklistItems={internalChecklistItems}
       calculateLineItemSubtotal={(item) => {
         if (bulkEditForm?.discountsLevel === INVOICE_LEVEL) {
           const lineTotal = parseNumericInput(item.lineTotal ?? item.amount, 0);
@@ -3222,14 +3430,17 @@ const InvoicesPage = () => {
       invoiceCategoriesLoading={
         invoiceCategoriesLoading || invoiceCategoriesFetching
       }
+      showDepartmentField={isDepartmentFeatureEnabled}
       showCategoryField={isCategoryFeatureEnabled}
       showCampaignField={isCampaignFeatureEnabled}
       currencyOptions={invoiceCurrencyOptions}
+      showInvoiceFunding={showInvoiceFunding}
       GST_TREATMENTS={GST_TREATMENTS}
       INDIAN_STATES={INDIAN_STATES}
       LEDGER_OPTIONS={LEDGER_OPTIONS}
       TAX_RATES={TAX_RATES}
       showErpIntegrationFields={showErpIntegrationFields}
+      includeLedgerAccountGroups={hasConnectedZoho}
     />
   );
 
@@ -3305,44 +3516,59 @@ const InvoicesPage = () => {
         onUploadNew={handleMapTaxInvoiceUpload}
       />
 
-      <div className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        {showProformaInvoiceFields && (
-          <div className="flex flex-wrap gap-2">
-            {INVOICE_DOCUMENT_TYPE_TABS.map(({ value, label }) => (
-              <Button
-                key={value}
-                type="button"
-                size="sm"
-                variant={
-                  invoiceDocumentTypeTab === value ? "default" : "outline"
-                }
-                onClick={() => setInvoiceDocumentTypeTab(value)}
-                data-testid={`invoice-document-tab-${value}`}
-              >
-                {label}
-              </Button>
-            ))}
-          </div>
-        )}
-        <div className="flex flex-wrap gap-2">
-          {invoiceQuickFilters.map(({ value, label, count }) => (
-            <Button
-              key={value}
-              type="button"
-              size="sm"
-              variant={invoiceStatusFilter === value ? "default" : "outline"}
-              onClick={() => {
-                setInvoiceStatusFilter(value);
-                updateInvoiceColumnFilter("statuses", []);
-              }}
-              data-testid={`invoice-filter-${value}`}
-            >
-              {count != null ? `${label} (${count})` : label}
-            </Button>
-          ))}
-          <div className="relative w-full sm:w-64 sm:max-w-xs">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
+	      <div className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+	        <div className="flex flex-wrap gap-2">
+	          {showProformaInvoiceFields
+	            ? INVOICE_DOCUMENT_TYPE_TABS.map(({ value, label }) => (
+	                <Button
+	                  key={value}
+	                  type="button"
+	                  size="sm"
+	                  variant={
+	                    invoiceDocumentTypeTab === value ? "default" : "outline"
+	                  }
+	                  onClick={() => setInvoiceDocumentTypeTab(value)}
+	                  data-testid={`invoice-document-tab-${value}`}
+	                >
+	                  {label}
+	                </Button>
+	              ))
+	            : invoiceQuickFilters.map(({ value, label, count }) => (
+	                <Button
+	                  key={value}
+	                  type="button"
+	                  size="sm"
+	                  variant={invoiceStatusFilter === value ? "default" : "outline"}
+	                  onClick={() => {
+	                    setInvoiceStatusFilter(value);
+	                    updateInvoiceColumnFilter("statuses", []);
+	                  }}
+	                  data-testid={`invoice-filter-${value}`}
+	                >
+	                  {count != null ? `${label} (${count})` : label}
+	                </Button>
+	              ))}
+	        </div>
+	        <div className="flex flex-wrap gap-2 lg:justify-end">
+	          {showProformaInvoiceFields &&
+	            invoiceQuickFilters.map(({ value, label, count }) => (
+	              <Button
+	                key={value}
+	                type="button"
+	                size="sm"
+	                variant={invoiceStatusFilter === value ? "default" : "outline"}
+	                onClick={() => {
+	                  setInvoiceStatusFilter(value);
+	                  updateInvoiceColumnFilter("statuses", []);
+	                }}
+	                data-testid={`invoice-filter-${value}`}
+	              >
+	                {count != null ? `${label} (${count})` : label}
+	              </Button>
+	            ))}
+	          <div className="relative w-full sm:w-64 sm:max-w-xs">
+	            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+	            <Input
               placeholder="Search vendor, invoice #, ref no, amount..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
@@ -3401,7 +3627,8 @@ const InvoicesPage = () => {
                       }}
                       className={cn(
                         "h-7 gap-1 pl-2 pr-2.5 text-xs",
-                        invoiceCurrentPage === 0 && "pointer-events-none opacity-50",
+                        invoiceCurrentPage === 0 &&
+                          "pointer-events-none opacity-50",
                       )}
                       data-testid="invoice-pagination-previous"
                     />
@@ -3482,9 +3709,11 @@ const InvoicesPage = () => {
         getDepartmentNameById={getDepartmentNameById}
         invoiceCategories={invoiceCategories}
         getCategoryNameById={getCategoryNameById}
+        isDepartmentFeatureEnabled={isDepartmentFeatureEnabled}
         isCategoryFeatureEnabled={isCategoryFeatureEnabled}
         isCampaignFeatureEnabled={isCampaignFeatureEnabled}
         showRefNoField={isRefNoEnabled}
+        showInvoiceFunding={showInvoiceFunding}
         invoiceMandatoryFields={invoiceMandatoryFields}
         bulkEditOpen={bulkEditOpen}
         setBulkEditOpen={setBulkEditOpen}
@@ -3516,6 +3745,11 @@ const InvoicesPage = () => {
         findVendorById={findVendorById}
         showProformaInvoiceFields={showProformaInvoiceFields}
         showErpIntegrationFields={showErpIntegrationFields}
+        showInternalChecklist={isInternalChecklistEnabled}
+        internalChecklistItems={internalChecklistItems}
+        canEditInternalChecklist={canEditInternalChecklist}
+        onSaveInternalChecklist={handleSaveInternalChecklist}
+        savingInternalChecklist={savingInternalChecklist}
         onMapTaxInvoice={handleMapTaxInvoice}
         onViewLinkedInvoice={handleViewLinkedInvoice}
         allInvoices={invoices}

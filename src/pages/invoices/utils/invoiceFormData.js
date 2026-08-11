@@ -16,6 +16,7 @@ import {
 } from "./invoiceTax";
 import { buildTdsValue } from "./tds";
 import { resolveLineItemsExpanded } from "./lineItemsSummary";
+import { buildInternalChecklistState } from "./internalChecklist";
 
 export const resolveVendorGstin = (vendor = {}) =>
   String(vendor?.gstin ?? vendor?.gstIn ?? "").trim();
@@ -124,12 +125,31 @@ export const buildInvoiceEditFormData = (
     invoiceNumber: invoice.invoiceNumber || invoice.invoiceNumber || "",
     invoiceDate: invoiceDate || format(new Date(), "yyyy-MM-dd"),
     dueDate: dueDate || "",
+    isFunded: Boolean(invoice.isFunded ?? invoice.is_funded ?? false),
+    orgAmount:
+      invoice.orgAmount ??
+      invoice.org_amount ??
+      "",
+    financierAmount:
+      invoice.financierAmount ??
+      invoice.financier_amount ??
+      "",
     billingAddress:
       invoice.billingAddress ||
-      invoice.billingAddress ||
+      invoice.billing_address ||
       invoice.vendorAddress ||
-      invoice.vendorAddress ||
+      invoice.vendor_address ||
       "",
+    shippingAddress:
+      invoice.shippingAddress ||
+      invoice.shipping_address ||
+      "",
+    shippingSameAsBilling: Boolean(
+      (invoice.shippingAddress || invoice.shipping_address) &&
+        (invoice.billingAddress || invoice.billing_address) &&
+        String(invoice.shippingAddress || invoice.shipping_address).trim() ===
+          String(invoice.billingAddress || invoice.billing_address).trim(),
+    ),
     billingGstin:
       invoice.billingGstin ||
       invoice.billing_gstin ||
@@ -266,6 +286,8 @@ export const buildInvoiceEditFormData = (
       invoice.net_payable ??
       "",
     currency: editCurrency,
+    convertToInr: Boolean(invoice.convertToInr ?? invoice.convert_to_inr ?? false),
+    matchingInrValue: invoice.matchingInrValue ?? invoice.matching_inr_value ?? "",
     roundOff:
       invoice.roundOff ??
       invoice.round_off ??
@@ -313,5 +335,8 @@ export const buildInvoiceEditFormData = (
       invoice.linkedProformaInvoiceId ?? invoice.linked_proforma_invoice_id ?? "",
     linkedProformaInvoiceNumber:
       invoice.linkedProformaInvoiceNumber ?? invoice.linked_proforma_invoice_number ?? "",
+    internalChecklist: buildInternalChecklistState(
+      invoice.internalChecklist ?? invoice.internal_checklist,
+    ),
   };
 };

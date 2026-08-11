@@ -10,6 +10,7 @@ import {
   normalizeInvoiceFilterOptions,
 } from "../utils/payloadMappers";
 import { normalizeApprovalHistoryEntries } from "../../pages/invoices/utils/invoiceHistory";
+import { normalizeAdvanceAdjustmentProposal } from "../../pages/invoices/utils/advanceAdjustment";
 import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
 
 const unwrapVendorList = extractListResponse;
@@ -70,6 +71,23 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
       }),
       invalidatesTags: ["Invoices", "Dashboard", "Reports"],
     }),
+    // PUT /invoices/{id}/internal-checklist
+    // Dedicated endpoint for updating only the Internal Checklist, independent
+    // of the normal invoice-editable-status gate. Body is sent as-is
+    // ({ internalChecklist: [...] }), deliberately NOT run through
+    // toInvoiceApiPayload — that whitelist represents a full invoice update
+    // and this endpoint must never touch any other invoice field.
+    updateInvoiceInternalChecklist: builder.mutation({
+      query: ({ id, body }) => ({
+        url: `/invoices/${id}/internal-checklist`,
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: (result, error, { id } = {}) => [
+        { type: "Invoices", id },
+        "Invoices",
+      ],
+    }),
     forwardInvoice: builder.mutation({
       query: (body) => ({
         url: "/invoices/forward",
@@ -114,10 +132,46 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
       }),
       invalidatesTags: ["Invoices", "Approvals", "Dashboard", "Reports"],
     }),
+    getInvoiceAdvanceAdjustmentProposal: builder.query({
+      query: (id) => ({
+        url: `/invoices/${id}/advance-adjustments/propose`,
+        method: "GET",
+      }),
+      transformResponse: normalizeAdvanceAdjustmentProposal,
+      providesTags: (_result, _error, id) => [{ type: "Invoices", id }],
+    }),
+    confirmInvoiceAdvanceAdjustment: builder.mutation({
+      query: ({ id, body }) => ({
+        url: `/invoices/${id}/advance-adjustments/confirm`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: (_result, _error, { id }) => [
+        { type: "Invoices", id },
+        "Invoices",
+        "Approvals",
+        "Dashboard",
+        "Reports",
+        "VendorAdvances",
+      ],
+    }),
     getInvoiceHistory: builder.query({
       query: (id) => ({ url: `/invoices/${id}/history`, method: "GET" }),
       transformResponse: (response) => normalizeApprovalHistoryEntries(response),
-      providesTags: ["Invoices"],
+      providesTags: (_result, _error, id) => [{ type: "Invoices", id }, "Invoices"],
+    }),
+    getInvoiceFundingHistory: builder.query({
+      query: (id) => ({
+        url: `/invoices/${id}/funding-history`,
+        method: "GET",
+      }),
+      transformResponse: (response) => {
+        if (Array.isArray(response)) return response;
+        if (Array.isArray(response?.data)) return response.data;
+        if (Array.isArray(response?.history)) return response.history;
+        return [];
+      },
+      providesTags: (_result, _error, id) => [{ type: "Invoices", id }],
     }),
     getPendingCheckerInvoices: builder.query({
       query: (params) => ({ url: "/checker/pending", method: "GET", params }),
@@ -231,6 +285,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
         { type: "Vendors", id: "LIST" },
         { type: "Vendors", id: "PENDING" },
         { type: "Vendors", id },
+        "Invoices",
         "Dashboard",
         "Reports",
       ],
@@ -251,14 +306,18 @@ export const {
   useLazyGetInvoiceQuery,
   useCreateInvoiceMutation,
   useUpdateInvoiceMutation,
+  useUpdateInvoiceInternalChecklistMutation,
   useForwardInvoiceMutation,
   useDeleteInvoiceMutation,
   useCancelInvoiceMutation,
   useScanInvoiceMutation,
   useBulkUploadInvoicesMutation,
   useApproveInvoiceMutation,
+  useGetInvoiceAdvanceAdjustmentProposalQuery,
+  useConfirmInvoiceAdvanceAdjustmentMutation,
   useGetInvoiceHistoryQuery,
   useLazyGetInvoiceHistoryQuery,
+  useGetInvoiceFundingHistoryQuery,
   useGetPendingCheckerInvoicesQuery,
   useCheckInvoiceMutation,
   useGetVendorsQuery,

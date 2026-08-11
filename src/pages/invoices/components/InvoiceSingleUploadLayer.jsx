@@ -8,17 +8,19 @@ import {
   useScanInvoiceMutation,
 } from "../../../Services/apis/invoicesVendorsApi";
 import {
-  useGetCorporateDepartmentsQuery,
   useGetCorporateUserDetailsQuery,
 } from "../../../Services/apis/corporateApi";
 import { useGetCategoriesForInvoiceQuery } from "../../../Services/apis/categoriesApi";
+import { useGetDepartmentsForInvoiceQuery } from "../../../Services/apis/departmentsApi";
 import {
   extractVendorIdFromResponse,
   mergeInvoiceVendorOptions,
 } from "../../../Services/utils/payloadMappers";
 import { useAuth } from "../../../contexts/AuthContext";
 import { useRBAC } from "../../../contexts/RBACContext";
+import { isInvoiceFundingEnabled } from "../../../utils/invoiceConfiguration";
 import { useActionGuard } from "../../../hooks/useActionGuard";
+import useZohoIntegrationActive from "../../../hooks/useZohoIntegrationActive";
 import { useCreditErrorHandler } from "../../../contexts/CreditErrorContext";
 import { useSidebar } from "../../../components/Layout";
 import {
@@ -60,6 +62,8 @@ import {
   extractApiErrorDetail,
   resolveInitialInvoiceStatus,
 } from "../../../utils/approvalWorkflow";
+import { isInternalChecklistEnabled as isInternalChecklistEnabledForCorporate } from "../../../utils/invoiceConfiguration";
+import { getActiveInternalChecklistItems } from "../utils/internalChecklist";
 import { InvoiceForm } from "./InvoiceForm";
 import { InvoicePdfPreview } from "./InvoicePdfPreview";
 import UploadSection from "./UploadSection";
@@ -72,6 +76,10 @@ import {
 } from "../utils/invoiceBulkUtils";
 import { findVendorByInvoiceName } from "../utils/vendorMatching";
 import { getInvoiceDueDateValidationErrorForInvoice } from "../utils/msmePaymentDue";
+import {
+  getInvoiceFundingSplitError,
+  isInvoiceFundingSplitValid,
+} from "../utils/invoiceFunding";
 import { useCurrencyFilter } from "../../../hooks/useCurrencyFilter";
 import { CURRENCY_SCREENS } from "../../../utils/currency";
 import { getInvoiceVendorRequestValidationErrors } from "../../../utils/vendorValidation";
@@ -122,7 +130,18 @@ const InvoiceSingleUploadLayer = ({
   prefillCampaignRef.current = prefillCampaign;
 
   const { user } = useAuth();
-  const { isCategoryFeatureEnabled, isCampaignFeatureEnabled, isBranchEnabled, isCorporateScreenAllowed, isCorporateSectionEnabled } = useRBAC();
+  const {
+    corporateScreens,
+    isCategoryFeatureEnabled,
+    isDepartmentFeatureEnabled,
+    isCampaignFeatureEnabled,
+    isBranchEnabled,
+    isCorporateScreenAllowed,
+    isCorporateSectionEnabled,
+  } = useRBAC();
+  const showInvoiceFunding = isInvoiceFundingEnabled(
+    corporateScreens?.activeInvoiceConfiguration ?? [],
+  );
   const hasPurchaseOrderSubscription =
     isCorporateScreenAllowed("PURCHASE_ORDER") &&
     (isCorporateSectionEnabled("PURCHASE_ORDER_ALL") ||
@@ -134,6 +153,13 @@ const InvoiceSingleUploadLayer = ({
     isCorporateScreenAllowed("INVOICE_MATCHING") &&
     isCorporateSectionEnabled("INVOICE_MATCHING_ALL");
   const showErpIntegrationFields = isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
+  const showInternalChecklist = isInternalChecklistEnabledForCorporate(
+    corporateScreens?.activeInvoiceConfiguration ?? [],
+  );
+  const internalChecklistItems = getActiveInternalChecklistItems(
+    corporateScreens?.activeInternalChecklistItems ?? [],
+  );
+  const { hasConnectedZoho } = useZohoIntegrationActive();
   const showInvoiceMatchingSelection =
     isInvoiceMatchingEnabled && hasPurchaseOrderSubscription;
   const canUseThreeWayMatching =
@@ -166,7 +192,10 @@ const InvoiceSingleUploadLayer = ({
   const uploadedFileRef = useRef(null);
 
   const { data: vendorsData = [], refetch: refetchVendors } = useGetVendorsQuery();
-  const { data: departmentsData = [] } = useGetCorporateDepartmentsQuery();
+  const { data: departmentsData = [] } = useGetDepartmentsForInvoiceQuery(
+    { userEmail: invoiceUserEmail, ...(currencyParam ? { currency: currencyParam } : {}) },
+    { skip: !invoiceUserEmail || !isDepartmentFeatureEnabled },
+  );
   const { data: invoiceMandatoryFieldsData, isLoading: invoiceMandatoryFieldsLoading } =
     useGetInvoiceMandatoryFieldsQuery(
       { userEmail: invoiceUserEmail },
@@ -191,8 +220,11 @@ const InvoiceSingleUploadLayer = ({
     [invoiceMandatoryFieldsData],
   );
   const mandatoryFieldOptions = useMemo(
-    () => ({ showCategoryField: isCategoryFeatureEnabled }),
-    [isCategoryFeatureEnabled],
+    () => ({
+      showDepartmentField: isDepartmentFeatureEnabled,
+      showCategoryField: isCategoryFeatureEnabled,
+    }),
+    [isDepartmentFeatureEnabled, isCategoryFeatureEnabled],
   );
   const invoiceVendorOptions = useMemo(
     () =>
@@ -503,6 +535,13 @@ const InvoiceSingleUploadLayer = ({
     if (!formData) return;
 
     const totals = calculateTotals(formData.lineItems);
+    const fundingError = getInvoiceFundingSplitError(formData, totals?.total, {
+      enabled: showInvoiceFunding,
+    });
+    if (fundingError) {
+      toast.error(fundingError);
+      return;
+    }
     const resolvedVendorId =
       formData.vendorId ||
       prefillRef.current?.vendorId ||
@@ -627,6 +666,11 @@ const InvoiceSingleUploadLayer = ({
     canManageInvoices &&
     !invoiceMandatoryFieldsLoading &&
     Boolean(formData) &&
+    isInvoiceFundingSplitValid(
+      formData,
+      calculateTotals(formData?.lineItems || [], formData?.currency)?.total,
+      { enabled: showInvoiceFunding },
+    ) &&
     isInvoiceMandatoryFieldsSatisfied(formData, invoiceMandatoryFields, mandatoryFieldOptions) &&
     (Boolean(formData?.vendorId) ||
       Boolean(prefillRef.current?.vendorId) ||
@@ -742,6 +786,7 @@ const InvoiceSingleUploadLayer = ({
       departments={departments}
       invoiceCategories={invoiceCategories}
       invoiceCategoriesLoading={invoiceCategoriesLoading || invoiceCategoriesFetching}
+      showDepartmentField={isDepartmentFeatureEnabled}
       showCategoryField={isCategoryFeatureEnabled}
       showCampaignField={isCampaignFeatureEnabled}
       lockedCampaign={lockCampaign}
@@ -755,9 +800,14 @@ const InvoiceSingleUploadLayer = ({
       showBillingGst={Boolean(uploadedFile)}
       requireBillingGst={false}
       showBranchField={isBranchEnabled}
+      showInvoiceFunding={showInvoiceFunding}
       showProformaInvoiceFields={isPiSubscriptionEnabled}
       showInvoiceMatching={showInvoiceMatchingSelection}
       canUseThreeWayMatching={canUseThreeWayMatching}
+      showErpIntegrationFields={showErpIntegrationFields}
+      showInternalChecklist={showInternalChecklist}
+      internalChecklistItems={internalChecklistItems}
+      includeLedgerAccountGroups={hasConnectedZoho}
     />
   );
 

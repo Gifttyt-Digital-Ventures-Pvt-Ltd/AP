@@ -42,9 +42,9 @@ import {
   ChevronLeft,
   Building2,
   Shield,
-  ArrowLeftRight,
   ShoppingCart,
   Package,
+  Truck,
   Calculator,
   Link2,
   Layers,
@@ -56,6 +56,7 @@ import {
   User,
   WalletCards,
   BookOpen,
+  Landmark,
 } from "lucide-react";
 
 // Context to control sidebar visibility from child components
@@ -74,6 +75,7 @@ export const Layout = ({ children }) => {
     isLoaded: rbacLoaded,
     isTokenBasedSubscription,
     isCorporateSectionEnabled,
+    isBankingEnabled,
   } = useRBAC();
   const { data: corporateContext = null } = useGetCorporateDetailsQuery();
   const { data: corporateUserContext = null } =
@@ -124,27 +126,51 @@ export const Layout = ({ children }) => {
     unreadNotifications?.count ?? unreadNotifications?.unreadCount ?? 0,
   );
 
-  const menuItems = [
-    { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
-    { icon: ShoppingCart, label: "Purchase Orders", path: "/purchase-orders" },
-    { icon: Package, label: "Goods Receipt", path: "/goods-receipt" },
-    { icon: FileText, label: "Invoices", path: "/invoices" },
-    { icon: Link2, label: "Invoice Matching", path: "/invoice-matching" },
-    { icon: ArrowLeftRight, label: "Transactions", path: "/transactions" },
-    { icon: CheckCircle, label: "Approvals", path: "/approvals" },
-    { icon: CreditCard, label: "Payments", path: "/payments" },
-    { icon: Layers, label: "Payment Batches", path: "/payment-batches" },
-    { icon: Users, label: "Vendors", path: "/vendors" },
-    { icon: Megaphone, label: "Campaigns", path: "/campaigns" },
-    { icon: Calculator, label: "Tax Management", path: "/tax-management" },
-    { icon: BookOpen, label: "Accounting", path: "/accounting" },
-    { icon: BarChart3, label: "Reports", path: "/reports" },
-    { icon: Plug, label: "Integrations", path: "/integrations" },
-    { icon: Building2, label: "Banking", path: "/banking" },
-    ...(canUseNotifications ? [{ icon: Bell, label: "Notifications", path: "/notifications" }] : []),
-    { icon: Shield, label: "User Roles", path: "/user-roles" },
-    { icon: Settings, label: "Settings", path: "/settings" },
-    { icon: History, label: "Audit Trail", path: "/audit-trail" },
+  const hasConnectedBankingFeature = isBankingEnabled;
+  const showConnectedBankingGroup = hasConnectedBankingFeature;
+
+  const connectedBankingItems = [
+    ...(hasConnectedBankingFeature
+      ? [{ icon: Landmark, label: "Banking", path: "/banking" }]
+      : []),
+  ];
+
+  const menuSections = [
+    {
+      items: [
+        { icon: LayoutDashboard, label: "Dashboard", path: "/dashboard" },
+        {
+          icon: ShoppingCart,
+          label: "Purchase Orders",
+          path: "/purchase-orders",
+        },
+        { icon: Truck, label: "Order Tracking", path: "/order-tracking" },
+        { icon: Package, label: "Goods Receipt", path: "/goods-receipt" },
+        { icon: FileText, label: "Invoices", path: "/invoices" },
+        { icon: Link2, label: "Invoice Matching", path: "/invoice-matching" },
+        { icon: CheckCircle, label: "Approvals", path: "/approvals" },
+        { icon: CreditCard, label: "Payments", path: "/payments" },
+        { icon: Layers, label: "Payment Batches", path: "/payment-batches" },
+        ...(showConnectedBankingGroup ? connectedBankingItems : []),
+      ],
+    },
+    {
+      items: [
+        { icon: Users, label: "Vendors", path: "/vendors" },
+        { icon: Megaphone, label: "Campaigns", path: "/campaigns" },
+        { icon: Calculator, label: "Tax Management", path: "/tax-management" },
+        { icon: BookOpen, label: "Accounting", path: "/accounting" },
+        { icon: BarChart3, label: "Reports", path: "/reports" },
+        { icon: Plug, label: "Integrations", path: "/integrations" },
+        ...(!hasConnectedBankingFeature
+          ? [{ icon: Building2, label: "Banking", path: "/banking" }]
+          : []),
+        ...(canUseNotifications ? [{ icon: Bell, label: "Notifications", path: "/notifications" }] : []),
+        { icon: Shield, label: "User Roles", path: "/user-roles" },
+        { icon: Settings, label: "Settings", path: "/settings" },
+        { icon: History, label: "Audit Trail", path: "/audit-trail" },
+      ],
+    },
   ];
 
   const handleLogout = async () => {
@@ -212,53 +238,72 @@ export const Layout = ({ children }) => {
                 className="flex-1 min-h-0 overflow-y-auto scrollbar-none p-4 space-y-2"
                 data-testid="sidebar-nav"
               >
-                {menuItems.map((item) => {
-                  if (!canShowNavItem(item.path)) return null;
+                {menuSections.map((section, sectionIndex) => (
+                  <React.Fragment
+                    key={section.type || `section-${sectionIndex}`}
+                  >
+                    {section.type === "payments" && sidebarOpen && (
+                      <div className="pt-2">
+                        <p className="px-2 pb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                          Payments
+                        </p>
+                      </div>
+                    )}
 
-                  const Icon = item.icon;
-                  const isNotificationsItem = item.path === "/notifications";
-                  const buttonElement = (
-                    <button
-                      onClick={() => handleNavigate(item.path)}
-                      className={`relative w-full flex items-center gap-3 px-2 py-2 rounded-md transition-all ${
-                        isActive(item.path)
-                          ? "bg-button-primary text-button-primary-foreground"
-                          : "hover:bg-button-primary-hover hover:text-primary-foreground"
-                      }`}
-                      data-testid={`nav-${(item?.label ?? 'nav').toLowerCase()}`}
-                      aria-label={
-                        isNotificationsItem && unreadNotificationCount > 0
-                          ? `Notifications, ${unreadNotificationCount} unread`
-                          : item.label
+                    {section.items.map((item) => {
+                      if (!canShowNavItem(item.path)) return null;
+
+                      const Icon = item.icon;
+                      const navLabel = item.label;
+                      const isNotificationsItem = item.path === "/notifications";
+                      const buttonElement = (
+                        <button
+                          onClick={() => handleNavigate(item.path)}
+                          className={`relative w-full flex items-center gap-3 px-2 py-2 rounded-md transition-all ${
+                            isActive(item.path)
+                              ? "bg-button-primary text-button-primary-foreground"
+                              : "hover:bg-button-primary-hover hover:text-primary-foreground"
+                          }`}
+                          data-testid={`nav-${item.label.toLowerCase().replace(/\s+/g, "-")}`}
+                          aria-label={
+                            isNotificationsItem && unreadNotificationCount > 0
+                              ? `Notifications, ${unreadNotificationCount} unread`
+                              : item.label
+                          }
+                        >
+                          <Icon className="h-6 w-6" />
+                          {isNotificationsItem && inAppNotificationsEnabled && unreadNotificationCount > 0 && (
+                            <span className="absolute left-6 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold leading-none text-white">
+                              {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
+                            </span>
+                          )}
+                          {sidebarOpen && (
+                            <span className="text-sm font-medium">
+                              {item.label}
+                            </span>
+                          )}
+                        </button>
+                      );
+
+                      if (!sidebarOpen) {
+                        return (
+                          <Tooltip key={item.path}>
+                            <TooltipTrigger asChild>
+                              {buttonElement}
+                            </TooltipTrigger>
+                            <TooltipContent side="right">
+                              {navLabel}
+                            </TooltipContent>
+                          </Tooltip>
+                        );
                       }
-                    >
-                      <Icon className="h-6 w-6" />
-                      {isNotificationsItem && inAppNotificationsEnabled && unreadNotificationCount > 0 && (
-                        <span className="absolute left-6 top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-semibold leading-none text-white">
-                          {unreadNotificationCount > 99 ? "99+" : unreadNotificationCount}
-                        </span>
-                      )}
-                      {sidebarOpen && (
-                        <span className="text-sm font-medium">
-                          {item.label}
-                        </span>
-                      )}
-                    </button>
-                  );
 
-                  if (!sidebarOpen) {
-                    return (
-                      <Tooltip key={item.path}>
-                        <TooltipTrigger asChild>{buttonElement}</TooltipTrigger>
-                        <TooltipContent side="right">
-                          {item.label}
-                        </TooltipContent>
-                      </Tooltip>
-                    );
-                  }
-
-                  return React.cloneElement(buttonElement, { key: item.path });
-                })}
+                      return React.cloneElement(buttonElement, {
+                        key: item.path,
+                      });
+                    })}
+                  </React.Fragment>
+                ))}
               </nav>
 
               <div className="p-4 border-t border-border">

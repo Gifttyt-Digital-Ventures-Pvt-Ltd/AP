@@ -83,24 +83,49 @@ const workflowTypeIncludesCategory = (type = '') =>
     .split('_')
     .includes('CATEGORY');
 
-export const getMatchingPriorityOrder = (categoryEnabled = true) =>
+const workflowTypeIncludesDepartment = (type = '') =>
+  String(type || '')
+    .split('_')
+    .includes('DEPARTMENT');
+
+const isWorkflowTypeEnabled = (
+  type,
+  { categoryEnabled = true, departmentEnabled = true } = {},
+) =>
+  (categoryEnabled || !workflowTypeIncludesCategory(type)) &&
+  (departmentEnabled || !workflowTypeIncludesDepartment(type));
+
+export const getMatchingPriorityOrder = (
+  categoryEnabled = true,
+  departmentEnabled = true,
+) =>
   WORKFLOW_SECTIONS.filter(
-    ({ type }) => categoryEnabled || !workflowTypeIncludesCategory(type),
+    ({ type }) => isWorkflowTypeEnabled(type, { categoryEnabled, departmentEnabled }),
   )
     .map(({ type }) => getWorkflowTypeShortLabel(type))
     .join(' → ');
 
-export const getMatchingExplainerStepOne = (categoryEnabled = true) =>
-  categoryEnabled
-    ? 'Invoice arrives — vendor, department, category & amount are extracted'
-    : 'Invoice arrives — vendor, department & amount are extracted';
+export const getMatchingExplainerStepOne = (
+  categoryEnabled = true,
+  departmentEnabled = true,
+) => {
+  const fields = ['vendor'];
+  if (departmentEnabled) fields.push('department');
+  if (categoryEnabled) fields.push('category');
+  fields.push('amount');
+
+  return `Invoice arrives — ${fields.join(', ')} are extracted`;
+};
 
 const hasTypeToken = (type, token) => {
   const upperType = String(type || '').toUpperCase();
   return upperType.split('_').includes(token);
 };
 
-export const getConditionVisibility = (type) => {
+export const getConditionVisibility = (
+  type,
+  { categoryEnabled = true, departmentEnabled = true } = {},
+) => {
   const upperType = String(type || '').toUpperCase();
   if (!upperType || upperType === 'GENERIC') {
     return { showVendor: false, showDept: false, showAmount: false, showCategory: false };
@@ -117,9 +142,9 @@ export const getConditionVisibility = (type) => {
 
   return {
     showVendor: hasTypeToken(upperType, 'VENDOR'),
-    showDept: hasTypeToken(upperType, 'DEPARTMENT'),
+    showDept: departmentEnabled && hasTypeToken(upperType, 'DEPARTMENT'),
     showAmount: hasTypeToken(upperType, 'AMOUNT'),
-    showCategory: hasTypeToken(upperType, 'CATEGORY'),
+    showCategory: categoryEnabled && hasTypeToken(upperType, 'CATEGORY'),
   };
 };
 

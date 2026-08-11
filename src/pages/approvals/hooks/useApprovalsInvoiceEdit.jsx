@@ -15,13 +15,14 @@ import {
   useGetVendorsQuery,
   useRequestVendorAdditionMutation,
   useUpdateInvoiceMutation,
+  useUpdateInvoiceInternalChecklistMutation,
   useCheckInvoiceMutation,
 } from "../../../Services/apis/invoicesVendorsApi";
 import {
-  useGetCorporateDepartmentsQuery,
   useGetCorporateUserDetailsQuery,
 } from "../../../Services/apis/corporateApi";
 import { useGetCategoriesForInvoiceQuery } from "../../../Services/apis/categoriesApi";
+import { useGetDepartmentsForInvoiceQuery } from "../../../Services/apis/departmentsApi";
 import { findVendorByInvoiceName } from "../../invoices/utils/vendorMatching";
 import {
   extractVendorIdFromResponse,
@@ -70,8 +71,10 @@ import { getInvoiceVendorRequestValidationErrors } from "../../../utils/vendorVa
 import {
   isCheckerEditEnabled as isCheckerEditEnabledForCorporate,
   isCheckerEditForbiddenError,
+  isInternalChecklistEnabled as isInternalChecklistEnabledForCorporate,
   isNetPayableEditEnabled as isNetPayableEditEnabledForCorporate,
 } from "../../../utils/invoiceConfiguration";
+import { getActiveInternalChecklistItems } from "../../invoices/utils/internalChecklist";
 import {
   buildCurrentUserIdentity,
   canEditInvoice,
@@ -87,6 +90,7 @@ export const useApprovalsInvoiceEdit = ({
   currencies = [],
   currencyParam,
   onRefresh,
+  onInternalChecklistSaved,
   renderPdfPreview,
   pdfZoom,
   viewPreviewError,
@@ -96,6 +100,7 @@ export const useApprovalsInvoiceEdit = ({
   const {
     corporateScreens,
     isCategoryFeatureEnabled,
+    isDepartmentFeatureEnabled,
     isCampaignFeatureEnabled,
     isCorporateAdmin,
     hasPermission,
@@ -119,7 +124,13 @@ export const useApprovalsInvoiceEdit = ({
     "";
 
   const { data: vendorsData = [] } = useGetVendorsQuery();
-  const { data: departmentsData = [] } = useGetCorporateDepartmentsQuery();
+  const { data: departmentsData = [] } = useGetDepartmentsForInvoiceQuery(
+    {
+      userEmail: invoiceUserEmail,
+      ...(currencyParam ? { currency: currencyParam } : {}),
+    },
+    { skip: !invoiceUserEmail || !isDepartmentFeatureEnabled },
+  );
   const {
     data: invoiceMandatoryFieldsData,
     isLoading: invoiceMandatoryFieldsLoading,
@@ -141,6 +152,8 @@ export const useApprovalsInvoiceEdit = ({
 
   const [updateInvoice, { isLoading: updateInvoiceLoading }] =
     useUpdateInvoiceMutation();
+  const [updateInvoiceInternalChecklist, { isLoading: savingInternalChecklist }] =
+    useUpdateInvoiceInternalChecklistMutation();
   const [checkInvoice, { isLoading: checkInvoiceLoading }] =
     useCheckInvoiceMutation();
   const [requestVendorAddition, { isLoading: requestVendorLoading }] =
@@ -172,8 +185,11 @@ export const useApprovalsInvoiceEdit = ({
     [invoiceMandatoryFieldsData],
   );
   const mandatoryFieldOptions = useMemo(
-    () => ({ showCategoryField: isCategoryFeatureEnabled }),
-    [isCategoryFeatureEnabled],
+    () => ({
+      showDepartmentField: isDepartmentFeatureEnabled,
+      showCategoryField: isCategoryFeatureEnabled,
+    }),
+    [isDepartmentFeatureEnabled, isCategoryFeatureEnabled],
   );
   const invoiceCurrencyOptions = useMemo(
     () => currencies.filter((currency) => currency !== "ALL"),
@@ -194,6 +210,25 @@ export const useApprovalsInvoiceEdit = ({
       ),
     [corporateScreens?.activeInvoiceConfiguration],
   );
+  const isInternalChecklistEnabled = useMemo(
+    () =>
+      isInternalChecklistEnabledForCorporate(
+        corporateScreens?.activeInvoiceConfiguration ?? [],
+      ),
+    [corporateScreens?.activeInvoiceConfiguration],
+  );
+  const internalChecklistItems = useMemo(
+    () =>
+      getActiveInternalChecklistItems(
+        corporateScreens?.activeInternalChecklistItems ?? [],
+      ),
+    [corporateScreens?.activeInternalChecklistItems],
+  );
+  // Internal Checklist stays editable after the invoice itself becomes
+  // read-only (e.g. Approved) — Maker/Admin/Master Admin only, no Checker.
+  // Reuses the same role signals already computed above rather than a new
+  // RBAC permission key.
+  const canEditInternalChecklist = canManageInvoices || isCorporateAdmin || isMasterAdmin;
 
   const invoiceEditContext = useMemo(
     () => ({
@@ -495,6 +530,26 @@ export const useApprovalsInvoiceEdit = ({
     setEditDialogOpen(true);
   };
 
+  const handleSaveInternalChecklist = async (invoice, nextChecklist) => {
+    if (!canEditInternalChecklist) {
+      toast.error("You do not have permission to edit the internal checklist");
+      return;
+    }
+    const invoiceId = invoice?.id;
+    if (!invoiceId) return;
+
+    try {
+      await updateInvoiceInternalChecklist({
+        id: invoiceId,
+        body: { internalChecklist: nextChecklist },
+      }).unwrap();
+      toast.success("Internal checklist updated");
+      await onInternalChecklistSaved?.(invoice);
+    } catch (error) {
+      toast.error(extractApiErrorDetail(error) || "Failed to update internal checklist");
+    }
+  };
+
   const handleUpdateInvoice = async () => {
     if (!guardAction("invoices.update")) return;
     if (!editingInvoice || !formData) return;
@@ -640,6 +695,8 @@ export const useApprovalsInvoiceEdit = ({
         setEditDialogOpen={setEditDialogOpen}
         handleUpdateInvoice={handleUpdateInvoice}
         canEditNetPayable={isNetPayableEditEnabled}
+        showInternalChecklist={isInternalChecklistEnabled}
+        internalChecklistItems={internalChecklistItems}
         canAddVendor={canAddVendors}
         canSubmit={
           isEdit
@@ -663,6 +720,7 @@ export const useApprovalsInvoiceEdit = ({
         invoiceCategoriesLoading={
           invoiceCategoriesLoading || invoiceCategoriesFetching
         }
+        showDepartmentField={isDepartmentFeatureEnabled}
         showCategoryField={isCategoryFeatureEnabled}
         showCampaignField={isCampaignFeatureEnabled}
         currencyOptions={invoiceCurrencyOptions}
@@ -740,5 +798,10 @@ export const useApprovalsInvoiceEdit = ({
     findVendorByName,
     findVendorById,
     editDialogs,
+    showInternalChecklist: isInternalChecklistEnabled,
+    internalChecklistItems,
+    canEditInternalChecklist,
+    handleSaveInternalChecklist,
+    savingInternalChecklist,
   };
 };

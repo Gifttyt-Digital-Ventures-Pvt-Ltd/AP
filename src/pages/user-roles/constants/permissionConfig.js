@@ -24,6 +24,13 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    title: "Order Tracking",
+    permissions: [
+      { id: "order-tracking-manage", label: "Manage (Export Reports)" },
+      { id: "order-tracking-view", label: "View Only" },
+    ],
+  },
+  {
     title: "GRN",
     permissions: [
       { id: "grn-manage", label: "Manage (Create, Delete, Edit) GRN" },
@@ -65,8 +72,9 @@ export const PERMISSION_GROUPS = [
   {
     title: "Payments",
     permissions: [
-      { id: "payments-manage", label: "Manage" },
-      { id: "payments-view", label: "View Only" },
+      { id: "payments-admin", label: "Admin" },
+      { id: "payments-requester", label: "Requester" },
+      { id: "payments-approver", label: "Approver" },
     ],
   },
   {
@@ -93,7 +101,10 @@ export const PERMISSION_GROUPS = [
   },
   {
     title: "Banking",
-    permissions: [{ id: "banking-full", label: "Full Access" }],
+    permissions: [
+      { id: "banking-manage", label: "Manage" },
+      { id: "banking-view", label: "View Only" },
+    ],
   },
   {
     title: "Manage Role",
@@ -111,10 +122,16 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    title: "Payment Approval Workflow",
+    permissions: [
+      { id: "payment-approval-workflow-manage", label: "Manage Payment Workflows" },
+      { id: "payment-approval-workflow-view", label: "View Payment Workflows" },
+    ],
+  },
+  {
     title: "Settings",
     permissions: [
       { id: "settings-org", label: "Manage Organisation Details" },
-      { id: "settings-banking", label: "Manage Connected Banking" },
       { id: "credits-manage", label: "Manage Billing" },
       { id: "notifications-manage", label: "Manage Notifications" },
     ],
@@ -130,6 +147,13 @@ export const PERMISSION_GROUPS = [
       { id: "category-manage", label: "Manage (Add, Delete, Edit)" },
     ],
   },
+  {
+    title: "Department",
+    permissions: [
+      { id: "department-view", label: "View Only" },
+      { id: "department-manage", label: "Manage (Add, Delete, Edit)" },
+    ],
+  },
 ];
 
 // Human-readable permission labels ported from AP_User Roles ViewRoleDialog.
@@ -142,6 +166,8 @@ export const PERMISSION_LABELS = {
   "po-manage": "Purchase Orders - Manage",
   "po-approve": "Purchase Orders - Approve",
   "po-view": "Purchase Orders - View Only",
+  "order-tracking-manage": "Order Tracking - Manage (Export Reports)",
+  "order-tracking-view": "Order Tracking - View Only",
   "grn-manage": "GRN - Manage",
   "grn-approve": "GRN - Approve",
   "grn-view": "GRN - View Only",
@@ -157,6 +183,9 @@ export const PERMISSION_LABELS = {
   "campaign-approve": "Campaigns - Approve",
   "matching-manage": "Invoice Matching - Manage",
   "matching-view": "Invoice Matching - View Only",
+  "payments-admin": "Payments - Admin",
+  "payments-requester": "Payments - Requester",
+  "payments-approver": "Payments - Approver",
   "payments-manage": "Payments - Manage",
   "payments-view": "Payments - View Only",
   "payment-batches-manage": "Payment Batches - Manage",
@@ -170,18 +199,25 @@ export const PERMISSION_LABELS = {
   "reports-full": "Reports - Full Access",
   "audit-trail-view": "Audit Trail - View Only",
   "banking-view": "Banking - View Only",
+  "banking-manage": "Banking - Manage",
+  "beneficiary-manage": "Banking - Manage Beneficiaries",
   "banking-full": "Banking - Full Access",
+  "payouts-release": "Payments - Release ICICI Payout",
   "roles-view": "Manage Roles - View Only",
   "roles-manage": "Manage Roles - Manage Roles & Assign Role Sets",
   "roles-manage-users": "Manage Roles - Manage Users (no role assignment)",
   "approval-workflow-view": "Approval Workflow - View Only",
   "approval-workflow-manage": "Approval Workflow - Manage",
+  "payment-approval-workflow-view": "Payment Approval Workflow - View Only",
+  "payment-approval-workflow-manage": "Payment Approval Workflow - Manage",
   "settings-org": "Settings - Manage Organisation",
   "settings-banking": "Settings - Manage Banking",
   "notifications-manage": "Notifications - Manage",
   "integrations-manage": "Integrations - Manage",
   "category-view": "Category - View Only",
   "category-manage": "Category - Manage (Add, Delete, Edit)",
+  "department-view": "Department - View Only",
+  "department-manage": "Department - Manage (Add, Delete, Edit)",
 };
 
 export const CAMPAIGN_PERMISSION_IDS = [

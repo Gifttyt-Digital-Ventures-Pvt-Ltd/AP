@@ -14,7 +14,7 @@ import { Textarea } from "../../../components/ui/textarea";
 import { getErrorText, normalizeMappings } from "../utils";
 import { LoadingState, PageShell } from "./shared";
 
-const MappingEditor = () => {
+const MappingEditor = ({ embedded = false }) => {
   const { connectionId } = useParams();
   const { guardAction, canPerformAction } = useActionGuard();
   const { data, isLoading } = useGetIntegrationMappingsQuery(connectionId, { skip: !connectionId });
@@ -37,7 +37,76 @@ const MappingEditor = () => {
     }
   };
 
-  if (isLoading) return <PageShell title="Mappings"><LoadingState label="Loading mappings..." /></PageShell>;
+  if (isLoading) {
+    return embedded ? (
+      <LoadingState label="Loading mappings..." />
+    ) : (
+      <PageShell title="Mappings">
+        <LoadingState label="Loading mappings..." />
+      </PageShell>
+    );
+  }
+
+  const content = (
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <Card className="rounded-md">
+        <CardHeader>
+          <CardTitle className="text-base">Mapping payload</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Textarea
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            className="min-h-[520px] font-mono text-xs"
+            spellCheck={false}
+          />
+        </CardContent>
+      </Card>
+      <div className="space-y-4">
+        <Card className="rounded-md">
+          <CardHeader>
+            <CardTitle className="text-base">Version</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="font-mono text-sm">{mappings.version}</p>
+          </CardContent>
+        </Card>
+        {[
+          ["Expense categories", mappings.categories.length],
+          ["Payment modes", mappings.paymentModes.length],
+          ["Vendor contacts", mappings.vendors.length],
+        ].map(([label, count]) => (
+          <Card key={label} className="rounded-md">
+            <CardContent className="flex items-center justify-between p-4">
+              <span className="text-sm text-muted-foreground">{label}</span>
+              <span className="font-semibold">{count}</span>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+
+  if (embedded) {
+    return (
+      <div className="space-y-4">
+        <div className="flex justify-end">
+          <Button
+            onClick={handleSave}
+            disabled={!canPerformAction("integrations.mapping.edit") || saving}
+          >
+            {saving ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Settings2 className="mr-2 h-4 w-4" />
+            )}
+            Save mappings
+          </Button>
+        </div>
+        {content}
+      </div>
+    );
+  }
 
   return (
     <PageShell
@@ -45,9 +114,9 @@ const MappingEditor = () => {
       description="Versioned connection mappings for categories, payment modes, vendors, and Zoho accounts."
       backAction={
         <Button asChild variant="outline" size="sm">
-          <Link to={`/integrations/${connectionId}`}>
+          <Link to={`/integrations/${connectionId}/sync-data`}>
             <ArrowLeft className="mr-2 h-4 w-4" />
-            Dashboard
+            Sync Data
           </Link>
         </Button>
       }
@@ -58,43 +127,7 @@ const MappingEditor = () => {
           </Button>
       }
     >
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-        <Card className="rounded-md">
-          <CardHeader>
-            <CardTitle className="text-base">Mapping payload</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Textarea
-              value={draft}
-              onChange={(event) => setDraft(event.target.value)}
-              className="min-h-[520px] font-mono text-xs"
-              spellCheck={false}
-            />
-          </CardContent>
-        </Card>
-        <div className="space-y-4">
-          <Card className="rounded-md">
-            <CardHeader>
-              <CardTitle className="text-base">Version</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <p className="font-mono text-sm">{mappings.version}</p>
-            </CardContent>
-          </Card>
-          {[
-            ["Expense categories", mappings.categories.length],
-            ["Payment modes", mappings.paymentModes.length],
-            ["Vendor contacts", mappings.vendors.length],
-          ].map(([label, count]) => (
-            <Card key={label} className="rounded-md">
-              <CardContent className="flex items-center justify-between p-4">
-                <span className="text-sm text-muted-foreground">{label}</span>
-                <span className="font-semibold">{count}</span>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      </div>
+      {content}
     </PageShell>
   );
 };

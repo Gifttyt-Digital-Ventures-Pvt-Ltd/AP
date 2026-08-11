@@ -5,6 +5,7 @@ import {
   CheckCircle,
   FileText,
   History,
+  Landmark,
   Link2,
   Pencil,
   PanelLeftClose,
@@ -27,11 +28,118 @@ import {
   TabsTrigger,
 } from "../../../components/ui/tabs";
 import { formatWorkflowStatus } from "../../../utils/approvalWorkflow";
+import { useGetInvoiceFundingHistoryQuery } from "../../../Services/apis/invoicesVendorsApi";
+import { formatCurrency, normalizeCurrencyCode } from "../../../utils/currency";
 import AccountingLockBanner from "../../../components/AccountingLockBanner";
 import InvoiceReadOnlyDetails from "./InvoiceReadOnlyDetails";
 import InvoiceChecklist from "./InvoiceFormChecklist";
 import { buildInvoiceEditFormData } from "../utils/invoiceFormData";
 import { isProformaInvoice, canMapTaxInvoiceToProforma } from "../constants/proformaInvoice";
+
+const getFundingEntryTimestamp = (entry = {}) =>
+  entry.updatedAt ||
+  entry.updated_at ||
+  entry.createdAt ||
+  entry.created_at ||
+  entry.timestamp ||
+  entry.date ||
+  "";
+
+const formatFundingEntryTimestamp = (entry = {}) => {
+  const value = getFundingEntryTimestamp(entry);
+  if (!value) return "";
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value);
+  return format(parsed, "dd MMM yyyy, hh:mm a");
+};
+
+const hasFundingAmount = (value) =>
+  value !== undefined && value !== null && value !== "";
+
+const FundingHistoryTimeline = ({
+  history = [],
+  loading = false,
+  currency = "INR",
+}) => {
+  if (loading) {
+    return (
+      <div className="rounded-lg border bg-muted/20 p-4 text-sm text-muted-foreground">
+        Loading funding history...
+      </div>
+    );
+  }
+
+  if (!history.length) {
+    return (
+      <div className="rounded-lg border bg-muted/20 p-6 text-center">
+        <Landmark className="mx-auto mb-2 h-5 w-5 text-muted-foreground" />
+        <p className="text-sm font-medium text-foreground">
+          No funding history available
+        </p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Funding changes will appear here once the invoice funding split is updated.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      {history.map((entry, index) => (
+        <div
+          key={`${entry.id || getFundingEntryTimestamp(entry) || index}-${index}`}
+          className="rounded-lg border bg-background p-4"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                {entry.message || entry.action || "Funding updated"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {entry.updatedByName ||
+                  entry.userName ||
+                  entry.userEmail ||
+                  entry.updatedBy ||
+                  "System"}
+                {formatFundingEntryTimestamp(entry)
+                  ? ` - ${formatFundingEntryTimestamp(entry)}`
+                  : ""}
+              </p>
+            </div>
+            <span className="rounded-full border px-2 py-0.5 text-xs font-medium text-muted-foreground">
+              {entry.isFunded ?? entry.is_funded ? "Funded" : "Non-Funded"}
+            </span>
+          </div>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-md bg-muted/30 px-3 py-2">
+              <p className="text-[11px] uppercase text-muted-foreground">
+                Organization Amount
+              </p>
+              <p className="text-sm font-semibold">
+                {hasFundingAmount(entry.orgAmount ?? entry.org_amount)
+                  ? formatCurrency(entry.orgAmount ?? entry.org_amount, currency)
+                  : "-"}
+              </p>
+            </div>
+            <div className="rounded-md bg-muted/30 px-3 py-2">
+              <p className="text-[11px] uppercase text-muted-foreground">
+                Financier Amount
+              </p>
+              <p className="text-sm font-semibold">
+                {hasFundingAmount(entry.financierAmount ?? entry.financier_amount)
+                  ? formatCurrency(
+                      entry.financierAmount ?? entry.financier_amount,
+                      currency,
+                    )
+                  : "-"}
+              </p>
+            </div>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+};
 
 const ViewDialog = ({
   viewDialogOpen,
@@ -50,17 +158,24 @@ const ViewDialog = ({
   handleEditInvoice,
   canCancel,
   handleCancelInvoice,
+  showDepartmentField = true,
   showCategoryField = true,
   isCategoryFeatureEnabled = true,
   showCampaignField = false,
   isCampaignFeatureEnabled = false,
   showRefNoField = false,
+  showInvoiceFunding = false,
   findVendorByName,
   findVendorById,
   departmentMandatory = false,
   categoryMandatory = false,
   showProformaInvoiceFields = false,
   showErpIntegrationFields = false,
+  showInternalChecklist = false,
+  internalChecklistItems,
+  canEditInternalChecklist = false,
+  onSaveInternalChecklist,
+  savingInternalChecklist = false,
   onMapTaxInvoice,
   onViewLinkedInvoice,
   allInvoices = [],
@@ -93,6 +208,15 @@ const ViewDialog = ({
     ],
   );
   const [previewOpen, setPreviewOpen] = useState(true);
+  const invoiceIdForFundingHistory =
+    selectedInvoice?.id || selectedInvoice?.invoiceId;
+  const invoiceCurrency = normalizeCurrencyCode(selectedInvoice?.currency);
+  const {
+    data: fundingHistory = [],
+    isFetching: fundingHistoryLoading,
+  } = useGetInvoiceFundingHistoryQuery(invoiceIdForFundingHistory, {
+    skip: !showInvoiceFunding || !invoiceIdForFundingHistory,
+  });
   const selectedIsProformaInvoice = Boolean(selectedInvoice) && isProformaInvoice(selectedInvoice);
   const accountingObjectType = selectedIsProformaInvoice ? "PI" : "INVOICE";
   const accountingObjectLabel = selectedIsProformaInvoice ? "proforma invoice" : "invoice";
@@ -183,7 +307,11 @@ const ViewDialog = ({
                   onValueChange={setViewTab}
                   className="w-full flex-1 flex flex-col min-h-0"
                 >
-                  <TabsList className="grid w-full grid-cols-2 mb-4">
+                  <TabsList
+                    className={`grid w-full mb-4 ${
+                      showInvoiceFunding ? "grid-cols-3" : "grid-cols-2"
+                    }`}
+                  >
                     <TabsTrigger value="details">
                       <FileText className="h-4 w-4 mr-2" />
                       Details
@@ -192,6 +320,12 @@ const ViewDialog = ({
                       <History className="h-4 w-4 mr-2" />
                       History ({invoiceHistory.length})
                     </TabsTrigger>
+                    {showInvoiceFunding ? (
+                      <TabsTrigger value="funding-history">
+                        <Landmark className="h-4 w-4 mr-2" />
+                        Funding ({fundingHistory.length})
+                      </TabsTrigger>
+                    ) : null}
                   </TabsList>
 
                   <TabsContent value="details" className="mt-0 flex-1 min-h-0">
@@ -209,15 +343,22 @@ const ViewDialog = ({
                         )}
                         <InvoiceReadOnlyDetails
                           invoice={selectedInvoice}
+                          showDepartmentField={showDepartmentField}
                           showCategoryField={showCategoryField}
                           isCategoryFeatureEnabled={isCategoryFeatureEnabled}
                           showCampaignField={showCampaignField}
                           isCampaignFeatureEnabled={isCampaignFeatureEnabled}
                           showRefNoField={showRefNoField}
+                          showInvoiceFunding={showInvoiceFunding}
                           findVendorByName={findVendorByName}
                           findVendorById={findVendorById}
                           showProformaInvoiceFields={showProformaInvoiceFields}
                           showErpIntegrationFields={showErpIntegrationFields}
+                          showInternalChecklist={showInternalChecklist}
+                          internalChecklistItems={internalChecklistItems}
+                          canEditInternalChecklist={canEditInternalChecklist}
+                          onSaveInternalChecklist={onSaveInternalChecklist}
+                          savingInternalChecklist={savingInternalChecklist}
                           onMapTaxInvoice={onMapTaxInvoice}
                           onViewLinkedInvoice={onViewLinkedInvoice}
                           allInvoices={allInvoices}
@@ -230,6 +371,7 @@ const ViewDialog = ({
                         formData={checklistFormData}
                         departmentMandatory={departmentMandatory}
                         categoryMandatory={categoryMandatory}
+                        showDepartmentField={showDepartmentField}
                         showCategoryField={showCategoryField}
                         showCampaignField={showCampaignField}
                       />
@@ -242,6 +384,18 @@ const ViewDialog = ({
                       loading={loadingHistory}
                     />
                   </TabsContent>
+                  {showInvoiceFunding ? (
+                    <TabsContent
+                      value="funding-history"
+                      className="mt-0 flex-1 overflow-y-auto pr-3 scrollbar-thin-muted"
+                    >
+                      <FundingHistoryTimeline
+                        history={fundingHistory}
+                        loading={fundingHistoryLoading}
+                        currency={invoiceCurrency}
+                      />
+                    </TabsContent>
+                  ) : null}
                 </Tabs>
               </div>
 

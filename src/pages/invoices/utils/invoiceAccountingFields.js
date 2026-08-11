@@ -67,7 +67,10 @@ export const deriveExpenseTypeFromAccountingNode = (node = {}) => {
 
 export const deriveExpenseTypeFromLedger = deriveExpenseTypeFromAccountingNode;
 
-export const buildGroupBranchOptionsFromCoa = (tree = []) => {
+export const buildGroupBranchOptionsFromCoa = (
+  tree = [],
+  { includeLedgers = false } = {},
+) => {
   const options = [];
   const seen = new Set();
 
@@ -80,13 +83,20 @@ export const buildGroupBranchOptionsFromCoa = (tree = []) => {
         nodeType.includes("category") ||
         nodeType.includes("header") ||
         (nodeType === "" && hasChildren);
+      const isLedger =
+        includeLedgers &&
+        !isSelectableGroup &&
+        (nodeType.includes("ledger") ||
+          nodeType.includes("account") ||
+          !hasChildren);
+      const isSelectable = isSelectableGroup || isLedger;
       const name = String(node.name || node.accountName || node.erpId || "").trim();
       const id = String(node.id || node.erpId || name || "").trim();
       const nextAncestors = name
         ? [...ancestors, { id, name, type: nodeType }]
         : ancestors;
 
-      if (isSelectableGroup && id && name && !seen.has(id)) {
+      if (isSelectable && id && name && !seen.has(id)) {
         seen.add(id);
         const parentPath = ancestors.map((ancestor) => ancestor.name).filter(Boolean);
         const path = [...parentPath, name];
@@ -110,6 +120,9 @@ export const buildGroupBranchOptionsFromCoa = (tree = []) => {
           accountGroupName: name,
           groupId: id,
           groupName: name,
+          ledgerId: isLedger ? id : "",
+          ledgerName: isLedger ? name : "",
+          optionType: isLedger ? "ledger" : "group",
           category,
           parentGroupName: parentPath[parentPath.length - 1] || "",
           parentPath: parentPath.join(" > "),

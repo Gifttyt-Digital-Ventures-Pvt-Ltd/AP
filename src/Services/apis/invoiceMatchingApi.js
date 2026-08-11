@@ -33,6 +33,26 @@ export const invoiceMatchingApi = serviceApi.injectEndpoints({
         { type: "Reconciliation", id },
       ],
     }),
+    getInvoiceMatchingLineItems: builder.query({
+      query: ({ id, ...params }) => ({
+        url: `/invoice-matching/${id}/line-items`,
+        method: "GET",
+        params,
+      }),
+      providesTags: (_result, _error, args) => [
+        { type: "Matching", id: `LINE-ITEMS-${args?.id}` },
+      ],
+    }),
+    getInvoiceMatchingVarianceReport: builder.query({
+      query: ({ id, ...params }) => ({
+        url: `/invoice-matching/${id}/variance-report`,
+        method: "GET",
+        params,
+      }),
+      providesTags: (_result, _error, args) => [
+        { type: "Matching", id: `VARIANCE-REPORT-${args?.id}` },
+      ],
+    }),
     getInvoiceMatchingAcceptanceLog: builder.query({
       query: (id) => ({ url: `/invoice-matching/${id}/acceptance-log`, method: "GET" }),
       providesTags: (_result, _error, id) => [
@@ -81,12 +101,43 @@ export const invoiceMatchingApi = serviceApi.injectEndpoints({
       providesTags: ["Matching"],
     }),
     getAvailableGrns: builder.query({
-      query: (poId) => ({
-        url: "/invoice-matching/grns/available",
-        method: "GET",
-        params: { poId },
-      }),
+      query: (args) => {
+        const params =
+          args && typeof args === "object" && !Array.isArray(args)
+            ? args
+            : { poId: args };
+
+        return {
+          url: "/invoice-matching/grns/available",
+          method: "GET",
+          params,
+        };
+      },
       providesTags: ["Matching"],
+    }),
+    getAvailableMatchesForGrn: builder.query({
+      query: (grnId) => ({
+        url: `/invoice-matching/grn/${grnId}/available-matches`,
+        method: "GET",
+      }),
+      providesTags: (_result, _error, grnId) => [
+        { type: "Matching", id: `GRN-MATCH-TYPES-${grnId}` },
+      ],
+    }),
+    getInvoiceMatchingThresholds: builder.query({
+      query: () => ({
+        url: "/invoice-matching/config/thresholds",
+        method: "GET",
+      }),
+      providesTags: [{ type: "Matching", id: "THRESHOLDS" }],
+    }),
+    updateInvoiceMatchingThresholds: builder.mutation({
+      query: (body) => ({
+        url: "/invoice-matching/config/thresholds",
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: [{ type: "Matching", id: "THRESHOLDS" }],
     }),
     performInvoiceMatch: builder.mutation({
       query: (body) => ({
@@ -172,6 +223,10 @@ export const {
   useLazyGetInvoiceMatchingDetailQuery,
   useGetInvoiceMatchingChecklistQuery,
   useGetInvoiceMatchingQtyReconciliationQuery,
+  useGetInvoiceMatchingLineItemsQuery,
+  useLazyGetInvoiceMatchingLineItemsQuery,
+  useGetInvoiceMatchingVarianceReportQuery,
+  useLazyGetInvoiceMatchingVarianceReportQuery,
   useGetInvoiceMatchingAcceptanceLogQuery,
   useGetInvoiceMatchingGroupChecklistQuery,
   useGetInvoiceMatchingGroupAcceptanceLogQuery,
@@ -179,6 +234,10 @@ export const {
   useGetAvailableMatchingInvoicesQuery,
   useGetAvailablePurchaseOrdersQuery,
   useGetAvailableGrnsQuery,
+  useGetAvailableMatchesForGrnQuery,
+  useLazyGetAvailableMatchesForGrnQuery,
+  useGetInvoiceMatchingThresholdsQuery,
+  useUpdateInvoiceMatchingThresholdsMutation,
   usePerformInvoiceMatchMutation,
   useEditInvoiceMatchMutation,
   useMarkInvoiceMatchExceptionMutation,

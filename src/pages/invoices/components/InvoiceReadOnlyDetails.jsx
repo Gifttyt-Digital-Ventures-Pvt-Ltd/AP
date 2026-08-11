@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { format } from "date-fns";
 import { Label } from "../../../components/ui/label";
 import { formatCurrency, normalizeCurrencyCode } from "../../../utils/currency";
+import { ConvertedInrAmountSummary } from "../../../components/common/InrConversionFields";
 import { useGetInvoiceTdsPreviewQuery } from "../../../Services/apis/taxApi";
 import useTdsSubscription from "../../../hooks/useTdsSubscription";
 import { TAX_RATES } from "../constants";
@@ -27,7 +28,7 @@ import {
 } from "../utils/msmePaymentDue";
 import { computeLineItemsSummary, resolveLineItemsExpanded } from "../utils/lineItemsSummary";
 import { Button } from "../../../components/ui/button";
-import { Link2 } from "lucide-react";
+import { Link2, Loader2 } from "lucide-react";
 import {
   canMapTaxInvoiceToProforma,
   getDocumentTypeLabel,
@@ -42,6 +43,11 @@ import {
 import AppDataTable from "../../../components/common/AppDataTable";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import { cn } from "../../../lib/utils";
+import { Badge } from "../../../components/ui/badge";
+import { buildInternalChecklistState } from "../utils/internalChecklist";
+import { INTERNAL_CHECKLIST_ITEMS } from "../constants/internalChecklist";
+import { normalizeHistoricalAdvanceAdjustment } from "../utils/advanceAdjustment";
+import InternalChecklistSection from "./InternalChecklistSection";
 
 const formatDisplayDate = (value) => {
   if (!value) return "-";
@@ -70,6 +76,7 @@ const computeTdsAmount = (lineItems = [], tdsValue = "", subTotalOverride, tdsRa
 
 const InvoiceReadOnlyDetails = ({
   invoice,
+  showDepartmentField = true,
   showCategoryField = true,
   showCampaignField = false,
   showRefNoField = false,
@@ -79,12 +86,18 @@ const InvoiceReadOnlyDetails = ({
   isCampaignFeatureEnabled = false,
   showProformaInvoiceFields = false,
   showErpIntegrationFields = false,
+  showInternalChecklist = false,
+  internalChecklistItems = INTERNAL_CHECKLIST_ITEMS,
+  canEditInternalChecklist = false,
+  onSaveInternalChecklist,
+  savingInternalChecklist = false,
   onMapTaxInvoice,
   onViewLinkedInvoice,
   allInvoices = [],
   getStatusBadgeClass,
   canCancelLinkedInvoice = false,
   onCancelLinkedInvoice,
+  showInvoiceFunding = false,
 }) => {
   const formData = useMemo(
     () =>
@@ -110,6 +123,19 @@ const InvoiceReadOnlyDetails = ({
     setShowLineItems(resolveLineItemsExpanded(formData ?? {}));
   }, [invoice?.id, formData?.lineItemsExpanded]);
 
+  const [stagedInternalChecklist, setStagedInternalChecklist] = useState(() =>
+    buildInternalChecklistState(formData?.internalChecklist, internalChecklistItems),
+  );
+
+  useEffect(() => {
+    setStagedInternalChecklist(
+      buildInternalChecklistState(formData?.internalChecklist, internalChecklistItems),
+    );
+    // Reset only when a different invoice is loaded, so in-progress edits
+    // aren't wiped out by unrelated re-renders of this component.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [invoice?.id]);
+
   const { isTdsSubscriptionEnabled } = useTdsSubscription();
   const invoiceIdForTdsPreview = invoice?.id ?? invoice?.invoiceId;
   const readOnlyTdsSectionCode =
@@ -131,11 +157,14 @@ const InvoiceReadOnlyDetails = ({
     },
     { skip: !isTdsSubscriptionEnabled || !invoiceIdForTdsPreview || !readOnlyTdsSectionCode },
   );
-
   if (!formData) return null;
 
   const msmePaymentDue = normalizeMsmePaymentDue(invoice);
   const invoiceCurrency = normalizeCurrencyCode(formData.currency);
+  const isFunded = Boolean(formData.isFunded ?? invoice?.isFunded ?? invoice?.is_funded);
+  const orgAmount = Number(formData.orgAmount ?? invoice?.orgAmount ?? invoice?.org_amount ?? 0) || 0;
+  const financierAmount =
+    Number(formData.financierAmount ?? invoice?.financierAmount ?? invoice?.financier_amount ?? 0) || 0;
   const useInrTax = isInrInvoiceCurrency(invoiceCurrency);
   const isSummaryOnlyInvoice =
     formData.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
@@ -143,6 +172,7 @@ const InvoiceReadOnlyDetails = ({
   const isInvoiceLevelTax = isInvoiceLevelSelection(formData.taxesLevel);
   const showLineItemDiscount = isLineItemLevelSelection(formData.discountsLevel);
   const formatAmount = (amount) => formatCurrency(amount, invoiceCurrency);
+  const advanceAdjustment = normalizeHistoricalAdvanceAdjustment(invoice);
 
   const calculateLineItemSubtotal = (item) => {
     if (isInvoiceLevelDiscount) {
@@ -277,6 +307,9 @@ const InvoiceReadOnlyDetails = ({
     showCategoryField &&
     isCategoryFeatureEnabled &&
     (formData.categoryId || formData.categoryName);
+  const showDepartment =
+    showDepartmentField &&
+    (formData.departmentId || formData.departmentName);
 
   const showCampaign =
     showCampaignField &&
@@ -320,6 +353,36 @@ const InvoiceReadOnlyDetails = ({
     const taxableAmount = calculateLineItemSubtotal(item);
     const taxAmount = isInvoiceLevelTax ? 0 : getLineItemTaxAmount(item);
     return taxableAmount + taxAmount;
+  };
+
+  const renderAccountingGroupValue = (item = {}) => {
+    const ledgerName = item.ledgerName || item.ledger || item.ledger_name || "";
+    const groupName =
+      item.accountGroupName ||
+      item.account_group_name ||
+      item.groupName ||
+      item.group_name ||
+      "";
+
+    if (!ledgerName && !groupName) return "-";
+
+    return (
+      <div className="min-w-0 space-y-1">
+        <div className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate font-medium">{ledgerName || groupName}</span>
+          {ledgerName ? (
+            <Badge variant="secondary" className="shrink-0 px-1.5 py-0 text-[9px] uppercase">
+              Ledger
+            </Badge>
+          ) : null}
+        </div>
+        {ledgerName && groupName && ledgerName !== groupName ? (
+          <p className="truncate text-[10px] text-muted-foreground">
+            Group: {groupName}
+          </p>
+        ) : null}
+      </div>
+    );
   };
 
   const readOnlyLineItemHeaders = (() => {
@@ -420,7 +483,7 @@ const InvoiceReadOnlyDetails = ({
             );
             break;
           case "accountGroup":
-            value = item.accountGroupName || item.groupName || item.ledger || "-";
+            value = renderAccountingGroupValue(item);
             break;
           case "expenseType":
             value = item.expenseType || "-";
@@ -490,7 +553,9 @@ const InvoiceReadOnlyDetails = ({
             ) : null}
           </div>
           <DetailField label="Currency" value={invoiceCurrency} mono />
-          <DetailField label="Department" value={formData.departmentName} />
+          {showDepartment && (
+            <DetailField label="Department" value={formData.departmentName} />
+          )}
           {showCategory && (
             <DetailField label="Category" value={formData.categoryName} />
           )}
@@ -506,8 +571,33 @@ const InvoiceReadOnlyDetails = ({
           )}
         </div>
 
+        {showInvoiceFunding ? (
+          <div className="rounded-lg border border-border bg-muted/20 p-3">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <h3 className="text-sm font-semibold text-gray-800">Funding</h3>
+              <Badge variant={isFunded ? "default" : "secondary"}>
+                {isFunded ? "Funded" : "Non-Funded"}
+              </Badge>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <DetailField
+                label="Organization Funded Amount"
+                value={isFunded ? formatAmount(orgAmount) : "-"}
+              />
+              <DetailField
+                label="Financier Funded Amount"
+                value={isFunded ? formatAmount(financierAmount) : "-"}
+              />
+            </div>
+          </div>
+        ) : null}
+
         {formData.billingAddress && (
           <DetailField label="Billing Address" value={formData.billingAddress} />
+        )}
+
+        {formData.shippingAddress && (
+          <DetailField label="Shipping Address" value={formData.shippingAddress} />
         )}
 
         <div className="grid grid-cols-2 gap-3">
@@ -685,6 +775,50 @@ const InvoiceReadOnlyDetails = ({
             {formatAmount(netPayable)}
           </span>
         </div>
+        {advanceAdjustment.hasAdjustmentContext && (
+          <div className="space-y-1.5 rounded-md border border-border bg-muted/30 p-3">
+            <div className="flex justify-between text-xs">
+              <span>Advance Adjusted Total</span>
+              <span className="font-medium">
+                {formatAmount(advanceAdjustment.advanceAdjustedTotal ?? 0)}
+              </span>
+            </div>
+            {advanceAdjustment.netPayableAfterAdvance !== null && (
+              <div className="flex justify-between text-sm font-bold">
+                <span>Net Payable After Advance</span>
+                <span className="text-primary">
+                  {formatAmount(advanceAdjustment.netPayableAfterAdvance)}
+                </span>
+              </div>
+            )}
+            {advanceAdjustment.adjustedAdvances.length > 0 && (
+              <div className="space-y-1 border-t border-border pt-1.5 text-xs text-muted-foreground">
+                {advanceAdjustment.adjustedAdvances.map((advance, index) => (
+                  <div
+                    key={`${advance.advanceId ?? advance.referenceNumber ?? index}`}
+                    className="flex justify-between gap-3"
+                  >
+                    <span className="truncate">
+                      {advance.referenceNumber || advance.advanceId || "Advance"}
+                    </span>
+                    <span className="shrink-0">
+                      {formatAmount(
+                        advance.adjustedAmount ??
+                          advance.proposedAdjustedAmount ??
+                          0,
+                      )}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+        <ConvertedInrAmountSummary
+          convertToInr={formData.convertToInr ?? invoice?.convertToInr}
+          matchingInrValue={formData.matchingInrValue ?? invoice?.matchingInrValue}
+          className="flex justify-between text-sm font-semibold text-primary"
+        />
       </div>
 
       {showProformaInvoiceFields && isProformaInvoice(invoice) && (
@@ -723,6 +857,33 @@ const InvoiceReadOnlyDetails = ({
               label="Remaining PI Balance"
               value={formatCurrency(invoice.piRemainingBalance, formData.currency)}
             />
+          )}
+        </div>
+      )}
+
+      {showInternalChecklist && (internalChecklistItems.length > 0 || stagedInternalChecklist.length > 0) && (
+        <div className="space-y-3 pt-4 border-t">
+          <InternalChecklistSection
+            items={internalChecklistItems}
+            values={stagedInternalChecklist}
+            onChange={setStagedInternalChecklist}
+            readOnly={!canEditInternalChecklist}
+          />
+          {canEditInternalChecklist && (
+            <div className="flex justify-end">
+              <Button
+                type="button"
+                size="sm"
+                disabled={savingInternalChecklist}
+                onClick={() => onSaveInternalChecklist?.(invoice, stagedInternalChecklist)}
+                data-testid="save-internal-checklist-btn"
+              >
+                {savingInternalChecklist && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                Save Checklist
+              </Button>
+            </div>
           )}
         </div>
       )}

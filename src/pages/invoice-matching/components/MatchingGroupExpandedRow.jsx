@@ -15,7 +15,7 @@ const MatchingGroupExpandedRow = ({
   );
 
   return (
-    <TableRow className="border-b border-border bg-muted/30 hover:bg-muted/30">
+    <TableRow className="bg-muted/30 hover:bg-muted/30">
       <TableCell colSpan={colSpan} className="px-4 py-3">
         <div className="pl-8 md:pl-12">
           <div className="mb-2 flex flex-wrap items-center gap-2">

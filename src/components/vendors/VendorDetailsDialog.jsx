@@ -1,13 +1,6 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Building2, CheckCircle2, ChevronsUpDown, Loader2, MapPin, Plus, Trash2, User } from "lucide-react";
-import { useGetAvailableCurrenciesQuery } from "../../Services/apis/corporateApi";
+import React, { useCallback, useEffect, useState } from "react";
+import { Building2, Loader2, MapPin, Plus, Trash2, User } from "lucide-react";
 import { useRBAC } from "../../contexts/RBACContext";
-import {
-  CURRENCY_SCREENS,
-  FALLBACK_CURRENCIES,
-  mergeCurrencyOptions,
-  normalizeCurrencyCode,
-} from "../../utils/currency";
 import {
   getVendorFieldDisplayName,
   isVendorFieldRequired,
@@ -30,11 +23,6 @@ import { Input } from "../ui/input";
 import { Label } from "../ui/label";
 import AppSelect from "../common/AppSelect";
 import {
-  Popover,
-  PopoverAnchor,
-  PopoverContent,
-} from "../ui/popover";
-import {
   Select,
   SelectContent,
   SelectItem,
@@ -44,6 +32,21 @@ import {
 import { useVendorGstDetailsFetch } from "../../pages/vendors/hooks/useVendorGstDetailsFetch";
 import VendorDocumentsPanel from "../../pages/vendors/components/VendorDocumentsPanel";
 import VendorTdsPanel from "../../pages/vendors/components/VendorTdsPanel";
+import FetchVendorResultsPreview from "../../pages/vendors/components/FetchVendorResultsPreview";
+import VendorCurrencyPicker from "../../pages/vendors/components/VendorCurrencyPicker";
+import {
+  buildGstRegistrationFromVerification,
+  createEmptyGstRegistration,
+  formatRegistrationLocation,
+  getRegistrationKey,
+  mapFetchedRegistrationToVerification,
+  normalizeFormGstRegistrations,
+} from "../../pages/vendors/utils/vendorGstRegistrations";
+import {
+  createEmptyVendorBranch,
+  normalizeVendorBranches,
+  validateVendorBranches,
+} from "../../pages/vendors/utils/vendorBranches";
 import { createEmptyVendorDocuments } from "../../pages/vendors/utils/vendorDocuments";
 import {
   getVisibleVendorDocumentTypes,
@@ -80,135 +83,6 @@ const FormSection = ({ title, description, children, className }) => (
     {children}
   </section>
 );
-
-const buildGstRegistrationFromVerification = (data) => {
-  const gstin = String(data?.gstin || "").trim().toUpperCase();
-  if (!gstin) return null;
-
-  return {
-    gstin,
-    state: data.state || "",
-    stateCode: data.stateCode || "",
-    businessNature: data.businessNature || "",
-    location: data.location ?? null,
-    bankDetails: data.bankDetails ?? data.bank_details ?? {},
-    address: formatRegistrationLocation(data),
-  };
-};
-
-const getRegistrationValue = (registration, ...keys) => {
-  for (const key of keys) {
-    const value = registration?.[key];
-    if (value !== undefined && value !== null && value !== "") return value;
-  }
-  return "";
-};
-
-const formatRegistrationLocation = (registration = {}) => {
-  const location = registration.location ?? registration.addressDetails ?? registration.address_details;
-  if (location && typeof location === "object") {
-    return [
-      location.addressLine1 ?? location.address_line1,
-      location.addressLine2 ?? location.address_line2,
-      location.city,
-      location.state,
-      location.pincode ?? location.postalCode ?? location.postal_code,
-      location.country,
-    ]
-      .filter(Boolean)
-      .join(", ");
-  }
-
-  return getRegistrationValue(registration, "address", "principalAddress", "principal_address");
-};
-
-const normalizeFormGstRegistrations = (registrations = []) =>
-  (Array.isArray(registrations) ? registrations : [])
-    .map((registration) => ({
-      ...registration,
-      gstin: String(getRegistrationValue(registration, "gstin", "gstIn", "gst")).trim().toUpperCase(),
-      state: getRegistrationValue(registration, "state", "stateName", "state_name"),
-      stateCode: getRegistrationValue(registration, "stateCode", "state_code"),
-      address: formatRegistrationLocation(registration),
-      location: registration.location ?? registration.addressDetails ?? registration.address_details ?? null,
-      bankDetails: registration.bankDetails ?? registration.bank_details ?? {},
-      _clientId:
-        registration._clientId ||
-        (getRegistrationValue(registration, "gstin", "gstIn", "gst")
-          ? `reg-${String(getRegistrationValue(registration, "gstin", "gstIn", "gst")).trim().toUpperCase()}`
-          : undefined),
-      _fromFetch: registration._fromFetch === true,
-    }))
-    .filter((registration) => registration.gstin || registration._clientId);
-
-const getRegistrationKey = (registration = {}) =>
-  registration._clientId || String(registration.gstin || "").trim().toUpperCase();
-
-const createEmptyGstRegistration = () => ({
-  _clientId: `draft-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-  gstin: "",
-  state: "",
-  location: { country: "India" },
-  bankDetails: {},
-});
-
-const createEmptyVendorBranch = () => ({
-  id: `vendor-branch-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-  branchName: "",
-  branchCode: "",
-  gstin: "",
-});
-
-const normalizeVendorBranches = (branches = []) =>
-  (Array.isArray(branches) ? branches : []).map((branch) => ({
-    ...branch,
-    id:
-      branch.id ||
-      branch.branchId ||
-      branch.branch_id ||
-      branch._clientId ||
-      `vendor-branch-${Math.random().toString(36).slice(2, 9)}`,
-    branchName: branch.branchName ?? branch.branch_name ?? branch.name ?? "",
-    branchCode: String(branch.branchCode ?? branch.branch_code ?? branch.code ?? "")
-      .trim()
-      .toUpperCase(),
-    gstin: String(branch.gstin ?? branch.mappedGstin ?? branch.mapped_gstin ?? branch.billingGstin ?? "")
-      .trim()
-      .toUpperCase(),
-  }));
-
-const getActiveVendorBranches = (branches = []) =>
-  normalizeVendorBranches(branches).filter(
-    (branch) => branch.branchName || branch.branchCode || branch.gstin,
-  );
-
-const validateVendorBranches = (branches = [], gstRegistrations = []) => {
-  const activeBranches = getActiveVendorBranches(branches);
-  const validGstins = new Set(
-    normalizeFormGstRegistrations(gstRegistrations)
-      .map((registration) => registration.gstin)
-      .filter(Boolean),
-  );
-  const names = [];
-  const codes = [];
-
-  for (const branch of activeBranches) {
-    if (!branch.branchName) return "Branch name is required for each vendor branch.";
-    if (branch.gstin && !validGstins.has(branch.gstin)) {
-      return "Vendor branch GSTIN must be selected from the vendor's added GST registrations.";
-    }
-    names.push(branch.branchName.trim().toLowerCase());
-    if (branch.branchCode) {
-      codes.push(branch.branchCode.trim().toLowerCase());
-    }
-  }
-
-  if (new Set(names).size !== names.length) return "Vendor branch names must be unique.";
-  if (codes.length > 0 && new Set(codes).size !== codes.length) {
-    return "Vendor branch codes must be unique.";
-  }
-  return "";
-};
 
 const VendorBranchesEditor = ({ branches = [], gstRegistrations = [], onChange }) => {
   const rows = normalizeVendorBranches(branches);
@@ -559,138 +433,6 @@ const GstRegistrationsEditor = ({
   );
 };
 
-const mapFetchedRegistrationToVerification = (registration = {}) => ({
-  gstin: registration.gstin,
-  pan: registration.pan || "",
-  state: registration.state || "",
-  stateCode: registration.stateCode || "",
-  businessNature: registration.businessNature || "",
-  location: registration.location ?? null,
-  bankDetails: registration.bankDetails ?? {},
-  address: registration.address || "",
-  legalName: registration.legalName || "",
-  tradeName: registration.tradeName || "",
-  validGstin: true,
-});
-
-const FetchVendorResultsPreview = ({
-  fetchMode,
-  records,
-  selectedGstins,
-  onToggleGstin,
-  onSelectAll,
-  onSelectNone,
-  onApply,
-}) => {
-  if (!records.length) return null;
-
-  const firstRecord = records[0];
-  const isPanMode = fetchMode === "pan";
-  const selectedCount = selectedGstins.size;
-
-  return (
-    <div className="space-y-3 rounded-lg border border-border bg-background p-3">
-      <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
-        <div className="font-semibold">{firstRecord.legalName || firstRecord.tradeName}</div>
-        {firstRecord.tradeName &&
-        firstRecord.legalName &&
-        firstRecord.tradeName.trim().toUpperCase() !== firstRecord.legalName.trim().toUpperCase() ? (
-          <div className="mt-0.5 text-xs">
-            Trade name: <span className="font-medium">{firstRecord.tradeName}</span>
-          </div>
-        ) : null}
-        <div className="mt-0.5 text-xs">
-          PAN: <span className="font-mono font-medium">{firstRecord.pan || "—"}</span>
-          {" · "}
-          {records.length} GSTIN{records.length !== 1 ? "s" : ""} found
-        </div>
-      </div>
-
-      {isPanMode ? (
-        <div className="overflow-hidden rounded-md border border-border">
-          <div className="flex items-center justify-between border-b border-border bg-muted/40 px-3 py-2">
-            <span className="text-xs font-semibold text-foreground">
-              GSTINs Found ({records.length})
-            </span>
-            <div className="flex gap-2">
-              <button type="button" className="text-xs font-medium text-primary" onClick={onSelectAll}>
-                All
-              </button>
-              <button type="button" className="text-xs text-muted-foreground" onClick={onSelectNone}>
-                None
-              </button>
-            </div>
-          </div>
-            {records.map((record) => {
-            const checked = selectedGstins.has(record.gstin);
-            return (
-              <div
-                key={record.gstin}
-                role="button"
-                tabIndex={0}
-                onClick={() => onToggleGstin(record.gstin)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault();
-                    onToggleGstin(record.gstin);
-                  }
-                }}
-                className={`flex w-full min-w-0 cursor-pointer items-start gap-3 border-b border-border px-3 py-2 text-left last:border-b-0 sm:items-center ${
-                  checked ? "bg-primary/5" : "bg-background hover:bg-muted/30"
-                }`}
-              >
-                <Checkbox
-                  checked={checked}
-                  onCheckedChange={() => onToggleGstin(record.gstin)}
-                  onClick={(event) => event.stopPropagation()}
-                  className="mt-0.5 shrink-0 sm:mt-0"
-                />
-                <span className="min-w-0 shrink-0 font-mono text-xs font-semibold text-primary sm:min-w-[9.5rem]">
-                  {record.gstin}
-                </span>
-                <span className="min-w-0 flex-1 break-words text-sm text-foreground">
-                  {record.state || "—"}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <div className="overflow-hidden rounded-md border border-border text-sm">
-          {[
-            ["State", firstRecord.state],
-            ["Address", firstRecord.address || formatRegistrationLocation(firstRecord)],
-          ].map(([label, value]) => (
-            <div
-              key={label}
-              className="flex flex-col gap-1 border-b border-border px-3 py-2 last:border-b-0 sm:flex-row sm:gap-3"
-            >
-              <span className="shrink-0 text-xs font-semibold text-muted-foreground sm:min-w-24">
-                {label}
-              </span>
-              <span className="min-w-0 break-words text-foreground">{value || "—"}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="flex justify-end">
-        <Button
-          type="button"
-          size="sm"
-          disabled={selectedCount === 0}
-          onClick={onApply}
-        >
-          <CheckCircle2 className="mr-2 h-4 w-4" />
-          {isPanMode
-            ? `Add ${selectedCount} Selected GSTIN${selectedCount !== 1 ? "s" : ""}`
-            : "Add GSTIN"}
-        </Button>
-      </div>
-    </div>
-  );
-};
-
 const VendorDetailsDialog = ({
   open,
   onOpenChange,
@@ -726,11 +468,6 @@ const VendorDetailsDialog = ({
   const gstVerificationEnabled = portalVerificationEnabled;
   const showPortalFetch =
     !invoiceVendorRequest && portalVerificationEnabled;
-
-  const { data: availableCurrencies = [] } = useGetAvailableCurrenciesQuery(
-    CURRENCY_SCREENS.INVOICE,
-    { skip: invoiceVendorRequest },
-  );
 
   const applyGstVerification = useCallback((data) => {
     if (!data) return;
@@ -773,8 +510,6 @@ const VendorDetailsDialog = ({
   const [fetchMessageIsError, setFetchMessageIsError] = useState(false);
   const [fetchedRecords, setFetchedRecords] = useState([]);
   const [selectedFetchedGstins, setSelectedFetchedGstins] = useState(() => new Set());
-  const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false);
-  const [currencyQuery, setCurrencyQuery] = useState("");
 
   const { fetchVendorDetails, isLoading: isFetchLoading } = useVendorGstDetailsFetch();
 
@@ -795,8 +530,6 @@ const VendorDetailsDialog = ({
       setFetchMessageIsError(false);
       setFetchedRecords([]);
       setSelectedFetchedGstins(new Set());
-      setCurrencyPickerOpen(false);
-      setCurrencyQuery("");
     }
   }, [open]);
 
@@ -924,33 +657,8 @@ const VendorDetailsDialog = ({
     gstVerification,
     { invoiceVendorRequest, gstVerificationEnabled, activeVendorFields },
   );
-  const currencyOptions =
-    Array.isArray(availableCurrencies) && availableCurrencies.length > 0
-      ? availableCurrencies.filter((currency) => currency !== "ALL")
-      : FALLBACK_CURRENCIES;
-  const resolvedCurrencyOptions = useMemo(
-    () => mergeCurrencyOptions(currencyOptions, FALLBACK_CURRENCIES, formData?.currency),
-    [currencyOptions, formData?.currency],
-  );
-  const filteredCurrencyOptions = useMemo(() => {
-    const query = String(currencyQuery || "").trim().toUpperCase();
-    if (!query) return resolvedCurrencyOptions;
-    return resolvedCurrencyOptions.filter((code) => code.includes(query));
-  }, [currencyQuery, resolvedCurrencyOptions]);
-
   const updateField = (field, value) =>
     setFormData((prev) => ({ ...prev, [field]: value }));
-
-  const applyCurrencyChange = (value) => {
-    const normalized = normalizeCurrencyCode(value);
-    updateField("currency", normalized);
-    setCurrencyQuery(normalized);
-  };
-
-  useEffect(() => {
-    if (!open) return;
-    setCurrencyQuery(formData?.currency || "INR");
-  }, [formData?.currency, open]);
 
   if (!formData) return null;
 
@@ -1218,7 +926,7 @@ const VendorDetailsDialog = ({
 
   const nameLabel =
     formData.vendor_type === "Company"
-      ? labelFor(VENDOR_FIELD_SECTIONS.COMPANY_NAME, "Company Name")
+      ? labelFor(VENDOR_FIELD_SECTIONS.COMPANY_NAME, "Vendor Name")
       : "Full Name";
 
   return (
@@ -1275,6 +983,23 @@ const VendorDetailsDialog = ({
                   ))}
                 </div>
               </div>
+
+              {!invoiceVendorRequest ? (
+                <div>
+                  <Label>
+                    {labelFor(VENDOR_FIELD_SECTIONS.VENDOR_ID, "Vendor ID")}
+                    {isRequired(VENDOR_FIELD_SECTIONS.VENDOR_ID) ? " *" : ""}
+                  </Label>
+                  <Input
+                    value={formData.vendorId || ""}
+                    onChange={(event) => updateField("vendorId", event.target.value)}
+                    placeholder="e.g., VEN-0042"
+                    className="mt-1.5"
+                    data-testid="vendor-id-input"
+                    required={isRequired(VENDOR_FIELD_SECTIONS.VENDOR_ID)}
+                  />
+                </div>
+              ) : null}
 
               <div>
                 <Label>
@@ -1548,89 +1273,13 @@ const VendorDetailsDialog = ({
                 </Select>
               </div>
 
-              <div>
-                <Label>
-                  {labelFor(VENDOR_FIELD_SECTIONS.CURRENCY, "Currency")}
-                  {isRequired(VENDOR_FIELD_SECTIONS.CURRENCY) ? " *" : ""}
-                </Label>
-                <Popover
-                  open={currencyPickerOpen}
-                  onOpenChange={setCurrencyPickerOpen}
-                >
-                  <PopoverAnchor asChild>
-                    <div className="relative mt-1.5">
-                      <Input
-                        value={currencyQuery}
-                        onChange={(event) => {
-                          const next = event.target.value
-                            .toUpperCase()
-                            .replace(/[^A-Z]/g, "")
-                            .slice(0, 3);
-                          setCurrencyQuery(next);
-                          setCurrencyPickerOpen(true);
-                          if (next.length === 3) {
-                            applyCurrencyChange(next);
-                          }
-                        }}
-                        onFocus={() => setCurrencyPickerOpen(true)}
-                        onBlur={() => {
-                          const normalized = normalizeCurrencyCode(currencyQuery);
-                          if (String(currencyQuery || "").trim().length === 3) {
-                            applyCurrencyChange(normalized);
-                          } else {
-                            setCurrencyQuery(formData.currency || "INR");
-                          }
-                        }}
-                        placeholder="Select or type code (e.g. USD)"
-                        className="pr-10 uppercase"
-                        autoComplete="off"
-                        maxLength={3}
-                        required={isRequired(VENDOR_FIELD_SECTIONS.CURRENCY)}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setCurrencyPickerOpen((open) => !open)}
-                        className="absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
-                        aria-label="Show currency list"
-                      >
-                        <ChevronsUpDown className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  </PopoverAnchor>
-                  <PopoverContent
-                    className="w-[var(--radix-popover-trigger-width)] p-0"
-                    align="start"
-                    onOpenAutoFocus={(event) => event.preventDefault()}
-                  >
-                    <div className="max-h-56 overflow-y-auto py-1">
-                      {filteredCurrencyOptions.length === 0 ? (
-                        <p className="px-3 py-2 text-xs text-muted-foreground">
-                          {String(currencyQuery || "").trim().length === 3
-                            ? `Use ${normalizeCurrencyCode(currencyQuery)}`
-                            : "No matching currencies — type a 3-letter ISO code"}
-                        </p>
-                      ) : (
-                        filteredCurrencyOptions.map((code) => (
-                          <button
-                            key={code}
-                            type="button"
-                            className={`flex w-full items-center px-3 py-2 text-left text-sm hover:bg-accent ${
-                              formData.currency === code ? "bg-accent" : ""
-                            }`}
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => {
-                              applyCurrencyChange(code);
-                              setCurrencyPickerOpen(false);
-                            }}
-                          >
-                            {code}
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </div>
+              <VendorCurrencyPicker
+                value={formData.currency}
+                onChange={(next) => updateField("currency", next)}
+                label={labelFor(VENDOR_FIELD_SECTIONS.CURRENCY, "Currency")}
+                required={isRequired(VENDOR_FIELD_SECTIONS.CURRENCY)}
+                skipFetch={invoiceVendorRequest}
+              />
             </div>
           </FormSection>
 

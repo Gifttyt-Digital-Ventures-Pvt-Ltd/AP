@@ -38,9 +38,11 @@ const InvoicesDialogs = (props) => {
     getDepartmentNameById,
     invoiceCategories,
     getCategoryNameById,
+    isDepartmentFeatureEnabled,
     isCategoryFeatureEnabled,
     isCampaignFeatureEnabled,
     showRefNoField = false,
+    showInvoiceFunding = false,
     invoiceMandatoryFields,
     bulkEditOpen,
     setBulkEditOpen,
@@ -72,6 +74,11 @@ const InvoicesDialogs = (props) => {
     findVendorById,
     showProformaInvoiceFields = false,
     showErpIntegrationFields = false,
+    showInternalChecklist = false,
+    internalChecklistItems,
+    canEditInternalChecklist = false,
+    onSaveInternalChecklist,
+    savingInternalChecklist = false,
     onMapTaxInvoice,
     onViewLinkedInvoice,
     allInvoices = [],
@@ -153,17 +160,24 @@ const InvoicesDialogs = (props) => {
         handleEditInvoice={handleEditInvoice}
         canCancel={canCancel}
         handleCancelInvoice={handleCancelInvoice}
+        showDepartmentField={isDepartmentFeatureEnabled}
         showCategoryField={isCategoryFeatureEnabled}
         isCategoryFeatureEnabled={isCategoryFeatureEnabled}
         showCampaignField={isCampaignFeatureEnabled}
         isCampaignFeatureEnabled={isCampaignFeatureEnabled}
         showRefNoField={showRefNoField}
+        showInvoiceFunding={showInvoiceFunding}
         findVendorByName={findVendorByName}
         findVendorById={findVendorById}
         departmentMandatory={invoiceMandatoryFields?.department}
         categoryMandatory={invoiceMandatoryFields?.category}
         showProformaInvoiceFields={showProformaInvoiceFields}
         showErpIntegrationFields={showErpIntegrationFields}
+        showInternalChecklist={showInternalChecklist}
+        internalChecklistItems={internalChecklistItems}
+        canEditInternalChecklist={canEditInternalChecklist}
+        onSaveInternalChecklist={onSaveInternalChecklist}
+        savingInternalChecklist={savingInternalChecklist}
         onMapTaxInvoice={onMapTaxInvoice}
         onViewLinkedInvoice={onViewLinkedInvoice}
         allInvoices={allInvoices}

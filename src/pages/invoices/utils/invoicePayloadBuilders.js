@@ -18,6 +18,7 @@ import {
 } from "./invoiceTax";
 import { parseNumericInput } from "./numericInput";
 import { resolveTdsRate } from "./tds";
+import { buildInternalChecklistState } from "./internalChecklist";
 import { normalizeDueDateForInvoice, resolveVendorIsMsme } from "./msmePaymentDue";
 
 export const computeTdsAmount = (
@@ -191,10 +192,23 @@ export const initializeInvoiceFormData = (
     "";
   const billingAddress =
     extractedData?.billingAddress ||
-    extractedData?.billingAddress ||
+    extractedData?.billing_address ||
     vendorAddress;
+  const shippingAddress =
+    extractedData?.shippingAddress ||
+    extractedData?.shipping_address ||
+    "";
+  const extractedGstin =
+    extractedData?.vendorGstin ||
+    extractedData?.gstin ||
+    extractedData?.billingGstin ||
+    "";
+  const extractedSourceOfSupply =
+    extractedData?.sourceOfSupply || extractedData?.placeOfSupply || "";
+  const extractedDestinationOfSupply =
+    extractedData?.destinationOfSupply || extractedData?.placeOfSupply || "";
 
-  return {
+  const formResult = {
     vendorName: extractedData?.vendorName || "",
     vendorId: matchedVendor?.id || "",
     vendorMatched: !!matchedVendor,
@@ -205,8 +219,22 @@ export const initializeInvoiceFormData = (
     invoiceNumber: extractedData?.invoiceNumber || "",
     invoiceDate,
     dueDate,
+    isFunded: Boolean(extractedData?.isFunded ?? extractedData?.is_funded ?? false),
+    orgAmount:
+      extractedData?.orgAmount ??
+      extractedData?.org_amount ??
+      "",
+    financierAmount:
+      extractedData?.financierAmount ??
+      extractedData?.financier_amount ??
+      "",
     billingAddress: billingAddress,
-    shippingAddress: extractedData?.shippingAddress || extractedData?.shippingAddress || "",
+    shippingAddress,
+    shippingSameAsBilling: Boolean(
+      billingAddress &&
+        shippingAddress &&
+        String(billingAddress).trim() === String(shippingAddress).trim(),
+    ),
     billingGstin:
       extractedData?.billingGstin ||
       extractedData?.billing_gstin ||
@@ -379,6 +407,8 @@ export const initializeInvoiceFormData = (
       "",
     matchingPurchaseOrderId: "",
     matchingGrnId: "",
+    convertToInr: extractedData ? false : undefined,
+    matchingInrValue: extractedData ? null : "",
     matchingId: "",
     existingMatchingPurchaseOrderId: "",
     existingMatchingGrnId: "",
@@ -388,7 +418,36 @@ export const initializeInvoiceFormData = (
     documentType: extractedData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE,
     linkedProformaInvoiceId: extractedData?.linkedProformaInvoiceId ?? "",
     linkedProformaInvoiceNumber: extractedData?.linkedProformaInvoiceNumber ?? "",
+    internalChecklist: buildInternalChecklistState(
+      extractedData?.internalChecklist ?? extractedData?.internal_checklist,
+    ),
   };
+
+  // Baseline of what OCR actually extracted, so the checklist can tell a
+  // scanned value the user left untouched apart from one they typed over.
+  // Only fields OCR actually returned are included — fields it left blank
+  // (or defaults we filled in ourselves) have nothing to be "matched" against.
+  formResult.extractedSnapshot = extractedData
+    ? {
+        invoiceNumber: extractedData?.invoiceNumber || "",
+        invoiceDate: extractedData?.invoiceDate || "",
+        currency: extractedData?.currency
+          ? normalizeCurrencyCode(extractedData.currency)
+          : "",
+        vendorName: extractedData?.vendorName || "",
+        gstin: extractedGstin,
+        gstTreatment: extractedData?.gstTreatment || "",
+        sourceOfSupply: extractedSourceOfSupply,
+        destinationOfSupply: extractedDestinationOfSupply,
+        invoiceTax: extractedData?.invoiceTax || extractedData?.invoice_tax || "",
+        invoiceTaxName:
+          extractedData?.invoiceTaxName || extractedData?.invoice_tax_name || "",
+        invoiceTaxRate:
+          extractedData?.invoiceTaxRate ?? extractedData?.invoice_tax_rate ?? "",
+      }
+    : null;
+
+  return formResult;
 };
 
 export const buildToCreateInvoicePayload = (

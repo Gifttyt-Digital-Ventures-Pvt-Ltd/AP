@@ -20,6 +20,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from '../../../components/ui/tooltip';
+import { formatCurrency } from '../../../utils/currency';
 
 const ClippedInvoiceLabel = ({ invoice }) => {
   const invoiceNumber = String(invoice?.invoiceNumber || '').trim() || '-';
@@ -42,6 +43,19 @@ const ClippedInvoiceLabel = ({ invoice }) => {
   );
 };
 
+const preventDialogOutsideDismiss = (event) => {
+  event.preventDefault();
+};
+
+const hasAdvanceAdjustment = (invoice = {}) =>
+  Boolean(
+    invoice.hasAdvanceAdjustment ||
+      invoice.advanceAdjustedTotal != null ||
+      invoice.advance_adjusted_total != null ||
+      invoice.netPayableAfterAdvance != null ||
+      invoice.net_payable_after_advance != null,
+  );
+
 // Confirm record-payment for invoices selected on the pending list.
 const RecordPaymentDialog = ({
   open,
@@ -53,6 +67,7 @@ const RecordPaymentDialog = ({
   submitting = false,
 }) => {
   const selectedTotal = selectedInvoices.reduce((sum, invoice) => sum + (invoice.amount || 0), 0);
+  const hasConvertedInvoice = selectedInvoices.some((invoice) => Boolean(invoice.convertToInr));
   const maxPaymentDate = useMemo(() => {
     const now = new Date();
     const year = now.getFullYear();
@@ -63,7 +78,11 @@ const RecordPaymentDialog = ({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[calc(100vw-2rem)] max-w-lg overflow-hidden" data-testid="record-payment-dialog">
+      <DialogContent
+        className="w-[calc(100vw-2rem)] max-w-lg overflow-hidden"
+        data-testid="record-payment-dialog"
+        onInteractOutside={preventDialogOutsideDismiss}
+      >
         <DialogHeader>
           <DialogTitle>Record Payment</DialogTitle>
         </DialogHeader>
@@ -83,8 +102,30 @@ const RecordPaymentDialog = ({
                         <ClippedInvoiceLabel invoice={invoice} />
                       </div>
                       <span className="shrink-0 whitespace-nowrap text-muted-foreground">
-                        ₹{Number(invoice.amount || 0).toLocaleString('en-IN')}
+                        {formatCurrency(invoice.amount || 0, invoice.currency || 'INR')}
                       </span>
+                      {hasAdvanceAdjustment(invoice) ? (
+                        <span className="col-span-2 text-xs text-muted-foreground">
+                          Original: {formatCurrency(
+                            invoice.originalAmount ?? invoice.totalAmount ?? invoice.amount ?? 0,
+                            invoice.currency || 'INR',
+                          )} · Advance Adjusted: -{formatCurrency(
+                            invoice.advanceAdjustedTotal ?? invoice.advance_adjusted_total ?? 0,
+                            invoice.currency || 'INR',
+                          )} · Net Payable After Advance: {formatCurrency(
+                            invoice.netPayableAfterAdvance ??
+                              invoice.net_payable_after_advance ??
+                              invoice.amount ??
+                              0,
+                            invoice.currency || 'INR',
+                          )}
+                        </span>
+                      ) : null}
+                      {invoice.convertToInr && Number(invoice.matchingInrValue) > 0 ? (
+                        <span className="col-span-2 text-xs text-muted-foreground">
+                          Converted INR Amount: {formatCurrency(invoice.matchingInrValue, 'INR')}
+                        </span>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
@@ -93,7 +134,7 @@ const RecordPaymentDialog = ({
               )}
             </div>
             <p className="mt-1 text-xs text-muted-foreground">
-              Total: ₹{selectedTotal.toLocaleString('en-IN')} · Status will be set to <strong>PAID</strong>
+              Total: {hasConvertedInvoice ? 'INR payment required' : formatCurrency(selectedTotal, selectedInvoices[0]?.currency || 'INR')} · Status will be set to <strong>PAID</strong>
             </p>
           </div>
 
@@ -144,6 +185,24 @@ const RecordPaymentDialog = ({
               data-testid="record-payment-reference-input"
             />
           </div>
+
+          {hasConvertedInvoice ? (
+            <div>
+              <Label htmlFor="record-payment-actual-inr">Actual INR Amount *</Label>
+              <Input
+                id="record-payment-actual-inr"
+                type="number"
+                min="0"
+                step="0.01"
+                value={formData.actualInrAmount || ''}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, actualInrAmount: e.target.value }))
+                }
+                placeholder="Enter settlement amount in INR"
+                data-testid="record-payment-actual-inr-input"
+              />
+            </div>
+          ) : null}
 
           <Button
             type="submit"

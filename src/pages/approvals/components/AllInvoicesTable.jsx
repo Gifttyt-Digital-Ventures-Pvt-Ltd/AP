@@ -1,9 +1,8 @@
 import React, { useMemo } from "react";
-import { Eye, Search } from "lucide-react";
+import { Eye } from "lucide-react";
 import AppDataTable from "../../../components/common/AppDataTable";
 import { OrgBranchCell, VendorWithBranchCell } from "../../../components/common/BranchTableCells";
 import { Button } from "../../../components/ui/button";
-import { Input } from "../../../components/ui/input";
 import {
   Pagination,
   PaginationContent,
@@ -58,8 +57,6 @@ const baseAllInvoicesTableHeader = [
 
 const AllInvoicesTable = ({
   allInvoices,
-  searchTerm,
-  setSearchTerm,
   pagination,
   visiblePageNumbers = [],
   onPageChange,
@@ -193,17 +190,6 @@ const AllInvoicesTable = ({
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-4">
-      <div className="relative w-full shrink-0 sm:w-64 sm:max-w-xs">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          placeholder="Search vendor, invoice #, ref no, amount..."
-          value={searchTerm}
-          onChange={(event) => setSearchTerm(event.target.value)}
-          className="pl-10"
-          data-testid="approvals-all-search-input"
-        />
-      </div>
-
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
         <div className="min-h-0 flex-1 overflow-x-auto overflow-y-auto scrollbar-thin-muted">
           <AppDataTable

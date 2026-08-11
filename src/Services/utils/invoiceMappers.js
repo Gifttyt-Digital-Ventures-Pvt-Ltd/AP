@@ -6,6 +6,7 @@ import {
 import { normalizeMsmePaymentDue } from "../../pages/invoices/utils/msmePaymentDue";
 import { normalizeInvoiceOverdueFields } from "../../pages/invoices/utils/invoiceDueDate";
 import { normalizeExpenseType } from "../../pages/invoices/utils/invoiceAccountingFields";
+import { normalizeHistoricalAdvanceAdjustment } from "../../pages/invoices/utils/advanceAdjustment";
 
 const toLocalDateTimeString = (value) => {
   if (!value) return value;
@@ -18,6 +19,12 @@ const roundMoney = (value) => {
   if (value === null || value === undefined || value === "") return value;
   const numeric = Number(value);
   return Number.isFinite(numeric) ? Math.round(numeric * 100) / 100 : value;
+};
+
+const toNullableMoney = (value) => {
+  if (value === null || value === undefined || value === "") return null;
+  const rounded = roundMoney(value);
+  return Number.isFinite(Number(rounded)) ? Number(rounded) : null;
 };
 
 const normalizeDepartmentId = (value) => {
@@ -256,7 +263,10 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
 
   return {
     ...invoice,
+    ...normalizeHistoricalAdvanceAdjustment(invoice),
     currency: normalizeCurrencyCode(invoice.currency ?? invoice.currencyCode ?? DEFAULT_CURRENCY),
+    convertToInr: Boolean(invoice.convertToInr ?? invoice.convert_to_inr ?? false),
+    matchingInrValue: pickInvoiceField(invoice, "matchingInrValue", "matching_inr_value", ""),
     invoiceNumber: pickInvoiceField(invoice, "invoiceNumber", "invoice_number", ""),
     refNo: pickInvoiceField(invoice, "refNo", "ref_no", "") || null,
     vendorId: pickInvoiceField(invoice, "vendorId", "vendor_id", ""),
@@ -275,6 +285,11 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
       pickInvoiceField(invoice, "gstAmount", "gst_amount"),
     invoiceDate: pickInvoiceField(invoice, "invoiceDate", "invoice_date"),
     dueDate: pickInvoiceField(invoice, "dueDate", "due_date"),
+    isFunded: Boolean(pickInvoiceField(invoice, "isFunded", "is_funded", false)),
+    orgAmount: toNullableMoney(pickInvoiceField(invoice, "orgAmount", "org_amount", null)),
+    financierAmount: toNullableMoney(
+      pickInvoiceField(invoice, "financierAmount", "financier_amount", null),
+    ),
     ...normalizeInvoiceOverdueFields(invoice),
     totalAmount,
     amount: totalAmount ?? invoice.netAmount ?? invoice.net_amount,
@@ -282,6 +297,7 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
     billingAddress:
       pickInvoiceField(invoice, "billingAddress", "billing_address") ??
       pickInvoiceField(invoice, "vendorAddress", "vendor_address"),
+    shippingAddress: pickInvoiceField(invoice, "shippingAddress", "shipping_address", ""),
     billingGstin: pickInvoiceField(invoice, "billingGstin", "billing_gstin", ""),
     vendorAddress: pickInvoiceField(invoice, "vendorAddress", "vendor_address"),
     gstTreatment: pickInvoiceField(invoice, "gstTreatment", "gst_treatment"),
@@ -439,6 +455,11 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
       invoice.cancel_disabled_reason ??
       invoice.cancellationDisabledReason ??
       "",
+    internalChecklist: Array.isArray(
+      pickInvoiceField(invoice, "internalChecklist", "internal_checklist"),
+    )
+      ? pickInvoiceField(invoice, "internalChecklist", "internal_checklist")
+      : [],
     ...normalizeMsmePaymentDue(invoice),
   };
 };
@@ -559,6 +580,15 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
       pickInvoiceField(invoice, "invoiceDate", "invoice_date", ""),
     ),
     dueDate: dueDate || null,
+    isFunded: Boolean(pickInvoiceField(invoice, "isFunded", "is_funded", false)),
+    orgAmount: Boolean(pickInvoiceField(invoice, "isFunded", "is_funded", false))
+      ? toNullableMoney(pickInvoiceField(invoice, "orgAmount", "org_amount", null))
+      : null,
+    financierAmount: Boolean(pickInvoiceField(invoice, "isFunded", "is_funded", false))
+      ? toNullableMoney(
+          pickInvoiceField(invoice, "financierAmount", "financier_amount", null),
+        )
+      : null,
     totalAmount,
     amount: resolvedNetAmount,
     netAmount: resolvedNetAmount,
@@ -583,6 +613,14 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
       normalizeCurrencyCode(
         pickInvoiceField(invoice, "currency", "currency_code", ""),
       ) || DEFAULT_CURRENCY,
+    ...(pickInvoiceField(invoice, "convertToInr", "convert_to_inr") !== undefined
+      ? {
+          convertToInr: Boolean(pickInvoiceField(invoice, "convertToInr", "convert_to_inr", false)),
+          matchingInrValue: Boolean(pickInvoiceField(invoice, "convertToInr", "convert_to_inr", false))
+            ? toNullableMoney(pickInvoiceField(invoice, "matchingInrValue", "matching_inr_value", null))
+            : null,
+        }
+      : {}),
     memo:
       invoice.memo ??
       invoice.description ??
@@ -612,10 +650,18 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
       pickInvoiceField(invoice, "departmentId", "department_id"),
     ),
     departmentName: pickInvoiceField(invoice, "departmentName", "department_name", ""),
-    poId: pickInvoiceField(invoice, "poId", "po_id", ""),
-    poNumber: pickInvoiceField(invoice, "poNumber", "po_number", ""),
-    grnId: pickInvoiceField(invoice, "grnId", "grn_id", ""),
-    grnNumber: pickInvoiceField(invoice, "grnNumber", "grn_number", ""),
+    poId:
+      pickInvoiceField(invoice, "matchingPurchaseOrderId", "matching_purchase_order_id") ??
+      pickInvoiceField(invoice, "poId", "po_id", null),
+    poNumber:
+      pickInvoiceField(invoice, "matchingPoNumber", "matching_po_number") ??
+      pickInvoiceField(invoice, "poNumber", "po_number", null),
+    grnId:
+      pickInvoiceField(invoice, "matchingGrnId", "matching_grn_id") ??
+      pickInvoiceField(invoice, "grnId", "grn_id", null),
+    grnNumber:
+      pickInvoiceField(invoice, "matchingGrnNumber", "matching_grn_number") ??
+      pickInvoiceField(invoice, "grnNumber", "grn_number", null),
     matchingId: pickInvoiceField(invoice, "matchingId", "matching_id", ""),
     documentType: pickInvoiceField(invoice, "documentType", "document_type", "TAX_INVOICE"),
     ...(pickInvoiceField(invoice, "linkedProformaInvoiceId", "linked_proforma_invoice_id")
@@ -672,6 +718,11 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
       invoice.lineItemsExpanded ??
       invoice.line_items_expanded ??
       true,
+    internalChecklist: Array.isArray(
+      pickInvoiceField(invoice, "internalChecklist", "internal_checklist"),
+    )
+      ? pickInvoiceField(invoice, "internalChecklist", "internal_checklist")
+      : [],
   };
 };
 

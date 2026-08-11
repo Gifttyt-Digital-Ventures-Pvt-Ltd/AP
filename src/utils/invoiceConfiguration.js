@@ -4,7 +4,9 @@ export const INVOICE_CONFIG_SECTIONS = {
   BRANCH: 'BRANCH',
   SQ_FT: 'SQ_FT',
   NET_PAYABLE_EDIT: 'NET_PAYABLE_EDIT',
+  INVOICE_FUNDING: 'INVOICE_FUNDING',
   ALLOW_INVOICE_LINE_ITEM_REMOVAL: 'ALLOW_INVOICE_LINE_ITEM_REMOVAL',
+  INTERNAL_CHECKLIST: 'INTERNAL_CHECKLIST',
 };
 
 const INVOICE_LINE_ITEM_REMOVAL_SECTION_ALIASES = [
@@ -32,9 +34,19 @@ export const DEFAULT_INVOICE_CONFIGURATION = [
     section: INVOICE_CONFIG_SECTIONS.NET_PAYABLE_EDIT,
   },
   {
+    displayName: 'Invoice Funding',
+    screen: 'INVOICE',
+    section: INVOICE_CONFIG_SECTIONS.INVOICE_FUNDING,
+  },
+  {
     displayName: 'Allow Summary Only invoices',
     screen: 'INVOICE',
     section: INVOICE_CONFIG_SECTIONS.ALLOW_INVOICE_LINE_ITEM_REMOVAL,
+  },
+  {
+    displayName: 'Internal Checklist',
+    screen: 'INVOICE',
+    section: INVOICE_CONFIG_SECTIONS.INTERNAL_CHECKLIST,
   },
 ];
 
@@ -111,9 +123,21 @@ export const isNetPayableEditEnabled = (activeInvoiceConfiguration = []) =>
     activeInvoiceConfiguration,
   );
 
+export const isInvoiceFundingEnabled = (activeInvoiceConfiguration = []) =>
+  isInvoiceConfigurationEnabled(
+    INVOICE_CONFIG_SECTIONS.INVOICE_FUNDING,
+    activeInvoiceConfiguration,
+  );
+
 export const isInvoiceLineItemRemovalEnabled = (activeInvoiceConfiguration = []) =>
   INVOICE_LINE_ITEM_REMOVAL_SECTION_ALIASES.some((sectionId) =>
     isInvoiceConfigurationEnabled(sectionId, activeInvoiceConfiguration),
+  );
+
+export const isInternalChecklistEnabled = (activeInvoiceConfiguration = []) =>
+  isInvoiceConfigurationEnabled(
+    INVOICE_CONFIG_SECTIONS.INTERNAL_CHECKLIST,
+    activeInvoiceConfiguration,
   );
 
 export const isBranchEnabled = (

@@ -1,5 +1,11 @@
 export const FULL_ACCESS_PERMISSION = "FULL_ACCESS";
 
+// Connected Banking runtime is controlled by the dedicated subscription section.
+export const CONNECTED_BANKING_SECTION = "CONNECTED_BANKING_ALL";
+
+export const isBankingCorporateEntitlementEnabled = (isCorporateSectionEnabled) =>
+  isCorporateSectionEnabled(CONNECTED_BANKING_SECTION);
+
 export const ROUTE_PERMISSION_RULES = {
   "/dashboard": { anyOf: ["dashboard-view"] },
   "/vendors": { anyOf: ["vendors-view", "vendors-manage", "vendors-approve"] },
@@ -7,6 +13,7 @@ export const ROUTE_PERMISSION_RULES = {
     anyOf: ["campaign-view", "campaign-manage", "campaign-approve"],
   },
   "/purchase-orders": { anyOf: ["po-view", "po-manage", "po-approve"] },
+  "/order-tracking": { anyOf: ["order-tracking-view", "order-tracking-manage"] },
   "/goods-receipt": { anyOf: ["grn-view", "grn-manage", "grn-approve"] },
   "/invoices": {
     anyOf: [
@@ -15,7 +22,6 @@ export const ROUTE_PERMISSION_RULES = {
     ],
   },
   "/invoice-matching": { anyOf: ["matching-view", "matching-manage"] },
-  "/transactions": { anyOf: ["banking-view", "banking-full"] },
   "/approvals": {
     anyOf: [
       "invoice-checker",
@@ -25,9 +31,17 @@ export const ROUTE_PERMISSION_RULES = {
       // "payments-manage",
     ],
   },
-  "/payments": { anyOf: ["payments-view", "payments-manage"] },
+  "/payments": {
+    anyOf: [
+      "payments-view",
+      "payments-manage",
+      "payments-admin",
+      "payments-requester",
+      "payments-approver",
+    ],
+  },
   "/payment-batches": {
-    anyOf: ["payment-batches-view", "payment-batches-manage"],
+    anyOf: ["payment-batches-view", "payment-batches-manage", "payments-admin"],
   },
   "/tax-management": { anyOf: ["tax-view", "tax-manage"] },
   "/accounting": {
@@ -47,7 +61,7 @@ export const ROUTE_PERMISSION_RULES = {
   "/integrations/connect": {
     anyOf: ["integrations-manage"],
   },
-  "/banking": { anyOf: ["banking-view", "banking-full"] },
+  "/banking": { anyOf: ["banking-view", "banking-manage", "banking-full", "payments-admin"] },
   "/notifications": {},
   "/user-roles": {
     anyOf: [
@@ -56,14 +70,22 @@ export const ROUTE_PERMISSION_RULES = {
       "roles-manage-users",
       "approval-workflow-view",
       "approval-workflow-manage",
+      "payment-approval-workflow-view",
+      "payment-approval-workflow-manage",
       "category-view",
       "category-manage",
+      "department-view",
+      "department-manage",
     ],
   },
   "/settings": {
     anyOf: [
       "settings-org",
       "settings-banking",
+      "banking-view",
+      "banking-manage",
+      "banking-full",
+      "payments-admin",
       "notifications-manage",
       "credits-view",
       "credits-ledger",
@@ -87,13 +109,21 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
       "PURCHASE_ORDER_ALL",
     ],
   },
+  // No "/order-tracking" entitlement rule (yet): unlike every other route
+  // here, ORDER_TRACKING isn't a real corporate screen in the backend yet
+  // (this whole feature is still frontend-only mock data), so no account's
+  // allowedScreens/enabledSections can ever contain it - not even Corp
+  // Admin/FULL_ACCESS, since that check has no such bypass. The
+  // "/order-tracking" entry in ROUTE_PERMISSION_RULES above still applies
+  // (FULL_ACCESS or a future "order-tracking-view" permission), so this is
+  // the only gate today. Add this entry back once backend registers
+  // ORDER_TRACKING/ORDER_TRACKING_ALL - see docs/order-tracking-api-contract.md §5.
   "/goods-receipt": { screen: "GRN", anySections: ["GRN_ALL"] },
   "/invoices": { screen: "INVOICE", anySections: ["INVOICES_ALL"] },
   "/invoice-matching": {
     screen: "INVOICE_MATCHING",
     anySections: ["INVOICE_MATCHING_ALL"],
   },
-  "/transactions": { screen: "BANKING", anySections: ["BANKING_ALL"] },
   "/approvals": { screen: "APPROVAL", anySections: ["APPROVAL_ALL"] },
   "/payments": { screen: "PAYMENTS", anySections: ["PAYMENTS_ALL"] },
   "/payment-batches": {
@@ -127,7 +157,9 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
   "/integrations/erp": {
     anySections: ["SETTINGS_INTEGRATIONS"],
   },
-  "/banking": { anySections: ["SETTINGS_CONNECTED_BANKING"] },
+  "/banking": {
+    anySections: [CONNECTED_BANKING_SECTION],
+  },
   "/notifications": {
     screen: "SETTINGS",
     anySections: ["SETTINGS_NOTIFICATIONS"],
@@ -139,13 +171,14 @@ export const ROUTE_CORPORATE_ENTITLEMENT_RULES = {
       "MANAGE_ROLE_ROLES_PERMISSIONS",
       "MANAGE_ROLE_APPROVAL_WORKFLOW",
       "CATEGORY_ALL",
+      "DEPARTMENT_ALL",
     ],
   },
   "/settings": {
     screen: "SETTINGS",
     anySections: [
       "SETTINGS_ORG_DETAILS",
-      "SETTINGS_CONNECTED_BANKING",
+      CONNECTED_BANKING_SECTION,
       "SETTINGS_BILLING",
       "CREDITS_ALL",
       "WALLET_ALL",
@@ -161,7 +194,6 @@ export const DEFAULT_ROUTE_PRIORITY = [
   "/goods-receipt",
   "/invoices",
   "/invoice-matching",
-  "/transactions",
   "/approvals",
   "/payments",
   "/payment-batches",
@@ -216,15 +248,29 @@ export const ACTION_PERMISSION_RULES = {
   "matching.edit": { anyOf: ["matching-manage"] },
   "matching.exception": { anyOf: ["matching-manage"] },
 
-  "payments.releaseBulk": { anyOf: ["payments-manage"] },
+  "payments.releaseBulk": { anyOf: ["payments-manage", "payments-admin"] },
   "payments.create": { anyOf: ["payments-manage"] },
-  "payments.createBatch": { anyOf: ["payment-batches-manage"] },
+  "payments.createPayrun": { anyOf: ["payments-requester", "payments-manage"] },
+  "payments.createBatch": { anyOf: ["payment-batches-manage", "payments-admin"] },
+  "payments.approvePayrun": { anyOf: ["payments-approver", "payments-admin", "payments-manage"] },
+  "payments.rejectPayrun": { anyOf: ["payments-approver", "payments-admin", "payments-manage"] },
+  "payments.cancelPayrun": { anyOf: ["payments-requester", "payments-manage"] },
+  "payments.releasePayrun": { anyOf: ["payments-admin", "payments-manage"] },
 
-  "paymentBatches.process": { anyOf: ["payment-batches-manage"] },
-  "paymentBatches.markProcessed": { anyOf: ["payment-batches-manage"] },
-  "paymentBatches.generateFile": { anyOf: ["payment-batches-manage"] },
+  "banking.link": { anyOf: ["banking-manage", "banking-full", "settings-banking", "payments-admin"] },
+  "banking.cibRegister": { anyOf: ["banking-manage", "banking-full", "settings-banking", "payments-admin"] },
+  "banking.addBeneficiary": {
+    anyOf: ["beneficiary-manage", "banking-full", "banking-manage", "payments-admin"],
+  },
+  "banking.verifyBeneficiary": {
+    anyOf: ["beneficiary-manage", "banking-full", "banking-manage", "payments-admin"],
+  },
+  "banking.releasePayout": { anyOf: ["payments-manage", "payments-admin", "payouts-release"] },
 
-  "settings.createBankAccount": { anyOf: ["settings-banking", "banking-full"] },
+  "paymentBatches.process": { anyOf: ["payment-batches-manage", "payments-admin"] },
+  "paymentBatches.markProcessed": { anyOf: ["payment-batches-manage", "payments-admin"] },
+  "paymentBatches.generateFile": { anyOf: ["payment-batches-manage", "payments-admin"] },
+
   "settings.createOrganisation": { anyOf: ["settings-org"] },
   "settings.updateOrganisation": { anyOf: ["settings-org"] },
   "billing.requestTokens": { anyOf: ["credits-manage", "MANAGE_BILLING"] },
@@ -232,17 +278,22 @@ export const ACTION_PERMISSION_RULES = {
   "categories.create": { anyOf: ["category-manage"] },
   "categories.update": { anyOf: ["category-manage"] },
   "categories.delete": { anyOf: ["category-manage"] },
+  "departments.create": { anyOf: ["department-manage"] },
+  "departments.update": { anyOf: ["department-manage"] },
+  "departments.delete": { anyOf: ["department-manage"] },
 
   "tax.calculateTds": { anyOf: ["tax-manage"] },
   "tax.generateForm16a": { anyOf: ["tax-manage"] },
 
-  "transactions.uploadStatement": { anyOf: ["banking-full"] },
-  "transactions.deleteStatement": { anyOf: ["banking-full"] },
-  "transactions.update": { anyOf: ["banking-full"] },
-  "transactions.review": { anyOf: ["banking-full"] },
-  "transactions.undo": { anyOf: ["banking-full"] },
-  "transactions.uploadVoucher": { anyOf: ["banking-full"] },
-  "transactions.linkInvoice": { anyOf: ["banking-full"] },
+  "transactions.uploadStatement": {
+    anyOf: ["banking-view", "banking-manage", "banking-full", "payments-view", "payments-admin"],
+  },
+  "transactions.deleteStatement": { anyOf: ["banking-manage", "banking-full"] },
+  "transactions.update": { anyOf: ["banking-manage", "banking-full"] },
+  "transactions.review": { anyOf: ["banking-manage", "banking-full"] },
+  "transactions.undo": { anyOf: ["banking-manage", "banking-full"] },
+  "transactions.uploadVoucher": { anyOf: ["banking-manage", "banking-full"] },
+  "transactions.linkInvoice": { anyOf: ["banking-manage", "banking-full"] },
 
   "integrations.connect": { anyOf: ["integrations-manage"] },
   "integrations.disconnect": { anyOf: ["integrations-manage"] },
@@ -293,6 +344,16 @@ export const ACTION_PERMISSION_RULES = {
   "workflow.switch": { anyOf: ["approval-workflow-manage"] },
   "workflow.test": {
     anyOf: ["approval-workflow-view", "approval-workflow-manage"],
+  },
+  "paymentWorkflow.create": { anyOf: ["payment-approval-workflow-manage"] },
+  "paymentWorkflow.update": { anyOf: ["payment-approval-workflow-manage"] },
+  "paymentWorkflow.delete": { anyOf: ["payment-approval-workflow-manage"] },
+  "paymentWorkflow.switch": { anyOf: ["payment-approval-workflow-manage"] },
+  "paymentWorkflow.view": {
+    anyOf: [
+      "payment-approval-workflow-view",
+      "payment-approval-workflow-manage",
+    ],
   },
 };
 

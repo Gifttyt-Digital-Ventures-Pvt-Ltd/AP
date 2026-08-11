@@ -110,6 +110,7 @@ export const createDefaultLineItem = (currency = DEFAULT_CURRENCY) => {
     description: "",
     ledger: "",
     ledgerId: "",
+    ledgerName: "",
     accountGroupId: "",
     accountGroupName: "",
     groupId: "",
@@ -199,8 +200,19 @@ export const resolveInrTaxLabel = (item, taxesRaw = []) => {
 
 export const resolveScannedLineItemPricing = (item = {}) => {
   const quantity = Number(item?.quantity ?? item?.qty ?? 1) || 1;
-  const listUnitPrice =
-    Number(item?.unitPrice ?? item?.unitPrice ?? item?.price ?? 0) || 0;
+  const unitPriceSource =
+    item?.unitPrice ??
+    item?.unit_price ??
+    item?.unitRate ??
+    item?.unit_rate ??
+    item?.rate ??
+    item?.price;
+  const listUnitPrice = Number(unitPriceSource);
+  const hasExplicitUnitPrice =
+    unitPriceSource !== undefined &&
+    unitPriceSource !== null &&
+    unitPriceSource !== "" &&
+    Number.isFinite(listUnitPrice);
   const scannedLineTotal = Number(
     item?.lineTotal ?? item?.lineTotal ?? item?.amount ?? 0,
   );
@@ -208,22 +220,18 @@ export const resolveScannedLineItemPricing = (item = {}) => {
     item?.discountAmount ?? item?.discount_amount ?? item?.discountValue ?? 0,
   ) || 0;
   const grossAmount =
-    listUnitPrice > 0 ? quantity * listUnitPrice : scannedLineTotal + discountAmount;
+    hasExplicitUnitPrice && listUnitPrice > 0
+      ? quantity * listUnitPrice
+      : scannedLineTotal + discountAmount;
   const amount = grossAmount > 0 ? grossAmount : scannedLineTotal;
-  const effectiveUnitPrice =
-    listUnitPrice > 0
-      ? listUnitPrice
-      : quantity > 0 && amount > 0
-        ? amount / quantity
-        : 0;
 
   return {
     quantity,
-    unitPrice: effectiveUnitPrice,
+    unitPrice: hasExplicitUnitPrice ? listUnitPrice : "",
     amount,
     lineTotal: amount,
-    listUnitPrice: listUnitPrice,
-    listAmount: quantity * listUnitPrice,
+    listUnitPrice: hasExplicitUnitPrice ? listUnitPrice : "",
+    listAmount: hasExplicitUnitPrice ? quantity * listUnitPrice : 0,
   };
 };
 
@@ -403,14 +411,31 @@ export const mapExtractedLineItemToForm = (
 ) => {
   const quantity = Number(item.quantity || 1);
   const lineTotal = Number(item.lineTotal ?? item.amount ?? item.lineTotal ?? 0);
-  const unitPrice = Number(item.unitPrice ?? item.unitRate ?? item.unitPrice ?? 0);
-  const unitRate =
-    quantity > 0 && lineTotal > 0 ? lineTotal / quantity : unitPrice;
-  const resolvedLineTotal = lineTotal > 0 ? lineTotal : quantity * unitRate;
+  const unitRateSource =
+    item.unitRate ??
+    item.unit_rate ??
+    item.unitPrice ??
+    item.unit_price ??
+    item.rate ??
+    item.price;
+  const parsedUnitRate = Number(unitRateSource);
+  const hasExplicitUnitRate =
+    unitRateSource !== undefined &&
+    unitRateSource !== null &&
+    unitRateSource !== "" &&
+    Number.isFinite(parsedUnitRate);
+  const unitRate = hasExplicitUnitRate ? parsedUnitRate : "";
+  const resolvedLineTotal =
+    lineTotal > 0
+      ? lineTotal
+      : hasExplicitUnitRate
+        ? quantity * parsedUnitRate
+        : 0;
 
   return {
     description: item.description || "",
     ledger: item.ledger || item.ledgerName || item.ledger_name || "",
+    ledgerName: item.ledgerName || item.ledger_name || item.ledger || "",
     ledgerId: item.ledgerId || item.ledger_id || "",
     accountGroupId:
       item.accountGroupId || item.account_group_id || item.groupId || item.group_id || "",

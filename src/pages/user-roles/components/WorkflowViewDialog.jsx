@@ -46,12 +46,16 @@ const WorkflowViewDialog = ({
   onOpenChange,
   rule,
   categoryEnabled = true,
+  departmentEnabled = true,
   canManageWorkflow = false,
   onEdit,
 }) => {
   if (!rule) return null;
 
-  const visibility = getConditionVisibility(rule.type);
+  const visibility = getConditionVisibility(rule.type, {
+    categoryEnabled,
+    departmentEnabled,
+  });
   const vendorNames = Array.isArray(rule.vendorNames) ? rule.vendorNames : [];
   const departmentNames = Array.isArray(rule.departmentNames) ? rule.departmentNames : [];
   const categoryNames = Array.isArray(rule.categoryNames) ? rule.categoryNames : [];
@@ -134,7 +138,7 @@ const WorkflowViewDialog = ({
                   </DetailField>
                 )}
 
-                {visibility?.showDept && (
+                {departmentEnabled && visibility?.showDept && (
                   <DetailField label="Departments">
                     <NameList names={departmentNames} />
                   </DetailField>

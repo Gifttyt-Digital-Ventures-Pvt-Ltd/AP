@@ -54,7 +54,7 @@ const GrnPoPickerDialog = ({
               <TableRow key={po.id}>
                 <TableCell className="font-medium text-primary">{po.po_number}</TableCell>
                 <TableCell>{po.vendor_name}</TableCell>
-                <TableCell>{formatCurrency(po.total_amount)}</TableCell>
+                <TableCell>{formatCurrency(po.total_amount, po.currency)}</TableCell>
                 <TableCell>
                   <Badge
                     variant="outline"

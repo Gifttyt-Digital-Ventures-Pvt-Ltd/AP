@@ -11,7 +11,7 @@ const InvoiceTableLinkedTaxExpandedRow = ({
   canCancelLinkedInvoice,
   getStatusBadgeClass,
 }) => (
-  <TableRow className="border-b border-border bg-muted/30 hover:bg-muted/30">
+  <TableRow className="bg-muted/30 hover:bg-muted/30">
     <TableCell colSpan={colSpan} className="px-4 py-3">
       <InvoiceLinkedTaxInvoicesPanel
         linkedInvoices={linkedInvoices}

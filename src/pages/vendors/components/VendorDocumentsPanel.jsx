@@ -1,5 +1,5 @@
-import React, { useRef } from 'react';
-import { FileText, Trash2, Upload } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { Eye, FileText, Trash2, Upload } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
 import { Label } from '../../../components/ui/label';
@@ -11,6 +11,7 @@ import {
   getVendorDocumentValidationError,
   normalizeVendorDocuments,
 } from '../utils/vendorDocuments';
+import VendorDocumentPreviewDialog from './VendorDocumentPreviewDialog';
 
 const VendorDocumentRow = ({ docKey, label, document, onUpload, onRemove, disabled }) => {
   const inputRef = useRef(null);
@@ -96,11 +97,13 @@ const VendorDocumentsPanel = ({
   disabled = false,
   readOnly = false,
   visibleDocumentTypes = null,
+  gridClassName = null,
 }) => {
   const normalizedDocuments = normalizeVendorDocuments(documents);
   const documentTypes = Array.isArray(visibleDocumentTypes) && visibleDocumentTypes.length > 0
     ? visibleDocumentTypes
     : VENDOR_DOCUMENT_TYPES;
+  const [previewDoc, setPreviewDoc] = useState(null);
 
   const handleUpload = (docKey, meta) => {
     onChange?.({
@@ -127,31 +130,53 @@ const VendorDocumentsPanel = ({
     }
 
     return (
-      <div className="space-y-2">
-        {uploaded.map(({ key, label }) => {
-          const document = normalizedDocuments[key];
-          return (
-            <div
-              key={key}
-              className="flex items-start gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm"
-            >
-              <FileText className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
-              <div className="min-w-0">
-                <p className="font-medium text-foreground">{label}</p>
-                <p className="truncate text-muted-foreground">{document.fileName}</p>
-                <p className="text-xs text-muted-foreground">
-                  {formatVendorDocumentSize(document.fileSize)}
-                </p>
+      <>
+        <div className="space-y-2">
+          {uploaded.map(({ key, label }) => {
+            const document = normalizedDocuments[key];
+            return (
+              <div
+                key={key}
+                className="flex items-start justify-between gap-2 rounded-lg border border-border bg-background px-3 py-2 text-sm"
+              >
+                <div className="flex min-w-0 items-start gap-2">
+                  <FileText className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
+                  <div className="min-w-0">
+                    <p className="font-medium text-foreground">{label}</p>
+                    <p className="truncate text-muted-foreground">{document.fileName}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatVendorDocumentSize(document.fileSize)}
+                    </p>
+                  </div>
+                </div>
+                {document.fileUrl ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="shrink-0"
+                    onClick={() => setPreviewDoc({ label, document })}
+                  >
+                    <Eye className="mr-2 h-4 w-4" />
+                    View
+                  </Button>
+                ) : null}
               </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+        <VendorDocumentPreviewDialog
+          open={Boolean(previewDoc)}
+          onOpenChange={(open) => !open && setPreviewDoc(null)}
+          label={previewDoc?.label}
+          document={previewDoc?.document}
+        />
+      </>
     );
   }
 
   return (
-    <div className="space-y-3">
+    <div className={gridClassName || 'space-y-3'}>
       {documentTypes.map(({ key, label }) => (
         <VendorDocumentRow
           key={key}

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   useEditInvoiceMatchMutation,
   useGetAvailableGrnsQuery,
+  useGetAvailableMatchesForGrnQuery,
   useGetAvailableMatchingInvoicesQuery,
   useGetAvailablePurchaseOrdersQuery,
   useGetInvoiceMatchingDetailQuery,
@@ -37,6 +38,7 @@ import {
 } from "../../components/ui/table";
 import AppDataTable from "../../components/common/AppDataTable";
 import RefreshButton from "../../components/common/RefreshButton";
+import TableSortButton from "../../components/common/TableSortButton";
 import { Textarea } from "../../components/ui/textarea";
 import { cn } from "../../lib/utils";
 import { toast } from "sonner";
@@ -58,6 +60,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { useActionGuard } from "../../hooks/useActionGuard";
+import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { useCreditErrorHandler } from "../../contexts/CreditErrorContext";
 import MeteredActionCostHint from "../../components/credits/MeteredActionCostHint";
 import { useMeteredActionEstimate } from "../../hooks/useMeteredActionEstimate";
@@ -68,19 +71,39 @@ import MatchingInvoiceCountBadge from "./components/MatchingInvoiceCountBadge";
 import MatchChecklistPanel from "./components/MatchChecklistPanel";
 import { extractPageContent, extractMatchingGrns } from "../../Services/utils/payloadMappers";
 
-const STATUS_OPTIONS = [
-  { value: "ALL", label: "All Statuses" },
-  { value: "MATCHED", label: "Matched" },
-  { value: "PARTIAL_MATCH", label: "Partial Match" },
-  { value: "MISMATCH", label: "Mismatch" },
-  { value: "RESOLVED", label: "Resolved" },
-  { value: "EXCEPTION", label: "Exception" },
-];
-
 const MATCH_TYPE_OPTIONS = [
   { value: "ALL", label: "All Types" },
-  { value: "TWO_WAY", label: "2 Way" },
-  { value: "THREE_WAY", label: "3 Way" },
+  { value: "PO_INVOICE", label: "PO + Tax Invoice" },
+  { value: "PO_PI", label: "PO + PI" },
+  { value: "PO_PI_TI", label: "PO + PI + Tax Invoice" },
+  { value: "THREE_WAY", label: "PO + PI/TI + GRN" },
+  { value: "INVOICE_GRN", label: "PI/TI + GRN" },
+  { value: "PO_GRN", label: "PO + GRN" },
+];
+
+const MANUAL_MATCH_TYPE_OPTIONS = MATCH_TYPE_OPTIONS.filter((option) =>
+  option.value !== "ALL",
+);
+
+const GRN_MATCH_TYPES = new Set(["THREE_WAY", "INVOICE_GRN", "PO_GRN"]);
+
+const extractSuggestedMatchTypes = (response) => {
+  const values =
+    response?.availableMatchTypes ??
+    response?.available_match_types ??
+    response?.data?.availableMatchTypes ??
+    response?.data?.available_match_types ??
+    response?.matchTypes ??
+    response?.data?.matchTypes ??
+    [];
+
+  return Array.isArray(values)
+    ? values.map(normalizeMatchType).filter(Boolean)
+    : [];
+};
+
+const matchSortOptions = [
+  { value: "createdAt", label: "Upload date", defaultDirection: "desc" },
 ];
 
 const matchingTableHeader = [
@@ -127,6 +150,21 @@ const formatCurrency = (amount, currency = "INR") =>
     minimumFractionDigits: 2,
   }).format(Number(amount || 0));
 
+const renderAmountWithConversion = (amount, currency = "INR", record = {}) => (
+  <div className="space-y-0.5">
+    <div>{formatCurrency(amount, currency)}</div>
+    {record.convertToInr && Number(record.matchingInrValue) > 0 ? (
+      <div className="text-xs text-muted-foreground">
+        Converted INR Amount: {formatCurrency(record.matchingInrValue, "INR")}
+      </div>
+    ) : null}
+    {record.matchingReadinessStatus === "AWAITING_INR_VALUE" ||
+    record.readinessStatus === "AWAITING_INR_VALUE" ? (
+      <div className="text-xs font-medium text-amber-700">Awaiting INR Value</div>
+    ) : null}
+  </div>
+);
+
 const formatDate = (dateStr) => {
   if (!dateStr) return "-";
   const date = new Date(dateStr);
@@ -154,9 +192,9 @@ const normalizeStatus = (value) => {
 
 const normalizeMatchType = (value) => {
   const raw = String(value || "").trim().toUpperCase();
-  if (raw === "2_WAY" || raw === "PO_INVOICE" || raw === "PO_PI") return "TWO_WAY";
+  if (raw === "TWO_WAY" || raw === "2_WAY" || raw === "PO_TO_INVOICE") return "PO_INVOICE";
   if (raw === "3_WAY") return "THREE_WAY";
-  return raw || "TWO_WAY";
+  return raw || "PO_INVOICE";
 };
 
 const getMatchTypeLabel = (value) => {
@@ -164,7 +202,26 @@ const getMatchTypeLabel = (value) => {
   return MATCH_TYPE_OPTIONS.find((option) => option.value === normalized)?.label || normalized.replace(/_/g, " ");
 };
 
-const usesGrnPool = (matchType) => normalizeMatchType(matchType) === "THREE_WAY";
+const usesGrnPool = (matchType) =>
+  ["THREE_WAY", "INVOICE_GRN", "PO_GRN"].includes(normalizeMatchType(matchType));
+
+const getMatchTypeRequirements = (matchType) => {
+  switch (normalizeMatchType(matchType)) {
+    case "PO_PI":
+      return { taxInvoice: false, pi: true, anyDocument: false, po: true, grn: false };
+    case "PO_PI_TI":
+      return { taxInvoice: true, pi: true, anyDocument: false, po: true, grn: false };
+    case "THREE_WAY":
+      return { taxInvoice: false, pi: false, anyDocument: true, po: true, grn: true };
+    case "INVOICE_GRN":
+      return { taxInvoice: false, pi: false, anyDocument: true, po: false, grn: true };
+    case "PO_GRN":
+      return { taxInvoice: false, pi: false, anyDocument: false, po: true, grn: true };
+    case "PO_INVOICE":
+    default:
+      return { taxInvoice: true, pi: false, anyDocument: false, po: true, grn: false };
+  }
+};
 
 const normalizeMatching = (match = {}) => ({
   ...match,
@@ -175,9 +232,14 @@ const normalizeMatching = (match = {}) => ({
   poNumber: match.poNumber ?? match.po_number ?? match.purchaseOrder?.number ?? "",
   grnNumber: match.grnNumber ?? match.grn_number ?? match.grn?.number ?? "",
   matchType: normalizeMatchType(match.matchType ?? match.match_type),
+  currency: match.currency ?? match.currencyCode ?? match.invoice?.currency ?? match.purchaseOrder?.currency ?? "INR",
   invoiceAmount: Number(match.invoiceAmount ?? match.invoice_amount ?? match.invoice?.amount ?? 0),
   poAmount: Number(match.poAmount ?? match.po_amount ?? match.purchaseOrder?.amount ?? 0),
   grnAmount: Number(match.grnAmount ?? match.grn_amount ?? match.grn?.amount ?? 0),
+  convertToInr: Boolean(match.convertToInr ?? match.convert_to_inr ?? false),
+  matchingInrValue: match.matchingInrValue ?? match.matching_inr_value ?? "",
+  matchingReadinessStatus:
+    match.matchingReadinessStatus ?? match.matching_readiness_status ?? match.readinessStatus ?? match.readiness_status,
   varianceAmount: Number(match.varianceAmount ?? match.variance_amount ?? 0),
   variancePercentage: Number(match.variancePercentage ?? match.variance_percentage ?? 0),
   grnVarianceAmount: Number(match.grnVarianceAmount ?? match.grn_variance_amount ?? 0),
@@ -206,7 +268,11 @@ const normalizeMatchingGroup = (group = {}) => {
       vendorName: flatMatch.vendorName,
       grnNumber: flatMatch.grnNumber,
       matchType: flatMatch.matchType,
+      currency: group.currency ?? group.currencyCode ?? flatMatch.currency ?? "INR",
       poAmount: flatMatch.poAmount,
+      convertToInr: flatMatch.convertToInr,
+      matchingInrValue: flatMatch.matchingInrValue,
+      matchingReadinessStatus: flatMatch.matchingReadinessStatus,
       cumulativeInvoiceAmount: flatMatch.invoiceAmount,
       varianceAmount: flatMatch.varianceAmount,
       variancePercentage: flatMatch.variancePercentage,
@@ -234,7 +300,14 @@ const normalizeMatchingGroup = (group = {}) => {
     vendorName: group.vendorName ?? group.vendor_name ?? latestMatch.vendorName ?? "",
     grnNumber: group.grnNumber ?? group.grn_number ?? latestMatch.grnNumber ?? "",
     matchType: normalizeMatchType(group.matchType ?? group.match_type ?? latestMatch.matchType),
+    currency: group.currency ?? group.currencyCode ?? latestMatch.currency ?? "INR",
     poAmount: Number(group.poAmount ?? group.po_amount ?? latestMatch.poAmount ?? 0),
+    convertToInr: Boolean(group.convertToInr ?? group.convert_to_inr ?? latestMatch.convertToInr ?? false),
+    matchingInrValue: group.matchingInrValue ?? group.matching_inr_value ?? latestMatch.matchingInrValue ?? "",
+    matchingReadinessStatus:
+      group.matchingReadinessStatus ??
+      group.matching_readiness_status ??
+      latestMatch.matchingReadinessStatus,
     cumulativeInvoiceAmount: Number(
       group.cumulativeInvoiceAmount ??
         group.cumulative_invoice_amount ??
@@ -264,33 +337,66 @@ const normalizeInvoice = (invoice = {}) => ({
   ...invoice,
   id: invoice.id ?? invoice.invoiceId ?? invoice.invoice_id,
   invoiceNumber: invoice.invoiceNumber ?? invoice.invoice_number ?? invoice.number ?? "",
+  vendorId: invoice.vendorId ?? invoice.vendor_id ?? invoice.vendor?.id ?? "",
   vendorName: invoice.vendorName ?? invoice.vendor_name ?? "",
   totalAmount: Number(invoice.totalAmount ?? invoice.total_amount ?? invoice.amount ?? 0),
   remainingAmount: Number(
     invoice.remainingAmount ?? invoice.remaining_amount ?? invoice.totalAmount ?? invoice.amount ?? 0,
   ),
   currency: invoice.currency ?? "INR",
+  documentType: invoice.documentType ?? invoice.document_type ?? "",
+  linkedProformaInvoiceId:
+    invoice.linkedProformaInvoiceId ?? invoice.linked_proforma_invoice_id ?? invoice.piId ?? invoice.pi_id ?? "",
 });
+
+const isProformaDocument = (invoice = {}) =>
+  ["PROFORMA_INVOICE", "PROFORMA", "PI"].includes(
+    String(invoice.documentType || "").trim().toUpperCase(),
+  );
+
+const getVendorKey = (record = {}) =>
+  String(record.vendorId ?? record.vendor_id ?? record.vendor?.id ?? record.vendorName ?? record.vendor_name ?? "")
+    .trim()
+    .toLowerCase();
+
+const hasMixedVendors = (records = []) => {
+  const vendorKeys = records.map(getVendorKey).filter(Boolean);
+  return new Set(vendorKeys).size > 1;
+};
 
 const normalizePurchaseOrder = (po = {}) => ({
   ...po,
   id: po.id ?? po.poId ?? po.po_id ?? po.purchaseOrderId ?? po.purchase_order_id,
   poNumber: po.poNumber ?? po.po_number ?? po.number ?? "",
+  vendorId: po.vendorId ?? po.vendor_id ?? po.vendor?.id ?? "",
+  vendorName: po.vendorName ?? po.vendor_name ?? po.vendor?.name ?? "",
   date: po.date ?? po.poDate ?? po.po_date ?? po.poDateOrReceivedDate,
   amount: Number(po.amount ?? po.poAmount ?? po.po_amount ?? 0),
   currency: po.currency ?? "INR",
+  convertToInr: Boolean(po.convertToInr ?? po.convert_to_inr ?? false),
+  matchingInrValue: po.matchingInrValue ?? po.matching_inr_value ?? "",
+  readinessStatus: po.readinessStatus ?? po.readiness_status,
   varianceAmount: Number(po.varianceAmount ?? po.variance_amount ?? 0),
   variancePercentage: Number(po.variancePercentage ?? po.variance_percentage ?? 0),
-  recommendation: po.recommendation ?? "",
+  recommendation: po.recommendation ?? po.recommendationStatus ?? po.recommendation_status ?? "",
+  recommendationReason: po.recommendationReason ?? po.recommendation_reason ?? "",
 });
 
 const normalizeGrn = (grn = {}) => ({
   ...grn,
   id: grn.id ?? grn.grnId ?? grn.grn_id,
+  poId: grn.poId ?? grn.po_id ?? grn.purchaseOrderId ?? grn.purchase_order_id ?? "",
   grnNumber: grn.grnNumber ?? grn.grn_number ?? grn.number ?? "",
+  vendorId: grn.vendorId ?? grn.vendor_id ?? grn.vendor?.id ?? "",
+  vendorName: grn.vendorName ?? grn.vendor_name ?? grn.vendor?.name ?? "",
   amount: Number(grn.amount ?? grn.grnAmount ?? grn.grn_amount ?? 0),
   currency: grn.currency ?? "INR",
+  convertToInr: Boolean(grn.convertToInr ?? grn.convert_to_inr ?? false),
+  matchingInrValue: grn.matchingInrValue ?? grn.matching_inr_value ?? "",
+  readinessStatus: grn.readinessStatus ?? grn.readiness_status,
   receivedDate: grn.receivedDate ?? grn.received_date ?? grn.poDateOrReceivedDate,
+  recommendation: grn.recommendation ?? grn.recommendationStatus ?? grn.recommendation_status ?? "",
+  recommendationReason: grn.recommendationReason ?? grn.recommendation_reason ?? "",
 });
 
 const mergeById = (items, fallbackItem) => {
@@ -300,12 +406,56 @@ const mergeById = (items, fallbackItem) => {
   );
 };
 
+const extractSuggestionItems = (data = {}, keys = []) => {
+  const containers = [
+    data?.suggestions,
+    data?.data?.suggestions,
+    data?.data,
+    data,
+  ].filter(Boolean);
+
+  for (const container of containers) {
+    for (const key of keys) {
+      if (Array.isArray(container?.[key])) return container[key];
+    }
+  }
+
+  return [];
+};
+
+const isRecommendedOption = (item = {}) => {
+  const value = String(item.recommendation || item.recommendationStatus || "").trim().toUpperCase();
+  return Boolean(item.isRecommended || item.is_recommended || value === "RECOMMENDED" || value === "EXACT_MATCH");
+};
+
+const recommendationText = (item = {}) => {
+  if (isRecommendedOption(item)) return "Recommended";
+  return item.recommendationReason || item.recommendation || "";
+};
+
+const documentOptionLabel = (document = {}, fallback = "Document") => {
+  const typeLabel = isProformaDocument(document) ? "PI" : "TI";
+  const amount = formatCurrency(document.remainingAmount ?? document.totalAmount, document.currency);
+  return `${typeLabel} ${document.invoiceNumber || fallback} - ${document.vendorName || "-"} (${amount})`;
+};
+
+const purchaseOrderOptionLabel = (po = {}) => {
+  const note = recommendationText(po);
+  return `${po.poNumber || "PO"} - ${formatCurrency(po.amount, po.currency)}${note ? ` - ${note}` : ""}`;
+};
+
+const grnOptionLabel = (grn = {}) => {
+  const note = recommendationText(grn);
+  return `${grn.grnNumber || "GRN"} - ${formatCurrency(grn.amount, grn.currency)}${note ? ` - ${note}` : ""}`;
+};
+
 const emptyMatchForm = {
   invoiceId: "",
   invoiceIds: [],
+  piId: "",
   purchaseOrderId: "",
   grnId: "",
-  matchType: "TWO_WAY",
+  matchType: "PO_INVOICE",
   remarks: "",
 };
 
@@ -331,11 +481,11 @@ const InvoiceMatching = () => {
     status: "ALL",
     matchType: "ALL",
     search: "",
-    needsAttention: false,
     sortBy: "createdAt",
     sortDir: "desc",
   });
   const [searchInput, setSearchInput] = useState("");
+  const debouncedSearchInput = useDebouncedValue(searchInput.trim(), 300);
   const [showMatchDialog, setShowMatchDialog] = useState(false);
   const [showDetailDialog, setShowDetailDialog] = useState(false);
   const [showGroupChecklistDialog, setShowGroupChecklistDialog] = useState(false);
@@ -373,30 +523,73 @@ const InvoiceMatching = () => {
   });
   const { data: invoicesData = {}, isFetching: invoicesFetching } =
     useGetAvailableMatchingInvoicesQuery(
-      { page: 0, size: 100 },
+      {
+        page: 0,
+        size: 100,
+        matchType: normalizeMatchType(matchForm.matchType),
+        purchaseOrderId: matchForm.purchaseOrderId || undefined,
+        grnId: matchForm.grnId || undefined,
+        includeAll: true,
+        includeSuggestions: true,
+      },
       {
         skip: !showMatchDialog,
         refetchOnMountOrArgChange: true,
       },
     );
   const isEditMode = Boolean(editingMatching);
-  const selectedInvoiceIds = isEditMode
-    ? [matchForm.invoiceId].filter(Boolean)
-    : (matchForm.invoiceIds?.length ? matchForm.invoiceIds : [matchForm.invoiceId].filter(Boolean));
-  const firstSelectedInvoiceId = selectedInvoiceIds[0] || "";
+  const selectedMatchRequirements = getMatchTypeRequirements(matchForm.matchType);
+  const purchaseOrderPickerParams = useMemo(
+    () => ({
+      page: 0,
+      size: 100,
+      matchType: normalizeMatchType(matchForm.matchType),
+      invoiceId: matchForm.invoiceId || undefined,
+      piId: matchForm.piId || undefined,
+      includeAll: true,
+      includeSuggestions: true,
+    }),
+    [matchForm.invoiceId, matchForm.matchType, matchForm.piId],
+  );
   const { data: purchaseOrdersData = {}, isFetching: purchaseOrdersLoading } =
-    useGetAvailablePurchaseOrdersQuery(firstSelectedInvoiceId, {
-      skip: !showMatchDialog || !firstSelectedInvoiceId,
+    useGetAvailablePurchaseOrdersQuery(purchaseOrderPickerParams, {
+      skip: !showMatchDialog || !selectedMatchRequirements.po,
+      refetchOnMountOrArgChange: true,
     });
-  const { data: grnsData = {}, isFetching: grnsLoading } = useGetAvailableGrnsQuery(
+  const grnPickerParams = useMemo(() => {
+    if (!showMatchDialog || !selectedMatchRequirements.grn) return null;
+    return {
+      page: 0,
+      size: 100,
+      matchType: normalizeMatchType(matchForm.matchType),
+      poId: matchForm.purchaseOrderId || undefined,
+      invoiceId: matchForm.invoiceId || undefined,
+      piId: matchForm.piId || undefined,
+      includeAll: true,
+      includeSuggestions: true,
+    };
+  }, [
+    matchForm.invoiceId,
+    matchForm.matchType,
+    matchForm.piId,
     matchForm.purchaseOrderId,
+    selectedMatchRequirements.grn,
+    showMatchDialog,
+  ]);
+  const { data: grnsData = {}, isFetching: grnsLoading } = useGetAvailableGrnsQuery(
+    grnPickerParams,
     {
-      skip:
-        !showMatchDialog ||
-        !usesGrnPool(matchForm.matchType) ||
-        !matchForm.purchaseOrderId,
+      skip: !grnPickerParams,
+      refetchOnMountOrArgChange: true,
     },
   );
+  const {
+    data: grnMatchSuggestionsData,
+    isFetching: grnMatchSuggestionsLoading,
+  } = useGetAvailableMatchesForGrnQuery(matchForm.grnId, {
+    skip: !showMatchDialog || !matchForm.grnId,
+    refetchOnMountOrArgChange: true,
+  });
 
   const [getInvoiceMatchingDetail] = useLazyGetInvoiceMatchingDetailQuery();
   const [performInvoiceMatch, { isLoading: performing }] = usePerformInvoiceMatchMutation();
@@ -408,38 +601,122 @@ const InvoiceMatching = () => {
     () => extractPageContent(listData).map(normalizeMatchingGroup),
     [listData],
   );
+  const suggestedTaxInvoices = extractSuggestionItems(invoicesData, [
+    "taxInvoices",
+    "tax_invoices",
+    "taxInvoiceSuggestions",
+    "tax_invoice_suggestions",
+  ]);
+  const suggestedPis = extractSuggestionItems(invoicesData, [
+    "proformaInvoices",
+    "proforma_invoices",
+    "pis",
+    "piSuggestions",
+    "pi_suggestions",
+  ]);
+  const suggestedDocuments = extractSuggestionItems(invoicesData, [
+    "documents",
+    "documentSuggestions",
+    "document_suggestions",
+    "invoices",
+    "invoiceSuggestions",
+    "invoice_suggestions",
+  ]);
+  const documentPickerItems =
+    suggestedTaxInvoices.length || suggestedPis.length
+      ? [...suggestedTaxInvoices, ...suggestedPis]
+      : suggestedDocuments.length
+        ? suggestedDocuments
+        : extractPageContent(invoicesData);
+  const purchaseOrderPickerItems = extractSuggestionItems(purchaseOrdersData, [
+    "purchaseOrders",
+    "purchase_orders",
+    "poSuggestions",
+    "po_suggestions",
+    "suggestedPurchaseOrders",
+    "suggested_purchase_orders",
+  ]);
+  const grnPickerItems = extractSuggestionItems(grnsData, [
+    "grns",
+    "grnSuggestions",
+    "grn_suggestions",
+    "suggestedGrns",
+    "suggested_grns",
+  ]);
   const invoices = mergeById(
-    extractPageContent(invoicesData).map(normalizeInvoice),
+    documentPickerItems.map(normalizeInvoice),
     editingMatching?.invoice ? normalizeInvoice(editingMatching.invoice) : null,
   );
   const purchaseOrders = mergeById(
-    extractPageContent(purchaseOrdersData).map(normalizePurchaseOrder),
+    (purchaseOrderPickerItems.length ? purchaseOrderPickerItems : extractPageContent(purchaseOrdersData))
+      .map(normalizePurchaseOrder),
     editingMatching?.purchaseOrder ? normalizePurchaseOrder(editingMatching.purchaseOrder) : null,
   );
   const grns = mergeById(
-    extractMatchingGrns(grnsData).items.map(normalizeGrn),
+    (grnPickerItems.length ? grnPickerItems : extractMatchingGrns(grnsData).items).map(normalizeGrn),
     editingMatching?.grn ? normalizeGrn(editingMatching.grn) : null,
   );
-  const matchingGrnsAvailability = extractMatchingGrns(grnsData);
   const detail = detailData ? normalizeMatching(detailData) : selectedMatching;
   const totalPages = Number(listData?.totalPages ?? 1) || 1;
   const totalElements = Number(listData?.totalElements ?? matchingGroups.length) || 0;
   const loading = summaryLoading || listLoading;
   const matchCostEstimate = useMeteredActionEstimate(
     CREDIT_ACTION_CODES.INVOICE_MATCHING,
-    isEditMode ? 0 : Math.max(selectedInvoiceIds.length, 1),
+    isEditMode ? 0 : 1,
   );
+  const taxInvoiceOptions = invoices.filter((invoice) => !isProformaDocument(invoice));
+  const piOptions = invoices.filter(isProformaDocument);
+  const selectedInvoiceIds = matchForm.invoiceIds?.length
+    ? matchForm.invoiceIds
+    : [matchForm.invoiceId].filter(Boolean);
   const selectedInvoices = invoices.filter((invoice) => selectedInvoiceIds.includes(invoice.id));
   const selectedInvoice = selectedInvoices[0];
+  const selectedPi = invoices.find((invoice) => invoice.id === matchForm.piId);
+  const selectedDocuments = selectedInvoices.length
+    ? selectedInvoices
+    : [selectedPi].filter(Boolean);
+  const selectedDocument = selectedDocuments[0];
   const selectedPo = purchaseOrders.find((po) => po.id === matchForm.purchaseOrderId);
+  const selectedGrn = grns.find((grn) => grn.id === matchForm.grnId);
+  const selectedMatchNeedsPo = selectedMatchRequirements.po;
+  const selectedMatchNeedsGrn = selectedMatchRequirements.grn;
   const availableMatchTypeOptions = canUseThreeWayMatching
     ? MATCH_TYPE_OPTIONS
-    : MATCH_TYPE_OPTIONS.filter((option) => option.value !== "THREE_WAY");
+    : MATCH_TYPE_OPTIONS.filter((option) => !GRN_MATCH_TYPES.has(option.value));
+  const suggestedMatchTypes = useMemo(
+    () => extractSuggestedMatchTypes(grnMatchSuggestionsData),
+    [grnMatchSuggestionsData],
+  );
+  const manualMatchTypeOptions = useMemo(() => {
+    const subscriptionAllowed = canUseThreeWayMatching
+      ? MANUAL_MATCH_TYPE_OPTIONS
+      : MANUAL_MATCH_TYPE_OPTIONS.filter((option) => !GRN_MATCH_TYPES.has(option.value));
+
+    if (suggestedMatchTypes.length === 0) return subscriptionAllowed;
+
+    const suggested = new Set(suggestedMatchTypes);
+    return subscriptionAllowed.filter((option) => suggested.has(option.value));
+  }, [canUseThreeWayMatching, suggestedMatchTypes]);
+  const matchQuickFilters = [
+    { value: "ALL", label: "All", count: Number(summary.totalMatchings ?? 0) },
+    { value: "MATCHED", label: "Matched", count: Number(summary.matched ?? 0) },
+    { value: "PARTIAL_MATCH", label: "Partially Matched", count: Number(summary.partialMatch ?? 0) },
+    { value: "MISMATCH", label: "Mismatch", count: Number(summary.mismatch ?? 0) },
+    { value: "RESOLVED", label: "Resolved", count: Number(summary.resolved ?? 0) },
+  ];
+
+  useEffect(() => {
+    setQuery((current) =>
+      current.search === debouncedSearchInput
+        ? current
+        : { ...current, page: 0, search: debouncedSearchInput },
+    );
+  }, [debouncedSearchInput]);
 
   useEffect(() => {
     if (canUseThreeWayMatching) return;
 
-    if (query.matchType === "THREE_WAY") {
+    if (GRN_MATCH_TYPES.has(query.matchType)) {
       setQuery((current) => ({
         ...current,
         page: 0,
@@ -449,14 +726,33 @@ const InvoiceMatching = () => {
   }, [canUseThreeWayMatching, query.matchType]);
 
   useEffect(() => {
-    if (canUseThreeWayMatching || matchForm.matchType !== "THREE_WAY") return;
+    if (canUseThreeWayMatching || !GRN_MATCH_TYPES.has(matchForm.matchType)) return;
 
     setMatchForm((current) => ({
       ...current,
-      matchType: "TWO_WAY",
+      matchType: "PO_INVOICE",
       grnId: "",
     }));
   }, [canUseThreeWayMatching, matchForm.matchType]);
+
+  useEffect(() => {
+    if (!showMatchDialog || !matchForm.grnId || suggestedMatchTypes.length === 0) return;
+    if (suggestedMatchTypes.includes(normalizeMatchType(matchForm.matchType))) return;
+
+    const nextMatchType = manualMatchTypeOptions[0]?.value;
+    if (!nextMatchType) return;
+
+    setMatchForm((current) => ({
+      ...current,
+      matchType: nextMatchType,
+    }));
+  }, [
+    manualMatchTypeOptions,
+    matchForm.grnId,
+    matchForm.matchType,
+    showMatchDialog,
+    suggestedMatchTypes,
+  ]);
 
   const refreshData = async () => {
     try {
@@ -485,12 +781,24 @@ const InvoiceMatching = () => {
     try {
       const detailRecord = await getInvoiceMatchingDetail(match.id).unwrap();
       setEditingMatching(detailRecord);
+      const normalizedType = normalizeMatchType(detailRecord.matchType ?? match.matchType);
+      const detailInvoice = normalizeInvoice(detailRecord.invoice || {});
+      const detailPiId =
+        detailRecord.pi?.id ??
+        detailRecord.proformaInvoice?.id ??
+        detailRecord.proforma_invoice?.id ??
+        detailRecord.piId ??
+        detailRecord.pi_id ??
+        (isProformaDocument(detailInvoice) ? detailInvoice.id : "");
       setMatchForm({
-        invoiceId: detailRecord.invoice?.id ?? detailRecord.invoiceId ?? "",
+        invoiceId: isProformaDocument(detailInvoice)
+          ? ""
+          : detailRecord.invoice?.id ?? detailRecord.invoiceId ?? "",
         invoiceIds: [],
+        piId: detailPiId,
         purchaseOrderId: detailRecord.purchaseOrder?.id ?? detailRecord.purchaseOrderId ?? "",
         grnId: detailRecord.grn?.id ?? detailRecord.grnId ?? "",
-        matchType: normalizeMatchType(detailRecord.matchType ?? match.matchType),
+        matchType: normalizedType,
         remarks: "",
       });
       setShowMatchDialog(true);
@@ -500,30 +808,98 @@ const InvoiceMatching = () => {
   };
 
   const handleInvoiceChange = (invoiceId) => {
+    const nextInvoice = invoices.find((invoice) => invoice.id === invoiceId);
+    const currentPi = invoices.find((invoice) => invoice.id === matchForm.piId);
+    if (hasMixedVendors([nextInvoice, currentPi].filter(Boolean))) {
+      toast.error("Selected TI and PI must belong to the same vendor");
+      return;
+    }
+
     setMatchForm((current) => ({
       ...current,
       invoiceId,
       invoiceIds: invoiceId ? [invoiceId] : [],
-      purchaseOrderId: "",
-      grnId: "",
     }));
   };
 
   const handleInvoiceToggle = (invoiceId, checked) => {
-    setMatchForm((current) => {
-      const currentIds = current.invoiceIds?.length ? current.invoiceIds : [current.invoiceId].filter(Boolean);
-      const nextIds = checked
-        ? [...new Set([...currentIds, invoiceId])]
-        : currentIds.filter((id) => id !== invoiceId);
+    const currentIds = matchForm.invoiceIds?.length
+      ? matchForm.invoiceIds
+      : [matchForm.invoiceId].filter(Boolean);
+    const nextIds = checked
+      ? [...new Set([...currentIds, invoiceId])]
+      : currentIds.filter((id) => id !== invoiceId);
+    const nextDocuments = invoices.filter((invoice) => nextIds.includes(invoice.id));
 
-      return {
-        ...current,
-        invoiceId: nextIds[0] || "",
-        invoiceIds: nextIds,
-        purchaseOrderId: "",
-        grnId: "",
-      };
-    });
+    if (hasMixedVendors(nextDocuments)) {
+      toast.error("Selected invoices must belong to the same vendor");
+      return;
+    }
+
+    setMatchForm((current) => ({
+      ...current,
+      invoiceId: nextIds[0] || "",
+      invoiceIds: nextIds,
+    }));
+  };
+
+  const handlePiChange = (piId) => {
+    const nextPi = invoices.find((invoice) => invoice.id === piId);
+    const currentInvoice = invoices.find((invoice) => invoice.id === matchForm.invoiceId);
+    if (hasMixedVendors([currentInvoice, nextPi].filter(Boolean))) {
+      toast.error("Selected TI and PI must belong to the same vendor");
+      return;
+    }
+
+    setMatchForm((current) => ({
+      ...current,
+      piId,
+    }));
+  };
+
+  const handleDocumentToggle = (document, checked) => {
+    const currentIds = matchForm.invoiceIds?.length
+      ? matchForm.invoiceIds
+      : [matchForm.invoiceId, matchForm.piId].filter(Boolean);
+    const nextIds = checked
+      ? [...new Set([...currentIds, document.id])]
+      : currentIds.filter((id) => id !== document.id);
+    const selectedDocs = invoices.filter((invoice) => nextIds.includes(invoice.id));
+    const nextTaxInvoice = selectedDocs.find((invoice) => !isProformaDocument(invoice));
+    const nextPi = selectedDocs.find(isProformaDocument);
+
+    if (hasMixedVendors(selectedDocs)) {
+      toast.error("Selected documents must belong to the same vendor");
+      return;
+    }
+
+    setMatchForm((current) => ({
+      ...current,
+      invoiceId: nextTaxInvoice?.id || "",
+      invoiceIds: nextIds,
+      piId: nextPi?.id || "",
+    }));
+  };
+
+  const handlePiToggle = (piId, checked) => {
+    const currentIds = matchForm.invoiceIds?.length
+      ? matchForm.invoiceIds
+      : [matchForm.piId].filter(Boolean);
+    const nextIds = checked
+      ? [...new Set([...currentIds, piId])]
+      : currentIds.filter((id) => id !== piId);
+    const nextDocuments = invoices.filter((invoice) => nextIds.includes(invoice.id));
+
+    if (hasMixedVendors(nextDocuments)) {
+      toast.error("Selected PI documents must belong to the same vendor");
+      return;
+    }
+
+    setMatchForm((current) => ({
+      ...current,
+      invoiceIds: nextIds,
+      piId: nextIds[0] || "",
+    }));
   };
 
   const handlePoChange = (purchaseOrderId) => {
@@ -536,37 +912,83 @@ const InvoiceMatching = () => {
 
   const handleMatchSubmit = async () => {
     const action = isEditMode ? "matching.edit" : "matching.perform";
+    const requirements = getMatchTypeRequirements(matchForm.matchType);
     if (!guardAction(action)) return;
-    if (selectedInvoiceIds.length === 0) {
-      toast.error("Please select an invoice");
+    const selectedTaxInvoiceIds = matchForm.invoiceIds?.length
+      ? matchForm.invoiceIds
+      : [matchForm.invoiceId].filter(Boolean);
+    const selectedPiIds = matchForm.invoiceIds?.length
+      ? matchForm.invoiceIds
+      : [matchForm.piId].filter(Boolean);
+    const selectedDocumentIds = matchForm.invoiceIds?.length
+      ? matchForm.invoiceIds
+      : [matchForm.invoiceId, matchForm.piId].filter(Boolean);
+
+    if (requirements.taxInvoice && selectedTaxInvoiceIds.length === 0) {
+      toast.error("Please select a tax invoice");
       return;
     }
-    if (!matchForm.purchaseOrderId) {
+    if (requirements.pi && selectedPiIds.length === 0) {
+      toast.error("Please select a PI");
+      return;
+    }
+    if (requirements.anyDocument && selectedDocumentIds.length === 0) {
+      toast.error("Please select an invoice or PI");
+      return;
+    }
+    if (requirements.po && !matchForm.purchaseOrderId) {
       toast.error("Please select a purchase order");
       return;
     }
-    if (!isEditMode && selectedInvoices.length > 1) {
-      const vendorNames = new Set(selectedInvoices.map((invoice) => String(invoice.vendorName || "").trim().toUpperCase()));
-      const currencies = new Set(selectedInvoices.map((invoice) => String(invoice.currency || "INR").trim().toUpperCase()));
-      if (vendorNames.size > 1 || currencies.size > 1) {
-        toast.error("Select invoices from the same vendor and currency for batch matching");
-        return;
-      }
+    if (requirements.grn && !matchForm.grnId) {
+      toast.error("Please select a GRN");
+      return;
     }
-    if (usesGrnPool(matchForm.matchType) && matchingGrnsAvailability.items.length === 0) {
-      toast.error("No approved GRNs on this PO yet");
+    if (hasMixedVendors([...selectedDocuments, selectedPo, selectedGrn].filter(Boolean))) {
+      toast.error("Selected documents, PO, and GRN must belong to the same vendor");
       return;
     }
 
-    const body = {
-      purchaseOrderId: matchForm.purchaseOrderId,
-      grnId: null,
-      matchType: matchForm.matchType,
+    let body = {
+      matchType: normalizeMatchType(matchForm.matchType),
     };
-    if (isEditMode || selectedInvoiceIds.length <= 1) {
-      body.invoiceId = selectedInvoiceIds[0];
-    } else {
-      body.invoiceIds = selectedInvoiceIds;
+    if (requirements.po) {
+      body.purchaseOrderId = matchForm.purchaseOrderId;
+    }
+    if (requirements.taxInvoice || (requirements.anyDocument && matchForm.invoiceId)) {
+      if (!isEditMode && selectedTaxInvoiceIds.length > 1) {
+        body.invoiceIds = selectedTaxInvoiceIds;
+      } else {
+        body.invoiceId = selectedTaxInvoiceIds[0] || matchForm.invoiceId;
+      }
+      body.matchedDocType = "TAX_INVOICE";
+    }
+    if (requirements.pi || (requirements.anyDocument && matchForm.piId)) {
+      if (!isEditMode && selectedPiIds.length > 1) {
+        body.invoiceIds = selectedPiIds;
+      }
+      body.piId = selectedPiIds[0] || matchForm.piId;
+      body.matchedDocType = "PROFORMA_INVOICE";
+    }
+    if (requirements.anyDocument && !requirements.taxInvoice && !requirements.pi) {
+      if (!isEditMode && selectedDocumentIds.length > 1) {
+        body.invoiceIds = selectedDocumentIds;
+      } else if (matchForm.invoiceId) {
+        body.invoiceId = matchForm.invoiceId;
+      }
+      if (matchForm.piId) {
+        body.piId = matchForm.piId;
+      }
+      if (selectedDocuments.length > 0) {
+        const hasPi = selectedDocuments.some(isProformaDocument);
+        const hasTaxInvoice = selectedDocuments.some((invoice) => !isProformaDocument(invoice));
+        if (hasPi !== hasTaxInvoice) {
+          body.matchedDocType = hasPi ? "PROFORMA_INVOICE" : "TAX_INVOICE";
+        }
+      }
+    }
+    if (requirements.grn) {
+      body.grnId = matchForm.grnId;
     }
     if (isEditMode && matchForm.remarks.trim()) {
       body.remarks = matchForm.remarks.trim();
@@ -615,10 +1037,16 @@ const InvoiceMatching = () => {
   };
 
   const getSubmitDisabledReason = () => {
+    const requirements = getMatchTypeRequirements(matchForm.matchType);
+    const selectedIds = matchForm.invoiceIds?.length
+      ? matchForm.invoiceIds
+      : [matchForm.invoiceId, matchForm.piId].filter(Boolean);
     if (performing || editing) return "Saving match...";
-    if (selectedInvoiceIds.length === 0) return "Select a document";
-    if (!matchForm.purchaseOrderId) return "Select a purchase order";
-    if (usesGrnPool(matchForm.matchType) && !grnsLoading && matchingGrnsAvailability.items.length === 0) return "No approved GRNs on this PO yet";
+    if (requirements.taxInvoice && selectedIds.length === 0) return "Select a tax invoice";
+    if (requirements.pi && selectedIds.length === 0) return "Select a PI";
+    if (requirements.anyDocument && selectedIds.length === 0) return "Select an invoice or PI";
+    if (requirements.po && !matchForm.purchaseOrderId) return "Select a purchase order";
+    if (requirements.grn && !matchForm.grnId) return "Select a GRN";
     return "";
   };
 
@@ -806,16 +1234,18 @@ const InvoiceMatching = () => {
                 break;
               case "matchType":
                 value = (
-                  <Badge variant="outline">{getMatchTypeLabel(group.matchType)}</Badge>
+                  <Badge variant="outline" className={'whitespace-nowrap'}>{getMatchTypeLabel(group.matchType)}</Badge>
                 );
                 break;
               case "poAmount":
-                value = formatCurrency(group.poAmount);
+                value = renderAmountWithConversion(group.poAmount, group.currency, group);
                 break;
               case "matchedAmount":
                 value = (
                   <div>
-                    <div className="font-medium">{formatCurrency(group.cumulativeInvoiceAmount)}</div>
+                    <div className="font-medium">
+                      {renderAmountWithConversion(group.cumulativeInvoiceAmount, group.currency, group)}
+                    </div>
                     <div className="mt-1 h-1.5 w-32 overflow-hidden rounded-full bg-muted">
                       <div className="h-full rounded-full bg-primary" style={{ width: `${progressValue}%` }} />
                     </div>
@@ -891,7 +1321,7 @@ const InvoiceMatching = () => {
             value = formatDate(po.date);
             break;
           case "amount":
-            value = formatCurrency(po.amount, po.currency);
+            value = renderAmountWithConversion(po.amount, po.currency, po);
             break;
           case "variance":
             value = `${formatCurrency(po.varianceAmount, po.currency)} (${formatPercent(po.variancePercentage)}%)`;
@@ -954,98 +1384,51 @@ const InvoiceMatching = () => {
         </div>
       </div>
 
-      <div className="grid shrink-0 grid-cols-1 gap-4 md:grid-cols-4 lg:grid-cols-7">
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">Total</p>
-            <p className="text-2xl font-bold">{Number(summary.totalMatchings ?? 0)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">Matched</p>
-            <p className="text-2xl font-bold text-green-600">{Number(summary.matched ?? 0)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">Partial</p>
-            <p className="text-2xl font-bold text-yellow-600">{Number(summary.partialMatch ?? 0)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">Mismatch</p>
-            <p className="text-2xl font-bold text-red-600">{Number(summary.mismatch ?? 0)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">Resolved</p>
-            <p className="text-2xl font-bold text-blue-600">{Number(summary.resolved ?? 0)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">2 Way</p>
-            <p className="text-2xl font-bold">{Number(summary.twoWayMatches ?? 0)}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardContent className="pt-4">
-            <p className="text-sm text-muted-foreground">3 Way</p>
-            <p className="text-2xl font-bold">{Number(summary.threeWayMatches ?? 0)}</p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="flex shrink-0 flex-col gap-3 md:flex-row md:items-center">
-        <div className="relative flex-1 md:max-w-sm">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            placeholder="Search invoice, PO, or vendor..."
-            value={searchInput}
-            onChange={(event) => setSearchInput(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") updateQuery({ search: searchInput.trim() });
-            }}
-            className="pl-10"
-            data-testid="search-matching-input"
+      <div className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="flex flex-wrap gap-2">
+          {matchQuickFilters.map(({ value, label, count }) => (
+            <Button
+              key={value}
+              type="button"
+              size="sm"
+              variant={query.status === value ? "default" : "outline"}
+              onClick={() => updateQuery({ status: value })}
+              data-testid={`match-filter-${value}`}
+            >
+              {label} ({count})
+            </Button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative w-full sm:w-64 sm:max-w-xs">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              placeholder="Search invoice, PO, or vendor..."
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              className="pl-10"
+              data-testid="search-matching-input"
+            />
+          </div>
+          <Select value={query.matchType} onValueChange={(matchType) => updateQuery({ matchType })}>
+            <SelectTrigger className="w-full md:w-40" data-testid="match-type-filter">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {availableMatchTypeOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <TableSortButton
+            options={matchSortOptions}
+            value={query.sortBy}
+            direction={query.sortDir}
+            onChange={({ value, direction }) => updateQuery({ sortBy: value, sortDir: direction })}
           />
         </div>
-        <Button variant="outline" onClick={() => updateQuery({ search: searchInput.trim() })}>
-          Search
-        </Button>
-        <Select value={query.status} onValueChange={(status) => updateQuery({ status })}>
-          <SelectTrigger className="w-full md:w-48" data-testid="status-filter">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {STATUS_OPTIONS.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={query.matchType} onValueChange={(matchType) => updateQuery({ matchType })}>
-          <SelectTrigger className="w-full md:w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {availableMatchTypeOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Button
-          variant={query.needsAttention ? "default" : "outline"}
-          onClick={() => updateQuery({ needsAttention: !query.needsAttention })}
-        >
-          Needs Attention
-        </Button>
       </div>
 
       {/* Bounded to the remaining height so the table can scroll its rows internally with a
@@ -1115,6 +1498,10 @@ const InvoiceMatching = () => {
                     setMatchForm((current) => ({
                       ...current,
                       matchType,
+                      invoiceId: "",
+                      invoiceIds: [],
+                      piId: "",
+                      purchaseOrderId: "",
                       grnId: "",
                     }))
                   }
@@ -1123,7 +1510,7 @@ const InvoiceMatching = () => {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {availableMatchTypeOptions
+                    {manualMatchTypeOptions
                       .filter((option) => option.value !== "ALL")
                       .map((option) => (
                         <SelectItem key={option.value} value={option.value}>
@@ -1134,99 +1521,273 @@ const InvoiceMatching = () => {
                 </Select>
               ) : (
                 <div className="flex min-h-10 items-center justify-between rounded-md border bg-muted/40 px-3 text-sm">
-                  <span className="font-medium">2 Way Matching</span>
+                  <span className="font-medium">PO + Invoice Matching</span>
                   <Badge variant="outline">Default</Badge>
                 </div>
               )}
+              {matchForm.grnId ? (
+                <p className="text-xs text-muted-foreground">
+                  {grnMatchSuggestionsLoading
+                    ? "Loading match type suggestions from the selected GRN..."
+                    : suggestedMatchTypes.length > 0
+                      ? "Match types are suggested by the selected GRN."
+                      : "No GRN-specific match type suggestions returned yet."}
+                </p>
+              ) : null}
             </div>
 
-            <div className="space-y-2">
-              <Label>{isEditMode ? "Select Document" : "Select Document(s)"}</Label>
-              {isEditMode ? (
-                <Select value={matchForm.invoiceId} onValueChange={handleInvoiceChange}>
-                  <SelectTrigger data-testid="select-invoice">
-                    <SelectValue
-                      placeholder={
-                        invoicesFetching && invoices.length === 0
-                          ? "Loading documents..."
-                          : "Select an invoice or PI"
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {invoices.map((invoice) => (
-                      <SelectItem key={invoice.id} value={invoice.id}>
-                        {invoice.invoiceNumber} - {invoice.vendorName} ({formatCurrency(invoice.remainingAmount, invoice.currency)})
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <div className="max-h-64 overflow-y-auto rounded-md border bg-white">
-                  {invoicesFetching && invoices.length === 0 ? (
-                    <div className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading documents...
-                    </div>
-                  ) : invoices.length === 0 ? (
-                    <div className="px-3 py-4 text-sm text-muted-foreground">No available invoice or PI found.</div>
-                  ) : (
-                    invoices.map((invoice) => {
-                      const checked = selectedInvoiceIds.includes(invoice.id);
-                      return (
-                        <label
-                          key={invoice.id}
-                          className="flex cursor-pointer items-start gap-3 border-b px-3 py-3 last:border-b-0 hover:bg-muted/40"
-                        >
-                          <Checkbox
-                            checked={checked}
-                            onCheckedChange={(value) => handleInvoiceToggle(invoice.id, Boolean(value))}
-                            data-testid={`select-invoice-${invoice?.id ?? 'unknown'}`}
-                          />
-                          <span className="min-w-0 flex-1">
-                            <span className="block font-medium">{invoice.invoiceNumber || "-"}</span>
-                            <span className="block text-xs text-muted-foreground">
-                              {invoice.vendorName || "-"} · {formatCurrency(invoice.remainingAmount, invoice.currency)}
+            {selectedMatchRequirements.anyDocument ? (
+              <div className="space-y-2">
+                <Label>{isEditMode ? "Invoice / PI" : "Invoice / PI Document(s)"}</Label>
+                {isEditMode ? (
+                  <Select
+                    value={
+                      matchForm.piId
+                        ? `PI:${matchForm.piId}`
+                        : matchForm.invoiceId
+                          ? `TI:${matchForm.invoiceId}`
+                          : ""
+                    }
+                    onValueChange={(value) => {
+                      const [type, id] = String(value || "").split(":");
+                      setMatchForm((current) => ({
+                        ...current,
+                        invoiceId: type === "TI" ? id : "",
+                        invoiceIds: type === "TI" && id ? [id] : [],
+                        piId: type === "PI" ? id : "",
+                      }));
+                    }}
+                    disabled={invoicesFetching && invoices.length === 0}
+                  >
+                    <SelectTrigger data-testid="select-document">
+                      <SelectValue
+                        placeholder={
+                          invoicesFetching && invoices.length === 0
+                            ? "Loading documents..."
+                            : "Select an invoice or PI"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {invoices.map((invoice) => {
+                        const typePrefix = isProformaDocument(invoice) ? "PI" : "TI";
+                        return (
+                          <SelectItem key={`${typePrefix}:${invoice.id}`} value={`${typePrefix}:${invoice.id}`}>
+                            {documentOptionLabel(invoice)}
+                          </SelectItem>
+                        );
+                      })}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="max-h-64 overflow-y-auto rounded-md border bg-white">
+                    {invoicesFetching && invoices.length === 0 ? (
+                      <div className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading documents...
+                      </div>
+                    ) : invoices.length === 0 ? (
+                      <div className="px-3 py-4 text-sm text-muted-foreground">
+                        No available invoice or PI found.
+                      </div>
+                    ) : (
+                      invoices.map((invoice) => {
+                        const checked = selectedInvoiceIds.includes(invoice.id);
+                        return (
+                          <label
+                            key={invoice.id}
+                            className="flex cursor-pointer items-start gap-3 border-b px-3 py-3 last:border-b-0 hover:bg-muted/40"
+                          >
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={(value) => handleDocumentToggle(invoice, Boolean(value))}
+                              data-testid={`select-document-${invoice?.id ?? "unknown"}`}
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block font-medium">{invoice.invoiceNumber || "-"}</span>
+                              <span className="block text-xs text-muted-foreground">
+                                {documentOptionLabel(invoice)}
+                              </span>
                             </span>
-                          </span>
-                        </label>
-                      );
-                    })
-                  )}
-                </div>
-              )}
-            </div>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : null}
 
-            {selectedInvoices.length > 0 && (
+            {selectedMatchRequirements.taxInvoice ? (
+              <div className="space-y-2">
+                <Label>{isEditMode ? "Tax Invoice" : "Tax Invoice(s)"}</Label>
+                {isEditMode ? (
+                  <Select
+                    value={matchForm.invoiceId}
+                    onValueChange={handleInvoiceChange}
+                    disabled={invoicesFetching && taxInvoiceOptions.length === 0}
+                  >
+                    <SelectTrigger data-testid="select-tax-invoice">
+                      <SelectValue
+                        placeholder={
+                          invoicesFetching && taxInvoiceOptions.length === 0
+                            ? "Loading tax invoices..."
+                            : "Select a tax invoice"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {taxInvoiceOptions.map((invoice) => (
+                        <SelectItem key={invoice.id} value={invoice.id}>
+                          {documentOptionLabel(invoice, "Tax Invoice")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="max-h-64 overflow-y-auto rounded-md border bg-white">
+                    {invoicesFetching && taxInvoiceOptions.length === 0 ? (
+                      <div className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading tax invoices...
+                      </div>
+                    ) : taxInvoiceOptions.length === 0 ? (
+                      <div className="px-3 py-4 text-sm text-muted-foreground">
+                        No available tax invoice found.
+                      </div>
+                    ) : (
+                      taxInvoiceOptions.map((invoice) => {
+                        const checked = selectedInvoiceIds.includes(invoice.id);
+                        return (
+                          <label
+                            key={invoice.id}
+                            className="flex cursor-pointer items-start gap-3 border-b px-3 py-3 last:border-b-0 hover:bg-muted/40"
+                          >
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={(value) => handleInvoiceToggle(invoice.id, Boolean(value))}
+                              data-testid={`select-tax-invoice-${invoice?.id ?? "unknown"}`}
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block font-medium">{invoice.invoiceNumber || "-"}</span>
+                              <span className="block text-xs text-muted-foreground">
+                                {invoice.vendorName || "-"} · {formatCurrency(invoice.remainingAmount, invoice.currency)}
+                              </span>
+                            </span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {selectedMatchRequirements.pi ? (
+              <div className="space-y-2">
+                <Label>{isEditMode ? "PI" : "PI Document(s)"}</Label>
+                {isEditMode ? (
+                  <Select
+                    value={matchForm.piId}
+                    onValueChange={handlePiChange}
+                    disabled={invoicesFetching && piOptions.length === 0}
+                  >
+                    <SelectTrigger data-testid="select-pi">
+                      <SelectValue
+                        placeholder={
+                          invoicesFetching && piOptions.length === 0
+                            ? "Loading PI documents..."
+                            : "Select a PI"
+                        }
+                      />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {piOptions.map((invoice) => (
+                        <SelectItem key={invoice.id} value={invoice.id}>
+                          {documentOptionLabel(invoice, "PI")}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="max-h-64 overflow-y-auto rounded-md border bg-white">
+                    {invoicesFetching && piOptions.length === 0 ? (
+                      <div className="flex items-center gap-2 px-3 py-4 text-sm text-muted-foreground">
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                        Loading PI documents...
+                      </div>
+                    ) : piOptions.length === 0 ? (
+                      <div className="px-3 py-4 text-sm text-muted-foreground">
+                        No available PI found.
+                      </div>
+                    ) : (
+                      piOptions.map((invoice) => {
+                        const checked = selectedInvoiceIds.includes(invoice.id);
+                        return (
+                          <label
+                            key={invoice.id}
+                            className="flex cursor-pointer items-start gap-3 border-b px-3 py-3 last:border-b-0 hover:bg-muted/40"
+                          >
+                            <Checkbox
+                              checked={checked}
+                              onCheckedChange={(value) => handlePiToggle(invoice.id, Boolean(value))}
+                              data-testid={`select-pi-${invoice?.id ?? "unknown"}`}
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block font-medium">{invoice.invoiceNumber || "-"}</span>
+                              <span className="block text-xs text-muted-foreground">
+                                {documentOptionLabel(invoice, "PI")}
+                              </span>
+                            </span>
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </div>
+            ) : null}
+
+            {selectedDocument ? (
               <Card className="bg-muted">
                 <CardContent className="grid gap-4 pt-4 text-sm md:grid-cols-3">
                   <div>
                     <p className="text-muted-foreground">Selected Document(s)</p>
-                    <p className="font-medium">{selectedInvoices.length}</p>
+                    <p className="font-medium">
+                      {selectedDocuments.length > 1
+                        ? `${selectedDocuments.length} documents`
+                        : selectedDocument.invoiceNumber || "-"}
+                    </p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Primary Vendor</p>
-                    <p className="font-medium">{selectedInvoice?.vendorName || "-"}</p>
+                    <p className="text-muted-foreground">Vendor</p>
+                    <p className="font-medium">{selectedDocument.vendorName || "-"}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Total Document Amount</p>
+                    <p className="text-muted-foreground">
+                      {selectedDocuments.length > 1 ? "Total Amount" : "Amount"}
+                    </p>
                     <p className="font-medium">
                       {formatCurrency(
-                        selectedInvoices.reduce((sum, invoice) => sum + Number(invoice.remainingAmount || 0), 0),
-                        selectedInvoice?.currency || "INR",
+                        selectedDocuments.reduce(
+                          (sum, item) => sum + Number(item.remainingAmount ?? item.totalAmount ?? 0),
+                          0,
+                        ),
+                        selectedDocument.currency || "INR",
                       )}
                     </p>
                   </div>
                 </CardContent>
               </Card>
-            )}
+            ) : null}
 
-            <div className="space-y-2">
+            {selectedMatchNeedsPo ? (
+              <div className="space-y-2">
               <Label>Select Purchase Order</Label>
               <Select
                 value={matchForm.purchaseOrderId}
                 onValueChange={handlePoChange}
-                disabled={!matchForm.invoiceId || purchaseOrdersLoading}
+                disabled={purchaseOrdersLoading && purchaseOrders.length === 0}
               >
                 <SelectTrigger data-testid="select-po">
                   <SelectValue
@@ -1238,12 +1799,20 @@ const InvoiceMatching = () => {
                 <SelectContent>
                   {purchaseOrders.map((po) => (
                     <SelectItem key={po.id} value={po.id}>
-                      {po.poNumber} - {formatCurrency(po.amount, po.currency)} ({po.recommendation || "VARIANCE"})
+                      {purchaseOrderOptionLabel(po)}
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
-            </div>
+              {!purchaseOrdersLoading && purchaseOrders.length === 0 ? (
+                <p className="text-xs text-muted-foreground">No available purchase order found.</p>
+              ) : null}
+              </div>
+            ) : (
+              <div className="rounded-md border bg-muted/40 px-3 py-2 text-sm text-muted-foreground">
+                This match type is invoice and GRN based, so purchase order selection is not required.
+              </div>
+            )}
 
             {selectedPo && (
               <Card>
@@ -1255,33 +1824,51 @@ const InvoiceMatching = () => {
               </Card>
             )}
 
-            {usesGrnPool(matchForm.matchType) && (
+            {selectedMatchNeedsGrn && (
               <div className="space-y-2">
-                <Label>Approved GRN Pool</Label>
-                <div className="rounded-md border bg-muted/30 p-3">
-                  {grnsLoading ? (
-                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                      Loading approved GRNs...
-                    </div>
-                  ) : grns.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
-                      {grns.map((grn) => (
-                        <Badge key={grn.id} variant="outline">
-                          {grn.grnNumber || "GRN"} · {formatDate(grn.receivedDate)}
-                        </Badge>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-sm text-amber-700">
-                    {matchingGrnsAvailability.hasGrns === false
-                      ? "No approved GRNs are available for this purchase order yet."
-                      : "No GRNs are available for this purchase order."}
-                  </p>
-                  )}
-                </div>
+                <Label>Select GRN</Label>
+                <Select
+                  value={matchForm.grnId}
+                  onValueChange={(grnId) => setMatchForm((current) => ({ ...current, grnId }))}
+                  disabled={grnsLoading && grns.length === 0}
+                >
+                  <SelectTrigger data-testid="select-grn">
+                    <SelectValue placeholder={grnsLoading ? "Loading GRNs..." : "Select a GRN"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {grns.map((grn) => (
+                      <SelectItem key={grn.id} value={grn.id}>
+                        {grnOptionLabel(grn)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {!grnsLoading && grns.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">No available GRN found.</p>
+                ) : null}
               </div>
             )}
+
+            {selectedGrn ? (
+              <Card className="bg-muted">
+                <CardContent className="grid gap-4 pt-4 text-sm md:grid-cols-3">
+                  <div>
+                    <p className="text-muted-foreground">Selected GRN</p>
+                    <p className="font-medium">{selectedGrn.grnNumber || "-"}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Received Date</p>
+                    <p className="font-medium">{formatDate(selectedGrn.receivedDate)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Amount</p>
+                    <div className="font-medium">
+                      {renderAmountWithConversion(selectedGrn.amount, selectedGrn.currency, selectedGrn)}
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : null}
 
             {isEditMode && (
               <div className="space-y-2">
