@@ -154,6 +154,9 @@ export const normalizePoLineItem = (item = {}) => ({
 
 export const normalizePurchaseOrder = (po = {}) => ({
   ...po,
+  id: po.id ?? po.poId ?? po.po_id ?? po.purchaseOrderId ?? po.purchase_order_id,
+  poId: po.poId ?? po.po_id ?? po.purchaseOrderId ?? po.purchase_order_id ?? po.id,
+  po_id: po.po_id ?? po.poId ?? po.purchaseOrderId ?? po.purchase_order_id ?? po.id,
   po_number: po.po_number ?? po.poNumber,
   vendor_id: po.vendor_id ?? po.vendorId,
   vendor_name: po.vendor_name ?? po.vendorName,

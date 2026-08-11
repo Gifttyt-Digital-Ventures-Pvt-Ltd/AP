@@ -53,6 +53,38 @@ export const VENDOR_VERIFICATION_SECTION_IDS = new Set([
   'VENDOR_VERIFY_PORTAL',
 ]);
 
+export const VENDOR_GST_REGISTRATION_DETAIL_SECTIONS = new Set([
+  VENDOR_FIELD_SECTIONS.ADDRESS_LINE_1,
+  VENDOR_FIELD_SECTIONS.ADDRESS_LINE_2,
+  VENDOR_FIELD_SECTIONS.CITY,
+  VENDOR_FIELD_SECTIONS.STATE,
+  VENDOR_FIELD_SECTIONS.PINCODE,
+  VENDOR_FIELD_SECTIONS.COUNTRY,
+  VENDOR_FIELD_SECTIONS.ACCOUNT_NAME,
+  VENDOR_FIELD_SECTIONS.ACCOUNT_NUMBER,
+  VENDOR_FIELD_SECTIONS.IFSC_CODE,
+  VENDOR_FIELD_SECTIONS.BANK_NAME,
+  VENDOR_FIELD_SECTIONS.BRANCH,
+]);
+
+export const VENDOR_FORM_NON_TOP_LEVEL_SECTIONS = new Set([
+  ...VENDOR_GST_REGISTRATION_DETAIL_SECTIONS,
+  VENDOR_FIELD_SECTIONS.GST_NO,
+]);
+
+export const VENDOR_MSME_DETAIL_SECTIONS = new Set([
+  VENDOR_FIELD_SECTIONS.UDYAM_REGISTRATION_NO,
+  VENDOR_FIELD_SECTIONS.MSME_CATEGORY,
+]);
+
+export const VENDOR_TDS_DETAIL_SECTIONS = new Set([
+  VENDOR_FIELD_SECTIONS.TCS_GROUP,
+  VENDOR_FIELD_SECTIONS.TDS_GROUP,
+  VENDOR_FIELD_SECTIONS.LOW_NIL_DEDUCTION_CERTIFICATE_NO,
+  VENDOR_FIELD_SECTIONS.CERTIFICATE_VALIDITY,
+  VENDOR_FIELD_SECTIONS.SPECIFIED_PERSON_206AB,
+]);
+
 /** Section ID → snake_case form / bulk-upload field key */
 export const VENDOR_SECTION_TO_FORM_KEY = {
   [VENDOR_FIELD_SECTIONS.VENDOR_ID]: 'vendorId',
@@ -196,6 +228,16 @@ export const normalizeActiveVendorFields = (activeVendorFields = []) => {
     .map(normalizeVendorFieldSection)
     .filter(Boolean)
     .filter((section) => !VENDOR_VERIFICATION_SECTION_IDS.has(section));
+};
+
+export const getVendorFormRequiredFields = (activeVendorFields = [], vendor = {}) => {
+  const msmeEnabled = vendor?.msme === true;
+  const tdsEnabled = vendor?.tdsApplicable === true;
+
+  return normalizeActiveVendorFields(activeVendorFields)
+    .filter((section) => !VENDOR_FORM_NON_TOP_LEVEL_SECTIONS.has(section))
+    .filter((section) => msmeEnabled || !VENDOR_MSME_DETAIL_SECTIONS.has(section))
+    .filter((section) => tdsEnabled || !VENDOR_TDS_DETAIL_SECTIONS.has(section));
 };
 
 export const isVendorFieldRequired = (sectionId, activeVendorFields = []) => {

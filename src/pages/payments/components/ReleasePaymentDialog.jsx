@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
@@ -23,6 +23,7 @@ import {
 } from '../../../Services/apis/approvalsPaymentsBankingApi';
 import { useGetBankingAccountBalanceQuery } from '../../../Services/apis/connectedBankingApi';
 import { DEFAULT_CURRENCY, formatCurrency } from '../../../utils/currency';
+import { isBankAccountPaymentEligible } from '../../banking/utils/bankAccounts';
 
 const OTP_RESEND_COOLDOWN_SECONDS = 30;
 
@@ -303,7 +304,11 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
   const totalDebitAmount = Number(payrun?.totalAmount || 0);
   const payrunCurrency = payrun?.currency || DEFAULT_CURRENCY;
   const paymentModeRecommendation = getPaymentModeRecommendation(totalDebitAmount);
-  const selectedAccount = bankAccounts.find((account) => String(getReleaseBankAccountId(account)) === String(bankAccountId));
+  const releaseBankAccounts = useMemo(() => {
+    const eligibleAccounts = bankAccounts.filter(isBankAccountPaymentEligible);
+    return eligibleAccounts.length > 0 ? eligibleAccounts : bankAccounts;
+  }, [bankAccounts]);
+  const selectedAccount = releaseBankAccounts.find((account) => String(getReleaseBankAccountId(account)) === String(bankAccountId));
   const selectedBalanceAccountId = selectedAccount ? String(getReleaseBankAccountId(selectedAccount)) : '';
   const {
     data: selectedAccountBalance,
@@ -340,8 +345,16 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
   }, [mode, open, paymentModeRecommendation.enabledModes, paymentModeRecommendation.recommendedMode]);
 
   useEffect(() => {
+    if (!open || bankAccountId || releaseBankAccounts.length !== 1) return;
+    const onlyAccountId = getReleaseBankAccountId(releaseBankAccounts[0]);
+    if (onlyAccountId) {
+      setBankAccountId(String(onlyAccountId));
+    }
+  }, [bankAccountId, open, releaseBankAccounts]);
+
+  useEffect(() => {
     if (!open || !bankAccountId) return;
-    const stillEligible = bankAccounts.some(
+    const stillEligible = releaseBankAccounts.some(
       (account) => String(getReleaseBankAccountId(account)) === String(bankAccountId),
     );
     if (!stillEligible) {
@@ -351,7 +364,7 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
       setOtpRequestId('');
       toast.error('The selected bank account is no longer active. Select another active verified account and request a new OTP.');
     }
-  }, [bankAccountId, bankAccounts, open]);
+  }, [bankAccountId, open, releaseBankAccounts]);
 
   useEffect(() => {
     if (!open) return;
@@ -370,7 +383,7 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
   }, [open, otpCooldownSeconds, otpSent]);
 
   if (!payrun) return null;
-  const hasEligibleBankAccount = bankAccounts.length > 0;
+  const hasEligibleBankAccount = releaseBankAccounts.length > 0;
   const releaseSteps = ['Verify Beneficiaries', 'Debit Account', 'Review & Release'];
   const paymentModes = ['IMPS', 'NEFT', 'RTGS'];
   const chargeAmount = 0;
@@ -730,7 +743,7 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
                   <div>
                     <Label className="text-[13px] font-medium text-slate-700">Pay From</Label>
                     <div className="mt-2 max-h-56 space-y-2 overflow-y-auto pr-1">
-                      {bankAccounts.map((account) => {
+                      {releaseBankAccounts.map((account) => {
                         const accountId = String(getReleaseBankAccountId(account));
                         const active = String(bankAccountId) === accountId;
                         const accountBankName = account.label || account.bankName || account.bank || 'IDFC Bank';

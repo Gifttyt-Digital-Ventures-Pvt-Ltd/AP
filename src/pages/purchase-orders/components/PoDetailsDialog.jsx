@@ -1,16 +1,12 @@
 import React, { useEffect, useMemo, useState } from "react";
 import {
   Building2,
-  CheckCircle,
-  Clock3,
   Download,
   FileText,
   History,
   Loader2,
   Package,
   Send,
-  User,
-  XCircle,
 } from "lucide-react";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
@@ -48,6 +44,8 @@ import PoLogo from "./PoLogo";
 import { OrgBranchDetail, VendorBranchDetail } from "../../../components/common/BranchTableCells";
 import AccountingLockBanner from "../../../components/AccountingLockBanner";
 import { isAccountingReadyLocked } from "../../../utils/accountingLock";
+import ApprovalHistoryTimeline from "../../../components/common/ApprovalHistoryTimeline";
+import { useGetPurchaseOrderHistoryQuery } from "../../../Services/apis/purchaseOrdersMasterDataApi";
 
 const PoDetailsDialog = ({
   showViewDialog,
@@ -67,10 +65,21 @@ const PoDetailsDialog = ({
   onSaveDeliveryStatus,
   savingDeliveryStatus,
 }) => {
-  const selectedPoId = selectedPO?.id || selectedPO?.po_id || selectedPO?.poId;
+  const selectedPoId =
+    selectedPO?.id ||
+    selectedPO?.po_id ||
+    selectedPO?.poId ||
+    selectedPO?.purchaseOrderId ||
+    selectedPO?.purchase_order_id;
   const [viewTab, setViewTab] = useState("details");
   const [deliveryStatus, setDeliveryStatus] = useState(selectedPO?.delivery_status || "");
   const [deliveryRemarks, setDeliveryRemarks] = useState(selectedPO?.delivery_remarks || "");
+  const {
+    data: approvalHistory = [],
+    isLoading: loadingApprovalHistory,
+  } = useGetPurchaseOrderHistoryQuery(selectedPoId, {
+    skip: !showViewDialog || !selectedPoId,
+  });
 
   useEffect(() => {
     setDeliveryStatus(selectedPO?.delivery_status || "");
@@ -202,37 +211,6 @@ const PoDetailsDialog = ({
         ))}
       </TableRow>
     );
-  };
-
-  const approvalHistory = useMemo(() => {
-    const candidates = [
-      selectedPO?.approval_records,
-      selectedPO?.approvalRecords,
-      selectedPO?.approvals,
-    ];
-    const firstPopulated = candidates.find(
-      (entry) => Array.isArray(entry) && entry.length > 0,
-    );
-    if (firstPopulated) return firstPopulated;
-    return candidates.find(Array.isArray) || [];
-  }, [selectedPO]);
-
-  const getHistoryIcon = (action = "") => {
-    const normalized = String(action || "").toLowerCase();
-    if (normalized.includes("approve"))
-      return <CheckCircle className="h-4 w-4 text-emerald-700" />;
-    if (normalized.includes("reject"))
-      return <XCircle className="h-4 w-4 text-red-700" />;
-    return <Clock3 className="h-4 w-4 text-slate-600" />;
-  };
-
-  const getHistoryBadgeClass = (action = "") => {
-    const normalized = String(action || "").toLowerCase();
-    if (normalized.includes("approve"))
-      return "bg-emerald-100 text-emerald-800 border-emerald-200";
-    if (normalized.includes("reject"))
-      return "bg-red-100 text-red-800 border-red-200";
-    return "bg-slate-100 text-slate-700 border-slate-200";
   };
 
   return (
@@ -572,74 +550,11 @@ const PoDetailsDialog = ({
               </TabsContent>
 
               <TabsContent value="history" className="mt-4 space-y-4">
-                {approvalHistory.length === 0 ? (
-                  <div className="text-center py-12 text-muted-foreground border border-dashed rounded-lg bg-white">
-                    <History className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                    <p>No history records found</p>
-                  </div>
-                ) : (
-                  <div className="relative">
-                    <div className="absolute left-[19px] top-0 bottom-0 w-0.5 bg-border" />
-                    <div className="space-y-4">
-                      {approvalHistory.map((approval, idx) => {
-                        const action =
-                          approval.action || approval.status || "Updated";
-                        const actor =
-                          approval.userName ||
-                          approval.user_name ||
-                          approval.approver_name ||
-                          "-";
-                        const level =
-                          approval.level || approval.approval_level || "-";
-                        const timestamp =
-                          approval.timestamp || approval.created_at;
-
-                        return (
-                          <div key={idx} className="relative flex gap-4">
-                            <div className="relative z-10 w-10 h-10 rounded-full flex items-center justify-center border-2 border-background shadow-sm bg-white">
-                              {getHistoryIcon(action)}
-                            </div>
-                            <div className="flex-1 pb-4">
-                              <div className="bg-card border rounded-lg p-4 shadow-sm">
-                                <div className="flex items-start justify-between mb-2">
-                                  <span
-                                    className={`inline-flex items-center px-2 py-1 rounded text-xs font-medium border ${getHistoryBadgeClass(action)}`}
-                                  >
-                                    {action}
-                                  </span>
-                                  {timestamp && (
-                                    <div className="text-right text-xs text-muted-foreground">
-                                      <p>{formatDate(timestamp)}</p>
-                                    </div>
-                                  )}
-                                </div>
-                                <p className="text-sm mb-3 font-bold"> {level}</p>
-                                {approval.comments && (
-                                  <div className="mb-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
-                                    <p className="text-xs font-medium text-slate-700">
-                                      Comments
-                                    </p>
-                                    <p className="mt-1 text-sm text-slate-900 whitespace-pre-line">
-                                      {approval.comments}
-                                    </p>
-                                  </div>
-                                )}
-                                <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                                  <User className="h-3 w-3" />
-                                  <span className="font-medium">{actor}</span>
-                                  {/* <span>|</span>
-                                  <span className="bg-muted px-2 py-0.5 rounded">
-                                    Level {level}
-                                  </span> */}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+                <ApprovalHistoryTimeline
+                  history={approvalHistory}
+                  loading={loadingApprovalHistory}
+                  emptyMessage="No purchase order history records found"
+                />
               </TabsContent>
               </Tabs>
             </div>

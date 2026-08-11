@@ -61,6 +61,7 @@ const GeneralInformationSection = ({
       ? labelFor(VENDOR_FIELD_SECTIONS.COMPANY_NAME, "Vendor Name")
       : "Full Name";
   const errorClass = (key) => getVendorFieldErrorClassName(fieldErrors, key);
+  const requiredMark = (sectionId) => (isRequired(sectionId) ? " *" : "");
 
   const [isOtherCategory, setIsOtherCategory] = useState(
     () => Boolean(formData.category) && !CATEGORY_OPTIONS.includes(formData.category),
@@ -100,7 +101,8 @@ const GeneralInformationSection = ({
           <div className="flex w-full items-start gap-4">
             <div className="flex-1">
               <Label>
-                {nameLabel} *
+                {nameLabel}
+                {requiredMark(VENDOR_FIELD_SECTIONS.COMPANY_NAME)}
               </Label>
               <Input
                 value={formData.name || ""}
@@ -108,14 +110,14 @@ const GeneralInformationSection = ({
                 placeholder="e.g., Acme Corporation"
                 className={`mt-1.5 ${errorClass("name")}`}
                 data-testid="vendor-name-input"
-                required
+                required={isRequired(VENDOR_FIELD_SECTIONS.COMPANY_NAME)}
               />
             </div>
 
             <div className="flex-1">
               <Label>
                 {labelFor(VENDOR_FIELD_SECTIONS.TRADE_NAME, "Trade Name")}
-                {isRequired(VENDOR_FIELD_SECTIONS.TRADE_NAME) ? " *" : ""}
+                {requiredMark(VENDOR_FIELD_SECTIONS.TRADE_NAME)}
               </Label>
               <Input
                 value={formData.trade_name || ""}
@@ -131,7 +133,8 @@ const GeneralInformationSection = ({
 
             <div className="flex-1">
               <Label>
-                {labelFor(VENDOR_FIELD_SECTIONS.VENDOR_ID, "Vendor Code/ID")} *
+                {labelFor(VENDOR_FIELD_SECTIONS.VENDOR_ID, "Vendor Code/ID")}
+                {requiredMark(VENDOR_FIELD_SECTIONS.VENDOR_ID)}
               </Label>
               <Input
                 value={formData.vendorId || ""}
@@ -141,14 +144,15 @@ const GeneralInformationSection = ({
                 placeholder=""
                 className={`mt-1.5 ${errorClass("vendorId")}`}
                 data-testid="vendor-id-input"
-                required
+                required={isRequired(VENDOR_FIELD_SECTIONS.VENDOR_ID)}
               />
             </div>
           </div>
 
           <div className="w-full">
             <Label>
-              {labelFor(VENDOR_FIELD_SECTIONS.VENDOR_TYPE, "Vendor Type")} *
+              {labelFor(VENDOR_FIELD_SECTIONS.VENDOR_TYPE, "Vendor Type")}
+              {requiredMark(VENDOR_FIELD_SECTIONS.VENDOR_TYPE)}
             </Label>
             <div className="mt-2 flex items-start gap-4">
               {["Company", "Individual"].map((type) => (
@@ -192,7 +196,8 @@ const GeneralInformationSection = ({
           <div className="flex w-full items-start gap-4">
             <div className="flex-1">
               <Label>
-                {labelFor(VENDOR_FIELD_SECTIONS.CATEGORY, "Category")} *
+                {labelFor(VENDOR_FIELD_SECTIONS.CATEGORY, "Category")}
+                {requiredMark(VENDOR_FIELD_SECTIONS.CATEGORY)}
               </Label>
               {isOtherCategory ? (
                 <div className="relative mt-1.5">
@@ -239,7 +244,7 @@ const GeneralInformationSection = ({
             <div className="flex-1">
               <Label>
                 {labelFor(VENDOR_FIELD_SECTIONS.CURRENCY, "Currency")}
-                {isRequired(VENDOR_FIELD_SECTIONS.CURRENCY) ? " *" : ""}
+                {requiredMark(VENDOR_FIELD_SECTIONS.CURRENCY)}
               </Label>
               <AppSelect
                 value={formData.currency || ""}
@@ -254,7 +259,8 @@ const GeneralInformationSection = ({
           <div className="flex w-full items-start gap-4">
             <div className="flex-1">
               <Label>
-                {labelFor(VENDOR_FIELD_SECTIONS.PAYMENT_TERMS, "Payment Terms")} *
+                {labelFor(VENDOR_FIELD_SECTIONS.PAYMENT_TERMS, "Payment Terms")}
+                {requiredMark(VENDOR_FIELD_SECTIONS.PAYMENT_TERMS)}
               </Label>
               <AppSelect
                 value={formData.paymentTerms || ""}
@@ -273,7 +279,7 @@ const GeneralInformationSection = ({
                   VENDOR_FIELD_SECTIONS.MODE_OF_DELIVERY,
                   "Mode of Delivery",
                 )}
-                {isRequired(VENDOR_FIELD_SECTIONS.MODE_OF_DELIVERY) ? " *" : ""}
+                {requiredMark(VENDOR_FIELD_SECTIONS.MODE_OF_DELIVERY)}
               </Label>
               <Input
                 value={formData.modeOfDelivery || ""}
@@ -291,7 +297,7 @@ const GeneralInformationSection = ({
                   VENDOR_FIELD_SECTIONS.DELIVERY_TERMS,
                   "Delivery Terms",
                 )}
-                {isRequired(VENDOR_FIELD_SECTIONS.DELIVERY_TERMS) ? " *" : ""}
+                {requiredMark(VENDOR_FIELD_SECTIONS.DELIVERY_TERMS)}
               </Label>
               <AppSelect
                 value={formData.deliveryTerms || ""}
@@ -333,7 +339,8 @@ const GeneralInformationSection = ({
           <div className="flex w-full items-end gap-4">
             <div className="flex-1">
               <Label>
-                {labelFor(VENDOR_FIELD_SECTIONS.VENDOR_STATUS, "Vendor Status")} *
+                {labelFor(VENDOR_FIELD_SECTIONS.VENDOR_STATUS, "Vendor Status")}
+                {requiredMark(VENDOR_FIELD_SECTIONS.VENDOR_STATUS)}
               </Label>
               <AppSelect
                 value={formData.vendorStatus || ""}
@@ -402,7 +409,7 @@ const GeneralInformationSection = ({
                 className="cursor-pointer font-normal"
               >
                 {labelFor(VENDOR_FIELD_SECTIONS.MSME, "MSME registered vendor")}
-                {isRequired(VENDOR_FIELD_SECTIONS.MSME) ? " *" : ""}
+                {requiredMark(VENDOR_FIELD_SECTIONS.MSME)}
               </Label>
             </div>
 
@@ -414,7 +421,8 @@ const GeneralInformationSection = ({
                       {labelFor(
                         VENDOR_FIELD_SECTIONS.UDYAM_REGISTRATION_NO,
                         "Udyam Registration No",
-                      )} *
+                      )}
+                      {requiredMark(VENDOR_FIELD_SECTIONS.UDYAM_REGISTRATION_NO)}
                     </Label>
                     <Input
                       value={formData.udyamRegistrationNo || ""}
@@ -423,7 +431,7 @@ const GeneralInformationSection = ({
                       }
                       placeholder="UDYAM-XX-00-0000000"
                       className={`mt-1.5 bg-background ${errorClass("udyamRegistrationNo")}`}
-                      required
+                      required={isRequired(VENDOR_FIELD_SECTIONS.UDYAM_REGISTRATION_NO)}
                     />
                   </div>
                   <div className="flex-1">
@@ -431,7 +439,8 @@ const GeneralInformationSection = ({
                       {labelFor(
                         VENDOR_FIELD_SECTIONS.MSME_CATEGORY,
                         "MSME Category",
-                      )} *
+                      )}
+                      {requiredMark(VENDOR_FIELD_SECTIONS.MSME_CATEGORY)}
                     </Label>
                     <AppSelect
                       value={formData.msmeCategory || ""}

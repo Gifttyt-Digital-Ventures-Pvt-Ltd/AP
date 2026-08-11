@@ -57,6 +57,7 @@ const TaxInformationSection = ({
 }) => {
   const tdsApplicable = Boolean(formData.tdsApplicable);
   const errorClass = (key) => getVendorFieldErrorClassName(fieldErrors, key);
+  const requiredMark = (sectionId) => (isRequired(sectionId) ? " *" : "");
   const { data: tdsSectionsData = [] } = useGetTdsSectionsQuery();
   const tdsGroupOptions = useMemo(
     () => buildTdsSectionOptions(tdsSectionsData),
@@ -88,7 +89,8 @@ const TaxInformationSection = ({
         <div className="flex w-full items-start gap-4">
           <div className="flex-1">
             <Label>
-              {labelFor(VENDOR_FIELD_SECTIONS.PAN_NO, "PAN No.")} *
+              {labelFor(VENDOR_FIELD_SECTIONS.PAN_NO, "PAN No.")}
+              {requiredMark(VENDOR_FIELD_SECTIONS.PAN_NO)}
             </Label>
             <Input
               value={formData.pan || ""}
@@ -96,11 +98,14 @@ const TaxInformationSection = ({
               placeholder="e.g., ABCDE1234F"
               className={`mt-1.5 font-mono uppercase ${errorClass("pan")}`}
               maxLength={10}
-              required
+              required={isRequired(VENDOR_FIELD_SECTIONS.PAN_NO)}
             />
           </div>
           <div className="flex-1">
-            <Label>{labelFor(VENDOR_FIELD_SECTIONS.PAN_STATUS, "PAN Status")} *</Label>
+            <Label>
+              {labelFor(VENDOR_FIELD_SECTIONS.PAN_STATUS, "PAN Status")}
+              {requiredMark(VENDOR_FIELD_SECTIONS.PAN_STATUS)}
+            </Label>
             <AppSelect
               value={formData.panStatus || ""}
               onChange={(event) => updateField("panStatus", event.target.value)}
@@ -122,7 +127,10 @@ const TaxInformationSection = ({
             />
           </div>
           <div className="flex-1">
-            <Label>{labelFor(VENDOR_FIELD_SECTIONS.NATURE_OF_ASSESSEE, "Nature of Assessee")} *</Label>
+            <Label>
+              {labelFor(VENDOR_FIELD_SECTIONS.NATURE_OF_ASSESSEE, "Nature of Assessee")}
+              {requiredMark(VENDOR_FIELD_SECTIONS.NATURE_OF_ASSESSEE)}
+            </Label>
             <AppSelect
               value={formData.natureOfAssessee || ""}
               onChange={(event) => updateField("natureOfAssessee", event.target.value)}
@@ -159,7 +167,10 @@ const TaxInformationSection = ({
         <div className="flex w-full flex-col items-start gap-6">
           <div className="flex w-full items-start gap-4">
             <div className="flex-1">
-              <Label>{labelFor(VENDOR_FIELD_SECTIONS.TDS_GROUP, "TDS Group/List")} *</Label>
+              <Label>
+                {labelFor(VENDOR_FIELD_SECTIONS.TDS_GROUP, "TDS Group/List")}
+                {requiredMark(VENDOR_FIELD_SECTIONS.TDS_GROUP)}
+              </Label>
               <AppSelect
                 value={formData.tdsGroup || ""}
                 onChange={(event) => updateField("tdsGroup", event.target.value)}
@@ -169,7 +180,10 @@ const TaxInformationSection = ({
               />
             </div>
             <div className="flex-1">
-              <Label>{labelFor(VENDOR_FIELD_SECTIONS.TCS_GROUP, "TCS Group/List")} *</Label>
+              <Label>
+                {labelFor(VENDOR_FIELD_SECTIONS.TCS_GROUP, "TCS Group/List")}
+                {requiredMark(VENDOR_FIELD_SECTIONS.TCS_GROUP)}
+              </Label>
               <AppSelect
                 value={formData.tcsGroup || ""}
                 onChange={(event) => updateField("tcsGroup", event.target.value)}
@@ -187,6 +201,7 @@ const TaxInformationSection = ({
                   VENDOR_FIELD_SECTIONS.LOW_NIL_DEDUCTION_CERTIFICATE_NO,
                   "Low/Nil Deduction Certificate No.",
                 )}
+                {requiredMark(VENDOR_FIELD_SECTIONS.LOW_NIL_DEDUCTION_CERTIFICATE_NO)}
               </Label>
               <Input
                 value={formData.lowNilDeductionCertificateNo || ""}
@@ -198,7 +213,10 @@ const TaxInformationSection = ({
               />
             </div>
             <div className="flex-1">
-              <Label>{labelFor(VENDOR_FIELD_SECTIONS.CERTIFICATE_VALIDITY, "Certificate Validity")}</Label>
+              <Label>
+                {labelFor(VENDOR_FIELD_SECTIONS.CERTIFICATE_VALIDITY, "Certificate Validity")}
+                {requiredMark(VENDOR_FIELD_SECTIONS.CERTIFICATE_VALIDITY)}
+              </Label>
               <Input
                 type="date"
                 value={formData.certificateValidity || ""}
@@ -217,6 +235,7 @@ const TaxInformationSection = ({
               />
               <Label htmlFor="vendor-206ab" className="cursor-pointer font-normal">
                 {labelFor(VENDOR_FIELD_SECTIONS.SPECIFIED_PERSON_206AB, "206AB Specified Person")}
+                {requiredMark(VENDOR_FIELD_SECTIONS.SPECIFIED_PERSON_206AB)}
               </Label>
             </div>
             <p className="pl-6 text-xs leading-4 text-muted-foreground">
