@@ -46,6 +46,7 @@ import { cn } from "../../../lib/utils";
 import { Badge } from "../../../components/ui/badge";
 import { buildInternalChecklistState } from "../utils/internalChecklist";
 import { INTERNAL_CHECKLIST_ITEMS } from "../constants/internalChecklist";
+import { normalizeHistoricalAdvanceAdjustment } from "../utils/advanceAdjustment";
 import InternalChecklistSection from "./InternalChecklistSection";
 import { normalizeHistoricalAdvanceAdjustment } from "../utils/advanceAdjustment";
 
