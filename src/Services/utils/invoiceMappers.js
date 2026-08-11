@@ -6,6 +6,7 @@ import {
 import { normalizeMsmePaymentDue } from "../../pages/invoices/utils/msmePaymentDue";
 import { normalizeInvoiceOverdueFields } from "../../pages/invoices/utils/invoiceDueDate";
 import { normalizeExpenseType } from "../../pages/invoices/utils/invoiceAccountingFields";
+import { normalizeHistoricalAdvanceAdjustment } from "../../pages/invoices/utils/advanceAdjustment";
 
 const toLocalDateTimeString = (value) => {
   if (!value) return value;
@@ -262,6 +263,7 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
 
   return {
     ...invoice,
+    ...normalizeHistoricalAdvanceAdjustment(invoice),
     currency: normalizeCurrencyCode(invoice.currency ?? invoice.currencyCode ?? DEFAULT_CURRENCY),
     convertToInr: Boolean(invoice.convertToInr ?? invoice.convert_to_inr ?? false),
     matchingInrValue: pickInvoiceField(invoice, "matchingInrValue", "matching_inr_value", ""),

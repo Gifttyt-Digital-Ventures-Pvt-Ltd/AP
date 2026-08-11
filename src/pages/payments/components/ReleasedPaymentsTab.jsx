@@ -9,6 +9,7 @@ import { formatCurrency } from '../../../utils/currency';
 import { withIntegrationTableHeader } from '../../../utils/integrationProvenance';
 import { formatInvoiceAmount } from '../../invoices/utils/invoiceAmounts';
 import { cn } from '../../../lib/utils';
+import { getPayableDisplayLabel } from '../utils/payableRows';
 
 const clippedText = (value) => {
   const text = String(value || '-');
@@ -86,6 +87,14 @@ const ReleasedPaymentsTab = ({
             value = (
               <div className="space-y-0.5">
                 {clippedText(amount)}
+                {payment.hasAdvanceAdjustment ? (
+                  <div className="text-xs text-muted-foreground">
+                    Advance Adjusted: -{formatCurrency(
+                      payment.advanceAdjustedTotal ?? 0,
+                      payment.currency || 'INR',
+                    )}
+                  </div>
+                ) : null}
                 {Number(payment.actualInrAmount ?? payment.actual_inr_amount) > 0 ? (
                   <div className="text-xs text-muted-foreground">
                     Actual INR Amount: {formatCurrency(
@@ -98,6 +107,18 @@ const ReleasedPaymentsTab = ({
             );
             break;
           }
+          case 'invoiceNumber':
+            value = (
+              <div className="min-w-0">
+                {payment.sourceType && payment.sourceType !== 'INVOICE' ? (
+                  <span className="mb-0.5 inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                    {payment.sourceType}
+                  </span>
+                ) : null}
+                {clippedText(getPayableDisplayLabel(payment))}
+              </div>
+            );
+            break;
           case 'paymentDate':
             value = clippedText(safeFormatDate(payment.paymentDate));
             break;
@@ -120,26 +141,32 @@ const ReleasedPaymentsTab = ({
           case 'actions':
             value = (
               <div className="flex justify-start gap-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleViewPaymentInvoice?.(payment)}
-                  data-testid={`view-payment-invoice-${payment?.id ?? 'unknown'}`}
-                  title="View Invoice"
-                  className="h-8 w-8 p-0"
-                >
-                  <Eye className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => handleDownloadPaymentInvoice?.(payment)}
-                  data-testid={`download-payment-invoice-${payment?.id ?? 'unknown'}`}
-                  title="Download Invoice"
-                  className="h-8 w-8 p-0"
-                >
-                  <Download className="h-4 w-4" />
-                </Button>
+                {payment.sourceType === 'INVOICE' ? (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleViewPaymentInvoice?.(payment)}
+                      data-testid={`view-payment-invoice-${payment?.id ?? 'unknown'}`}
+                      title="View Invoice"
+                      className="h-8 w-8 p-0"
+                    >
+                      <Eye className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDownloadPaymentInvoice?.(payment)}
+                      data-testid={`download-payment-invoice-${payment?.id ?? 'unknown'}`}
+                      title="Download Invoice"
+                      className="h-8 w-8 p-0"
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  </>
+                ) : (
+                  <span className="text-xs text-muted-foreground">Read only</span>
+                )}
               </div>
             );
             break;

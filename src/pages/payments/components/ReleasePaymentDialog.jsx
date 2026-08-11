@@ -23,6 +23,7 @@ import {
 } from '../../../Services/apis/approvalsPaymentsBankingApi';
 import { useGetBankingAccountBalanceQuery } from '../../../Services/apis/connectedBankingApi';
 import { DEFAULT_CURRENCY, formatCurrency } from '../../../utils/currency';
+import { getPayableDisplayLabel } from '../utils/payableRows';
 
 const OTP_RESEND_COOLDOWN_SECONDS = 30;
 
@@ -302,6 +303,9 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
   const [releasePayrunPayment, { isLoading: releasingPayrun }] = useReleasePayrunMutation();
   const totalDebitAmount = Number(payrun?.totalAmount || 0);
   const payrunCurrency = payrun?.currency || DEFAULT_CURRENCY;
+  const hasSourceAwareRows = payrun?.invoices?.some(
+    (invoice) => invoice.sourceType && invoice.sourceType !== 'INVOICE',
+  );
   const paymentModeRecommendation = getPaymentModeRecommendation(totalDebitAmount);
   const selectedAccount = bankAccounts.find((account) => String(getReleaseBankAccountId(account)) === String(bankAccountId));
   const selectedBalanceAccountId = selectedAccount ? String(getReleaseBankAccountId(selectedAccount)) : '';
@@ -611,11 +615,11 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
           {step === 1 && (
             <div className="space-y-5">
               {renderReleaseSection(
-                'Invoice Details',
+                hasSourceAwareRows ? 'Payable Details' : 'Invoice Details',
                 <AppDataTable
                   tableHeader={[
                     { key: 'vendorName', title: 'Vendor' },
-                    { key: 'invoiceNumber', title: 'Invoice' },
+                    { key: 'invoiceNumber', title: hasSourceAwareRows ? 'Reference' : 'Invoice' },
                     { key: 'beneficiaryAccount', title: 'Beneficiary Account' },
                     { key: 'bank', title: 'Bank' },
                     { key: 'ifsc', title: 'IFSC' },
@@ -639,7 +643,14 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
                           {clippedTableText(invoice.vendorName)}
                         </TableCell>
                         <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left text-primary">
-                          {clippedTableText(invoice.invoiceNumber)}
+                          <div className="min-w-0">
+                            {invoice.sourceType && invoice.sourceType !== 'INVOICE' ? (
+                              <span className="mb-0.5 inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                                {invoice.sourceType}
+                              </span>
+                            ) : null}
+                            {clippedTableText(getPayableDisplayLabel(invoice))}
+                          </div>
                         </TableCell>
                         <TableCell className="max-w-[220px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left">
                           {hasMultipleAccounts ? (
@@ -682,7 +693,14 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
                           {clippedTableText(selectedBeneficiary.ifsc)}
                         </TableCell>
                         <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left font-semibold text-slate-900">
-                          {clippedTableText(formatMoney(invoice.requestedAmount, getInvoicePaymentCurrency(invoice, payrunCurrency)))}
+                          <div className="min-w-0">
+                            {clippedTableText(formatMoney(invoice.requestedAmount, getInvoicePaymentCurrency(invoice, payrunCurrency)))}
+                            {invoice.hasAdvanceAdjustment ? (
+                              <span className="block truncate text-[11px] font-normal text-slate-500">
+                                Advance Adjusted: -{formatMoney(invoice.advanceAdjustedTotal, invoice.currency)}
+                              </span>
+                            ) : null}
+                          </div>
                         </TableCell>
                         <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left">
                           <span

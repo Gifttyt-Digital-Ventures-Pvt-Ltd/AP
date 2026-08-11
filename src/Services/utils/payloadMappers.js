@@ -381,6 +381,16 @@ export const toVendorUiPayload = (vendor = {}) => ({
     null,
   requested_by_email: vendor.requested_by_email ?? vendor.requestedByEmail,
   requested_by: vendor.requested_by ?? vendor.requestedBy,
+  vendorAdvanceBalance: vendor.vendorAdvanceBalance ?? vendor.vendor_advance_balance,
+  outstandingAdvanceBalance:
+    vendor.outstandingAdvanceBalance ?? vendor.outstanding_advance_balance,
+  totalAdvancesPaid: vendor.totalAdvancesPaid ?? vendor.total_advances_paid,
+  totalAdvancesAdjusted:
+    vendor.totalAdvancesAdjusted ?? vendor.total_advances_adjusted,
+  totalAdvancesRefunded:
+    vendor.totalAdvancesRefunded ?? vendor.total_advances_refunded,
+  advanceSummary: vendor.advanceSummary ?? vendor.advance_summary,
+  advancesByPo: vendor.advancesByPo ?? vendor.advances_by_po,
 });
 
 export const extractVendorIdFromResponse = (response) => {

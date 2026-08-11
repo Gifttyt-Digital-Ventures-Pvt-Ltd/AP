@@ -10,6 +10,7 @@ import {
   Package,
   Send,
   User,
+  WalletCards,
   XCircle,
 } from "lucide-react";
 import { Badge } from "../../../components/ui/badge";
@@ -48,6 +49,9 @@ import PoLogo from "./PoLogo";
 import { OrgBranchDetail, VendorBranchDetail } from "../../../components/common/BranchTableCells";
 import AccountingLockBanner from "../../../components/AccountingLockBanner";
 import { isAccountingReadyLocked } from "../../../utils/accountingLock";
+import PoPaymentScheduleSection from "./PoPaymentScheduleSection";
+import { normalizePaymentScheduleRows } from "../utils/poPaymentSchedule";
+import AdvanceContextPanel from "../../../components/vendor-advances/AdvanceContextPanel";
 
 const PoDetailsDialog = ({
   showViewDialog,
@@ -66,6 +70,8 @@ const PoDetailsDialog = ({
   onEditPO,
   onSaveDeliveryStatus,
   savingDeliveryStatus,
+  canRaiseAdvance = false,
+  onRaiseAdvance,
 }) => {
   const selectedPoId = selectedPO?.id || selectedPO?.po_id || selectedPO?.poId;
   const [viewTab, setViewTab] = useState("details");
@@ -83,6 +89,10 @@ const PoDetailsDialog = ({
   const isInr = poCurrency === "INR";
   const documentBorderClass = "border";
   const headerBorderClass = "border-b";
+  const paymentScheduleRows = useMemo(
+    () => normalizePaymentScheduleRows(selectedPO || {}),
+    [selectedPO],
+  );
 
   const selectedFormat =
     selectedPO?.formatConfigSnapshot ||
@@ -432,6 +442,23 @@ const PoDetailsDialog = ({
                     </section>
                   )}
 
+                  {paymentScheduleRows.length ? (
+                    <PoPaymentScheduleSection
+                      rows={paymentScheduleRows}
+                      poGrossTotal={Number(selectedPO.total_amount) || 0}
+                      formatCurrency={(amount) => formatCurrency(amount, poCurrency)}
+                      readOnly
+                    />
+                  ) : null}
+
+                  <AdvanceContextPanel
+                    source={selectedPO}
+                    title="PO Advance Context"
+                    description="Read-only PO-linked advance summary and history from backend."
+                    currency={poCurrency}
+                    className="mt-6"
+                  />
+
                   <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-[1fr_320px]">
                     {sectionOn("PAYMENT") && (
                       <section className="rounded border bg-slate-50/60 p-4">
@@ -665,6 +692,17 @@ const PoDetailsDialog = ({
               Download PO
             </Button>
           )}
+          {selectedPO && canRaiseAdvance ? (
+            <Button
+              variant="outline"
+              onClick={() => onRaiseAdvance?.(selectedPO)}
+              disabled={submitting}
+              data-testid="raise-advance-btn"
+            >
+              <WalletCards className="h-4 w-4 mr-2" />
+              Raise Advance
+            </Button>
+          ) : null}
           {["Draft", "Sent Back"].includes(selectedPO?.status) &&
             canManagePo &&
             !isAccountingReadyLocked(selectedPO) && (

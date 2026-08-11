@@ -8,6 +8,7 @@ import { useGetAvailableCurrenciesQuery } from "../../../../Services/apis/corpor
 import {
   CURRENCY_SCREENS,
   FALLBACK_CURRENCIES,
+  formatCurrency,
   mergeCurrencyOptions,
 } from "../../../../utils/currency";
 import { VENDOR_FIELD_SECTIONS } from "../../../../utils/vendorFieldConfig";
@@ -34,6 +35,24 @@ const PAYMENT_TERMS_OPTIONS = [
 ];
 const DELIVERY_TERMS_OPTIONS = ["EXW", "FOB", "CIF", "DAP", "DDP"];
 const MSME_CATEGORY_OPTIONS = ["Micro", "Small", "Medium"];
+
+const hasValue = (value) =>
+  value !== undefined && value !== null && value !== "";
+
+const getVendorBalance = (vendor = {}) =>
+  vendor.vendorBalance ??
+  vendor.vendor_balance ??
+  vendor.balance ??
+  vendor.currentBalance ??
+  vendor.current_balance ??
+  vendor.openingBalance ??
+  vendor.opening_balance;
+
+const formatVendorBalance = (vendor = {}) => {
+  const balance = getVendorBalance(vendor);
+  if (!hasValue(balance)) return "";
+  return formatCurrency(balance, vendor.currency || "INR");
+};
 
 const SubsectionHeading = ({ title, description }) => (
   <div className="flex flex-col items-start self-stretch">
@@ -307,8 +326,9 @@ const GeneralInformationSection = ({
             <div className="flex-1">
               <Label>Vendor Balance</Label>
               <Input
-                value={formData.currency || "INR"}
+                value={formatVendorBalance(formData)}
                 disabled
+                placeholder="—"
                 className="mt-1.5 bg-muted uppercase"
               />
             </div>

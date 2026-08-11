@@ -47,6 +47,15 @@ const preventDialogOutsideDismiss = (event) => {
   event.preventDefault();
 };
 
+const hasAdvanceAdjustment = (invoice = {}) =>
+  Boolean(
+    invoice.hasAdvanceAdjustment ||
+      invoice.advanceAdjustedTotal != null ||
+      invoice.advance_adjusted_total != null ||
+      invoice.netPayableAfterAdvance != null ||
+      invoice.net_payable_after_advance != null,
+  );
+
 // Confirm record-payment for invoices selected on the pending list.
 const RecordPaymentDialog = ({
   open,
@@ -95,6 +104,23 @@ const RecordPaymentDialog = ({
                       <span className="shrink-0 whitespace-nowrap text-muted-foreground">
                         {formatCurrency(invoice.amount || 0, invoice.currency || 'INR')}
                       </span>
+                      {hasAdvanceAdjustment(invoice) ? (
+                        <span className="col-span-2 text-xs text-muted-foreground">
+                          Original: {formatCurrency(
+                            invoice.originalAmount ?? invoice.totalAmount ?? invoice.amount ?? 0,
+                            invoice.currency || 'INR',
+                          )} · Advance Adjusted: -{formatCurrency(
+                            invoice.advanceAdjustedTotal ?? invoice.advance_adjusted_total ?? 0,
+                            invoice.currency || 'INR',
+                          )} · Net Payable After Advance: {formatCurrency(
+                            invoice.netPayableAfterAdvance ??
+                              invoice.net_payable_after_advance ??
+                              invoice.amount ??
+                              0,
+                            invoice.currency || 'INR',
+                          )}
+                        </span>
+                      ) : null}
                       {invoice.convertToInr && Number(invoice.matchingInrValue) > 0 ? (
                         <span className="col-span-2 text-xs text-muted-foreground">
                           Converted INR Amount: {formatCurrency(invoice.matchingInrValue, 'INR')}
