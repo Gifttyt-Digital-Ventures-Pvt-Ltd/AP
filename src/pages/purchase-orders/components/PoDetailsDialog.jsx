@@ -50,6 +50,8 @@ import { useGetPurchaseOrderHistoryQuery } from "../../../Services/apis/purchase
 import PoPaymentScheduleSection from "./PoPaymentScheduleSection";
 import { normalizePaymentScheduleRows } from "../utils/poPaymentSchedule";
 import AdvanceContextPanel from "../../../components/vendor-advances/AdvanceContextPanel";
+import ApprovalHistoryTimeline from "../../../components/common/ApprovalHistoryTimeline";
+import { useGetPurchaseOrderHistoryQuery } from "../../../Services/apis/purchaseOrdersMasterDataApi";
 
 const PoDetailsDialog = ({
   showViewDialog,
