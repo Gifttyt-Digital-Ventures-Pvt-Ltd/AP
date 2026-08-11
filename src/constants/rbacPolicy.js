@@ -22,9 +22,6 @@ export const ROUTE_PERMISSION_RULES = {
     ],
   },
   "/invoice-matching": { anyOf: ["matching-view", "matching-manage"] },
-  "/transactions": {
-    anyOf: ["banking-view", "banking-manage", "banking-full", "payments-view", "payments-admin"],
-  },
   "/approvals": {
     anyOf: [
       "invoice-checker",
@@ -197,7 +194,6 @@ export const DEFAULT_ROUTE_PRIORITY = [
   "/goods-receipt",
   "/invoices",
   "/invoice-matching",
-  "/transactions",
   "/approvals",
   "/payments",
   "/payment-batches",

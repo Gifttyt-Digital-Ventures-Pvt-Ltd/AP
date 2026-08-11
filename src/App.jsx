@@ -25,7 +25,6 @@ const Payments = lazy(() => import("./pages/payments/Payments"));
 const ConnectedBanking = lazy(() => import("./pages/banking/ConnectedBanking"));
 const UserRoles = lazy(() => import("./pages/user-roles/UserRoles"));
 const Profile = lazy(() => import("./pages/profile/Profile"));
-const TransactionsRoute = lazy(() => import("./pages/transactions/TransactionsRoute"));
 const PurchaseOrdersPage = lazy(() => import("./pages/purchase-orders/PurchaseOrdersPage"));
 const OrderTrackingPage = lazy(() => import("./pages/order-tracking/OrderTrackingPage"));
 const GoodsReceipt = lazy(() => import("./pages/goods-receipt/GoodsReceipt"));
@@ -255,7 +254,6 @@ function AppContent() {
           <Route path="/settings/integrations/tally" element={<Navigate to="/integrations/erp/tally" replace />} />
           <Route path="/user-roles" element={withPageFallback(<UserRoles />)} />
           <Route path="/profile" element={withPageFallback(<Profile />)} />
-          <Route path="/transactions" element={withPageFallback(<TransactionsRoute />)} />
           <Route path="/purchase-orders" element={withPageFallback(<PurchaseOrdersPage />)} />
           <Route path="/order-tracking" element={withPageFallback(<OrderTrackingPage />)} />
           <Route path="/goods-receipt" element={withPageFallback(<GoodsReceipt />)} />
