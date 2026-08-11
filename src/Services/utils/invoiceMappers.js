@@ -650,10 +650,18 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
       pickInvoiceField(invoice, "departmentId", "department_id"),
     ),
     departmentName: pickInvoiceField(invoice, "departmentName", "department_name", ""),
-    poId: pickInvoiceField(invoice, "poId", "po_id", ""),
-    poNumber: pickInvoiceField(invoice, "poNumber", "po_number", ""),
-    grnId: pickInvoiceField(invoice, "grnId", "grn_id", ""),
-    grnNumber: pickInvoiceField(invoice, "grnNumber", "grn_number", ""),
+    poId:
+      pickInvoiceField(invoice, "matchingPurchaseOrderId", "matching_purchase_order_id") ??
+      pickInvoiceField(invoice, "poId", "po_id", null),
+    poNumber:
+      pickInvoiceField(invoice, "matchingPoNumber", "matching_po_number") ??
+      pickInvoiceField(invoice, "poNumber", "po_number", null),
+    grnId:
+      pickInvoiceField(invoice, "matchingGrnId", "matching_grn_id") ??
+      pickInvoiceField(invoice, "grnId", "grn_id", null),
+    grnNumber:
+      pickInvoiceField(invoice, "matchingGrnNumber", "matching_grn_number") ??
+      pickInvoiceField(invoice, "grnNumber", "grn_number", null),
     matchingId: pickInvoiceField(invoice, "matchingId", "matching_id", ""),
     documentType: pickInvoiceField(invoice, "documentType", "document_type", "TAX_INVOICE"),
     ...(pickInvoiceField(invoice, "linkedProformaInvoiceId", "linked_proforma_invoice_id")

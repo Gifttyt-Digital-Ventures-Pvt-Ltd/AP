@@ -27,11 +27,18 @@ import {
  * definition was retired/renamed/removed) — those are never edited or
  * dropped, only shown read-only, so retiring a definition can't delete
  * history already recorded against an invoice.
+ *
+ * `readOnly` renders every active item disabled with its note as plain text
+ * instead of an input — used when the caller has view-only access (e.g. the
+ * invoice itself is no longer editable, or the current user lacks checklist
+ * edit permission), so this one component covers both the interactive and
+ * display-only cases instead of a second hand-rolled checklist view.
  */
 const InternalChecklistSection = ({
   items = [],
   values = [],
   onChange,
+  readOnly = false,
 }) => {
   const { active: activeValues, orphaned: orphanedValues } = partitionInternalChecklistValues(
     values,
@@ -73,29 +80,44 @@ const InternalChecklistSection = ({
                   <Checkbox
                     id={checkboxId}
                     checked={Boolean(value?.isChecked)}
-                    onCheckedChange={(checked) => handleToggle(item.id, Boolean(checked))}
+                    onCheckedChange={
+                      readOnly ? undefined : (checked) => handleToggle(item.id, Boolean(checked))
+                    }
+                    disabled={readOnly}
                     data-testid={checkboxId}
                   />
-                  <Label htmlFor={checkboxId} className="cursor-pointer text-xs">
+                  <Label
+                    htmlFor={checkboxId}
+                    className={readOnly ? "text-xs" : "cursor-pointer text-xs"}
+                  >
                     {item.label}
                   </Label>
                 </div>
-                <div>
-                  <Label htmlFor={noteId} className="text-xs text-muted-foreground">
-                    Note
-                  </Label>
-                  <Input
-                    id={noteId}
-                    value={value?.note || ""}
-                    onChange={(e) => handleNoteChange(item.id, e.target.value)}
-                    disabled={!value?.isChecked}
-                    placeholder={
-                      value?.isChecked ? "Add a note (optional)" : "Check the item to add a note"
-                    }
-                    className="h-6 text-xs"
-                    data-testid={noteId}
-                  />
-                </div>
+                {readOnly ? (
+                  value?.note ? (
+                    <p className="text-xs text-muted-foreground break-words">
+                      <span className="font-medium text-foreground">Note: </span>
+                      {value.note}
+                    </p>
+                  ) : null
+                ) : (
+                  <div>
+                    <Label htmlFor={noteId} className="text-xs text-muted-foreground">
+                      Note
+                    </Label>
+                    <Input
+                      id={noteId}
+                      value={value?.note || ""}
+                      onChange={(e) => handleNoteChange(item.id, e.target.value)}
+                      disabled={!value?.isChecked}
+                      placeholder={
+                        value?.isChecked ? "Add a note (optional)" : "Check the item to add a note"
+                      }
+                      className="h-6 text-xs"
+                      data-testid={noteId}
+                    />
+                  </div>
+                )}
               </div>
             );
           })}

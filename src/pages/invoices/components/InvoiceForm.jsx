@@ -2486,7 +2486,9 @@ export const InvoiceForm = ({
                       setFormData({
                         ...formData,
                         matchingPurchaseOrderId: "",
+                        matchingPoNumber: "",
                         matchingGrnId: "",
+                        matchingGrnNumber: "",
                       })
                     }
                   >
@@ -2507,28 +2509,30 @@ export const InvoiceForm = ({
                   <AppSelect
                     value={selectedMatchingPoId}
                     onChange={(event) => {
-                      const poId = event.target.value;
-                      const selectedPo = availablePurchaseOrders.find(
-                        (po) => String(po.id) === String(poId),
-                      );
-                      const inheritConversion =
-                        selectedPo &&
-                        isForeignCurrency(selectedPo.currency) &&
-                        Boolean(selectedPo.convertToInr) &&
-                        Number(selectedPo.matchingInrValue) > 0;
+  const poId = event.target.value;
+  const selectedPo = availablePurchaseOrders.find(
+    (po) => String(po.id) === String(poId),
+  );
+  const inheritConversion =
+    selectedPo &&
+    isForeignCurrency(selectedPo.currency) &&
+    Boolean(selectedPo.convertToInr) &&
+    Number(selectedPo.matchingInrValue) > 0;
 
-                      setFormData({
-                        ...formData,
-                        matchingPurchaseOrderId: poId,
-                        matchingGrnId: "",
-                        ...(inheritConversion
-                          ? {
-                              convertToInr: true,
-                              matchingInrValue: null,
-                            }
-                          : {}),
-                      });
-                    }}
+  setFormData({
+    ...formData,
+    matchingPurchaseOrderId: poId,
+    matchingPoNumber: selectedPo?.poNumber || "",
+    matchingGrnId: "",
+    matchingGrnNumber: "",
+    ...(inheritConversion
+      ? {
+          convertToInr: true,
+          matchingInrValue: null,
+        }
+      : {}),
+  });
+}}
                     options={availablePurchaseOrders.map((po) => ({
                       value: po.id,
                       label: `${po.poNumber || "PO"} - ${formatAmount(po.amount)}`,
@@ -2560,28 +2564,29 @@ export const InvoiceForm = ({
                     <Label className="text-xs">GRN Pool Anchor</Label>
                     <AppSelect
                       value={formData.matchingGrnId || ""}
-                      onChange={(event) => {
-                        const grnId = event.target.value;
-                        const selectedGrn = availableGrns.find(
-                          (grn) => String(grn.id) === String(grnId),
-                        );
-                        const inheritConversion =
-                          selectedGrn &&
-                          isForeignCurrency(selectedGrn.currency) &&
-                          Boolean(selectedGrn.convertToInr) &&
-                          Number(selectedGrn.matchingInrValue) > 0;
+                     onChange={(event) => {
+  const grnId = event.target.value;
+  const selectedGrn = availableGrns.find(
+    (grn) => String(grn.id) === String(grnId),
+  );
+  const inheritConversion =
+    selectedGrn &&
+    isForeignCurrency(selectedGrn.currency) &&
+    Boolean(selectedGrn.convertToInr) &&
+    Number(selectedGrn.matchingInrValue) > 0;
 
-                        setFormData({
-                          ...formData,
-                          matchingGrnId: grnId,
-                          ...(inheritConversion
-                            ? {
-                                convertToInr: true,
-                                matchingInrValue: null,
-                              }
-                            : {}),
-                        });
-                      }}
+  setFormData({
+    ...formData,
+    matchingGrnId: grnId,
+    matchingGrnNumber: selectedGrn?.grnNumber || "",
+    ...(inheritConversion
+      ? {
+          convertToInr: true,
+          matchingInrValue: null,
+        }
+      : {}),
+  });
+}}
                       options={availableGrns.map((grn) => ({
                         value: grn.id,
                         label: `${grn.grnNumber || "GRN"} - ${formatAmount(grn.amount)}`,

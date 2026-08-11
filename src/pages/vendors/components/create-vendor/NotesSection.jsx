@@ -1,7 +1,8 @@
 import React from "react";
 import { VENDOR_FIELD_SECTIONS } from "../../../../utils/vendorFieldConfig";
+import { getVendorFieldErrorClassName } from "../../../../utils/vendorValidation";
 
-const NotesSection = ({ notes, onNotesChange, isRequired }) => (
+const NotesSection = ({ notes, onNotesChange, isRequired, fieldErrors = {} }) => (
   <div className="-mx-6 border-b border-border px-10">
     <div className="flex flex-col items-start self-stretch border-b border-border py-6">
       <h3 className="font-['Manrope'] text-lg font-semibold leading-6 text-foreground">
@@ -13,7 +14,7 @@ const NotesSection = ({ notes, onNotesChange, isRequired }) => (
       <textarea
         value={notes || ""}
         onChange={(event) => onNotesChange(event.target.value)}
-        className="min-h-[96px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        className={`min-h-[96px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring ${getVendorFieldErrorClassName(fieldErrors, "notes")}`}
         placeholder="Special instructions, payment preferences, or internal remarks…"
         required={isRequired(VENDOR_FIELD_SECTIONS.REMARKS)}
       />

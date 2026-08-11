@@ -71,6 +71,23 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
       }),
       invalidatesTags: ["Invoices", "Dashboard", "Reports"],
     }),
+    // PUT /invoices/{id}/internal-checklist
+    // Dedicated endpoint for updating only the Internal Checklist, independent
+    // of the normal invoice-editable-status gate. Body is sent as-is
+    // ({ internalChecklist: [...] }), deliberately NOT run through
+    // toInvoiceApiPayload — that whitelist represents a full invoice update
+    // and this endpoint must never touch any other invoice field.
+    updateInvoiceInternalChecklist: builder.mutation({
+      query: ({ id, body }) => ({
+        url: `/invoices/${id}/internal-checklist`,
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: (result, error, { id } = {}) => [
+        { type: "Invoices", id },
+        "Invoices",
+      ],
+    }),
     forwardInvoice: builder.mutation({
       query: (body) => ({
         url: "/invoices/forward",
@@ -141,7 +158,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
     getInvoiceHistory: builder.query({
       query: (id) => ({ url: `/invoices/${id}/history`, method: "GET" }),
       transformResponse: (response) => normalizeApprovalHistoryEntries(response),
-      providesTags: ["Invoices"],
+      providesTags: (_result, _error, id) => [{ type: "Invoices", id }, "Invoices"],
     }),
     getInvoiceFundingHistory: builder.query({
       query: (id) => ({
@@ -288,6 +305,7 @@ export const {
   useLazyGetInvoiceQuery,
   useCreateInvoiceMutation,
   useUpdateInvoiceMutation,
+  useUpdateInvoiceInternalChecklistMutation,
   useForwardInvoiceMutation,
   useDeleteInvoiceMutation,
   useCancelInvoiceMutation,

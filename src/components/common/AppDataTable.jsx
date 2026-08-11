@@ -55,6 +55,7 @@ const AppDataTable = ({
   tableContainerClassName = "",
   bordered = false,
   onRowClick,
+  fixedLayout = false, // new
 }) => {
   const resolvedColumns =
     tableHeader?.map((header, index) => {
@@ -95,6 +96,7 @@ const AppDataTable = ({
     <Table
       className={cn("border-collapse", tableClassName)}
       containerClassName={tableContainerClassName}
+      fixedLayout={fixedLayout}
     >
       <TableHeader
         className={cn(

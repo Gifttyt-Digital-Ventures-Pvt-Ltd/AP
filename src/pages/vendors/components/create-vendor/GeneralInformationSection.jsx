@@ -1,5 +1,5 @@
-import React from "react";
-import { Building2, User } from "lucide-react";
+import React, { useState } from "react";
+import { Building2, User, X } from "lucide-react";
 import { Checkbox } from "../../../../components/ui/checkbox";
 import { Input } from "../../../../components/ui/input";
 import { Label } from "../../../../components/ui/label";
@@ -12,6 +12,7 @@ import {
   mergeCurrencyOptions,
 } from "../../../../utils/currency";
 import { VENDOR_FIELD_SECTIONS } from "../../../../utils/vendorFieldConfig";
+import { getVendorFieldErrorClassName } from "../../../../utils/vendorValidation";
 
 const CATEGORY_OPTIONS = [
   "IT Services",
@@ -72,11 +73,17 @@ const GeneralInformationSection = ({
   isRequired,
   labelFor,
   isEditMode = false,
+  fieldErrors = {},
 }) => {
   const nameLabel =
     formData.vendor_type === "Company"
       ? labelFor(VENDOR_FIELD_SECTIONS.COMPANY_NAME, "Vendor Name")
       : "Full Name";
+  const errorClass = (key) => getVendorFieldErrorClassName(fieldErrors, key);
+
+  const [isOtherCategory, setIsOtherCategory] = useState(
+    () => Boolean(formData.category) && !CATEGORY_OPTIONS.includes(formData.category),
+  );
 
   const { data: availableCurrencies = [] } = useGetAvailableCurrenciesQuery(
     CURRENCY_SCREENS.INVOICE,
@@ -118,7 +125,7 @@ const GeneralInformationSection = ({
                 value={formData.name || ""}
                 onChange={(event) => updateField("name", event.target.value)}
                 placeholder="e.g., Acme Corporation"
-                className="mt-1.5"
+                className={`mt-1.5 ${errorClass("name")}`}
                 data-testid="vendor-name-input"
                 required
               />
@@ -135,7 +142,7 @@ const GeneralInformationSection = ({
                   updateField("trade_name", event.target.value)
                 }
                 placeholder="e.g., Tensai"
-                className="mt-1.5"
+                className={`mt-1.5 ${errorClass("trade_name")}`}
                 data-testid="vendor-trade-name-input"
                 required={isRequired(VENDOR_FIELD_SECTIONS.TRADE_NAME)}
               />
@@ -150,8 +157,8 @@ const GeneralInformationSection = ({
                 onChange={(event) =>
                   updateField("vendorId", event.target.value)
                 }
-                placeholder="Auto-generated on save"
-                className="mt-1.5"
+                placeholder=""
+                className={`mt-1.5 ${errorClass("vendorId")}`}
                 data-testid="vendor-id-input"
                 required
               />
@@ -171,7 +178,9 @@ const GeneralInformationSection = ({
                   className={`flex flex-1 items-center justify-center gap-2 rounded-lg border p-3 transition-all ${
                     formData.vendor_type === type
                       ? "border-accent bg-accent/10 shadow-sm"
-                      : "border-border hover:border-accent/50"
+                      : fieldErrors.vendor_type
+                        ? "border-destructive hover:border-destructive"
+                        : "border-border hover:border-accent/50"
                   }`}
                 >
                   {type === "Company" ? (
@@ -204,15 +213,46 @@ const GeneralInformationSection = ({
               <Label>
                 {labelFor(VENDOR_FIELD_SECTIONS.CATEGORY, "Category")} *
               </Label>
-              <AppSelect
-                value={formData.category || ""}
-                onChange={(event) =>
-                  updateField("category", event.target.value)
-                }
-                options={CATEGORY_OPTIONS}
-                placeholder="Select Category"
-                className="mt-1.5"
-              />
+              {isOtherCategory ? (
+                <div className="relative mt-1.5">
+                  <Input
+                    autoFocus
+                    placeholder="Enter category"
+                    value={formData.category || ""}
+                    onChange={(event) =>
+                      updateField("category", event.target.value)
+                    }
+                    className={`pr-8 ${errorClass("category")}`}
+                  />
+                  <button
+                    type="button"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    onClick={() => {
+                      setIsOtherCategory(false);
+                      updateField("category", "");
+                    }}
+                    aria-label="Choose from list instead"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+              ) : (
+                <AppSelect
+                  value={formData.category || ""}
+                  onChange={(event) => {
+                    const nextValue = event.target.value;
+                    if (nextValue === "Others") {
+                      setIsOtherCategory(true);
+                      updateField("category", "");
+                    } else {
+                      updateField("category", nextValue);
+                    }
+                  }}
+                  options={CATEGORY_OPTIONS}
+                  placeholder="Select Category"
+                  className={`mt-1.5 ${errorClass("category")}`}
+                />
+              )}
             </div>
 
             <div className="flex-1">
@@ -225,7 +265,7 @@ const GeneralInformationSection = ({
                 onChange={(event) => updateField("currency", event.target.value)}
                 options={resolvedCurrencyOptions}
                 placeholder="Select Currency"
-                className="mt-1.5"
+                className={`mt-1.5 ${errorClass("currency")}`}
               />
             </div>
           </div>
@@ -242,7 +282,7 @@ const GeneralInformationSection = ({
                 }
                 options={PAYMENT_TERMS_OPTIONS}
                 placeholder="Select Payment Terms"
-                className="mt-1.5"
+                className={`mt-1.5 ${errorClass("paymentTerms")}`}
               />
             </div>
 
@@ -258,7 +298,7 @@ const GeneralInformationSection = ({
                 value={formData.modeOfDelivery || ""}
                 onChange={(event) => updateField("modeOfDelivery", event.target.value)}
                 placeholder="e.g., Road / Air / Courier"
-                className="mt-1.5"
+                className={`mt-1.5 ${errorClass("modeOfDelivery")}`}
               />
             </div>
           </div>
@@ -279,7 +319,7 @@ const GeneralInformationSection = ({
                 }
                 options={DELIVERY_TERMS_OPTIONS}
                 placeholder="Select Delivery Terms"
-                className="mt-1.5"
+                className={`mt-1.5 ${errorClass("deliveryTerms")}`}
               />
             </div>
 
@@ -322,7 +362,7 @@ const GeneralInformationSection = ({
                 }
                 options={VENDOR_STATUS_OPTIONS}
                 placeholder="Select Vendor Status"
-                className="mt-1.5"
+                className={`mt-1.5 ${errorClass("vendorStatus")}`}
               />
             </div>
 
@@ -402,7 +442,7 @@ const GeneralInformationSection = ({
                         updateField("udyamRegistrationNo", event.target.value)
                       }
                       placeholder="UDYAM-XX-00-0000000"
-                      className="mt-1.5 bg-background"
+                      className={`mt-1.5 bg-background ${errorClass("udyamRegistrationNo")}`}
                       required
                     />
                   </div>
@@ -420,7 +460,7 @@ const GeneralInformationSection = ({
                       }
                       options={MSME_CATEGORY_OPTIONS}
                       placeholder="Select MSME Category"
-                      className="mt-1.5 bg-background"
+                      className={`mt-1.5 bg-background ${errorClass("msmeCategory")}`}
                     />
                   </div>
                 </div>

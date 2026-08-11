@@ -370,11 +370,22 @@ const Approvals = () => {
     ]);
   }, [refetchPendingApprovals, refetchPendingChecker, refetchInvoices]);
 
-  const { canEdit, handleEditInvoice, findVendorByName, findVendorById, editDialogs } =
-    useApprovalsInvoiceEdit({
+  const {
+    canEdit,
+    handleEditInvoice,
+    findVendorByName,
+    findVendorById,
+    editDialogs,
+    showInternalChecklist,
+    internalChecklistItems,
+    canEditInternalChecklist,
+    handleSaveInternalChecklist,
+    savingInternalChecklist,
+  } = useApprovalsInvoiceEdit({
       currencies,
       currencyParam,
       onRefresh: refreshApprovalLists,
+      onInternalChecklistSaved: loadInvoiceHistory,
       renderPdfPreview,
       pdfZoom,
       viewPreviewError,
@@ -726,6 +737,11 @@ const Approvals = () => {
         findVendorByName={findVendorByName}
         findVendorById={findVendorById}
         approvalActionConfig={viewApprovalActionConfig}
+        showInternalChecklist={showInternalChecklist}
+        internalChecklistItems={internalChecklistItems}
+        canEditInternalChecklist={canEditInternalChecklist}
+        onSaveInternalChecklist={handleSaveInternalChecklist}
+        savingInternalChecklist={savingInternalChecklist}
       />
 
       {editDialogs}

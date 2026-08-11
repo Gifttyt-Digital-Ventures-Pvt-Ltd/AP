@@ -76,6 +76,9 @@ const InvoicesDialogs = (props) => {
     showErpIntegrationFields = false,
     showInternalChecklist = false,
     internalChecklistItems,
+    canEditInternalChecklist = false,
+    onSaveInternalChecklist,
+    savingInternalChecklist = false,
     onMapTaxInvoice,
     onViewLinkedInvoice,
     allInvoices = [],
@@ -172,6 +175,9 @@ const InvoicesDialogs = (props) => {
         showErpIntegrationFields={showErpIntegrationFields}
         showInternalChecklist={showInternalChecklist}
         internalChecklistItems={internalChecklistItems}
+        canEditInternalChecklist={canEditInternalChecklist}
+        onSaveInternalChecklist={onSaveInternalChecklist}
+        savingInternalChecklist={savingInternalChecklist}
         onMapTaxInvoice={onMapTaxInvoice}
         onViewLinkedInvoice={onViewLinkedInvoice}
         allInvoices={allInvoices}
