@@ -24,6 +24,13 @@ export const PERMISSION_GROUPS = [
     ],
   },
   {
+    title: "Order Tracking",
+    permissions: [
+      { id: "order-tracking-manage", label: "Manage (Export Reports)" },
+      { id: "order-tracking-view", label: "View Only" },
+    ],
+  },
+  {
     title: "GRN",
     permissions: [
       { id: "grn-manage", label: "Manage (Create, Delete, Edit) GRN" },
@@ -159,6 +166,8 @@ export const PERMISSION_LABELS = {
   "po-manage": "Purchase Orders - Manage",
   "po-approve": "Purchase Orders - Approve",
   "po-view": "Purchase Orders - View Only",
+  "order-tracking-manage": "Order Tracking - Manage (Export Reports)",
+  "order-tracking-view": "Order Tracking - View Only",
   "grn-manage": "GRN - Manage",
   "grn-approve": "GRN - Approve",
   "grn-view": "GRN - View Only",
