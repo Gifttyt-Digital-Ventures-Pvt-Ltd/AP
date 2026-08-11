@@ -88,7 +88,8 @@ const TaxInformationSection = ({
         <div className="flex w-full items-start gap-4">
           <div className="flex-1">
             <Label>
-              {labelFor(VENDOR_FIELD_SECTIONS.PAN_NO, "PAN No.")} *
+              {labelFor(VENDOR_FIELD_SECTIONS.PAN_NO, "PAN No.")}
+              {isRequired(VENDOR_FIELD_SECTIONS.PAN_NO) ? " *" : ""}
             </Label>
             <Input
               value={formData.pan || ""}
@@ -96,11 +97,14 @@ const TaxInformationSection = ({
               placeholder="e.g., ABCDE1234F"
               className={`mt-1.5 font-mono uppercase ${errorClass("pan")}`}
               maxLength={10}
-              required
+              required={isRequired(VENDOR_FIELD_SECTIONS.PAN_NO)}
             />
           </div>
           <div className="flex-1">
-            <Label>{labelFor(VENDOR_FIELD_SECTIONS.PAN_STATUS, "PAN Status")} *</Label>
+            <Label>
+              {labelFor(VENDOR_FIELD_SECTIONS.PAN_STATUS, "PAN Status")}
+              {isRequired(VENDOR_FIELD_SECTIONS.PAN_STATUS) ? " *" : ""}
+            </Label>
             <AppSelect
               value={formData.panStatus || ""}
               onChange={(event) => updateField("panStatus", event.target.value)}
@@ -113,16 +117,23 @@ const TaxInformationSection = ({
 
         <div className="flex w-full items-start gap-4">
           <div className="flex-1">
-            <Label>{labelFor(VENDOR_FIELD_SECTIONS.PAN_REFERENCE_NO, "PAN Reference No.")}</Label>
+            <Label>
+              {labelFor(VENDOR_FIELD_SECTIONS.PAN_REFERENCE_NO, "PAN Reference No.")}
+              {isRequired(VENDOR_FIELD_SECTIONS.PAN_REFERENCE_NO) ? " *" : ""}
+            </Label>
             <Input
               value={formData.panReferenceNo || ""}
               onChange={(event) => updateField("panReferenceNo", event.target.value)}
               placeholder="e.g., PAN-REF-0042"
               className={`mt-1.5 ${errorClass("panReferenceNo")}`}
+              required={isRequired(VENDOR_FIELD_SECTIONS.PAN_REFERENCE_NO)}
             />
           </div>
           <div className="flex-1">
-            <Label>{labelFor(VENDOR_FIELD_SECTIONS.NATURE_OF_ASSESSEE, "Nature of Assessee")} *</Label>
+            <Label>
+              {labelFor(VENDOR_FIELD_SECTIONS.NATURE_OF_ASSESSEE, "Nature of Assessee")}
+              {isRequired(VENDOR_FIELD_SECTIONS.NATURE_OF_ASSESSEE) ? " *" : ""}
+            </Label>
             <AppSelect
               value={formData.natureOfAssessee || ""}
               onChange={(event) => updateField("natureOfAssessee", event.target.value)}
@@ -159,7 +170,10 @@ const TaxInformationSection = ({
         <div className="flex w-full flex-col items-start gap-6">
           <div className="flex w-full items-start gap-4">
             <div className="flex-1">
-              <Label>{labelFor(VENDOR_FIELD_SECTIONS.TDS_GROUP, "TDS Group/List")} *</Label>
+              <Label>
+                {labelFor(VENDOR_FIELD_SECTIONS.TDS_GROUP, "TDS Group/List")}
+                {isRequired(VENDOR_FIELD_SECTIONS.TDS_GROUP) ? " *" : ""}
+              </Label>
               <AppSelect
                 value={formData.tdsGroup || ""}
                 onChange={(event) => updateField("tdsGroup", event.target.value)}
@@ -169,7 +183,10 @@ const TaxInformationSection = ({
               />
             </div>
             <div className="flex-1">
-              <Label>{labelFor(VENDOR_FIELD_SECTIONS.TCS_GROUP, "TCS Group/List")} *</Label>
+              <Label>
+                {labelFor(VENDOR_FIELD_SECTIONS.TCS_GROUP, "TCS Group/List")}
+                {isRequired(VENDOR_FIELD_SECTIONS.TCS_GROUP) ? " *" : ""}
+              </Label>
               <AppSelect
                 value={formData.tcsGroup || ""}
                 onChange={(event) => updateField("tcsGroup", event.target.value)}
@@ -187,6 +204,7 @@ const TaxInformationSection = ({
                   VENDOR_FIELD_SECTIONS.LOW_NIL_DEDUCTION_CERTIFICATE_NO,
                   "Low/Nil Deduction Certificate No.",
                 )}
+                {isRequired(VENDOR_FIELD_SECTIONS.LOW_NIL_DEDUCTION_CERTIFICATE_NO) ? " *" : ""}
               </Label>
               <Input
                 value={formData.lowNilDeductionCertificateNo || ""}
@@ -195,15 +213,20 @@ const TaxInformationSection = ({
                 }
                 placeholder="e.g., LDC-0042"
                 className={`mt-1.5 ${errorClass("lowNilDeductionCertificateNo")}`}
+                required={isRequired(VENDOR_FIELD_SECTIONS.LOW_NIL_DEDUCTION_CERTIFICATE_NO)}
               />
             </div>
             <div className="flex-1">
-              <Label>{labelFor(VENDOR_FIELD_SECTIONS.CERTIFICATE_VALIDITY, "Certificate Validity")}</Label>
+              <Label>
+                {labelFor(VENDOR_FIELD_SECTIONS.CERTIFICATE_VALIDITY, "Certificate Validity")}
+                {isRequired(VENDOR_FIELD_SECTIONS.CERTIFICATE_VALIDITY) ? " *" : ""}
+              </Label>
               <Input
                 type="date"
                 value={formData.certificateValidity || ""}
                 onChange={(event) => updateField("certificateValidity", event.target.value)}
                 className={`mt-1.5 ${errorClass("certificateValidity")}`}
+                required={isRequired(VENDOR_FIELD_SECTIONS.CERTIFICATE_VALIDITY)}
               />
             </div>
           </div>

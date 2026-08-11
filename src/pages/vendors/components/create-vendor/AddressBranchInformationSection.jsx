@@ -29,6 +29,7 @@ const AddOutlineButton = ({ children, ...props }) => (
 const AddressBranchInformationSection = ({
   formData,
   updateField,
+  isRequired,
   labelFor,
   gstRegistrations,
   vendorBranches,
@@ -72,7 +73,7 @@ const AddressBranchInformationSection = ({
         <div className="flex w-full items-center gap-6">
           <div className="flex-1">
             <SubsectionHeading
-              title="GSTIN Details *"
+              title={`GSTIN Details${isRequired(VENDOR_FIELD_SECTIONS.GST_NO) ? " *" : ""}`}
               description={
                 isEditMode
                   ? "GSTIN details associated with this vendor."
@@ -157,7 +158,7 @@ const AddressBranchInformationSection = ({
             onUpdate={updateGstRegistration}
             onRemove={removeGstRegistration}
             portalFetchEnabled={showPortalFetch}
-            gstinRequired
+            gstinRequired={isRequired(VENDOR_FIELD_SECTIONS.GST_NO)}
           />
         </div>
       </div>
@@ -218,51 +219,71 @@ const AddressBranchInformationSection = ({
 
             <div className="flex w-full items-start gap-4">
               <div className="flex-1">
-                <Label>{labelFor(VENDOR_FIELD_SECTIONS.IEC_NUMBER, "IEC Number")}</Label>
+                <Label>
+                  {labelFor(VENDOR_FIELD_SECTIONS.IEC_NUMBER, "IEC Number")}
+                  {isRequired(VENDOR_FIELD_SECTIONS.IEC_NUMBER) ? " *" : ""}
+                </Label>
                 <Input
                   value={formData.iecNumber || ""}
                   onChange={(event) => updateField("iecNumber", event.target.value.toUpperCase())}
                   placeholder="Import Export Code"
                   className={`mt-1.5 uppercase ${errorClass("iecNumber")}`}
+                  required={isRequired(VENDOR_FIELD_SECTIONS.IEC_NUMBER)}
                 />
               </div>
               <div className="flex-1">
-                <Label>{labelFor(VENDOR_FIELD_SECTIONS.TAN, "TAN")}</Label>
+                <Label>
+                  {labelFor(VENDOR_FIELD_SECTIONS.TAN, "TAN")}
+                  {isRequired(VENDOR_FIELD_SECTIONS.TAN) ? " *" : ""}
+                </Label>
                 <Input
                   value={formData.tan || ""}
                   onChange={(event) => updateField("tan", event.target.value.toUpperCase())}
                   placeholder="Tax Deduction Account Number"
                   className={`mt-1.5 uppercase ${errorClass("tan")}`}
+                  required={isRequired(VENDOR_FIELD_SECTIONS.TAN)}
                 />
               </div>
               <div className="flex-1">
-                <Label>{labelFor(VENDOR_FIELD_SECTIONS.TIN, "TIN")}</Label>
+                <Label>
+                  {labelFor(VENDOR_FIELD_SECTIONS.TIN, "TIN")}
+                  {isRequired(VENDOR_FIELD_SECTIONS.TIN) ? " *" : ""}
+                </Label>
                 <Input
                   value={formData.tin || ""}
                   onChange={(event) => updateField("tin", event.target.value)}
                   placeholder="Legacy VAT ID"
                   className={`mt-1.5 ${errorClass("tin")}`}
+                  required={isRequired(VENDOR_FIELD_SECTIONS.TIN)}
                 />
               </div>
             </div>
 
             <div className="flex w-full items-start gap-4">
               <div className="flex-1">
-                <Label>{labelFor(VENDOR_FIELD_SECTIONS.STC, "STC")}</Label>
+                <Label>
+                  {labelFor(VENDOR_FIELD_SECTIONS.STC, "STC")}
+                  {isRequired(VENDOR_FIELD_SECTIONS.STC) ? " *" : ""}
+                </Label>
                 <Input
                   value={formData.stc || ""}
                   onChange={(event) => updateField("stc", event.target.value)}
                   placeholder="Legacy Service Tax Code"
                   className={`mt-1.5 ${errorClass("stc")}`}
+                  required={isRequired(VENDOR_FIELD_SECTIONS.STC)}
                 />
               </div>
               <div className="flex-1">
-                <Label>{labelFor(VENDOR_FIELD_SECTIONS.ST_REGISTRATION_NUMBER, "ST Registration Number")}</Label>
+                <Label>
+                  {labelFor(VENDOR_FIELD_SECTIONS.ST_REGISTRATION_NUMBER, "ST Registration Number")}
+                  {isRequired(VENDOR_FIELD_SECTIONS.ST_REGISTRATION_NUMBER) ? " *" : ""}
+                </Label>
                 <Input
                   value={formData.stRegistrationNumber || ""}
                   onChange={(event) => updateField("stRegistrationNumber", event.target.value)}
                   placeholder="Legacy Sales Tax reg. no."
                   className={`mt-1.5 ${errorClass("stRegistrationNumber")}`}
+                  required={isRequired(VENDOR_FIELD_SECTIONS.ST_REGISTRATION_NUMBER)}
                 />
               </div>
               <div className="flex-1" />
