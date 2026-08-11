@@ -13,6 +13,7 @@ import {
   isGrnBillToEnabled,
 } from '../utils/grnFormatConfig';
 import { formatCurrency } from '../utils';
+import InrConversionFields from '../../../components/common/InrConversionFields';
 
 const GrnCreateFormFields = ({
   form,
@@ -32,7 +33,7 @@ const GrnCreateFormFields = ({
           <div>
             <p className="font-semibold text-primary">{selectedPo.po_number}</p>
             <p className="text-sm text-muted-foreground">
-              {selectedPo.vendor_name} · {formatCurrency(selectedPo.total_amount)}
+              {selectedPo.vendor_name} · {formatCurrency(selectedPo.total_amount, selectedPo.currency || form.currency)}
             </p>
           </div>
           {showExtractedBadge && (
@@ -131,6 +132,19 @@ const GrnCreateFormFields = ({
         qcEnabled={qcEnabled}
         poLinked={poLinked}
         formatConfig={formatConfig}
+        currency={form.currency}
+      />
+
+      <InrConversionFields
+        currency={form.currency}
+        convertToInr={form.convertToInr}
+        matchingInrValue={form.matchingInrValue}
+        onChange={(conversion) =>
+          setForm((current) => ({
+            ...current,
+            ...conversion,
+          }))
+        }
       />
 
       {isGrnBillToEnabled(formatConfig) && (

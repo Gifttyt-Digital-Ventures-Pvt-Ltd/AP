@@ -75,9 +75,9 @@ import TableSortButton from "../../components/common/TableSortButton";
 import { TableCell, TableRow } from "../../components/ui/table";
 import MultipleVendorUploadDialog from "./components/MultipleVendorUploadDialog";
 import {
+  getVendorFormRequiredFields,
   getVendorUploadMandatoryFieldKeys,
   isVendorFieldRequired,
-  VENDOR_FIELD_SECTIONS,
   VENDOR_FORM_KEY_TO_SECTION,
 } from "../../utils/vendorFieldConfig";
 import {
@@ -108,11 +108,13 @@ import {
   normalizeVendorForSave,
 } from "./utils/vendorSave";
 import { mergeBulkVendorRowsByPan } from "./utils/bulkVendorMerge";
+import { validateVendorBranches } from "./utils/vendorBranches";
 import { isVendorPortalFetchEnabled } from "../../utils/vendorVerificationConfig";
 import VendorApprovalDialog from "./components/VendorApprovalDialog";
 import IntegrationSourceBadge from "../../components/integrations/IntegrationSourceBadge";
 import useZohoIntegrationActive from "../../hooks/useZohoIntegrationActive";
 import { withIntegrationTableHeader } from "../../utils/integrationProvenance";
+import { validateVendorBankAccounts } from "./components/create-vendor/VendorBankDetailsEditor";
 
 const VENDOR_UPLOAD_FIELDS = [
   "vendorId",
@@ -273,25 +275,6 @@ const getVendorApiErrorMessages = (response) => {
 const getVendorType = (vendor) =>
   vendor?.vendor_type || vendor?.vendorType || "Company";
 
-// Fields owned by a per-GSTIN registration row (or, for bulk upload, only meaningful on
-// a "GSTIN"-type row) — excluded from blanket vendor-level "mandatory" treatment so a
-// tenant marking one of these mandatory doesn't force it onto every bulk-upload row,
-// including Bank Account / Branch typed rows where it doesn't apply.
-const GST_REGISTRATION_OWNED_VENDOR_SECTIONS = new Set([
-  VENDOR_FIELD_SECTIONS.ADDRESS_LINE_1,
-  VENDOR_FIELD_SECTIONS.ADDRESS_LINE_2,
-  VENDOR_FIELD_SECTIONS.CITY,
-  VENDOR_FIELD_SECTIONS.STATE,
-  VENDOR_FIELD_SECTIONS.PINCODE,
-  VENDOR_FIELD_SECTIONS.COUNTRY,
-  VENDOR_FIELD_SECTIONS.ACCOUNT_NAME,
-  VENDOR_FIELD_SECTIONS.ACCOUNT_NUMBER,
-  VENDOR_FIELD_SECTIONS.IFSC_CODE,
-  VENDOR_FIELD_SECTIONS.BANK_NAME,
-  VENDOR_FIELD_SECTIONS.BRANCH,
-  VENDOR_FIELD_SECTIONS.GST_NO,
-]);
-
 const getNormalizedVendorStatusKey = (status) =>
   String(status || "")
     .trim()
@@ -409,27 +392,6 @@ const Vendors = () => {
   );
   const vendorFieldConfiguration =
     corporateScreens?.vendorFieldConfiguration ?? [];
-  const effectiveActiveVendorFields = useMemo(
-    () =>
-      activeVendorFields.filter(
-        (section) =>
-          !GST_REGISTRATION_OWNED_VENDOR_SECTIONS.has(
-            String(section).trim().toUpperCase(),
-          ),
-      ),
-    [activeVendorFields],
-  );
-  const vendorUploadMandatoryFields = useMemo(
-    () => getVendorUploadMandatoryFieldKeys(effectiveActiveVendorFields),
-    [effectiveActiveVendorFields],
-  );
-  const vendorUploadOptionalFields = useMemo(
-    () =>
-      VENDOR_UPLOAD_FIELDS.filter(
-        (field) => !vendorUploadMandatoryFields.includes(field),
-      ),
-    [vendorUploadMandatoryFields],
-  );
   const canUpdateVendorPermission = canPerformAction("vendors.update");
   const canRequestVendorPermission = canPerformAction("invoices.addVendor");
   const vendorEditContext = useMemo(
@@ -532,6 +494,30 @@ const Vendors = () => {
     ...NEW_VENDOR_FIELD_DEFAULTS,
   });
 
+  const effectiveActiveVendorFields = useMemo(
+    () => getVendorFormRequiredFields(activeVendorFields, formData),
+    [activeVendorFields, formData],
+  );
+  const effectiveUploadVendorFields = useMemo(
+    () =>
+      getVendorFormRequiredFields(activeVendorFields, {
+        msme: true,
+        tdsApplicable: true,
+      }),
+    [activeVendorFields],
+  );
+  const vendorUploadMandatoryFields = useMemo(
+    () => getVendorUploadMandatoryFieldKeys(effectiveUploadVendorFields),
+    [effectiveUploadVendorFields],
+  );
+  const vendorUploadOptionalFields = useMemo(
+    () =>
+      VENDOR_UPLOAD_FIELDS.filter(
+        (field) => !vendorUploadMandatoryFields.includes(field),
+      ),
+    [vendorUploadMandatoryFields],
+  );
+
   const vendors = Array.isArray(vendorsData) ? vendorsData : [];
 
   useEffect(() => {
@@ -593,6 +579,15 @@ const Vendors = () => {
     }
     if (tdsValidationErrors.length > 0) {
       toast.error(tdsValidationErrors[0]);
+      return;
+    }
+
+    const vendorBankError = validateVendorBankAccounts(formData.bankAccounts, {
+      foreignVendor: Boolean(formData.foreignVendor),
+      isRequired: (sectionId) => isVendorFieldRequired(sectionId, activeVendorFields),
+    });
+    if (vendorBankError) {
+      toast.error(vendorBankError);
       return;
     }
 
@@ -671,6 +666,43 @@ const Vendors = () => {
     setMultipleVendorUploadOpen(true);
   };
 
+  const getBulkVendorPayloadValidationErrors = (vendor, index) => {
+    const vendorLabel = `Vendor ${index + 1}${vendor?.name ? ` (${vendor.name})` : ""}: `;
+    const requiredVendorFields = getVendorFormRequiredFields(activeVendorFields, vendor);
+    const validationErrors = getVendorValidationErrors(vendor, {
+      activeVendorFields: requiredVendorFields,
+      vendorFieldConfiguration,
+    });
+    const gstVerificationErrors = getVendorGstVerificationErrors(vendor, null, {
+      gstVerificationEnabled: portalVerificationEnabled,
+      activeVendorFields: requiredVendorFields,
+    });
+    const vendorBankError = validateVendorBankAccounts(vendor.bankAccounts, {
+      foreignVendor: Boolean(vendor.foreignVendor),
+      isRequired: (sectionId) => isVendorFieldRequired(sectionId, activeVendorFields),
+    });
+    const vendorBranchError = validateVendorBranches(
+      vendor.vendorBranches,
+      vendor.gstRegistrations,
+    );
+    const tdsErrors = [
+      ...getVendorTdsValidationErrors(vendor.tdsMapping ?? vendor),
+      ...getVendorTdsCertificateValidationErrors(vendor.tdsCertificates, {
+        requireCertificate: Boolean(
+          vendor.tdsDetailsEdited && hasConfiguredVendorTds(vendor.tdsMapping),
+        ),
+      }),
+    ];
+
+    return [
+      ...validationErrors,
+      ...gstVerificationErrors,
+      ...(vendorBankError ? [vendorBankError] : []),
+      ...(vendorBranchError ? [vendorBranchError] : []),
+      ...tdsErrors,
+    ].map((error) => `${vendorLabel}${error}`);
+  };
+
   const handleBulkVendorUpload = async (rows) => {
     if (!guardAction("vendors.create")) {
       return { errors: [] };
@@ -687,6 +719,13 @@ const Vendors = () => {
             "No valid vendor records found. Please include at least a vendor name column",
           ],
         };
+      }
+
+      const validationErrors = vendorsPayload.flatMap((vendor, index) =>
+        getBulkVendorPayloadValidationErrors(vendor, index),
+      );
+      if (validationErrors.length > 0) {
+        return { errors: validationErrors };
       }
 
       const bulkStatus = resolveBulkCreateVendorStatus();
@@ -730,7 +769,7 @@ const Vendors = () => {
     const section = VENDOR_FORM_KEY_TO_SECTION[fieldKey];
     if (
       section &&
-      isVendorFieldRequired(section, effectiveActiveVendorFields)
+      isVendorFieldRequired(section, effectiveUploadVendorFields)
     ) {
       return "Mandatory";
     }

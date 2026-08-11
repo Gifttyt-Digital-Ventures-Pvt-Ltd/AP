@@ -1,6 +1,7 @@
 import React from 'react';
 import { format } from 'date-fns';
 import { CheckCircle2, XCircle } from 'lucide-react';
+import { normalizePayableRow } from '../utils/payableRows';
 
 export const GENERIC_ADMIN_PAYRUN_ROUTE = {
   workflowId: 'generic-admin-payrun-route',
@@ -485,14 +486,32 @@ export const normalizePayrun = (payrun = {}) => {
         item.bank_details ||
         [vendorBankName, vendorAccountNumber, vendorIfscCode].filter(Boolean).join(' · ');
 
+      const payable = normalizePayableRow({
+        ...item,
+        currency: item.currency || item.currency_code || payrun.currency || payrun.currency_code,
+      });
+
       return {
         ...item,
+        ...payable,
         id: item.invoiceId || item.invoice_id || item.id || item.payrunItemId || item.payrun_item_id,
         payrunItemId: item.payrunItemId || item.payrun_item_id,
-        invoiceNumber: item.invoiceNumber || item.invoice_number || '-',
+        invoiceNumber: item.invoiceNumber || item.invoice_number || payable.invoiceNumber || '-',
         vendorId: item.vendorId || item.vendor_id,
         vendorName: item.vendorName || item.vendor_name || item.vendor?.name || '-',
-        requestedAmount: Number(item.requestedAmount || item.requested_amount || item.paymentAmount || item.payment_amount || item.amount || 0),
+        currency: item.currency || item.currency_code || payrun.currency || payrun.currency_code,
+        requestedAmount: Number(
+          item.requestedAmount ||
+            item.requested_amount ||
+            payable.payableAmount ||
+            item.paymentAmount ||
+            item.payment_amount ||
+            item.amount ||
+            0,
+        ),
+        convertToInr: Boolean(item.convertToInr ?? item.convert_to_inr ?? false),
+        matchingInrValue: item.matchingInrValue ?? item.matching_inr_value,
+        actualInrAmount: item.actualInrAmount ?? item.actual_inr_amount,
         gstAmount: Number(item.gstAmount || item.gst_amount || 0),
         holdGst: Boolean(item.holdGst ?? item.hold_gst),
         bankDetails,
@@ -505,6 +524,7 @@ export const normalizePayrun = (payrun = {}) => {
         paidOn: item.paidOn || item.paid_on,
       };
     }),
+    currency: payrun.currency || payrun.currency_code || items.find((item) => item.currency || item.currency_code)?.currency || items.find((item) => item.currency || item.currency_code)?.currency_code,
     totalAmount: Number(payrun.totalPaymentAmount || payrun.total_payment_amount || payrun.totalAmount || payrun.total_amount || 0),
     timeline: auditLog.map((entry) => ({
       label: formatPayrunAuditLabel(entry.label || entry.event || entry.action),

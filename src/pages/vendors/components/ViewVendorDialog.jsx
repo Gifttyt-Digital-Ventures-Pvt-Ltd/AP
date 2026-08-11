@@ -29,6 +29,7 @@ import {
   DialogTitle,
 } from '../../../components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../../../components/ui/tabs';
+import AdvanceContextPanel from '../../../components/vendor-advances/AdvanceContextPanel';
 
 const VendorDetailsTab = ({ vendor }) => {
   const { corporateScreens } = useRBAC();
@@ -77,6 +78,13 @@ const VendorDetailsTab = ({ vendor }) => {
         </div>
       </div>
     </div>
+
+    <AdvanceContextPanel
+      source={vendor}
+      title="Vendor Advance Balance"
+      description="Read-only vendor advance balance returned by backend."
+      currency={vendor.currency || 'INR'}
+    />
 
     <div>
       <h3 className="font-semibold mb-3">Contact Information</h3>

@@ -1,4 +1,8 @@
 import { formatCurrency as formatCurrencyAmount } from "../../../utils/currency";
+import {
+  buildPaymentSchedulePayload,
+  normalizePaymentScheduleRows,
+} from "./poPaymentSchedule";
 
 export const SUPPORTED_PO_CURRENCIES = ["INR", "USD", "EUR", "GBP"];
 export const DEFAULT_PO_TEMPLATE_CODE = "T1";
@@ -154,6 +158,9 @@ export const normalizePoLineItem = (item = {}) => ({
 
 export const normalizePurchaseOrder = (po = {}) => ({
   ...po,
+  id: po.id ?? po.poId ?? po.po_id ?? po.purchaseOrderId ?? po.purchase_order_id,
+  poId: po.poId ?? po.po_id ?? po.purchaseOrderId ?? po.purchase_order_id ?? po.id,
+  po_id: po.po_id ?? po.poId ?? po.purchaseOrderId ?? po.purchase_order_id ?? po.id,
   po_number: po.po_number ?? po.poNumber,
   vendor_id: po.vendor_id ?? po.vendorId,
   vendor_name: po.vendor_name ?? po.vendorName,
@@ -180,11 +187,17 @@ export const normalizePurchaseOrder = (po = {}) => ({
   vendor_branch_name: po.vendor_branch_name ?? po.vendorBranchName ?? '',
   vendor_branch_code: po.vendor_branch_code ?? po.vendorBranchCode ?? '',
   vendor_branch_gstin: po.vendor_branch_gstin ?? po.vendorBranchGstin ?? '',
+  reference_document_type: po.reference_document_type ?? po.referenceDocumentType ?? '',
+  reference_document_no: po.reference_document_no ?? po.referenceDocumentNo ?? '',
+  reference_document_id: po.reference_document_id ?? po.referenceDocumentId ?? '',
+  reference_document_name: po.reference_document_name ?? po.referenceDocumentName ?? '',
   po_date: po.po_date ?? po.poDate,
   valid_till: po.valid_till ?? po.validTill ?? "",
   expected_delivery_date: po.expected_delivery_date ?? po.expectedDeliveryDate,
   currency: po.currency ?? "INR",
   exchange_rate: po.exchange_rate ?? po.exchangeRate ?? "",
+  convertToInr: Boolean(po.convertToInr ?? po.convert_to_inr ?? false),
+  matchingInrValue: po.matchingInrValue ?? po.matching_inr_value ?? "",
   tax_mode: po.tax_mode ?? po.taxMode ?? getTaxMode(po.currency ?? "INR"),
   tds_applicable: po.tds_applicable ?? po.isTdsApplicable ?? false,
   tds_section: po.tds_section ?? po.tdsSection ?? "",
@@ -227,6 +240,7 @@ export const normalizePurchaseOrder = (po = {}) => ({
   overdue_days: Number(po.overdue_days ?? po.overdueDays ?? 0) || 0,
   created_by_name: po.created_by_name ?? po.createdByName ?? "",
   approval_records: po.approval_records ?? po.approvalRecords ?? po.approvals ?? [],
+  paymentSchedule: normalizePaymentScheduleRows(po),
 });
 
 export const sanitizeLineItemForCurrency = (item = {}, currency = "INR") => {
@@ -258,7 +272,11 @@ export const isFormatFieldEnabled = (formatConfig = {}, sectionKey = "", fieldKe
   return field ? Boolean(field.isEnabled) : true;
 };
 
-export const buildCreatePurchaseOrderPayload = (form = {}, formatConfig = null) => {
+export const buildCreatePurchaseOrderPayload = (
+  form = {},
+  formatConfig = null,
+  { includePaymentSchedule = false } = {},
+) => {
   const currency = form.currency || "INR";
   const isInr = isInrCurrency(currency);
   const poNumber = String(form.po_number || "").trim();
@@ -269,6 +287,10 @@ export const buildCreatePurchaseOrderPayload = (form = {}, formatConfig = null) 
   const lineOn = (key) => !formatConfig || isFormatFieldEnabled(formatConfig, "LINE_ITEM", key);
   const tdsApplicable = isInr && taxTotalsOn("is_tds_applicable") && Boolean(form.tds_applicable);
   const includeTotal = (value) => value !== undefined && value !== null && value !== "";
+
+  const paymentSchedule = includePaymentSchedule
+    ? buildPaymentSchedulePayload(form.paymentSchedule || [])
+    : [];
 
   return {
     ...(poNumber ? { poNumber } : {}),
@@ -284,11 +306,21 @@ export const buildCreatePurchaseOrderPayload = (form = {}, formatConfig = null) 
     vendorBranchName: form.vendor_branch_name || null,
     vendorBranchCode: form.vendor_branch_code || null,
     vendorBranchGstin: form.vendor_branch_gstin || null,
+    referenceDocumentType: form.reference_document_type || null,
+    referenceDocumentNo: form.reference_document_no || null,
+    referenceDocumentId: form.reference_document_id || null,
+    referenceDocumentName: form.reference_document_name || null,
     formatConfigId: form.po_format_id || null,
     poDate: form.po_date,
     validTill: headerOn("valid_till") ? form.valid_till || null : null,
     currency,
     exchangeRate: isInr ? null : Number(form.exchange_rate) || null,
+    ...(form.convertToInr !== undefined
+      ? {
+          convertToInr: Boolean(form.convertToInr),
+          matchingInrValue: form.convertToInr ? Number(form.matchingInrValue) || null : null,
+        }
+      : {}),
     placeOfSupply: isInr && shipBillOn("place_of_supply") ? form.place_of_supply || null : null,
     expectedDeliveryDate: form.expected_delivery_date || null,
     deliveryTerms: paymentOn("delivery_terms") ? form.delivery_terms || "" : "",
@@ -350,5 +382,6 @@ export const buildCreatePurchaseOrderPayload = (form = {}, formatConfig = null) 
         ...(includeTotal(item.cess_amount) ? { cessAmount: Number(item.cess_amount) } : {}),
       };
     }),
+    ...(includePaymentSchedule ? { paymentSchedule } : {}),
   };
 };

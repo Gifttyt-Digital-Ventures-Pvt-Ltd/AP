@@ -57,6 +57,7 @@ const TaxInformationSection = ({
 }) => {
   const tdsApplicable = Boolean(formData.tdsApplicable);
   const errorClass = (key) => getVendorFieldErrorClassName(fieldErrors, key);
+  const requiredMark = (sectionId) => (isRequired(sectionId) ? " *" : "");
   const { data: tdsSectionsData = [] } = useGetTdsSectionsQuery();
   const tdsGroupOptions = useMemo(
     () => buildTdsSectionOptions(tdsSectionsData),
@@ -89,7 +90,7 @@ const TaxInformationSection = ({
           <div className="flex-1">
             <Label>
               {labelFor(VENDOR_FIELD_SECTIONS.PAN_NO, "PAN No.")}
-              {isRequired(VENDOR_FIELD_SECTIONS.PAN_NO) ? " *" : ""}
+              {requiredMark(VENDOR_FIELD_SECTIONS.PAN_NO)}
             </Label>
             <Input
               value={formData.pan || ""}
@@ -103,7 +104,7 @@ const TaxInformationSection = ({
           <div className="flex-1">
             <Label>
               {labelFor(VENDOR_FIELD_SECTIONS.PAN_STATUS, "PAN Status")}
-              {isRequired(VENDOR_FIELD_SECTIONS.PAN_STATUS) ? " *" : ""}
+              {requiredMark(VENDOR_FIELD_SECTIONS.PAN_STATUS)}
             </Label>
             <AppSelect
               value={formData.panStatus || ""}
@@ -132,7 +133,7 @@ const TaxInformationSection = ({
           <div className="flex-1">
             <Label>
               {labelFor(VENDOR_FIELD_SECTIONS.NATURE_OF_ASSESSEE, "Nature of Assessee")}
-              {isRequired(VENDOR_FIELD_SECTIONS.NATURE_OF_ASSESSEE) ? " *" : ""}
+              {requiredMark(VENDOR_FIELD_SECTIONS.NATURE_OF_ASSESSEE)}
             </Label>
             <AppSelect
               value={formData.natureOfAssessee || ""}
@@ -172,7 +173,7 @@ const TaxInformationSection = ({
             <div className="flex-1">
               <Label>
                 {labelFor(VENDOR_FIELD_SECTIONS.TDS_GROUP, "TDS Group/List")}
-                {isRequired(VENDOR_FIELD_SECTIONS.TDS_GROUP) ? " *" : ""}
+                {requiredMark(VENDOR_FIELD_SECTIONS.TDS_GROUP)}
               </Label>
               <AppSelect
                 value={formData.tdsGroup || ""}
@@ -185,7 +186,7 @@ const TaxInformationSection = ({
             <div className="flex-1">
               <Label>
                 {labelFor(VENDOR_FIELD_SECTIONS.TCS_GROUP, "TCS Group/List")}
-                {isRequired(VENDOR_FIELD_SECTIONS.TCS_GROUP) ? " *" : ""}
+                {requiredMark(VENDOR_FIELD_SECTIONS.TCS_GROUP)}
               </Label>
               <AppSelect
                 value={formData.tcsGroup || ""}
@@ -204,7 +205,7 @@ const TaxInformationSection = ({
                   VENDOR_FIELD_SECTIONS.LOW_NIL_DEDUCTION_CERTIFICATE_NO,
                   "Low/Nil Deduction Certificate No.",
                 )}
-                {isRequired(VENDOR_FIELD_SECTIONS.LOW_NIL_DEDUCTION_CERTIFICATE_NO) ? " *" : ""}
+                {requiredMark(VENDOR_FIELD_SECTIONS.LOW_NIL_DEDUCTION_CERTIFICATE_NO)}
               </Label>
               <Input
                 value={formData.lowNilDeductionCertificateNo || ""}
@@ -219,7 +220,7 @@ const TaxInformationSection = ({
             <div className="flex-1">
               <Label>
                 {labelFor(VENDOR_FIELD_SECTIONS.CERTIFICATE_VALIDITY, "Certificate Validity")}
-                {isRequired(VENDOR_FIELD_SECTIONS.CERTIFICATE_VALIDITY) ? " *" : ""}
+                {requiredMark(VENDOR_FIELD_SECTIONS.CERTIFICATE_VALIDITY)}
               </Label>
               <Input
                 type="date"
@@ -240,6 +241,7 @@ const TaxInformationSection = ({
               />
               <Label htmlFor="vendor-206ab" className="cursor-pointer font-normal">
                 {labelFor(VENDOR_FIELD_SECTIONS.SPECIFIED_PERSON_206AB, "206AB Specified Person")}
+                {requiredMark(VENDOR_FIELD_SECTIONS.SPECIFIED_PERSON_206AB)}
               </Label>
             </div>
             <p className="pl-6 text-xs leading-4 text-muted-foreground">

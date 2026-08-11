@@ -36,6 +36,51 @@ const normalizeBankAccounts = (accounts = []) =>
     id: account.id || `vendor-bank-${Math.random().toString(36).slice(2, 9)}`,
   }));
 
+const getActiveBankAccounts = (accounts = []) =>
+  normalizeBankAccounts(accounts).filter((account) =>
+    [
+      account.bankName,
+      account.accountName,
+      account.accountNumber,
+      account.accountType,
+      account.ifscCode,
+      account.swiftCode,
+      account.bankCurrency,
+      account.bankContactDetails,
+      account.bankAddress,
+    ].some((value) => String(value ?? "").trim()),
+  );
+
+export const validateVendorBankAccounts = (
+  bankAccounts = [],
+  { foreignVendor = false, isRequired = () => false } = {},
+) => {
+  const rows = getActiveBankAccounts(bankAccounts);
+
+  for (const [index, row] of rows.entries()) {
+    const label = rows.length > 1 ? `Bank account ${index + 1}` : "Bank account";
+    const bankCurrency = String(row.bankCurrency || "").trim().toUpperCase();
+    const requiredFields = [
+      [isRequired(VENDOR_FIELD_SECTIONS.BANK_NAME), row.bankName, "Bank name"],
+      [isRequired(VENDOR_FIELD_SECTIONS.ACCOUNT_NAME), row.accountName, "Account name"],
+      [isRequired(VENDOR_FIELD_SECTIONS.ACCOUNT_NUMBER), row.accountNumber, "Account number"],
+      [
+        isRequired(VENDOR_FIELD_SECTIONS.IFSC_CODE) || bankCurrency === "INR",
+        row.ifscCode,
+        "IFSC code",
+      ],
+      [foreignVendor, row.swiftCode, "Swift code"],
+    ];
+
+    const missingField = requiredFields.find(
+      ([required, value]) => required && !String(value ?? "").trim(),
+    );
+    if (missingField) return `${label}: ${missingField[2]} is required.`;
+  }
+
+  return "";
+};
+
 const VendorBankDetailsEditor = ({
   bankAccounts = [],
   onChange,
@@ -73,7 +118,9 @@ const VendorBankDetailsEditor = ({
           <div className="flex w-full flex-col items-start gap-6">
             <div className="flex w-full items-start gap-4">
               <div className="flex-1">
-                <Label>Bank Name *</Label>
+                <Label>
+                  Bank Name{isRequired(VENDOR_FIELD_SECTIONS.BANK_NAME) ? " *" : ""}
+                </Label>
                 <Input
                   value={row.bankName || ""}
                   onChange={(event) => updateRow(row.id, "bankName", event.target.value)}
@@ -82,7 +129,9 @@ const VendorBankDetailsEditor = ({
                 />
               </div>
               <div className="flex-1">
-                <Label>Account Name *</Label>
+                <Label>
+                  Account Name{isRequired(VENDOR_FIELD_SECTIONS.ACCOUNT_NAME) ? " *" : ""}
+                </Label>
                 <Input
                   value={row.accountName || ""}
                   onChange={(event) => updateRow(row.id, "accountName", event.target.value)}
@@ -91,7 +140,9 @@ const VendorBankDetailsEditor = ({
                 />
               </div>
               <div className="flex-1">
-                <Label>Account No. *</Label>
+                <Label>
+                  Account No.{isRequired(VENDOR_FIELD_SECTIONS.ACCOUNT_NUMBER) ? " *" : ""}
+                </Label>
                 <Input
                   value={row.accountNumber || ""}
                   onChange={(event) => updateRow(row.id, "accountNumber", event.target.value)}
@@ -136,7 +187,7 @@ const VendorBankDetailsEditor = ({
 
             <div className="flex w-full items-start gap-4">
               <div className="flex-1">
-                <Label>Bank Currency *</Label>
+                <Label>Bank Currency</Label>
                 <Input
                   value={row.bankCurrency || ""}
                   onChange={(event) =>
@@ -148,7 +199,7 @@ const VendorBankDetailsEditor = ({
                 />
               </div>
               <div className="flex-1">
-                <Label>Bank Active Status *</Label>
+                <Label>Bank Active Status</Label>
                 <AppSelect
                   value={row.isActive ? "Active" : "Inactive"}
                   onChange={(event) => updateRow(row.id, "isActive", event.target.value === "Active")}

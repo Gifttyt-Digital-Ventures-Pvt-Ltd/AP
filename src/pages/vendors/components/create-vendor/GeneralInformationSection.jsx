@@ -8,6 +8,7 @@ import { useGetAvailableCurrenciesQuery } from "../../../../Services/apis/corpor
 import {
   CURRENCY_SCREENS,
   FALLBACK_CURRENCIES,
+  formatCurrency,
   mergeCurrencyOptions,
 } from "../../../../utils/currency";
 import { VENDOR_FIELD_SECTIONS } from "../../../../utils/vendorFieldConfig";
@@ -35,6 +36,24 @@ const PAYMENT_TERMS_OPTIONS = [
 const DELIVERY_TERMS_OPTIONS = ["EXW", "FOB", "CIF", "DAP", "DDP"];
 const MSME_CATEGORY_OPTIONS = ["Micro", "Small", "Medium"];
 
+const hasValue = (value) =>
+  value !== undefined && value !== null && value !== "";
+
+const getVendorBalance = (vendor = {}) =>
+  vendor.vendorBalance ??
+  vendor.vendor_balance ??
+  vendor.balance ??
+  vendor.currentBalance ??
+  vendor.current_balance ??
+  vendor.openingBalance ??
+  vendor.opening_balance;
+
+const formatVendorBalance = (vendor = {}) => {
+  const balance = getVendorBalance(vendor);
+  if (!hasValue(balance)) return "";
+  return formatCurrency(balance, vendor.currency || "INR");
+};
+
 const SubsectionHeading = ({ title, description }) => (
   <div className="flex flex-col items-start self-stretch">
     <h4 className="font-['Manrope'] text-base font-semibold leading-5 text-foreground">
@@ -61,6 +80,7 @@ const GeneralInformationSection = ({
       ? labelFor(VENDOR_FIELD_SECTIONS.COMPANY_NAME, "Vendor Name")
       : "Full Name";
   const errorClass = (key) => getVendorFieldErrorClassName(fieldErrors, key);
+  const requiredMark = (sectionId) => (isRequired(sectionId) ? " *" : "");
 
   const [isOtherCategory, setIsOtherCategory] = useState(
     () => Boolean(formData.category) && !CATEGORY_OPTIONS.includes(formData.category),
@@ -101,7 +121,7 @@ const GeneralInformationSection = ({
             <div className="flex-1">
               <Label>
                 {nameLabel}
-                {isRequired(VENDOR_FIELD_SECTIONS.COMPANY_NAME) ? " *" : ""}
+                {requiredMark(VENDOR_FIELD_SECTIONS.COMPANY_NAME)}
               </Label>
               <Input
                 value={formData.name || ""}
@@ -116,7 +136,7 @@ const GeneralInformationSection = ({
             <div className="flex-1">
               <Label>
                 {labelFor(VENDOR_FIELD_SECTIONS.TRADE_NAME, "Trade Name")}
-                {isRequired(VENDOR_FIELD_SECTIONS.TRADE_NAME) ? " *" : ""}
+                {requiredMark(VENDOR_FIELD_SECTIONS.TRADE_NAME)}
               </Label>
               <Input
                 value={formData.trade_name || ""}
@@ -133,7 +153,7 @@ const GeneralInformationSection = ({
             <div className="flex-1">
               <Label>
                 {labelFor(VENDOR_FIELD_SECTIONS.VENDOR_ID, "Vendor Code/ID")}
-                {isRequired(VENDOR_FIELD_SECTIONS.VENDOR_ID) ? " *" : ""}
+                {requiredMark(VENDOR_FIELD_SECTIONS.VENDOR_ID)}
               </Label>
               <Input
                 value={formData.vendorId || ""}
@@ -151,7 +171,7 @@ const GeneralInformationSection = ({
           <div className="w-full">
             <Label>
               {labelFor(VENDOR_FIELD_SECTIONS.VENDOR_TYPE, "Vendor Type")}
-              {isRequired(VENDOR_FIELD_SECTIONS.VENDOR_TYPE) ? " *" : ""}
+              {requiredMark(VENDOR_FIELD_SECTIONS.VENDOR_TYPE)}
             </Label>
             <div className="mt-2 flex items-start gap-4">
               {["Company", "Individual"].map((type) => (
@@ -196,7 +216,7 @@ const GeneralInformationSection = ({
             <div className="flex-1">
               <Label>
                 {labelFor(VENDOR_FIELD_SECTIONS.CATEGORY, "Category")}
-                {isRequired(VENDOR_FIELD_SECTIONS.CATEGORY) ? " *" : ""}
+                {requiredMark(VENDOR_FIELD_SECTIONS.CATEGORY)}
               </Label>
               {isOtherCategory ? (
                 <div className="relative mt-1.5">
@@ -243,7 +263,7 @@ const GeneralInformationSection = ({
             <div className="flex-1">
               <Label>
                 {labelFor(VENDOR_FIELD_SECTIONS.CURRENCY, "Currency")}
-                {isRequired(VENDOR_FIELD_SECTIONS.CURRENCY) ? " *" : ""}
+                {requiredMark(VENDOR_FIELD_SECTIONS.CURRENCY)}
               </Label>
               <AppSelect
                 value={formData.currency || ""}
@@ -259,7 +279,7 @@ const GeneralInformationSection = ({
             <div className="flex-1">
               <Label>
                 {labelFor(VENDOR_FIELD_SECTIONS.PAYMENT_TERMS, "Payment Terms")}
-                {isRequired(VENDOR_FIELD_SECTIONS.PAYMENT_TERMS) ? " *" : ""}
+                {requiredMark(VENDOR_FIELD_SECTIONS.PAYMENT_TERMS)}
               </Label>
               <AppSelect
                 value={formData.paymentTerms || ""}
@@ -278,7 +298,7 @@ const GeneralInformationSection = ({
                   VENDOR_FIELD_SECTIONS.MODE_OF_DELIVERY,
                   "Mode of Delivery",
                 )}
-                {isRequired(VENDOR_FIELD_SECTIONS.MODE_OF_DELIVERY) ? " *" : ""}
+                {requiredMark(VENDOR_FIELD_SECTIONS.MODE_OF_DELIVERY)}
               </Label>
               <Input
                 value={formData.modeOfDelivery || ""}
@@ -296,7 +316,7 @@ const GeneralInformationSection = ({
                   VENDOR_FIELD_SECTIONS.DELIVERY_TERMS,
                   "Delivery Terms",
                 )}
-                {isRequired(VENDOR_FIELD_SECTIONS.DELIVERY_TERMS) ? " *" : ""}
+                {requiredMark(VENDOR_FIELD_SECTIONS.DELIVERY_TERMS)}
               </Label>
               <AppSelect
                 value={formData.deliveryTerms || ""}
@@ -312,8 +332,9 @@ const GeneralInformationSection = ({
             <div className="flex-1">
               <Label>Vendor Balance</Label>
               <Input
-                value={formData.currency || "INR"}
+                value={formatVendorBalance(formData)}
                 disabled
+                placeholder="—"
                 className="mt-1.5 bg-muted uppercase"
               />
             </div>
@@ -339,7 +360,7 @@ const GeneralInformationSection = ({
             <div className="flex-1">
               <Label>
                 {labelFor(VENDOR_FIELD_SECTIONS.VENDOR_STATUS, "Vendor Status")}
-                {isRequired(VENDOR_FIELD_SECTIONS.VENDOR_STATUS) ? " *" : ""}
+                {requiredMark(VENDOR_FIELD_SECTIONS.VENDOR_STATUS)}
               </Label>
               <AppSelect
                 value={formData.vendorStatus || ""}
@@ -408,7 +429,7 @@ const GeneralInformationSection = ({
                 className="cursor-pointer font-normal"
               >
                 {labelFor(VENDOR_FIELD_SECTIONS.MSME, "MSME registered vendor")}
-                {isRequired(VENDOR_FIELD_SECTIONS.MSME) ? " *" : ""}
+                {requiredMark(VENDOR_FIELD_SECTIONS.MSME)}
               </Label>
             </div>
 
@@ -421,7 +442,7 @@ const GeneralInformationSection = ({
                         VENDOR_FIELD_SECTIONS.UDYAM_REGISTRATION_NO,
                         "Udyam Registration No",
                       )}
-                      {isRequired(VENDOR_FIELD_SECTIONS.UDYAM_REGISTRATION_NO) ? " *" : ""}
+                      {requiredMark(VENDOR_FIELD_SECTIONS.UDYAM_REGISTRATION_NO)}
                     </Label>
                     <Input
                       value={formData.udyamRegistrationNo || ""}
@@ -439,7 +460,7 @@ const GeneralInformationSection = ({
                         VENDOR_FIELD_SECTIONS.MSME_CATEGORY,
                         "MSME Category",
                       )}
-                      {isRequired(VENDOR_FIELD_SECTIONS.MSME_CATEGORY) ? " *" : ""}
+                      {requiredMark(VENDOR_FIELD_SECTIONS.MSME_CATEGORY)}
                     </Label>
                     <AppSelect
                       value={formData.msmeCategory || ""}

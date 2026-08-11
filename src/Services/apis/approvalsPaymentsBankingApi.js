@@ -119,20 +119,32 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
       invalidatesTags: ["Payments", "Invoices", "Dashboard", "Reports", ...CREDIT_INVALIDATION_TAGS],
     }),
     approvePayrun: builder.mutation({
-      query: ({ payrunId, ...body }) => ({
+      query: ({ payrunId, invoiceIds: _invoiceIds, ...body }) => ({
         url: `/payruns/${payrunId}/approve`,
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Payments", "Invoices", "Dashboard", "Reports"],
+      invalidatesTags: (_result, _error, { invoiceIds = [] } = {}) => [
+        "Payments",
+        "Invoices",
+        ...invoiceIds.map((id) => ({ type: "Invoices", id })),
+        "Dashboard",
+        "Reports",
+      ],
     }),
     rejectPayrun: builder.mutation({
-      query: ({ payrunId, ...body }) => ({
+      query: ({ payrunId, invoiceIds: _invoiceIds, ...body }) => ({
         url: `/payruns/${payrunId}/reject`,
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Payments", "Invoices", "Dashboard", "Reports"],
+      invalidatesTags: (_result, _error, { invoiceIds = [] } = {}) => [
+        "Payments",
+        "Invoices",
+        ...invoiceIds.map((id) => ({ type: "Invoices", id })),
+        "Dashboard",
+        "Reports",
+      ],
     }),
     cancelPayrun: builder.mutation({
       query: ({ payrunId, ...body }) => ({

@@ -68,8 +68,14 @@ const GrnApprovalDialog = ({
                 </p>
               )}
               <p>
-                <strong>Value:</strong> {formatCurrency(grn.total_received_value)}
+                <strong>Value:</strong> {formatCurrency(grn.total_received_value, grn.currency)}
               </p>
+              {grn.convertToInr && Number(grn.matchingInrValue) > 0 ? (
+                <p>
+                  <strong>Converted INR Amount:</strong>{' '}
+                  {formatCurrency(grn.matchingInrValue, 'INR')}
+                </p>
+              ) : null}
             </div>
 
             <div className="space-y-2">

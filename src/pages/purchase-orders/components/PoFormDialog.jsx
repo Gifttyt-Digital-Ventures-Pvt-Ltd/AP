@@ -19,6 +19,17 @@ import { TAX_RATES } from "../../invoices/constants";
 import { parseTaxRateFromLabel } from "../../invoices/utils/invoiceTax";
 import { buildTdsValue } from "../../invoices/utils/tds";
 import AppSelect from "../../../components/common/AppSelect";
+import InrConversionFields, {
+  ConvertedInrAmountSummary,
+} from "../../../components/common/InrConversionFields";
+import PoPaymentScheduleSection from "./PoPaymentScheduleSection";
+
+const PO_REFERENCE_DOCUMENT_TYPE_OPTIONS = [
+  { value: "PI", label: "Proforma Invoice (PI)" },
+  { value: "CUSTOMER_PO", label: "Purchase Order (PO)" },
+  { value: "LOI", label: "Letter of Intent (LOI)" },
+  { value: "EXCEL", label: "Excel" },
+];
 
 const getPoFormLineItemTableHeader = ({ isInr, fieldOn }) => [
   ...(fieldOn("LINE_ITEM", "item_name") ? [{ key: "item_description", title: "Description *", headerClassName: "w-[220px]" }] : []),
@@ -180,6 +191,7 @@ const PoFormDialog = ({
   requestingVendor = false,
   showBranchField = false,
   organisationBranches = [],
+  isPaymentTermsEnabled = false,
 }) => {
   const [previewAction, setPreviewAction] = useState(null);
 
@@ -618,6 +630,31 @@ const PoFormDialog = ({
                     <FieldBlock label="Delivery Date">
                       <Input type="date" value={poForm.expected_delivery_date} onChange={(e) => setPoForm((prev) => ({ ...prev, expected_delivery_date: e.target.value }))} className={inputClassName} data-testid="delivery-date-input" />
                     </FieldBlock>
+                    <FieldBlock label="Reference Document No.">
+                      <Input
+                        value={poForm.reference_document_no || ""}
+                        onChange={(e) => setPoForm((prev) => ({ ...prev, reference_document_no: e.target.value }))}
+                        placeholder="Customer PI / PO / LOI no."
+                        className={inputClassName}
+                        data-testid="po-reference-document-no-input"
+                      />
+                    </FieldBlock>
+                    {poForm.reference_document_type ? (
+                      <FieldBlock label="Reference Type">
+                        <AppSelect
+                          value={poForm.reference_document_type || ""}
+                          onChange={(event) =>
+                            setPoForm((prev) => ({
+                              ...prev,
+                              reference_document_type: event.target.value,
+                            }))
+                          }
+                          options={PO_REFERENCE_DOCUMENT_TYPE_OPTIONS}
+                          className={inputClassName}
+                          data-testid="po-reference-document-type-input"
+                        />
+                      </FieldBlock>
+                    ) : null}
                   </div>
                 </div>
               ) : null}
@@ -677,6 +714,31 @@ const PoFormDialog = ({
                       <FieldBlock label="Delivery Date">
                         <Input type="date" value={poForm.expected_delivery_date} onChange={(e) => setPoForm((prev) => ({ ...prev, expected_delivery_date: e.target.value }))} className={inputClassName} data-testid="delivery-date-input" />
                       </FieldBlock>
+                      <FieldBlock label="Reference Document No.">
+                        <Input
+                          value={poForm.reference_document_no || ""}
+                          onChange={(e) => setPoForm((prev) => ({ ...prev, reference_document_no: e.target.value }))}
+                          placeholder="Customer PI / PO / LOI no."
+                          className={inputClassName}
+                          data-testid="po-reference-document-no-input"
+                        />
+                      </FieldBlock>
+                      {poForm.reference_document_type ? (
+                        <FieldBlock label="Reference Type">
+                          <AppSelect
+                            value={poForm.reference_document_type || ""}
+                            onChange={(event) =>
+                              setPoForm((prev) => ({
+                                ...prev,
+                                reference_document_type: event.target.value,
+                              }))
+                            }
+                            options={PO_REFERENCE_DOCUMENT_TYPE_OPTIONS}
+                            className={inputClassName}
+                            data-testid="po-reference-document-type-input"
+                          />
+                        </FieldBlock>
+                      ) : null}
                     </div>
                   </div>
                 </header>
@@ -888,6 +950,21 @@ const PoFormDialog = ({
                 </section>
               )}
 
+              {isPaymentTermsEnabled ? (
+                <PoPaymentScheduleSection
+                  rows={poForm.paymentSchedule || []}
+                  poGrossTotal={displayTotal}
+                  formatCurrency={formatPoCurrency}
+                  readOnly={isPreviewing}
+                  onChange={(paymentSchedule) =>
+                    setPoForm((prev) => ({
+                      ...prev,
+                      paymentSchedule,
+                    }))
+                  }
+                />
+              ) : null}
+
               <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-[1fr_320px]">
                 {sectionOn("PAYMENT") && (
                   <section className="rounded border bg-slate-50/60 p-4">
@@ -1013,6 +1090,25 @@ const PoFormDialog = ({
                         </div>
                       </>
                     )}
+                    <ConvertedInrAmountSummary
+                      convertToInr={poForm.convertToInr}
+                      matchingInrValue={poForm.matchingInrValue}
+                      className="mt-2 flex justify-between border-t pt-2 text-sm font-semibold text-primary"
+                    />
+                    {!isPreviewing ? (
+                      <InrConversionFields
+                        currency={poForm.currency}
+                        convertToInr={poForm.convertToInr}
+                        matchingInrValue={poForm.matchingInrValue}
+                        onChange={(conversion) =>
+                          setPoForm((prev) => ({
+                            ...prev,
+                            ...conversion,
+                          }))
+                        }
+                        className="mt-3"
+                      />
+                    ) : null}
                   </section>
                 )}
               </div>

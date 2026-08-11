@@ -54,7 +54,8 @@ const DEFAULT_REPORT_TYPES = [
     description:
       "Complete list of invoices including vendor details, dates, amounts, and statuses.",
     metrics: "Invoices",
-    columns: "Invoice Number, Vendor, Invoice Date, Due Date, Amount, Status",
+    columns:
+      "Invoice Number, Vendor, Invoice Date, Due Date, Original Currency, Original Amount, Conversion Applied, Converted INR Amount, Status",
     icon: FileText,
   },
   {
@@ -63,7 +64,7 @@ const DEFAULT_REPORT_TYPES = [
     description: "Track completed, pending, and failed payments.",
     metrics: "Payments",
     columns:
-      "Payment Reference, Vendor, Amount Paid, Payment Date, Payment Method",
+      "Payment Reference, Vendor, Original Currency, Original Amount, Conversion Applied, Converted INR Amount, Actual INR Amount, Payment Date, Payment Method",
     icon: CreditCard,
   },
   {
@@ -72,7 +73,7 @@ const DEFAULT_REPORT_TYPES = [
     description: "Detailed invoice line-item breakdown for spend analysis.",
     metrics: "Line Items",
     columns:
-      "Invoice Number, Item Description, Quantity, Unit Price, Tax, Total Amount",
+      "Invoice Number, Item Description, Quantity, Unit Price, Tax, Original Currency, Original Amount, Conversion Applied, Converted INR Amount",
     icon: LineChart,
   },
 
@@ -81,7 +82,8 @@ const DEFAULT_REPORT_TYPES = [
     name: "Vendor Spend Report",
     description: "Analyze total spend by vendor for the selected period.",
     metrics: "Vendors",
-    columns: "Vendor Name, Invoice Count, Total Spend, Average Invoice Value",
+    columns:
+      "Vendor Name, Invoice Count, Original Currency, Original Amount, Conversion Applied, Converted INR Amount, Average Invoice Value",
     icon: Users,
   },
   {

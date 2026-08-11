@@ -88,7 +88,16 @@ const PoListTable = ({
             );
             break;
           case "total_amount":
-            value = formatCurrency(po.total_amount, po.currency);
+            value = (
+              <div className="space-y-0.5">
+                <div>{formatCurrency(po.total_amount, po.currency)}</div>
+                {po.convertToInr && Number(po.matchingInrValue) > 0 ? (
+                  <div className="text-xs text-muted-foreground">
+                    Converted INR Amount: {formatCurrency(po.matchingInrValue, "INR")}
+                  </div>
+                ) : null}
+              </div>
+            );
             break;
           case "status":
             value = (

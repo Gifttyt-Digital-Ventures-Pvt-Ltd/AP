@@ -20,7 +20,7 @@ import { normalizeInvoiceHistoryEntries } from "../../invoices/utils/invoiceHist
 import PoDetailsDialog from "../../purchase-orders/components/PoDetailsDialog";
 import { statusColors as poStatusColors } from "../../purchase-orders/constants";
 import { normalizePurchaseOrder } from "../../purchase-orders/utils";
-import ViewVendorDialog from "../../vendors/components/ViewVendorDialog";
+import ViewVendorPage from "../../vendors/components/view-vendor/ViewVendorPage";
 import { formatDateTime } from "../utils/coaUtils";
 
 const OBJECT_LABELS = {
@@ -389,14 +389,23 @@ const AccountingQueuePreviewDialog = ({ open, onOpenChange, detail }) => {
 
   if (objectType === "VENDOR") {
     return (
-      <ViewVendorDialog
-        open={open}
-        onOpenChange={onOpenChange}
-        vendor={record}
-        canApprove={false}
-        isPendingApproval={false}
-        onApproveAction={() => {}}
-      />
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent
+          hideClose
+          className="!flex h-[90vh] max-h-[90vh] min-h-0 max-w-[min(1200px,95vw)] flex-col gap-0 overflow-hidden p-0"
+        >
+          <DialogTitle className="sr-only">
+            {record?.name ? `Vendor: ${record.name}` : "Vendor Details"}
+          </DialogTitle>
+          <div className="flex h-full min-h-0 w-full flex-1 flex-col">
+            <ViewVendorPage
+              embedded
+              formData={record}
+              onClose={() => onOpenChange(false)}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
     );
   }
 

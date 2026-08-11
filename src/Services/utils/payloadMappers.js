@@ -381,6 +381,16 @@ export const toVendorUiPayload = (vendor = {}) => ({
     null,
   requested_by_email: vendor.requested_by_email ?? vendor.requestedByEmail,
   requested_by: vendor.requested_by ?? vendor.requestedBy,
+  vendorAdvanceBalance: vendor.vendorAdvanceBalance ?? vendor.vendor_advance_balance,
+  outstandingAdvanceBalance:
+    vendor.outstandingAdvanceBalance ?? vendor.outstanding_advance_balance,
+  totalAdvancesPaid: vendor.totalAdvancesPaid ?? vendor.total_advances_paid,
+  totalAdvancesAdjusted:
+    vendor.totalAdvancesAdjusted ?? vendor.total_advances_adjusted,
+  totalAdvancesRefunded:
+    vendor.totalAdvancesRefunded ?? vendor.total_advances_refunded,
+  advanceSummary: vendor.advanceSummary ?? vendor.advance_summary,
+  advancesByPo: vendor.advancesByPo ?? vendor.advances_by_po,
 });
 
 export const extractVendorIdFromResponse = (response) => {
@@ -483,6 +493,14 @@ export const toRecordPaymentsApiPayload = (payment = {}) => {
     "referenceNumber",
     payment.reference_number ?? payment.referenceNumber,
   );
+  addStringIfPresent(payload, "currency", payment.currency);
+  const actualInrAmount = payment.actualInrAmount ?? payment.actual_inr_amount;
+  if (actualInrAmount !== undefined && actualInrAmount !== null && actualInrAmount !== "") {
+    const inrAmount = Number(actualInrAmount);
+    payload.actualInrAmount = inrAmount;
+    payload.amount = inrAmount;
+    payload.paymentAmount = inrAmount;
+  }
   return payload;
 };
 

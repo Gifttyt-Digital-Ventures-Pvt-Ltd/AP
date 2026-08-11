@@ -52,11 +52,13 @@ const AddressBranchInformationSection = ({
   removeGstRegistration,
   updateVendorBranches,
   isVendorFetchReady,
+  isApiFieldRequired = () => false,
   isEditMode = false,
   fieldErrors = {},
 }) => {
   const [legacyOpen, setLegacyOpen] = useState(true);
   const errorClass = (key) => getVendorFieldErrorClassName(fieldErrors, key);
+  const requiredMark = (sectionId) => (isRequired(sectionId) ? " *" : "");
 
   return (
     <div className="-mx-6 border-b border-border px-10">
@@ -73,7 +75,7 @@ const AddressBranchInformationSection = ({
         <div className="flex w-full items-center gap-6">
           <div className="flex-1">
             <SubsectionHeading
-              title={`GSTIN Details${isRequired(VENDOR_FIELD_SECTIONS.GST_NO) ? " *" : ""}`}
+              title={`GSTIN Details${isApiFieldRequired(VENDOR_FIELD_SECTIONS.GST_NO) ? " *" : ""}`}
               description={
                 isEditMode
                   ? "GSTIN details associated with this vendor."
@@ -221,7 +223,7 @@ const AddressBranchInformationSection = ({
               <div className="flex-1">
                 <Label>
                   {labelFor(VENDOR_FIELD_SECTIONS.IEC_NUMBER, "IEC Number")}
-                  {isRequired(VENDOR_FIELD_SECTIONS.IEC_NUMBER) ? " *" : ""}
+                  {requiredMark(VENDOR_FIELD_SECTIONS.IEC_NUMBER)}
                 </Label>
                 <Input
                   value={formData.iecNumber || ""}
@@ -234,7 +236,7 @@ const AddressBranchInformationSection = ({
               <div className="flex-1">
                 <Label>
                   {labelFor(VENDOR_FIELD_SECTIONS.TAN, "TAN")}
-                  {isRequired(VENDOR_FIELD_SECTIONS.TAN) ? " *" : ""}
+                  {requiredMark(VENDOR_FIELD_SECTIONS.TAN)}
                 </Label>
                 <Input
                   value={formData.tan || ""}
@@ -247,7 +249,7 @@ const AddressBranchInformationSection = ({
               <div className="flex-1">
                 <Label>
                   {labelFor(VENDOR_FIELD_SECTIONS.TIN, "TIN")}
-                  {isRequired(VENDOR_FIELD_SECTIONS.TIN) ? " *" : ""}
+                  {requiredMark(VENDOR_FIELD_SECTIONS.TIN)}
                 </Label>
                 <Input
                   value={formData.tin || ""}
@@ -263,7 +265,7 @@ const AddressBranchInformationSection = ({
               <div className="flex-1">
                 <Label>
                   {labelFor(VENDOR_FIELD_SECTIONS.STC, "STC")}
-                  {isRequired(VENDOR_FIELD_SECTIONS.STC) ? " *" : ""}
+                  {requiredMark(VENDOR_FIELD_SECTIONS.STC)}
                 </Label>
                 <Input
                   value={formData.stc || ""}
@@ -276,7 +278,7 @@ const AddressBranchInformationSection = ({
               <div className="flex-1">
                 <Label>
                   {labelFor(VENDOR_FIELD_SECTIONS.ST_REGISTRATION_NUMBER, "ST Registration Number")}
-                  {isRequired(VENDOR_FIELD_SECTIONS.ST_REGISTRATION_NUMBER) ? " *" : ""}
+                  {requiredMark(VENDOR_FIELD_SECTIONS.ST_REGISTRATION_NUMBER)}
                 </Label>
                 <Input
                   value={formData.stRegistrationNumber || ""}

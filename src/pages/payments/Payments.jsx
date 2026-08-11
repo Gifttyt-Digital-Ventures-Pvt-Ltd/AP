@@ -81,6 +81,7 @@ import ViewDialog from '../invoices/components/ViewDialog';
 import { InvoicePdfPreview } from '../invoices/components/InvoicePdfPreview';
 import { getInvoiceFileUrl, openInvoiceFileDownload } from '../invoices/utils/invoicePreview';
 import { normalizeInvoiceHistoryEntries } from '../invoices/utils/invoiceHistory';
+import { formatInvoiceAmount } from '../invoices/utils/invoiceAmounts';
 import { getInvoiceStatusBadgeClass } from '../../utils/approvalWorkflow';
 import { useActionGuard } from '../../hooks/useActionGuard';
 import { useCreditErrorHandler } from '../../contexts/CreditErrorContext';
@@ -93,6 +94,11 @@ import { CURRENCY_SCREENS } from '../../utils/currency';
 import { isInvoiceFundingEnabled as isInvoiceFundingEnabledForCorporate } from '../../utils/invoiceConfiguration';
 import { OrgBranchCell, VendorWithBranchCell } from '../../components/common/BranchTableCells';
 import { clearNotificationQueryParams } from '../../utils/notificationQueryParams';
+import {
+  getSelectablePayableRows,
+  isPayableSelectable,
+  normalizePayableRow,
+} from './utils/payableRows';
 
 const safeLower = (value) => String(value ?? '').toLowerCase();
 
@@ -450,6 +456,7 @@ const Payments = () => {
     paymentDate: '',
     payment_method: 'Bank Transfer',
     reference_number: '',
+    actualInrAmount: '',
   });
   const [createBatchForm, setCreateBatchForm] = useState({
     payment_method: 'NEFT',
@@ -476,31 +483,36 @@ const Payments = () => {
   const [rejectPayrun] = useRejectPayrunMutation();
   const [cancelPayrun] = useCancelPayrunMutation();
 
-  const normalizePayment = (payment = {}) => ({
-    ...payment,
-    invoice_id: payment.invoice_id ?? payment.invoiceId,
-    invoiceNumber: payment.invoiceNumber ?? payment.invoice_number,
-    vendorName: payment.vendorName ?? payment.vendor_name,
-    batchId:
-      payment.batchId ??
-      payment.batch_id ??
-      payment.batchNumber ??
-      payment.batch_number ??
-      payment.payrunNumber ??
-      payment.payrun_number ??
-      payment.payrunId ??
-      payment.payrun_id ??
-      payment.paymentBatchId ??
-      payment.payment_batch_id,
-    paymentDate: payment.paymentDate ?? payment.payment_date ?? payment.paidOn ?? payment.paid_on,
-    payment_method: payment.payment_method ?? payment.paymentMethod,
-    reference_number:
-      payment.reference_number ??
-      payment.referenceNumber ??
-      payment.utrNumber ??
-      payment.utr_number ??
-      payment.utr,
-  });
+  const normalizePayment = (payment = {}) => {
+    const payable = normalizePayableRow(payment);
+
+    return {
+      ...payable,
+      invoice_id: payment.invoice_id ?? payment.invoiceId,
+      invoiceNumber: payment.invoiceNumber ?? payment.invoice_number ?? payable.invoiceNumber,
+      vendorName: payment.vendorName ?? payment.vendor_name ?? payable.vendorName,
+      batchId:
+        payment.batchId ??
+        payment.batch_id ??
+        payment.batchNumber ??
+        payment.batch_number ??
+        payment.payrunNumber ??
+        payment.payrun_number ??
+        payment.payrunId ??
+        payment.payrun_id ??
+        payment.paymentBatchId ??
+        payment.payment_batch_id,
+      paymentDate: payment.paymentDate ?? payment.payment_date ?? payment.paidOn ?? payment.paid_on,
+      payment_method: payment.payment_method ?? payment.paymentMethod,
+      reference_number:
+        payment.reference_number ??
+        payment.referenceNumber ??
+        payment.utrNumber ??
+        payment.utr_number ??
+        payment.utr,
+      actualInrAmount: payment.actualInrAmount ?? payment.actual_inr_amount,
+    };
+  };
 
   const normalizeInvoice = (invoice = {}) => ({
     ...invoice,
@@ -511,26 +523,23 @@ const Payments = () => {
   });
   const normalizePendingPaymentInvoice = (invoice = {}) => {
     const normalized = toInvoiceUiPayload(invoice);
-    const netPayable =
-      invoice.netAmount ??
-      invoice.net_amount ??
-      invoice.netPayable ??
-      invoice.net_payable ??
-      normalized.netAmount ??
-      normalized.net_amount ??
-      normalized.amount;
+    const payable = normalizePayableRow({
+      ...normalized,
+      ...invoice,
+    });
 
     return {
       ...normalized,
+      ...payable,
       grossAmount:
         invoice.totalAmount ??
         invoice.total_amount ??
         normalized.totalAmount ??
         normalized.total_amount,
-      originalAmount: invoice.amount ?? invoice.originalAmount ?? normalized.originalAmount,
-      amount: Number(netPayable ?? 0),
-      netAmount: Number(netPayable ?? 0),
-      netPayable: Number(netPayable ?? 0),
+      originalAmount: payable.originalAmount ?? invoice.amount ?? normalized.originalAmount,
+      amount: Number(payable.payableAmount ?? 0),
+      netAmount: Number(payable.payableAmount ?? 0),
+      netPayable: Number(payable.payableAmount ?? 0),
       gstAmount: Number(invoice.gstAmount ?? invoice.gst_amount ?? normalized.gstAmount ?? 0),
       vendorBankName: invoice.vendorBankName ?? invoice.vendor_bank_name ?? normalized.vendorBankName,
       vendorAccountNumber:
@@ -563,6 +572,10 @@ const Payments = () => {
   const payableInvoices = useMemo(
     () => invoices,
     [invoices],
+  );
+  const selectablePayableInvoices = useMemo(
+    () => getSelectablePayableRows(payableInvoices),
+    [payableInvoices],
   );
   const pendingPaymentsPagination = useMemo(
     () =>
@@ -613,9 +626,9 @@ const Payments = () => {
   }, []);
   const bulkPaymentEstimate = useMeteredActionEstimate(
     CREDIT_ACTION_CODES.PAYMENT_PROCESSING,
-    payableInvoices.length,
+    selectablePayableInvoices.length,
   );
-  const batchEligibleInvoices = [...pendingPaymentInvoices, ...pendingApproverInvoices];
+  const batchEligibleInvoices = [...selectablePayableInvoices, ...pendingApproverInvoices];
   const bankAccounts = useMemo(
     () => getLinkedAccounts(accounts),
     [accounts],
@@ -690,8 +703,12 @@ const Payments = () => {
 
   const handleBulkRelease = async () => {
     if (!guardAction('payments.releaseBulk')) return;
-    if (payableInvoices.length === 0) {
+    if (selectablePayableInvoices.length === 0) {
       toast.error('No pending payments to release');
+      return;
+    }
+    if (payableInvoices.some((invoice) => !isPayableSelectable(invoice))) {
+      toast.error('Some payable rows need backend source-aware payment support before release');
       return;
     }
 
@@ -750,22 +767,26 @@ const Payments = () => {
       paymentDate: '',
       payment_method: 'Bank Transfer',
       reference_number: '',
+      actualInrAmount: '',
     });
   };
 
-  const selectedRecordPaymentInvoices = payableInvoices.filter((invoice) =>
+  const selectedRecordPaymentInvoices = selectablePayableInvoices.filter((invoice) =>
     recordPaymentInvoiceIds.includes(invoice.id),
+  );
+  const selectedRecordPaymentHasConvertedInvoice = selectedRecordPaymentInvoices.some(
+    (invoice) => Boolean(invoice.convertToInr),
   );
 
   const openPaymentReportDialog = () => {
     if (!guardAction('payments.create')) return;
-    if (payableInvoices.length === 0) {
+    if (selectablePayableInvoices.length === 0) {
       toast.error('No pending invoices available for report');
       return;
     }
 
     setPaymentReportInvoiceIds((prev) =>
-      prev.length > 0 ? prev : payableInvoices.map((invoice) => invoice.id),
+      prev.length > 0 ? prev : selectablePayableInvoices.map((invoice) => invoice.id),
     );
     setPaymentReportDialogOpen(true);
   };
@@ -927,11 +948,15 @@ const Payments = () => {
   const confirmApprovalDecision = async (payrun, type, comments) => {
     const isReject = type === 'reject';
     const pendingApproval = getPayrunApprovalRecords(payrun).find((approval) => approval.status === 'Pending');
+    const invoiceIds = (payrun.invoices || [])
+      .map((invoice) => invoice.invoiceId || invoice.invoice_id || invoice.id)
+      .filter((id) => id !== undefined && id !== null);
     try {
       const action = isReject ? rejectPayrun : approvePayrun;
       await action({
         payrunId: payrun.payrunId || payrun.id,
         approvalId: pendingApproval?.id,
+        invoiceIds,
         comments,
       }).unwrap();
       setApprovalDecisionOpen(false);
@@ -982,6 +1007,11 @@ const Payments = () => {
   };
 
   const toggleRecordPaymentInvoice = (invoiceId) => {
+    const row = payableInvoices.find((invoice) => invoice.id === invoiceId);
+    if (row && !isPayableSelectable(row)) {
+      toast.error(row.disabledReason || 'This payable row is not available for payment yet');
+      return;
+    }
     setRecordPaymentInvoiceIds((prev) =>
       prev.includes(invoiceId)
         ? prev.filter((id) => id !== invoiceId)
@@ -991,7 +1021,9 @@ const Payments = () => {
 
   const selectAllRecordPaymentInvoices = () => {
     setRecordPaymentInvoiceIds((prev) =>
-      prev.length === payableInvoices.length ? [] : payableInvoices.map((invoice) => invoice.id),
+      prev.length === selectablePayableInvoices.length
+        ? []
+        : selectablePayableInvoices.map((invoice) => invoice.id),
     );
   };
 
@@ -1024,16 +1056,34 @@ const Payments = () => {
       toast.error('Payment method is required');
       return;
     }
+    if (selectedRecordPaymentHasConvertedInvoice) {
+      const actualInrAmount = Number(recordPaymentForm.actualInrAmount);
+      if (!Number.isFinite(actualInrAmount) || actualInrAmount <= 0) {
+        toast.error('Actual INR Amount is required for converted foreign invoices');
+        return;
+      }
+    }
 
     const referenceNumber = String(recordPaymentForm.reference_number || '').trim();
 
     setRecordingPayments(true);
     try {
+      const actualInrAmount = selectedRecordPaymentHasConvertedInvoice
+        ? Number(recordPaymentForm.actualInrAmount)
+        : null;
       const response = await recordPayments({
         invoiceNumbers,
         paymentDate: new Date(recordPaymentForm.paymentDate).toISOString(),
         paymentMethod: recordPaymentForm.payment_method,
         ...(referenceNumber ? { referenceNumber } : {}),
+        ...(selectedRecordPaymentHasConvertedInvoice
+          ? {
+              currency: 'INR',
+              amount: actualInrAmount,
+              paymentAmount: actualInrAmount,
+              actualInrAmount,
+            }
+          : {}),
       }).unwrap();
       toast.success(response?.message || 'Payments recorded successfully (PAID)');
       await refetchPendingPaymentInvoices();
@@ -1304,7 +1354,10 @@ const Payments = () => {
   const filteredPendingInvoices = payableInvoices.filter(
     (invoice) =>
       safeLower(invoice.vendorName).includes(safeLower(searchTerm)) ||
-      safeLower(invoice.invoiceNumber).includes(safeLower(searchTerm))
+      safeLower(invoice.invoiceNumber).includes(safeLower(searchTerm)) ||
+      safeLower(invoice.referenceNumber).includes(safeLower(searchTerm)) ||
+      safeLower(invoice.poNumber).includes(safeLower(searchTerm)) ||
+      safeLower(invoice.milestoneLabel).includes(safeLower(searchTerm))
   );
   const filteredPayruns = payruns.filter((payrun) =>
     safeLower(payrun.batchId).includes(safeLower(searchTerm)) ||
@@ -1338,7 +1391,19 @@ const Payments = () => {
             );
             break;
           case 'amount':
-            value = clippedTableText(`₹${Number(invoice.amount || 0).toLocaleString('en-IN')}`);
+            value = (
+              <div className="space-y-0.5">
+                {clippedTableText(formatInvoiceAmount(invoice, invoice.amount || 0))}
+                {invoice.convertToInr && Number(invoice.matchingInrValue) > 0 ? (
+                  <div className="text-xs text-muted-foreground">
+                    Converted INR Amount: {formatInvoiceAmount(
+                      { currency: 'INR' },
+                      invoice.matchingInrValue,
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            );
             break;
           case 'vendorName':
             value = clippedTableText(getRecordVendorLabel(invoice));
@@ -1655,7 +1720,7 @@ const Payments = () => {
       <PendingPaymentReportDialog
         open={paymentReportDialogOpen}
         onOpenChange={setPaymentReportDialogOpen}
-        invoices={payableInvoices}
+        invoices={selectablePayableInvoices}
         selectedInvoiceIds={paymentReportInvoiceIds}
         onToggleInvoice={togglePaymentReportInvoice}
         onSelectAllInvoices={selectPaymentReportInvoices}
@@ -1680,12 +1745,12 @@ const Payments = () => {
           <AlertDialogHeader>
             <AlertDialogTitle>Release All Pending Payments?</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to release payments for {payableInvoices.length} invoices?
+              Are you sure you want to release payments for {selectablePayableInvoices.length} invoices?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <MeteredActionCostHint
             actionCode={CREDIT_ACTION_CODES.PAYMENT_PROCESSING}
-            unitCount={payableInvoices.length}
+            unitCount={selectablePayableInvoices.length}
             className="mx-6 mb-2"
           />
           <AlertDialogFooter>

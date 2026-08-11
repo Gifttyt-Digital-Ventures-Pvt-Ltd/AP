@@ -35,6 +35,9 @@ import {
 import { TableCell, TableRow } from "../../../components/ui/table";
 import AppDataTable from "../../../components/common/AppDataTable";
 import AppSelect from "../../../components/common/AppSelect";
+import InrConversionFields, {
+  isForeignCurrency,
+} from "../../../components/common/InrConversionFields";
 import {
   DEFAULT_CURRENCY,
   FALLBACK_CURRENCIES,
@@ -217,6 +220,8 @@ const normalizePurchaseOrderOption = (po = {}) => ({
   poNumber: po.poNumber ?? po.po_number ?? po.number ?? "",
   amount: Number(po.amount ?? po.poAmount ?? po.po_amount ?? 0),
   currency: po.currency ?? DEFAULT_CURRENCY,
+  convertToInr: Boolean(po.convertToInr ?? po.convert_to_inr ?? false),
+  matchingInrValue: po.matchingInrValue ?? po.matching_inr_value ?? "",
 });
 
 const normalizeGrnOption = (grn = {}) => ({
@@ -225,6 +230,8 @@ const normalizeGrnOption = (grn = {}) => ({
   grnNumber: grn.grnNumber ?? grn.grn_number ?? grn.number ?? "",
   amount: Number(grn.amount ?? grn.grnAmount ?? grn.grn_amount ?? 0),
   currency: grn.currency ?? DEFAULT_CURRENCY,
+  convertToInr: Boolean(grn.convertToInr ?? grn.convert_to_inr ?? false),
+  matchingInrValue: grn.matchingInrValue ?? grn.matching_inr_value ?? "",
 });
 
 const getVendorBranchOptionValue = (branch = {}) => {
@@ -2502,17 +2509,30 @@ export const InvoiceForm = ({
                   <AppSelect
                     value={selectedMatchingPoId}
                     onChange={(event) => {
-                      const selectedPo = availablePurchaseOrders.find(
-                        (po) => String(po.id) === String(event.target.value),
-                      );
-                      setFormData({
-                        ...formData,
-                        matchingPurchaseOrderId: event.target.value,
-                        matchingPoNumber: selectedPo?.poNumber || "",
-                        matchingGrnId: "",
-                        matchingGrnNumber: "",
-                      });
-                    }}
+  const poId = event.target.value;
+  const selectedPo = availablePurchaseOrders.find(
+    (po) => String(po.id) === String(poId),
+  );
+  const inheritConversion =
+    selectedPo &&
+    isForeignCurrency(selectedPo.currency) &&
+    Boolean(selectedPo.convertToInr) &&
+    Number(selectedPo.matchingInrValue) > 0;
+
+  setFormData({
+    ...formData,
+    matchingPurchaseOrderId: poId,
+    matchingPoNumber: selectedPo?.poNumber || "",
+    matchingGrnId: "",
+    matchingGrnNumber: "",
+    ...(inheritConversion
+      ? {
+          convertToInr: true,
+          matchingInrValue: null,
+        }
+      : {}),
+  });
+}}
                     options={availablePurchaseOrders.map((po) => ({
                       value: po.id,
                       label: `${po.poNumber || "PO"} - ${formatAmount(po.amount)}`,
@@ -2544,16 +2564,29 @@ export const InvoiceForm = ({
                     <Label className="text-xs">GRN Pool Anchor</Label>
                     <AppSelect
                       value={formData.matchingGrnId || ""}
-                      onChange={(event) => {
-                        const selectedGrn = availableGrns.find(
-                          (grn) => String(grn.id) === String(event.target.value),
-                        );
-                        setFormData({
-                          ...formData,
-                          matchingGrnId: event.target.value,
-                          matchingGrnNumber: selectedGrn?.grnNumber || "",
-                        });
-                      }}
+                     onChange={(event) => {
+  const grnId = event.target.value;
+  const selectedGrn = availableGrns.find(
+    (grn) => String(grn.id) === String(grnId),
+  );
+  const inheritConversion =
+    selectedGrn &&
+    isForeignCurrency(selectedGrn.currency) &&
+    Boolean(selectedGrn.convertToInr) &&
+    Number(selectedGrn.matchingInrValue) > 0;
+
+  setFormData({
+    ...formData,
+    matchingGrnId: grnId,
+    matchingGrnNumber: selectedGrn?.grnNumber || "",
+    ...(inheritConversion
+      ? {
+          convertToInr: true,
+          matchingInrValue: null,
+        }
+      : {}),
+  });
+}}
                       options={availableGrns.map((grn) => ({
                         value: grn.id,
                         label: `${grn.grnNumber || "GRN"} - ${formatAmount(grn.amount)}`,
@@ -3064,6 +3097,18 @@ export const InvoiceForm = ({
                 <span>{formatAmount(netPayable)}</span>
               )}
             </div>
+            <InrConversionFields
+              currency={formData?.currency}
+              convertToInr={formData?.convertToInr}
+              matchingInrValue={formData?.matchingInrValue}
+              onChange={(conversion) =>
+                setFormData({
+                  ...formData,
+                  ...conversion,
+                })
+              }
+              className="mt-3"
+            />
           </div>
 
           {showInternalChecklist && (

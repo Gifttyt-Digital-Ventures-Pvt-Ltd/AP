@@ -1,6 +1,15 @@
-import React, { useRef } from "react";
-import { X } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { FileText, History, X } from "lucide-react";
+import { toast } from "sonner";
+import { useLazyGetVendorHistoryQuery } from "../../../../Services/apis/invoicesVendorsApi";
+import ApprovalHistoryTimeline from "../../../../components/common/ApprovalHistoryTimeline";
 import { Button } from "../../../../components/ui/button";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "../../../../components/ui/tabs";
 import { useRBAC } from "../../../../contexts/RBACContext";
 import { getVendorFieldDisplayName, VENDOR_FIELD_SECTIONS } from "../../../../utils/vendorFieldConfig";
 import {
@@ -15,6 +24,7 @@ import ViewBankDetailsSection from "./ViewBankDetailsSection";
 import ViewAttachmentsSection from "./ViewAttachmentsSection";
 import ViewNotesSection from "./ViewNotesSection";
 import ReadOnlyField from "./ReadOnlyField";
+import AdvanceContextPanel from "../../../../components/vendor-advances/AdvanceContextPanel";
 
 const NAV_SECTIONS = [
   {
@@ -70,8 +80,12 @@ const CONTACT_FIELDS = [
   { key: "website", section: VENDOR_FIELD_SECTIONS.WEBSITE },
 ];
 
-const ViewVendorPage = ({ formData, onClose, onEdit }) => {
+const ViewVendorPage = ({ formData, onClose, onEdit, embedded = false }) => {
   const contentPaneRef = useRef(null);
+  const [viewTab, setViewTab] = useState("details");
+  const [vendorHistory, setVendorHistory] = useState([]);
+  const [loadingHistory, setLoadingHistory] = useState(false);
+  const [triggerVendorHistory] = useLazyGetVendorHistoryQuery();
   const { corporateScreens } = useRBAC();
   const vendorFieldConfiguration = corporateScreens?.vendorFieldConfiguration ?? [];
   const activeVendorDocuments = corporateScreens?.activeVendorDocuments;
@@ -88,10 +102,47 @@ const ViewVendorPage = ({ formData, onClose, onEdit }) => {
   const labelFor = (sectionId, fallback = "") =>
     getVendorFieldDisplayName(sectionId, vendorFieldConfiguration) || fallback;
 
+  useEffect(() => {
+    const vendorId = formData?.id;
+    if (!vendorId) {
+      setViewTab("details");
+      setVendorHistory([]);
+      setLoadingHistory(false);
+      return undefined;
+    }
+
+    let cancelled = false;
+    setViewTab("details");
+    setVendorHistory([]);
+    setLoadingHistory(true);
+
+    triggerVendorHistory(vendorId)
+      .unwrap()
+      .then((response) => {
+        if (!cancelled) setVendorHistory(Array.isArray(response) ? response : []);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          toast.error("Failed to load vendor history");
+          setVendorHistory([]);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingHistory(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [formData?.id, triggerVendorHistory]);
+
   if (!formData) return null;
 
   return (
-    <div className="-m-4 flex min-h-0 flex-1 flex-col overflow-hidden" data-testid="view-vendor-page">
+    <div
+      className={`${embedded ? "" : "-m-4"} flex h-full min-h-0 w-full flex-1 flex-col overflow-hidden`}
+      data-testid="view-vendor-page"
+    >
       <div className="flex shrink-0 items-center justify-between border-b border-border bg-muted/20 px-4 py-3">
         <div className="flex flex-col items-start pl-1">
           <h1 className="overflow-hidden text-xl font-bold leading-7 text-foreground">
@@ -116,93 +167,134 @@ const ViewVendorPage = ({ formData, onClose, onEdit }) => {
         </Button>
       </div>
 
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <aside className="hidden min-h-0 w-96 shrink-0 md:flex md:flex-col">
-          <VendorFormSectionNav sections={NAV_SECTIONS} scrollContainerRef={contentPaneRef} />
-        </aside>
+      <Tabs value={viewTab} onValueChange={setViewTab} className="flex min-h-0 w-full flex-1 flex-col">
+        <div className="shrink-0 border-b border-border px-4 py-2">
+          <TabsList className="grid w-full max-w-md grid-cols-2">
+            <TabsTrigger value="details">
+              <FileText className="mr-2 h-4 w-4" />
+              Details
+            </TabsTrigger>
+            <TabsTrigger value="history">
+              <History className="mr-2 h-4 w-4" />
+              History ({vendorHistory.length})
+            </TabsTrigger>
+          </TabsList>
+        </div>
 
-        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
-          <div ref={contentPaneRef} className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-6">
-            <div className="space-y-10">
-              <div id="general-information" className="scroll-mt-4">
-                <ViewGeneralInformationSection formData={formData} labelFor={labelFor} />
-              </div>
+        <TabsContent
+          value="details"
+          className="m-0 min-h-0 w-full flex-1 overflow-hidden data-[state=active]:flex data-[state=active]:flex-col"
+        >
+          <div className="flex min-h-0 w-full flex-1 overflow-hidden">
+            <aside className="hidden min-h-0 w-96 shrink-0 md:flex md:flex-col">
+              <VendorFormSectionNav sections={NAV_SECTIONS} scrollContainerRef={contentPaneRef} />
+            </aside>
 
-              <div id="address-branch-information" className="scroll-mt-4">
-                <ViewAddressBranchInformationSection
-                  formData={formData}
-                  labelFor={labelFor}
-                  gstRegistrations={formData.gstRegistrations}
-                  vendorBranches={formData.vendorBranches}
-                />
-              </div>
-
-              <section id="contact-details" className="-mx-6 scroll-mt-4 border-b border-border px-10">
-                <div className="flex flex-col items-start self-stretch border-b border-border py-6">
-                  <h3 className="font-['Manrope'] text-lg font-semibold leading-6 text-foreground">
-                    Contact Details
-                  </h3>
-                </div>
-
-                <div className="flex flex-col items-start gap-6 px-4 pb-8 pt-6">
-                  <div className="flex w-full items-start gap-4">
-                    {CONTACT_FIELDS.slice(0, 3).map(({ key, section }) => (
-                      <ReadOnlyField
-                        key={key}
-                        label={labelFor(section)}
-                        value={formData[key]}
-                        className="flex-1"
-                      />
-                    ))}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+              <div ref={contentPaneRef} className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-6">
+                <div className="space-y-10">
+                  <div id="general-information" className="scroll-mt-4">
+                    <ViewGeneralInformationSection formData={formData} labelFor={labelFor} />
                   </div>
 
-                  <div className="flex w-full items-start gap-4">
-                    {CONTACT_FIELDS.slice(3).map(({ key, section }) => (
-                      <ReadOnlyField
-                        key={key}
-                        label={labelFor(section)}
-                        value={formData[key]}
-                        className="flex-1"
-                      />
-                    ))}
-                    <div className="flex-1" />
+                  <AdvanceContextPanel
+                    source={formData}
+                    title="Vendor Advance Balance"
+                    description="Read-only vendor advance balance and PO-wise context from backend."
+                    currency={formData.currency || "INR"}
+                    className="-mx-6 px-10"
+                  />
+
+                  <div id="address-branch-information" className="scroll-mt-4">
+                    <ViewAddressBranchInformationSection
+                      formData={formData}
+                      labelFor={labelFor}
+                      gstRegistrations={formData.gstRegistrations}
+                      vendorBranches={formData.vendorBranches}
+                    />
+                  </div>
+
+                  <section id="contact-details" className="-mx-6 scroll-mt-4 border-b border-border px-10">
+                    <div className="flex flex-col items-start self-stretch border-b border-border py-6">
+                      <h3 className="font-['Manrope'] text-lg font-semibold leading-6 text-foreground">
+                        Contact Details
+                      </h3>
+                    </div>
+
+                    <div className="flex flex-col items-start gap-6 px-4 pb-8 pt-6">
+                      <div className="flex w-full items-start gap-4">
+                        {CONTACT_FIELDS.slice(0, 3).map(({ key, section }) => (
+                          <ReadOnlyField
+                            key={key}
+                            label={labelFor(section)}
+                            value={formData[key]}
+                            className="flex-1"
+                          />
+                        ))}
+                      </div>
+
+                      <div className="flex w-full items-start gap-4">
+                        {CONTACT_FIELDS.slice(3).map(({ key, section }) => (
+                          <ReadOnlyField
+                            key={key}
+                            label={labelFor(section)}
+                            value={formData[key]}
+                            className="flex-1"
+                          />
+                        ))}
+                        <div className="flex-1" />
+                      </div>
+                    </div>
+                  </section>
+
+                  <div id="tax-information" className="scroll-mt-4">
+                    <ViewTaxInformationSection formData={formData} labelFor={labelFor} />
+                  </div>
+
+                  <div id="bank-details" className="scroll-mt-4">
+                    <ViewBankDetailsSection bankAccounts={formData.bankAccounts || []} />
+                  </div>
+
+                  <div id="attachments" className="scroll-mt-4">
+                    <ViewAttachmentsSection
+                      documents={formData.documents}
+                      visibleDocumentTypes={visibleVendorDocumentTypes}
+                      showDocuments={showVendorDocumentsSection}
+                    />
+                  </div>
+
+                  <div id="notes" className="scroll-mt-4">
+                    <ViewNotesSection notes={formData.notes} />
                   </div>
                 </div>
-              </section>
-
-              <div id="tax-information" className="scroll-mt-4">
-                <ViewTaxInformationSection formData={formData} labelFor={labelFor} />
-              </div>
-
-              <div id="bank-details" className="scroll-mt-4">
-                <ViewBankDetailsSection bankAccounts={formData.bankAccounts || []} />
-              </div>
-
-              <div id="attachments" className="scroll-mt-4">
-                <ViewAttachmentsSection
-                  documents={formData.documents}
-                  visibleDocumentTypes={visibleVendorDocumentTypes}
-                  showDocuments={showVendorDocumentsSection}
-                />
-              </div>
-
-              <div id="notes" className="scroll-mt-4">
-                <ViewNotesSection notes={formData.notes} />
               </div>
             </div>
           </div>
+        </TabsContent>
 
-          <div className="flex shrink-0 items-start gap-3 bg-background px-4 py-1">
-            <Button type="button" variant="outline" className="flex-1" onClick={onClose}>
-              Close
-            </Button>
-            {onEdit ? (
-              <Button type="button" className="flex-1" onClick={onEdit}>
-                Edit Vendor
-              </Button>
-            ) : null}
+        <TabsContent
+          value="history"
+          className="m-0 min-h-0 w-full flex-1 overflow-y-auto px-6 py-6 md:px-0 data-[state=active]:block"
+        >
+          <div className="md:pl-[59px] md:pr-10">
+            <ApprovalHistoryTimeline
+              history={vendorHistory}
+              loading={loadingHistory}
+              emptyMessage="No vendor history records found"
+            />
           </div>
-        </div>
+        </TabsContent>
+      </Tabs>
+
+      <div className="flex shrink-0 items-start gap-3 bg-background px-4 py-1">
+        <Button type="button" variant="outline" className="flex-1" onClick={onClose}>
+          Close
+        </Button>
+        {onEdit ? (
+          <Button type="button" className="flex-1" onClick={onEdit}>
+            Edit Vendor
+          </Button>
+        ) : null}
       </div>
     </div>
   );

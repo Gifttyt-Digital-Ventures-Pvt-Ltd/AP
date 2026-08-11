@@ -73,7 +73,7 @@ const CreateVendorGstinsEditor = ({
                   )}
                 </div>
                 <div className="flex-1">
-                  <Label>GST Registration Type *</Label>
+                  <Label>GST Registration Type</Label>
                   <AppSelect
                     value={registration.registrationType || ""}
                     onChange={(event) =>
@@ -85,7 +85,7 @@ const CreateVendorGstinsEditor = ({
                   />
                 </div>
                 <div className="flex-1">
-                  <Label>HSN/SAC Default Code *</Label>
+                  <Label>HSN/SAC Default Code</Label>
                   <Input
                     value={registration.hsnSacDefaultCode || ""}
                     onChange={(event) =>
@@ -93,7 +93,6 @@ const CreateVendorGstinsEditor = ({
                     }
                     placeholder="e.g., 9983"
                     className="mt-1.5"
-                    required
                   />
                 </div>
               </div>

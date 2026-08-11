@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
@@ -22,6 +22,10 @@ import {
   useResendPayrunReleaseOtpMutation,
 } from '../../../Services/apis/approvalsPaymentsBankingApi';
 import { useGetBankingAccountBalanceQuery } from '../../../Services/apis/connectedBankingApi';
+import { DEFAULT_CURRENCY, formatCurrency } from '../../../utils/currency';
+import { isBankAccountPaymentEligible } from '../../banking/utils/bankAccounts';
+import { getPayableDisplayLabel } from '../utils/payableRows';
+import { isBankAccountPaymentEligible } from '../../banking/utils/bankAccounts';
 
 const OTP_RESEND_COOLDOWN_SECONDS = 30;
 
@@ -29,11 +33,11 @@ const preventDialogOutsideDismiss = (event) => {
   event.preventDefault();
 };
 
-const formatMoney = (value) =>
-  `₹${Number(value || 0).toLocaleString('en-IN', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+const formatMoney = (value, currency = DEFAULT_CURRENCY) =>
+  formatCurrency(Number(value || 0), currency);
+
+const getInvoicePaymentCurrency = (invoice = {}, fallbackCurrency = DEFAULT_CURRENCY) =>
+  invoice.convertToInr ? DEFAULT_CURRENCY : invoice.currency || fallbackCurrency;
 
 const clippedTableText = (value, className = '') => {
   const text = String(value || '-');
@@ -300,8 +304,16 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
   const [resendReleaseOtp, { isLoading: resendingOtp }] = useResendPayrunReleaseOtpMutation();
   const [releasePayrunPayment, { isLoading: releasingPayrun }] = useReleasePayrunMutation();
   const totalDebitAmount = Number(payrun?.totalAmount || 0);
+  const payrunCurrency = payrun?.currency || DEFAULT_CURRENCY;
+  const hasSourceAwareRows = payrun?.invoices?.some(
+    (invoice) => invoice.sourceType && invoice.sourceType !== 'INVOICE',
+  );
   const paymentModeRecommendation = getPaymentModeRecommendation(totalDebitAmount);
-  const selectedAccount = bankAccounts.find((account) => String(getReleaseBankAccountId(account)) === String(bankAccountId));
+  const releaseBankAccounts = useMemo(() => {
+    const eligibleAccounts = bankAccounts.filter(isBankAccountPaymentEligible);
+    return eligibleAccounts.length > 0 ? eligibleAccounts : bankAccounts;
+  }, [bankAccounts]);
+  const selectedAccount = releaseBankAccounts.find((account) => String(getReleaseBankAccountId(account)) === String(bankAccountId));
   const selectedBalanceAccountId = selectedAccount ? String(getReleaseBankAccountId(selectedAccount)) : '';
   const {
     data: selectedAccountBalance,
@@ -338,8 +350,16 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
   }, [mode, open, paymentModeRecommendation.enabledModes, paymentModeRecommendation.recommendedMode]);
 
   useEffect(() => {
+    if (!open || bankAccountId || releaseBankAccounts.length !== 1) return;
+    const onlyAccountId = getReleaseBankAccountId(releaseBankAccounts[0]);
+    if (onlyAccountId) {
+      setBankAccountId(String(onlyAccountId));
+    }
+  }, [bankAccountId, open, releaseBankAccounts]);
+
+  useEffect(() => {
     if (!open || !bankAccountId) return;
-    const stillEligible = bankAccounts.some(
+    const stillEligible = releaseBankAccounts.some(
       (account) => String(getReleaseBankAccountId(account)) === String(bankAccountId),
     );
     if (!stillEligible) {
@@ -349,7 +369,7 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
       setOtpRequestId('');
       toast.error('The selected bank account is no longer active. Select another active verified account and request a new OTP.');
     }
-  }, [bankAccountId, bankAccounts, open]);
+  }, [bankAccountId, open, releaseBankAccounts]);
 
   useEffect(() => {
     if (!open) return;
@@ -368,7 +388,7 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
   }, [open, otpCooldownSeconds, otpSent]);
 
   if (!payrun) return null;
-  const hasEligibleBankAccount = bankAccounts.length > 0;
+  const hasEligibleBankAccount = releaseBankAccounts.length > 0;
   const releaseSteps = ['Verify Beneficiaries', 'Debit Account', 'Review & Release'];
   const paymentModes = ['IMPS', 'NEFT', 'RTGS'];
   const chargeAmount = 0;
@@ -463,6 +483,7 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
         bankAccountId: getReleaseBankAccountId(selectedAccount),
         paymentMode: mode,
         amount: Number(payrun.totalAmount || 0),
+        currency: payrunCurrency,
       };
       const response = resend
         ? await resendReleaseOtp({ ...payload, otpRequestId }).unwrap()
@@ -602,17 +623,17 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
 
           <div className="rounded-xl border border-primary/20 bg-primary/5 px-[18px] py-4">
             <p className="mb-0.5 text-xs text-slate-500">Total Debit</p>
-            <p className="m-0 text-[22px] font-extrabold text-slate-900">{formatMoney(totalDebitAmount)}</p>
+            <p className="m-0 text-[22px] font-extrabold text-slate-900">{formatMoney(totalDebitAmount, payrunCurrency)}</p>
           </div>
 
           {step === 1 && (
             <div className="space-y-5">
               {renderReleaseSection(
-                'Invoice Details',
+                hasSourceAwareRows ? 'Payable Details' : 'Invoice Details',
                 <AppDataTable
                   tableHeader={[
                     { key: 'vendorName', title: 'Vendor' },
-                    { key: 'invoiceNumber', title: 'Invoice' },
+                    { key: 'invoiceNumber', title: hasSourceAwareRows ? 'Reference' : 'Invoice' },
                     { key: 'beneficiaryAccount', title: 'Beneficiary Account' },
                     { key: 'bank', title: 'Bank' },
                     { key: 'ifsc', title: 'IFSC' },
@@ -636,7 +657,14 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
                           {clippedTableText(invoice.vendorName)}
                         </TableCell>
                         <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left text-primary">
-                          {clippedTableText(invoice.invoiceNumber)}
+                          <div className="min-w-0">
+                            {invoice.sourceType && invoice.sourceType !== 'INVOICE' ? (
+                              <span className="mb-0.5 inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                                {invoice.sourceType}
+                              </span>
+                            ) : null}
+                            {clippedTableText(getPayableDisplayLabel(invoice))}
+                          </div>
                         </TableCell>
                         <TableCell className="max-w-[220px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left">
                           {hasMultipleAccounts ? (
@@ -679,7 +707,14 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
                           {clippedTableText(selectedBeneficiary.ifsc)}
                         </TableCell>
                         <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left font-semibold text-slate-900">
-                          {clippedTableText(formatMoney(invoice.requestedAmount))}
+                          <div className="min-w-0">
+                            {clippedTableText(formatMoney(invoice.requestedAmount, getInvoicePaymentCurrency(invoice, payrunCurrency)))}
+                            {invoice.hasAdvanceAdjustment ? (
+                              <span className="block truncate text-[11px] font-normal text-slate-500">
+                                Advance Adjusted: -{formatMoney(invoice.advanceAdjustedTotal, invoice.currency)}
+                              </span>
+                            ) : null}
+                          </div>
                         </TableCell>
                         <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left">
                           <span
@@ -727,7 +762,7 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
                   <div>
                     <Label className="text-[13px] font-medium text-slate-700">Pay From</Label>
                     <div className="mt-2 max-h-56 space-y-2 overflow-y-auto pr-1">
-                      {bankAccounts.map((account) => {
+                      {releaseBankAccounts.map((account) => {
                         const accountId = String(getReleaseBankAccountId(account));
                         const active = String(bankAccountId) === accountId;
                         const accountBankName = account.label || account.bankName || account.bank || 'IDFC Bank';
@@ -820,7 +855,7 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
                     </div>
                     <div className="mt-3 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-[12.5px] text-blue-900">
                       Recommended: <strong>{paymentModeRecommendation.recommendedMode}</strong> for this batch amount of{' '}
-                      <strong>{formatMoney(totalDebitAmount)}</strong> ({paymentModeRecommendation.reason})
+                      <strong>{formatMoney(totalDebitAmount, payrunCurrency)}</strong> ({paymentModeRecommendation.reason})
                     </div>
                   </div>
                 </div>,
@@ -836,7 +871,7 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
                   {showBatchField ? renderReleaseRow('Batch', payrun.batchId || payrun.payrunNumber || '-') : null}
                   {renderReleaseRow('Debit Account', selectedAccount ? `${bankName} · ${accountNumber}` : '-')}
                   {renderReleaseRow('Payment Mode', mode)}
-                  {renderReleaseRow('Invoice Amount', formatMoney(totalDebitAmount))}
+                  {renderReleaseRow('Invoice Amount', formatMoney(totalDebitAmount, payrunCurrency))}
                   {renderReleaseRow(`Charges (${mode})`, chargeAmount > 0 ? formatMoney(chargeAmount) : 'Free')}
                   {renderReleaseRow('Total Debit', formatMoney(totalDebitAmount + chargeAmount))}
                   {renderReleaseRow(

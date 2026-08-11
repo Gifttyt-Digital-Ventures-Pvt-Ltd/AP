@@ -407,6 +407,8 @@ export const initializeInvoiceFormData = (
       "",
     matchingPurchaseOrderId: "",
     matchingGrnId: "",
+    convertToInr: extractedData ? false : undefined,
+    matchingInrValue: extractedData ? null : "",
     matchingId: "",
     existingMatchingPurchaseOrderId: "",
     existingMatchingGrnId: "",
