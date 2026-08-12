@@ -1,5 +1,5 @@
 import React from "react";
-import { Link, useNavigate, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router";
 import { toast } from "sonner";
 import { ArrowLeft, Loader2, TriangleAlert, Unplug } from "lucide-react";
 

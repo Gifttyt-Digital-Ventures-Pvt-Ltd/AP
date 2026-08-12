@@ -6,7 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { useSidebar } from "../../components/Layout";
 import {
   useGetVendorsQuery,
@@ -298,6 +298,11 @@ const NEW_VENDOR_FIELD_DEFAULTS = {
   foreignVendor: false,
   udyamRegistrationNo: "",
   msmeCategory: "",
+  msmeVerificationStatus: "",
+  msmeVerificationMode: "",
+  msmeVerifiedAt: "",
+  msmeVerificationMessage: "",
+  msmeProviderReferenceId: "",
   iecNumber: "",
   tan: "",
   tin: "",

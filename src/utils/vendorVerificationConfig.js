@@ -1,19 +1,25 @@
-export const VENDOR_VERIFY_PORTAL_SECTION = 'VENDOR_VERIFY_PORTAL';
+export const VENDOR_VERIFY_PORTAL_SECTION = "VENDOR_VERIFY_PORTAL";
+export const VENDOR_VERIFY_MSME_SECTION = "VENDOR_VERIFY_MSME";
 
 export const DEFAULT_VENDOR_VERIFICATION_CATALOG = [
   {
-    displayName: 'GST Portal Verification',
-    screen: 'VENDOR',
+    displayName: "GST Portal Verification",
+    screen: "VENDOR",
     section: VENDOR_VERIFY_PORTAL_SECTION,
+  },
+  {
+    displayName: "MSME/Udyam Verification",
+    screen: "VENDOR",
+    section: VENDOR_VERIFY_MSME_SECTION,
   },
 ];
 
-export const normalizeVendorVerificationSection = (section = '') =>
-  String(section || '')
+export const normalizeVendorVerificationSection = (section = "") =>
+  String(section || "")
     .trim()
     .toUpperCase()
-    .replace(/[^A-Z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
+    .replace(/[^A-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
 
 export const normalizeVendorVerificationCatalog = (catalog = []) => {
   if (!Array.isArray(catalog)) return [];
@@ -25,22 +31,33 @@ export const normalizeVendorVerificationCatalog = (catalog = []) => {
         (entry) => entry.section === section,
       );
       return {
-        displayName: String(item?.displayName || defaultEntry?.displayName || section).trim(),
-        screen: String(item?.screen || 'VENDOR').trim(),
+        displayName: String(
+          item?.displayName || defaultEntry?.displayName || section,
+        ).trim(),
+        screen: String(item?.screen || "VENDOR").trim(),
         section,
       };
     })
     .filter(Boolean);
 };
 
-export const normalizeActiveVendorVerification = (activeVendorVerification = []) => {
+export const normalizeActiveVendorVerification = (
+  activeVendorVerification = [],
+) => {
   if (!Array.isArray(activeVendorVerification)) return [];
-  return activeVendorVerification.map(normalizeVendorVerificationSection).filter(Boolean);
+  return activeVendorVerification
+    .map(normalizeVendorVerificationSection)
+    .filter(Boolean);
 };
 
 export const isVendorPortalFetchEnabled = (activeVendorVerification) =>
   normalizeActiveVendorVerification(activeVendorVerification).includes(
     VENDOR_VERIFY_PORTAL_SECTION,
+  );
+
+export const isVendorMsmeVerificationEnabled = (activeVendorVerification) =>
+  normalizeActiveVendorVerification(activeVendorVerification).includes(
+    VENDOR_VERIFY_MSME_SECTION,
   );
 
 export const resolveActiveVendorVerification = ({

@@ -121,7 +121,21 @@ const normalizeBeneficiary = (beneficiary = {}) => ({
     beneficiary.bankAccountId ??
     beneficiary.bank_account_id ??
     beneficiary.sourceBankAccountId,
+  vendorBankAccountId:
+    beneficiary.vendorBankAccountId ??
+    beneficiary.vendor_bank_account_id ??
+    beneficiary.vendorBankId ??
+    beneficiary.vendor_bank_id,
   vendorId: beneficiary.vendorId ?? beneficiary.vendor_id,
+  vendorName:
+    beneficiary.vendorName ??
+    beneficiary.vendor_name ??
+    beneficiary.vendorDisplayName ??
+    beneficiary.vendor_display_name,
+  bankName:
+    beneficiary.bankName ??
+    beneficiary.bank_name ??
+    beneficiary.bank,
   name:
     beneficiary.name ??
     beneficiary.beneficiaryName ??
@@ -136,6 +150,13 @@ const normalizeBeneficiary = (beneficiary = {}) => ({
     beneficiary.normalizedStatus ??
     beneficiary.normalized_status ??
     "PENDING",
+  bankVerificationStatus:
+    beneficiary.bankVerificationStatus ??
+    beneficiary.bank_verification_status ??
+    beneficiary.verificationStatus ??
+    beneficiary.verification_status ??
+    beneficiary.reviewStatus ??
+    beneficiary.review_status,
   availableAt: beneficiary.availableAt ?? beneficiary.available_at,
   verified:
     beneficiary.verified ??
@@ -223,9 +244,27 @@ export const connectedBankingApi = serviceApi.injectEndpoints({
       invalidatesTags: ["ConnectedBanking"],
     }),
     getBeneficiaries: builder.query({
-      query: () => ({ url: "/banking/beneficiaries", method: "GET" }),
-      transformResponse: (response) =>
-        asList(response, "beneficiaries").map(normalizeBeneficiary),
+      query: ({ limit = 10, offset = 0 } = {}) => ({
+        url: "/banking/beneficiaries",
+        method: "GET",
+        params: { limit, offset },
+      }),
+      transformResponse: (response, _meta, arg = {}) => {
+        const items = asList(response, "beneficiaries").map(normalizeBeneficiary);
+        const payload = response?.data && !Array.isArray(response.data) ? response.data : response;
+        return {
+          items,
+          total:
+            payload?.total ??
+            payload?.totalElements ??
+            payload?.totalCount ??
+            payload?.count ??
+            items.length,
+          limit: payload?.limit ?? arg?.limit ?? items.length,
+          offset: payload?.offset ?? arg?.offset ?? 0,
+          hasMore: Boolean(payload?.hasMore ?? payload?.has_more ?? false),
+        };
+      },
       providesTags: ["ConnectedBanking"],
     }),
     validateBeneficiary: builder.mutation({

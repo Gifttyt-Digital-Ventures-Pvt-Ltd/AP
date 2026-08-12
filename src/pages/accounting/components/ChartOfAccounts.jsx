@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router";
 import { BookOpen, ChevronLeft, Loader2, Pencil, Plus, RefreshCw, Search } from "lucide-react";
 import { toast } from "sonner";
 

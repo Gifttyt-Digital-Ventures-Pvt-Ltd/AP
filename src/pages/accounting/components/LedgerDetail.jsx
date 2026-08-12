@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router";
 import { ChevronLeft, ChevronRight, ExternalLink, Loader2 } from "lucide-react";
 
 import { Badge } from "../../../components/ui/badge";
