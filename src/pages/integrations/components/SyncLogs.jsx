@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams } from "react-router";
 import { ArrowLeft, FileClock, RefreshCw } from "lucide-react";
 
 import { useGetIntegrationLogsQuery } from "../../../Services/apis/integrationsApi";

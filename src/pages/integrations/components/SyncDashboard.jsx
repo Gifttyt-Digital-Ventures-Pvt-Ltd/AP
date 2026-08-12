@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router";
 import { toast } from "sonner";
 import { ArrowLeft, RefreshCw, Search } from "lucide-react";
 
