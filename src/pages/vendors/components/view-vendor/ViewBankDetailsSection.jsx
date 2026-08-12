@@ -1,7 +1,43 @@
 import React from "react";
 import ReadOnlyField from "./ReadOnlyField";
 
-const ViewBankAccountsList = ({ bankAccounts = [] }) => {
+const BANK_VERIFICATION_STATUS_STYLES = {
+  APPROVED: "text-emerald-700",
+  VERIFIED: "text-emerald-700",
+  SUCCESS: "text-emerald-700",
+  PENDING_APPROVAL: "text-amber-700",
+  PENDING: "text-amber-700",
+  REJECTED: "text-red-700",
+  FAILED: "text-red-700",
+  NOT_VERIFIED: "text-muted-foreground",
+};
+
+const normalizeBankVerificationStatus = (status) =>
+  String(status || "NOT_VERIFIED").trim().toUpperCase() || "NOT_VERIFIED";
+
+const getBankVerificationLabel = (status) => {
+  const normalized = normalizeBankVerificationStatus(status);
+  if (["APPROVED", "VERIFIED", "SUCCESS"].includes(normalized)) return "Verified";
+  if (["PENDING_APPROVAL", "PENDING"].includes(normalized)) return "Pending";
+  if (["REJECTED", "FAILED"].includes(normalized)) return "Not Verified";
+  return "Not verified";
+};
+
+const BankVerificationStatus = ({ status }) => {
+  const normalized = normalizeBankVerificationStatus(status);
+  return (
+    <span
+      className={`text-sm font-medium ${
+        BANK_VERIFICATION_STATUS_STYLES[normalized] ||
+        BANK_VERIFICATION_STATUS_STYLES.NOT_VERIFIED
+      }`}
+    >
+      {getBankVerificationLabel(normalized)}
+    </span>
+  );
+};
+
+const ViewBankAccountsList = ({ bankAccounts = [], showBankVerificationStatus = false }) => {
   if (!bankAccounts.length) {
     return (
       <div className="rounded-lg border border-border bg-muted/20 px-4 py-3 text-sm text-muted-foreground">
@@ -37,12 +73,31 @@ const ViewBankAccountsList = ({ bankAccounts = [] }) => {
                 value={row.isActive ? "Active" : "Inactive"}
                 className="flex-1"
               />
+              {showBankVerificationStatus ? (
+                <div className="flex-1">
+                  <p className="text-sm font-medium leading-none text-foreground">
+                    Bank Verification
+                  </p>
+                  <div className="mt-1">
+                    <BankVerificationStatus status={row.bankVerificationStatus} />
+                  </div>
+                </div>
+              ) : (
+                <ReadOnlyField
+                  label="Bank Contact Details"
+                  value={row.bankContactDetails}
+                  className="flex-1"
+                />
+              )}
+            </div>
+
+            {showBankVerificationStatus ? (
               <ReadOnlyField
                 label="Bank Contact Details"
                 value={row.bankContactDetails}
-                className="flex-1"
+                className="w-full"
               />
-            </div>
+            ) : null}
 
             <ReadOnlyField label="Bank Address" value={row.bankAddress} className="w-full" />
           </div>
@@ -52,7 +107,7 @@ const ViewBankAccountsList = ({ bankAccounts = [] }) => {
   );
 };
 
-const ViewBankDetailsSection = ({ bankAccounts }) => (
+const ViewBankDetailsSection = ({ bankAccounts, showBankVerificationStatus = false }) => (
   <div className="-mx-6 border-b border-border px-10">
     <div className="flex flex-col items-start self-stretch border-b border-border py-6">
       <h3 className="font-['Manrope'] text-lg font-semibold leading-6 text-foreground">
@@ -74,7 +129,10 @@ const ViewBankDetailsSection = ({ bankAccounts }) => (
         </p>
       </div>
 
-      <ViewBankAccountsList bankAccounts={bankAccounts || []} />
+      <ViewBankAccountsList
+        bankAccounts={bankAccounts || []}
+        showBankVerificationStatus={showBankVerificationStatus}
+      />
     </div>
   </div>
 );

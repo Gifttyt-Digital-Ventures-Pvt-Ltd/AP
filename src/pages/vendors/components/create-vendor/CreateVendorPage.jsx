@@ -23,7 +23,14 @@ import {
   getVisibleVendorDocumentTypes,
   hasVisibleVendorDocuments,
 } from "../../../../utils/vendorDocumentConfig";
-import { isVendorPortalFetchEnabled } from "../../../../utils/vendorVerificationConfig";
+import {
+  isVendorMsmeVerificationEnabled,
+  isVendorPortalFetchEnabled,
+} from "../../../../utils/vendorVerificationConfig";
+import {
+  useVerifyVendorBankAccountMutation,
+  useVerifyVendorMsmeMutation,
+} from "../../../../Services/apis/invoicesVendorsApi";
 import { useVendorGstDetailsFetch } from "../../hooks/useVendorGstDetailsFetch";
 import {
   getVendorTdsCertificateValidationErrors,
@@ -156,6 +163,9 @@ const CreateVendorPage = ({
   const gstVerificationEnabled = isVendorPortalFetchEnabled(
     corporateScreens?.activeVendorVerification,
   );
+  const msmeVerificationEnabled = isVendorMsmeVerificationEnabled(
+    corporateScreens?.activeVendorVerification,
+  );
   const showPortalFetch = gstVerificationEnabled;
   const requiredVendorFields = useMemo(
     () => getVendorFormRequiredFields(activeVendorFields, formData),
@@ -166,7 +176,28 @@ const CreateVendorPage = ({
   const isApiFieldRequired = (sectionId) => isVendorFieldRequired(sectionId, activeVendorFields);
   const labelFor = (sectionId, fallback = "") =>
     getVendorFieldDisplayName(sectionId, vendorFieldConfiguration) || fallback;
-  const updateField = (field, value) => setFormData((prev) => ({ ...prev, [field]: value }));
+  const updateField = (field, value) =>
+    setFormData((prev) => {
+      const shouldResetMsmeVerification =
+        ["pan", "udyamRegistrationNo"].includes(field) &&
+        prev.msmeVerificationStatus &&
+        prev.msmeVerificationStatus !== "NOT_VERIFIED" &&
+        String(prev[field] || "").trim().toUpperCase() !== String(value || "").trim().toUpperCase();
+
+      return {
+        ...prev,
+        [field]: value,
+        ...(shouldResetMsmeVerification
+          ? {
+              msmeVerificationStatus: "NOT_VERIFIED",
+              msmeVerificationMode: "",
+              msmeVerifiedAt: "",
+              msmeVerificationMessage: "Verification reset because PAN or Udyam Registration No. changed.",
+              msmeProviderReferenceId: "",
+            }
+          : {}),
+      };
+    });
 
   const [gstVerification, setGstVerification] = useState({
     verified: false,
@@ -183,6 +214,184 @@ const CreateVendorPage = ({
   const [selectedFetchedGstins, setSelectedFetchedGstins] = useState(() => new Set());
 
   const { fetchVendorDetails, isLoading: isFetchLoading } = useVendorGstDetailsFetch();
+  const [verifyVendorMsme, { isLoading: isMsmeVerifying }] = useVerifyVendorMsmeMutation();
+  const [verifyVendorBankAccount, { isLoading: isBankVerifying }] = useVerifyVendorBankAccountMutation();
+
+  const applyMsmeVerificationResponse = (response, fallbackMode) => {
+    const verificationStatus = response.verificationStatus || (response.verified ? "VERIFIED" : "FAILED");
+
+    setFormData((prev) => ({
+      ...prev,
+      udyamRegistrationNo: response.udyamRegistrationNo || prev.udyamRegistrationNo,
+      msmeCategory: response.msmeCategory || prev.msmeCategory,
+      msmeVerificationStatus: verificationStatus,
+      msmeVerificationMode: response.verificationMode || fallbackMode,
+      msmeVerifiedAt: response.verifiedAt || "",
+      msmeVerificationMessage: response.verificationMessage || "",
+      msmeProviderReferenceId: response.providerReferenceId || "",
+    }));
+
+    return verificationStatus;
+  };
+
+  const handleVerifyMsme = async () => {
+    if (!msmeVerificationEnabled || !formData?.msme) return null;
+
+    const udyamRegistrationNo = String(formData.udyamRegistrationNo || "").trim().toUpperCase();
+
+    if (!udyamRegistrationNo) {
+      toast.error("Enter Udyam Registration No. to verify MSME status");
+      return null;
+    }
+
+    const requestBody = { verificationMode: "UDYAM", udyamRegistrationNo };
+
+    try {
+      const response = await verifyVendorMsme(requestBody).unwrap();
+      const verificationStatus = applyMsmeVerificationResponse(response, requestBody.verificationMode);
+
+      if (verificationStatus === "VERIFIED" || response.verified) {
+        toast.success(response.verificationMessage || "MSME verification completed");
+      } else {
+        toast.error(response.verificationMessage || "MSME verification failed");
+      }
+      return response;
+    } catch (error) {
+      const message =
+        error?.data?.verificationMessage ||
+        error?.data?.message ||
+        error?.data?.detail ||
+        "MSME verification failed";
+      const errorCode = String(error?.data?.code || error?.data?.errorCode || "").toUpperCase();
+      const nextStatus = errorCode === "MSME_PROVIDER_UNAVAILABLE" ? "UNAVAILABLE" : "FAILED";
+
+      setFormData((prev) => ({
+        ...prev,
+        msmeVerificationStatus: nextStatus,
+        msmeVerificationMode: requestBody.verificationMode,
+        msmeVerificationMessage: message,
+      }));
+      toast.error(message);
+      return null;
+    }
+  };
+
+  const handleFetchMsmeUsingPan = async (panInput) => {
+    if (!msmeVerificationEnabled || !formData?.msme) return null;
+
+    const pan = String(panInput || "").trim().toUpperCase();
+
+    if (!pan) {
+      toast.error("Enter PAN to fetch Udyam details");
+      return null;
+    }
+
+    try {
+      const response = await verifyVendorMsme({ verificationMode: "PAN", pan }).unwrap();
+      return response;
+    } catch (error) {
+      const message =
+        error?.data?.verificationMessage ||
+        error?.data?.message ||
+        error?.data?.detail ||
+        "MSME verification failed";
+      const errorCode = String(error?.data?.code || error?.data?.errorCode || "").toUpperCase();
+      const nextStatus = errorCode === "MSME_PROVIDER_UNAVAILABLE" ? "UNAVAILABLE" : "FAILED";
+
+      setFormData((prev) => ({
+        ...prev,
+        msmeVerificationStatus: nextStatus,
+        msmeVerificationMode: "PAN",
+        msmeVerificationMessage: message,
+      }));
+      toast.error(message);
+      return null;
+    }
+  };
+
+  const handleApplyFetchedMsme = (response) => {
+    if (!response) return;
+    const verificationStatus = applyMsmeVerificationResponse(response, response.verificationMode || "PAN");
+
+    if (verificationStatus === "VERIFIED" || response.verified) {
+      toast.success(response.verificationMessage || "Udyam details fetched and verified");
+    } else {
+      toast.error(response.verificationMessage || "Fetched Udyam details could not be verified");
+    }
+  };
+
+  const handleVerifyBankAccount = async (bankAccountId) => {
+    const bankAccounts = Array.isArray(formData.bankAccounts) ? formData.bankAccounts : [];
+    const targetAccount = bankAccounts.find((account) => String(account.id) === String(bankAccountId));
+    if (!targetAccount) return null;
+
+    const accountNumber = String(targetAccount.accountNumber || targetAccount.account_number || "").trim();
+    const ifsc = String(targetAccount.ifscCode || targetAccount.ifsc_code || targetAccount.ifsc || "").trim().toUpperCase();
+    const requestBody = {
+      ...(accountNumber ? { accountNumber } : {}),
+      ...(ifsc ? { ifsc } : {}),
+    };
+
+    if (!accountNumber && !ifsc) {
+      toast.error("Enter account number or IFSC to verify bank details");
+      return null;
+    }
+
+    try {
+      const response = await verifyVendorBankAccount(requestBody).unwrap();
+      const verificationStatus =
+        response.verificationStatus ||
+        response.bankVerificationStatus ||
+        (response.verified ? "VERIFIED" : "FAILED");
+
+      setFormData((prev) => ({
+        ...prev,
+        bankAccounts: (Array.isArray(prev.bankAccounts) ? prev.bankAccounts : []).map((account) =>
+          String(account.id) === String(bankAccountId)
+            ? {
+                ...account,
+                bankName: response.bankName || account.bankName,
+                accountName: response.accountHolderName || account.accountName,
+                accountNumber: response.accountNumber || account.accountNumber,
+                ifscCode: response.ifsc || account.ifscCode,
+                bankVerificationStatus: verificationStatus,
+                bankVerificationMessage: response.verificationMessage || "",
+                bankVerifiedAt: response.verifiedAt || "",
+                bankProviderReferenceId: response.providerReferenceId || "",
+              }
+            : account,
+        ),
+      }));
+
+      if (["VERIFIED", "APPROVED", "SUCCESS"].includes(String(verificationStatus).toUpperCase()) || response.verified) {
+        toast.success(response.verificationMessage || "Bank account verified");
+      } else {
+        toast.error(response.verificationMessage || "Bank account verification failed");
+      }
+      return response;
+    } catch (error) {
+      const message =
+        error?.data?.verificationMessage ||
+        error?.data?.message ||
+        error?.data?.detail ||
+        "Bank account verification failed";
+
+      setFormData((prev) => ({
+        ...prev,
+        bankAccounts: (Array.isArray(prev.bankAccounts) ? prev.bankAccounts : []).map((account) =>
+          String(account.id) === String(bankAccountId)
+            ? {
+                ...account,
+                bankVerificationStatus: "FAILED",
+                bankVerificationMessage: message,
+              }
+            : account,
+        ),
+      }));
+      toast.error(message);
+      return null;
+    }
+  };
 
   useEffect(() => {
     if (!formData?.gstin) return;
@@ -472,6 +681,11 @@ const CreateVendorPage = ({
                   labelFor={labelFor}
                   isEditMode={isEditMode}
                   fieldErrors={fieldErrors}
+                  portalVerificationEnabled={msmeVerificationEnabled}
+                  onVerifyMsme={handleVerifyMsme}
+                  onFetchMsmeUsingPan={handleFetchMsmeUsingPan}
+                  onApplyFetchedMsme={handleApplyFetchedMsme}
+                  isMsmeVerifying={isMsmeVerifying}
                 />
               </div>
 
@@ -589,6 +803,8 @@ const CreateVendorPage = ({
                   onChange={(bankAccounts) => updateField("bankAccounts", bankAccounts)}
                   foreignVendor={Boolean(formData.foreignVendor)}
                   isRequired={isApiFieldRequired}
+                  onVerifyBankAccount={handleVerifyBankAccount}
+                  isBankVerifying={isBankVerifying}
                 />
               </div>
 

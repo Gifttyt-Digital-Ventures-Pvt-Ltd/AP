@@ -46,7 +46,6 @@ import {
   useRegisterBeneficiaryMutation,
   useValidateBeneficiaryMutation,
 } from "../../Services/apis/connectedBankingApi";
-import { useGetVendorsQuery } from "../../Services/apis/invoicesVendorsApi";
 import { useActionGuard } from "../../hooks/useActionGuard";
 import { toast } from "sonner";
 import BeneficiariesTable from "./components/BeneficiariesTable";
@@ -113,43 +112,6 @@ const getAccountSelectLabel = (account = {}) =>
   `${getAccountLabel(account)} · ${getMaskedAccount(account)}`;
 
 const BENEFICIARY_PAGE_SIZE = 10;
-
-const getVendorId = (vendor = {}, index = 0) =>
-  String(vendor.id ?? vendor.vendorId ?? vendor.vendor_id ?? index);
-
-const getVendorName = (vendor = {}) =>
-  vendor.name || vendor.vendorName || vendor.vendor_name || "—";
-
-const normalizeVendorBankAccounts = (vendor = {}) => {
-  if (!vendor || typeof vendor !== "object") return [];
-  const accounts = vendor.bankAccounts || vendor.bank_accounts || vendor.vendorBankAccounts || vendor.vendor_bank_accounts || [];
-  const normalizedAccounts = Array.isArray(accounts) ? accounts : [];
-  if (normalizedAccounts.length > 0) return normalizedAccounts;
-
-  const accountNumber = vendor.accountNumber || vendor.account_number;
-  const ifsc = vendor.ifscCode || vendor.ifsc_code || vendor.ifsc;
-  const bankName = vendor.bankName || vendor.bank_name;
-  if (!accountNumber && !ifsc && !bankName) return [];
-
-  return [{
-    id: `${vendor.id || vendor.vendorId || vendor.vendor_id || "vendor"}-default-bank`,
-    bankName,
-    accountNumber,
-    ifscCode: ifsc,
-    accountHolderName: vendor.accountHolderName || vendor.account_holder_name || getVendorName(vendor),
-  }];
-};
-
-const findBeneficiaryForVendorAccount = (beneficiaries = [], vendorId, account = {}) => {
-  const accountNumber = String(account.accountNumber || account.account_number || "").trim();
-  const ifsc = String(account.ifscCode || account.ifsc_code || account.ifsc || "").trim().toUpperCase();
-  return beneficiaries.find((beneficiary) => {
-    const sameVendor = String(beneficiary.vendorId || beneficiary.vendor_id || "") === String(vendorId);
-    const sameAccount = String(beneficiary.accountNumber || beneficiary.account_number || "").trim() === accountNumber;
-    const sameIfsc = String(beneficiary.ifsc || beneficiary.ifscCode || beneficiary.ifsc_code || "").trim().toUpperCase() === ifsc;
-    return sameVendor && sameAccount && sameIfsc;
-  });
-};
 
 const getVisiblePages = (currentPage, totalPages, maxVisible = 5) => {
   if (totalPages <= 0) return [];
@@ -356,34 +318,28 @@ const ConnectedBanking = () => {
   const { isConnectedBankingEnabled } = useRBAC();
   const { guardAction, canPerformAction } = useActionGuard();
   const skip = !isConnectedBankingEnabled;
+  const beneficiaryOffset = beneficiaryPage * BENEFICIARY_PAGE_SIZE;
 
   const {
     accounts,
     paymentReadyAccounts,
     beneficiaries,
+    beneficiariesMeta,
     gateState,
     isSetupReady,
     isLoading,
     isFetching,
     refetchAll,
     refetchBeneficiaries,
-  } = useBankingSetup({ skip });
+  } = useBankingSetup({
+    skip,
+    beneficiaryLimit: BENEFICIARY_PAGE_SIZE,
+    beneficiaryOffset,
+  });
   const [validateBeneficiary, { isLoading: validatingBeneficiary }] = useValidateBeneficiaryMutation();
   const [registerBeneficiary, { isLoading: savingBeneficiary }] = useRegisterBeneficiaryMutation();
-  const {
-    data: vendorsData = [],
-    isFetching: vendorsFetching,
-    refetch: refetchVendors,
-  } = useGetVendorsQuery(
-    { limit: 500, offset: 0 },
-    { skip },
-  );
   const canManageBeneficiaries = canPerformAction("banking.addBeneficiary");
   const hasPaymentReadyAccount = paymentReadyAccounts.length > 0;
-  const vendors = useMemo(
-    () => (Array.isArray(vendorsData) ? vendorsData : []),
-    [vendorsData],
-  );
 
   const selectedAccount = useMemo(() => {
     if (!accounts.length) return null;
@@ -466,41 +422,32 @@ const ConnectedBanking = () => {
     [accountActivity, activityDateFrom, activityDateTo, activitySearch, selectedAccountId],
   );
 
-  const vendorBeneficiaryAccounts = useMemo(
+  const beneficiaryRows = useMemo(
     () =>
-      vendors.flatMap((vendor, vendorIndex) => {
-        const vendorId = getVendorId(vendor, vendorIndex);
-        return normalizeVendorBankAccounts(vendor).map((account, accountIndex) => {
-          const linkedBeneficiary = findBeneficiaryForVendorAccount(beneficiaries, vendorId, account);
-          const accountNumber = account.accountNumber || account.account_number || "";
-          const ifsc = account.ifscCode || account.ifsc_code || account.ifsc || "";
-          return {
-            id: `${vendorId}-${account.id || account.accountId || accountNumber || accountIndex}`,
-            vendorId,
-            vendorName: getVendorName(vendor),
-            name:
-              linkedBeneficiary?.name ||
-              account.accountHolderName ||
-              account.account_holder_name ||
-              getVendorName(vendor),
-            bankName: account.bankName || account.bank_name || account.bank || "—",
-            accountNumber: accountNumber || "—",
-            ifsc: ifsc || "—",
-            status: linkedBeneficiary?.status || "UNVERIFIED",
-            availableAt: linkedBeneficiary?.availableAt,
-            bankAccountId: linkedBeneficiary?.bankAccountId,
-          };
-        });
-      }),
-    [beneficiaries, vendors],
+      beneficiaries.map((beneficiary, index) => ({
+        ...beneficiary,
+        id: beneficiary.id ?? beneficiary.bnfId ?? beneficiary.beneficiaryId ?? index,
+        vendorId: beneficiary.vendorId ?? beneficiary.vendor_id,
+        vendorBankAccountId: beneficiary.vendorBankAccountId ?? beneficiary.vendor_bank_account_id,
+        vendorName: beneficiary.vendorName ?? beneficiary.name ?? "—",
+        name: beneficiary.name ?? "—",
+        bankName: beneficiary.bankName ?? "—",
+        accountNumber: beneficiary.accountNumber ?? "—",
+        ifsc: beneficiary.ifsc ?? "—",
+        status: beneficiary.status ?? beneficiary.normalizedStatus ?? "UNVERIFIED",
+        bankVerificationStatus: beneficiary.bankVerificationStatus,
+        availableAt: beneficiary.availableAt ?? beneficiary.available_at,
+        bankAccountId: beneficiary.bankAccountId ?? beneficiary.bank_account_id,
+      })),
+    [beneficiaries],
   );
 
   const beneficiaryPagination = useMemo(() => {
-    const total = vendorBeneficiaryAccounts.length;
+    const total = beneficiariesMeta?.total ?? beneficiaryRows.length;
     const totalPages = Math.max(1, Math.ceil(total / BENEFICIARY_PAGE_SIZE));
     const safePage = Math.min(beneficiaryPage, totalPages - 1);
     const start = safePage * BENEFICIARY_PAGE_SIZE;
-    const end = Math.min(start + BENEFICIARY_PAGE_SIZE, total);
+    const end = Math.min(start + beneficiaryRows.length, total);
     return {
       total,
       totalPages,
@@ -512,15 +459,11 @@ const ConnectedBanking = () => {
       hasPrevious: safePage > 0,
       hasNext: safePage < totalPages - 1,
     };
-  }, [beneficiaryPage, vendorBeneficiaryAccounts.length]);
+  }, [beneficiariesMeta?.total, beneficiaryPage, beneficiaryRows.length]);
 
   const paginatedBeneficiaries = useMemo(
-    () =>
-      vendorBeneficiaryAccounts.slice(
-        beneficiaryPagination.start,
-        beneficiaryPagination.end,
-      ),
-    [beneficiaryPagination.end, beneficiaryPagination.start, vendorBeneficiaryAccounts],
+    () => beneficiaryRows,
+    [beneficiaryRows],
   );
 
   const handleExportActivity = () => {
@@ -576,7 +519,7 @@ const ConnectedBanking = () => {
     if (!guardAction("banking.addBeneficiary")) return false;
     try {
       await registerBeneficiary(payload).unwrap();
-      await Promise.all([refetchBeneficiaries(), refetchVendors()]);
+      await refetchBeneficiaries();
       toast.success("Beneficiary saved successfully");
       setBeneficiaryDialogOpen(false);
       return true;
@@ -630,7 +573,7 @@ const ConnectedBanking = () => {
     setBeneficiaryPage(Math.max(beneficiaryPagination.totalPages - 1, 0));
   }, [beneficiaryPage, beneficiaryPagination.totalPages]);
 
-  const bankingRefreshing = isFetching || isStatementFetching || vendorsFetching;
+  const bankingRefreshing = isFetching || isStatementFetching;
 
   if (!isConnectedBankingEnabled) {
     return (
@@ -871,6 +814,7 @@ const ConnectedBanking = () => {
                   beneficiaries={paginatedBeneficiaries}
                   canManage={canManageBeneficiaries}
                   onRegister={handleRetryBeneficiary}
+                  showBankVerificationStatus={isConnectedBankingEnabled}
                   footer={
                     <div className="flex shrink-0 flex-col gap-3 border-t border-border p-4 sm:flex-row sm:items-center sm:justify-between">
                       <p className="text-sm text-muted-foreground">
@@ -932,7 +876,7 @@ const ConnectedBanking = () => {
               </DialogHeader>
               <BeneficiaryForm
                 accounts={paymentReadyAccounts}
-                vendors={vendors}
+                vendors={beneficiaryRows}
                 beneficiaries={beneficiaries}
                 canManage={canManageBeneficiaries}
                 validating={validatingBeneficiary}

@@ -15,6 +15,70 @@ import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
 
 const unwrapVendorList = extractListResponse;
 
+const normalizeMsmeVerificationResponse = (response = {}) => {
+  const payload = response?.data ?? response?.result ?? response;
+  return {
+    ...payload,
+    verificationMode: payload?.verificationMode ?? payload?.verification_mode ?? "",
+    verified: Boolean(payload?.verified),
+    msmeStatus: payload?.msmeStatus ?? payload?.msme_status ?? "",
+    enterpriseName: payload?.enterpriseName ?? payload?.enterprise_name ?? "",
+    udyamRegistrationNo: payload?.udyamRegistrationNo ?? payload?.udyam_registration_no ?? "",
+    msmeCategory: payload?.msmeCategory ?? payload?.msme_category ?? "",
+    verificationStatus: payload?.verificationStatus ?? payload?.verification_status ?? "",
+    verificationMessage: payload?.verificationMessage ?? payload?.verification_message ?? payload?.message ?? "",
+    verifiedAt: payload?.verifiedAt ?? payload?.verified_at ?? "",
+    providerReferenceId: payload?.providerReferenceId ?? payload?.provider_reference_id ?? "",
+  };
+};
+
+const normalizeVendorBankVerificationResponse = (response = {}) => {
+  const payload = response?.data ?? response?.result ?? response;
+  return {
+    ...payload,
+    verified: Boolean(payload?.verified),
+    verificationStatus:
+      payload?.verificationStatus ??
+      payload?.verification_status ??
+      payload?.bankVerificationStatus ??
+      payload?.bank_verification_status ??
+      "",
+    verificationMessage:
+      payload?.verificationMessage ??
+      payload?.verification_message ??
+      payload?.message ??
+      "",
+    accountNumber:
+      payload?.accountNumber ??
+      payload?.account_number ??
+      "",
+    ifsc:
+      payload?.ifsc ??
+      payload?.ifscCode ??
+      payload?.ifsc_code ??
+      "",
+    accountHolderName:
+      payload?.accountHolderName ??
+      payload?.account_holder_name ??
+      payload?.accountName ??
+      payload?.account_name ??
+      "",
+    bankName:
+      payload?.bankName ??
+      payload?.bank_name ??
+      payload?.bank ??
+      "",
+    verifiedAt:
+      payload?.verifiedAt ??
+      payload?.verified_at ??
+      "",
+    providerReferenceId:
+      payload?.providerReferenceId ??
+      payload?.provider_reference_id ??
+      "",
+  };
+};
+
 const normalizeVendorListResponse = (response) => {
   const vendors = unwrapVendorList(response).map(toVendorUiPayload);
   const payload = response?.data && !Array.isArray(response.data) ? response.data : response;
@@ -235,6 +299,22 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
         ...CREDIT_INVALIDATION_TAGS,
       ],
     }),
+    verifyVendorMsme: builder.mutation({
+      query: (body) => ({
+        url: "/vendors/verify/msme",
+        method: "POST",
+        body,
+      }),
+      transformResponse: normalizeMsmeVerificationResponse,
+    }),
+    verifyVendorBankAccount: builder.mutation({
+      query: (body) => ({
+        url: "/vendors/verify/bank-account",
+        method: "POST",
+        body,
+      }),
+      transformResponse: normalizeVendorBankVerificationResponse,
+    }),
     requestVendorAddition: builder.mutation({
       query: (body) => ({
         url: "/vendors/request",
@@ -324,6 +404,8 @@ export const {
   useGetVendorQuery,
   useLazyGetVendorQuery,
   useCreateVendorMutation,
+  useVerifyVendorMsmeMutation,
+  useVerifyVendorBankAccountMutation,
   useRequestVendorAdditionMutation,
   useUpdateVendorMutation,
   useDeleteVendorMutation,

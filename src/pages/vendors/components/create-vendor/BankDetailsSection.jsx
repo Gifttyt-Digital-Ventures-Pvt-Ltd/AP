@@ -3,7 +3,14 @@ import { Plus } from "lucide-react";
 import { Button } from "../../../../components/ui/button";
 import VendorBankDetailsEditor, { createEmptyBankAccount } from "./VendorBankDetailsEditor";
 
-const BankDetailsSection = ({ bankAccounts, onChange, foreignVendor = false, isRequired }) => (
+const BankDetailsSection = ({
+  bankAccounts,
+  onChange,
+  foreignVendor = false,
+  isRequired,
+  onVerifyBankAccount,
+  isBankVerifying = false,
+}) => (
   <div className="-mx-6 border-b border-border px-10">
     <div className="flex flex-col items-start self-stretch border-b border-border py-6">
       <h3 className="font-['Manrope'] text-lg font-semibold leading-6 text-foreground">
@@ -44,6 +51,8 @@ const BankDetailsSection = ({ bankAccounts, onChange, foreignVendor = false, isR
         onChange={onChange}
         foreignVendor={foreignVendor}
         isRequired={isRequired}
+        onVerifyBankAccount={onVerifyBankAccount}
+        isBankVerifying={isBankVerifying}
       />
     </div>
   </div>

@@ -1,6 +1,7 @@
 import React from "react";
-import { X } from "lucide-react";
+import { Loader2, X } from "lucide-react";
 import AppSelect from "../../../../components/common/AppSelect";
+import { Button } from "../../../../components/ui/button";
 import { Input } from "../../../../components/ui/input";
 import { Label } from "../../../../components/ui/label";
 import { VENDOR_FIELD_SECTIONS } from "../../../../utils/vendorFieldConfig";
@@ -16,6 +17,31 @@ const BANK_ACTIVE_STATUS_OPTIONS = [
   { value: "Inactive", label: "Inactive" },
 ];
 
+const BANK_VERIFICATION_STATUS_STYLES = {
+  VERIFIED: "text-emerald-700",
+  APPROVED: "text-emerald-700",
+  SUCCESS: "text-emerald-700",
+  FAILED: "text-red-700",
+  REJECTED: "text-red-700",
+  PENDING: "text-amber-700",
+  PENDING_APPROVAL: "text-amber-700",
+  NOT_VERIFIED: "text-muted-foreground",
+};
+
+const normalizeBankVerificationStatus = (status) =>
+  String(status || "NOT_VERIFIED").trim().toUpperCase() || "NOT_VERIFIED";
+
+const getBankVerificationLabel = (status) => {
+  const normalized = normalizeBankVerificationStatus(status);
+  if (["VERIFIED", "APPROVED", "SUCCESS"].includes(normalized)) return "Verified";
+  if (["FAILED", "REJECTED"].includes(normalized)) return "Not Verified";
+  if (["PENDING", "PENDING_APPROVAL"].includes(normalized)) return "Pending";
+  return "";
+};
+
+const canRetryBankVerification = (status) =>
+  ["FAILED", "REJECTED", "NOT_VERIFIED"].includes(normalizeBankVerificationStatus(status));
+
 export const createEmptyBankAccount = () => ({
   id: `vendor-bank-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
   bankName: "",
@@ -28,6 +54,10 @@ export const createEmptyBankAccount = () => ({
   isActive: true,
   bankContactDetails: "",
   bankAddress: "",
+  bankVerificationStatus: "",
+  bankVerificationMessage: "",
+  bankVerifiedAt: "",
+  bankProviderReferenceId: "",
 });
 
 const normalizeBankAccounts = (accounts = []) =>
@@ -86,11 +116,34 @@ const VendorBankDetailsEditor = ({
   onChange,
   foreignVendor = false,
   isRequired = () => false,
+  onVerifyBankAccount,
+  isBankVerifying = false,
 }) => {
   const rows = normalizeBankAccounts(bankAccounts);
 
   const updateRow = (id, field, value) => {
-    onChange(rows.map((row) => (row.id === id ? { ...row, [field]: value } : row)));
+    onChange(
+      rows.map((row) => {
+        if (row.id !== id) return row;
+        const shouldResetVerification =
+          ["accountNumber", "ifscCode"].includes(field) &&
+          normalizeBankVerificationStatus(row.bankVerificationStatus) !== "NOT_VERIFIED" &&
+          String(row[field] || "").trim().toUpperCase() !== String(value || "").trim().toUpperCase();
+
+        return {
+          ...row,
+          [field]: value,
+          ...(shouldResetVerification
+            ? {
+                bankVerificationStatus: "NOT_VERIFIED",
+                bankVerificationMessage: "",
+                bankVerifiedAt: "",
+                bankProviderReferenceId: "",
+              }
+            : {}),
+        };
+      }),
+    );
   };
 
   if (!rows.length) {
@@ -108,6 +161,12 @@ const VendorBankDetailsEditor = ({
           isRequired(VENDOR_FIELD_SECTIONS.IFSC_CODE) ||
           String(row.bankCurrency || "").trim().toUpperCase() === "INR";
         const swiftRequired = foreignVendor;
+        const bankVerificationStatus = normalizeBankVerificationStatus(row.bankVerificationStatus);
+        const bankVerificationLabel = getBankVerificationLabel(bankVerificationStatus);
+        const canVerifyBank = Boolean(
+          onVerifyBankAccount &&
+            (String(row.accountNumber || "").trim() || String(row.ifscCode || "").trim()),
+        );
 
         return (
         <div
@@ -229,15 +288,43 @@ const VendorBankDetailsEditor = ({
             </div>
 
             <div className="flex w-full justify-end">
-              <button
-                type="button"
-                onClick={() => onChange(rows.filter((item) => item.id !== row.id))}
-                className="flex items-center gap-1 text-xs font-medium text-destructive"
-                aria-label={`Delete bank account ${index + 1}`}
-              >
-                <X className="h-4 w-4" />
-                Remove
-              </button>
+              <div className="flex items-center gap-3">
+                {onVerifyBankAccount ? (
+                  !bankVerificationLabel || canRetryBankVerification(bankVerificationStatus) ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-8 text-xs"
+                      onClick={() => onVerifyBankAccount(row.id)}
+                      disabled={isBankVerifying || !canVerifyBank}
+                    >
+                      {isBankVerifying ? (
+                        <Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />
+                      ) : null}
+                      {bankVerificationLabel ? "Retry Verification" : "Verify Bank"}
+                    </Button>
+                  ) : (
+                    <span
+                      className={`text-xs font-medium ${
+                        BANK_VERIFICATION_STATUS_STYLES[bankVerificationStatus] ||
+                        BANK_VERIFICATION_STATUS_STYLES.NOT_VERIFIED
+                      }`}
+                    >
+                      {bankVerificationLabel}
+                    </span>
+                  )
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => onChange(rows.filter((item) => item.id !== row.id))}
+                  className="flex items-center gap-1 text-xs font-medium text-destructive"
+                  aria-label={`Delete bank account ${index + 1}`}
+                >
+                  <X className="h-4 w-4" />
+                  Remove
+                </button>
+              </div>
             </div>
           </div>
         </div>

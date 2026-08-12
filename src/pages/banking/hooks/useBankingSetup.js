@@ -13,7 +13,7 @@ import {
   isBankAccountPaymentEligible,
 } from "../utils/bankAccounts";
 
-export const useBankingSetup = ({ skip = false } = {}) => {
+export const useBankingSetup = ({ skip = false, beneficiaryLimit = 10, beneficiaryOffset = 0 } = {}) => {
   const {
     data: apiAccounts = [],
     isLoading: accountsLoading,
@@ -22,15 +22,42 @@ export const useBankingSetup = ({ skip = false } = {}) => {
   } = useGetLinkedBankingAccountsQuery(undefined, { skip });
 
   const {
-    data: beneficiaries = [],
+    data: beneficiariesResponse,
     isLoading: beneficiariesLoading,
     isFetching: beneficiariesFetching,
     refetch: refetchBeneficiaries,
-  } = useGetBeneficiariesQuery(undefined, { skip });
+  } = useGetBeneficiariesQuery(
+    { limit: beneficiaryLimit, offset: beneficiaryOffset },
+    { skip },
+  );
 
   const accounts = useMemo(
     () => apiAccounts,
     [apiAccounts],
+  );
+  const beneficiaries = useMemo(
+    () =>
+      Array.isArray(beneficiariesResponse)
+        ? beneficiariesResponse
+        : beneficiariesResponse?.items ?? [],
+    [beneficiariesResponse],
+  );
+  const beneficiariesMeta = useMemo(
+    () =>
+      Array.isArray(beneficiariesResponse)
+        ? {
+            total: beneficiariesResponse.length,
+            limit: beneficiaryLimit,
+            offset: beneficiaryOffset,
+            hasMore: false,
+          }
+        : {
+            total: beneficiariesResponse?.total ?? beneficiaries.length,
+            limit: beneficiariesResponse?.limit ?? beneficiaryLimit,
+            offset: beneficiariesResponse?.offset ?? beneficiaryOffset,
+            hasMore: Boolean(beneficiariesResponse?.hasMore),
+          },
+    [beneficiaries.length, beneficiariesResponse, beneficiaryLimit, beneficiaryOffset],
   );
 
   const linkedAccount = useMemo(
@@ -111,6 +138,7 @@ export const useBankingSetup = ({ skip = false } = {}) => {
     paymentReadyAccounts,
     accounts,
     beneficiaries,
+    beneficiariesMeta,
     activeBeneficiaries,
     gateState,
     setupStatus,
