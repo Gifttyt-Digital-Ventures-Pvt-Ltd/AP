@@ -1,9 +1,18 @@
 import React, { useState } from "react";
-import { Building2, User, X } from "lucide-react";
+import { Building2, Loader2, User, X } from "lucide-react";
+import { Badge } from "../../../../components/ui/badge";
+import { Button } from "../../../../components/ui/button";
 import { Checkbox } from "../../../../components/ui/checkbox";
 import { Input } from "../../../../components/ui/input";
 import { Label } from "../../../../components/ui/label";
 import AppSelect from "../../../../components/common/AppSelect";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../../../components/ui/dialog";
 import { useGetAvailableCurrenciesQuery } from "../../../../Services/apis/corporateApi";
 import {
   CURRENCY_SCREENS,
@@ -35,6 +44,16 @@ const PAYMENT_TERMS_OPTIONS = [
 ];
 const DELIVERY_TERMS_OPTIONS = ["EXW", "FOB", "CIF", "DAP", "DDP"];
 const MSME_CATEGORY_OPTIONS = ["Micro", "Small", "Medium"];
+const MSME_STATUS_STYLES = {
+  VERIFIED: "border-emerald-200 bg-emerald-100 text-emerald-800",
+  FAILED: "border-red-200 bg-red-100 text-red-800",
+  UNAVAILABLE: "border-amber-200 bg-amber-100 text-amber-900",
+  MANUAL: "border-blue-200 bg-blue-100 text-blue-800",
+  NOT_VERIFIED: "border-slate-200 bg-slate-100 text-slate-700",
+};
+
+const normalizeMsmeVerificationStatus = (status) =>
+  String(status || "NOT_VERIFIED").trim().toUpperCase() || "NOT_VERIFIED";
 
 const hasValue = (value) =>
   value !== undefined && value !== null && value !== "";
@@ -74,6 +93,11 @@ const GeneralInformationSection = ({
   labelFor,
   isEditMode = false,
   fieldErrors = {},
+  portalVerificationEnabled = false,
+  onVerifyMsme,
+  onFetchMsmeUsingPan,
+  onApplyFetchedMsme,
+  isMsmeVerifying = false,
 }) => {
   const nameLabel =
     formData.vendor_type === "Company"
@@ -81,10 +105,20 @@ const GeneralInformationSection = ({
       : "Full Name";
   const errorClass = (key) => getVendorFieldErrorClassName(fieldErrors, key);
   const requiredMark = (sectionId) => (isRequired(sectionId) ? " *" : "");
+  const msmeVerificationStatus = normalizeMsmeVerificationStatus(formData.msmeVerificationStatus);
+  const showMsmeVerificationControls = Boolean(portalVerificationEnabled && formData.msme);
+  const canVerifyMsme = Boolean(showMsmeVerificationControls && onVerifyMsme);
+  const hasUdyamRegistrationNo = Boolean(String(formData.udyamRegistrationNo || "").trim());
+  const fetchUsingPanDisabled = hasUdyamRegistrationNo || isMsmeVerifying;
+  const verifyMsmeDisabled = !hasUdyamRegistrationNo || isMsmeVerifying;
 
   const [isOtherCategory, setIsOtherCategory] = useState(
     () => Boolean(formData.category) && !CATEGORY_OPTIONS.includes(formData.category),
   );
+  const [panFetchOpen, setPanFetchOpen] = useState(false);
+  const [panInput, setPanInput] = useState("");
+  const [panFetchResult, setPanFetchResult] = useState(null);
+  const [panFetchError, setPanFetchError] = useState("");
 
   const { data: availableCurrencies = [] } = useGetAvailableCurrenciesQuery(
     CURRENCY_SCREENS.INVOICE,
@@ -98,9 +132,55 @@ const GeneralInformationSection = ({
     FALLBACK_CURRENCIES,
     formData.currency,
   );
+  const openPanFetchDialog = () => {
+    if (fetchUsingPanDisabled) return;
+    setPanInput(String(formData.pan || "").trim().toUpperCase());
+    setPanFetchResult(null);
+    setPanFetchError("");
+    setPanFetchOpen(true);
+  };
+  const handlePanFetch = async () => {
+    if (!onFetchMsmeUsingPan || isMsmeVerifying) return;
+
+    const response = await onFetchMsmeUsingPan(panInput);
+    setPanFetchResult(response);
+    setPanFetchError(response ? "" : "No verified Udyam details were found for this PAN.");
+  };
+  const confirmPanFetch = () => {
+    if (!panFetchResult || !onApplyFetchedMsme) return;
+    onApplyFetchedMsme(panFetchResult);
+    setPanFetchOpen(false);
+  };
+  const renderUdyamFetchCta = () => {
+    if (!showMsmeVerificationControls) return null;
+
+    if (["VERIFIED", "FAILED"].includes(msmeVerificationStatus)) {
+      return (
+        <span
+          className={`pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium ${
+            msmeVerificationStatus === "VERIFIED" ? "text-emerald-700" : "text-red-700"
+          }`}
+        >
+          {msmeVerificationStatus === "VERIFIED" ? "Verified" : "Not Verified"}
+        </span>
+      );
+    }
+
+    return (
+      <button
+        type="button"
+        onClick={openPanFetchDialog}
+        disabled={fetchUsingPanDisabled}
+        className="absolute right-3 top-1/2 -translate-y-1/2 text-sm font-medium text-primary transition-colors hover:text-primary/80 disabled:cursor-not-allowed disabled:text-muted-foreground"
+      >
+        Fetch using PAN
+      </button>
+    );
+  };
 
   return (
-    <div className="-mx-6 border-b border-border px-10">
+    <>
+      <div className="-mx-6 border-b border-border px-10">
       <div className="flex flex-col items-start self-stretch border-b border-border py-6">
         <h3 className="font-['Manrope'] text-lg font-semibold leading-6 text-foreground">
           General Information
@@ -444,15 +524,18 @@ const GeneralInformationSection = ({
                       )}
                       {requiredMark(VENDOR_FIELD_SECTIONS.UDYAM_REGISTRATION_NO)}
                     </Label>
-                    <Input
-                      value={formData.udyamRegistrationNo || ""}
-                      onChange={(event) =>
-                        updateField("udyamRegistrationNo", event.target.value)
-                      }
-                      placeholder="UDYAM-XX-00-0000000"
-                      className={`mt-1.5 bg-background ${errorClass("udyamRegistrationNo")}`}
-                      required={isRequired(VENDOR_FIELD_SECTIONS.UDYAM_REGISTRATION_NO)}
-                    />
+                    <div className="relative mt-1.5">
+                      <Input
+                        value={formData.udyamRegistrationNo || ""}
+                        onChange={(event) =>
+                          updateField("udyamRegistrationNo", event.target.value)
+                        }
+                        placeholder="UDYAM-XX-00-0000000"
+                        className={`bg-background pr-36 ${errorClass("udyamRegistrationNo")}`}
+                        required={isRequired(VENDOR_FIELD_SECTIONS.UDYAM_REGISTRATION_NO)}
+                      />
+                      {renderUdyamFetchCta()}
+                    </div>
                   </div>
                   <div className="flex-1">
                     <Label>
@@ -473,16 +556,142 @@ const GeneralInformationSection = ({
                     />
                   </div>
                 </div>
-                <p className="mt-3 text-xs leading-4 text-muted-foreground">
-                  Confirmed by you as in-scope — drives the mandatory 45-day
-                  payment rule under the MSME Act.
-                </p>
+                {showMsmeVerificationControls && formData.msmeVerificationMessage ? (
+                  <p className="mt-3 text-xs leading-4 text-muted-foreground">
+                    {formData.msmeVerificationMessage}
+                  </p>
+                ) : null}
+                <div className="mt-3 flex items-center justify-between gap-3">
+                  <p className="text-xs leading-4 text-muted-foreground">
+                    Confirmed by you as in-scope — drives the mandatory 45-day
+                    payment rule under the MSME Act.
+                  </p>
+                  {canVerifyMsme ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={onVerifyMsme}
+                      disabled={verifyMsmeDisabled}
+                    >
+                      {isMsmeVerifying ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : null}
+                      Verify
+                    </Button>
+                  ) : null}
+                </div>
               </div>
             ) : null}
           </div>
         </div>
       </div>
-    </div>
+      </div>
+      <Dialog open={panFetchOpen} onOpenChange={setPanFetchOpen}>
+      <DialogContent
+        className="max-w-3xl gap-0 overflow-hidden p-0"
+        onInteractOutside={(event) => isMsmeVerifying && event.preventDefault()}
+      >
+        <DialogHeader className="border-b px-8 py-6">
+          <DialogTitle className="text-2xl font-semibold leading-8">
+            Fetch & Verify Udyam Registration No
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-5 px-8 py-7">
+          <div>
+            <Label className="text-base font-semibold">Enter PAN No.</Label>
+            <Input
+              value={panInput}
+              onChange={(event) => {
+                setPanInput(event.target.value.toUpperCase());
+                setPanFetchResult(null);
+                setPanFetchError("");
+              }}
+              placeholder="ABCDE1234F"
+              className="mt-3 h-12 text-base"
+              disabled={isMsmeVerifying}
+            />
+          </div>
+          {panFetchError ? (
+            <p className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {panFetchError}
+            </p>
+          ) : null}
+          {panFetchResult ? (
+            <div className="rounded-lg border border-border bg-muted/30 p-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div>
+                  <p className="text-xs text-muted-foreground">Udyam Registration No</p>
+                  <p className="mt-1 text-sm font-medium text-foreground">
+                    {panFetchResult.udyamRegistrationNo || "-"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">MSME Category</p>
+                  <p className="mt-1 text-sm font-medium text-foreground">
+                    {panFetchResult.msmeCategory || "-"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Enterprise Name</p>
+                  <p className="mt-1 text-sm font-medium text-foreground">
+                    {panFetchResult.enterpriseName || "-"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Verification Status</p>
+                  <Badge
+                    variant="outline"
+                    className={MSME_STATUS_STYLES[normalizeMsmeVerificationStatus(panFetchResult.verificationStatus)] || MSME_STATUS_STYLES.NOT_VERIFIED}
+                  >
+                    {normalizeMsmeVerificationStatus(panFetchResult.verificationStatus).replace(/_/g, " ")}
+                  </Badge>
+                </div>
+              </div>
+              {panFetchResult.verificationMessage ? (
+                <p className="mt-3 text-sm text-muted-foreground">
+                  {panFetchResult.verificationMessage}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
+        </div>
+        <DialogFooter className="gap-4 border-t px-8 py-5 sm:justify-between sm:space-x-0">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 flex-1"
+            onClick={() => setPanFetchOpen(false)}
+            disabled={isMsmeVerifying}
+          >
+            Cancel
+          </Button>
+          {panFetchResult ? (
+            <Button
+              type="button"
+              className="h-11 flex-1"
+              onClick={confirmPanFetch}
+              disabled={isMsmeVerifying}
+            >
+              Confirm
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              className="h-11 flex-1"
+              onClick={handlePanFetch}
+              disabled={isMsmeVerifying || !String(panInput || "").trim()}
+            >
+              {isMsmeVerifying ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              Fetch & Verify
+            </Button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+      </Dialog>
+    </>
   );
 };
 

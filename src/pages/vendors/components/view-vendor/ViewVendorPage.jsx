@@ -16,6 +16,7 @@ import {
   getVisibleVendorDocumentTypes,
   hasVisibleVendorDocuments,
 } from "../../../../utils/vendorDocumentConfig";
+import { isVendorMsmeVerificationEnabled } from "../../../../utils/vendorVerificationConfig";
 import VendorFormSectionNav from "../create-vendor/VendorFormSectionNav";
 import ViewGeneralInformationSection from "./ViewGeneralInformationSection";
 import ViewAddressBranchInformationSection from "./ViewAddressBranchInformationSection";
@@ -86,10 +87,12 @@ const ViewVendorPage = ({ formData, onClose, onEdit, embedded = false }) => {
   const [vendorHistory, setVendorHistory] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [triggerVendorHistory] = useLazyGetVendorHistoryQuery();
-  const { corporateScreens } = useRBAC();
+  const { corporateScreens, isConnectedBankingEnabled } = useRBAC();
   const vendorFieldConfiguration = corporateScreens?.vendorFieldConfiguration ?? [];
   const activeVendorDocuments = corporateScreens?.activeVendorDocuments;
+  const activeVendorVerification = corporateScreens?.activeVendorVerification;
   const vendorDocumentConfiguration = corporateScreens?.vendorDocumentConfiguration ?? [];
+  const showMsmeVerificationStatus = isVendorMsmeVerificationEnabled(activeVendorVerification);
   const visibleVendorDocumentTypes = getVisibleVendorDocumentTypes(
     activeVendorDocuments,
     vendorDocumentConfiguration,
@@ -194,7 +197,11 @@ const ViewVendorPage = ({ formData, onClose, onEdit, embedded = false }) => {
               <div ref={contentPaneRef} className="min-h-0 flex-1 overflow-y-auto px-6 pb-6 pt-6">
                 <div className="space-y-10">
                   <div id="general-information" className="scroll-mt-4">
-                    <ViewGeneralInformationSection formData={formData} labelFor={labelFor} />
+                    <ViewGeneralInformationSection
+                      formData={formData}
+                      labelFor={labelFor}
+                      showMsmeVerificationStatus={showMsmeVerificationStatus}
+                    />
                   </div>
 
                   <AdvanceContextPanel
@@ -252,7 +259,10 @@ const ViewVendorPage = ({ formData, onClose, onEdit, embedded = false }) => {
                   </div>
 
                   <div id="bank-details" className="scroll-mt-4">
-                    <ViewBankDetailsSection bankAccounts={formData.bankAccounts || []} />
+                    <ViewBankDetailsSection
+                      bankAccounts={formData.bankAccounts || []}
+                      showBankVerificationStatus={isConnectedBankingEnabled}
+                    />
                   </div>
 
                   <div id="attachments" className="scroll-mt-4">

@@ -35,7 +35,45 @@ const formatVendorBalance = (vendor = {}) => {
   return formatCurrency(balance, vendor.currency || "INR");
 };
 
-const ViewGeneralInformationSection = ({ formData, labelFor }) => {
+const MSME_VERIFICATION_STATUS_STYLES = {
+  VERIFIED: "text-emerald-700",
+  FAILED: "text-red-700",
+  NOT_VERIFIED: "text-muted-foreground",
+  UNAVAILABLE: "text-amber-700",
+  MANUAL: "text-blue-700",
+};
+
+const normalizeMsmeVerificationStatus = (status) =>
+  String(status || "NOT_VERIFIED").trim().toUpperCase() || "NOT_VERIFIED";
+
+const getMsmeVerificationLabel = (status) => {
+  const normalized = normalizeMsmeVerificationStatus(status);
+  if (normalized === "VERIFIED") return "Verified";
+  if (normalized === "FAILED") return "Not Verified";
+  if (normalized === "UNAVAILABLE") return "Unavailable";
+  if (normalized === "MANUAL") return "Manual";
+  return "Not verified";
+};
+
+const MsmeVerificationStatus = ({ status }) => {
+  const normalized = normalizeMsmeVerificationStatus(status);
+  return (
+    <span
+      className={`text-sm font-medium ${
+        MSME_VERIFICATION_STATUS_STYLES[normalized] ||
+        MSME_VERIFICATION_STATUS_STYLES.NOT_VERIFIED
+      }`}
+    >
+      {getMsmeVerificationLabel(normalized)}
+    </span>
+  );
+};
+
+const ViewGeneralInformationSection = ({
+  formData,
+  labelFor,
+  showMsmeVerificationStatus = false,
+}) => {
   const nameLabel =
     formData.vendor_type === "Company"
       ? labelFor(VENDOR_FIELD_SECTIONS.COMPANY_NAME, "Vendor Name")
@@ -177,6 +215,14 @@ const ViewGeneralInformationSection = ({ formData, labelFor }) => {
                     <Label>{labelFor(VENDOR_FIELD_SECTIONS.MSME_CATEGORY, "MSME Category")}</Label>
                     <ReadOnlyValue value={formData.msmeCategory} className="mt-1" />
                   </div>
+                  {showMsmeVerificationStatus ? (
+                    <div className="flex-1">
+                      <Label>MSME Verification</Label>
+                      <div className="mt-1">
+                        <MsmeVerificationStatus status={formData.msmeVerificationStatus} />
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
                 <p className="mt-3 text-xs leading-4 text-muted-foreground">
                   Confirmed as in-scope — drives the mandatory 45-day payment rule under the MSME Act.

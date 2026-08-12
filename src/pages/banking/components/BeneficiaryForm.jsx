@@ -31,7 +31,15 @@ const getVendorId = (vendor = {}, index = 0) =>
   String(vendor.id ?? vendor.vendorId ?? vendor.vendor_id ?? index);
 
 const getVendorLabel = (vendor = {}) => {
-  const name = vendor.name || vendor.vendorName || vendor.vendor_name || "Vendor";
+  const name =
+    vendor.vendorName ||
+    vendor.vendor_name ||
+    vendor.vendorDisplayName ||
+    vendor.vendor_display_name ||
+    vendor.name ||
+    vendor.beneficiaryName ||
+    vendor.beneficiary_name ||
+    "Vendor";
   const code = vendor.vendorId || vendor.vendor_id;
   return code ? `${name}` : name;
 };
@@ -52,18 +60,33 @@ const normalizeVendorBankAccounts = (vendor = {}) => {
   const normalizedAccounts = Array.isArray(accounts) ? accounts : [];
   if (normalizedAccounts.length > 0) return normalizedAccounts;
 
-  const accountNumber = vendor.accountNumber || vendor.account_number;
+  const accountNumber =
+    vendor.accountNumber ||
+    vendor.account_number ||
+    vendor.creditAccountNumber;
   const ifsc = vendor.ifscCode || vendor.ifsc_code || vendor.ifsc;
-  const bankName = vendor.bankName || vendor.bank_name;
+  const bankName = vendor.bankName || vendor.bank_name || vendor.bank;
   if (!accountNumber && !ifsc && !bankName) return [];
 
   return [{
-    id: `${vendor.id || vendor.vendorId || vendor.vendor_id || "vendor"}-default-bank`,
+    id:
+      vendor.vendorBankAccountId ||
+      vendor.vendor_bank_account_id ||
+      vendor.bankAccountId ||
+      vendor.bank_account_id ||
+      vendor.bnfId ||
+      vendor.id ||
+      `${vendor.vendorId || vendor.vendor_id || "vendor"}-default-bank`,
     bankName,
     accountNumber,
     ifscCode: ifsc,
-    accountHolderName: vendor.accountHolderName || vendor.account_holder_name || vendor.name,
-    beneficiaryStatus: vendor.beneficiaryStatus || vendor.beneficiary_status,
+    accountHolderName:
+      vendor.accountHolderName ||
+      vendor.account_holder_name ||
+      vendor.name ||
+      vendor.beneficiaryName ||
+      vendor.beneficiary_name,
+    beneficiaryStatus: vendor.beneficiaryStatus || vendor.beneficiary_status || vendor.status,
   }];
 };
 
@@ -211,7 +234,11 @@ const BeneficiaryForm = ({
     bankName: form.bankName.trim() || undefined,
     accountNumber: form.accountNumber.trim(),
     ifsc: form.ifsc.trim().toUpperCase(),
-    vendorId: form.vendorId.trim() || undefined,
+    vendorId:
+      (selectedVendor?.vendorId ??
+        selectedVendor?.vendor_id ??
+        form.vendorId.trim()) ||
+      undefined,
     vendorBankAccountId: form.vendorBankAccountId || undefined,
     addToVendor: !form.vendorBankAccountId,
     payeeType: "ACCOUNT",
