@@ -26,6 +26,7 @@ const roleBadgeClass = (role) => {
 
 const usersTableHeader = [
   { key: 'user', title: 'User' },
+  {key:'mobile', title:'Mobile No'},
   { key: 'department', title: 'Department' },
   { key: 'status', title: 'Status' },
   { key: 'created_at', title: 'Created', cellClassName: 'text-sm text-muted-foreground' },
