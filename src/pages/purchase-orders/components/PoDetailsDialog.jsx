@@ -51,7 +51,10 @@ import AccountingLockBanner from "../../../components/AccountingLockBanner";
 import { isAccountingReadyLocked } from "../../../utils/accountingLock";
 import ApprovalHistoryTimeline from "../../../components/common/ApprovalHistoryTimeline";
 import { useGetPurchaseOrderHistoryQuery } from "../../../Services/apis/purchaseOrdersMasterDataApi";
-import { useGetDocumentPaymentScheduleHistoryQuery } from "../../../Services/apis/paymentSchedulesApi";
+import {
+  useGetDocumentPaymentScheduleHistoryQuery,
+  useGetDocumentPaymentScheduleQuery,
+} from "../../../Services/apis/paymentSchedulesApi";
 import PoPaymentScheduleSection from "./PoPaymentScheduleSection";
 import { normalizePaymentScheduleRows } from "../utils/poPaymentSchedule";
 import AdvanceContextPanel from "../../../components/vendor-advances/AdvanceContextPanel";
@@ -62,6 +65,19 @@ const normalizeReferenceDocumentUrl = (url = "") => {
   if (/^https?:\/\//i.test(url)) return url;
   return new URL(url, window.location.origin).toString();
 };
+
+const getDocumentGrossTotal = (document = {}, po = {}) =>
+  Number(
+    document.totalAmount ??
+      document.total_amount ??
+      document.grossTotal ??
+      document.gross_total ??
+      document.documentGrossTotal ??
+      document.document_gross_total ??
+      po.total_amount ??
+      po.totalAmount ??
+      0,
+  ) || 0;
 
 const PoDetailsDialog = ({
   showViewDialog,
@@ -113,6 +129,13 @@ const PoDetailsDialog = ({
     { documentType: "PO", documentId: selectedPoId },
     { skip: !showViewDialog || !selectedPoId },
   );
+  const {
+    data: documentScheduleData,
+    isFetching: loadingPaymentSchedule,
+  } = useGetDocumentPaymentScheduleQuery(
+    { documentType: "PO", documentId: selectedPoId },
+    { skip: !showViewDialog || !selectedPoId },
+  );
 
   useEffect(() => {
     setDeliveryStatus(selectedPO?.delivery_status || "");
@@ -125,10 +148,32 @@ const PoDetailsDialog = ({
   const isInr = poCurrency === "INR";
   const documentBorderClass = "border";
   const headerBorderClass = "border-b";
-  const paymentScheduleRows = useMemo(
+  const documentScheduleSource = useMemo(
+    () =>
+      Array.isArray(documentScheduleData)
+        ? { paymentSchedule: documentScheduleData }
+        : {
+            ...(documentScheduleData || {}),
+            paymentSchedule:
+              documentScheduleData?.paymentSchedule ??
+              documentScheduleData?.payment_schedule ??
+              documentScheduleData?.rows ??
+              documentScheduleData?.schedule,
+          },
+    [documentScheduleData],
+  );
+  const fetchedPaymentScheduleRows = useMemo(
+    () => normalizePaymentScheduleRows(documentScheduleSource || {}),
+    [documentScheduleSource],
+  );
+  const embeddedPaymentScheduleRows = useMemo(
     () => normalizePaymentScheduleRows(selectedPO || {}),
     [selectedPO],
   );
+  const paymentScheduleRows = fetchedPaymentScheduleRows.length
+    ? fetchedPaymentScheduleRows
+    : embeddedPaymentScheduleRows;
+  const documentGrossTotal = getDocumentGrossTotal(documentScheduleSource || {}, selectedPO || {});
 
   useEffect(() => {
     if (!scheduleDialogOpen) {
@@ -655,10 +700,15 @@ const PoDetailsDialog = ({
                       {paymentScheduleRows.length ? (
                         <PoPaymentScheduleSection
                           rows={paymentScheduleRows}
-                          poGrossTotal={Number(selectedPO.total_amount) || 0}
+                          documentGrossTotal={documentGrossTotal}
                           formatCurrency={(amount) => formatCurrency(amount, poCurrency)}
                           readOnly
                         />
+                      ) : null}
+                      {loadingPaymentSchedule && !paymentScheduleRows.length ? (
+                        <div className="rounded border bg-slate-50/60 p-4 text-sm text-muted-foreground">
+                          Loading payment schedule...
+                        </div>
                       ) : null}
                     </div>
                   ) : null}
@@ -816,7 +866,7 @@ const PoDetailsDialog = ({
           </DialogHeader>
           <PoPaymentScheduleSection
             rows={scheduleDraftRows}
-            poGrossTotal={Number(selectedPO?.total_amount) || 0}
+            documentGrossTotal={documentGrossTotal}
             formatCurrency={(amount) => formatCurrency(amount, poCurrency)}
             onChange={setScheduleDraftRows}
           />

@@ -12,6 +12,7 @@ import {
   getPaymentScheduleSummary,
   getNextPaymentScheduleTriggerStage,
   inferPaymentScheduleBasis,
+  isPaymentScheduleRowLocked,
   normalizePaymentScheduleBasis,
   normalizePaymentScheduleTriggerStage,
 } from "../utils/poPaymentSchedule";
@@ -45,6 +46,7 @@ const PoPaymentScheduleSection = ({
   const summary = getPaymentScheduleSummary(effectiveRows, grossTotal);
   const showDifferenceWarning = Math.abs(summary.difference) > 0.009;
   const canAddMilestone = scheduleRows.length < PAYMENT_SCHEDULE_TRIGGER_OPTIONS.length;
+  const hasLockedRows = effectiveRows.some((row) => isPaymentScheduleRowLocked(row));
 
   useEffect(() => {
     if (scheduleRows.length) setSelectedBasis(firstRowBasis);
@@ -60,12 +62,14 @@ const PoPaymentScheduleSection = ({
   }, [firstRowBasis, onChange, readOnly, scheduleRows]);
 
   const updateScheduleBasis = (basis) => {
+    if (hasLockedRows) return;
     const normalizedBasis = normalizePaymentScheduleBasis(basis);
     setSelectedBasis(normalizedBasis);
     onChange?.(scheduleRows.map((row) => ({ ...row, basis: normalizedBasis })));
   };
 
   const updateRow = (index, field, value) => {
+    if (isPaymentScheduleRowLocked(scheduleRows[index])) return;
     onChange?.(
       scheduleRows.map((row, rowIndex) => {
         if (rowIndex !== index) return row;
@@ -88,6 +92,7 @@ const PoPaymentScheduleSection = ({
   };
 
   const removeRow = (index) => {
+    if (isPaymentScheduleRowLocked(scheduleRows[index])) return;
     onChange?.(
       scheduleRows
         .filter((_, rowIndex) => rowIndex !== index)
@@ -96,6 +101,13 @@ const PoPaymentScheduleSection = ({
   };
 
   const renderRow = (row, index, headers) => {
+    const rowLocked = isPaymentScheduleRowLocked(row);
+    const lockReason =
+      row.lockReason ||
+      row.lock_reason ||
+      row.disabledReason ||
+      row.disabled_reason ||
+      "This milestone already has paid or settled payment activity.";
     const isTriggerDisabled = (triggerStage) =>
       scheduleRows.some(
         (scheduleRow, rowIndex) =>
@@ -112,7 +124,7 @@ const PoPaymentScheduleSection = ({
               content = index + 1;
               break;
             case "triggerStage":
-              content = readOnly ? row.triggerStage : (
+              content = readOnly || rowLocked ? row.triggerStage : (
                 <Select value={row.triggerStage} onValueChange={(value) => updateRow(index, "triggerStage", value)}>
                   <SelectTrigger className="h-9 bg-white/80">
                     <SelectValue />
@@ -132,7 +144,7 @@ const PoPaymentScheduleSection = ({
               );
               break;
             case "label":
-              content = readOnly ? row.label || "-" : (
+              content = readOnly || rowLocked ? row.label || "-" : (
                 <Input
                   value={row.label || ""}
                   onChange={(event) => updateRow(index, "label", event.target.value)}
@@ -142,7 +154,7 @@ const PoPaymentScheduleSection = ({
               );
               break;
             case "value":
-              content = readOnly ? row.value : (
+              content = readOnly || rowLocked ? row.value : (
                 <Input
                   type="number"
                   min="0"
@@ -155,7 +167,13 @@ const PoPaymentScheduleSection = ({
               break;
             case "actions":
               content = !readOnly ? (
-                <Button variant="ghost" size="icon" onClick={() => removeRow(index)} disabled={scheduleRows.length === 1}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => removeRow(index)}
+                  disabled={scheduleRows.length === 1 || rowLocked}
+                  title={rowLocked ? lockReason : "Remove milestone"}
+                >
                   <Trash2 className="h-4 w-4 text-destructive" />
                 </Button>
               ) : null;
@@ -166,7 +184,12 @@ const PoPaymentScheduleSection = ({
 
           return (
             <TableCell key={header.key} className={header.cellClassName}>
-              {content}
+              <div className="space-y-1">
+                {content}
+                {header.key === "label" && rowLocked ? (
+                  <p className="text-[11px] text-muted-foreground">{lockReason}</p>
+                ) : null}
+              </div>
             </TableCell>
           );
         })}
@@ -190,8 +213,14 @@ const PoPaymentScheduleSection = ({
                 {PAYMENT_SCHEDULE_BASIS_OPTIONS.find((option) => option.value === scheduleBasis)?.label || scheduleBasis}
               </div>
             ) : (
-              <Select value={scheduleBasis} onValueChange={updateScheduleBasis}>
-                <SelectTrigger className="h-9 bg-white/80">
+              <Select value={scheduleBasis} onValueChange={updateScheduleBasis} disabled={hasLockedRows}>
+                <SelectTrigger
+                  className={`h-9 ${
+                    hasLockedRows
+                      ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500 opacity-70"
+                      : "bg-white/80"
+                  }`}
+                >
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -251,6 +280,12 @@ const PoPaymentScheduleSection = ({
           <p>
             Scheduled total must match the document gross total before it can be saved.
           </p>
+        </div>
+      ) : null}
+
+      {!readOnly && hasLockedRows ? (
+        <div className="mt-3 rounded border border-slate-200 bg-white px-3 py-2 text-xs text-muted-foreground">
+          Paid or settled milestones are locked. You can adjust remaining unpaid milestones, but locked rows cannot be changed or removed.
         </div>
       ) : null}
     </section>
