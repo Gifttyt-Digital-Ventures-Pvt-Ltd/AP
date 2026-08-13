@@ -88,6 +88,27 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
         "Invoices",
       ],
     }),
+    // PUT /invoices/{id}/funding
+    // Dedicated endpoint for updating only the invoice funding split,
+    // independent of the full invoice editable-status gate.
+    updateInvoiceFunding: builder.mutation({
+      query: ({ id, body }) => ({
+        url: `/invoices/${id}/funding`,
+        method: "PUT",
+        body,
+      }),
+      transformResponse: (response) => {
+        const payload = response?.invoice ?? response?.data ?? response;
+        return payload ? toInvoiceUiPayload(payload) : payload;
+      },
+      invalidatesTags: (_result, _error, { id } = {}) => [
+        { type: "Invoices", id },
+        "Invoices",
+        "Approvals",
+        "Dashboard",
+        "Reports",
+      ],
+    }),
     forwardInvoice: builder.mutation({
       query: (body) => ({
         url: "/invoices/forward",
@@ -307,6 +328,7 @@ export const {
   useCreateInvoiceMutation,
   useUpdateInvoiceMutation,
   useUpdateInvoiceInternalChecklistMutation,
+  useUpdateInvoiceFundingMutation,
   useForwardInvoiceMutation,
   useDeleteInvoiceMutation,
   useCancelInvoiceMutation,

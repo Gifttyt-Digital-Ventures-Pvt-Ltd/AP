@@ -15,6 +15,9 @@ import AppDataTable from '../../../components/common/AppDataTable';
 import { TableCell, TableRow } from '../../../components/ui/table';
 import { cn } from '../../../lib/utils';
 import { DEFAULT_CURRENCY, formatCurrency, normalizeCurrencyCode } from '../../../utils/currency';
+import PayableSourceBadge from './PayableSourceBadge';
+import MilestoneStageChip from './MilestoneStageChip';
+import NetPayableBreakdown from './NetPayableBreakdown';
 
 const preventDialogOutsideDismiss = (event) => {
   event.preventDefault();
@@ -74,7 +77,9 @@ const clippedTableText = (value, className = '') => {
 
 const getInvoiceAmount = (invoice = {}) =>
   Number(
-    invoice.payableAmount ??
+    invoice.netPayableAmount ??
+      invoice.net_payable_amount ??
+      invoice.payableAmount ??
       invoice.payable_amount ??
       invoice.netPayableAfterAdvance ??
       invoice.net_payable_after_advance ??
@@ -88,6 +93,10 @@ const getInvoiceAmount = (invoice = {}) =>
       invoice.amountDue ??
       0,
   );
+
+const isAdvanceStageRow = (row = {}) =>
+  row.sourceType === 'ADVANCE' ||
+  (row.sourceType === 'OBLIGATION' && row.isAdvance !== false && row.triggerStage !== 'TI');
 
 const getAdvanceAdjustedTotal = (invoice = {}) =>
   Number(invoice.advanceAdjustedTotal ?? invoice.advance_adjusted_total ?? 0);
@@ -127,14 +136,28 @@ const RequestPaymentDialog = ({
         const requestedAmount = getInvoiceRequestedAmount(invoice, amountDue, convertToInr);
         return {
           id: invoice.id,
+          isAdvance: invoice.isAdvance,
+          triggerStage: invoice.triggerStage,
+          sharePct: invoice.sharePct,
+          milestoneLabel: invoice.milestoneLabel,
+          orderNumber: invoice.orderNumber,
+          grossAmount: invoice.grossAmount,
+          advanceAdjustedAmount: invoice.advanceAdjustedAmount,
+          payableAmount: invoice.payableAmount,
+          tdsAmount: invoice.tdsAmount,
           vendorName: invoice.vendorName || '-',
-          invoiceNumber: invoice.invoiceNumber || '-',
+          invoiceNumber:
+            invoice.invoiceNumber ||
+            invoice.milestoneLabel ||
+            invoice.advanceNumber ||
+            invoice.orderNumber ||
+            '-',
           currency,
           convertToInr,
           matchingInrValue,
           gstValid: true,
           holdGst: false,
-          gstAmount,
+          gstAmount: isAdvanceStageRow(invoice) ? 0 : gstAmount,
           amountDue,
           requestedAmount,
           originalAmount:
@@ -145,6 +168,15 @@ const RequestPaymentDialog = ({
             invoice.amount,
           advanceAdjustedTotal: getAdvanceAdjustedTotal(invoice),
           netPayableAfterAdvance: getNetPayableAfterAdvance(invoice),
+          netPayableAmount:
+            invoice.netPayableAmount ??
+            invoice.net_payable_amount ??
+            requestedAmount,
+          sourceType: invoice.sourceType || 'INVOICE',
+          payableKey: invoice.payableKey,
+          invoiceId: invoice.invoiceId || invoice.id,
+          obligationId: invoice.obligationId,
+          advanceId: invoice.advanceId,
           hasAdvanceAdjustment: Boolean(
             invoice.hasAdvanceAdjustment ||
               invoice.advanceAdjustedTotal != null ||
@@ -187,10 +219,16 @@ const RequestPaymentDialog = ({
       currency: resolvePayrunCurrency(rows),
       remarks,
       items: rows.map((row) => ({
-        invoiceId: row.id,
+        sourceType: row.sourceType || 'INVOICE',
+        ...(row.sourceType === 'OBLIGATION'
+          ? { obligationId: row.obligationId }
+          : row.sourceType === 'ADVANCE'
+            ? { advanceId: row.advanceId }
+            : { invoiceId: row.invoiceId || row.id }),
         invoiceNumber: row.invoiceNumber,
         currency: getPaymentCurrency(row),
         requestedAmount: Number(row.requestedAmount || 0),
+        netPayableAmount: Number(row.requestedAmount || 0),
         holdGst: row.holdGst,
         gstAmount: row.holdGst ? Number(row.gstAmount || 0) : 0,
         paymentAmount: getPaymentAmount(row),
@@ -216,7 +254,8 @@ const RequestPaymentDialog = ({
             <AppDataTable
               tableHeader={[
                 { key: 'vendorName', title: 'Vendor' },
-                { key: 'invoiceNumber', title: 'Invoice' },
+                { key: 'source', title: 'Source' },
+                { key: 'invoiceNumber', title: 'Reference' },
                 { key: 'gstValidation', title: 'GST Validation' },
                 { key: 'holdGst', title: 'Hold GST' },
                 { key: 'gstAmount', title: 'Tax Amount', headerClassName: 'text-left', cellClassName: 'text-left' },
@@ -234,16 +273,33 @@ const RequestPaymentDialog = ({
                   <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3 py-3 text-left font-medium">
                     {clippedTableText(row.vendorName)}
                   </TableCell>
-                  <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
-                    {clippedTableText(row.invoiceNumber)}
+                  <TableCell className="max-w-[180px] overflow-hidden px-3 py-3 text-left">
+                    <div className="space-y-1">
+                      <PayableSourceBadge sourceType={row.sourceType} isAdvance={row.isAdvance} />
+                      <MilestoneStageChip stage={row.triggerStage} sharePct={row.sharePct} />
+                    </div>
                   </TableCell>
                   <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
-                    <span className="inline-flex items-center rounded-full border border-green-200 bg-green-50 px-2 py-1 text-xs font-medium text-green-800">
-                      Pass
-                    </span>
+                    <div className="min-w-0 space-y-0.5">
+                      {clippedTableText(row.invoiceNumber)}
+                      {row.orderNumber ? (
+                        <span className="block truncate text-[11px] text-muted-foreground" title={row.orderNumber}>
+                          {row.orderNumber}
+                        </span>
+                      ) : null}
+                    </div>
                   </TableCell>
                   <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
-                    {isInrRow(row) ? (
+                    {isAdvanceStageRow(row) ? (
+                      <span className="text-muted-foreground">-</span>
+                    ) : (
+                      <span className="inline-flex items-center rounded-full border border-green-200 bg-green-50 px-2 py-1 text-xs font-medium text-green-800">
+                        Pass
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
+                    {isInrRow(row) && !isAdvanceStageRow(row) ? (
                       <Checkbox
                         checked={row.holdGst}
                         onCheckedChange={(checked) =>
@@ -265,23 +321,8 @@ const RequestPaymentDialog = ({
                     {clippedTableText(formatMoney(row.gstAmount, row.currency))}
                   </TableCell>
                   <TableCell className="max-w-[180px] overflow-hidden px-3 py-3 text-left font-medium">
-                    <div className="min-w-0 space-y-0.5 leading-tight">
-                      {clippedTableText(formatMoney(row.amountDue, row.currency))}
-                      {row.hasAdvanceAdjustment ? (
-                        <>
-                          <span className="block truncate text-[11px] font-normal text-muted-foreground">
-                            Original: {formatMoney(row.originalAmount, row.currency)}
-                          </span>
-                          <span className="block truncate text-[11px] font-normal text-muted-foreground">
-                            Advance Adjusted: -{formatMoney(row.advanceAdjustedTotal, row.currency)}
-                          </span>
-                          {row.netPayableAfterAdvance > 0 ? (
-                            <span className="block truncate text-[11px] font-normal text-muted-foreground">
-                              After Advance: {formatMoney(row.netPayableAfterAdvance, row.currency)}
-                            </span>
-                          ) : null}
-                        </>
-                      ) : null}
+                    <div className="min-w-0 space-y-1 leading-tight">
+                      <NetPayableBreakdown payable={row} />
                       {row.convertToInr && row.matchingInrValue > 0 ? (
                         <span className="block truncate text-[11px] font-normal text-muted-foreground">
                           INR: {formatMoney(row.matchingInrValue, DEFAULT_CURRENCY)}

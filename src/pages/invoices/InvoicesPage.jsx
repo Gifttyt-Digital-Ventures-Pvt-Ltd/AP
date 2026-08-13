@@ -20,6 +20,7 @@ import {
   useLazyGetInvoiceHistoryQuery,
   useUpdateInvoiceMutation,
   useUpdateInvoiceInternalChecklistMutation,
+  useUpdateInvoiceFundingMutation,
   useForwardInvoiceMutation,
   useDeleteInvoiceMutation,
   useCancelInvoiceMutation,
@@ -590,6 +591,8 @@ const InvoicesPage = () => {
     useUpdateInvoiceMutation();
   const [updateInvoiceInternalChecklist, { isLoading: savingInternalChecklist }] =
     useUpdateInvoiceInternalChecklistMutation();
+  const [updateInvoiceFunding, { isLoading: savingInvoiceFunding }] =
+    useUpdateInvoiceFundingMutation();
   const [performInvoiceMatch, { isLoading: performMatchingLoading }] =
     usePerformInvoiceMatchMutation();
   const [editInvoiceMatch, { isLoading: editMatchingLoading }] =
@@ -929,6 +932,20 @@ const InvoicesPage = () => {
       isCorporateAdmin,
       isMasterAdmin,
       isCheckerEditEnabled,
+    ],
+  );
+  const canEditInvoiceFunding = useMemo(
+    () =>
+      Boolean(
+        showInvoiceFunding &&
+          (canUpdateInvoices || canManageInvoices || isCorporateAdmin || isMasterAdmin),
+      ),
+    [
+      showInvoiceFunding,
+      canUpdateInvoices,
+      canManageInvoices,
+      isCorporateAdmin,
+      isMasterAdmin,
     ],
   );
 
@@ -2679,6 +2696,49 @@ const InvoicesPage = () => {
     }
   };
 
+  const handleSaveInvoiceFunding = async (invoice, fundingPayload) => {
+    if (!canEditInvoiceFunding) {
+      toast.error("You do not have permission to edit invoice funding");
+      return false;
+    }
+
+    const invoiceId = invoice?.id || invoice?.invoiceId;
+    if (!invoiceId) {
+      toast.error("Invoice id is required to update funding");
+      return false;
+    }
+
+    try {
+      const updatedInvoice = await updateInvoiceFunding({
+        id: invoiceId,
+        body: fundingPayload,
+      }).unwrap();
+
+      let refreshedInvoice = updatedInvoice;
+      try {
+        refreshedInvoice = await getInvoice(invoiceId).unwrap();
+      } catch {
+        // The funding endpoint result is enough to update the visible card;
+        // the list/query invalidation still keeps the rest of the app current.
+      }
+
+      if (refreshedInvoice) {
+        setSelectedInvoice((prev) =>
+          prev && (prev.id === invoiceId || prev.invoiceId === invoiceId)
+            ? { ...prev, ...refreshedInvoice }
+            : prev,
+        );
+      }
+
+      toast.success("Invoice funding updated");
+      await fetchInvoiceHistory(refreshedInvoice || invoice);
+      return true;
+    } catch (error) {
+      toast.error(extractApiErrorDetail(error) || "Failed to update invoice funding");
+      return false;
+    }
+  };
+
   const handleForwardSavedInvoice = async () => {
     if (!guardAction("invoices.update")) return;
     if (!selectedInvoice || !formData) return;
@@ -3750,6 +3810,9 @@ const InvoicesPage = () => {
         canEditInternalChecklist={canEditInternalChecklist}
         onSaveInternalChecklist={handleSaveInternalChecklist}
         savingInternalChecklist={savingInternalChecklist}
+        canEditInvoiceFunding={canEditInvoiceFunding}
+        onSaveInvoiceFunding={handleSaveInvoiceFunding}
+        savingInvoiceFunding={savingInvoiceFunding}
         onMapTaxInvoice={handleMapTaxInvoice}
         onViewLinkedInvoice={handleViewLinkedInvoice}
         allInvoices={invoices}

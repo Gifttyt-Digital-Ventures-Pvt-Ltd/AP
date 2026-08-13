@@ -8,6 +8,7 @@ import {
   toRecordPaymentsApiPayload,
 } from "../utils/payloadMappers";
 import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
+import { normalizePayablesResponse } from "../../pages/payments/utils/payableNormalizers";
 
 const normalizePaginatedListResponse = (response, extraKeys = [], mapItem = (item) => item) => {
   const items = extractListResponse(response, extraKeys).map(mapItem);
@@ -43,6 +44,16 @@ const normalizePaginatedListResponse = (response, extraKeys = [], mapItem = (ite
   };
 };
 
+const normalizePayablesListResponse = (response) => {
+  const page = normalizePaginatedListResponse(response, ["payables", "pendingPayments", "pending_payments"]);
+  const items = normalizePayablesResponse(response, { strictMoney: true });
+  return {
+    ...page,
+    items,
+    data: items,
+  };
+};
+
 export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getPendingApprovals: builder.query({
@@ -65,6 +76,16 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
           toInvoiceUiPayload,
         ),
       providesTags: ["Invoices", "Payments"],
+    }),
+    getPayables: builder.query({
+      query: (params) => ({ url: "/payments/payables", method: "GET", params }),
+      transformResponse: normalizePayablesListResponse,
+      providesTags: ["Payments"],
+    }),
+    getPayablesSummary: builder.query({
+      query: (params) => ({ url: "/payments/payables/summary", method: "GET", params }),
+      transformResponse: (response) => response?.data ?? response ?? {},
+      providesTags: ["Payments"],
     }),
     getReleasedPayments: builder.query({
       query: (params) => ({ url: "/payments/released", method: "GET", params }),
@@ -197,6 +218,8 @@ export const {
   useGetPendingApprovalsQuery,
   useGetPaymentsQuery,
   useGetPendingPaymentsQuery,
+  useGetPayablesQuery,
+  useGetPayablesSummaryQuery,
   useGetReleasedPaymentsQuery,
   useGetPaymentQuery,
   useLazyGetPaymentQuery,

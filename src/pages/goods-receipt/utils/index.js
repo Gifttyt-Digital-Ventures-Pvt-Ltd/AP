@@ -1,6 +1,10 @@
 import { GRN_SOURCE, GRN_STATUS } from '../constants';
 import { buildGrnConfigSnapshot, isGrnValuationEnabled } from './grnFormatConfig';
 import { extractListResponse, extractPageContent } from '../../../Services/utils/payloadMappers';
+import {
+  buildPaymentSchedulePayload,
+  normalizePaymentScheduleRows,
+} from '../../purchase-orders/utils/poPaymentSchedule';
 
 export const getListData = extractListResponse;
 export { extractPageContent };
@@ -165,6 +169,7 @@ export const normalizeGrn = (grn = {}) => ({
   created_by_name: grn.created_by_name ?? grn.createdByName ?? '',
   submitted_by_name: grn.submitted_by_name ?? grn.submittedByName ?? '',
   approved_by_name: grn.approved_by_name ?? grn.approvedByName ?? '',
+  paymentSchedule: normalizePaymentScheduleRows(grn),
 });
 
 export const normalizePoLineItem = (item = {}) => ({
@@ -356,7 +361,10 @@ export const validateGrnLineItems = (lineItems, { qcEnabled = true } = {}) => {
   return null;
 };
 
-export const buildCreateGrnPayload = (form, { formatConfig, qcEnabled = true } = {}) => {
+export const buildCreateGrnPayload = (
+  form,
+  { formatConfig, qcEnabled = true, includePaymentSchedule = false } = {},
+) => {
   const valuationEnabled = isGrnValuationEnabled(formatConfig);
   const billToEnabled = Boolean(formatConfig?.bill_to_enabled);
   const lineItems = form.line_items
@@ -430,6 +438,9 @@ export const buildCreateGrnPayload = (form, { formatConfig, qcEnabled = true } =
     tax_amount: valuationEnabled ? taxAmount : undefined,
     total_received_value: valuationEnabled ? taxableAmount + taxAmount : undefined,
     remarks: form.remarks || undefined,
+    ...(includePaymentSchedule
+      ? { paymentSchedule: buildPaymentSchedulePayload(form.paymentSchedule || []) }
+      : {}),
     line_items: lineItems,
   };
 };

@@ -40,6 +40,7 @@ const PoListTable = ({
   canManagePo = false,
   canSubmitPo = false,
   canApprovePo = false,
+  onViewPO,
   onEditPO,
   onSubmitPO,
   onReviewPO,
@@ -55,15 +56,20 @@ const PoListTable = ({
         : basePoTableHeader.filter((header) => header.key !== "orgBranch"),
     [showBranchField],
   );
+  const openPoDetails = (po) => {
+    if (onViewPO) {
+      onViewPO(po);
+      return;
+    }
+    setSelectedPO(po);
+    setShowViewDialog(true);
+  };
 
   const renderPoRow = (po, rowIndex, headers) => (
     <TableRow
       key={po.id ?? rowIndex}
       className="cursor-pointer hover:bg-muted"
-      onClick={() => {
-        setSelectedPO(po);
-        setShowViewDialog(true);
-      }}
+      onClick={() => openPoDetails(po)}
       data-testid={`po-row-${po?.id ?? 'unknown'}`}
     >
       {headers.map((header) => {
@@ -131,8 +137,7 @@ const PoListTable = ({
                   size="icon"
                   onClick={(event) => {
                     event.stopPropagation();
-                    setSelectedPO(po);
-                    setShowViewDialog(true);
+                    openPoDetails(po);
                   }}
                   title="View PO"
                   aria-label="View PO"
