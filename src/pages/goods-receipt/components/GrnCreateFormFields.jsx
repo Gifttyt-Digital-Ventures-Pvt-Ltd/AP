@@ -14,6 +14,17 @@ import {
 } from '../utils/grnFormatConfig';
 import { formatCurrency } from '../utils';
 import InrConversionFields from '../../../components/common/InrConversionFields';
+import usePaymentTermsSubscription from '../../../hooks/usePaymentTermsSubscription';
+import PoPaymentScheduleSection from '../../purchase-orders/components/PoPaymentScheduleSection';
+
+const getGrnDocumentTotal = (form = {}) =>
+  (form.line_items || []).reduce((sum, line) => {
+    const lineAmount =
+      Number(line.line_amount) ||
+      (Number(line.received_quantity) || 0) * (Number(line.unit_price) || 0);
+    const taxAmount = (lineAmount * (Number(line.gst_rate) || 0)) / 100;
+    return sum + lineAmount + taxAmount;
+  }, 0);
 
 const GrnCreateFormFields = ({
   form,
@@ -24,6 +35,8 @@ const GrnCreateFormFields = ({
   showExtractedBadge = false,
 }) => {
   const qcEnabled = Boolean(formatConfig?.qc_enabled);
+  const { isPaymentTermsEnabled } = usePaymentTermsSubscription();
+  const documentGrossTotal = getGrnDocumentTotal(form);
 
   return (
     <div className="space-y-6">
@@ -206,6 +219,17 @@ const GrnCreateFormFields = ({
           )}
         </div>
       )}
+
+      {isPaymentTermsEnabled ? (
+        <PoPaymentScheduleSection
+          rows={form.paymentSchedule || []}
+          documentGrossTotal={documentGrossTotal}
+          formatCurrency={(amount) => formatCurrency(amount, form.currency)}
+          onChange={(paymentSchedule) =>
+            setForm((current) => ({ ...current, paymentSchedule }))
+          }
+        />
+      ) : null}
     </div>
   );
 };

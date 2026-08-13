@@ -14,7 +14,12 @@ import {
   getPayrunApprovalRecords,
 } from './payrunUtils';
 import { DEFAULT_CURRENCY, formatCurrency } from '../../../utils/currency';
-import { getPayableDisplayLabel } from '../utils/payableRows';
+import {
+  getPayableDisplayLabel,
+  getPayableSelectionKey,
+} from '../utils/payableRows';
+import PayableSourceBadge from './PayableSourceBadge';
+import NetPayableBreakdown from './NetPayableBreakdown';
 
 const preventDialogOutsideDismiss = (event) => {
   event.preventDefault();
@@ -34,9 +39,6 @@ const safeFormatDate = (value, pattern = 'dd MMM yy') => {
 
 const formatMoney = (value, currency = DEFAULT_CURRENCY) =>
   formatCurrency(Number(value || 0), currency);
-
-const getInvoicePaymentCurrency = (invoice = {}) =>
-  invoice.convertToInr ? DEFAULT_CURRENCY : invoice.currency || DEFAULT_CURRENCY;
 
 const getInvoiceStatusLabel = (status = '') => {
   const value = String(status || 'ready').trim().toLowerCase();
@@ -149,15 +151,13 @@ const PayrunDetailsSheet = ({
           {renderDrawerSection(
             hasSourceAwareRows ? 'Payables' : 'Invoices',
             <>
-              {payrun.invoices.map((invoice) => (
-                <div key={invoice.id} className="border-b border-slate-100 px-3.5 py-3 last:border-b-0">
+              {payrun.invoices.map((invoice, rowIndex) => (
+                <div key={getPayableSelectionKey(invoice) || invoice.id || rowIndex} className="border-b border-slate-100 px-3.5 py-3 last:border-b-0">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      {invoice.sourceType && invoice.sourceType !== 'INVOICE' ? (
-                        <span className="mb-1 inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
-                          {invoice.sourceType}
-                        </span>
-                      ) : null}
+                      <div className="mb-1">
+                        <PayableSourceBadge sourceType={invoice.sourceType} isAdvance={invoice.isAdvance} />
+                      </div>
                       <p className="m-0 truncate text-[13px] font-semibold text-primary">{getPayableDisplayLabel(invoice)}</p>
                       <p className="mt-0.5 truncate text-[13px] font-medium text-slate-900">{invoice.vendorName}</p>
                       {invoice.poNumber ? (
@@ -171,14 +171,7 @@ const PayrunDetailsSheet = ({
                     </div>
                     <div className="flex shrink-0 items-start gap-2">
                       <div className="text-right">
-                        <p className="m-0 text-[13px] font-bold text-slate-900">
-                          {formatMoney(invoice.requestedAmount, getInvoicePaymentCurrency(invoice))}
-                        </p>
-                        {invoice.hasAdvanceAdjustment ? (
-                          <p className="mt-0.5 text-[11px] font-normal text-slate-500">
-                            Adj: -{formatMoney(invoice.advanceAdjustedTotal, invoice.currency)}
-                          </p>
-                        ) : null}
+                        <NetPayableBreakdown payable={invoice} />
                       </div>
                       {invoice.sourceType === 'INVOICE' ? (
                         <Button

@@ -10,7 +10,10 @@ import {
   PAYMENT_SCHEDULE_TRIGGER_OPTIONS,
   createEmptyPaymentScheduleRow,
   getPaymentScheduleSummary,
+  getNextPaymentScheduleTriggerStage,
+  inferPaymentScheduleBasis,
   normalizePaymentScheduleBasis,
+  normalizePaymentScheduleTriggerStage,
 } from "../utils/poPaymentSchedule";
 
 const editableHeader = [
@@ -27,21 +30,34 @@ const inputClassName = "h-9 bg-white/80 text-sm";
 
 const PoPaymentScheduleSection = ({
   rows = [],
+  documentGrossTotal,
   poGrossTotal = 0,
   formatCurrency,
   onChange,
   readOnly = false,
 }) => {
-  const summary = getPaymentScheduleSummary(rows, poGrossTotal);
-  const showDifferenceWarning = Math.abs(summary.difference) > 0.009;
   const scheduleRows = Array.isArray(rows) ? rows : [];
-  const firstRowBasis = normalizePaymentScheduleBasis(scheduleRows[0]?.basis);
+  const grossTotal = documentGrossTotal ?? poGrossTotal;
+  const firstRowBasis = inferPaymentScheduleBasis(scheduleRows, grossTotal);
   const [selectedBasis, setSelectedBasis] = useState(firstRowBasis);
   const scheduleBasis = scheduleRows.length ? firstRowBasis : selectedBasis;
+  const effectiveRows = scheduleRows.map((row) => ({ ...row, basis: scheduleBasis }));
+  const summary = getPaymentScheduleSummary(effectiveRows, grossTotal);
+  const showDifferenceWarning = Math.abs(summary.difference) > 0.009;
+  const canAddMilestone = scheduleRows.length < PAYMENT_SCHEDULE_TRIGGER_OPTIONS.length;
 
   useEffect(() => {
     if (scheduleRows.length) setSelectedBasis(firstRowBasis);
   }, [firstRowBasis, scheduleRows.length]);
+
+  useEffect(() => {
+    if (readOnly || !scheduleRows.length) return;
+    const hasBasisMismatch = scheduleRows.some(
+      (row) => normalizePaymentScheduleBasis(row.basis) !== firstRowBasis,
+    );
+    if (!hasBasisMismatch) return;
+    onChange?.(scheduleRows.map((row) => ({ ...row, basis: firstRowBasis })));
+  }, [firstRowBasis, onChange, readOnly, scheduleRows]);
 
   const updateScheduleBasis = (basis) => {
     const normalizedBasis = normalizePaymentScheduleBasis(basis);
@@ -63,7 +79,12 @@ const PoPaymentScheduleSection = ({
   };
 
   const addRow = () => {
-    onChange?.([...scheduleRows, createEmptyPaymentScheduleRow(scheduleRows.length + 1, scheduleBasis)]);
+    const nextTriggerStage = getNextPaymentScheduleTriggerStage(scheduleRows);
+    if (!nextTriggerStage) return;
+    onChange?.([
+      ...scheduleRows,
+      createEmptyPaymentScheduleRow(scheduleRows.length + 1, scheduleBasis, nextTriggerStage),
+    ]);
   };
 
   const removeRow = (index) => {
@@ -75,6 +96,13 @@ const PoPaymentScheduleSection = ({
   };
 
   const renderRow = (row, index, headers) => {
+    const isTriggerDisabled = (triggerStage) =>
+      scheduleRows.some(
+        (scheduleRow, rowIndex) =>
+          rowIndex !== index &&
+          normalizePaymentScheduleTriggerStage(scheduleRow.triggerStage) === triggerStage,
+      );
+
     return (
       <TableRow key={`${row.sequence}-${index}`} className="bg-white">
         {headers.map((header) => {
@@ -91,7 +119,11 @@ const PoPaymentScheduleSection = ({
                   </SelectTrigger>
                   <SelectContent>
                     {PAYMENT_SCHEDULE_TRIGGER_OPTIONS.map((option) => (
-                      <SelectItem key={option.value} value={option.value}>
+                      <SelectItem
+                        key={option.value}
+                        value={option.value}
+                        disabled={isTriggerDisabled(option.value)}
+                      >
                         {option.label}
                       </SelectItem>
                     ))}
@@ -173,7 +205,7 @@ const PoPaymentScheduleSection = ({
             )}
           </div>
           {!readOnly ? (
-            <Button variant="outline" size="sm" onClick={addRow}>
+            <Button variant="outline" size="sm" onClick={addRow} disabled={!canAddMilestone}>
               <Plus className="mr-1 h-4 w-4" />
               Add Milestone
             </Button>
@@ -185,7 +217,7 @@ const PoPaymentScheduleSection = ({
         <div className="overflow-x-auto rounded border bg-white">
           <AppDataTable
             tableHeader={readOnly ? readOnlyHeader : editableHeader}
-            tableData={scheduleRows}
+            tableData={effectiveRows}
             renderRow={renderRow}
             tableClassName="min-w-[560px]"
           />
@@ -202,7 +234,7 @@ const PoPaymentScheduleSection = ({
           <p className="font-semibold">{formatCurrency(summary.scheduledTotal)}</p>
         </div>
         <div className="rounded border bg-white px-3 py-2">
-          <p className="text-xs text-muted-foreground">PO Gross Total</p>
+          <p className="text-xs text-muted-foreground">Document Gross Total</p>
           <p className="font-semibold">{formatCurrency(summary.poGrossTotal)}</p>
         </div>
         <div className="rounded border bg-white px-3 py-2">
@@ -217,7 +249,7 @@ const PoPaymentScheduleSection = ({
         <div className="mt-3 flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
-            Scheduled total does not match the PO gross total. Draft save is allowed; backend validation remains authoritative for submission and approval.
+            Scheduled total must match the document gross total before it can be saved.
           </p>
         </div>
       ) : null}
