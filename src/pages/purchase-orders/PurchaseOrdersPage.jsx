@@ -139,6 +139,7 @@ const createDefaultPoForm = (defaultCurrency = 'INR', formatId = 'default-format
   reference_document_type: '',
   reference_document_id: '',
   reference_document_name: '',
+  creation_source: 'MANUAL',
   po_date: new Date().toISOString().split('T')[0],
   valid_till: '',
   expected_delivery_date: '',
@@ -175,6 +176,7 @@ const buildPoEditForm = (po = {}, fallbackFormatId = 'default-format') => ({
   reference_document_type: po.reference_document_type || po.referenceDocumentType || '',
   reference_document_id: po.reference_document_id || po.referenceDocumentId || '',
   reference_document_name: po.reference_document_name || po.referenceDocumentName || '',
+  creation_source: po.creation_source || po.creationSource || '',
   po_date: String(po.po_date || po.poDate || '').slice(0, 10) || new Date().toISOString().split('T')[0],
   valid_till: String(po.valid_till || po.validTill || '').slice(0, 10),
   expected_delivery_date: String(po.expected_delivery_date || po.expectedDeliveryDate || '').slice(0, 10),
@@ -1256,6 +1258,7 @@ const PurchaseOrdersPage = () => {
         }),
         ...(isPaymentTermsEnabled ? { paymentSchedule: [] } : {}),
         reference_document_type: referenceDocumentType,
+        creation_source: 'DOCUMENT_UPLOAD',
         reference_document_name:
           extracted.referenceDocumentName ||
           extracted.reference_document_name ||
@@ -1280,6 +1283,7 @@ const PurchaseOrdersPage = () => {
         }),
         ...(isPaymentTermsEnabled ? { paymentSchedule: [] } : {}),
         reference_document_type: referenceDocumentType,
+        creation_source: 'DOCUMENT_UPLOAD',
         reference_document_name: file.name,
       });
       toast.warning(

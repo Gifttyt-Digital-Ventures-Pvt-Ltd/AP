@@ -40,6 +40,7 @@ import { Textarea } from "../../../components/ui/textarea";
 import {
   getPoReferenceDocumentName,
   getPoReferenceDocumentS3Key,
+  getPoReferenceDocumentType,
   getPoReferenceDocumentUrl,
   isFormatFieldEnabled,
   isFormatSectionEnabled,
@@ -59,11 +60,24 @@ import PoPaymentScheduleSection from "./PoPaymentScheduleSection";
 import { normalizePaymentScheduleRows } from "../utils/poPaymentSchedule";
 import AdvanceContextPanel from "../../../components/vendor-advances/AdvanceContextPanel";
 import { InvoicePdfPreview } from "../../invoices/components/InvoicePdfPreview";
+import PoSpreadsheetPreview from "./PoSpreadsheetPreview";
 
 const normalizeReferenceDocumentUrl = (url = "") => {
   if (!url) return "";
   if (/^https?:\/\//i.test(url)) return url;
   return new URL(url, window.location.origin).toString();
+};
+
+const isSpreadsheetReferenceDocument = ({ name = "", type = "" } = {}) => {
+  const normalizedType = String(type || "").trim().toUpperCase();
+  const normalizedName = String(name || "").trim().toLowerCase();
+  return (
+    normalizedType === "EXCEL" ||
+    normalizedType === "SPREADSHEET" ||
+    normalizedName.endsWith(".xls") ||
+    normalizedName.endsWith(".xlsx") ||
+    normalizedName.endsWith(".csv")
+  );
 };
 
 const getDocumentGrossTotal = (document = {}, po = {}) =>
@@ -220,6 +234,7 @@ const PoDetailsDialog = ({
     selectedPO?.logo_url ||
     null;
   const referenceDocument = {
+    type: getPoReferenceDocumentType(selectedPO),
     name: getPoReferenceDocumentName(selectedPO),
     url: normalizeReferenceDocumentUrl(getPoReferenceDocumentUrl(selectedPO)),
     s3Key: getPoReferenceDocumentS3Key(selectedPO),
@@ -230,6 +245,7 @@ const PoDetailsDialog = ({
       referenceDocument.s3Key,
   );
   const hasReferencePreview = Boolean(referenceDocument.url);
+  const isSpreadsheetReference = isSpreadsheetReferenceDocument(referenceDocument);
   const referencePreviewFile = referenceDocument.name
     ? { name: referenceDocument.name }
     : null;
@@ -359,14 +375,18 @@ const PoDetailsDialog = ({
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-100 lg:flex-row">
           {hasReferencePreview ? (
             <aside className="h-[420px] min-h-0 w-full shrink-0 border-b bg-white lg:h-auto lg:w-[38%] lg:border-b-0 lg:border-r">
-              <InvoicePdfPreview
-                fileURL={referenceDocument.url}
-                file={referencePreviewFile}
-                zoom={referencePreviewZoom}
-                imageError={referencePreviewError}
-                setImageError={setReferencePreviewError}
-                setPdfZoom={setReferencePreviewZoom}
-              />
+              {isSpreadsheetReference ? (
+                <PoSpreadsheetPreview fileURL={referenceDocument.url} fileName={referenceDocument.name} />
+              ) : (
+                <InvoicePdfPreview
+                  fileURL={referenceDocument.url}
+                  file={referencePreviewFile}
+                  zoom={referencePreviewZoom}
+                  imageError={referencePreviewError}
+                  setImageError={setReferencePreviewError}
+                  setPdfZoom={setReferencePreviewZoom}
+                />
+              )}
             </aside>
           ) : null}
 
@@ -663,6 +683,11 @@ const PoDetailsDialog = ({
                             {!referenceDocument.url && referenceDocument.s3Key ? (
                               <p className="text-xs text-muted-foreground">
                                 Preview URL was not returned for this uploaded document.
+                              </p>
+                            ) : null}
+                            {!referenceDocument.url && !referenceDocument.s3Key && isSpreadsheetReference ? (
+                              <p className="text-xs text-muted-foreground">
+                                Excel metadata was returned, but no preview/download URL was returned.
                               </p>
                             ) : null}
                           </div>

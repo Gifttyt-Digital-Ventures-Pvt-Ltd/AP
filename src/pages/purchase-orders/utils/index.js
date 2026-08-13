@@ -214,6 +214,19 @@ export const getPoReferenceDocumentS3Key = (po = {}) => {
   "";
 };
 
+export const getPoReferenceDocumentType = (po = {}) => {
+  const source = po || {};
+  return source.reference_document_type ??
+  source.referenceDocumentType ??
+  source.referenceDocument?.type ??
+  source.referenceDocument?.documentType ??
+  source.referenceDocument?.document_type ??
+  source.reference_document?.type ??
+  source.reference_document?.documentType ??
+  source.reference_document?.document_type ??
+  "";
+};
+
 export const normalizePurchaseOrder = (po = {}) => ({
   ...po,
   id: po.id ?? po.poId ?? po.po_id ?? po.purchaseOrderId ?? po.purchase_order_id,
@@ -245,7 +258,7 @@ export const normalizePurchaseOrder = (po = {}) => ({
   vendor_branch_name: po.vendor_branch_name ?? po.vendorBranchName ?? '',
   vendor_branch_code: po.vendor_branch_code ?? po.vendorBranchCode ?? '',
   vendor_branch_gstin: po.vendor_branch_gstin ?? po.vendorBranchGstin ?? '',
-  reference_document_type: po.reference_document_type ?? po.referenceDocumentType ?? '',
+  reference_document_type: getPoReferenceDocumentType(po),
   reference_document_id: po.reference_document_id ?? po.referenceDocumentId ?? '',
   reference_document_name: getPoReferenceDocumentName(po),
   reference_document_url: getPoReferenceDocumentUrl(po),
@@ -353,6 +366,7 @@ export const buildCreatePurchaseOrderPayload = (
 
   return {
     ...(poNumber ? { poNumber } : {}),
+    creationSource: form.creation_source || form.creationSource || "MANUAL",
     vendorId: form.vendor_id || null,
     vendorRequestSubmitted: Boolean(form.vendor_request_submitted),
     vendorName: form.scanned_vendor_name || form.vendor_name || null,
