@@ -156,57 +156,63 @@ export const normalizePoLineItem = (item = {}) => ({
   invoiced_quantity: item.invoiced_quantity ?? item.invoicedQuantity ?? 0,
 });
 
-export const getPoReferenceDocumentName = (po = {}) =>
-  po.reference_document_name ??
-  po.referenceDocumentName ??
-  po.referenceDocument?.name ??
-  po.reference_document?.name ??
-  po.fileName ??
-  po.file_name ??
+export const getPoReferenceDocumentName = (po = {}) => {
+  const source = po || {};
+  return source.reference_document_name ??
+  source.referenceDocumentName ??
+  source.referenceDocument?.name ??
+  source.reference_document?.name ??
+  source.fileName ??
+  source.file_name ??
   "";
+};
 
-export const getPoReferenceDocumentUrl = (po = {}) =>
-  po.referenceDocumentUrl ??
-  po.reference_document_url ??
-  po.reference_document_download_url ??
-  po.referenceDocumentDownloadUrl ??
-  po.reference_document_file_url ??
-  po.referenceDocumentFileUrl ??
-  po.reference_file_url ??
-  po.referenceFileUrl ??
-  po.reference_url ??
-  po.referenceUrl ??
-  po.source_document_url ??
-  po.sourceDocumentUrl ??
-  po.uploaded_document_url ??
-  po.uploadedDocumentUrl ??
-  po.documentUrl ??
-  po.document_url ??
-  po.fileUrl ??
-  po.file_url ??
-  po.url ??
-  po.referenceDocument?.url ??
-  po.referenceDocument?.downloadUrl ??
-  po.referenceDocument?.download_url ??
-  po.referenceDocument?.fileUrl ??
-  po.referenceDocument?.file_url ??
-  po.reference_document?.url ??
-  po.reference_document?.downloadUrl ??
-  po.reference_document?.download_url ??
-  po.reference_document?.fileUrl ??
-  po.reference_document?.file_url ??
+export const getPoReferenceDocumentUrl = (po = {}) => {
+  const source = po || {};
+  return source.referenceDocumentUrl ??
+  source.reference_document_url ??
+  source.reference_document_download_url ??
+  source.referenceDocumentDownloadUrl ??
+  source.reference_document_file_url ??
+  source.referenceDocumentFileUrl ??
+  source.reference_file_url ??
+  source.referenceFileUrl ??
+  source.reference_url ??
+  source.referenceUrl ??
+  source.source_document_url ??
+  source.sourceDocumentUrl ??
+  source.uploaded_document_url ??
+  source.uploadedDocumentUrl ??
+  source.documentUrl ??
+  source.document_url ??
+  source.fileUrl ??
+  source.file_url ??
+  source.url ??
+  source.referenceDocument?.url ??
+  source.referenceDocument?.downloadUrl ??
+  source.referenceDocument?.download_url ??
+  source.referenceDocument?.fileUrl ??
+  source.referenceDocument?.file_url ??
+  source.reference_document?.url ??
+  source.reference_document?.downloadUrl ??
+  source.reference_document?.download_url ??
+  source.reference_document?.fileUrl ??
+  source.reference_document?.file_url ??
   "";
+};
 
-export const getPoReferenceDocumentS3Key = (po = {}) =>
-  po.reference_document_s3_key ??
-  po.referenceDocumentS3Key ??
-  po.reference_document_key ??
-  po.referenceDocumentKey ??
-  po.referenceDocument?.s3Key ??
-  po.referenceDocument?.s3_key ??
-  po.reference_document?.s3Key ??
-  po.reference_document?.s3_key ??
+export const getPoReferenceDocumentS3Key = (po = {}) => {
+  const source = po || {};
+  return source.reference_document_s3_key ??
+  source.referenceDocumentS3Key ??
+  source.reference_document_key ??
+  source.referenceDocumentKey ??
+  source.referenceDocument?.s3Key ??
+  source.referenceDocument?.s3_key ??
+  source.reference_document?.s3Key ??
+  source.reference_document?.s3_key ??
   "";
+};
 
 export const normalizePurchaseOrder = (po = {}) => ({
   ...po,
