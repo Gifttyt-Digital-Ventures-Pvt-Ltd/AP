@@ -28,7 +28,7 @@ import {
 } from "../utils/msmePaymentDue";
 import { computeLineItemsSummary, resolveLineItemsExpanded } from "../utils/lineItemsSummary";
 import { Button } from "../../../components/ui/button";
-import { Link2, Loader2 } from "lucide-react";
+import { Link2, Loader2, Pencil } from "lucide-react";
 import {
   canMapTaxInvoiceToProforma,
   getDocumentTypeLabel,
@@ -48,6 +48,7 @@ import { buildInternalChecklistState } from "../utils/internalChecklist";
 import { INTERNAL_CHECKLIST_ITEMS } from "../constants/internalChecklist";
 import { normalizeHistoricalAdvanceAdjustment } from "../utils/advanceAdjustment";
 import InternalChecklistSection from "./InternalChecklistSection";
+import InvoicePaymentSchedulePanel from "./InvoicePaymentSchedulePanel";
 
 const formatDisplayDate = (value) => {
   if (!value) return "-";
@@ -98,6 +99,8 @@ const InvoiceReadOnlyDetails = ({
   canCancelLinkedInvoice = false,
   onCancelLinkedInvoice,
   showInvoiceFunding = false,
+  canEditInvoiceFunding = false,
+  onEditInvoiceFunding,
 }) => {
   const formData = useMemo(
     () =>
@@ -575,9 +578,29 @@ const InvoiceReadOnlyDetails = ({
           <div className="rounded-lg border border-border bg-muted/20 p-3">
             <div className="mb-2 flex items-center justify-between gap-3">
               <h3 className="text-sm font-semibold text-gray-800">Funding</h3>
-              <Badge variant={isFunded ? "default" : "secondary"}>
-                {isFunded ? "Funded" : "Non-Funded"}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant={isFunded ? "default" : "secondary"}>
+                  {isFunded ? "Funded" : "Non-Funded"}
+                </Badge>
+                {canEditInvoiceFunding ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1.5 text-xs"
+                    onClick={() =>
+                      onEditInvoiceFunding?.({
+                        invoice,
+                        invoiceTotal: totals.total,
+                        currency: invoiceCurrency,
+                      })
+                    }
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit Funding
+                  </Button>
+                ) : null}
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <DetailField
@@ -629,6 +652,8 @@ const InvoiceReadOnlyDetails = ({
         <div className="grid grid-cols-2 gap-3">
           <DetailField label="Source" value={formData.source} />
         </div>
+
+        <InvoicePaymentSchedulePanel invoice={invoice} />
 
         <div className="grid grid-cols-2 gap-3">
           <DetailField label="Discounts" value={formData.discountsLevel} />

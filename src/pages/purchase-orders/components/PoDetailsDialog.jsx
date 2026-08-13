@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   Building2,
   Download,
+  ExternalLink,
   FileText,
   History,
   Loader2,
@@ -37,6 +38,9 @@ import {
 } from "../../../components/ui/select";
 import { Textarea } from "../../../components/ui/textarea";
 import {
+  getPoReferenceDocumentName,
+  getPoReferenceDocumentS3Key,
+  getPoReferenceDocumentUrl,
   isFormatFieldEnabled,
   isFormatSectionEnabled,
 } from "../utils";
@@ -47,14 +51,39 @@ import AccountingLockBanner from "../../../components/AccountingLockBanner";
 import { isAccountingReadyLocked } from "../../../utils/accountingLock";
 import ApprovalHistoryTimeline from "../../../components/common/ApprovalHistoryTimeline";
 import { useGetPurchaseOrderHistoryQuery } from "../../../Services/apis/purchaseOrdersMasterDataApi";
+import {
+  useGetDocumentPaymentScheduleHistoryQuery,
+  useGetDocumentPaymentScheduleQuery,
+} from "../../../Services/apis/paymentSchedulesApi";
 import PoPaymentScheduleSection from "./PoPaymentScheduleSection";
 import { normalizePaymentScheduleRows } from "../utils/poPaymentSchedule";
 import AdvanceContextPanel from "../../../components/vendor-advances/AdvanceContextPanel";
+import { InvoicePdfPreview } from "../../invoices/components/InvoicePdfPreview";
+
+const normalizeReferenceDocumentUrl = (url = "") => {
+  if (!url) return "";
+  if (/^https?:\/\//i.test(url)) return url;
+  return new URL(url, window.location.origin).toString();
+};
+
+const getDocumentGrossTotal = (document = {}, po = {}) =>
+  Number(
+    document.totalAmount ??
+      document.total_amount ??
+      document.grossTotal ??
+      document.gross_total ??
+      document.documentGrossTotal ??
+      document.document_gross_total ??
+      po.total_amount ??
+      po.totalAmount ??
+      0,
+  ) || 0;
 
 const PoDetailsDialog = ({
   showViewDialog,
   setShowViewDialog,
   selectedPO,
+  loadingDetails = false,
   statusColors,
   formatDate,
   formatCurrency,
@@ -70,6 +99,9 @@ const PoDetailsDialog = ({
   savingDeliveryStatus,
   canRaiseAdvance = false,
   onRaiseAdvance,
+  canEditPaymentSchedule = false,
+  onSavePaymentSchedule,
+  savingPaymentSchedule = false,
 }) => {
   const selectedPoId =
     selectedPO?.id ||
@@ -80,12 +112,30 @@ const PoDetailsDialog = ({
   const [viewTab, setViewTab] = useState("details");
   const [deliveryStatus, setDeliveryStatus] = useState(selectedPO?.delivery_status || "");
   const [deliveryRemarks, setDeliveryRemarks] = useState(selectedPO?.delivery_remarks || "");
+  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
+  const [scheduleDraftRows, setScheduleDraftRows] = useState([]);
+  const [referencePreviewZoom, setReferencePreviewZoom] = useState(100);
+  const [referencePreviewError, setReferencePreviewError] = useState(false);
   const {
     data: approvalHistory = [],
     isLoading: loadingApprovalHistory,
   } = useGetPurchaseOrderHistoryQuery(selectedPoId, {
     skip: !showViewDialog || !selectedPoId,
   });
+  const {
+    data: paymentScheduleHistory = [],
+    isLoading: loadingPaymentScheduleHistory,
+  } = useGetDocumentPaymentScheduleHistoryQuery(
+    { documentType: "PO", documentId: selectedPoId },
+    { skip: !showViewDialog || !selectedPoId },
+  );
+  const {
+    data: documentScheduleData,
+    isFetching: loadingPaymentSchedule,
+  } = useGetDocumentPaymentScheduleQuery(
+    { documentType: "PO", documentId: selectedPoId },
+    { skip: !showViewDialog || !selectedPoId },
+  );
 
   useEffect(() => {
     setDeliveryStatus(selectedPO?.delivery_status || "");
@@ -98,10 +148,50 @@ const PoDetailsDialog = ({
   const isInr = poCurrency === "INR";
   const documentBorderClass = "border";
   const headerBorderClass = "border-b";
-  const paymentScheduleRows = useMemo(
+  const documentScheduleSource = useMemo(
+    () =>
+      Array.isArray(documentScheduleData)
+        ? { paymentSchedule: documentScheduleData }
+        : {
+            ...(documentScheduleData || {}),
+            paymentSchedule:
+              documentScheduleData?.paymentSchedule ??
+              documentScheduleData?.payment_schedule ??
+              documentScheduleData?.rows ??
+              documentScheduleData?.schedule,
+          },
+    [documentScheduleData],
+  );
+  const fetchedPaymentScheduleRows = useMemo(
+    () => normalizePaymentScheduleRows(documentScheduleSource || {}),
+    [documentScheduleSource],
+  );
+  const embeddedPaymentScheduleRows = useMemo(
     () => normalizePaymentScheduleRows(selectedPO || {}),
     [selectedPO],
   );
+  const paymentScheduleRows = fetchedPaymentScheduleRows.length
+    ? fetchedPaymentScheduleRows
+    : embeddedPaymentScheduleRows;
+  const documentGrossTotal = getDocumentGrossTotal(documentScheduleSource || {}, selectedPO || {});
+
+  useEffect(() => {
+    if (!scheduleDialogOpen) {
+      setScheduleDraftRows(paymentScheduleRows);
+    }
+  }, [paymentScheduleRows, scheduleDialogOpen]);
+
+  const openScheduleDialog = () => {
+    setScheduleDraftRows(paymentScheduleRows);
+    setScheduleDialogOpen(true);
+  };
+
+  const handleSaveSchedule = async () => {
+    const saved = await onSavePaymentSchedule?.(selectedPO, scheduleDraftRows);
+    if (saved !== false) {
+      setScheduleDialogOpen(false);
+    }
+  };
 
   const selectedFormat =
     selectedPO?.formatConfigSnapshot ||
@@ -129,6 +219,25 @@ const PoDetailsDialog = ({
     selectedPO?.logoUrl ||
     selectedPO?.logo_url ||
     null;
+  const referenceDocument = {
+    name: getPoReferenceDocumentName(selectedPO),
+    url: normalizeReferenceDocumentUrl(getPoReferenceDocumentUrl(selectedPO)),
+    s3Key: getPoReferenceDocumentS3Key(selectedPO),
+  };
+  const hasReferenceDocument = Boolean(
+    referenceDocument.name ||
+      referenceDocument.url ||
+      referenceDocument.s3Key,
+  );
+  const hasReferencePreview = Boolean(referenceDocument.url);
+  const referencePreviewFile = referenceDocument.name
+    ? { name: referenceDocument.name }
+    : null;
+
+  useEffect(() => {
+    setReferencePreviewZoom(100);
+    setReferencePreviewError(false);
+  }, [selectedPoId, referenceDocument.url]);
   const vendorAddress =
     selectedPO?.vendor_address ||
     selectedPO?.vendorAddress ||
@@ -225,11 +334,21 @@ const PoDetailsDialog = ({
 
   return (
     <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
-      <DialogContent className="flex max-h-[92vh] max-w-6xl flex-col overflow-hidden p-0">
+      <DialogContent
+        className={`flex max-h-[92vh] flex-col overflow-hidden p-0 ${
+          hasReferencePreview ? "w-[96vw] max-w-[96vw]" : "max-w-6xl"
+        }`}
+      >
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2 px-6 pt-6 pb-3 border-b">
             <FileText className="h-5 w-5" />
             Purchase Order: {selectedPO?.po_number}
+            {loadingDetails ? (
+              <span className="ml-auto flex items-center gap-2 text-xs font-normal text-muted-foreground">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                Loading details
+              </span>
+            ) : null}
           </DialogTitle>
           <DialogDescription className="sr-only">
             Review purchase order details, download, submit, or approve based on
@@ -237,7 +356,21 @@ const PoDetailsDialog = ({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-slate-100">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden bg-slate-100 lg:flex-row">
+          {hasReferencePreview ? (
+            <aside className="h-[420px] min-h-0 w-full shrink-0 border-b bg-white lg:h-auto lg:w-[38%] lg:border-b-0 lg:border-r">
+              <InvoicePdfPreview
+                fileURL={referenceDocument.url}
+                file={referencePreviewFile}
+                zoom={referencePreviewZoom}
+                imageError={referencePreviewError}
+                setImageError={setReferencePreviewError}
+                setPdfZoom={setReferencePreviewZoom}
+              />
+            </aside>
+          ) : null}
+
+          <div className="min-h-0 flex-1 overflow-y-auto">
           {selectedPO ? (
             <div className="bg-background px-6 pt-4">
               <AccountingLockBanner
@@ -252,11 +385,15 @@ const PoDetailsDialog = ({
           {selectedPO && (
             <div className="px-6 py-5 space-y-6">
               <Tabs value={viewTab} onValueChange={setViewTab}>
-              <TabsList className="grid w-full max-w-sm grid-cols-2">
+              <TabsList className="grid w-full max-w-2xl grid-cols-3">
                 <TabsTrigger value="details">Details</TabsTrigger>
                 <TabsTrigger value="history">
                   <History className="h-4 w-4 mr-1" />
                   History ({approvalHistory.length})
+                </TabsTrigger>
+                <TabsTrigger value="schedule-history">
+                  <History className="h-4 w-4 mr-1" />
+                  Payment Schedule ({paymentScheduleHistory.length})
                 </TabsTrigger>
               </TabsList>
 
@@ -420,15 +557,6 @@ const PoDetailsDialog = ({
                     </section>
                   )}
 
-                  {paymentScheduleRows.length ? (
-                    <PoPaymentScheduleSection
-                      rows={paymentScheduleRows}
-                      poGrossTotal={Number(selectedPO.total_amount) || 0}
-                      formatCurrency={(amount) => formatCurrency(amount, poCurrency)}
-                      readOnly
-                    />
-                  ) : null}
-
                   <AdvanceContextPanel
                     source={selectedPO}
                     title="PO Advance Context"
@@ -521,6 +649,70 @@ const PoDetailsDialog = ({
                     </section>
                   )}
 
+                  {hasReferenceDocument ? (
+                    <section className="mt-6 rounded border bg-slate-50/60 p-4 text-sm">
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div>
+                          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground mb-1">
+                            Reference Document
+                          </p>
+                          <div className="space-y-1">
+                            {referenceDocument.name ? (
+                              <p className="font-medium">{referenceDocument.name}</p>
+                            ) : null}
+                            {!referenceDocument.url && referenceDocument.s3Key ? (
+                              <p className="text-xs text-muted-foreground">
+                                Preview URL was not returned for this uploaded document.
+                              </p>
+                            ) : null}
+                          </div>
+                        </div>
+                        {referenceDocument.url ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => window.open(referenceDocument.url, "_blank", "noopener,noreferrer")}
+                          >
+                            <ExternalLink className="mr-2 h-4 w-4" />
+                            Open Reference
+                          </Button>
+                        ) : null}
+                      </div>
+                    </section>
+                  ) : null}
+
+                  {paymentScheduleRows.length || canEditPaymentSchedule ? (
+                    <div className="mt-6">
+                      {canEditPaymentSchedule ? (
+                        <div className="mb-2 flex justify-end">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={openScheduleDialog}
+                            disabled={savingPaymentSchedule}
+                            data-testid="edit-payment-schedule-btn"
+                          >
+                            Edit Payment Schedule
+                          </Button>
+                        </div>
+                      ) : null}
+                      {paymentScheduleRows.length ? (
+                        <PoPaymentScheduleSection
+                          rows={paymentScheduleRows}
+                          documentGrossTotal={documentGrossTotal}
+                          formatCurrency={(amount) => formatCurrency(amount, poCurrency)}
+                          readOnly
+                        />
+                      ) : null}
+                      {loadingPaymentSchedule && !paymentScheduleRows.length ? (
+                        <div className="rounded border bg-slate-50/60 p-4 text-sm text-muted-foreground">
+                          Loading payment schedule...
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+
                   <section className="mt-6 rounded border bg-slate-50/60 p-4 text-sm">
                     <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground mb-3">
                       Asset Delivery Status
@@ -583,9 +775,17 @@ const PoDetailsDialog = ({
                   emptyMessage="No purchase order history records found"
                 />
               </TabsContent>
+              <TabsContent value="schedule-history" className="mt-4 space-y-4">
+                <ApprovalHistoryTimeline
+                  history={paymentScheduleHistory}
+                  loading={loadingPaymentScheduleHistory}
+                  emptyMessage="No payment schedule history records found"
+                />
+              </TabsContent>
               </Tabs>
             </div>
           )}
+          </div>
         </div>
 
         <DialogFooter className="shrink-0 border-t bg-background px-6 py-4">
@@ -656,6 +856,39 @@ const PoDetailsDialog = ({
           )}
         </DialogFooter>
       </DialogContent>
+      <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>Edit Payment Schedule</DialogTitle>
+            <DialogDescription>
+              Update the payment schedule without changing the rest of this document.
+            </DialogDescription>
+          </DialogHeader>
+          <PoPaymentScheduleSection
+            rows={scheduleDraftRows}
+            documentGrossTotal={documentGrossTotal}
+            formatCurrency={(amount) => formatCurrency(amount, poCurrency)}
+            onChange={setScheduleDraftRows}
+          />
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setScheduleDialogOpen(false)}
+              disabled={savingPaymentSchedule}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSaveSchedule}
+              disabled={savingPaymentSchedule}
+              data-testid="save-payment-schedule-btn"
+            >
+              {savingPaymentSchedule ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Save Payment Schedule
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 };

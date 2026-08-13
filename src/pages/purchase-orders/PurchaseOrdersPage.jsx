@@ -21,6 +21,7 @@ import {
   useApprovePurchaseOrderMutation,
   useScanPurchaseOrderMutation,
 } from '../../Services/apis/purchaseOrdersMasterDataApi';
+import { useUpdateDocumentPaymentScheduleMutation } from '../../Services/apis/paymentSchedulesApi';
 import { useRequestAccountingReadyUnlockMutation } from '../../Services/apis/accountingApi';
 import { useGetOrganisationQuery } from '../../Services/apis/settingsApi';
 import { normalizeOrganisationBranchesFromApi } from '../../utils/organisationGst';
@@ -51,6 +52,7 @@ import {
   resolvePoTotals,
 } from './utils/poTotals';
 import {
+  buildPaymentSchedulePayload,
   getPaymentScheduleSummary,
   normalizePaymentScheduleRows,
   validatePaymentScheduleRows,
@@ -135,7 +137,6 @@ const createDefaultPoForm = (defaultCurrency = 'INR', formatId = 'default-format
   vendor_branch_code: '',
   vendor_branch_gstin: '',
   reference_document_type: '',
-  reference_document_no: '',
   reference_document_id: '',
   reference_document_name: '',
   po_date: new Date().toISOString().split('T')[0],
@@ -172,7 +173,6 @@ const buildPoEditForm = (po = {}, fallbackFormatId = 'default-format') => ({
   vendor_branch_code: po.vendor_branch_code || po.vendorBranchCode || '',
   vendor_branch_gstin: po.vendor_branch_gstin || po.vendorBranchGstin || '',
   reference_document_type: po.reference_document_type || po.referenceDocumentType || '',
-  reference_document_no: po.reference_document_no || po.referenceDocumentNo || '',
   reference_document_id: po.reference_document_id || po.referenceDocumentId || '',
   reference_document_name: po.reference_document_name || po.referenceDocumentName || '',
   po_date: String(po.po_date || po.poDate || '').slice(0, 10) || new Date().toISOString().split('T')[0],
@@ -378,6 +378,7 @@ const PurchaseOrdersPage = () => {
   const [savePurchaseOrderDraft] = useSavePurchaseOrderDraftMutation();
   const [createPurchaseOrder] = useCreatePurchaseOrderMutation();
   const [updatePurchaseOrder] = useUpdatePurchaseOrderMutation();
+  const [updateDocumentPaymentSchedule] = useUpdateDocumentPaymentScheduleMutation();
   const [submitPurchaseOrder] = useSubmitPurchaseOrderMutation();
   const [approvePurchaseOrder] = useApprovePurchaseOrderMutation();
   const [scanPurchaseOrder] = useScanPurchaseOrderMutation();
@@ -397,6 +398,7 @@ const PurchaseOrdersPage = () => {
   const [requestVendorForm, setRequestVendorForm] = useState(createEmptyVendorRequestForm);
   const [pdfZoom, setPdfZoom] = useState(100);
   const uploadInProgressRef = useRef(false);
+  const poDetailsRequestRef = useRef(null);
   const poUploadEstimate = useMeteredActionEstimate(CREDIT_ACTION_CODES.PO_UPLOAD, uploadFile ? 1 : 0);
 
   const formatConfig = formatConfigData || DEFAULT_PO_FORMAT_CONFIG;
@@ -419,7 +421,9 @@ const PurchaseOrdersPage = () => {
   const [createAction, setCreateAction] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [downloadingPoId, setDownloadingPoId] = useState(null);
+  const [loadingPoDetailsId, setLoadingPoDetailsId] = useState(null);
   const [savingDeliveryStatus, setSavingDeliveryStatus] = useState(false);
+  const [savingPaymentSchedule, setSavingPaymentSchedule] = useState(false);
   const [approvalForm, setApprovalForm] = useState({ action: 'Approved', comments: '' });
   const [savedFormatConfigs, setSavedFormatConfigs] = useState(() => [makeFormatConfig(formatConfig)]);
   const [activeFormatId, setActiveFormatId] = useState('default-format');
@@ -643,7 +647,8 @@ const PurchaseOrdersPage = () => {
         resolvePoTotals(form).total_amount,
       );
       if (paymentSchedule.length > 0 && Math.abs(scheduleSummary.difference) > 0.009) {
-        toast.warning('Payment Schedule total does not match the PO gross total. Draft save is allowed; backend remains authoritative.');
+        toast.error('Payment Schedule total must match the document gross total.');
+        return false;
       }
     }
     return true;
@@ -832,6 +837,60 @@ const PurchaseOrdersPage = () => {
     }
   };
 
+  const canEditPaymentScheduleForPo = (po) => {
+    if (!isPaymentTermsEnabled || !po) return false;
+    if (!canManagePo && !canApprovePo) return false;
+    const status = String(po.status || '').trim().toUpperCase();
+    return !['CANCELLED', 'CANCELED', 'REJECTED', 'CLOSED'].includes(status);
+  };
+
+  const handleSavePaymentSchedule = async (po, paymentSchedule = []) => {
+    const poId = getPoId(po);
+    if (!poId) {
+      toast.error('Purchase order id is missing');
+      return false;
+    }
+    if (!canEditPaymentScheduleForPo(po)) {
+      toast.error('Payment Schedule cannot be edited for this purchase order');
+      return false;
+    }
+
+    const scheduleErrors = validatePaymentScheduleRows(paymentSchedule);
+    if (scheduleErrors.length > 0) {
+      toast.error(scheduleErrors[0]);
+      return false;
+    }
+
+    const scheduleSummary = getPaymentScheduleSummary(
+      paymentSchedule,
+      Number(po.total_amount ?? po.totalAmount) || 0,
+    );
+    if (paymentSchedule.length > 0 && Math.abs(scheduleSummary.difference) > 0.009) {
+      toast.error('Payment Schedule total must match the document gross total.');
+      return false;
+    }
+
+    setSavingPaymentSchedule(true);
+    try {
+      const data = await updateDocumentPaymentSchedule({
+        documentType: 'PO',
+        documentId: poId,
+        body: { paymentSchedule: buildPaymentSchedulePayload(paymentSchedule) },
+      }).unwrap();
+      const updatedPo = getCreatedPo(data);
+      const normalizedUpdatedPo = normalizePurchaseOrder(updatedPo || {});
+      setSelectedPO((prev) => (prev ? { ...prev, ...normalizedUpdatedPo, paymentSchedule } : prev));
+      toast.success('Payment Schedule updated');
+      await fetchData();
+      return true;
+    } catch (error) {
+      toast.error(extractApiErrorDetail(error) || 'Failed to update Payment Schedule');
+      return false;
+    } finally {
+      setSavingPaymentSchedule(false);
+    }
+  };
+
   const resetForm = () => {
     setPoForm(createPoFormForFormat(activeFormatConfig.defaultCurrency, activeFormatConfig.id));
   };
@@ -865,6 +924,35 @@ const PurchaseOrdersPage = () => {
     setShowRaiseAdvanceDialog(true);
   };
 
+  const openPoDetails = useCallback(async (po) => {
+    if (!po) return;
+
+    const poId = getPoId(po);
+    setSelectedPO(po);
+    setShowViewDialog(true);
+
+    if (!poId) return;
+
+    const requestKey = String(poId);
+    poDetailsRequestRef.current = requestKey;
+    setLoadingPoDetailsId(poId);
+    try {
+      const data = await getPurchaseOrderById(poId).unwrap();
+      const fullPo = getCreatedPo(data);
+      if (poDetailsRequestRef.current === requestKey) {
+        setSelectedPO(normalizePurchaseOrder(fullPo || data || po));
+      }
+    } catch (error) {
+      if (poDetailsRequestRef.current === requestKey) {
+        toast.warning('Could not load latest purchase order details. Showing list data.');
+      }
+    } finally {
+      if (poDetailsRequestRef.current === requestKey) {
+        setLoadingPoDetailsId(null);
+      }
+    }
+  }, [getPurchaseOrderById]);
+
   const submitPoFromRow = (po) => {
     const poId = getPoId(po);
     if (!poId) {
@@ -877,6 +965,8 @@ const PurchaseOrdersPage = () => {
   const closePoViewDialog = useCallback((open) => {
     setShowViewDialog(open);
     if (!open) {
+      poDetailsRequestRef.current = null;
+      setLoadingPoDetailsId(null);
       clearNotificationQueryParams(searchParams, setSearchParams);
     }
   }, [searchParams, setSearchParams]);
@@ -1164,10 +1254,8 @@ const PurchaseOrdersPage = () => {
           vendors,
           defaultCurrency: activeFormatConfig.defaultCurrency,
         }),
-        reference_document_type:
-          extracted.referenceDocumentType ||
-          extracted.reference_document_type ||
-          referenceDocumentType,
+        ...(isPaymentTermsEnabled ? { paymentSchedule: [] } : {}),
+        reference_document_type: referenceDocumentType,
         reference_document_name:
           extracted.referenceDocumentName ||
           extracted.reference_document_name ||
@@ -1190,6 +1278,7 @@ const PurchaseOrdersPage = () => {
           vendors,
           defaultCurrency: activeFormatConfig.defaultCurrency,
         }),
+        ...(isPaymentTermsEnabled ? { paymentSchedule: [] } : {}),
         reference_document_type: referenceDocumentType,
         reference_document_name: file.name,
       });
@@ -1423,8 +1512,7 @@ const PurchaseOrdersPage = () => {
     );
 
     if (loadedPo) {
-      setSelectedPO(loadedPo);
-      setShowViewDialog(true);
+      openPoDetails(loadedPo);
       return;
     }
 
@@ -1444,6 +1532,7 @@ const PurchaseOrdersPage = () => {
       });
   }, [
     getPurchaseOrderById,
+    openPoDetails,
     notificationAction,
     notificationPoId,
     notificationSource,
@@ -1499,6 +1588,7 @@ const PurchaseOrdersPage = () => {
         canManagePo={canManagePo}
         canSubmitPo={canSubmitPo}
         canApprovePo={canApprovePo}
+        onViewPO={openPoDetails}
         onEditPO={openEditPoDialog}
         onSubmitPO={submitPoFromRow}
         onReviewPO={openPoApprovalDialog}
@@ -1557,6 +1647,11 @@ const PurchaseOrdersPage = () => {
         showViewDialog={showViewDialog}
         setShowViewDialog={closePoViewDialog}
         selectedPO={selectedPO}
+        loadingDetails={Boolean(
+          loadingPoDetailsId &&
+            selectedPO &&
+            String(loadingPoDetailsId) === String(getPoId(selectedPO)),
+        )}
         statusColors={statusColors}
         formatDate={formatDate}
         formatCurrency={formatCurrency}
@@ -1572,6 +1667,9 @@ const PurchaseOrdersPage = () => {
         savingDeliveryStatus={savingDeliveryStatus}
         canRaiseAdvance={isVendorAdvancesEnabled}
         onRaiseAdvance={openRaiseAdvanceDialog}
+        canEditPaymentSchedule={canEditPaymentScheduleForPo(selectedPO)}
+        onSavePaymentSchedule={handleSavePaymentSchedule}
+        savingPaymentSchedule={savingPaymentSchedule}
       />
 
       <PoApprovalDialog
@@ -1666,6 +1764,7 @@ const PurchaseOrdersPage = () => {
               }
               showBranchField={isBranchEnabled}
               organisationBranches={organisationBranches}
+              isPaymentTermsEnabled={isPaymentTermsEnabled}
             />
             ) : null
           )}

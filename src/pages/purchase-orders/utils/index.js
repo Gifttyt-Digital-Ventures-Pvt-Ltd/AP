@@ -156,6 +156,64 @@ export const normalizePoLineItem = (item = {}) => ({
   invoiced_quantity: item.invoiced_quantity ?? item.invoicedQuantity ?? 0,
 });
 
+export const getPoReferenceDocumentName = (po = {}) => {
+  const source = po || {};
+  return source.reference_document_name ??
+  source.referenceDocumentName ??
+  source.referenceDocument?.name ??
+  source.reference_document?.name ??
+  source.fileName ??
+  source.file_name ??
+  "";
+};
+
+export const getPoReferenceDocumentUrl = (po = {}) => {
+  const source = po || {};
+  return source.referenceDocumentUrl ??
+  source.reference_document_url ??
+  source.reference_document_download_url ??
+  source.referenceDocumentDownloadUrl ??
+  source.reference_document_file_url ??
+  source.referenceDocumentFileUrl ??
+  source.reference_file_url ??
+  source.referenceFileUrl ??
+  source.reference_url ??
+  source.referenceUrl ??
+  source.source_document_url ??
+  source.sourceDocumentUrl ??
+  source.uploaded_document_url ??
+  source.uploadedDocumentUrl ??
+  source.documentUrl ??
+  source.document_url ??
+  source.fileUrl ??
+  source.file_url ??
+  source.url ??
+  source.referenceDocument?.url ??
+  source.referenceDocument?.downloadUrl ??
+  source.referenceDocument?.download_url ??
+  source.referenceDocument?.fileUrl ??
+  source.referenceDocument?.file_url ??
+  source.reference_document?.url ??
+  source.reference_document?.downloadUrl ??
+  source.reference_document?.download_url ??
+  source.reference_document?.fileUrl ??
+  source.reference_document?.file_url ??
+  "";
+};
+
+export const getPoReferenceDocumentS3Key = (po = {}) => {
+  const source = po || {};
+  return source.reference_document_s3_key ??
+  source.referenceDocumentS3Key ??
+  source.reference_document_key ??
+  source.referenceDocumentKey ??
+  source.referenceDocument?.s3Key ??
+  source.referenceDocument?.s3_key ??
+  source.reference_document?.s3Key ??
+  source.reference_document?.s3_key ??
+  "";
+};
+
 export const normalizePurchaseOrder = (po = {}) => ({
   ...po,
   id: po.id ?? po.poId ?? po.po_id ?? po.purchaseOrderId ?? po.purchase_order_id,
@@ -188,9 +246,10 @@ export const normalizePurchaseOrder = (po = {}) => ({
   vendor_branch_code: po.vendor_branch_code ?? po.vendorBranchCode ?? '',
   vendor_branch_gstin: po.vendor_branch_gstin ?? po.vendorBranchGstin ?? '',
   reference_document_type: po.reference_document_type ?? po.referenceDocumentType ?? '',
-  reference_document_no: po.reference_document_no ?? po.referenceDocumentNo ?? '',
   reference_document_id: po.reference_document_id ?? po.referenceDocumentId ?? '',
-  reference_document_name: po.reference_document_name ?? po.referenceDocumentName ?? '',
+  reference_document_name: getPoReferenceDocumentName(po),
+  reference_document_url: getPoReferenceDocumentUrl(po),
+  reference_document_s3_key: getPoReferenceDocumentS3Key(po),
   po_date: po.po_date ?? po.poDate,
   valid_till: po.valid_till ?? po.validTill ?? "",
   expected_delivery_date: po.expected_delivery_date ?? po.expectedDeliveryDate,
@@ -307,7 +366,6 @@ export const buildCreatePurchaseOrderPayload = (
     vendorBranchCode: form.vendor_branch_code || null,
     vendorBranchGstin: form.vendor_branch_gstin || null,
     referenceDocumentType: form.reference_document_type || null,
-    referenceDocumentNo: form.reference_document_no || null,
     referenceDocumentId: form.reference_document_id || null,
     referenceDocumentName: form.reference_document_name || null,
     formatConfigId: form.po_format_id || null,

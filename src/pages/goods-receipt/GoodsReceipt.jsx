@@ -15,6 +15,7 @@ import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useCreditErrorHandler } from '../../contexts/CreditErrorContext';
 import { useRBAC } from '../../contexts/RBACContext';
 import useForeignCurrencyInrConversionSubscription from '../../hooks/useForeignCurrencyInrConversionSubscription';
+import usePaymentTermsSubscription from '../../hooks/usePaymentTermsSubscription';
 import {
   getInrConversionValidationError,
   isForeignCurrency,
@@ -88,6 +89,10 @@ import {
   normalizePurchaseOrder,
   validateGrnLineItems,
 } from './utils';
+import {
+  getPaymentScheduleSummary,
+  validatePaymentScheduleRows,
+} from '../purchase-orders/utils/poPaymentSchedule';
 import { clearNotificationQueryParams } from '../../utils/notificationQueryParams';
 
 const getGrnId = (grn) => grn?.id || grn?.grn_id || grn?.grnId;
@@ -153,6 +158,15 @@ const getExtractStatus = (payload = {}) =>
 
 const isExtractJobPending = (status = '') =>
   ['PROCESSING', 'PENDING', 'IN_PROGRESS', 'QUEUED', 'RUNNING'].includes(String(status).toUpperCase());
+
+const getGrnPaymentScheduleTotal = (form = {}) =>
+  (form.line_items || []).reduce((sum, line) => {
+    const lineAmount =
+      Number(line.line_amount) ||
+      (Number(line.received_quantity) || 0) * (Number(line.unit_price) || 0);
+    const taxAmount = (lineAmount * (Number(line.gst_rate) || 0)) / 100;
+    return sum + lineAmount + taxAmount;
+  }, 0);
 
 const normalizeUploadedGrnLineItem = (item = {}) => {
   const receivedQty = Number(
@@ -220,6 +234,7 @@ const GoodsReceipt = () => {
   const { handleCreditError } = useCreditErrorHandler();
   const { isCorporateScreenAllowed, isCorporateSectionEnabled } = useRBAC();
   const { isForeignCurrencyInrConversionEnabled } = useForeignCurrencyInrConversionSubscription();
+  const { isPaymentTermsEnabled } = usePaymentTermsSubscription();
   const { setHideSidebar } = useSidebar();
 
   const hasPiSubscription = useProformaInvoiceSubscription().isPiSubscriptionEnabled;
@@ -470,6 +485,26 @@ const GoodsReceipt = () => {
     }
   };
 
+  const validatePaymentSchedule = (form) => {
+    if (!isPaymentTermsEnabled) return true;
+    const paymentSchedule = form.paymentSchedule || [];
+    const scheduleErrors = validatePaymentScheduleRows(paymentSchedule);
+    if (scheduleErrors.length > 0) {
+      toast.error(scheduleErrors[0]);
+      return false;
+    }
+
+    const summary = getPaymentScheduleSummary(
+      paymentSchedule,
+      getGrnPaymentScheduleTotal(form),
+    );
+    if (paymentSchedule.length > 0 && Math.abs(summary.difference) > 0.009) {
+      toast.error('Payment Schedule total must match the document gross total.');
+      return false;
+    }
+    return true;
+  };
+
   const resetCreateState = () => {
     setGrnForm(createDefaultGrnForm(activeFormatId));
     setSelectedPo(null);
@@ -610,10 +645,12 @@ const GoodsReceipt = () => {
       toast.error(conversionError);
       return;
     }
+    if (!validatePaymentSchedule(grnForm)) return;
 
     const payload = buildCreateGrnPayload(grnForm, {
       formatConfig: selectedFormat,
       qcEnabled: selectedFormat.qc_enabled,
+      includePaymentSchedule: isPaymentTermsEnabled,
     });
 
     try {
@@ -811,6 +848,7 @@ const GoodsReceipt = () => {
       toast.error(conversionError);
       return;
     }
+    if (!validatePaymentSchedule(draftGrn)) return;
 
     const payload = buildCreateGrnPayload(
       {
@@ -820,6 +858,7 @@ const GoodsReceipt = () => {
       {
         formatConfig: selectedFormat,
         qcEnabled: selectedFormat.qc_enabled,
+        includePaymentSchedule: isPaymentTermsEnabled,
       },
     );
 

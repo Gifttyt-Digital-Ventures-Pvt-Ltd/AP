@@ -493,7 +493,25 @@ export const toPaymentCreateApiPayload = (payment = {}) => {
 
 export const toRecordPaymentsApiPayload = (payment = {}) => {
   const invoiceNumbers = payment.invoice_numbers ?? payment.invoiceNumbers;
+  const items = Array.isArray(payment.items)
+    ? payment.items
+        .map((item = {}) => ({
+          sourceType: item.sourceType ?? item.source_type ?? 'INVOICE',
+          ...(item.invoiceId || item.invoice_id
+            ? { invoiceId: item.invoiceId ?? item.invoice_id }
+            : {}),
+          ...(item.obligationId || item.obligation_id
+            ? { obligationId: item.obligationId ?? item.obligation_id }
+            : {}),
+          ...(item.advanceId || item.advance_id
+            ? { advanceId: item.advanceId ?? item.advance_id }
+            : {}),
+          netPayableAmount: Number(item.netPayableAmount ?? item.net_payable_amount ?? 0),
+        }))
+        .filter((item) => item.invoiceId || item.obligationId || item.advanceId)
+    : [];
   const payload = {
+    ...(items.length > 0 ? { items } : {}),
     invoiceNumbers: Array.isArray(invoiceNumbers)
       ? invoiceNumbers.filter(Boolean)
       : [],
