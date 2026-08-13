@@ -5,7 +5,7 @@ import React, {
   createContext,
   useContext,
 } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router";
 import { useAuth } from "../contexts/AuthContext";
 import { useLogoutConfirmation } from "../contexts/LogoutConfirmationContext";
 import { useRBAC } from "../contexts/RBACContext";

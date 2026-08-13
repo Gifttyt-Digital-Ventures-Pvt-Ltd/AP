@@ -1,5 +1,5 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { Plug } from "lucide-react";
 
 import { useGetApIntegrationSummaryQuery } from "../../../Services/apis/integrationsApi";

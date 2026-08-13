@@ -6,7 +6,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams } from "react-router";
 import { useSidebar } from "../../components/Layout";
 import {
   useGetVendorsQuery,
