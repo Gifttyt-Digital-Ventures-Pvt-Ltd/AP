@@ -561,6 +561,15 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
   const category = categoryEnabled ? resolveInvoiceCategoryPayload(invoice) : undefined;
   const normalizedSource = source;
   const dueDate = toLocalDateTimeString(pickInvoiceField(invoice, "dueDate", "due_date", ""));
+  const resolvedDocumentType = pickInvoiceField(
+    invoice,
+    "documentType",
+    "document_type",
+    "TAX_INVOICE",
+  );
+  const fundingAllowed = resolvedDocumentType === "TAX_INVOICE";
+  const resolvedIsFunded =
+    fundingAllowed && Boolean(pickInvoiceField(invoice, "isFunded", "is_funded", false));
 
   return {
     invoiceNumber: pickInvoiceField(invoice, "invoiceNumber", "invoice_number", ""),
@@ -580,11 +589,11 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
       pickInvoiceField(invoice, "invoiceDate", "invoice_date", ""),
     ),
     dueDate: dueDate || null,
-    isFunded: Boolean(pickInvoiceField(invoice, "isFunded", "is_funded", false)),
-    orgAmount: Boolean(pickInvoiceField(invoice, "isFunded", "is_funded", false))
+    isFunded: resolvedIsFunded,
+    orgAmount: resolvedIsFunded
       ? toNullableMoney(pickInvoiceField(invoice, "orgAmount", "org_amount", null))
       : null,
-    financierAmount: Boolean(pickInvoiceField(invoice, "isFunded", "is_funded", false))
+    financierAmount: resolvedIsFunded
       ? toNullableMoney(
           pickInvoiceField(invoice, "financierAmount", "financier_amount", null),
         )
@@ -663,7 +672,7 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
       pickInvoiceField(invoice, "matchingGrnNumber", "matching_grn_number") ??
       pickInvoiceField(invoice, "grnNumber", "grn_number", null),
     matchingId: pickInvoiceField(invoice, "matchingId", "matching_id", ""),
-    documentType: pickInvoiceField(invoice, "documentType", "document_type", "TAX_INVOICE"),
+    documentType: resolvedDocumentType,
     ...(pickInvoiceField(invoice, "linkedProformaInvoiceId", "linked_proforma_invoice_id")
       ? {
           linkedProformaInvoiceId: pickInvoiceField(

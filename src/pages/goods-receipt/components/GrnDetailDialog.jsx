@@ -123,6 +123,9 @@ const getGrnDocumentTotal = (source = {}) => {
   }, 0);
 };
 
+const isPaymentScheduleAvailable = (source = {}) =>
+  source?.paymentScheduleAvailable === true;
+
 const mergeHistoryEntries = (...historyLists) =>
   historyLists
     .flat()
@@ -155,6 +158,8 @@ const GrnDetailDialog = ({
   const { isPaymentTermsEnabled } = usePaymentTermsSubscription();
   const grnId = grn?.id || grn?.grn_id || grn?.grnId;
   const hasEmbeddedPaymentSchedule = normalizePaymentScheduleRows(grn || {}).length > 0;
+  const grnPaymentScheduleAvailable =
+    isPaymentScheduleAvailable(grn || {}) || hasEmbeddedPaymentSchedule;
   const {
     data: grnHistory = [],
     isLoading: loadingGrnHistory,
@@ -166,14 +171,20 @@ const GrnDetailDialog = ({
     isFetching: loadingPaymentSchedule,
   } = useGetDocumentPaymentScheduleQuery(
     { documentType: 'GRN', documentId: grnId },
-    { skip: !open || !grnId || !isPaymentTermsEnabled },
+    { skip: !open || !grnId || !isPaymentTermsEnabled || !grnPaymentScheduleAvailable },
   );
   const {
     data: paymentScheduleHistory = [],
     isLoading: loadingPaymentScheduleHistory,
   } = useGetDocumentPaymentScheduleHistoryQuery(
     { documentType: 'GRN', documentId: grnId },
-    { skip: !open || !grnId || (!isPaymentTermsEnabled && !hasEmbeddedPaymentSchedule) },
+    {
+      skip:
+        !open ||
+        !grnId ||
+        !grnPaymentScheduleAvailable ||
+        (!isPaymentTermsEnabled && !hasEmbeddedPaymentSchedule),
+    },
   );
   const [updateDocumentPaymentSchedule, { isLoading: savingPaymentSchedule }] =
     useUpdateDocumentPaymentScheduleMutation();
@@ -204,13 +215,17 @@ const GrnDetailDialog = ({
     const fetchedRows = normalizePaymentScheduleRows(documentScheduleSource || {});
     return fetchedRows.length ? fetchedRows : normalizePaymentScheduleRows(grn || {});
   }, [documentScheduleSource, grn]);
+  const documentScheduleAvailable =
+    isPaymentScheduleAvailable(documentScheduleSource || {}) ||
+    grnPaymentScheduleAvailable ||
+    grnScheduleRows.length > 0;
   const combinedHistory = useMemo(
     () => mergeHistoryEntries(grnHistory, paymentScheduleHistory),
     [grnHistory, paymentScheduleHistory],
   );
   const documentGrossTotal = getGrnDocumentTotal(documentScheduleSource) || getGrnDocumentTotal(grn);
   const canEditPaymentSchedule =
-    Boolean(isPaymentTermsEnabled && grnId) &&
+    Boolean(isPaymentTermsEnabled && grnId && documentScheduleAvailable && grnScheduleRows.length > 0) &&
     ![GRN_STATUS.CANCELLED, GRN_STATUS.REJECTED].includes(grn?.status);
 
   const isEditable =
@@ -544,7 +559,7 @@ const GrnDetailDialog = ({
                 </div>
               )}
 
-              {!editMode && (grnScheduleRows.length || canEditPaymentSchedule || loadingPaymentSchedule) && (
+              {!editMode && (documentScheduleAvailable || grnScheduleRows.length || loadingPaymentSchedule) && (
                 <div className="space-y-2">
                   {canEditPaymentSchedule ? (
                     <div className="flex justify-end">
@@ -571,6 +586,11 @@ const GrnDetailDialog = ({
                       formatCurrency={(amount) => formatCurrency(amount, grn.currency)}
                       readOnly
                     />
+                  ) : null}
+                  {documentScheduleAvailable && !loadingPaymentSchedule && grnScheduleRows.length === 0 ? (
+                    <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+                      Payment Schedule is available for this matched GRN, but schedule rows were not returned.
+                    </div>
                   ) : null}
                 </div>
               )}

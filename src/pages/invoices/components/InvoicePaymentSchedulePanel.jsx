@@ -54,12 +54,18 @@ const getDocumentGrossTotal = (document = {}, invoice = {}) =>
     ),
   ) || 0;
 
+const isPaymentScheduleAvailable = (source = {}) =>
+  source?.paymentScheduleAvailable === true;
+
 const InvoicePaymentSchedulePanel = ({ invoice }) => {
   const documentId = getInvoiceId(invoice);
   const documentType = isProformaInvoice(invoice) ? "PI" : "TI";
   const { isPaymentTermsEnabled } = usePaymentTermsSubscription();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draftRows, setDraftRows] = useState([]);
+  const invoiceRows = useMemo(() => normalizePaymentScheduleRows(invoice || {}), [invoice]);
+  const invoiceScheduleAvailable =
+    isPaymentScheduleAvailable(invoice || {}) || invoiceRows.length > 0;
   const {
     data: documentScheduleData,
     isFetching: loadingSchedule,
@@ -67,7 +73,7 @@ const InvoicePaymentSchedulePanel = ({ invoice }) => {
     refetch,
   } = useGetDocumentPaymentScheduleQuery(
     { documentType, documentId },
-    { skip: !isPaymentTermsEnabled || !documentId },
+    { skip: !isPaymentTermsEnabled || !documentId || !invoiceScheduleAvailable },
   );
   const [updatePaymentSchedule, { isLoading: saving }] =
     useUpdateDocumentPaymentScheduleMutation();
@@ -90,8 +96,11 @@ const InvoicePaymentSchedulePanel = ({ invoice }) => {
     () => normalizePaymentScheduleRows(documentScheduleSource || {}),
     [documentScheduleSource],
   );
-  const invoiceRows = useMemo(() => normalizePaymentScheduleRows(invoice || {}), [invoice]);
   const scheduleRows = documentRows.length ? documentRows : invoiceRows;
+  const documentScheduleAvailable =
+    isPaymentScheduleAvailable(documentScheduleSource || {}) ||
+    invoiceScheduleAvailable ||
+    scheduleRows.length > 0;
   const documentGrossTotal = getDocumentGrossTotal(documentScheduleSource || {}, invoice || {});
   const currency = normalizeCurrencyCode(
     firstValue(
@@ -102,7 +111,9 @@ const InvoicePaymentSchedulePanel = ({ invoice }) => {
       invoice?.currency_code,
     ) || "INR",
   );
-  const canEditSchedule = Boolean(isPaymentTermsEnabled && documentId);
+  const canEditSchedule = Boolean(
+    isPaymentTermsEnabled && documentId && documentScheduleAvailable && scheduleRows.length > 0,
+  );
 
   useEffect(() => {
     if (!dialogOpen) return;
@@ -110,7 +121,7 @@ const InvoicePaymentSchedulePanel = ({ invoice }) => {
   }, [dialogOpen, scheduleRows]);
 
   if (!documentId && scheduleRows.length === 0) return null;
-  if (!canEditSchedule && scheduleRows.length === 0 && !loadingSchedule) return null;
+  if (!documentScheduleAvailable && scheduleRows.length === 0 && !loadingSchedule) return null;
 
   const handleSave = async () => {
     const scheduleErrors = validatePaymentScheduleRows(draftRows);
@@ -145,7 +156,7 @@ const InvoicePaymentSchedulePanel = ({ invoice }) => {
         <div>
           <h3 className="text-sm font-semibold text-gray-800">Payment Schedule</h3>
           <p className="text-xs text-muted-foreground">
-            Sourced from this {documentType} document. Backend handles cross-module propagation.
+            Propagated from the matched PO schedule.
           </p>
         </div>
         {canEditSchedule ? (
@@ -178,6 +189,12 @@ const InvoicePaymentSchedulePanel = ({ invoice }) => {
         </div>
       ) : null}
 
+      {documentScheduleAvailable && !loadingSchedule && scheduleRows.length === 0 ? (
+        <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
+          Payment Schedule is available for this matched document, but schedule rows were not returned.
+        </div>
+      ) : null}
+
       {scheduleRows.length ? (
         <PoPaymentScheduleSection
           rows={scheduleRows}
@@ -192,7 +209,7 @@ const InvoicePaymentSchedulePanel = ({ invoice }) => {
           <DialogHeader>
             <DialogTitle>Edit Payment Schedule</DialogTitle>
             <DialogDescription>
-              Update this document's payment schedule. Backend propagation remains authoritative across modules.
+              Update the matched document schedule. Backend propagation remains authoritative across modules.
             </DialogDescription>
           </DialogHeader>
           <PoPaymentScheduleSection

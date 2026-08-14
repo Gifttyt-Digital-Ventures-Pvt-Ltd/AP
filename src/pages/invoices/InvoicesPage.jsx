@@ -250,6 +250,11 @@ const isInvoiceCancellable = (invoice = {}) => {
   return capability === true;
 };
 
+const isCancelledInvoiceStatus = (status) => {
+  const normalized = String(status || "").trim().toUpperCase().replace(/\s+/g, "_");
+  return normalized === "CANCELLED" || normalized === "CANCELED";
+};
+
 const createEmptyInvoiceColumnFilters = () => ({
   vendorIds: [],
   branches: [],
@@ -1991,10 +1996,12 @@ const InvoicesPage = () => {
   };
 
   const validateFundingSplit = (payload, totals) => {
+    const isTaxInvoiceDocument =
+      (payload?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE) === DOCUMENT_TYPE.TAX_INVOICE;
     const fundingError = getInvoiceFundingSplitError(
       payload,
       totals?.total ?? calculateInvoiceDataTotals(payload)?.total,
-      { enabled: showInvoiceFunding },
+      { enabled: showInvoiceFunding && isTaxInvoiceDocument },
     );
     if (!fundingError) return true;
     toast.error(fundingError);
@@ -2032,26 +2039,31 @@ const InvoicesPage = () => {
     return validateMandatoryPayload(payload);
   };
 
-  const canSubmitSavedDraft = (payload) =>
-    Boolean(payload?.vendorName?.trim()) &&
-    (Boolean(payload?.vendorId) || Boolean(payload?.vendorRequestSubmitted)) &&
-    isInvoiceFundingSplitValid(
-      payload,
-      calculateInvoiceDataTotals(payload)?.total,
-      { enabled: showInvoiceFunding },
-    ) &&
-    !getInrConversionValidationError({
-      currency: payload.currency,
-      enabled: isForeignCurrencyInrConversionEnabled,
-      convertToInr: payload.convertToInr,
-      matchingInrValue: payload.matchingInrValue,
-    }) &&
-    !invoiceMandatoryFieldsLoading &&
-    isInvoiceMandatoryFieldsSatisfied(
-      payload,
-      invoiceMandatoryFields,
-      mandatoryFieldOptions,
+  const canSubmitSavedDraft = (payload) => {
+    const isTaxInvoiceDocument =
+      (payload?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE) === DOCUMENT_TYPE.TAX_INVOICE;
+    return (
+      Boolean(payload?.vendorName?.trim()) &&
+      (Boolean(payload?.vendorId) || Boolean(payload?.vendorRequestSubmitted)) &&
+      isInvoiceFundingSplitValid(
+        payload,
+        calculateInvoiceDataTotals(payload)?.total,
+        { enabled: showInvoiceFunding && isTaxInvoiceDocument },
+      ) &&
+      !getInrConversionValidationError({
+        currency: payload.currency,
+        enabled: isForeignCurrencyInrConversionEnabled,
+        convertToInr: payload.convertToInr,
+        matchingInrValue: payload.matchingInrValue,
+      }) &&
+      !invoiceMandatoryFieldsLoading &&
+      isInvoiceMandatoryFieldsSatisfied(
+        payload,
+        invoiceMandatoryFields,
+        mandatoryFieldOptions,
+      )
     );
+  };
 
   const buildUpdateInvoiceBody = (data, { keepSaved = false } = {}) => {
     const totals = calculateTotals(data.lineItems, data.currency);
@@ -2699,6 +2711,11 @@ const InvoicesPage = () => {
   const handleSaveInvoiceFunding = async (invoice, fundingPayload) => {
     if (!canEditInvoiceFunding) {
       toast.error("You do not have permission to edit invoice funding");
+      return false;
+    }
+
+    if (isCancelledInvoiceStatus(invoice?.status)) {
+      toast.error("Cancelled invoices cannot be funded");
       return false;
     }
 

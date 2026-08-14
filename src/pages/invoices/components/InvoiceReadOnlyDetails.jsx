@@ -66,6 +66,11 @@ const DetailField = ({ label, value, mono = false, className = "" }) => (
   </div>
 );
 
+const isCancelledInvoiceStatus = (status) => {
+  const normalized = String(status || "").trim().toUpperCase().replace(/\s+/g, "_");
+  return normalized === "CANCELLED" || normalized === "CANCELED";
+};
+
 const computeTdsAmount = (lineItems = [], tdsValue = "", subTotalOverride, tdsRateOverride = null) => {
   const tdsRate = resolveTdsRate(tdsValue, tdsRateOverride);
   if (!tdsRate) return 0;
@@ -165,6 +170,12 @@ const InvoiceReadOnlyDetails = ({
   const msmePaymentDue = normalizeMsmePaymentDue(invoice);
   const invoiceCurrency = normalizeCurrencyCode(formData.currency);
   const isFunded = Boolean(formData.isFunded ?? invoice?.isFunded ?? invoice?.is_funded);
+  const effectiveShowInvoiceFunding = Boolean(
+    showInvoiceFunding && !isProformaInvoice(invoice),
+  );
+  const canEditFundingForInvoice = Boolean(
+    canEditInvoiceFunding && !isCancelledInvoiceStatus(invoice?.status),
+  );
   const orgAmount = Number(formData.orgAmount ?? invoice?.orgAmount ?? invoice?.org_amount ?? 0) || 0;
   const financierAmount =
     Number(formData.financierAmount ?? invoice?.financierAmount ?? invoice?.financier_amount ?? 0) || 0;
@@ -574,7 +585,7 @@ const InvoiceReadOnlyDetails = ({
           )}
         </div>
 
-        {showInvoiceFunding ? (
+        {effectiveShowInvoiceFunding ? (
           <div className="rounded-lg border border-border bg-muted/20 p-3">
             <div className="mb-2 flex items-center justify-between gap-3">
               <h3 className="text-sm font-semibold text-gray-800">Funding</h3>
@@ -582,7 +593,7 @@ const InvoiceReadOnlyDetails = ({
                 <Badge variant={isFunded ? "default" : "secondary"}>
                   {isFunded ? "Funded" : "Non-Funded"}
                 </Badge>
-                {canEditInvoiceFunding ? (
+                {canEditFundingForInvoice ? (
                   <Button
                     type="button"
                     variant="outline"

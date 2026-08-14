@@ -596,7 +596,7 @@ const PoFormDialog = ({
                       <Input
                         value={poForm.po_number || ''}
                         onChange={(e) => setPoForm((prev) => ({ ...prev, po_number: e.target.value }))}
-                        placeholder="As on vendor PO"
+                        placeholder="Enter Po Number"
                         className={inputClassName}
                         data-testid="upload-po-number-input"
                       />
