@@ -93,6 +93,16 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
         normalizePaginatedListResponse(response, ["payments", "releasedPayments", "released_payments"]),
       providesTags: ["Payments"],
     }),
+    getBankingPortalTransactions: builder.query({
+      query: (params) => ({ url: "/banking/portal-transactions", method: "GET", params }),
+      transformResponse: (response) =>
+        normalizePaginatedListResponse(response, [
+          "transactions",
+          "portalTransactions",
+          "portal_transactions",
+        ]),
+      providesTags: ["Payments", "Banking"],
+    }),
     getPayment: builder.query({
       query: (id) => ({ url: `/payments/${id}`, method: "GET" }),
       transformResponse: (response) => response?.payment ?? response?.data ?? response,
@@ -221,6 +231,7 @@ export const {
   useGetPayablesQuery,
   useGetPayablesSummaryQuery,
   useGetReleasedPaymentsQuery,
+  useGetBankingPortalTransactionsQuery,
   useGetPaymentQuery,
   useLazyGetPaymentQuery,
   useCreatePaymentMutation,

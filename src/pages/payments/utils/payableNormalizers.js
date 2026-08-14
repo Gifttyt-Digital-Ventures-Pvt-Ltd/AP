@@ -133,10 +133,21 @@ const getBasePayable = (row = {}, options = {}) => {
     firstValue(row.sourceType, row.source_type, row.payableType, row.payable_type, row.type),
   );
   const triggerStage = normalizeTriggerStage(firstValue(row.triggerStage, row.trigger_stage));
+  const rawSourceId = firstValue(row.sourceId, row.source_id);
   const invoiceId = firstValue(row.invoiceId, row.invoice_id, sourceType === "INVOICE" ? row.id : undefined);
-  const obligationId = firstValue(row.obligationId, row.obligation_id);
-  const advanceId = firstValue(row.advanceId, row.advance_id);
-  const sourceId = firstValue(row.sourceId, row.source_id, invoiceId, obligationId, advanceId, row.id);
+  const obligationId = firstValue(
+    row.obligationId,
+    row.obligation_id,
+    sourceType === "OBLIGATION" ? rawSourceId : undefined,
+    sourceType === "OBLIGATION" ? row.id : undefined,
+  );
+  const advanceId = firstValue(
+    row.advanceId,
+    row.advance_id,
+    sourceType === "ADVANCE" ? rawSourceId : undefined,
+    sourceType === "ADVANCE" ? row.id : undefined,
+  );
+  const sourceId = firstValue(rawSourceId, invoiceId, obligationId, advanceId, row.id);
   const payableKey = firstValue(
     row.payableKey,
     row.payable_key,
@@ -190,6 +201,7 @@ const getBasePayable = (row = {}, options = {}) => {
     ...row,
     id: firstValue(row.id, payableKey, sourceId),
     payableKey,
+    sourceId,
     sourceType,
     isAdvance: Boolean(
       row.isAdvance ??

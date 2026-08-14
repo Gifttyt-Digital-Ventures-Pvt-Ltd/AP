@@ -435,6 +435,16 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
     );
   };
 
+  const getSelectedBeneficiaryPayload = () =>
+    (payrun.invoices || []).map((invoice) => {
+      const selectedBeneficiary = getSelectedBeneficiaryForInvoice(invoice) || {};
+      return {
+        invoiceId: invoice.invoiceId || invoice.invoice_id || invoice.id,
+        payrunItemId: invoice.payrunItemId || invoice.payrun_item_id,
+        beneficiaryAccountId: selectedBeneficiary.id,
+      };
+    });
+
   const hasReleaseInvoices = Array.isArray(payrun.invoices) && payrun.invoices.length > 0;
   const canContinueReleaseStep =
     (step === 1 && hasReleaseInvoices) || (step === 2 && hasEligibleBankAccount && selectedAccount && !isBalanceFetching);
@@ -483,6 +493,7 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
         paymentMode: mode,
         amount: Number(payrun.totalAmount || 0),
         currency: payrunCurrency,
+        beneficiaries: getSelectedBeneficiaryPayload(),
       };
       const response = resend
         ? await resendReleaseOtp({ ...payload, otpRequestId }).unwrap()
@@ -525,6 +536,7 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
         paymentMode: mode,
         otpRequestId,
         otp: otp.trim(),
+        beneficiaries: getSelectedBeneficiaryPayload(),
       }).unwrap();
     } catch (error) {
       toast.error(error?.data?.message || error?.data?.detail || 'Failed to release payment');

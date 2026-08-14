@@ -757,6 +757,10 @@ export const InvoiceForm = ({
       : "min-w-[1040px]";
   const formatAmount = (amount) => formatCurrency(amount, invoiceCurrency);
   const totals = calculateTotals(formData?.lineItems || [], invoiceCurrency);
+  const isTaxInvoiceDocument =
+    normalizeDocumentType(formData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE) ===
+    DOCUMENT_TYPE.TAX_INVOICE;
+  const effectiveShowInvoiceFunding = Boolean(showInvoiceFunding && isTaxInvoiceDocument);
   const fundingInvoiceTotal = Math.max(Number(totals?.total) || 0, 0);
   const roundFundingAmount = (value) =>
     Math.round((Number(value) || 0) * 100) / 100;
@@ -787,7 +791,7 @@ export const InvoiceForm = ({
   const fundingSplitError = getInvoiceFundingSplitError(
     formData,
     fundingInvoiceTotal,
-    { enabled: showInvoiceFunding },
+    { enabled: effectiveShowInvoiceFunding },
   );
 
   const { data: eligiblePis = [] } = useGetEligiblePisForGrnQuery(undefined, {
@@ -962,7 +966,13 @@ export const InvoiceForm = ({
       ...prev,
       documentType,
       ...(documentType === DOCUMENT_TYPE.PROFORMA_INVOICE
-        ? { linkedProformaInvoiceId: "", linkedProformaInvoiceNumber: "" }
+        ? {
+            linkedProformaInvoiceId: "",
+            linkedProformaInvoiceNumber: "",
+            isFunded: false,
+            orgAmount: "",
+            financierAmount: "",
+          }
         : {}),
     }));
   };
@@ -2166,7 +2176,7 @@ export const InvoiceForm = ({
               </div>
             </div>
 
-            {showInvoiceFunding ? (
+            {effectiveShowInvoiceFunding ? (
               <div className="rounded-lg border border-border bg-muted/20 p-3">
                 <div className="mb-3 flex items-start justify-between gap-3">
                   <div>

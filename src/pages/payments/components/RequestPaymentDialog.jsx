@@ -173,10 +173,17 @@ const RequestPaymentDialog = ({
             invoice.net_payable_amount ??
             requestedAmount,
           sourceType: invoice.sourceType || 'INVOICE',
+          sourceId: invoice.sourceId || invoice.source_id,
           payableKey: invoice.payableKey,
           invoiceId: invoice.invoiceId || invoice.id,
-          obligationId: invoice.obligationId,
-          advanceId: invoice.advanceId,
+          obligationId:
+            invoice.obligationId ||
+            invoice.obligation_id ||
+            ((invoice.sourceType || 'INVOICE') === 'OBLIGATION' ? invoice.sourceId || invoice.source_id || invoice.id : undefined),
+          advanceId:
+            invoice.advanceId ||
+            invoice.advance_id ||
+            ((invoice.sourceType || 'INVOICE') === 'ADVANCE' ? invoice.sourceId || invoice.source_id || invoice.id : undefined),
           hasAdvanceAdjustment: Boolean(
             invoice.hasAdvanceAdjustment ||
               invoice.advanceAdjustedTotal != null ||
@@ -218,24 +225,34 @@ const RequestPaymentDialog = ({
     onCreate({
       currency: resolvePayrunCurrency(rows),
       remarks,
-      items: rows.map((row) => ({
-        sourceType: row.sourceType || 'INVOICE',
-        ...(row.sourceType === 'OBLIGATION'
-          ? { obligationId: row.obligationId }
-          : row.sourceType === 'ADVANCE'
-            ? { advanceId: row.advanceId }
-            : { invoiceId: row.invoiceId || row.id }),
-        invoiceNumber: row.invoiceNumber,
-        currency: getPaymentCurrency(row),
-        requestedAmount: Number(row.requestedAmount || 0),
-        netPayableAmount: Number(row.requestedAmount || 0),
-        holdGst: row.holdGst,
-        gstAmount: row.holdGst ? Number(row.gstAmount || 0) : 0,
-        paymentAmount: getPaymentAmount(row),
-        ...(row.convertToInr
-          ? { actualInrAmount: Number(row.requestedAmount || 0) }
-          : {}),
-      })),
+      items: rows.map((row) => {
+        const sourceType = row.sourceType || 'INVOICE';
+        const sourceId =
+          row.sourceId ||
+          (sourceType === 'OBLIGATION' ? row.obligationId : undefined) ||
+          (sourceType === 'ADVANCE' ? row.advanceId : undefined) ||
+          row.invoiceId ||
+          row.id;
+
+        return {
+          sourceType,
+          ...(sourceType === 'OBLIGATION'
+            ? { sourceId, obligationId: row.obligationId || sourceId }
+            : sourceType === 'ADVANCE'
+              ? { sourceId, advanceId: row.advanceId || sourceId }
+              : { invoiceId: row.invoiceId || row.id }),
+          invoiceNumber: row.invoiceNumber,
+          currency: getPaymentCurrency(row),
+          requestedAmount: Number(row.requestedAmount || 0),
+          netPayableAmount: Number(row.requestedAmount || 0),
+          holdGst: row.holdGst,
+          gstAmount: row.holdGst ? Number(row.gstAmount || 0) : 0,
+          paymentAmount: getPaymentAmount(row),
+          ...(row.convertToInr
+            ? { actualInrAmount: Number(row.requestedAmount || 0) }
+            : {}),
+        };
+      }),
     });
   };
 

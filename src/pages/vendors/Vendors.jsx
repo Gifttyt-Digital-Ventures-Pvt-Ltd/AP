@@ -329,6 +329,7 @@ const buildVendorViewData = (vendor) => {
     vendor.branch_details ??
     [];
   return {
+    ...vendor,
     id: vendor.id ?? vendor.vendorId,
     vendorId: vendor.vendorId ?? vendor.id,
     status: vendor.status,
@@ -369,6 +370,9 @@ const buildVendorViewData = (vendor) => {
     ),
   };
 };
+
+const getVendorRecordId = (vendor = {}) =>
+  vendor.id ?? vendor.vendor_id ?? vendor.vendorId;
 
 const Vendors = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -530,6 +534,34 @@ const Vendors = () => {
       toast.error("Failed to load vendors");
     }
   }, [vendorsError]);
+
+  const fetchVendorDetails = useCallback(
+    async (vendor) => {
+      const vendorId = getVendorRecordId(vendor);
+      if (!vendorId) return vendor;
+      try {
+        const details = await getVendor(vendorId).unwrap();
+        return details ? { ...vendor, ...details } : vendor;
+      } catch {
+        return vendor;
+      }
+    },
+    [getVendor],
+  );
+
+  const handleViewVendor = useCallback(
+    async (vendor) => {
+      const vendorId = getVendorRecordId(vendor);
+      setViewingVendor(vendor);
+      const details = await fetchVendorDetails(vendor);
+      setViewingVendor((current) =>
+        String(getVendorRecordId(current) ?? "") === String(vendorId ?? "")
+          ? details
+          : current,
+      );
+    },
+    [fetchVendorDetails],
+  );
 
   useEffect(() => {
     if (!vendorUploadOptionOpen) return undefined;
@@ -1039,8 +1071,9 @@ const Vendors = () => {
     return true;
   };
 
-  const handleEdit = (vendor) => {
-    if (!loadVendorIntoForm(vendor)) return;
+  const handleEdit = async (vendor) => {
+    const vendorDetails = await fetchVendorDetails(vendor);
+    if (!loadVendorIntoForm(vendorDetails)) return;
     setViewVendorEditMode(true);
   };
 
@@ -1409,7 +1442,7 @@ const Vendors = () => {
       <TableRow
         key={vendorId}
         className="cursor-pointer border-b border-border transition-colors hover:bg-muted/50"
-        onClick={() => setViewingVendor(vendor)}
+        onClick={() => handleViewVendor(vendor)}
         data-testid={`vendor-row-${vendor?.id ?? "unknown"}`}
       >
         {headers.map((header) => {
@@ -1646,11 +1679,7 @@ const Vendors = () => {
         onClose={closeViewVendorPage}
         onEdit={
           canEditVendor(viewingVendor, vendorEditContext)
-            ? () => {
-                if (loadVendorIntoForm(viewingVendor)) {
-                  setViewVendorEditMode(true);
-                }
-              }
+            ? () => handleEdit(viewingVendor)
             : undefined
         }
       />

@@ -194,6 +194,9 @@ export const normalizePurchaseOrder = (po = {}) => ({
   matchingInrValue: po.matchingInrValue ?? po.matching_inr_value ?? '',
   total_amount: Number(po.total_amount ?? po.totalAmount ?? 0),
   status: po.status ?? '',
+  paymentScheduleAvailable:
+    po.paymentScheduleAvailable === true || normalizePaymentScheduleRows(po).length > 0,
+  paymentSchedule: normalizePaymentScheduleRows(po),
   shipping_address: po.shipping_address ?? po.shippingAddress ?? '',
   billing_name: po.billing_name ?? po.billingName ?? po.bill_to_name ?? po.billToName ?? '',
   billing_gstin: po.billing_gstin ?? po.billingGstin ?? po.bill_to_gstin ?? po.billToGstin ?? '',
@@ -439,7 +442,10 @@ export const buildCreateGrnPayload = (
     total_received_value: valuationEnabled ? taxableAmount + taxAmount : undefined,
     remarks: form.remarks || undefined,
     ...(includePaymentSchedule
-      ? { paymentSchedule: buildPaymentSchedulePayload(form.paymentSchedule || []) }
+      ? {
+          paymentScheduleAvailable: Boolean(form.paymentScheduleAvailable),
+          paymentSchedule: buildPaymentSchedulePayload(form.paymentSchedule || []),
+        }
       : {}),
     line_items: lineItems,
   };

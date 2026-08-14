@@ -235,13 +235,14 @@ const ViewDialog = ({
   const invoiceIdForFundingHistory =
     selectedInvoice?.id || selectedInvoice?.invoiceId;
   const invoiceCurrency = normalizeCurrencyCode(selectedInvoice?.currency);
+  const selectedIsProformaInvoice = Boolean(selectedInvoice) && isProformaInvoice(selectedInvoice);
+  const effectiveShowInvoiceFunding = Boolean(showInvoiceFunding && !selectedIsProformaInvoice);
   const {
     data: fundingHistory = [],
     isFetching: fundingHistoryLoading,
   } = useGetInvoiceFundingHistoryQuery(invoiceIdForFundingHistory, {
-    skip: !showInvoiceFunding || !invoiceIdForFundingHistory,
+    skip: !effectiveShowInvoiceFunding || !invoiceIdForFundingHistory,
   });
-  const selectedIsProformaInvoice = Boolean(selectedInvoice) && isProformaInvoice(selectedInvoice);
   const accountingObjectType = selectedIsProformaInvoice ? "PI" : "INVOICE";
   const accountingObjectLabel = selectedIsProformaInvoice ? "proforma invoice" : "invoice";
   const renderInvoiceTitle = (titleClassName = "text-2xl", subtitleClassName = "text-xs") => (
@@ -333,7 +334,7 @@ const ViewDialog = ({
                 >
                   <TabsList
                     className={`grid w-full mb-4 ${
-                      showInvoiceFunding ? "grid-cols-3" : "grid-cols-2"
+                      effectiveShowInvoiceFunding ? "grid-cols-3" : "grid-cols-2"
                     }`}
                   >
                     <TabsTrigger value="details">
@@ -344,7 +345,7 @@ const ViewDialog = ({
                       <History className="h-4 w-4 mr-2" />
                       History ({invoiceHistory.length})
                     </TabsTrigger>
-                    {showInvoiceFunding ? (
+                    {effectiveShowInvoiceFunding ? (
                       <TabsTrigger value="funding-history">
                         <Landmark className="h-4 w-4 mr-2" />
                         Funding ({fundingHistory.length})
@@ -373,7 +374,7 @@ const ViewDialog = ({
                           showCampaignField={showCampaignField}
                           isCampaignFeatureEnabled={isCampaignFeatureEnabled}
                           showRefNoField={showRefNoField}
-                          showInvoiceFunding={showInvoiceFunding}
+                          showInvoiceFunding={effectiveShowInvoiceFunding}
                           findVendorByName={findVendorByName}
                           findVendorById={findVendorById}
                           showProformaInvoiceFields={showProformaInvoiceFields}
@@ -410,7 +411,7 @@ const ViewDialog = ({
                       loading={loadingHistory}
                     />
                   </TabsContent>
-                  {showInvoiceFunding ? (
+                  {effectiveShowInvoiceFunding ? (
                     <TabsContent
                       value="funding-history"
                       className="mt-0 flex-1 overflow-y-auto pr-3 scrollbar-thin-muted"

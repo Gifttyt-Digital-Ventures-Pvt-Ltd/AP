@@ -53,6 +53,7 @@ export const paymentSchedulesApi = serviceApi.injectEndpoints({
 
 export const {
   useGetDocumentPaymentScheduleQuery,
+  useLazyGetDocumentPaymentScheduleQuery,
   useGetDocumentPaymentScheduleHistoryQuery,
   useUpdateDocumentPaymentScheduleMutation,
 } = paymentSchedulesApi;

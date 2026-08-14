@@ -577,13 +577,13 @@ const PoDetailsDialog = ({
                     </section>
                   )}
 
-                  <AdvanceContextPanel
+                  {/* <AdvanceContextPanel
                     source={selectedPO}
                     title="PO Advance Context"
                     description="Read-only PO-linked advance summary and history from backend."
                     currency={poCurrency}
                     className="mt-6"
-                  />
+                  /> */}
 
                   <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-[1fr_320px]">
                     {sectionOn("PAYMENT") && (

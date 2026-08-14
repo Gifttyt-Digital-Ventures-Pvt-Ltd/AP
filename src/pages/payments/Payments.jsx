@@ -927,6 +927,7 @@ const Payments = () => {
       payableSelection.clear();
       setRequestPaymentOpen(false);
       setActivePaymentTab('payruns');
+      await refetchPayruns();
       toast.success(`${response?.payrunNumber || response?.payrun_number || 'Payrun'} created`);
     } catch (error) {
       toast.error(error?.data?.detail || error?.data?.message || 'Failed to create payrun');
@@ -1034,15 +1035,25 @@ const Payments = () => {
     const invoiceNumbers = allSelectedRowsInvoiceBacked ? selectedRecordPaymentInvoices
       .map((invoice) => String(invoice.invoiceNumber || '').trim())
       .filter(Boolean) : [];
-    const sourceItems = selectedRecordPaymentInvoices.map((invoice) => ({
-      sourceType: invoice.sourceType || 'INVOICE',
-      ...(invoice.sourceType === 'OBLIGATION'
-        ? { obligationId: invoice.obligationId }
-        : invoice.sourceType === 'ADVANCE'
-          ? { advanceId: invoice.advanceId }
-          : { invoiceId: invoice.invoiceId || invoice.id }),
-      netPayableAmount: Number(invoice.netPayableAmount ?? invoice.amount ?? 0),
-    }));
+    const sourceItems = selectedRecordPaymentInvoices.map((invoice) => {
+      const sourceType = invoice.sourceType || 'INVOICE';
+      const sourceId =
+        invoice.sourceId ||
+        (sourceType === 'OBLIGATION' ? invoice.obligationId : undefined) ||
+        (sourceType === 'ADVANCE' ? invoice.advanceId : undefined) ||
+        invoice.invoiceId ||
+        invoice.id;
+
+      return {
+        sourceType,
+        ...(sourceType === 'OBLIGATION'
+          ? { sourceId, obligationId: invoice.obligationId || sourceId }
+          : sourceType === 'ADVANCE'
+            ? { sourceId, advanceId: invoice.advanceId || sourceId }
+            : { invoiceId: invoice.invoiceId || invoice.id }),
+        netPayableAmount: Number(invoice.netPayableAmount ?? invoice.amount ?? 0),
+      };
+    });
 
     if (sourceItems.length === 0) {
       toast.error('Please select at least one payable row');
@@ -1127,15 +1138,25 @@ const Payments = () => {
         invoice_ids: selectedBatchRows
           .filter((invoice) => (invoice.sourceType || 'INVOICE') === 'INVOICE')
           .map((invoice) => invoice.invoiceId || invoice.id),
-        items: selectedBatchRows.map((invoice) => ({
-          sourceType: invoice.sourceType || 'INVOICE',
-          ...(invoice.sourceType === 'OBLIGATION'
-            ? { obligationId: invoice.obligationId }
-            : invoice.sourceType === 'ADVANCE'
-              ? { advanceId: invoice.advanceId }
-              : { invoiceId: invoice.invoiceId || invoice.id }),
-          netPayableAmount: Number(invoice.netPayableAmount ?? invoice.amount ?? 0),
-        })),
+        items: selectedBatchRows.map((invoice) => {
+          const sourceType = invoice.sourceType || 'INVOICE';
+          const sourceId =
+            invoice.sourceId ||
+            (sourceType === 'OBLIGATION' ? invoice.obligationId : undefined) ||
+            (sourceType === 'ADVANCE' ? invoice.advanceId : undefined) ||
+            invoice.invoiceId ||
+            invoice.id;
+
+          return {
+            sourceType,
+            ...(sourceType === 'OBLIGATION'
+              ? { sourceId, obligationId: invoice.obligationId || sourceId }
+              : sourceType === 'ADVANCE'
+                ? { sourceId, advanceId: invoice.advanceId || sourceId }
+                : { invoiceId: invoice.invoiceId || invoice.id }),
+            netPayableAmount: Number(invoice.netPayableAmount ?? invoice.amount ?? 0),
+          };
+        }),
       };
       if (!isConnectedBankingEnabled) {
         delete batchPayload.bank_account_id;
