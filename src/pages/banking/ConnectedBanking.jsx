@@ -46,7 +46,9 @@ import {
   useValidateBeneficiaryMutation,
 } from "../../Services/apis/connectedBankingApi";
 import { useGetBankingPortalTransactionsQuery } from "../../Services/apis/approvalsPaymentsBankingApi";
+import { useGetVendorsQuery } from "../../Services/apis/invoicesVendorsApi";
 import { useActionGuard } from "../../hooks/useActionGuard";
+import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { toast } from "sonner";
 import BeneficiariesTable from "./components/BeneficiariesTable";
 import BeneficiaryForm from "./components/BeneficiaryForm";
@@ -113,6 +115,16 @@ const getAccountSelectLabel = (account = {}) =>
 
 const BENEFICIARY_PAGE_SIZE = 10;
 const PORTAL_ACTIVITY_PAGE_SIZE = 25;
+const BENEFICIARY_VENDOR_PAGE_SIZE = 20;
+const EMPTY_VENDOR_DIRECTORY = [];
+
+const getVendorOptionKey = (vendor = {}, index = 0, prefix = "") =>
+  String(vendor.id ?? vendor.vendorId ?? vendor.vendor_id ?? `${prefix}${index}`);
+
+const getVendorDirectoryItems = (vendorDirectory) =>
+  Array.isArray(vendorDirectory)
+    ? vendorDirectory.filter(Boolean)
+    : [];
 
 const getVisiblePages = (currentPage, totalPages, maxVisible = 5) => {
   if (totalPages <= 0) return [];
@@ -408,11 +420,15 @@ const ConnectedBanking = () => {
   const [bankingTab, setBankingTab] = useState("activity");
   const [portalActivityPage, setPortalActivityPage] = useState(0);
   const [beneficiaryPage, setBeneficiaryPage] = useState(0);
+  const [beneficiaryVendorSearch, setBeneficiaryVendorSearch] = useState("");
+  const [beneficiaryVendorOffset, setBeneficiaryVendorOffset] = useState(0);
+  const [beneficiaryVendorOptions, setBeneficiaryVendorOptions] = useState([]);
   const { isConnectedBankingEnabled } = useRBAC();
   const { guardAction, canPerformAction } = useActionGuard();
   const skip = !isConnectedBankingEnabled;
   const portalActivityOffset = portalActivityPage * PORTAL_ACTIVITY_PAGE_SIZE;
   const beneficiaryOffset = beneficiaryPage * BENEFICIARY_PAGE_SIZE;
+  const debouncedBeneficiaryVendorSearch = useDebouncedValue(beneficiaryVendorSearch.trim(), 300);
 
   const {
     accounts,
@@ -430,6 +446,17 @@ const ConnectedBanking = () => {
     beneficiaryLimit: BENEFICIARY_PAGE_SIZE,
     beneficiaryOffset,
   });
+  const {
+    data: vendorDirectory = EMPTY_VENDOR_DIRECTORY,
+    isFetching: vendorsFetching,
+  } = useGetVendorsQuery(
+    {
+      limit: BENEFICIARY_VENDOR_PAGE_SIZE,
+      offset: beneficiaryVendorOffset,
+      ...(debouncedBeneficiaryVendorSearch ? { search: debouncedBeneficiaryVendorSearch } : {}),
+    },
+    { skip: skip || !beneficiaryDialogOpen },
+  );
   const [validateBeneficiary, { isLoading: validatingBeneficiary }] = useValidateBeneficiaryMutation();
   const [registerBeneficiary, { isLoading: savingBeneficiary }] = useRegisterBeneficiaryMutation();
   const canManageBeneficiaries = canPerformAction("banking.addBeneficiary");
@@ -441,6 +468,17 @@ const ConnectedBanking = () => {
   }, [accounts, selectedAccountId]);
   const selectedBalanceAccountId = selectedAccount ? getAccountId(selectedAccount) : "";
   const hasStatementDateRange = Boolean(activityDateFrom && activityDateTo);
+  const vendorDirectoryItems = useMemo(
+    () => getVendorDirectoryItems(vendorDirectory),
+    [vendorDirectory],
+  );
+  const vendorDirectoryTotal = Math.max(
+    Number(vendorDirectory?.total ?? vendorDirectoryItems.length) || 0,
+    vendorDirectoryItems.length,
+  );
+  const hasMoreBeneficiaryVendors = Boolean(
+    vendorDirectory?.hasMore ?? beneficiaryVendorOptions.length < vendorDirectoryTotal,
+  );
   const {
     data: selectedAccountBalance,
     isFetching: isBalanceFetching,
@@ -791,7 +829,53 @@ const ConnectedBanking = () => {
     setPortalActivityPage(Math.max(portalActivityPagination.totalPages - 1, 0));
   }, [portalActivityPage, portalActivityPagination.totalPages]);
 
-  const bankingRefreshing = isFetching || isStatementFetching || isPortalActivityFetching;
+  const bankingRefreshing = isFetching || isStatementFetching || isPortalActivityFetching || vendorsFetching;
+
+  useEffect(() => {
+    setBeneficiaryVendorOffset(0);
+    setBeneficiaryVendorOptions([]);
+  }, [debouncedBeneficiaryVendorSearch]);
+
+  useEffect(() => {
+    if (!beneficiaryDialogOpen) {
+      setBeneficiaryVendorSearch("");
+      setBeneficiaryVendorOffset(0);
+      setBeneficiaryVendorOptions([]);
+    }
+  }, [beneficiaryDialogOpen]);
+
+  useEffect(() => {
+    if (!beneficiaryDialogOpen) return;
+    if (!Array.isArray(vendorDirectory)) return;
+
+    setBeneficiaryVendorOptions((previous) => {
+      if (beneficiaryVendorOffset === 0) {
+        if (vendorDirectoryItems.length === 0) return previous.length === 0 ? previous : [];
+        const samePage =
+          previous.length === vendorDirectoryItems.length &&
+          previous.every(
+            (vendor, index) =>
+              getVendorOptionKey(vendor, index) === getVendorOptionKey(vendorDirectoryItems[index], index),
+          );
+        return samePage ? previous : vendorDirectoryItems;
+      }
+
+      const merged = new Map(
+        previous.map((vendor, index) => [
+          getVendorOptionKey(vendor, index),
+          vendor,
+        ]),
+      );
+      vendorDirectoryItems.forEach((vendor, index) => {
+        merged.set(
+          getVendorOptionKey(vendor, index, `${beneficiaryVendorOffset}-`),
+          vendor,
+        );
+      });
+      const next = Array.from(merged.values());
+      return next.length === previous.length ? previous : next;
+    });
+  }, [beneficiaryDialogOpen, beneficiaryVendorOffset, vendorDirectory, vendorDirectoryItems]);
 
   if (!isConnectedBankingEnabled) {
     return (
@@ -1176,11 +1260,18 @@ const ConnectedBanking = () => {
               </DialogHeader>
               <BeneficiaryForm
                 accounts={paymentReadyAccounts}
-                vendors={beneficiaryRows}
-                beneficiaries={beneficiaries}
+                vendors={beneficiaryVendorOptions}
                 canManage={canManageBeneficiaries}
+                vendorSearch={beneficiaryVendorSearch}
+                vendorsFetching={vendorsFetching}
+                hasMoreVendors={hasMoreBeneficiaryVendors}
                 validating={validatingBeneficiary}
                 saving={savingBeneficiary}
+                onVendorSearchChange={setBeneficiaryVendorSearch}
+                onLoadMoreVendors={() => {
+                  if (!hasMoreBeneficiaryVendors || vendorsFetching) return;
+                  setBeneficiaryVendorOffset((offset) => offset + BENEFICIARY_VENDOR_PAGE_SIZE);
+                }}
                 onVerify={handleVerifyBeneficiary}
                 onSave={handleSaveBeneficiary}
                 framed={false}
