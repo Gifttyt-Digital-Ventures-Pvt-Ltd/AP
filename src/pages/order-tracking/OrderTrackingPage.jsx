@@ -17,6 +17,8 @@ import OrderTrackingTable from "./components/OrderTrackingTable";
 import OrderTrackingPagination from "./components/OrderTrackingPagination";
 import OrderTrackingDetailDrawer from "./components/OrderTrackingDetailDrawer";
 import OrderTrackingPoPreviewDialog from "./components/OrderTrackingPoPreviewDialog";
+import OrderTrackingGrnPreviewDialog from "./components/OrderTrackingGrnPreviewDialog";
+import OrderTrackingInvoicePreviewDialog from "./components/OrderTrackingInvoicePreviewDialog";
 import { DEFAULT_ORDER_TRACKING_PARAMS, DEFAULT_ORDER_TRACKING_FILTERS } from "./constants";
 
 /**
@@ -36,6 +38,8 @@ const OrderTrackingPage = () => {
   const [activeSummaryCardKey, setActiveSummaryCardKey] = useState(null);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
   const [previewPoId, setPreviewPoId] = useState(null);
+  const [previewGrnId, setPreviewGrnId] = useState(null);
+  const [previewInvoiceId, setPreviewInvoiceId] = useState(null);
 
   const { data: listData, isFetching, refetch } = useGetOrderTrackingQuery(params);
   const { data: summary, isFetching: isSummaryFetching } = useGetOrderTrackingSummaryQuery();
@@ -93,8 +97,14 @@ const OrderTrackingPage = () => {
       setPreviewPoId(doc.id);
       return;
     }
-    // GRN/PI/TI don't have a wired cross-module deep link yet in this app —
-    // flagging rather than guessing at a route that doesn't exist.
+    if (doc.type === "GRN") {
+      setPreviewGrnId(doc.id);
+      return;
+    }
+    if (doc.type === "PI" || doc.type === "TI") {
+      setPreviewInvoiceId(doc.id);
+      return;
+    }
     toast.info(`Opening ${doc.type} ${doc.number} isn't wired up yet.`);
   };
 
@@ -169,6 +179,8 @@ const OrderTrackingPage = () => {
       />
 
       <OrderTrackingPoPreviewDialog poId={previewPoId} onClose={() => setPreviewPoId(null)} />
+      <OrderTrackingGrnPreviewDialog grnId={previewGrnId} onClose={() => setPreviewGrnId(null)} />
+      <OrderTrackingInvoicePreviewDialog invoiceId={previewInvoiceId} onClose={() => setPreviewInvoiceId(null)} />
     </div>
   );
 };
