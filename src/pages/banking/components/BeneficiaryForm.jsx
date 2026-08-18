@@ -112,11 +112,7 @@ const BeneficiaryForm = ({
     bankName: form.bankName.trim() || undefined,
     accountNumber: form.accountNumber.trim(),
     ifsc: form.ifsc.trim().toUpperCase(),
-    vendorId:
-      (selectedVendor?.vendorId ??
-        selectedVendor?.vendor_id ??
-        form.vendorId.trim()) ||
-      undefined,
+    vendorId: selectedVendor?.id,
     addToVendor: Boolean(form.vendorId),
     payeeType: "ACCOUNT",
   });

@@ -9,6 +9,7 @@ import {
 } from "../utils/payloadMappers";
 import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
 import { normalizePayablesResponse } from "../../pages/payments/utils/payableNormalizers";
+import { normalizePayrun } from "../../pages/payments/components/payrunUtils";
 
 const normalizePaginatedListResponse = (response, extraKeys = [], mapItem = (item) => item) => {
   const items = extractListResponse(response, extraKeys).map(mapItem);
@@ -141,6 +142,19 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
         normalizePaginatedListResponse(response, ["payruns", "paymentRuns", "payment_runs"]),
       providesTags: ["Payments"],
     }),
+    getPayrun: builder.query({
+      query: (payrunId) => ({ url: `/payruns/${payrunId}`, method: "GET" }),
+      transformResponse: (response) => {
+        const payload = Array.isArray(response?.data)
+          ? response.data[0]
+          : response?.data?.payrun || response?.payrun || response?.data || response;
+        return normalizePayrun(payload || {});
+      },
+      providesTags: (_result, _error, payrunId) => [
+        "Payments",
+        { type: "Payments", id: `payrun-${payrunId}` },
+      ],
+    }),
     createPayrun: builder.mutation({
       query: (body) => ({
         url: "/payruns",
@@ -239,6 +253,7 @@ export const {
   useRecordPaymentsMutation,
   useGeneratePendingPaymentInvoiceReportMutation,
   useGetPayrunsQuery,
+  useLazyGetPayrunQuery,
   useCreatePayrunMutation,
   useApprovePayrunMutation,
   useRejectPayrunMutation,

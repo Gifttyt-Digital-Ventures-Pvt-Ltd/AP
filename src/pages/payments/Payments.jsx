@@ -19,6 +19,7 @@ import {
   useCancelPayrunMutation,
   useCreatePayrunMutation,
   useGetPayrunsQuery,
+  useLazyGetPayrunQuery,
   useRejectPayrunMutation,
 } from '../../Services/apis/approvalsPaymentsBankingApi';
 import { useCreatePaymentBatchMutation } from '../../Services/apis/paymentBatchesApi';
@@ -484,6 +485,7 @@ const Payments = () => {
   const [approvePayrun] = useApprovePayrunMutation();
   const [rejectPayrun] = useRejectPayrunMutation();
   const [cancelPayrun] = useCancelPayrunMutation();
+  const [getPayrun] = useLazyGetPayrunQuery();
 
   const normalizePayment = (payment = {}) => {
     const payable = normalizePayableRow(payment);
@@ -1000,13 +1002,24 @@ const Payments = () => {
     setPayrunDetailsOpen(true);
   };
 
-  const openReleasePayrun = (payrun) => {
+  const openReleasePayrun = async (payrun) => {
     if (!guardAction('payments.releasePayrun')) return;
     if (!payrun.allowedActions?.release) {
       toast.error('This payrun is not available for release');
       return;
     }
-    setReleasePayrun(payrun);
+    const payrunId = payrun.payrunId || payrun.id;
+    if (!payrunId) {
+      toast.error('Payrun id is missing');
+      return;
+    }
+    try {
+      const freshPayrun = await getPayrun(payrunId).unwrap();
+      setReleasePayrun(freshPayrun);
+    } catch (error) {
+      toast.error(error?.data?.message || error?.data?.detail || 'Could not load latest payrun details. Using current payrun data.');
+      setReleasePayrun(payrun);
+    }
     setReleasePayrunOpen(true);
   };
 
