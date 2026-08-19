@@ -14,7 +14,9 @@ const CHAIN_TYPE_LABELS = { PO: "Purchase Order", GRN: "Goods Receipt", PI: "Pro
 const OrderTrackingDocumentChainSection = ({ documentChain, currency, onOpenDocument }) => (
   <div className="space-y-2" data-testid="order-tracking-document-chain-section">
     {documentChain.map((entry) => {
-      const documents = entry.documents || [];
+      const documents = (entry.documents || []).filter(
+        (doc) => doc.state !== "UNLINKED"
+      );
       return (
         <div key={entry.type} className="rounded-md border border-border p-2.5">
           <p className="mb-1.5 text-xs font-medium text-muted-foreground">{CHAIN_TYPE_LABELS[entry.type] || entry.type}</p>
