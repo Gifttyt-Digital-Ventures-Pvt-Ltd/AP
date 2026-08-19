@@ -455,9 +455,9 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
         ...(sourceType === "INVOICE"
           ? {
               invoiceId:
-                item.invoiceId ||
-                item.invoice_id ||
-                item.id,
+                invoice.invoiceId ||
+                invoice.invoice_id ||
+                invoice.id,
             }
           : {}),
       }];
