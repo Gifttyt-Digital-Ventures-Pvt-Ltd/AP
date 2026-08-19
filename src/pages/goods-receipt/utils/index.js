@@ -180,6 +180,15 @@ export const normalizePoLineItem = (item = {}) => ({
   unit_price: Number(item.unit_price ?? item.unitPrice ?? 0),
   quantity: Number(item.quantity ?? 0),
   received_quantity: Number(item.received_quantity ?? item.receivedQuantity ?? 0),
+  gst_rate: Number(
+    item.gst_rate ??
+      item.gstRate ??
+      item.gst_percent ??
+      item.gstPercent ??
+      item.tax_rate ??
+      item.taxRate ??
+      0,
+  ),
 });
 
 export const normalizePurchaseOrder = (po = {}) => ({
@@ -245,6 +254,15 @@ export const normalizePoLineReceiptState = (line = {}) => {
     already_received: already,
     pending_quantity: pending,
     unit_price: Number(line.unit_price ?? line.unitPrice ?? 0),
+    gst_rate: Number(
+      line.gst_rate ??
+        line.gstRate ??
+        line.gst_percent ??
+        line.gstPercent ??
+        line.tax_rate ??
+        line.taxRate ??
+        0,
+    ),
   };
 };
 
@@ -279,7 +297,15 @@ export const buildGrnLineItemsFromPo = (po, receiptStateLines = null) => {
       rejected_quantity: 0,
       rejection_reason: '',
       unit_price: line.unit_price,
-      gst_rate: Number(line.gst_rate ?? line.gstRate ?? 0),
+      gst_rate: Number(
+        line.gst_rate ??
+          line.gstRate ??
+          line.gst_percent ??
+          line.gstPercent ??
+          line.tax_rate ??
+          line.taxRate ??
+          0,
+      ),
       line_amount: receivedDefault * Number(line.unit_price || 0),
     };
   });
