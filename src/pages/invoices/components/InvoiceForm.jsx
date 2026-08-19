@@ -35,6 +35,7 @@ import {
 import { TableCell, TableRow } from "../../../components/ui/table";
 import AppDataTable from "../../../components/common/AppDataTable";
 import AppSelect from "../../../components/common/AppSelect";
+import ConnectedVendorPicker from "../../../components/common/ConnectedVendorPicker";
 import InrConversionFields, {
   isForeignCurrency,
 } from "../../../components/common/InrConversionFields";
@@ -366,11 +367,7 @@ export const InvoiceForm = ({
   const { data: coaData } = useGetCoaTreeQuery(undefined, {
     skip: !showErpIntegrationFields,
   });
-  const [vendorPickerOpen, setVendorPickerOpen] = useState(false);
-  const [vendorQuery, setVendorQuery] = useState("");
-  const vendorAnchorRef = useRef(null);
-  const vendorSwitchTriggerRef = useRef(null);
-  const lastVendorLoadCountRef = useRef(0);
+
   const [gstinPickerOpen, setGstinPickerOpen] = useState(false);
   const gstinTriggerRef = useRef(null);
   const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false);
@@ -382,40 +379,7 @@ export const InvoiceForm = ({
     useState({});
   const [isNetPayableManuallyEdited, setIsNetPayableManuallyEdited] = useState(false);
 
-  const filteredVendorOptions = useMemo(() => {
-    const query = String(vendorQuery || "")
-      .toLowerCase()
-      .trim();
-    const options = Array.isArray(vendorOptions) ? vendorOptions : [];
-    if (!query) return options;
-    return options.filter((vendor) =>
-      vendorMatchesInvoiceNameQuery(vendor, query),
-    );
-  }, [vendorOptions, vendorQuery]);
 
-  const maybeLoadMoreVendors = useCallback((element) => {
-    if (!hasMoreVendors || vendorsFetching) return;
-    if (!element) return;
-    const { scrollTop, scrollHeight, clientHeight } = element;
-    const scrollableDistance = Math.max(scrollHeight - clientHeight, 0);
-    if (scrollableDistance === 0) return;
-    const remainingDistance = scrollHeight - scrollTop - clientHeight;
-    const bottomThreshold = scrollableDistance * 0.2;
-    if (remainingDistance > bottomThreshold) return;
-    if (lastVendorLoadCountRef.current === vendorOptions.length) return;
-    lastVendorLoadCountRef.current = vendorOptions.length;
-    onLoadMoreVendors?.();
-  }, [hasMoreVendors, onLoadMoreVendors, vendorOptions.length, vendorsFetching]);
-
-  const handleVendorSearchChange = (value) => {
-    setVendorQuery(value);
-    onVendorSearchChange?.(value);
-  };
-
-  useEffect(() => {
-    if (vendorsFetching) return;
-    lastVendorLoadCountRef.current = 0;
-  }, [vendorOptions.length, vendorSearch, vendorsFetching]);
 
   useEffect(() => {
     setIsNetPayableManuallyEdited(false);
@@ -1216,7 +1180,6 @@ export const InvoiceForm = ({
   };
 
   const clearVendorSelection = () => {
-    setVendorQuery("");
     setFormData({
       ...formData,
       vendorName: "",
@@ -1961,131 +1924,23 @@ export const InvoiceForm = ({
                     )}
                   </Popover>
                 </div>
-                <Popover
-                  open={vendorPickerOpen}
-                  onOpenChange={setVendorPickerOpen}
-                >
-                  <PopoverAnchor asChild>
+                <ConnectedVendorPicker
+                  value={formData.vendorName || "Switch Vendor"}
+                  allowFreeText={true}
+                  onSelect={(vendor) => {
+                    applyVendorNameChange(vendor.name);
+                  }}
+                  triggerContent={
                     <button
-                      ref={vendorSwitchTriggerRef}
                       type="button"
-                      onClick={() => {
-                        handleVendorSearchChange("");
-                        setVendorPickerOpen((open) => !open);
-                      }}
                       className="flex shrink-0 items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-sm text-foreground"
                       data-testid="invoice-switch-vendor-btn"
                     >
                       Switch Vendor
                       <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
                     </button>
-                  </PopoverAnchor>
-                  <PopoverContent
-                    className="z-[120] min-w-[260px] overflow-y-auto w-[var(--radix-popover-trigger-width)] p-0"
-                    align="end"
-                    onOpenAutoFocus={(event) => event.preventDefault()}
-                    onInteractOutside={(event) => {
-                      if (
-                        vendorAnchorRef.current?.contains(event.target) ||
-                        vendorSwitchTriggerRef.current?.contains(event.target)
-                      ) {
-                        event.preventDefault();
-                      }
-                    }}
-                  >
-                    <div className="relative" ref={vendorAnchorRef}>
-                      <Input
-                        value={vendorQuery}
-                        onChange={(e) => {
-                          handleVendorSearchChange(e.target.value);
-                          applyVendorNameChange(e.target.value);
-                          setVendorPickerOpen(true);
-                        }}
-                        onFocus={() => {
-                          handleVendorSearchChange("");
-                          setVendorPickerOpen(true);
-                        }}
-                        placeholder="Select or enter vendor"
-                        className="pr-16 h-8 text-sm border-0 border-b rounded-none focus-visible:ring-0"
-                        autoComplete="off"
-                      />
-                      <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
-                        {formData.vendorName && (
-                          <button
-                            type="button"
-                            onClick={clearVendorSelection}
-                            className="text-gray-400 hover:text-gray-600 p-1"
-                            aria-label="Clear vendor"
-                          >
-                            <X className="h-3 w-3" />
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => {
-                            handleVendorSearchChange("");
-                            setVendorPickerOpen(true);
-                          }}
-                          className="text-gray-400 hover:text-gray-600 p-1"
-                          aria-label="Show vendor list"
-                        >
-                          <ChevronsUpDown className="h-3.5 w-3.5" />
-                        </button>
-                      </div>
-                    </div>
-                    <div
-                      className="max-h-56 overflow-y-auto overscroll-contain py-1"
-                      onScroll={(event) => maybeLoadMoreVendors(event.currentTarget)}
-                      onWheel={(event) => {
-                        event.currentTarget.scrollTop += event.deltaY;
-                        event.stopPropagation();
-                        maybeLoadMoreVendors(event.currentTarget);
-                      }}
-                    >
-                      {filteredVendorOptions.length === 0 ? (
-                        <p className="px-3 py-2 text-xs text-muted-foreground">
-                          {vendorsFetching
-                            ? "Loading vendors..."
-                            : vendorOptions.length === 0
-                            ? "No vendors available"
-                            : "No matching vendors — you can still enter a new name"}
-                        </p>
-                      ) : (
-                        filteredVendorOptions.map((vendor) => (
-                          <button
-                            key={vendor.id}
-                            type="button"
-                            className={cn(
-                              "flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-accent",
-                              vendorMatchesInvoiceName(
-                                vendor,
-                                formData.vendorName,
-                              ) && "bg-accent",
-                            )}
-                            onMouseDown={(event) => event.preventDefault()}
-                            onClick={() => {
-                              applyVendorNameChange(vendor.name);
-                              handleVendorSearchChange("");
-                              setVendorPickerOpen(false);
-                            }}
-                          >
-                            <span className="truncate">{vendor.name}</span>
-                            {vendor.isPendingApproval && (
-                              <span className="ml-auto shrink-0 text-[10px] text-amber-600">
-                                Pending
-                              </span>
-                            )}
-                          </button>
-                        ))
-                      )}
-                      {hasMoreVendors ? (
-                        <div className="border-t px-3 py-2 text-center text-xs text-muted-foreground">
-                          {vendorsFetching ? "Loading vendors..." : "Scroll for more vendors"}
-                        </div>
-                      ) : null}
-                    </div>
-                  </PopoverContent>
-                </Popover>
+                  }
+                />
               </div>
 
               <div className="grid grid-cols-2 gap-3 border-t border-border pt-3">

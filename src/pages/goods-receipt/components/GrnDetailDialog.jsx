@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../../components/ui/select';
+import ConnectedVendorPicker from '../../../components/common/ConnectedVendorPicker';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import {
   Dialog,
@@ -467,28 +468,17 @@ const GrnDetailDialog = ({
                 {canEditVendor ? (
                   <div className="space-y-2">
                     <Label>Vendor *</Label>
-                    <Select
-                      value={draftForm.vendor_id ? String(draftForm.vendor_id) : ''}
-                      onValueChange={(vendorId) => {
-                        const vendor = vendors.find((item) => String(item.id) === String(vendorId));
+                    <ConnectedVendorPicker
+                      value={draftForm.vendor_name || draftForm.vendor_id}
+                      onSelect={(vendor) => {
                         setDraftForm((current) => ({
                           ...current,
-                          vendor_id: vendorId,
+                          vendor_id: vendor?.id || '',
                           vendor_name: vendor?.name ?? vendor?.vendor_name ?? '',
                         }));
                       }}
-                    >
-                      <SelectTrigger className="h-9 bg-white/80" data-testid="grn-detail-vendor-select">
-                        <SelectValue placeholder="Select vendor" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {vendors.map((vendor) => (
-                          <SelectItem key={vendor.id} value={String(vendor.id)}>
-                            {vendor.name ?? vendor.vendor_name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                      placeholder="Select vendor"
+                    />
                   </div>
                 ) : (
                   <div className="rounded-lg border bg-muted/30 p-3">

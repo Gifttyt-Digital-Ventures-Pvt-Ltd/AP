@@ -19,8 +19,21 @@ import {
   useUpdatePurchaseOrderMutation,
   useSubmitPurchaseOrderMutation,
   useApprovePurchaseOrderMutation,
+  useCancelPurchaseOrderMutation,
   useScanPurchaseOrderMutation,
 } from '../../Services/apis/purchaseOrdersMasterDataApi';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../components/ui/dialog';
+import { Button } from '../../components/ui/button';
+import { Textarea } from '../../components/ui/textarea';
+import { Label } from '../../components/ui/label';
+import { Loader2, XCircle } from 'lucide-react';
 import { useUpdateDocumentPaymentScheduleMutation } from '../../Services/apis/paymentSchedulesApi';
 import { useRequestAccountingReadyUnlockMutation } from '../../Services/apis/accountingApi';
 import { useGetOrganisationQuery } from '../../Services/apis/settingsApi';
@@ -353,7 +366,7 @@ const PurchaseOrdersPage = () => {
     data: vendorsData = EMPTY_LIST,
     isLoading: vendorsLoading,
     refetch: refetchVendors,
-  } = useGetVendorsQuery();
+  } = useGetVendorsQuery({ limit: 50, offset: 0 });
   const { data: organisationData } = useGetOrganisationQuery();
   const organisationBranches = useMemo(
     () => normalizeOrganisationBranchesFromApi(organisationData),
@@ -383,6 +396,7 @@ const PurchaseOrdersPage = () => {
   const [updateDocumentPaymentSchedule] = useUpdateDocumentPaymentScheduleMutation();
   const [submitPurchaseOrder] = useSubmitPurchaseOrderMutation();
   const [approvePurchaseOrder] = useApprovePurchaseOrderMutation();
+  const [cancelPurchaseOrder, { isLoading: cancellingPO }] = useCancelPurchaseOrderMutation();
   const [scanPurchaseOrder] = useScanPurchaseOrderMutation();
   const [requestVendorAddition, { isLoading: requestVendorLoading }] =
     useRequestVendorAdditionMutation();
@@ -417,6 +431,9 @@ const PurchaseOrdersPage = () => {
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showApprovalDialog, setShowApprovalDialog] = useState(false);
   const [showRaiseAdvanceDialog, setShowRaiseAdvanceDialog] = useState(false);
+  const [showCancelDialog, setShowCancelDialog] = useState(false);
+  const [cancelReason, setCancelReason] = useState('');
+  const [poToCancel, setPoToCancel] = useState(null);
   const [selectedPO, setSelectedPO] = useState(null);
   const [advancePo, setAdvancePo] = useState(null);
   const [editingPO, setEditingPO] = useState(null);
@@ -924,6 +941,44 @@ const PurchaseOrdersPage = () => {
     if (!isVendorAdvancesEnabled || !po) return;
     setAdvancePo(po);
     setShowRaiseAdvanceDialog(true);
+  };
+
+  const openCancelPoDialog = (po) => {
+    if (!po) return;
+    setPoToCancel(po);
+    setCancelReason('');
+    setShowCancelDialog(true);
+  };
+
+  const handleConfirmCancelPo = async () => {
+    if (!poToCancel) return;
+    const poId = getPoId(poToCancel);
+    if (!poId) {
+      toast.error('Purchase Order ID is missing.');
+      return;
+    }
+    if (!cancelReason.trim()) {
+      toast.error('Please enter a cancellation reason.');
+      return;
+    }
+    try {
+      setSubmitting(true);
+      const res = await cancelPurchaseOrder({
+        id: poId,
+        body: { reason: cancelReason.trim() },
+      }).unwrap();
+
+      toast.success(res?.message || `Purchase Order ${poToCancel.po_number || ''} cancelled successfully.`);
+      setShowCancelDialog(false);
+      setPoToCancel(null);
+      setCancelReason('');
+      setShowViewDialog(false);
+    } catch (err) {
+      const errorMsg = extractApiErrorDetail(err) || 'Failed to cancel Purchase Order.';
+      handleCreditError(err, errorMsg);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const openPoDetails = useCallback(async (po) => {
@@ -1596,7 +1651,9 @@ const PurchaseOrdersPage = () => {
         onEditPO={openEditPoDialog}
         onSubmitPO={submitPoFromRow}
         onReviewPO={openPoApprovalDialog}
+        onCancelPO={openCancelPoDialog}
         submitting={submitting}
+        cancelling={cancellingPO}
         onRequestUnlock={handleRequestPoUnlock}
         requestingUnlock={requestAccountingUnlockLoading}
         showBranchField={isBranchEnabled}
@@ -1671,6 +1728,8 @@ const PurchaseOrdersPage = () => {
         savingDeliveryStatus={savingDeliveryStatus}
         canRaiseAdvance={isVendorAdvancesEnabled}
         onRaiseAdvance={openRaiseAdvanceDialog}
+        onCancelPO={openCancelPoDialog}
+        cancelling={cancellingPO}
         canEditPaymentSchedule={canEditPaymentScheduleForPo(selectedPO)}
         onSavePaymentSchedule={handleSavePaymentSchedule}
         savingPaymentSchedule={savingPaymentSchedule}
@@ -1783,6 +1842,62 @@ const PurchaseOrdersPage = () => {
         onSubmit={handleSubmitVendorRequest}
         submitting={requestVendorLoading}
       />
+
+      <Dialog
+        open={showCancelDialog}
+        onOpenChange={(open) => {
+          setShowCancelDialog(open);
+          if (!open) {
+            setPoToCancel(null);
+            setCancelReason('');
+          }
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-600">
+              <XCircle className="h-5 w-5" />
+              Cancel Purchase Order
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to cancel PO{' '}
+              <span className="font-semibold text-foreground">{poToCancel?.po_number || ''}</span>?
+              This will update the purchase order status to CANCELLED and update associated order tracking lifecycle records.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Label htmlFor="po-cancel-reason">
+              Cancellation Reason <span className="text-red-500">*</span>
+            </Label>
+            <Textarea
+              id="po-cancel-reason"
+              placeholder="Enter reason for cancelling this purchase order..."
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              rows={3}
+              data-testid="po-cancel-reason-input"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowCancelDialog(false)}
+              disabled={cancellingPO || submitting}
+            >
+              Back
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmCancelPo}
+              disabled={cancellingPO || submitting || !cancelReason.trim()}
+              data-testid="confirm-cancel-po-btn"
+            >
+              {(cancellingPO || submitting) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              Confirm Cancellation
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

@@ -243,7 +243,7 @@ const GoodsReceipt = () => {
   );
 
   const { data: grnsResponse, isLoading: grnsLoading, refetch: refetchGrns } = useGetGrnsQuery(grnQueryParams);
-  const { data: vendorsData = [] } = useGetVendorsQuery();
+  const { data: vendorsData = [] } = useGetVendorsQuery({ limit: 50, offset: 0 });
   const { data: formatConfigResponse, refetch: refetchFormatConfig } = useGetGrnFormatConfigQuery();
   const {
     data: formatConfigsResponse = [],

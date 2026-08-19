@@ -9,7 +9,19 @@ import {
   useGetOrderTrackingFilterOptionsQuery,
   useGetOrderTrackingDetailQuery,
   useUpdateOrderTrackingDeliveryStatusMutation,
+  useCloseOrderTrackingOrderMutation,
 } from "../../Services/apis/orderTrackingApi";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "../../components/ui/dialog";
+import { Button } from "../../components/ui/button";
+import { formatCurrency } from "../../utils/currency";
+import { Loader2, Lock } from "lucide-react";
 import OrderTrackingSummaryCards from "./components/OrderTrackingSummaryCards";
 import OrderTrackingFilterBar from "./components/OrderTrackingFilterBar";
 import DownloadReportButton from "./components/DownloadReportButton";
@@ -48,12 +60,31 @@ const OrderTrackingPage = () => {
     skip: !selectedOrderId,
   });
   const [updateDeliveryStatus] = useUpdateOrderTrackingDeliveryStatusMutation();
+  const [closeOrderTrackingOrder, { isLoading: closingOrder }] = useCloseOrderTrackingOrderMutation();
 
-  // order-tracking-manage is documented today as export-only with no other
-  // runtime effect; whether it should also gate inline delivery-status
-  // editing is an open question (docs/order-tracking-api-contract.md §8) —
-  // using it here as the working assumption until confirmed.
   const canEditDelivery = hasPermission("order-tracking-manage");
+  const canManageOrder = hasPermission("order-tracking-manage");
+
+  const [showCloseModal, setShowCloseModal] = useState(false);
+  const [orderToClose, setOrderToClose] = useState(null);
+
+  const handleOpenCloseModal = (orderDetail) => {
+    setOrderToClose(orderDetail);
+    setShowCloseModal(true);
+  };
+
+  const handleConfirmCloseOrder = async () => {
+    if (!orderToClose?.id) return;
+    try {
+      await closeOrderTrackingOrder({ orderId: orderToClose.id }).unwrap();
+      toast.success(`Order ${orderToClose.orderNumber || ""} closed successfully.`);
+      setShowCloseModal(false);
+      setOrderToClose(null);
+      refetch();
+    } catch (error) {
+      toast.error(error?.data?.message || "Failed to close order.");
+    }
+  };
 
   const rows = listData?.items ?? [];
   const totalPages = listData?.totalPages ?? 1;
@@ -176,11 +207,70 @@ const OrderTrackingPage = () => {
         detail={detail}
         isLoading={isDetailFetching}
         onOpenDocument={handleOpenDocument}
+        onCloseOrder={handleOpenCloseModal}
+        canManageOrder={canManageOrder}
+        closingOrder={closingOrder}
       />
 
       <OrderTrackingPoPreviewDialog poId={previewPoId} onClose={() => setPreviewPoId(null)} />
       <OrderTrackingGrnPreviewDialog grnId={previewGrnId} onClose={() => setPreviewGrnId(null)} />
       <OrderTrackingInvoicePreviewDialog invoiceId={previewInvoiceId} onClose={() => setPreviewInvoiceId(null)} />
+
+      {/* Manual Close Order Confirmation Modal */}
+      <Dialog
+        open={showCloseModal}
+        onOpenChange={(open) => {
+          setShowCloseModal(open);
+          if (!open) setOrderToClose(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Lock className="h-4 w-4 text-red-600" />
+              Close Order
+            </DialogTitle>
+            <DialogDescription asChild>
+              <div className="space-y-2 text-sm text-muted-foreground">
+                <p>
+                  You are about to manually close order{" "}
+                  <span className="font-semibold text-foreground">{orderToClose?.orderNumber || ""}</span>.
+                </p>
+                {Number(orderToClose?.advanceOutstanding || 0) > 0 ? (
+                  <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-amber-800 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-300">
+                    ⚠ Closing this order will release the unadjusted advance of{" "}
+                    <span className="font-semibold">
+                      {formatCurrency(orderToClose?.advanceOutstanding, orderToClose?.currency)}
+                    </span>{" "}
+                    to the vendor pool.
+                  </p>
+                ) : null}
+                <p className="font-medium text-foreground">
+                  This action is irreversible. Closed orders cannot be reopened.
+                </p>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowCloseModal(false)}
+              disabled={closingOrder}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleConfirmCloseOrder}
+              disabled={closingOrder}
+              data-testid="confirm-close-order-btn"
+            >
+              {closingOrder && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Close Order
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

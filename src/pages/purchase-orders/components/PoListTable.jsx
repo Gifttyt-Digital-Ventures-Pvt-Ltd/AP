@@ -1,5 +1,5 @@
 import React, { useMemo } from "react";
-import { CheckCircle2, Eye, Pencil, Send, Unlock } from "lucide-react";
+import { CheckCircle2, Eye, Pencil, Send, Unlock, XCircle } from "lucide-react";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
 import { TableCell, TableRow } from "../../../components/ui/table";
@@ -45,8 +45,10 @@ const PoListTable = ({
   onSubmitPO,
   onReviewPO,
   onRequestUnlock,
+  onCancelPO,
   submitting = false,
   requestingUnlock = false,
+  cancelling = false,
   showBranchField = false,
 }) => {
   const poTableHeader = useMemo(
@@ -215,6 +217,23 @@ const PoListTable = ({
                       <Unlock className="h-4 w-4 text-amber-700" />
                     </Button>
                   )}
+                {canManagePo && (po.can_cancel ?? po.actions?.can_cancel) && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onCancelPO?.(po);
+                    }}
+                    disabled={cancelling || submitting}
+                    title={po.cancel_disabled_reason ?? po.actions?.cancel_disabled_reason ?? "Cancel PO"}
+                    aria-label="Cancel PO"
+                    data-testid={`cancel-po-${po?.id ?? 'unknown'}`}
+                    className="text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/50"
+                  >
+                    <XCircle className="h-4 w-4" />
+                  </Button>
+                )}
               </div>
             );
             break;
