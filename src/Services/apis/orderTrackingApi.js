@@ -83,6 +83,20 @@ export const orderTrackingApi = serviceApi.injectEndpoints({
     exportOrderTrackingReport: builder.mutation({
       query: (params = {}) => ({ url: "/order-tracking/export", method: "POST", body: params }),
     }),
+
+    /** POST /order-tracking/{orderId}/close - Manually closes an order */
+    closeOrderTrackingOrder: builder.mutation({
+      query: ({ orderId, reason = "" }) => ({
+        url: `/order-tracking/${orderId}/close`,
+        method: "POST",
+        body: { reason },
+      }),
+      invalidatesTags: (result, error, { orderId }) => [
+        { type: "OrderTracking", id: "LIST" },
+        { type: "OrderTracking", id: "SUMMARY" },
+        { type: "OrderTracking", id: orderId },
+      ],
+    }),
   }),
 });
 
@@ -93,4 +107,5 @@ export const {
   useUpdateOrderTrackingDeliveryStatusMutation,
   useGetOrderTrackingFilterOptionsQuery,
   useExportOrderTrackingReportMutation,
+  useCloseOrderTrackingOrderMutation,
 } = orderTrackingApi;

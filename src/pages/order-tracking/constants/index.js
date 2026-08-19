@@ -72,6 +72,8 @@ export const DOCUMENT_CHAIN_STATE = {
   PARTIAL: "PARTIAL",
   NOT_RECEIVED: "NOT_RECEIVED",
   NOT_APPLICABLE: "NOT_APPLICABLE",
+  CANCELLED: "CANCELLED",
+  UNLINKED: "UNLINKED",
 };
 
 export const documentChainStateMeta = {
@@ -79,6 +81,8 @@ export const documentChainStateMeta = {
   [DOCUMENT_CHAIN_STATE.PARTIAL]: { className: "text-amber-500 dark:text-amber-400", label: "Partial" },
   [DOCUMENT_CHAIN_STATE.NOT_RECEIVED]: { className: "text-muted-foreground", label: "Not received" },
   [DOCUMENT_CHAIN_STATE.NOT_APPLICABLE]: { className: "text-muted-foreground/50", label: "Not applicable" },
+  [DOCUMENT_CHAIN_STATE.CANCELLED]: { className: "text-red-500 line-through opacity-70 dark:text-red-400", label: "Cancelled" },
+  [DOCUMENT_CHAIN_STATE.UNLINKED]: { className: "text-amber-600 line-through opacity-70 dark:text-amber-400", label: "Unlinked" },
 };
 
 // Document chain filter — proposed enum per spec §13's bullet list; not
@@ -157,5 +161,5 @@ export const ORDER_TRACKING_SUMMARY_CARDS = [
   { key: "openOrders", label: "Open Orders", filter: { orderStatus: ORDER_STATUS.OPEN } },
   { key: "overduePayments", label: "Overdue Payments", filter: { paymentStatus: "Overdue" } },
   { key: "pendingDelivery", label: "Pending Delivery", filter: {} }, // exact filter TBD — see docs §8 "pendingDelivery" open item
-  { key: "fullyClosed", label: "Fully Closed", filter: { orderStatus: ORDER_STATUS.CLOSED } },
+  { key: "fullyClosed", label: "Fully Settled", filter: { orderStatus: ORDER_STATUS.CLOSED } },
 ];

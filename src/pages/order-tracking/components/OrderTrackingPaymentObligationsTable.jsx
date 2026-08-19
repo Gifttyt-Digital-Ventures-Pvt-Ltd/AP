@@ -1,8 +1,9 @@
-import React from "react";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../../../components/ui/table";
+import React, { useMemo } from "react";
+import AppDataTable from "../../../components/common/AppDataTable";
 import { Badge } from "../../../components/ui/badge";
 import { formatCurrency } from "../../../utils/currency";
 import { formatDate } from "../utils";
+import { TableRow, TableCell } from "../../../components/ui/table";
 
 /**
  * Stage · Scheduled · Triggered · Paid · Status · Due Date (spec §12.3).
@@ -22,45 +23,116 @@ const OBLIGATION_STATUS_COLORS = {
   WAIVED: "bg-muted text-muted-foreground",
 };
 
-const OrderTrackingPaymentObligationsTable = ({ obligations, currency }) => (
-  <div className="overflow-x-auto rounded-md border border-border" data-testid="order-tracking-payment-obligations">
-    <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>Stage</TableHead>
-          <TableHead className="text-right">Scheduled</TableHead>
-          <TableHead className="text-right">Triggered</TableHead>
-          <TableHead className="text-right">Paid</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead>Due Date</TableHead>
-        </TableRow>
-      </TableHeader>
-      <TableBody>
-        {obligations.length === 0 ? (
-          <TableRow>
-            <TableCell colSpan={6} className="py-4 text-center text-sm text-muted-foreground">
-              No payment obligations recorded.
-            </TableCell>
-          </TableRow>
-        ) : (
-          obligations.map((obligation, index) => (
-            <TableRow key={`${obligation.stage}-${index}`}>
-              <TableCell className="font-medium">{obligation.stage}</TableCell>
-              <TableCell className="text-right">{formatCurrency(obligation.scheduled, currency)}</TableCell>
-              <TableCell className="text-right">{formatCurrency(obligation.triggered, currency)}</TableCell>
-              <TableCell className="text-right">{formatCurrency(obligation.paid, currency)}</TableCell>
-              <TableCell>
-                <Badge variant="outline" className={`border-0 font-medium ${OBLIGATION_STATUS_COLORS[obligation.status] || ""}`}>
-                  {obligation.status || "-"}
-                </Badge>
-              </TableCell>
-              <TableCell>{formatDate(obligation.dueDate)}</TableCell>
-            </TableRow>
-          ))
-        )}
-      </TableBody>
-    </Table>
-  </div>
-);
+const OrderTrackingPaymentObligationsTable = ({ obligations = [], currency }) => {
+  const columns = useMemo(() => [
+    {
+      key: "stage",
+      header: "Stage",
+      cellClassName: "font-medium",
+    },
+    {
+      key: "scheduled",
+      header: "Scheduled",
+      headerClassName: "text-right",
+      cellClassName: "text-right",
+    },
+    {
+      key: "triggered",
+      header: "Triggered",
+      headerClassName: "text-right",
+      cellClassName: "text-right",
+    },
+    {
+      key: "paid",
+      header: "Paid",
+      headerClassName: "text-right",
+      cellClassName: "text-right",
+    },
+    {
+      key: "outstanding",
+      header: "Outstanding",
+      headerClassName: "text-right",
+      cellClassName: "text-right font-medium",
+    },
+    {
+      key: "netPayable",
+      header: "Net Payable",
+      headerClassName: "text-right",
+      cellClassName: "text-right font-semibold text-primary",
+    },
+    {
+      key: "status",
+      header: "Status",
+    },
+    {
+      key: "dueDate",
+      header: "Due Date",
+    }
+  ], []);
+
+  const renderRow = (row, rowIndex, headers) => {
+    const scheduled = Number(row.scheduled || row.scheduled_amount || 0);
+    const triggered = Number(row.triggered || row.triggered_amount || 0);
+    const paid = Number(row.paid || row.paid_amount || 0);
+    const outstanding = row.outstanding ?? (triggered > 0 ? Math.max(0, triggered - paid) : Math.max(0, scheduled - paid));
+    const availableAdvance = Number(row.availableAdvance || row.advanceAdjustedAmount || 0);
+    const netPayable = row.netPayable ?? Math.max(0, (triggered > 0 ? triggered : scheduled) - availableAdvance - paid);
+    const isTriggered = triggered > 0 || String(row.status || "").toUpperCase() === "TRIGGERED";
+    const untriggeredReason = row.untriggeredReason || row.untriggered_reason || (!isTriggered ? "Document not approved / received" : null);
+
+    const renderCell = (header) => {
+      switch (header.key) {
+        case "stage":
+          return row.stage;
+        case "scheduled":
+          return formatCurrency(scheduled, currency);
+        case "triggered":
+          return formatCurrency(triggered, currency);
+        case "paid":
+          return formatCurrency(paid, currency);
+        case "outstanding":
+          return formatCurrency(outstanding, currency);
+        case "netPayable":
+          return formatCurrency(netPayable, currency);
+        case "status":
+          return (
+            <div className="flex flex-col gap-1">
+              <Badge variant="outline" className={`w-fit border-0 font-medium ${OBLIGATION_STATUS_COLORS[row.status] || ""}`}>
+                {isTriggered ? (row.status || "TRIGGERED") : "PENDING"}
+              </Badge>
+              {!isTriggered && untriggeredReason ? (
+                <span className="text-[11px] text-muted-foreground">{untriggeredReason}</span>
+              ) : null}
+            </div>
+          );
+        case "dueDate":
+          return formatDate(row.dueDate);
+        default:
+          return "-";
+      }
+    };
+
+    return (
+      <TableRow key={`${row.stage}-${rowIndex}`}>
+        {headers.map((header) => (
+          <TableCell key={header.key} className={header.cellClassName}>
+            {renderCell(header)}
+          </TableCell>
+        ))}
+      </TableRow>
+    );
+  };
+
+  return (
+    <div className="overflow-x-auto rounded-md border border-border" data-testid="order-tracking-payment-obligations">
+      <AppDataTable
+        columns={columns}
+        rows={obligations}
+        renderRow={renderRow}
+        emptyMessage="No payment obligations recorded."
+      />
+    </div>
+  );
+};
 
 export default OrderTrackingPaymentObligationsTable;

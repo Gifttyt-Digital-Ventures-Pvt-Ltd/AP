@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
+import ConnectedVendorPicker from "../../../components/common/ConnectedVendorPicker";
 import AppDataTable from "../../../components/common/AppDataTable";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import { Textarea } from "../../../components/ui/textarea";
@@ -80,6 +81,7 @@ const formatRegistrationLocation = (registration = {}) => {
 };
 
 const formatAddressFromEntity = (entity = {}) => {
+  if (!entity || typeof entity !== "object") return "";
   const directAddress = getRegistrationValue(
     entity,
     "address",
@@ -107,6 +109,7 @@ const formatAddressFromEntity = (entity = {}) => {
 };
 
 const getVendorGstRegistrationsForPo = (vendor = {}) => {
+  if (!vendor || typeof vendor !== "object") return [];
   const registrations = vendor.gstRegistrations ?? vendor.gst_regs ?? vendor.gstRegs ?? vendor.gst_registrations;
   const mapped = Array.isArray(registrations)
     ? registrations
@@ -222,7 +225,11 @@ const PoFormDialog = ({
         tdsRate: poForm.tds_percent,
       })
     : "";
-  const selectedVendor = vendors.find((vendor) => String(vendor.id) === String(poForm.vendor_id));
+  const [currentVendorObj, setCurrentVendorObj] = useState(null);
+  const selectedVendor =
+    (currentVendorObj && String(currentVendorObj.id) === String(poForm.vendor_id) ? currentVendorObj : null) ||
+    (Array.isArray(vendors) ? vendors.find((vendor) => String(vendor.id) === String(poForm.vendor_id)) : null) ||
+    currentVendorObj;
   const vendorGstRegistrations = useMemo(
     () => getVendorGstRegistrationsForPo(selectedVendor),
     [selectedVendor],
@@ -692,32 +699,24 @@ const PoFormDialog = ({
                   <section className="rounded border bg-slate-50/60 p-4">
                     <h3 className="mb-3 text-sm font-semibold">Vendor</h3>
                     <FieldBlock label="Vendor">
-                      <Select
-                        value={poForm.vendor_id}
-                        onValueChange={(v) =>
+                      <ConnectedVendorPicker
+                        value={selectedVendor?.name || poForm.vendor_name || poForm.vendor_id}
+                        onSelect={(vendor) => {
+                          setCurrentVendorObj(vendor);
                           setPoForm((prev) => ({
                             ...prev,
-                            vendor_id: v,
+                            vendor_id: vendor?.id ? String(vendor.id) : "",
+                            vendor_name: vendor?.name ?? vendor?.vendor_name ?? "",
                             vendor_gst_registration_id: "",
                             vendor_gstin: "",
                             vendor_pan: "",
                             vendor_branch_name: "",
                             vendor_branch_code: "",
                             vendor_branch_gstin: "",
-                          }))
-                        }
-                      >
-                        <SelectTrigger className="h-9 bg-white/80" data-testid="vendor-select">
-                          <SelectValue placeholder="Select vendor" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {vendors.map((v) => (
-                            <SelectItem key={v.id} value={String(v.id)}>
-                              {v.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                          }));
+                        }}
+                        placeholder="Select vendor"
+                      />
                     </FieldBlock>
                     {scannedVendorHint && !poForm.vendor_id ? (
                       <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">

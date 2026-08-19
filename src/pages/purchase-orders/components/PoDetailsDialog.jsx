@@ -9,6 +9,7 @@ import {
   Package,
   Send,
   WalletCards,
+  XCircle,
 } from "lucide-react";
 import { Badge } from "../../../components/ui/badge";
 import { Button } from "../../../components/ui/button";
@@ -113,6 +114,8 @@ const PoDetailsDialog = ({
   savingDeliveryStatus,
   canRaiseAdvance = false,
   onRaiseAdvance,
+  onCancelPO,
+  cancelling = false,
   canEditPaymentSchedule = false,
   onSavePaymentSchedule,
   savingPaymentSchedule = false,
@@ -836,11 +839,24 @@ const PoDetailsDialog = ({
             <Button
               variant="outline"
               onClick={() => onRaiseAdvance?.(selectedPO)}
-              disabled={submitting}
+              disabled={submitting || cancelling}
               data-testid="raise-advance-btn"
             >
               <WalletCards className="h-4 w-4 mr-2" />
               Raise Advance
+            </Button>
+          ) : null}
+          {selectedPO && canManagePo && (selectedPO?.can_cancel ?? selectedPO?.actions?.can_cancel) ? (
+            <Button
+              variant="outline"
+              onClick={() => onCancelPO?.(selectedPO)}
+              disabled={submitting || cancelling}
+              className="text-red-600 border-red-300 hover:bg-red-50 dark:hover:bg-red-950/50"
+              title={selectedPO?.cancel_disabled_reason ?? selectedPO?.actions?.cancel_disabled_reason ?? "Cancel PO"}
+              data-testid="cancel-po-btn"
+            >
+              {cancelling ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <XCircle className="h-4 w-4 mr-2" />}
+              Cancel PO
             </Button>
           ) : null}
           {["Draft", "Sent Back"].includes(selectedPO?.status) &&

@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../../components/ui/select';
+import ConnectedVendorPicker from '../../../components/common/ConnectedVendorPicker';
 import GrnCreateFormFields from './GrnCreateFormFields';
 import { GRN_SOURCE } from '../constants';
 
@@ -131,29 +132,18 @@ const GrnUploadFormPanel = ({
       <div className="grid gap-4 lg:grid-cols-2">
         <div className="space-y-2">
           <Label>Vendor</Label>
-          <Select
-            value={form.vendor_id ? String(form.vendor_id) : undefined}
-            onValueChange={(vendorId) => {
-              const vendor = vendors.find((item) => String(item.id) === String(vendorId));
+          <ConnectedVendorPicker
+            value={form.vendor_name || form.vendor_id}
+            onSelect={(vendor) => {
               setForm((current) => ({
                 ...current,
-                vendor_id: vendorId,
+                vendor_id: vendor?.id || '',
                 vendor_name: getVendorName(vendor),
                 requires_vendor: false,
               }));
             }}
-          >
-            <SelectTrigger className="h-9 bg-white/80" data-testid="grn-upload-vendor-select">
-              <SelectValue placeholder={form.vendor_name || 'Select vendor'} />
-            </SelectTrigger>
-            <SelectContent>
-              {vendors.map((vendor) => (
-                <SelectItem key={vendor.id} value={String(vendor.id)}>
-                  {getVendorName(vendor)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+            placeholder={form.vendor_name || 'Select vendor'}
+          />
           {!form.vendor_id && form.vendor_name ? (
             <p className="text-xs text-muted-foreground">Scanned: {form.vendor_name}</p>
           ) : null}

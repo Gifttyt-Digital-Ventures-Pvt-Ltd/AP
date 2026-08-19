@@ -222,6 +222,20 @@ export const purchaseOrdersMasterDataApi = serviceApi.injectEndpoints({
         { type: "Approvals", id: "LIST" },
       ],
     }),
+    // POST /purchase-orders/{id}/cancel
+    // Body: { reason: string }. Cancels the purchase order and associated order tracking lifecycle.
+    cancelPurchaseOrder: builder.mutation({
+      query: ({ id, body }) => ({
+        url: `/purchase-orders/${id}/cancel`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        ...invalidateEntityAndList("PurchaseOrders", id),
+        { type: "Approvals", id: "LIST" },
+        { type: "OrderTracking", id: "LIST" },
+      ],
+    }),
     // POST /purchase-orders/{id}/pdf
     // Future endpoint from the contract to trigger PDF generation/regeneration.
     generatePurchaseOrderPdf: builder.mutation({
@@ -290,6 +304,7 @@ export const {
   useUpdatePurchaseOrderMutation,
   useSubmitPurchaseOrderMutation,
   useApprovePurchaseOrderMutation,
+  useCancelPurchaseOrderMutation,
   useGeneratePurchaseOrderPdfMutation,
   useGetPurchaseOrderPdfUrlQuery,
   useLazyGetPurchaseOrderPdfUrlQuery,
