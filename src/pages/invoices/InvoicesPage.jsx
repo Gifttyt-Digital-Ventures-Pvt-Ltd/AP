@@ -220,6 +220,11 @@ import {
 } from "../../utils/accountingLock";
 import { getAccountingErrorMessage } from "../accounting/utils/coaUtils";
 
+const INVOICE_VENDOR_PAGE_SIZE = 20;
+
+const getInvoiceVendorOptionKey = (vendor = {}, index = 0, prefix = "") =>
+  String(vendor.id ?? vendor.vendorId ?? vendor.vendor_id ?? `${prefix}${index}`);
+
 const getApprovalWorkflowName = (invoice) =>
   invoice.approvalWorkflowName ??
   invoice.workflowName ??
@@ -452,7 +457,11 @@ const InvoicesPage = () => {
   });
   const [searchTerm, setSearchTerm] = useState("");
   const [invoicePageOffset, setInvoicePageOffset] = useState(0);
+  const [invoiceVendorSearch, setInvoiceVendorSearch] = useState("");
+  const [invoiceVendorOffset, setInvoiceVendorOffset] = useState(0);
+  const [invoiceVendorOptions, setInvoiceVendorOptions] = useState([]);
   const debouncedSearchTerm = useDebouncedValue(searchTerm.trim(), 300);
+  const debouncedInvoiceVendorSearch = useDebouncedValue(invoiceVendorSearch.trim(), 300);
   const debouncedInvoiceColumnFilters = useDebouncedValue(
     invoiceColumnFilters,
     300,
@@ -543,7 +552,11 @@ const InvoicesPage = () => {
     data: vendorsData = [],
     isFetching: vendorsFetching,
     refetch: refetchVendors,
-  } = useGetVendorsQuery();
+  } = useGetVendorsQuery({
+    limit: INVOICE_VENDOR_PAGE_SIZE,
+    offset: invoiceVendorOffset,
+    ...(debouncedInvoiceVendorSearch ? { search: debouncedInvoiceVendorSearch } : {}),
+  });
   const { data: departmentsData = [] } = useGetDepartmentsForInvoiceQuery(
     {
       userEmail: invoiceUserEmail,
@@ -652,9 +665,16 @@ const InvoicesPage = () => {
     setInvoicePageOffset(safePage * INVOICE_LIST_PAGE_SIZE);
   }, []);
   const vendors = Array.isArray(vendorsData) ? vendorsData : [];
-  const invoiceVendorOptions = useMemo(
+  const invoiceVendorPageOptions = useMemo(
     () => mergeInvoiceVendorOptions(vendors),
     [vendors],
+  );
+  const invoiceVendorTotal = Math.max(
+    Number(vendorsData?.total ?? invoiceVendorPageOptions.length) || 0,
+    invoiceVendorPageOptions.length,
+  );
+  const hasMoreInvoiceVendors = Boolean(
+    vendorsData?.hasMore ?? invoiceVendorOptions.length < invoiceVendorTotal,
   );
   const invoiceVendorFilterOptions = invoiceFilterOptionsData.vendors;
   const branchFilterOptions = invoiceFilterOptionsData.branches;
@@ -1007,6 +1027,52 @@ const InvoicesPage = () => {
     setHideSidebar(Boolean(uploadedFile) || editDialogOpen);
     return () => setHideSidebar(false);
   }, [uploadedFile, editDialogOpen, setHideSidebar]);
+
+  useEffect(() => {
+    const invoiceFormOpen = Boolean(uploadedFile) || editDialogOpen;
+    if (!invoiceFormOpen) {
+      setInvoiceVendorSearch("");
+      setInvoiceVendorOffset(0);
+      return;
+    }
+  }, [editDialogOpen, uploadedFile]);
+
+  useEffect(() => {
+    setInvoiceVendorOffset(0);
+  }, [debouncedInvoiceVendorSearch]);
+
+  useEffect(() => {
+    setInvoiceVendorOptions((previous) => {
+      if (invoiceVendorOffset === 0) {
+        if (invoiceVendorPageOptions.length === 0) {
+          return previous.length === 0 ? previous : [];
+        }
+        const samePage =
+          previous.length === invoiceVendorPageOptions.length &&
+          previous.every(
+            (vendor, index) =>
+              getInvoiceVendorOptionKey(vendor, index) ===
+              getInvoiceVendorOptionKey(invoiceVendorPageOptions[index], index),
+          );
+        return samePage ? previous : invoiceVendorPageOptions;
+      }
+
+      const merged = new Map(
+        previous.map((vendor, index) => [
+          getInvoiceVendorOptionKey(vendor, index),
+          vendor,
+        ]),
+      );
+      invoiceVendorPageOptions.forEach((vendor, index) => {
+        merged.set(
+          getInvoiceVendorOptionKey(vendor, index, `${invoiceVendorOffset}-`),
+          vendor,
+        );
+      });
+      const next = Array.from(merged.values());
+      return next.length === previous.length ? previous : next;
+    });
+  }, [invoiceVendorOffset, invoiceVendorPageOptions]);
 
   useEffect(() => {
     setUploadPreviewError(false);
@@ -2949,6 +3015,14 @@ const InvoicesPage = () => {
         departmentMandatory={invoiceMandatoryFields.department}
         categoryMandatory={invoiceMandatoryFields.category}
         vendorOptions={invoiceVendorOptions}
+        vendorSearch={invoiceVendorSearch}
+        vendorsFetching={vendorsFetching}
+        hasMoreVendors={hasMoreInvoiceVendors}
+        onVendorSearchChange={setInvoiceVendorSearch}
+        onLoadMoreVendors={() => {
+          if (!hasMoreInvoiceVendors || vendorsFetching) return;
+          setInvoiceVendorOffset((offset) => offset + INVOICE_VENDOR_PAGE_SIZE);
+        }}
         departments={departments}
         invoiceCategories={invoiceCategories}
         invoiceCategoriesLoading={
@@ -3502,6 +3576,14 @@ const InvoicesPage = () => {
       departmentMandatory={invoiceMandatoryFields.department}
       categoryMandatory={invoiceMandatoryFields.category}
       vendorOptions={invoiceVendorOptions}
+      vendorSearch={invoiceVendorSearch}
+      vendorsFetching={vendorsFetching}
+      hasMoreVendors={hasMoreInvoiceVendors}
+      onVendorSearchChange={setInvoiceVendorSearch}
+      onLoadMoreVendors={() => {
+        if (!hasMoreInvoiceVendors || vendorsFetching) return;
+        setInvoiceVendorOffset((offset) => offset + INVOICE_VENDOR_PAGE_SIZE);
+      }}
       departments={departments}
       invoiceCategories={invoiceCategories}
       invoiceCategoriesLoading={

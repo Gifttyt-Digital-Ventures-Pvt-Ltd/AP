@@ -446,11 +446,20 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
   const getSelectedBeneficiaryPayload = () => {
     const selected = (payrun.invoices || []).flatMap((invoice) => {
       const selectedBeneficiary = getSelectedBeneficiaryForInvoice(invoice) || {};
+      const sourceType = String(invoice?.sourceType || "INVOICE").toUpperCase();
       if (!selectedBeneficiary.beneficiaryId) return [];
       return [{
-        invoiceId: invoice.invoiceId || invoice.invoice_id || invoice.id,
+        // invoiceId: invoice.invoiceId || invoice.invoice_id || invoice.id,
         payrunItemId: invoice.payrunItemId || invoice.payrun_item_id,
         beneficiaryId: selectedBeneficiary.beneficiaryId,
+        ...(sourceType === "INVOICE"
+          ? {
+              invoiceId:
+                item.invoiceId ||
+                item.invoice_id ||
+                item.id,
+            }
+          : {}),
       }];
     });
     return selected.length > 0 ? selected : undefined;
@@ -943,7 +952,9 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
                     ? 'Releasing...'
                     : requestingOtp
                       ? 'Sending OTP...'
-                      : 'Release Payment'}
+                      : otpSent
+                        ? 'Release Payment'
+                        : 'Send OTP'}
                 </Button>
               )}
             </DialogFooter>

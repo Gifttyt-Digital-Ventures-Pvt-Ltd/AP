@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Building2,
   CheckCircle2,
@@ -320,6 +320,11 @@ export const InvoiceForm = ({
   canEditNetPayable = false,
   canSubmit = true,
   vendorOptions = [],
+  vendorSearch = "",
+  vendorsFetching = false,
+  hasMoreVendors = false,
+  onVendorSearchChange,
+  onLoadMoreVendors,
   departments = [],
   invoiceCategories = [],
   invoiceCategoriesLoading = false,
@@ -365,6 +370,7 @@ export const InvoiceForm = ({
   const [vendorQuery, setVendorQuery] = useState("");
   const vendorAnchorRef = useRef(null);
   const vendorSwitchTriggerRef = useRef(null);
+  const lastVendorLoadCountRef = useRef(0);
   const [gstinPickerOpen, setGstinPickerOpen] = useState(false);
   const gstinTriggerRef = useRef(null);
   const [currencyPickerOpen, setCurrencyPickerOpen] = useState(false);
@@ -386,6 +392,30 @@ export const InvoiceForm = ({
       vendorMatchesInvoiceNameQuery(vendor, query),
     );
   }, [vendorOptions, vendorQuery]);
+
+  const maybeLoadMoreVendors = useCallback((element) => {
+    if (!hasMoreVendors || vendorsFetching) return;
+    if (!element) return;
+    const { scrollTop, scrollHeight, clientHeight } = element;
+    const scrollableDistance = Math.max(scrollHeight - clientHeight, 0);
+    if (scrollableDistance === 0) return;
+    const remainingDistance = scrollHeight - scrollTop - clientHeight;
+    const bottomThreshold = scrollableDistance * 0.2;
+    if (remainingDistance > bottomThreshold) return;
+    if (lastVendorLoadCountRef.current === vendorOptions.length) return;
+    lastVendorLoadCountRef.current = vendorOptions.length;
+    onLoadMoreVendors?.();
+  }, [hasMoreVendors, onLoadMoreVendors, vendorOptions.length, vendorsFetching]);
+
+  const handleVendorSearchChange = (value) => {
+    setVendorQuery(value);
+    onVendorSearchChange?.(value);
+  };
+
+  useEffect(() => {
+    if (vendorsFetching) return;
+    lastVendorLoadCountRef.current = 0;
+  }, [vendorOptions.length, vendorSearch, vendorsFetching]);
 
   useEffect(() => {
     setIsNetPayableManuallyEdited(false);
@@ -1940,7 +1970,7 @@ export const InvoiceForm = ({
                       ref={vendorSwitchTriggerRef}
                       type="button"
                       onClick={() => {
-                        setVendorQuery("");
+                        handleVendorSearchChange("");
                         setVendorPickerOpen((open) => !open);
                       }}
                       className="flex shrink-0 items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm font-sm text-foreground"
@@ -1967,12 +1997,12 @@ export const InvoiceForm = ({
                       <Input
                         value={vendorQuery}
                         onChange={(e) => {
-                          setVendorQuery(e.target.value);
+                          handleVendorSearchChange(e.target.value);
                           applyVendorNameChange(e.target.value);
                           setVendorPickerOpen(true);
                         }}
                         onFocus={() => {
-                          setVendorQuery("");
+                          handleVendorSearchChange("");
                           setVendorPickerOpen(true);
                         }}
                         placeholder="Select or enter vendor"
@@ -1993,7 +2023,7 @@ export const InvoiceForm = ({
                         <button
                           type="button"
                           onClick={() => {
-                            setVendorQuery("");
+                            handleVendorSearchChange("");
                             setVendorPickerOpen(true);
                           }}
                           className="text-gray-400 hover:text-gray-600 p-1"
@@ -2005,14 +2035,18 @@ export const InvoiceForm = ({
                     </div>
                     <div
                       className="max-h-56 overflow-y-auto overscroll-contain py-1"
+                      onScroll={(event) => maybeLoadMoreVendors(event.currentTarget)}
                       onWheel={(event) => {
                         event.currentTarget.scrollTop += event.deltaY;
                         event.stopPropagation();
+                        maybeLoadMoreVendors(event.currentTarget);
                       }}
                     >
                       {filteredVendorOptions.length === 0 ? (
                         <p className="px-3 py-2 text-xs text-muted-foreground">
-                          {vendorOptions.length === 0
+                          {vendorsFetching
+                            ? "Loading vendors..."
+                            : vendorOptions.length === 0
                             ? "No vendors available"
                             : "No matching vendors — you can still enter a new name"}
                         </p>
@@ -2031,7 +2065,7 @@ export const InvoiceForm = ({
                             onMouseDown={(event) => event.preventDefault()}
                             onClick={() => {
                               applyVendorNameChange(vendor.name);
-                              setVendorQuery("");
+                              handleVendorSearchChange("");
                               setVendorPickerOpen(false);
                             }}
                           >
@@ -2044,6 +2078,11 @@ export const InvoiceForm = ({
                           </button>
                         ))
                       )}
+                      {hasMoreVendors ? (
+                        <div className="border-t px-3 py-2 text-center text-xs text-muted-foreground">
+                          {vendorsFetching ? "Loading vendors..." : "Scroll for more vendors"}
+                        </div>
+                      ) : null}
                     </div>
                   </PopoverContent>
                 </Popover>
