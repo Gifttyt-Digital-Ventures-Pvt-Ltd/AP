@@ -147,7 +147,7 @@ const CreateVendorPage = ({
   isEditMode = false,
 }) => {
   const contentPaneRef = useRef(null);
-  const { corporateScreens } = useRBAC();
+  const { corporateScreens, isConnectedBankingEnabled } = useRBAC();
   const activeVendorFields = corporateScreens?.activeVendorFields ?? [];
   const vendorFieldConfiguration = corporateScreens?.vendorFieldConfiguration ?? [];
   const activeVendorDocuments = corporateScreens?.activeVendorDocuments;
@@ -803,7 +803,7 @@ const CreateVendorPage = ({
                   onChange={(bankAccounts) => updateField("bankAccounts", bankAccounts)}
                   foreignVendor={Boolean(formData.foreignVendor)}
                   isRequired={isApiFieldRequired}
-                  onVerifyBankAccount={handleVerifyBankAccount}
+                  onVerifyBankAccount={isConnectedBankingEnabled ? handleVerifyBankAccount : undefined}
                   isBankVerifying={isBankVerifying}
                 />
               </div>
