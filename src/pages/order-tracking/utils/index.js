@@ -60,12 +60,38 @@ const mapDocumentChainDetail = (chain = []) =>
 
 const mapPaymentObligations = (obligations = []) =>
   (Array.isArray(obligations) ? obligations : []).map((obligation) => ({
-    stage: obligation.stage ?? "-",
-    scheduled: Number(obligation.scheduled ?? 0) || 0,
-    triggered: Number(obligation.triggered ?? 0) || 0,
-    paid: Number(obligation.paid ?? 0) || 0,
-    status: obligation.status ?? null,
-    dueDate: obligation.dueDate ?? null,
+    id: firstValue(obligation.id, obligation.obligationId, obligation.obligation_id),
+    obligationId: firstValue(obligation.obligationId, obligation.obligation_id, obligation.id),
+    scheduleRowId: firstValue(
+      obligation.scheduleRowId,
+      obligation.schedule_row_id,
+      obligation.paymentScheduleRowId,
+      obligation.payment_schedule_row_id,
+    ),
+    stage: firstValue(obligation.stage, obligation.triggerStage, obligation.trigger_stage, "-"),
+    label: firstValue(obligation.label, obligation.milestoneLabel, obligation.milestone_label, ""),
+    scheduled: Number(firstValue(obligation.scheduled, obligation.scheduled_amount, 0)) || 0,
+    triggered: Number(firstValue(obligation.triggered, obligation.triggered_amount, 0)) || 0,
+    paid: Number(firstValue(obligation.paid, obligation.paid_amount, 0)) || 0,
+    outstanding: obligation.outstanding,
+    availableAdvance: Number(firstValue(obligation.availableAdvance, obligation.available_advance, 0)) || 0,
+    advanceAdjustedAmount:
+      Number(firstValue(obligation.advanceAdjustedAmount, obligation.advance_adjusted_amount, 0)) || 0,
+    netPayable: obligation.netPayable ?? obligation.net_payable,
+    status: firstValue(obligation.status, obligation.obligationStatus, obligation.obligation_status, null),
+    advanceState: firstValue(obligation.advanceState, obligation.advance_state, null),
+    isAdvance: Boolean(
+      firstValue(obligation.isAdvance, obligation.is_advance, obligation.obligationType === "ADVANCE"),
+    ),
+    dueDate: firstValue(obligation.dueDate, obligation.due_date, null),
+    untriggeredReason: firstValue(obligation.untriggeredReason, obligation.untriggered_reason, null),
+    history: Array.isArray(obligation.history)
+      ? obligation.history
+      : Array.isArray(obligation.paymentHistory)
+        ? obligation.paymentHistory
+        : Array.isArray(obligation.payment_history)
+          ? obligation.payment_history
+          : [],
   }));
 
 /**

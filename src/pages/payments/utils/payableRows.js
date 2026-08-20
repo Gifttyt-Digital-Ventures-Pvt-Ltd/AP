@@ -1,5 +1,4 @@
 export {
-  applyPayablesDuplicateGuard,
   getPayableDisplayLabel,
   getPayableSelectionKey,
   getSelectablePayableRows,

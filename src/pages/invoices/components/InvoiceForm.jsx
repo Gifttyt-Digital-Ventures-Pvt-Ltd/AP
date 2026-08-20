@@ -2012,7 +2012,7 @@ export const InvoiceForm = ({
                   )}
                 </div>
                 <div>
-                  {formData.vendorMatched && vendorBranchOptions.length > 0 ? (
+                  {formData.vendorMatched && vendorBranches.length > 0 ? (
                     <>
                       <RequiredLabel required>GST Treatment</RequiredLabel>
                       <AppSelect

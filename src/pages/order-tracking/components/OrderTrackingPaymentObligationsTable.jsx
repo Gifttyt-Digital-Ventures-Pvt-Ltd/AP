@@ -26,6 +26,41 @@ const OBLIGATION_STATUS_COLORS = {
   WAIVED: "bg-muted text-muted-foreground",
 };
 
+const ADVANCE_STATE_LABELS = {
+  EARMARKED: "Awaiting Trigger",
+  ADVANCE_DUE: "Advance Due",
+  ADVANCE_PAID: "Advance Paid",
+  AVAILABLE_FOR_ADJUSTMENT: "Available",
+  ADJUSTED: "Adjusted",
+  RELEASED_TO_POOL: "Released",
+};
+
+const ADVANCE_STATE_COLORS = {
+  EARMARKED: "bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-300",
+  ADVANCE_DUE: "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300",
+  ADVANCE_PAID: "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
+  AVAILABLE_FOR_ADJUSTMENT: "bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300",
+  ADJUSTED: "bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300",
+  RELEASED_TO_POOL: "bg-muted text-muted-foreground",
+};
+
+const getObligationRowKey = (row = {}, rowIndex = 0) =>
+  row.id || row.obligationId || row.scheduleRowId || `${row.stage}-${rowIndex}`;
+
+const normalizeAdvanceState = (value) =>
+  String(value || "").trim().toUpperCase();
+
+const getHistoryMessage = (entry = {}) =>
+  entry.message ||
+  entry.description ||
+  entry.actionDescription ||
+  entry.action_description ||
+  entry.action ||
+  "Payment history updated";
+
+const getHistoryTimestamp = (entry = {}) =>
+  entry.timestamp || entry.createdAt || entry.created_at || entry.paidAt || entry.paid_at;
+
 const OrderTrackingPaymentObligationsTable = ({
   obligations = [],
   currency,
@@ -99,6 +134,17 @@ const OrderTrackingPaymentObligationsTable = ({
       );
     const isTriggered =
       triggered > 0 || String(row.status || "").toUpperCase() === "TRIGGERED";
+    const advanceState = normalizeAdvanceState(row.advanceState);
+    const displayStatus =
+      advanceState && ADVANCE_STATE_LABELS[advanceState]
+        ? ADVANCE_STATE_LABELS[advanceState]
+        : isTriggered
+          ? row.status || "TRIGGERED"
+          : "PENDING";
+    const statusClassName =
+      (advanceState && ADVANCE_STATE_COLORS[advanceState]) ||
+      OBLIGATION_STATUS_COLORS[row.status] ||
+      "";
     const untriggeredReason =
       row.untriggeredReason ||
       row.untriggered_reason ||
@@ -107,7 +153,14 @@ const OrderTrackingPaymentObligationsTable = ({
     const renderCell = (header) => {
       switch (header.key) {
         case "stage":
-          return row.stage;
+          return (
+            <div>
+              <p>{row.stage}</p>
+              {row.label ? (
+                <p className="text-xs font-normal text-muted-foreground">{row.label}</p>
+              ) : null}
+            </div>
+          );
         case "scheduled":
           return formatCurrency(scheduled, currency);
         case "triggered":
@@ -123,9 +176,9 @@ const OrderTrackingPaymentObligationsTable = ({
             <div className="flex flex-col gap-1">
               <Badge
                 variant="outline"
-                className={`w-fit border-0 font-medium ${OBLIGATION_STATUS_COLORS[row.status] || ""}`}
+                className={`w-fit border-0 font-medium ${statusClassName}`}
               >
-                {isTriggered ? row.status || "TRIGGERED" : "PENDING"}
+                {displayStatus}
               </Badge>
               {!isTriggered && untriggeredReason ? (
                 <span className="text-[11px] text-muted-foreground">
@@ -142,13 +195,35 @@ const OrderTrackingPaymentObligationsTable = ({
     };
 
     return (
-      <TableRow key={`${row.stage}-${rowIndex}`}>
-        {headers.map((header) => (
-          <TableCell key={header.key} className={header.cellClassName}>
-            {renderCell(header)}
-          </TableCell>
-        ))}
-      </TableRow>
+      <React.Fragment key={getObligationRowKey(row, rowIndex)}>
+        <TableRow>
+          {headers.map((header) => (
+            <TableCell key={header.key} className={header.cellClassName}>
+              {renderCell(header)}
+            </TableCell>
+          ))}
+        </TableRow>
+        {row.history?.length > 0 ? (
+          <TableRow>
+            <TableCell colSpan={headers.length} className="bg-muted/20">
+              <div className="space-y-1.5 text-xs">
+                <p className="font-medium text-muted-foreground">Payment history</p>
+                {row.history.map((entry, index) => (
+                  <div
+                    key={`${getObligationRowKey(row, rowIndex)}-history-${index}`}
+                    className="flex flex-wrap items-center justify-between gap-2 rounded border border-border bg-background px-2 py-1.5"
+                  >
+                    <span className="text-foreground">{getHistoryMessage(entry)}</span>
+                    <span className="text-muted-foreground">
+                      {formatDate(getHistoryTimestamp(entry))}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </TableCell>
+          </TableRow>
+        ) : null}
+      </React.Fragment>
     );
   };
 

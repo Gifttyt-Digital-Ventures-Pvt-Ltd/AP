@@ -28,7 +28,7 @@ import PoPaymentScheduleSection from "./PoPaymentScheduleSection";
 const getPoFormLineItemTableHeader = ({ isInr, fieldOn }) => [
   ...(fieldOn("LINE_ITEM", "item_name") ? [{ key: "item_description", title: "Description *", headerClassName: "w-[220px]" }] : []),
   ...(isInr && fieldOn("LINE_ITEM", "hsn_sac_code") ? [{ key: "hsn_sac_code", title: "HSN/SAC" }] : []),
-  ...(fieldOn("LINE_ITEM", "quantity") ? [{ key: "quantity", title: "Qty", headerClassName: "w-[80px]" }] : []),
+  ...(fieldOn("LINE_ITEM", "quantity") ? [{ key: "quantity", title: "Qty", headerClassName: "w-[120px]" }] : []),
   ...(fieldOn("LINE_ITEM", "uom") ? [{ key: "unit_of_measure", title: "Unit", headerClassName: "w-[88px]" }] : []),
   ...(fieldOn("LINE_ITEM", "unit_rate") ? [{ key: "unit_price", title: "Unit Price", headerClassName: "w-[120px]" }] : []),
   ...(fieldOn("LINE_ITEM", "discount_percent") ? [{ key: "discount_percent", title: "Disc %", headerClassName: "w-[82px]" }] : []),
@@ -46,10 +46,22 @@ const FieldBlock = ({ label, children, className = "" }) => (
 
 const inputClassName = "h-9 bg-white/80 text-sm";
 const numericTextPattern = /^\d*\.?\d*$/;
+const quantityTextPattern = /^\d*(?:\.\d{0,2})?$/;
+const percentTextPattern = /^\d*(?:\.\d{0,2})?$/;
 
 const isNumericTextInput = (value = "") => {
   const text = String(value);
   return text !== "." && numericTextPattern.test(text);
+};
+
+const isQuantityTextInput = (value = "") => {
+  const text = String(value);
+  return text !== "." && quantityTextPattern.test(text);
+};
+
+const isPercentTextInput = (value = "") => {
+  const text = String(value);
+  return text !== "." && percentTextPattern.test(text) && Number(text) <= 100;
 };
 
 const getRegistrationValue = (registration, ...keys) => {
@@ -400,10 +412,20 @@ const PoFormDialog = ({
           case "quantity":
             value = (
               <Input
-                type="number"
-                value={item.quantity}
-                onChange={(e) => updateLineItem(idx, "quantity", parseFloat(e.target.value) || 0)}
-                className={inputClassName}
+                type="text"
+                inputMode="decimal"
+                pattern="[0-9]*[.]?[0-9]*"
+                value={item.quantity ?? ""}
+                onChange={(e) => {
+                  const rawValue = e.target.value;
+                  if (rawValue === "") {
+                    updateLineItem(idx, "quantity", "");
+                    return;
+                  }
+                  if (!isQuantityTextInput(rawValue)) return;
+                  updateLineItem(idx, "quantity", rawValue);
+                }}
+                className={`${inputClassName} min-w-[100px]`}
                 data-testid={`line-item-qty-${idx}`}
               />
             );
@@ -448,11 +470,19 @@ const PoFormDialog = ({
           case "discount_percent":
             value = (
               <Input
-                type="number"
+                type="text"
+                inputMode="decimal"
+                pattern="[0-9]*[.]?[0-9]{0,2}"
                 value={item.discount_percent ?? ""}
-                onChange={(e) => updateLineItem(idx, "discount_percent", parseFloat(e.target.value) || 0)}
-                min="0"
-                max="100"
+                onChange={(e) => {
+                  const rawValue = e.target.value;
+                  if (rawValue === "") {
+                    updateLineItem(idx, "discount_percent", "");
+                    return;
+                  }
+                  if (!isPercentTextInput(rawValue)) return;
+                  updateLineItem(idx, "discount_percent", rawValue);
+                }}
                 className={inputClassName}
                 data-testid={`line-item-discount-${idx}`}
               />

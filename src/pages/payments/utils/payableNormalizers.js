@@ -109,6 +109,20 @@ const getFallbackNetPayableAmount = (row = {}) =>
     ),
   );
 
+const getFallbackObligationAmount = (row = {}) =>
+  toNumberOrNull(
+    firstValue(
+      row.remainingAmount,
+      row.remaining_amount,
+      row.outstandingAmount,
+      row.outstanding_amount,
+      row.scheduledAmount,
+      row.scheduled_amount,
+      row.triggeredAmount,
+      row.triggered_amount,
+    ),
+  );
+
 const getMissingMoneyFields = (row = {}, { strictMoney = false } = {}) => {
   const requiresCanonicalMoney = strictMoney && hasSourceAwareIdentity(row);
   if (!requiresCanonicalMoney) {
@@ -133,6 +147,8 @@ const getBasePayable = (row = {}, options = {}) => {
     firstValue(row.sourceType, row.source_type, row.payableType, row.payable_type, row.type),
   );
   const triggerStage = normalizeTriggerStage(firstValue(row.triggerStage, row.trigger_stage));
+  const isAdvanceStageObligation = sourceType === "OBLIGATION" && triggerStage !== "TI";
+  const obligationFallbackAmount = isAdvanceStageObligation ? getFallbackObligationAmount(row) : null;
   const rawSourceId = firstValue(row.sourceId, row.source_id);
   const invoiceId = firstValue(row.invoiceId, row.invoice_id, sourceType === "INVOICE" ? row.id : undefined);
   const obligationId = firstValue(
@@ -169,10 +185,14 @@ const getBasePayable = (row = {}, options = {}) => {
       "advance_adjustment_total",
     ]) ?? 0;
   const payableAmount =
-    getMoneyField(row, "payableAmount", "payable_amount") ?? getFallbackPayableAmount(row) ?? 0;
+    getMoneyField(row, "payableAmount", "payable_amount") ??
+    obligationFallbackAmount ??
+    getFallbackPayableAmount(row) ??
+    0;
   const tdsAmount = getMoneyField(row, "tdsAmount", "tds_amount", ["tds"]) ?? 0;
   const netPayableAmount =
     getMoneyField(row, "netPayableAmount", "net_payable_amount") ??
+    obligationFallbackAmount ??
     getFallbackNetPayableAmount(row) ??
     0;
   const backendSelectable = firstValue(row.isSelectable, row.is_selectable, row.selectable);
@@ -282,39 +302,12 @@ export const normalizePayableItem = (row = {}, options = {}) => {
   return normalizeInvoicePayable(row, options);
 };
 
-export const applyPayablesDuplicateGuard = (items = []) => {
-  const tiObligations = new Map();
-  items.forEach((item) => {
-    if (item.sourceType !== "OBLIGATION" || item.triggerStage !== "TI" || !item.invoiceId) return;
-    tiObligations.set(String(item.invoiceId), item);
-  });
-
-  if (tiObligations.size === 0) return items;
-
-  return items.filter((item) => {
-    if (item.sourceType !== "INVOICE" || !item.invoiceId) return true;
-    const duplicateObligation = tiObligations.get(String(item.invoiceId));
-    if (!duplicateObligation) return true;
-    console.warn(
-      "Dropped duplicate invoice payable because a TI obligation represents the same money.",
-      {
-        invoicePayableKey: item.payableKey,
-        tiObligationPayableKey: duplicateObligation.payableKey,
-        invoiceId: item.invoiceId,
-      },
-    );
-    return false;
-  });
-};
-
 export const normalizePayablesResponse = (raw, options = {}) => {
   const source = raw && typeof raw === "object" && !Array.isArray(raw) ? raw : {};
   const items = Array.isArray(raw)
     ? raw
     : firstValue(source.items, source.data, source.content, source.payables, source.pendingPayments, source.pending_payments) || [];
-  return applyPayablesDuplicateGuard(
-    (Array.isArray(items) ? items : []).map((item) => normalizePayableItem(item, options)),
-  );
+  return (Array.isArray(items) ? items : []).map((item) => normalizePayableItem(item, options));
 };
 
 export const getPayableDisplayLabel = (row = {}) => {
