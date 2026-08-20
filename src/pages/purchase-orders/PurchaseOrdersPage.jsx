@@ -1,9 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSearchParams } from 'react-router';
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useSearchParams } from "react-router";
 import {
   useGetVendorsQuery,
   useRequestVendorAdditionMutation,
-} from '../../Services/apis/invoicesVendorsApi';
+} from "../../Services/apis/invoicesVendorsApi";
 import {
   useGetPurchaseOrdersQuery,
   useGetPurchaseOrderFormatConfigQuery,
@@ -21,7 +27,7 @@ import {
   useApprovePurchaseOrderMutation,
   useCancelPurchaseOrderMutation,
   useScanPurchaseOrderMutation,
-} from '../../Services/apis/purchaseOrdersMasterDataApi';
+} from "../../Services/apis/purchaseOrdersMasterDataApi";
 import {
   Dialog,
   DialogContent,
@@ -29,22 +35,22 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '../../components/ui/dialog';
-import { Button } from '../../components/ui/button';
-import { Textarea } from '../../components/ui/textarea';
-import { Label } from '../../components/ui/label';
-import { Loader2, XCircle } from 'lucide-react';
-import { useUpdateDocumentPaymentScheduleMutation } from '../../Services/apis/paymentSchedulesApi';
-import { useRequestAccountingReadyUnlockMutation } from '../../Services/apis/accountingApi';
-import { useGetOrganisationQuery } from '../../Services/apis/settingsApi';
-import { normalizeOrganisationBranchesFromApi } from '../../utils/organisationGst';
-import { toast } from 'sonner';
+} from "../../components/ui/dialog";
+import { Button } from "../../components/ui/button";
+import { Textarea } from "../../components/ui/textarea";
+import { Label } from "../../components/ui/label";
+import { Loader2, XCircle } from "lucide-react";
+import { useUpdateDocumentPaymentScheduleMutation } from "../../Services/apis/paymentSchedulesApi";
+import { useRequestAccountingReadyUnlockMutation } from "../../Services/apis/accountingApi";
+import { useGetOrganisationQuery } from "../../Services/apis/settingsApi";
+import { normalizeOrganisationBranchesFromApi } from "../../utils/organisationGst";
+import { toast } from "sonner";
 import {
   getAccountingReadyBlockedMessage,
   isAccountingReadyLocked,
-} from '../../utils/accountingLock';
-import { getAccountingErrorMessage } from '../accounting/utils/coaUtils';
-import { statusColors } from './constants';
+} from "../../utils/accountingLock";
+import { getAccountingErrorMessage } from "../accounting/utils/coaUtils";
+import { statusColors } from "./constants";
 import {
   DEFAULT_PO_FORMAT_CONFIG,
   buildCreatePurchaseOrderPayload,
@@ -56,160 +62,179 @@ import {
   normalizePoTemplateCode,
   normalizePurchaseOrder,
   sanitizeLineItemForCurrency,
-} from './utils';
-import { initializePoFormFromScan } from './utils/poScanNormalization';
+} from "./utils";
+import { initializePoFormFromScan } from "./utils/poScanNormalization";
 import {
   applyUploadLineItemUpdate,
   applyUploadLineItemsChange,
   computeLineTotal,
   resolvePoTotals,
-} from './utils/poTotals';
+} from "./utils/poTotals";
 import {
   buildPaymentSchedulePayload,
   getPaymentScheduleSummary,
   normalizePaymentScheduleRows,
   validatePaymentScheduleRows,
-} from './utils/poPaymentSchedule';
-import PurchaseOrdersToolbar from './components/PurchaseOrdersToolbar';
-import PoListTable from './components/PoListTable';
-import PoFormDialog from './components/PoFormDialog';
-import PoFormatBuilderDialog from './components/PoFormatBuilderDialog';
-import PoDetailsDialog from './components/PoDetailsDialog';
-import PoApprovalDialog from './components/PoApprovalDialog';
-import RaiseAdvanceDialog from './components/RaiseAdvanceDialog';
-import PoUploadDialog from './components/PoUploadDialog';
-import PoUploadSection from './components/PoUploadSection';
-import PoSpreadsheetPreview from './components/PoSpreadsheetPreview';
-import { PO_CREATE_OPTIONS } from './components/PoCreateMenu';
-import { InvoicePdfPreview } from '../invoices/components/InvoicePdfPreview';
-import RequestVendorDialog from '../invoices/components/RequestVendorDialog';
+} from "./utils/poPaymentSchedule";
+import PurchaseOrdersToolbar from "./components/PurchaseOrdersToolbar";
+import PoListTable from "./components/PoListTable";
+import PoFormDialog from "./components/PoFormDialog";
+import PoFormatBuilderDialog from "./components/PoFormatBuilderDialog";
+import PoDetailsDialog from "./components/PoDetailsDialog";
+import PoApprovalDialog from "./components/PoApprovalDialog";
+import RaiseAdvanceDialog from "./components/RaiseAdvanceDialog";
+import PoUploadDialog from "./components/PoUploadDialog";
+import PoUploadSection from "./components/PoUploadSection";
+import PoSpreadsheetPreview from "./components/PoSpreadsheetPreview";
+import { PO_CREATE_OPTIONS } from "./components/PoCreateMenu";
+import { InvoicePdfPreview } from "../invoices/components/InvoicePdfPreview";
+import RequestVendorDialog from "../invoices/components/RequestVendorDialog";
 import {
   buildVendorRequestForm,
   createEmptyVendorRequestForm,
-} from '../invoices/utils/invoiceBulkUtils';
-import { getVendorGstRegistrations } from '../vendors/components/VendorGstRegistrationsPanel';
-import { useActionGuard } from '../../hooks/useActionGuard';
-import { useCreditErrorHandler } from '../../contexts/CreditErrorContext';
-import { useRBAC } from '../../contexts/RBACContext';
-import useForeignCurrencyInrConversionSubscription from '../../hooks/useForeignCurrencyInrConversionSubscription';
-import usePaymentTermsSubscription from '../../hooks/usePaymentTermsSubscription';
-import useVendorAdvancesSubscription from '../../hooks/useVendorAdvancesSubscription';
+} from "../invoices/utils/invoiceBulkUtils";
+import { getVendorGstRegistrations } from "../vendors/components/VendorGstRegistrationsPanel";
+import { useActionGuard } from "../../hooks/useActionGuard";
+import { useCreditErrorHandler } from "../../contexts/CreditErrorContext";
+import { useRBAC } from "../../contexts/RBACContext";
+import useForeignCurrencyInrConversionSubscription from "../../hooks/useForeignCurrencyInrConversionSubscription";
+import usePaymentTermsSubscription from "../../hooks/usePaymentTermsSubscription";
+import useVendorAdvancesSubscription from "../../hooks/useVendorAdvancesSubscription";
 import {
   getInrConversionValidationError,
   normalizeConversionStateForCurrency,
-} from '../../components/common/InrConversionFields';
-import { useSidebar } from '../../components/Layout';
-import { useMeteredActionEstimate } from '../../hooks/useMeteredActionEstimate';
-import { CREDIT_ACTION_CODES } from '../../constants/creditActions';
-import { extractApiErrorDetail } from '../../utils/approvalWorkflow';
-import { extractVendorIdFromResponse, extractListResponse } from '../../Services/utils/payloadMappers';
-import { getInvoiceVendorRequestValidationErrors } from '../../utils/vendorValidation';
-import { clearNotificationQueryParams } from '../../utils/notificationQueryParams';
+} from "../../components/common/InrConversionFields";
+import { useSidebar } from "../../components/Layout";
+import { useMeteredActionEstimate } from "../../hooks/useMeteredActionEstimate";
+import { CREDIT_ACTION_CODES } from "../../constants/creditActions";
+import { extractApiErrorDetail } from "../../utils/approvalWorkflow";
+import {
+  extractVendorIdFromResponse,
+  extractListResponse,
+} from "../../Services/utils/payloadMappers";
+import { getInvoiceVendorRequestValidationErrors } from "../../utils/vendorValidation";
+import { clearNotificationQueryParams } from "../../utils/notificationQueryParams";
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? '';
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL ?? "";
 const EMPTY_LIST = [];
 
 const isSpreadsheetUploadFile = (file = {}) => {
-  const fileName = String(file?.name || '').toLowerCase();
+  const fileName = String(file?.name || "").toLowerCase();
   return (
-    fileName.endsWith('.xls') ||
-    fileName.endsWith('.xlsx') ||
-    fileName.endsWith('.csv') ||
-    file?.type?.includes('spreadsheet') ||
-    file?.type?.includes('excel') ||
-    file?.type?.includes('csv')
+    fileName.endsWith(".xls") ||
+    fileName.endsWith(".xlsx") ||
+    fileName.endsWith(".csv") ||
+    file?.type?.includes("spreadsheet") ||
+    file?.type?.includes("excel") ||
+    file?.type?.includes("csv")
   );
 };
 
-const createEmptyLineItem = (currency = 'INR') =>
+const createEmptyLineItem = (currency = "INR") =>
   sanitizeLineItemForCurrency(
     {
-      item_description: '',
-      hsn_sac_code: '',
+      item_description: "",
+      hsn_sac_code: "",
       quantity: 1,
-      unit_of_measure: 'NOS',
+      unit_of_measure: "NOS",
       unit_price: 0,
       discount_percent: 0,
       gst_rate: 18,
-      remarks: '',
+      remarks: "",
     },
     currency,
   );
 
-const createDefaultPoForm = (defaultCurrency = 'INR', formatId = 'default-format') => ({
+const createDefaultPoForm = (
+  defaultCurrency = "INR",
+  formatId = "default-format",
+) => ({
   po_format_id: formatId,
-  po_number: '',
-  vendor_id: '',
-  vendor_gst_registration_id: '',
-  vendor_gstin: '',
-  vendor_pan: '',
-  branch_name: '',
-  branch_code: '',
-  billing_gstin: '',
-  vendor_branch_name: '',
-  vendor_branch_code: '',
-  vendor_branch_gstin: '',
-  reference_document_type: '',
-  reference_document_id: '',
-  reference_document_name: '',
-  creation_source: 'MANUAL',
-  po_date: new Date().toISOString().split('T')[0],
-  valid_till: '',
-  expected_delivery_date: '',
+  po_number: "",
+  vendor_id: "",
+  vendor_gst_registration_id: "",
+  vendor_gstin: "",
+  vendor_pan: "",
+  branch_name: "",
+  branch_code: "",
+  billing_gstin: "",
+  vendor_branch_name: "",
+  vendor_branch_code: "",
+  vendor_branch_gstin: "",
+  reference_document_type: "",
+  reference_document_id: "",
+  reference_document_name: "",
+  creation_source: "MANUAL",
+  po_date: new Date().toISOString().split("T")[0],
+  valid_till: "",
+  expected_delivery_date: "",
   currency: defaultCurrency,
-  exchange_rate: '',
+  exchange_rate: "",
   convertToInr: undefined,
-  matchingInrValue: '',
-  place_of_supply: '',
-  shipping_address: '',
-  billing_address: '',
-  delivery_terms: '',
-  freight_terms: '',
-  payment_terms: '',
+  matchingInrValue: "",
+  place_of_supply: "",
+  shipping_address: "",
+  billing_address: "",
+  delivery_terms: "",
+  freight_terms: "",
+  payment_terms: "",
   tds_applicable: false,
-  tds_section: '',
-  tds_percent: '',
-  remarks: '',
+  tds_section: "",
+  tds_percent: "",
+  remarks: "",
   line_items: [createEmptyLineItem(defaultCurrency)],
 });
 
-const buildPoEditForm = (po = {}, fallbackFormatId = 'default-format') => ({
-  po_format_id: po.po_format_id || po.poFormatId || po.formatConfigId || fallbackFormatId,
-  po_number: po.po_number || po.poNumber || '',
-  vendor_id: po.vendor_id || po.vendorId || '',
-  vendor_gst_registration_id: po.vendor_gst_registration_id || po.vendorGstRegistrationId || po.vendorRegistrationId || '',
-  vendor_gstin: po.vendor_gstin || po.vendorGstin || '',
-  vendor_pan: po.vendor_pan || po.vendorPan || '',
-  branch_name: po.branch_name || po.branchName || '',
-  branch_code: po.branch_code || po.branchCode || '',
-  billing_gstin: po.billing_gstin || po.billingGstin || '',
-  vendor_branch_name: po.vendor_branch_name || po.vendorBranchName || '',
-  vendor_branch_code: po.vendor_branch_code || po.vendorBranchCode || '',
-  vendor_branch_gstin: po.vendor_branch_gstin || po.vendorBranchGstin || '',
-  reference_document_type: po.reference_document_type || po.referenceDocumentType || '',
-  reference_document_id: po.reference_document_id || po.referenceDocumentId || '',
-  reference_document_name: po.reference_document_name || po.referenceDocumentName || '',
-  creation_source: po.creation_source || po.creationSource || '',
-  po_date: String(po.po_date || po.poDate || '').slice(0, 10) || new Date().toISOString().split('T')[0],
-  valid_till: String(po.valid_till || po.validTill || '').slice(0, 10),
-  expected_delivery_date: String(po.expected_delivery_date || po.expectedDeliveryDate || '').slice(0, 10),
-  currency: po.currency || 'INR',
-  exchange_rate: po.exchange_rate || po.exchangeRate || '',
+const buildPoEditForm = (po = {}, fallbackFormatId = "default-format") => ({
+  po_format_id:
+    po.po_format_id || po.poFormatId || po.formatConfigId || fallbackFormatId,
+  po_number: po.po_number || po.poNumber || "",
+  vendor_id: po.vendor_id || po.vendorId || "",
+  vendor_gst_registration_id:
+    po.vendor_gst_registration_id ||
+    po.vendorGstRegistrationId ||
+    po.vendorRegistrationId ||
+    "",
+  vendor_gstin: po.vendor_gstin || po.vendorGstin || "",
+  vendor_pan: po.vendor_pan || po.vendorPan || "",
+  branch_name: po.branch_name || po.branchName || "",
+  branch_code: po.branch_code || po.branchCode || "",
+  billing_gstin: po.billing_gstin || po.billingGstin || "",
+  vendor_branch_name: po.vendor_branch_name || po.vendorBranchName || "",
+  vendor_branch_code: po.vendor_branch_code || po.vendorBranchCode || "",
+  vendor_branch_gstin: po.vendor_branch_gstin || po.vendorBranchGstin || "",
+  reference_document_type:
+    po.reference_document_type || po.referenceDocumentType || "",
+  reference_document_id:
+    po.reference_document_id || po.referenceDocumentId || "",
+  reference_document_name:
+    po.reference_document_name || po.referenceDocumentName || "",
+  creation_source: po.creation_source || po.creationSource || "",
+  po_date:
+    String(po.po_date || po.poDate || "").slice(0, 10) ||
+    new Date().toISOString().split("T")[0],
+  valid_till: String(po.valid_till || po.validTill || "").slice(0, 10),
+  expected_delivery_date: String(
+    po.expected_delivery_date || po.expectedDeliveryDate || "",
+  ).slice(0, 10),
+  currency: po.currency || "INR",
+  exchange_rate: po.exchange_rate || po.exchangeRate || "",
   convertToInr: Boolean(po.convertToInr ?? po.convert_to_inr ?? false),
-  matchingInrValue: po.matchingInrValue ?? po.matching_inr_value ?? '',
-  place_of_supply: po.place_of_supply || po.placeOfSupply || '',
-  shipping_address: po.shipping_address || po.shipToAddress || po.shippingAddress || '',
-  billing_address: po.billing_address || po.billingAddress || '',
-  delivery_terms: po.delivery_terms || po.deliveryTerms || '',
-  freight_terms: po.freight_terms || po.freightTerms || '',
-  payment_terms: po.payment_terms || po.paymentTerms || '',
+  matchingInrValue: po.matchingInrValue ?? po.matching_inr_value ?? "",
+  place_of_supply: po.place_of_supply || po.placeOfSupply || "",
+  shipping_address:
+    po.shipping_address || po.shipToAddress || po.shippingAddress || "",
+  billing_address: po.billing_address || po.billingAddress || "",
+  delivery_terms: po.delivery_terms || po.deliveryTerms || "",
+  freight_terms: po.freight_terms || po.freightTerms || "",
+  payment_terms: po.payment_terms || po.paymentTerms || "",
   tds_applicable: Boolean(po.tds_applicable ?? po.isTdsApplicable),
-  tds_section: po.tds_section || po.tdsSection || '',
-  tds_percent: po.tds_percent || po.tdsPercent || '',
-  remarks: po.remarks || '',
+  tds_section: po.tds_section || po.tdsSection || "",
+  tds_percent: po.tds_percent || po.tdsPercent || "",
+  remarks: po.remarks || "",
   line_items: (po.line_items || []).length
     ? po.line_items
-    : [createEmptyLineItem(po.currency || 'INR')],
+    : [createEmptyLineItem(po.currency || "INR")],
 });
 
 const cloneFormatConfig = (config) => ({
@@ -217,7 +242,7 @@ const cloneFormatConfig = (config) => ({
   sections: (config.sections || []).map((section) => ({
     ...section,
     fields: (section.fields || [])
-      .filter((field) => field.fieldKey !== 'is_reverse_charge')
+      .filter((field) => field.fieldKey !== "is_reverse_charge")
       .map((field) => ({ ...field })),
   })),
 });
@@ -242,8 +267,8 @@ const serializeFormatSections = (sections = []) =>
 
 const makeFormatConfig = (
   config,
-  fallbackId = 'default-format',
-  fallbackName = 'Standard GST Format',
+  fallbackId = "default-format",
+  fallbackName = "Standard GST Format",
   tenantBranding = {},
 ) => ({
   ...cloneFormatConfig(config),
@@ -256,7 +281,8 @@ const makeFormatConfig = (
     tenantBranding.companyName ||
     "Company Name",
   logoUrl: config.logoUrl || config.logo_url || tenantBranding.logoUrl || null,
-  logoS3Key: config.logoS3Key || config.logo_s3_key || tenantBranding.logoS3Key || null,
+  logoS3Key:
+    config.logoS3Key || config.logo_s3_key || tenantBranding.logoS3Key || null,
 });
 
 const buildFormatConfigPayload = (config) => ({
@@ -265,7 +291,7 @@ const buildFormatConfigPayload = (config) => ({
   companyName: config.companyName,
   logoUrl: config.logoUrl || null,
   logoS3Key: config.logoS3Key || null,
-  showLogo: isFormatFieldEnabled(config, 'HEADER', 'h_logo'),
+  showLogo: isFormatFieldEnabled(config, "HEADER", "h_logo"),
   poNumberPrefix: config.poNumberPrefix,
   dateFormat: config.dateFormat,
   templateCode: config.templateCode,
@@ -289,7 +315,8 @@ const buildFormatConfigPayload = (config) => ({
   })),
 });
 
-const isUnsavedFormat = (formatId = '') => String(formatId).startsWith('new-format-');
+const isUnsavedFormat = (formatId = "") =>
+  String(formatId).startsWith("new-format-");
 const areFormatListsEquivalent = (left = [], right = []) => {
   if (left.length !== right.length) return false;
   for (let index = 0; index < left.length; index += 1) {
@@ -299,9 +326,14 @@ const areFormatListsEquivalent = (left = [], right = []) => {
     if (leftItem.id !== rightItem.id) return false;
     if (leftItem.name !== rightItem.name) return false;
     if (leftItem.defaultCurrency !== rightItem.defaultCurrency) return false;
-    if ((leftItem.logoUrl || '') !== (rightItem.logoUrl || '')) return false;
-    if ((leftItem.logoS3Key || '') !== (rightItem.logoS3Key || '')) return false;
-    if (serializeFormatSections(leftItem.sections) !== serializeFormatSections(rightItem.sections)) return false;
+    if ((leftItem.logoUrl || "") !== (rightItem.logoUrl || "")) return false;
+    if ((leftItem.logoS3Key || "") !== (rightItem.logoS3Key || ""))
+      return false;
+    if (
+      serializeFormatSections(leftItem.sections) !==
+      serializeFormatSections(rightItem.sections)
+    )
+      return false;
   }
   return true;
 };
@@ -321,7 +353,11 @@ const extractPurchaseOrderScanData = (response = {}) => {
     response,
   ];
 
-  return candidates.find((candidate) => candidate && typeof candidate === 'object') || null;
+  return (
+    candidates.find(
+      (candidate) => candidate && typeof candidate === "object",
+    ) || null
+  );
 };
 
 const PurchaseOrdersPage = () => {
@@ -330,22 +366,26 @@ const PurchaseOrdersPage = () => {
   const { guardAction, canPerformAction } = useActionGuard();
   const { handleCreditError } = useCreditErrorHandler();
   const { isCorporateSectionEnabled, isBranchEnabled } = useRBAC();
-  const { isForeignCurrencyInrConversionEnabled } = useForeignCurrencyInrConversionSubscription();
+  const { isForeignCurrencyInrConversionEnabled } =
+    useForeignCurrencyInrConversionSubscription();
   const { isPaymentTermsEnabled } = usePaymentTermsSubscription();
   const { isVendorAdvancesEnabled } = useVendorAdvancesSubscription();
   const { setHideSidebar } = useSidebar();
-  const canManagePo = canPerformAction('po.create');
-  const canSubmitPo = canPerformAction('po.submit');
-  const canRequestVendorFromPo = canManagePo || canPerformAction('invoices.addVendor');
-  const canUploadPo = canManagePo && (
-    isCorporateSectionEnabled('PURCHASE_ORDER_UPLOAD')
-    || isCorporateSectionEnabled('PURCHASE_ORDER_ALL')
-  );
-  const canApprovePo = canPerformAction('po.approve');
+  const canManagePo = canPerformAction("po.create");
+  const canSubmitPo = canPerformAction("po.submit");
+  const canRequestVendorFromPo =
+    canManagePo || canPerformAction("invoices.addVendor");
+  const canUploadPo =
+    canManagePo &&
+    (isCorporateSectionEnabled("PURCHASE_ORDER_UPLOAD") ||
+      isCorporateSectionEnabled("PURCHASE_ORDER_ALL"));
+  const canApprovePo = canPerformAction("po.approve");
 
-  const [deliveryStatusFilter, setDeliveryStatusFilter] = useState('all');
+  const [deliveryStatusFilter, setDeliveryStatusFilter] = useState("all");
   const purchaseOrdersQueryParams =
-    deliveryStatusFilter === 'all' ? undefined : { deliveryStatus: deliveryStatusFilter };
+    deliveryStatusFilter === "all"
+      ? undefined
+      : { deliveryStatus: deliveryStatusFilter };
 
   const {
     data: purchaseOrdersData = EMPTY_LIST,
@@ -366,7 +406,7 @@ const PurchaseOrdersPage = () => {
     data: vendorsData = EMPTY_LIST,
     isLoading: vendorsLoading,
     refetch: refetchVendors,
-  } = useGetVendorsQuery({ limit: 50, offset: 0 });
+  } = useGetVendorsQuery({ limit: 20, offset: 0 });
   const { data: organisationData } = useGetOrganisationQuery();
   const organisationBranches = useMemo(
     () => normalizeOrganisationBranchesFromApi(organisationData),
@@ -381,27 +421,37 @@ const PurchaseOrdersPage = () => {
       organisationData?.legal_name ||
       null,
     logoUrl: organisationData?.logoUrl || organisationData?.logo_url || null,
-    logoS3Key: organisationData?.logoS3Key || organisationData?.logo_s3_key || null,
+    logoS3Key:
+      organisationData?.logoS3Key || organisationData?.logo_s3_key || null,
   };
 
-  const [getPurchaseOrderDownloadUrl] = useLazyGetPurchaseOrderDownloadUrlQuery();
+  const [getPurchaseOrderDownloadUrl] =
+    useLazyGetPurchaseOrderDownloadUrlQuery();
   const [getPurchaseOrderById] = useLazyGetPurchaseOrderByIdQuery();
-  const [createPurchaseOrderFormatConfig] = useCreatePurchaseOrderFormatConfigMutation();
-  const [updatePurchaseOrderFormatConfig] = useUpdatePurchaseOrderFormatConfigMutation();
-  const [deletePurchaseOrderFormatConfig] = useDeletePurchaseOrderFormatConfigMutation();
-  const [setDefaultPurchaseOrderFormatConfig] = useSetDefaultPurchaseOrderFormatConfigMutation();
+  const [createPurchaseOrderFormatConfig] =
+    useCreatePurchaseOrderFormatConfigMutation();
+  const [updatePurchaseOrderFormatConfig] =
+    useUpdatePurchaseOrderFormatConfigMutation();
+  const [deletePurchaseOrderFormatConfig] =
+    useDeletePurchaseOrderFormatConfigMutation();
+  const [setDefaultPurchaseOrderFormatConfig] =
+    useSetDefaultPurchaseOrderFormatConfigMutation();
   const [savePurchaseOrderDraft] = useSavePurchaseOrderDraftMutation();
   const [createPurchaseOrder] = useCreatePurchaseOrderMutation();
   const [updatePurchaseOrder] = useUpdatePurchaseOrderMutation();
-  const [updateDocumentPaymentSchedule] = useUpdateDocumentPaymentScheduleMutation();
+  const [updateDocumentPaymentSchedule] =
+    useUpdateDocumentPaymentScheduleMutation();
   const [submitPurchaseOrder] = useSubmitPurchaseOrderMutation();
   const [approvePurchaseOrder] = useApprovePurchaseOrderMutation();
-  const [cancelPurchaseOrder, { isLoading: cancellingPO }] = useCancelPurchaseOrderMutation();
+  const [cancelPurchaseOrder, { isLoading: cancellingPO }] =
+    useCancelPurchaseOrderMutation();
   const [scanPurchaseOrder] = useScanPurchaseOrderMutation();
   const [requestVendorAddition, { isLoading: requestVendorLoading }] =
     useRequestVendorAdditionMutation();
-  const [requestAccountingUnlock, { isLoading: requestAccountingUnlockLoading }] =
-    useRequestAccountingReadyUnlockMutation();
+  const [
+    requestAccountingUnlock,
+    { isLoading: requestAccountingUnlockLoading },
+  ] = useRequestAccountingReadyUnlockMutation();
 
   const [showUploadPicker, setShowUploadPicker] = useState(false);
   const [uploadFile, setUploadFile] = useState(null);
@@ -411,20 +461,36 @@ const PurchaseOrdersPage = () => {
   const [uploadSaving, setUploadSaving] = useState(false);
   const [uploadPreviewError, setUploadPreviewError] = useState(false);
   const [requestVendorOpen, setRequestVendorOpen] = useState(false);
-  const [requestVendorForm, setRequestVendorForm] = useState(createEmptyVendorRequestForm);
+  const [requestVendorForm, setRequestVendorForm] = useState(
+    createEmptyVendorRequestForm,
+  );
   const [pdfZoom, setPdfZoom] = useState(100);
   const uploadInProgressRef = useRef(false);
   const poDetailsRequestRef = useRef(null);
-  const poUploadEstimate = useMeteredActionEstimate(CREDIT_ACTION_CODES.PO_UPLOAD, uploadFile ? 1 : 0);
+  const poUploadEstimate = useMeteredActionEstimate(
+    CREDIT_ACTION_CODES.PO_UPLOAD,
+    uploadFile ? 1 : 0,
+  );
 
   const formatConfig = formatConfigData || DEFAULT_PO_FORMAT_CONFIG;
-  const apiPurchaseOrders = extractListResponse(purchaseOrdersData).map(normalizePurchaseOrder);
-  const vendors = Array.isArray(vendorsData) ? vendorsData : extractListResponse(vendorsData);
-  const loading = purchaseOrdersLoading || vendorsLoading || formatConfigLoading || formatConfigsLoading;
+  const apiPurchaseOrders = extractListResponse(purchaseOrdersData).map(
+    normalizePurchaseOrder,
+  );
+  const vendors = Array.isArray(vendorsData)
+    ? vendorsData
+    : extractListResponse(vendorsData);
+  const loading =
+    purchaseOrdersLoading ||
+    vendorsLoading ||
+    formatConfigLoading ||
+    formatConfigsLoading;
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState('all');
-  const [poSort, setPoSort] = useState({ value: 'created_at', direction: 'desc' });
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [poSort, setPoSort] = useState({
+    value: "created_at",
+    direction: "desc",
+  });
   const [showCreateDialog, setShowCreateDialog] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [showBuilderDialog, setShowBuilderDialog] = useState(false);
@@ -432,7 +498,7 @@ const PurchaseOrdersPage = () => {
   const [showApprovalDialog, setShowApprovalDialog] = useState(false);
   const [showRaiseAdvanceDialog, setShowRaiseAdvanceDialog] = useState(false);
   const [showCancelDialog, setShowCancelDialog] = useState(false);
-  const [cancelReason, setCancelReason] = useState('');
+  const [cancelReason, setCancelReason] = useState("");
   const [poToCancel, setPoToCancel] = useState(null);
   const [selectedPO, setSelectedPO] = useState(null);
   const [advancePo, setAdvancePo] = useState(null);
@@ -443,17 +509,29 @@ const PurchaseOrdersPage = () => {
   const [loadingPoDetailsId, setLoadingPoDetailsId] = useState(null);
   const [savingDeliveryStatus, setSavingDeliveryStatus] = useState(false);
   const [savingPaymentSchedule, setSavingPaymentSchedule] = useState(false);
-  const [approvalForm, setApprovalForm] = useState({ action: 'Approved', comments: '' });
-  const [savedFormatConfigs, setSavedFormatConfigs] = useState(() => [makeFormatConfig(formatConfig)]);
-  const [activeFormatId, setActiveFormatId] = useState('default-format');
-  const [builderDraftConfig, setBuilderDraftConfig] = useState(() => makeFormatConfig(formatConfig));
+  const [approvalForm, setApprovalForm] = useState({
+    action: "Approved",
+    comments: "",
+  });
+  const [savedFormatConfigs, setSavedFormatConfigs] = useState(() => [
+    makeFormatConfig(formatConfig),
+  ]);
+  const [activeFormatId, setActiveFormatId] = useState("default-format");
+  const [builderDraftConfig, setBuilderDraftConfig] = useState(() =>
+    makeFormatConfig(formatConfig),
+  );
   const localFormatSectionOverridesRef = useRef({});
 
   const purchaseOrders = apiPurchaseOrders;
   const activeFormatConfig =
     savedFormatConfigs.find((config) => config.id === activeFormatId) ||
     savedFormatConfigs[0] ||
-    makeFormatConfig(DEFAULT_PO_FORMAT_CONFIG, 'default-format', 'Standard GST Format', tenantBranding);
+    makeFormatConfig(
+      DEFAULT_PO_FORMAT_CONFIG,
+      "default-format",
+      "Standard GST Format",
+      tenantBranding,
+    );
 
   const createPoFormForFormat = useCallback(
     (defaultCurrency, formatId) => {
@@ -474,16 +552,22 @@ const PurchaseOrdersPage = () => {
   );
 
   const [poForm, setPoForm] = useState(() =>
-    createPoFormForFormat(activeFormatConfig.defaultCurrency, activeFormatConfig.id),
+    createPoFormForFormat(
+      activeFormatConfig.defaultCurrency,
+      activeFormatConfig.id,
+    ),
   );
 
   useEffect(() => {
     setHideSidebar(Boolean(uploadFile));
   }, [setHideSidebar, uploadFile]);
 
-  useEffect(() => () => {
-    if (uploadFileURL) URL.revokeObjectURL(uploadFileURL);
-  }, [uploadFileURL]);
+  useEffect(
+    () => () => {
+      if (uploadFileURL) URL.revokeObjectURL(uploadFileURL);
+    },
+    [uploadFileURL],
+  );
 
   const resetUploadSession = useCallback(() => {
     setUploadFile(null);
@@ -500,26 +584,43 @@ const PurchaseOrdersPage = () => {
   }, []);
 
   useEffect(() => {
-    const formatsFromApi = extractListResponse(formatConfigsData).map((config, index) =>
-      makeFormatConfig(config, index === 0 ? 'default-format' : `format-${index + 1}`, 'Standard GST Format', tenantBranding),
-    ).map((config) => {
-      const localSections = localFormatSectionOverridesRef.current[config.id];
-      if (!localSections) return config;
+    const formatsFromApi = extractListResponse(formatConfigsData)
+      .map((config, index) =>
+        makeFormatConfig(
+          config,
+          index === 0 ? "default-format" : `format-${index + 1}`,
+          "Standard GST Format",
+          tenantBranding,
+        ),
+      )
+      .map((config) => {
+        const localSections = localFormatSectionOverridesRef.current[config.id];
+        if (!localSections) return config;
 
-      if (serializeFormatSections(config.sections) === serializeFormatSections(localSections)) {
-        delete localFormatSectionOverridesRef.current[config.id];
-        return config;
-      }
+        if (
+          serializeFormatSections(config.sections) ===
+          serializeFormatSections(localSections)
+        ) {
+          delete localFormatSectionOverridesRef.current[config.id];
+          return config;
+        }
 
-      return {
-        ...config,
-        sections: cloneFormatSections(localSections),
-      };
-    });
+        return {
+          ...config,
+          sections: cloneFormatSections(localSections),
+        };
+      });
     const nextFormats = formatsFromApi.length
       ? formatsFromApi
       : formatConfigData?.defaultCurrency
-        ? [makeFormatConfig(formatConfigData, 'default-format', 'Standard GST Format', tenantBranding)]
+        ? [
+            makeFormatConfig(
+              formatConfigData,
+              "default-format",
+              "Standard GST Format",
+              tenantBranding,
+            ),
+          ]
         : [];
 
     if (!nextFormats.length) return;
@@ -529,21 +630,26 @@ const PurchaseOrdersPage = () => {
       nextFormats.find((config) => config.isDefault) ||
       nextFormats[0];
 
-    setSavedFormatConfigs((prev) => (
-      areFormatListsEquivalent(prev, nextFormats) ? prev : nextFormats
-    ));
-    setActiveFormatId((prev) => (
-      prev === resolvedActiveFormat.id ? prev : resolvedActiveFormat.id
-    ));
+    setSavedFormatConfigs((prev) =>
+      areFormatListsEquivalent(prev, nextFormats) ? prev : nextFormats,
+    );
+    setActiveFormatId((prev) =>
+      prev === resolvedActiveFormat.id ? prev : resolvedActiveFormat.id,
+    );
     setBuilderDraftConfig((prev) => {
-      const nextDraft = makeFormatConfig(resolvedActiveFormat, 'default-format', 'Standard GST Format', tenantBranding);
+      const nextDraft = makeFormatConfig(
+        resolvedActiveFormat,
+        "default-format",
+        "Standard GST Format",
+        tenantBranding,
+      );
       if (
         prev?.id === nextDraft.id &&
         prev?.name === nextDraft.name &&
         prev?.companyName === nextDraft.companyName &&
         prev?.defaultCurrency === nextDraft.defaultCurrency &&
-        (prev?.logoUrl || '') === (nextDraft.logoUrl || '') &&
-        (prev?.logoS3Key || '') === (nextDraft.logoS3Key || '')
+        (prev?.logoUrl || "") === (nextDraft.logoUrl || "") &&
+        (prev?.logoS3Key || "") === (nextDraft.logoS3Key || "")
       ) {
         return prev;
       }
@@ -557,17 +663,30 @@ const PurchaseOrdersPage = () => {
         !prev.line_items[0]?.item_description;
 
       if (untouched) {
-        const nextForm = createPoFormForFormat(resolvedActiveFormat.defaultCurrency, resolvedActiveFormat.id);
-        return JSON.stringify(prev) === JSON.stringify(nextForm) ? prev : nextForm;
+        const nextForm = createPoFormForFormat(
+          resolvedActiveFormat.defaultCurrency,
+          resolvedActiveFormat.id,
+        );
+        return JSON.stringify(prev) === JSON.stringify(nextForm)
+          ? prev
+          : nextForm;
       }
-      if (nextFormats.some((config) => config.id === prev.po_format_id)) return prev;
+      if (nextFormats.some((config) => config.id === prev.po_format_id))
+        return prev;
       const nextForm = {
         ...prev,
         po_format_id: resolvedActiveFormat.id,
         currency: resolvedActiveFormat.defaultCurrency,
-        line_items: prev.line_items.map((item) => sanitizeLineItemForCurrency(item, resolvedActiveFormat.defaultCurrency)),
+        line_items: prev.line_items.map((item) =>
+          sanitizeLineItemForCurrency(
+            item,
+            resolvedActiveFormat.defaultCurrency,
+          ),
+        ),
       };
-      return JSON.stringify(prev) === JSON.stringify(nextForm) ? prev : nextForm;
+      return JSON.stringify(prev) === JSON.stringify(nextForm)
+        ? prev
+        : nextForm;
     });
   }, [
     formatConfigData,
@@ -581,16 +700,26 @@ const PurchaseOrdersPage = () => {
 
   const fetchData = async () => {
     try {
-      const requests = [refetchPurchaseOrders(), refetchVendors(), refetchFormatConfig(), refetchFormatConfigs()];
+      const requests = [
+        refetchPurchaseOrders(),
+        refetchVendors(),
+        refetchFormatConfig(),
+        refetchFormatConfigs(),
+      ];
       await Promise.all(requests);
     } catch (error) {
-      console.error('Error refreshing data:', error);
-      toast.error('Failed to refresh purchase orders');
+      console.error("Error refreshing data:", error);
+      toast.error("Failed to refresh purchase orders");
     }
   };
 
   const getCreatedPo = (response) =>
-    response?.po || response?.purchaseOrder || response?.formatConfig || response?.data || response?.item || response;
+    response?.po ||
+    response?.purchaseOrder ||
+    response?.formatConfig ||
+    response?.data ||
+    response?.item ||
+    response;
   const getPoId = (po) => po?.id || po?.po_id || po?.poId;
 
   const getDownloadUrl = (response) =>
@@ -603,7 +732,7 @@ const PurchaseOrdersPage = () => {
     response?.file_url;
 
   const normalizeDownloadUrl = (url) => {
-    if (!url) return '';
+    if (!url) return "";
     if (/^https?:\/\//i.test(url)) return url;
     const baseUrl = BACKEND_URL || window.location.origin;
     return new URL(url, baseUrl).toString();
@@ -612,16 +741,20 @@ const PurchaseOrdersPage = () => {
   const validatePoForm = (form = poForm, { isUpload = false } = {}) => {
     const selectedFormat = isUpload
       ? null
-      : savedFormatConfigs.find((config) => config.id === form.po_format_id) || activeFormatConfig;
-    const tdsEnabled = !isUpload
-      && isInrCurrency(form.currency)
-      && isFormatFieldEnabled(selectedFormat, 'TAX_TOTALS', 'is_tds_applicable');
+      : savedFormatConfigs.find((config) => config.id === form.po_format_id) ||
+        activeFormatConfig;
+    const tdsEnabled =
+      !isUpload &&
+      isInrCurrency(form.currency) &&
+      isFormatFieldEnabled(selectedFormat, "TAX_TOTALS", "is_tds_applicable");
 
     if (!form.vendor_id && !(isUpload && form.vendor_request_submitted)) {
-      toast.error('Please select a vendor');
+      toast.error("Please select a vendor");
       return false;
     }
-    const selectedVendor = vendors.find((vendor) => String(vendor.id) === String(form.vendor_id));
+    const selectedVendor = vendors.find(
+      (vendor) => String(vendor.id) === String(form.vendor_id),
+    );
     const vendorGstRegistrations = getVendorGstRegistrations(selectedVendor);
     if (
       isInrCurrency(form.currency) &&
@@ -629,15 +762,17 @@ const PurchaseOrdersPage = () => {
       !form.vendor_gstin &&
       !form.vendor_gst_registration_id
     ) {
-      toast.error('Please select a vendor GST registration');
+      toast.error("Please select a vendor GST registration");
       return false;
     }
     if (form.line_items.length === 0 || !form.line_items[0].item_description) {
-      toast.error('Please add at least one line item');
+      toast.error("Please add at least one line item");
       return false;
     }
     if (!isInrCurrency(form.currency) && !Number(form.exchange_rate)) {
-      toast.error('Exchange rate is required for foreign-currency purchase orders');
+      toast.error(
+        "Exchange rate is required for foreign-currency purchase orders",
+      );
       return false;
     }
     const conversionError = getInrConversionValidationError({
@@ -651,7 +786,7 @@ const PurchaseOrdersPage = () => {
       return false;
     }
     if (tdsEnabled && form.tds_applicable && !(Number(form.tds_percent) > 0)) {
-      toast.error('Please select a valid TDS rate');
+      toast.error("Please select a valid TDS rate");
       return false;
     }
     if (isPaymentTermsEnabled) {
@@ -665,27 +800,34 @@ const PurchaseOrdersPage = () => {
         paymentSchedule,
         resolvePoTotals(form).total_amount,
       );
-      if (paymentSchedule.length > 0 && Math.abs(scheduleSummary.difference) > 0.009) {
-        toast.error('Payment Schedule total must match the document gross total.');
+      if (
+        paymentSchedule.length > 0 &&
+        Math.abs(scheduleSummary.difference) > 0.009
+      ) {
+        toast.error(
+          "Payment Schedule total must match the document gross total.",
+        );
         return false;
       }
     }
     return true;
   };
 
-  const savePoForm = async (form, { submitForApproval = false, isUpload = false } = {}) => {
-    if (!guardAction('po.create')) return;
-    if (submitForApproval && !guardAction('po.submit')) return;
-    if (!validatePoForm(form, { isUpload })) return;
+  const savePoForm = async (
+    form,
+    { submitForApproval = false, isUpload = false } = {},
+  ) => {
+    if (!guardAction("po.create")) return false;
+    if (submitForApproval && !guardAction("po.submit")) return false;
+    if (!validatePoForm(form, { isUpload })) return false;
 
     const selectedFormat = isUpload
       ? null
-      : savedFormatConfigs.find((config) => config.id === form.po_format_id) || activeFormatConfig;
-    const payload = buildCreatePurchaseOrderPayload(
-      form,
-      selectedFormat,
-      { includePaymentSchedule: isPaymentTermsEnabled },
-    );
+      : savedFormatConfigs.find((config) => config.id === form.po_format_id) ||
+        activeFormatConfig;
+    const payload = buildCreatePurchaseOrderPayload(form, selectedFormat, {
+      includePaymentSchedule: isPaymentTermsEnabled,
+    });
     const data = submitForApproval
       ? await createPurchaseOrder(payload).unwrap()
       : await savePurchaseOrderDraft(payload).unwrap();
@@ -696,55 +838,63 @@ const PurchaseOrdersPage = () => {
     if (
       submitForApproval &&
       createdPoId &&
-      (normalizedCreatedPo.status === 'Draft' || normalizedCreatedPo.status === 'Sent Back')
+      (normalizedCreatedPo.status === "Draft" ||
+        normalizedCreatedPo.status === "Sent Back")
     ) {
       await submitPurchaseOrder(createdPoId).unwrap();
     }
 
     toast.success(
       submitForApproval
-        ? `Purchase Order ${createdPo?.po_number || createdPo?.poNumber || ''} submitted for approval`
-        : `Purchase Order ${createdPo?.po_number || createdPo?.poNumber || ''} saved as draft`,
+        ? `Purchase Order ${createdPo?.po_number || createdPo?.poNumber || ""} submitted for approval`
+        : `Purchase Order ${createdPo?.po_number || createdPo?.poNumber || ""} saved as draft`,
     );
     await fetchData();
+    return true;
   };
 
   const handleCreatePO = async ({ submitForApproval = false } = {}) => {
-    if (!guardAction('po.create')) return;
-    if (submitForApproval && !guardAction('po.submit')) return;
+    if (!guardAction("po.create")) return;
+    if (submitForApproval && !guardAction("po.submit")) return;
     if (!validatePoForm()) return;
 
-    setCreateAction(submitForApproval ? 'submit' : 'draft');
+    setCreateAction(submitForApproval ? "submit" : "draft");
     try {
-      const selectedFormat = savedFormatConfigs.find((config) => config.id === poForm.po_format_id) || activeFormatConfig;
-      const payload = buildCreatePurchaseOrderPayload(
-        poForm,
-        selectedFormat,
-        { includePaymentSchedule: isPaymentTermsEnabled },
-      );
+      const selectedFormat =
+        savedFormatConfigs.find(
+          (config) => config.id === poForm.po_format_id,
+        ) || activeFormatConfig;
+      const payload = buildCreatePurchaseOrderPayload(poForm, selectedFormat, {
+        includePaymentSchedule: isPaymentTermsEnabled,
+      });
       const editingPoId = getPoId(editingPO);
 
       if (editingPoId) {
-        const data = await updatePurchaseOrder({ id: editingPoId, body: payload }).unwrap();
+        const data = await updatePurchaseOrder({
+          id: editingPoId,
+          body: payload,
+        }).unwrap();
         const createdPo = getCreatedPo(data);
         const normalizedCreatedPo = normalizePurchaseOrder(createdPo || {});
         const createdPoId = getPoId(createdPo) || editingPoId;
 
         if (
           submitForApproval &&
-          (normalizedCreatedPo.status === 'Draft' || normalizedCreatedPo.status === 'Sent Back')
+          (normalizedCreatedPo.status === "Draft" ||
+            normalizedCreatedPo.status === "Sent Back")
         ) {
           await submitPurchaseOrder(createdPoId).unwrap();
         }
 
         toast.success(
           submitForApproval
-            ? `Purchase Order ${createdPo?.po_number || createdPo?.poNumber || ''} submitted for approval`
-            : `Purchase Order ${createdPo?.po_number || createdPo?.poNumber || ''} updated`,
+            ? `Purchase Order ${createdPo?.po_number || createdPo?.poNumber || ""} submitted for approval`
+            : `Purchase Order ${createdPo?.po_number || createdPo?.poNumber || ""} updated`,
         );
         await fetchData();
       } else {
-        await savePoForm(poForm, { submitForApproval });
+        const saved = await savePoForm(poForm, { submitForApproval });
+        if (!saved) return;
       }
 
       setShowCreateDialog(false);
@@ -752,47 +902,58 @@ const PurchaseOrdersPage = () => {
       resetForm();
     } catch (error) {
       if (handleCreditError(error)) return;
-      toast.error(extractApiErrorDetail(error) || 'Failed to save purchase order');
+      toast.error(
+        extractApiErrorDetail(error) || "Failed to save purchase order",
+      );
     } finally {
       setCreateAction(null);
     }
   };
 
   const handlePoPreviewCheck = ({ submitForApproval = false } = {}) => {
-    if (!guardAction('po.create')) return false;
-    if (submitForApproval && !guardAction('po.submit')) return false;
+    if (!guardAction("po.create")) return false;
+    if (submitForApproval && !guardAction("po.submit")) return false;
     return validatePoForm();
   };
 
   const handleSubmitForApproval = async (poId) => {
-    if (!guardAction('po.submit')) return;
+    if (!guardAction("po.submit")) return;
     setSubmitting(true);
     try {
       await submitPurchaseOrder(poId).unwrap();
-      toast.success('Purchase Order submitted for approval');
+      toast.success("Purchase Order submitted for approval");
       setShowViewDialog(false);
       fetchData();
     } catch (error) {
-      toast.error(extractApiErrorDetail(error) || 'Failed to submit for approval');
+      toast.error(
+        extractApiErrorDetail(error) || "Failed to submit for approval",
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
   const handleApproval = async () => {
-    if (!guardAction('po.approve')) return;
+    if (!guardAction("po.approve")) return;
     if (!selectedPO) return;
 
     setSubmitting(true);
     try {
-      await approvePurchaseOrder({ id: getPoId(selectedPO), body: approvalForm }).unwrap();
-      toast.success(approvalForm.action === 'Approved' ? 'Purchase Order issued' : `Purchase Order ${approvalForm.action.toLowerCase()}`);
+      await approvePurchaseOrder({
+        id: getPoId(selectedPO),
+        body: approvalForm,
+      }).unwrap();
+      toast.success(
+        approvalForm.action === "Approved"
+          ? "Purchase Order issued"
+          : `Purchase Order ${approvalForm.action.toLowerCase()}`,
+      );
       setShowApprovalDialog(false);
       setSelectedPO(null);
-      setApprovalForm({ action: 'Approved', comments: '' });
+      setApprovalForm({ action: "Approved", comments: "" });
       fetchData();
     } catch (error) {
-      toast.error(extractApiErrorDetail(error) || 'Failed to process approval');
+      toast.error(extractApiErrorDetail(error) || "Failed to process approval");
     } finally {
       setSubmitting(false);
     }
@@ -801,7 +962,7 @@ const PurchaseOrdersPage = () => {
   const handleDownloadPO = async (po) => {
     const poId = getPoId(po);
     if (!poId) {
-      toast.error('Purchase order id is missing');
+      toast.error("Purchase order id is missing");
       return;
     }
 
@@ -810,47 +971,68 @@ const PurchaseOrdersPage = () => {
       const data = await getPurchaseOrderDownloadUrl(poId).unwrap();
       const downloadUrl = getDownloadUrl(data);
       if (!downloadUrl) {
-        toast.error('Download URL was not returned for this purchase order');
+        toast.error("Download URL was not returned for this purchase order");
         return;
       }
-      window.open(normalizeDownloadUrl(downloadUrl), '_blank', 'noopener,noreferrer');
+      window.open(
+        normalizeDownloadUrl(downloadUrl),
+        "_blank",
+        "noopener,noreferrer",
+      );
     } catch (error) {
-      toast.error(error?.data?.detail || error?.data?.message || 'Failed to get purchase order download link');
+      toast.error(
+        error?.data?.detail ||
+          error?.data?.message ||
+          "Failed to get purchase order download link",
+      );
     } finally {
       setDownloadingPoId(null);
     }
   };
 
-  const handleSaveDeliveryStatus = async (po, { delivery_status, delivery_remarks }) => {
+  const handleSaveDeliveryStatus = async (
+    po,
+    { delivery_status, delivery_remarks },
+  ) => {
     const poId = getPoId(po);
     if (!poId) {
-      toast.error('Purchase order id is missing');
+      toast.error("Purchase order id is missing");
       return;
     }
 
     setSavingDeliveryStatus(true);
     try {
       const selectedFormat =
-        savedFormatConfigs.find((config) => config.id === (po.po_format_id || po.poFormatId || po.formatConfigId)) ||
-        activeFormatConfig;
+        savedFormatConfigs.find(
+          (config) =>
+            config.id ===
+            (po.po_format_id || po.poFormatId || po.formatConfigId),
+        ) || activeFormatConfig;
       const form = {
         ...buildEditablePoForm(po, selectedFormat.id),
         delivery_status,
         delivery_remarks,
       };
-      const payload = buildCreatePurchaseOrderPayload(
-        form,
-        selectedFormat,
-        { includePaymentSchedule: isPaymentTermsEnabled },
-      );
-      const data = await updatePurchaseOrder({ id: poId, body: payload }).unwrap();
+      const payload = buildCreatePurchaseOrderPayload(form, selectedFormat, {
+        includePaymentSchedule: isPaymentTermsEnabled,
+      });
+      const data = await updatePurchaseOrder({
+        id: poId,
+        body: payload,
+      }).unwrap();
       const updatedPo = getCreatedPo(data);
       const normalizedUpdatedPo = normalizePurchaseOrder(updatedPo || {});
-      setSelectedPO((prev) => (prev ? { ...prev, ...normalizedUpdatedPo } : prev));
-      toast.success('Asset delivery status updated');
+      setSelectedPO((prev) =>
+        prev ? { ...prev, ...normalizedUpdatedPo } : prev,
+      );
+      toast.success("Asset delivery status updated");
       await refetchPurchaseOrders();
     } catch (error) {
-      toast.error(error?.data?.detail || error?.data?.message || 'Failed to update asset delivery status');
+      toast.error(
+        error?.data?.detail ||
+          error?.data?.message ||
+          "Failed to update asset delivery status",
+      );
     } finally {
       setSavingDeliveryStatus(false);
     }
@@ -859,18 +1041,20 @@ const PurchaseOrdersPage = () => {
   const canEditPaymentScheduleForPo = (po) => {
     if (!isPaymentTermsEnabled || !po) return false;
     if (!canManagePo && !canApprovePo) return false;
-    const status = String(po.status || '').trim().toUpperCase();
-    return !['CANCELLED', 'CANCELED', 'REJECTED', 'CLOSED'].includes(status);
+    const status = String(po.status || "")
+      .trim()
+      .toUpperCase();
+    return !["CANCELLED", "CANCELED", "REJECTED", "CLOSED"].includes(status);
   };
 
   const handleSavePaymentSchedule = async (po, paymentSchedule = []) => {
     const poId = getPoId(po);
     if (!poId) {
-      toast.error('Purchase order id is missing');
+      toast.error("Purchase order id is missing");
       return false;
     }
     if (!canEditPaymentScheduleForPo(po)) {
-      toast.error('Payment Schedule cannot be edited for this purchase order');
+      toast.error("Payment Schedule cannot be edited for this purchase order");
       return false;
     }
 
@@ -884,26 +1068,35 @@ const PurchaseOrdersPage = () => {
       paymentSchedule,
       Number(po.total_amount ?? po.totalAmount) || 0,
     );
-    if (paymentSchedule.length > 0 && Math.abs(scheduleSummary.difference) > 0.009) {
-      toast.error('Payment Schedule total must match the document gross total.');
+    if (
+      paymentSchedule.length > 0 &&
+      Math.abs(scheduleSummary.difference) > 0.009
+    ) {
+      toast.error(
+        "Payment Schedule total must match the document gross total.",
+      );
       return false;
     }
 
     setSavingPaymentSchedule(true);
     try {
       const data = await updateDocumentPaymentSchedule({
-        documentType: 'PO',
+        documentType: "PO",
         documentId: poId,
         body: { paymentSchedule: buildPaymentSchedulePayload(paymentSchedule) },
       }).unwrap();
       const updatedPo = getCreatedPo(data);
       const normalizedUpdatedPo = normalizePurchaseOrder(updatedPo || {});
-      setSelectedPO((prev) => (prev ? { ...prev, ...normalizedUpdatedPo, paymentSchedule } : prev));
-      toast.success('Payment Schedule updated');
+      setSelectedPO((prev) =>
+        prev ? { ...prev, ...normalizedUpdatedPo, paymentSchedule } : prev,
+      );
+      toast.success("Payment Schedule updated");
       await fetchData();
       return true;
     } catch (error) {
-      toast.error(extractApiErrorDetail(error) || 'Failed to update Payment Schedule');
+      toast.error(
+        extractApiErrorDetail(error) || "Failed to update Payment Schedule",
+      );
       return false;
     } finally {
       setSavingPaymentSchedule(false);
@@ -911,28 +1104,35 @@ const PurchaseOrdersPage = () => {
   };
 
   const resetForm = () => {
-    setPoForm(createPoFormForFormat(activeFormatConfig.defaultCurrency, activeFormatConfig.id));
+    setPoForm(
+      createPoFormForFormat(
+        activeFormatConfig.defaultCurrency,
+        activeFormatConfig.id,
+      ),
+    );
   };
 
   const openEditPoDialog = (po) => {
     if (!po) return;
     if (isAccountingReadyLocked(po)) {
-      toast.error(getAccountingReadyBlockedMessage(po, 'purchase order'));
+      toast.error(getAccountingReadyBlockedMessage(po, "purchase order"));
       return;
     }
     const selectedFormat =
-      savedFormatConfigs.find((config) => config.id === (po.po_format_id || po.poFormatId || po.formatConfigId)) ||
-      activeFormatConfig;
+      savedFormatConfigs.find(
+        (config) =>
+          config.id === (po.po_format_id || po.poFormatId || po.formatConfigId),
+      ) || activeFormatConfig;
     setEditingPO(po);
     setPoForm(buildEditablePoForm(po, selectedFormat.id));
     setShowViewDialog(false);
     setShowCreateDialog(true);
   };
 
-  const openPoApprovalDialog = (po, action = 'Approved') => {
-    if (!po || !guardAction('po.approve')) return;
+  const openPoApprovalDialog = (po, action = "Approved") => {
+    if (!po || !guardAction("po.approve")) return;
     setSelectedPO(po);
-    setApprovalForm({ action, comments: '' });
+    setApprovalForm({ action, comments: "" });
     setShowViewDialog(false);
     setShowApprovalDialog(true);
   };
@@ -946,7 +1146,7 @@ const PurchaseOrdersPage = () => {
   const openCancelPoDialog = (po) => {
     if (!po) return;
     setPoToCancel(po);
-    setCancelReason('');
+    setCancelReason("");
     setShowCancelDialog(true);
   };
 
@@ -954,11 +1154,11 @@ const PurchaseOrdersPage = () => {
     if (!poToCancel) return;
     const poId = getPoId(poToCancel);
     if (!poId) {
-      toast.error('Purchase Order ID is missing.');
+      toast.error("Purchase Order ID is missing.");
       return;
     }
     if (!cancelReason.trim()) {
-      toast.error('Please enter a cancellation reason.');
+      toast.error("Please enter a cancellation reason.");
       return;
     }
     try {
@@ -968,87 +1168,109 @@ const PurchaseOrdersPage = () => {
         body: { reason: cancelReason.trim() },
       }).unwrap();
 
-      toast.success(res?.message || `Purchase Order ${poToCancel.po_number || ''} cancelled successfully.`);
+      toast.success(
+        res?.message ||
+          `Purchase Order ${poToCancel.po_number || ""} cancelled successfully.`,
+      );
       setShowCancelDialog(false);
       setPoToCancel(null);
-      setCancelReason('');
+      setCancelReason("");
       setShowViewDialog(false);
     } catch (err) {
-      const errorMsg = extractApiErrorDetail(err) || 'Failed to cancel Purchase Order.';
+      const errorMsg =
+        extractApiErrorDetail(err) || "Failed to cancel Purchase Order.";
       handleCreditError(err, errorMsg);
     } finally {
       setSubmitting(false);
     }
   };
 
-  const openPoDetails = useCallback(async (po) => {
-    if (!po) return;
+  const openPoDetails = useCallback(
+    async (po) => {
+      if (!po) return;
 
-    const poId = getPoId(po);
-    setSelectedPO(po);
-    setShowViewDialog(true);
+      const poId = getPoId(po);
+      setSelectedPO(po);
+      setShowViewDialog(true);
 
-    if (!poId) return;
+      if (!poId) return;
 
-    const requestKey = String(poId);
-    poDetailsRequestRef.current = requestKey;
-    setLoadingPoDetailsId(poId);
-    try {
-      const data = await getPurchaseOrderById(poId).unwrap();
-      const fullPo = getCreatedPo(data);
-      if (poDetailsRequestRef.current === requestKey) {
-        setSelectedPO(normalizePurchaseOrder(fullPo || data || po));
+      const requestKey = String(poId);
+      poDetailsRequestRef.current = requestKey;
+      setLoadingPoDetailsId(poId);
+      try {
+        const data = await getPurchaseOrderById(poId).unwrap();
+        const fullPo = getCreatedPo(data);
+        if (poDetailsRequestRef.current === requestKey) {
+          setSelectedPO(normalizePurchaseOrder(fullPo || data || po));
+        }
+      } catch (error) {
+        if (poDetailsRequestRef.current === requestKey) {
+          toast.warning(
+            "Could not load latest purchase order details. Showing list data.",
+          );
+        }
+      } finally {
+        if (poDetailsRequestRef.current === requestKey) {
+          setLoadingPoDetailsId(null);
+        }
       }
-    } catch (error) {
-      if (poDetailsRequestRef.current === requestKey) {
-        toast.warning('Could not load latest purchase order details. Showing list data.');
-      }
-    } finally {
-      if (poDetailsRequestRef.current === requestKey) {
-        setLoadingPoDetailsId(null);
-      }
-    }
-  }, [getPurchaseOrderById]);
+    },
+    [getPurchaseOrderById],
+  );
 
   const submitPoFromRow = (po) => {
     const poId = getPoId(po);
     if (!poId) {
-      toast.error('Purchase order id is missing');
+      toast.error("Purchase order id is missing");
       return;
     }
     handleSubmitForApproval(poId);
   };
 
-  const closePoViewDialog = useCallback((open) => {
-    setShowViewDialog(open);
-    if (!open) {
-      poDetailsRequestRef.current = null;
-      setLoadingPoDetailsId(null);
-      clearNotificationQueryParams(searchParams, setSearchParams);
-    }
-  }, [searchParams, setSearchParams]);
+  const closePoViewDialog = useCallback(
+    (open) => {
+      setShowViewDialog(open);
+      if (!open) {
+        poDetailsRequestRef.current = null;
+        setLoadingPoDetailsId(null);
+        clearNotificationQueryParams(searchParams, setSearchParams);
+      }
+    },
+    [searchParams, setSearchParams],
+  );
 
   const handleRequestPoUnlock = async (po) => {
     if (!canManagePo) {
-      toast.error('You need purchase order edit access to request unlock');
+      toast.error("You need purchase order edit access to request unlock");
       return;
     }
-    if (!guardAction('accounting.ready.unlockRequest')) return;
+    if (!guardAction("accounting.ready.unlockRequest")) return;
     try {
       const result = await requestAccountingUnlock({
         id: po?.accountingReadyId || po?.accounting_ready_id || po?.readyItemId,
-        objectType: 'PO',
+        objectType: "PO",
         objectId: po?.id || po?.po_id || po?.poId,
       }).unwrap();
-      toast.success(result?.message || 'Unlock request submitted');
+      toast.success(result?.message || "Unlock request submitted");
       await refetchPurchaseOrders();
     } catch (error) {
-      toast.error(getAccountingErrorMessage(error, 'Could not raise unlock request'));
+      toast.error(
+        getAccountingErrorMessage(error, "Could not raise unlock request"),
+      );
     }
   };
 
   const openBuilderDialog = (open) => {
-    if (open) setBuilderDraftConfig(makeFormatConfig(activeFormatConfig, 'default-format', 'Standard GST Format', tenantBranding));
+    if (open)
+      setBuilderDraftConfig(
+        makeFormatConfig(
+          activeFormatConfig,
+          "default-format",
+          "Standard GST Format",
+          tenantBranding,
+        ),
+      );
     setShowBuilderDialog(open);
   };
 
@@ -1056,7 +1278,7 @@ const PurchaseOrdersPage = () => {
     setCreateMenuOpen(false);
     if (option === PO_CREATE_OPTIONS.UPLOAD) {
       if (!canUploadPo) {
-        toast.error('PO upload is not available for your organisation');
+        toast.error("PO upload is not available for your organisation");
         return;
       }
       setShowUploadPicker(true);
@@ -1067,14 +1289,19 @@ const PurchaseOrdersPage = () => {
   };
 
   const saveBuilderConfig = async () => {
-    if (!String(builderDraftConfig.name || '').trim()) {
-      toast.error('Please name this PO format');
+    if (!String(builderDraftConfig.name || "").trim()) {
+      toast.error("Please name this PO format");
       return;
     }
 
     const nextConfig = {
-      ...makeFormatConfig(builderDraftConfig, 'default-format', 'Standard GST Format', tenantBranding),
-      name: String(builderDraftConfig.name || '').trim(),
+      ...makeFormatConfig(
+        builderDraftConfig,
+        "default-format",
+        "Standard GST Format",
+        tenantBranding,
+      ),
+      name: String(builderDraftConfig.name || "").trim(),
       configVersion: (builderDraftConfig.configVersion || 0) + 1,
     };
     const payload = buildFormatConfigPayload(nextConfig);
@@ -1083,7 +1310,10 @@ const PurchaseOrdersPage = () => {
     try {
       const data = isUnsavedFormat(nextConfig.id)
         ? await createPurchaseOrderFormatConfig(payload).unwrap()
-        : await updatePurchaseOrderFormatConfig({ id: nextConfig.id, body: payload }).unwrap();
+        : await updatePurchaseOrderFormatConfig({
+            id: nextConfig.id,
+            body: payload,
+          }).unwrap();
       const responseConfig = getCreatedPo(data) || {};
       const savedConfig = makeFormatConfig(
         {
@@ -1096,26 +1326,44 @@ const PurchaseOrdersPage = () => {
         nextConfig.name,
         tenantBranding,
       );
-      localFormatSectionOverridesRef.current[savedConfig.id] = cloneFormatSections(nextConfig.sections);
+      localFormatSectionOverridesRef.current[savedConfig.id] =
+        cloneFormatSections(nextConfig.sections);
 
       setSavedFormatConfigs((prev) => {
-        const existingId = isUnsavedFormat(nextConfig.id) ? savedConfig.id : nextConfig.id;
-        const exists = prev.some((config) => config.id === existingId || config.id === nextConfig.id);
+        const existingId = isUnsavedFormat(nextConfig.id)
+          ? savedConfig.id
+          : nextConfig.id;
+        const exists = prev.some(
+          (config) => config.id === existingId || config.id === nextConfig.id,
+        );
         return exists
-          ? prev.map((config) => (config.id === existingId || config.id === nextConfig.id ? savedConfig : config))
+          ? prev.map((config) =>
+              config.id === existingId || config.id === nextConfig.id
+                ? savedConfig
+                : config,
+            )
           : [...prev, savedConfig];
       });
       setActiveFormatId(savedConfig.id);
       setBuilderDraftConfig(savedConfig);
       setShowBuilderDialog(false);
       setPoForm((prev) => {
-        const untouched = !prev.vendor_id && prev.line_items.length === 1 && !prev.line_items[0]?.item_description;
-        return untouched ? createPoFormForFormat(savedConfig.defaultCurrency, savedConfig.id) : { ...prev, po_format_id: savedConfig.id };
+        const untouched =
+          !prev.vendor_id &&
+          prev.line_items.length === 1 &&
+          !prev.line_items[0]?.item_description;
+        return untouched
+          ? createPoFormForFormat(savedConfig.defaultCurrency, savedConfig.id)
+          : { ...prev, po_format_id: savedConfig.id };
       });
       await Promise.all([refetchFormatConfigs(), refetchFormatConfig()]);
       toast.success(`PO format "${savedConfig.name}" saved`);
     } catch (error) {
-      toast.error(error?.data?.detail || error?.data?.message || 'Failed to save PO format');
+      toast.error(
+        error?.data?.detail ||
+          error?.data?.message ||
+          "Failed to save PO format",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -1124,7 +1372,12 @@ const PurchaseOrdersPage = () => {
   const createNewBuilderFormat = () => {
     const id = `new-format-${Date.now()}`;
     setBuilderDraftConfig({
-      ...makeFormatConfig(activeFormatConfig, id, `Format ${savedFormatConfigs.length + 1}`, tenantBranding),
+      ...makeFormatConfig(
+        activeFormatConfig,
+        id,
+        `Format ${savedFormatConfigs.length + 1}`,
+        tenantBranding,
+      ),
       id,
       name: `Format ${savedFormatConfigs.length + 1}`,
       configVersion: 0,
@@ -1132,20 +1385,31 @@ const PurchaseOrdersPage = () => {
   };
 
   const selectBuilderFormat = (formatId) => {
-    const selectedFormat = savedFormatConfigs.find((config) => config.id === formatId);
+    const selectedFormat = savedFormatConfigs.find(
+      (config) => config.id === formatId,
+    );
     if (!selectedFormat) return;
-    setBuilderDraftConfig(makeFormatConfig(selectedFormat, 'default-format', 'Standard GST Format', tenantBranding));
+    setBuilderDraftConfig(
+      makeFormatConfig(
+        selectedFormat,
+        "default-format",
+        "Standard GST Format",
+        tenantBranding,
+      ),
+    );
     setActiveFormatId(selectedFormat.id);
   };
 
   const deleteBuilderFormat = async () => {
     if (savedFormatConfigs.length <= 1) {
-      toast.error('At least one PO format is required');
+      toast.error("At least one PO format is required");
       return;
     }
 
     const deletingFormatId = builderDraftConfig.id;
-    const remainingFormats = savedFormatConfigs.filter((config) => config.id !== deletingFormatId);
+    const remainingFormats = savedFormatConfigs.filter(
+      (config) => config.id !== deletingFormatId,
+    );
     const nextActiveFormat =
       remainingFormats.find((config) => config.id === activeFormatId) ||
       remainingFormats[0];
@@ -1158,25 +1422,48 @@ const PurchaseOrdersPage = () => {
 
       setSavedFormatConfigs(remainingFormats);
       setActiveFormatId(nextActiveFormat.id);
-      setBuilderDraftConfig(makeFormatConfig(nextActiveFormat, 'default-format', 'Standard GST Format', tenantBranding));
+      setBuilderDraftConfig(
+        makeFormatConfig(
+          nextActiveFormat,
+          "default-format",
+          "Standard GST Format",
+          tenantBranding,
+        ),
+      );
       setPoForm((prev) => {
         if (prev.po_format_id !== deletingFormatId) return prev;
         return {
           ...prev,
           po_format_id: nextActiveFormat.id,
           currency: nextActiveFormat.defaultCurrency,
-          exchange_rate: isInrCurrency(nextActiveFormat.defaultCurrency) ? '' : prev.exchange_rate,
-          place_of_supply: isInrCurrency(nextActiveFormat.defaultCurrency) ? prev.place_of_supply : '',
-          tds_applicable: isInrCurrency(nextActiveFormat.defaultCurrency) ? prev.tds_applicable : false,
-          tds_section: isInrCurrency(nextActiveFormat.defaultCurrency) ? prev.tds_section : '',
-          tds_percent: isInrCurrency(nextActiveFormat.defaultCurrency) ? prev.tds_percent : '',
-          line_items: prev.line_items.map((item) => sanitizeLineItemForCurrency(item, nextActiveFormat.defaultCurrency)),
+          exchange_rate: isInrCurrency(nextActiveFormat.defaultCurrency)
+            ? ""
+            : prev.exchange_rate,
+          place_of_supply: isInrCurrency(nextActiveFormat.defaultCurrency)
+            ? prev.place_of_supply
+            : "",
+          tds_applicable: isInrCurrency(nextActiveFormat.defaultCurrency)
+            ? prev.tds_applicable
+            : false,
+          tds_section: isInrCurrency(nextActiveFormat.defaultCurrency)
+            ? prev.tds_section
+            : "",
+          tds_percent: isInrCurrency(nextActiveFormat.defaultCurrency)
+            ? prev.tds_percent
+            : "",
+          line_items: prev.line_items.map((item) =>
+            sanitizeLineItemForCurrency(item, nextActiveFormat.defaultCurrency),
+          ),
         };
       });
       await Promise.all([refetchFormatConfigs(), refetchFormatConfig()]);
-      toast.success('PO format deleted');
+      toast.success("PO format deleted");
     } catch (error) {
-      toast.error(error?.data?.detail || error?.data?.message || 'Failed to delete PO format');
+      toast.error(
+        error?.data?.detail ||
+          error?.data?.message ||
+          "Failed to delete PO format",
+      );
     } finally {
       setSubmitting(false);
     }
@@ -1185,11 +1472,11 @@ const PurchaseOrdersPage = () => {
   const setBuilderFormatAsDefault = async () => {
     const targetFormatId = builderDraftConfig.id;
     if (!targetFormatId || isUnsavedFormat(targetFormatId)) {
-      toast.error('Save this PO format before setting it as default');
+      toast.error("Save this PO format before setting it as default");
       return;
     }
     if (builderDraftConfig.isDefault) {
-      toast.info('This PO format is already the default');
+      toast.info("This PO format is already the default");
       return;
     }
 
@@ -1205,28 +1492,48 @@ const PurchaseOrdersPage = () => {
       setBuilderDraftConfig((prev) => ({ ...prev, isDefault: true }));
       setActiveFormatId(targetFormatId);
       await Promise.all([refetchFormatConfigs(), refetchFormatConfig()]);
-      toast.success('Default PO format updated');
+      toast.success("Default PO format updated");
     } catch (error) {
-      toast.error(error?.data?.detail || error?.data?.message || 'Failed to set default PO format');
+      toast.error(
+        error?.data?.detail ||
+          error?.data?.message ||
+          "Failed to set default PO format",
+      );
     } finally {
       setSubmitting(false);
     }
   };
 
   const applyPoFormat = (formatId) => {
-    const selectedFormat = savedFormatConfigs.find((config) => config.id === formatId);
+    const selectedFormat = savedFormatConfigs.find(
+      (config) => config.id === formatId,
+    );
     if (!selectedFormat) return;
     setActiveFormatId(selectedFormat.id);
     setPoForm((prev) => ({
       ...prev,
       po_format_id: selectedFormat.id,
       currency: selectedFormat.defaultCurrency,
-      exchange_rate: isInrCurrency(selectedFormat.defaultCurrency) ? '' : prev.exchange_rate,
-      place_of_supply: isInrCurrency(selectedFormat.defaultCurrency) ? prev.place_of_supply : '',
-      tds_applicable: isInrCurrency(selectedFormat.defaultCurrency) && isFormatFieldEnabled(selectedFormat, 'TAX_TOTALS', 'is_tds_applicable') ? prev.tds_applicable : false,
-      tds_section: isInrCurrency(selectedFormat.defaultCurrency) ? prev.tds_section : '',
-      tds_percent: isInrCurrency(selectedFormat.defaultCurrency) ? prev.tds_percent : '',
-      line_items: prev.line_items.map((item) => sanitizeLineItemForCurrency(item, selectedFormat.defaultCurrency)),
+      exchange_rate: isInrCurrency(selectedFormat.defaultCurrency)
+        ? ""
+        : prev.exchange_rate,
+      place_of_supply: isInrCurrency(selectedFormat.defaultCurrency)
+        ? prev.place_of_supply
+        : "",
+      tds_applicable:
+        isInrCurrency(selectedFormat.defaultCurrency) &&
+        isFormatFieldEnabled(selectedFormat, "TAX_TOTALS", "is_tds_applicable")
+          ? prev.tds_applicable
+          : false,
+      tds_section: isInrCurrency(selectedFormat.defaultCurrency)
+        ? prev.tds_section
+        : "",
+      tds_percent: isInrCurrency(selectedFormat.defaultCurrency)
+        ? prev.tds_percent
+        : "",
+      line_items: prev.line_items.map((item) =>
+        sanitizeLineItemForCurrency(item, selectedFormat.defaultCurrency),
+      ),
     }));
   };
 
@@ -1248,44 +1555,62 @@ const PurchaseOrdersPage = () => {
   const updateLineItem = (index, field, value) => {
     setPoForm((prev) => ({
       ...prev,
-      line_items: prev.line_items.map((item, i) => (i === index ? { ...item, [field]: value } : item)),
+      line_items: prev.line_items.map((item, i) =>
+        i === index ? { ...item, [field]: value } : item,
+      ),
     }));
   };
 
   const updatePoCurrency = (currency) => {
     setPoForm((prev) => ({
-      ...normalizeConversionStateForCurrency(prev, currency, isForeignCurrencyInrConversionEnabled),
+      ...normalizeConversionStateForCurrency(
+        prev,
+        currency,
+        isForeignCurrencyInrConversionEnabled,
+      ),
       currency,
-      exchange_rate: isInrCurrency(currency) ? '' : prev.exchange_rate,
-      place_of_supply: isInrCurrency(currency) ? prev.place_of_supply : '',
+      exchange_rate: isInrCurrency(currency) ? "" : prev.exchange_rate,
+      place_of_supply: isInrCurrency(currency) ? prev.place_of_supply : "",
       tds_applicable: isInrCurrency(currency) ? prev.tds_applicable : false,
-      tds_section: isInrCurrency(currency) ? prev.tds_section : '',
-      tds_percent: isInrCurrency(currency) ? prev.tds_percent : '',
-      line_items: prev.line_items.map((item) => sanitizeLineItemForCurrency(item, currency)),
+      tds_section: isInrCurrency(currency) ? prev.tds_section : "",
+      tds_percent: isInrCurrency(currency) ? prev.tds_percent : "",
+      line_items: prev.line_items.map((item) =>
+        sanitizeLineItemForCurrency(item, currency),
+      ),
     }));
   };
 
   const calculateLineSubtotal = (item) => {
-    const amount = (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
-    const discount = amount * (Number(item.discount_percent) || 0) / 100;
+    const amount =
+      (Number(item.quantity) || 0) * (Number(item.unit_price) || 0);
+    const discount = (amount * (Number(item.discount_percent) || 0)) / 100;
     return Math.max(amount - discount, 0);
   };
 
   const calculateLineTotalFor = (item, currency) => {
     const taxable = calculateLineSubtotal(item);
-    const gst = isInrCurrency(currency) ? taxable * (Number(item.gst_rate) || 0) / 100 : 0;
+    const gst = isInrCurrency(currency)
+      ? (taxable * (Number(item.gst_rate) || 0)) / 100
+      : 0;
     return taxable + gst;
   };
 
-  const calculateLineTotal = (item) => calculateLineTotalFor(item, poForm.currency);
+  const calculateLineTotal = (item) =>
+    calculateLineTotalFor(item, poForm.currency);
 
   const calculatePOTotalFor = (form) =>
-    form.line_items.reduce((total, item) => total + calculateLineTotalFor(item, form.currency), 0);
+    form.line_items.reduce(
+      (total, item) => total + calculateLineTotalFor(item, form.currency),
+      0,
+    );
 
   const calculatePOTotal = () => calculatePOTotalFor(poForm);
 
-  const processUploadFile = async (file, { referenceDocumentType = 'PI' } = {}) => {
-    if (!guardAction('po.scan')) return false;
+  const processUploadFile = async (
+    file,
+    { referenceDocumentType = "PI" } = {},
+  ) => {
+    if (!guardAction("po.scan")) return false;
     if (!file) return false;
 
     uploadInProgressRef.current = true;
@@ -1296,14 +1621,14 @@ const PurchaseOrdersPage = () => {
     setUploadPreviewError(false);
 
     const formDataUpload = new FormData();
-    formDataUpload.append('file', file);
-    formDataUpload.append('referenceDocumentType', referenceDocumentType);
+    formDataUpload.append("file", file);
+    formDataUpload.append("referenceDocumentType", referenceDocumentType);
 
     try {
       const response = await scanPurchaseOrder(formDataUpload).unwrap();
       const extracted = extractPurchaseOrderScanData(response);
-      if (!extracted || typeof extracted !== 'object') {
-        throw new Error('Scan API returned empty response');
+      if (!extracted || typeof extracted !== "object") {
+        throw new Error("Scan API returned empty response");
       }
 
       setUploadPoForm({
@@ -1313,13 +1638,13 @@ const PurchaseOrdersPage = () => {
         }),
         ...(isPaymentTermsEnabled ? { paymentSchedule: [] } : {}),
         reference_document_type: referenceDocumentType,
-        creation_source: 'DOCUMENT_UPLOAD',
+        creation_source: "DOCUMENT_UPLOAD",
         reference_document_name:
           extracted.referenceDocumentName ||
           extracted.reference_document_name ||
           file.name,
       });
-      toast.success('Purchase order scanned successfully');
+      toast.success("Purchase order scanned successfully");
     } catch (error) {
       if (handleCreditError(error)) {
         resetUploadSession();
@@ -1330,15 +1655,18 @@ const PurchaseOrdersPage = () => {
         extractApiErrorDetail(error) ||
         error?.data?.message ||
         error?.message ||
-        'Failed to scan purchase order';
+        "Failed to scan purchase order";
       setUploadPoForm({
-        ...initializePoFormFromScan({}, {
-          vendors,
-          defaultCurrency: activeFormatConfig.defaultCurrency,
-        }),
+        ...initializePoFormFromScan(
+          {},
+          {
+            vendors,
+            defaultCurrency: activeFormatConfig.defaultCurrency,
+          },
+        ),
         ...(isPaymentTermsEnabled ? { paymentSchedule: [] } : {}),
         reference_document_type: referenceDocumentType,
-        creation_source: 'DOCUMENT_UPLOAD',
+        creation_source: "DOCUMENT_UPLOAD",
         reference_document_name: file.name,
       });
       toast.warning(
@@ -1372,12 +1700,20 @@ const PurchaseOrdersPage = () => {
     if (!uploadPoForm) return;
     setUploadSaving(true);
     try {
-      await savePoForm(uploadPoForm, { submitForApproval, isUpload: true });
+      const saved = await savePoForm(uploadPoForm, {
+        submitForApproval,
+        isUpload: true,
+      });
+      if (!saved) return;
       resetUploadSession();
       setShowUploadPicker(false);
     } catch (error) {
       if (handleCreditError(error)) return;
-      toast.error(error?.data?.detail || error?.data?.message || 'Failed to save purchase order');
+      toast.error(
+        error?.data?.detail ||
+          error?.data?.message ||
+          "Failed to save purchase order",
+      );
     } finally {
       setUploadSaving(false);
     }
@@ -1390,18 +1726,20 @@ const PurchaseOrdersPage = () => {
 
   const handleRequestVendorFromUpload = () => {
     if (!canRequestVendorFromPo) {
-      toast.error('You do not have permission to request vendor addition');
+      toast.error("You do not have permission to request vendor addition");
       return;
     }
     if (!uploadPoForm?.scanned_vendor_name && !uploadPoForm?.vendor_name) {
-      toast.error('Vendor name is required');
+      toast.error("Vendor name is required");
       return;
     }
 
     setRequestVendorForm(
       buildVendorRequestForm({
-        vendorName: uploadPoForm.scanned_vendor_name || uploadPoForm.vendor_name,
-        vendorGstin: uploadPoForm.scanned_vendor_gstin || uploadPoForm.vendor_gstin,
+        vendorName:
+          uploadPoForm.scanned_vendor_name || uploadPoForm.vendor_name,
+        vendorGstin:
+          uploadPoForm.scanned_vendor_gstin || uploadPoForm.vendor_gstin,
         vendor_pan: uploadPoForm.vendor_pan,
         billingAddress: uploadPoForm.billing_address,
         shippingAddress: uploadPoForm.shipping_address,
@@ -1416,18 +1754,20 @@ const PurchaseOrdersPage = () => {
   const handleSubmitVendorRequest = async (event) => {
     event.preventDefault();
     if (!canRequestVendorFromPo) {
-      toast.error('You do not have permission to request vendor addition');
+      toast.error("You do not have permission to request vendor addition");
       return;
     }
 
-    const validationErrors = getInvoiceVendorRequestValidationErrors(requestVendorForm);
+    const validationErrors =
+      getInvoiceVendorRequestValidationErrors(requestVendorForm);
     if (validationErrors.length > 0) {
       toast.error(validationErrors[0]);
       return;
     }
 
     const vendorName = requestVendorForm.name.trim();
-    const vendorType = requestVendorForm.vendor_type || requestVendorForm.vendorType;
+    const vendorType =
+      requestVendorForm.vendor_type || requestVendorForm.vendorType;
     const gstin = requestVendorForm.gstin.trim();
 
     try {
@@ -1444,14 +1784,17 @@ const PurchaseOrdersPage = () => {
         : extractListResponse(vendorsResult?.data);
       const matchedVendor =
         (requestedVendorId
-          ? freshVendors.find((vendor) => String(vendor.id) === String(requestedVendorId))
+          ? freshVendors.find(
+              (vendor) => String(vendor.id) === String(requestedVendorId),
+            )
           : null) ||
         freshVendors.find(
           (vendor) =>
-            String(vendor.name || '').trim().toLowerCase() ===
-            vendorName.toLowerCase(),
+            String(vendor.name || "")
+              .trim()
+              .toLowerCase() === vendorName.toLowerCase(),
         );
-      const resolvedVendorId = matchedVendor?.id || requestedVendorId || '';
+      const resolvedVendorId = matchedVendor?.id || requestedVendorId || "";
 
       setUploadPoForm((prev) =>
         prev
@@ -1471,26 +1814,37 @@ const PurchaseOrdersPage = () => {
       );
       handleRequestVendorOpenChange(false);
     } catch (error) {
-      toast.error(extractApiErrorDetail(error) || 'Failed to request vendor addition');
+      toast.error(
+        extractApiErrorDetail(error) || "Failed to request vendor addition",
+      );
     }
   };
 
   const updateUploadPoCurrency = (currency) => {
     setUploadPoForm((prev) => ({
-      ...normalizeConversionStateForCurrency(prev, currency, isForeignCurrencyInrConversionEnabled),
+      ...normalizeConversionStateForCurrency(
+        prev,
+        currency,
+        isForeignCurrencyInrConversionEnabled,
+      ),
       currency,
-      exchange_rate: isInrCurrency(currency) ? '' : prev.exchange_rate,
-      place_of_supply: isInrCurrency(currency) ? prev.place_of_supply : '',
+      exchange_rate: isInrCurrency(currency) ? "" : prev.exchange_rate,
+      place_of_supply: isInrCurrency(currency) ? prev.place_of_supply : "",
       tds_applicable: isInrCurrency(currency) ? prev.tds_applicable : false,
-      tds_section: isInrCurrency(currency) ? prev.tds_section : '',
-      tds_percent: isInrCurrency(currency) ? prev.tds_percent : '',
-      line_items: prev.line_items.map((item) => sanitizeLineItemForCurrency(item, currency)),
+      tds_section: isInrCurrency(currency) ? prev.tds_section : "",
+      tds_percent: isInrCurrency(currency) ? prev.tds_percent : "",
+      line_items: prev.line_items.map((item) =>
+        sanitizeLineItemForCurrency(item, currency),
+      ),
     }));
   };
 
   const addUploadLineItem = () => {
     setUploadPoForm((prev) =>
-      applyUploadLineItemsChange(prev, [...prev.line_items, createEmptyLineItem(prev.currency)]),
+      applyUploadLineItemsChange(prev, [
+        ...prev.line_items,
+        createEmptyLineItem(prev.currency),
+      ]),
     );
   };
 
@@ -1505,58 +1859,71 @@ const PurchaseOrdersPage = () => {
   };
 
   const updateUploadLineItem = (index, field, value) => {
-    setUploadPoForm((prev) => applyUploadLineItemUpdate(prev, index, field, value));
+    setUploadPoForm((prev) =>
+      applyUploadLineItemUpdate(prev, index, field, value),
+    );
   };
 
-  const calculateUploadLineTotal = (item) => computeLineTotal(item, uploadPoForm?.currency);
-  const calculateUploadPOTotal = () => resolvePoTotals(uploadPoForm || {}).total_amount;
+  const calculateUploadLineTotal = (item) =>
+    computeLineTotal(item, uploadPoForm?.currency);
+  const calculateUploadPOTotal = () =>
+    resolvePoTotals(uploadPoForm || {}).total_amount;
 
   const filteredOrders = purchaseOrders
     .filter((po) => {
       const matchesSearch =
         po.po_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         po.vendor_name?.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesStatus = statusFilter === 'all' || po.status === statusFilter;
+      const matchesStatus =
+        statusFilter === "all" || po.status === statusFilter;
       return matchesSearch && matchesStatus;
     })
     .sort((a, b) => {
       const resolveSortValue = (po) => {
-        if (poSort.value === 'total_amount') return Number(po?.total_amount) || 0;
-        if (poSort.value === 'created_at') {
+        if (poSort.value === "total_amount")
+          return Number(po?.total_amount) || 0;
+        if (poSort.value === "created_at") {
           return new Date(po?.created_at || po?.createdAt || 0).getTime() || 0;
         }
         return new Date(po?.[poSort.value] || 0).getTime() || 0;
       };
       const valueA = resolveSortValue(a);
       const valueB = resolveSortValue(b);
-      return poSort.direction === 'asc' ? valueA - valueB : valueB - valueA;
+      return poSort.direction === "asc" ? valueA - valueB : valueB - valueA;
     });
 
   const stats = {
     total: purchaseOrders.length,
-    draft: purchaseOrders.filter((p) => p.status === 'Draft').length,
-    pending: purchaseOrders.filter((p) => p.status === 'Pending Approval').length,
-    issued: purchaseOrders.filter((p) => p.status === 'Issued').length,
-    amended: purchaseOrders.filter((p) => p.status === 'Amended').length,
-    totalValue: purchaseOrders.reduce((sum, p) => sum + (p.total_amount || 0), 0),
+    draft: purchaseOrders.filter((p) => p.status === "Draft").length,
+    pending: purchaseOrders.filter((p) => p.status === "Pending Approval")
+      .length,
+    issued: purchaseOrders.filter((p) => p.status === "Issued").length,
+    amended: purchaseOrders.filter((p) => p.status === "Amended").length,
+    totalValue: purchaseOrders.reduce(
+      (sum, p) => sum + (p.total_amount || 0),
+      0,
+    ),
   };
 
-  const notificationSource = searchParams.get('source');
-  const notificationAction = searchParams.get('action');
-  const notificationPoId = searchParams.get('poId');
-  const notificationStatus = searchParams.get('status');
-  const notificationWeakEntity = searchParams.get('weakEntity') === '1';
+  const notificationSource = searchParams.get("source");
+  const notificationAction = searchParams.get("action");
+  const notificationPoId = searchParams.get("poId");
+  const notificationStatus = searchParams.get("status");
+  const notificationWeakEntity = searchParams.get("weakEntity") === "1";
 
   useEffect(() => {
-    if (notificationSource === 'notification' && notificationStatus === 'pending-approval') {
-      setStatusFilter('Pending Approval');
+    if (
+      notificationSource === "notification" &&
+      notificationStatus === "pending-approval"
+    ) {
+      setStatusFilter("Pending Approval");
     }
   }, [notificationSource, notificationStatus]);
 
   useEffect(() => {
     if (
-      notificationSource !== 'notification' ||
-      notificationAction !== 'preview' ||
+      notificationSource !== "notification" ||
+      notificationAction !== "preview" ||
       !notificationPoId
     ) {
       return;
@@ -1567,7 +1934,8 @@ const PurchaseOrdersPage = () => {
     handledNotificationRef.current = notificationKey;
 
     const loadedPo = purchaseOrders.find(
-      (po) => String(po?.id ?? po?.poId ?? po?.po_id) === String(notificationPoId),
+      (po) =>
+        String(po?.id ?? po?.poId ?? po?.po_id) === String(notificationPoId),
     );
 
     if (loadedPo) {
@@ -1576,7 +1944,9 @@ const PurchaseOrdersPage = () => {
     }
 
     if (notificationWeakEntity) {
-      toast.warning('Could not open the exact item. Showing the related module instead.');
+      toast.warning(
+        "Could not open the exact item. Showing the related module instead.",
+      );
       return;
     }
 
@@ -1587,7 +1957,9 @@ const PurchaseOrdersPage = () => {
         setShowViewDialog(true);
       })
       .catch(() => {
-        toast.warning('Could not open the exact item. Showing the related module instead.');
+        toast.warning(
+          "Could not open the exact item. Showing the related module instead.",
+        );
       });
   }, [
     getPurchaseOrderById,
@@ -1608,7 +1980,10 @@ const PurchaseOrdersPage = () => {
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-6" data-testid="purchase-orders-page">
+    <div
+      className="flex min-h-0 flex-1 flex-col gap-6"
+      data-testid="purchase-orders-page"
+    >
       <div className="shrink-0">
         <PurchaseOrdersToolbar
           setShowBuilderDialog={openBuilderDialog}
@@ -1618,7 +1993,7 @@ const PurchaseOrdersPage = () => {
           createMenuOpen={createMenuOpen}
           onToggleCreateMenu={(open) =>
             setCreateMenuOpen((prev) =>
-              typeof open === 'boolean' ? open : !prev,
+              typeof open === "boolean" ? open : !prev,
             )
           }
           onSelectCreateOption={handleSelectCreateOption}
@@ -1704,36 +2079,38 @@ const PurchaseOrdersPage = () => {
         onSave={saveBuilderConfig}
       />
 
-      <PoDetailsDialog
-        showViewDialog={showViewDialog}
-        setShowViewDialog={closePoViewDialog}
-        selectedPO={selectedPO}
-        loadingDetails={Boolean(
-          loadingPoDetailsId &&
+      {showViewDialog && (
+        <PoDetailsDialog
+          showViewDialog={showViewDialog}
+          setShowViewDialog={closePoViewDialog}
+          selectedPO={selectedPO}
+          loadingDetails={Boolean(
+            loadingPoDetailsId &&
             selectedPO &&
             String(loadingPoDetailsId) === String(getPoId(selectedPO)),
-        )}
-        statusColors={statusColors}
-        formatDate={formatDate}
-        formatCurrency={formatCurrency}
-        handleDownloadPO={handleDownloadPO}
-        handleSubmitForApproval={handleSubmitForApproval}
-        downloadingPoId={downloadingPoId}
-        submitting={submitting}
-        setShowApprovalDialog={setShowApprovalDialog}
-        canManagePo={canManagePo}
-        onEditPO={openEditPoDialog}
-        canApprovePo={canApprovePo}
-        onSaveDeliveryStatus={handleSaveDeliveryStatus}
-        savingDeliveryStatus={savingDeliveryStatus}
-        canRaiseAdvance={isVendorAdvancesEnabled}
-        onRaiseAdvance={openRaiseAdvanceDialog}
-        onCancelPO={openCancelPoDialog}
-        cancelling={cancellingPO}
-        canEditPaymentSchedule={canEditPaymentScheduleForPo(selectedPO)}
-        onSavePaymentSchedule={handleSavePaymentSchedule}
-        savingPaymentSchedule={savingPaymentSchedule}
-      />
+          )}
+          statusColors={statusColors}
+          formatDate={formatDate}
+          formatCurrency={formatCurrency}
+          handleDownloadPO={handleDownloadPO}
+          handleSubmitForApproval={handleSubmitForApproval}
+          downloadingPoId={downloadingPoId}
+          submitting={submitting}
+          setShowApprovalDialog={setShowApprovalDialog}
+          canManagePo={canManagePo}
+          onEditPO={openEditPoDialog}
+          canApprovePo={canApprovePo}
+          onSaveDeliveryStatus={handleSaveDeliveryStatus}
+          savingDeliveryStatus={savingDeliveryStatus}
+          canRaiseAdvance={isVendorAdvancesEnabled}
+          onRaiseAdvance={openRaiseAdvanceDialog}
+          onCancelPO={openCancelPoDialog}
+          cancelling={cancellingPO}
+          canEditPaymentSchedule={canEditPaymentScheduleForPo(selectedPO)}
+          onSavePaymentSchedule={handleSavePaymentSchedule}
+          savingPaymentSchedule={savingPaymentSchedule}
+        />
+      )}
 
       <PoApprovalDialog
         showApprovalDialog={showApprovalDialog}
@@ -1761,7 +2138,11 @@ const PurchaseOrdersPage = () => {
           open={showUploadPicker && !uploadFile}
           onOpenChange={handleUploadPickerOpenChange}
           onFileSelected={handleUploadPickerFile}
-          disabled={uploadScanning || uploadInProgressRef.current || !canPerformAction('po.scan')}
+          disabled={
+            uploadScanning ||
+            uploadInProgressRef.current ||
+            !canPerformAction("po.scan")
+          }
         />
       ) : null}
 
@@ -1774,11 +2155,15 @@ const PurchaseOrdersPage = () => {
           }}
           scanning={uploadScanning}
           saving={uploadSaving}
-          canSave={Boolean(uploadPoForm?.vendor_id || uploadPoForm?.vendor_request_submitted)}
+          canSave={Boolean(
+            uploadPoForm?.vendor_id || uploadPoForm?.vendor_request_submitted,
+          )}
           poUploadEstimateDisabled={poUploadEstimate.isDisabled}
           onSaveDraft={() => handleUploadSave({ submitForApproval: false })}
-          onSubmitForApproval={() => handleUploadSave({ submitForApproval: true })}
-          renderDocumentPreview={() => (
+          onSubmitForApproval={() =>
+            handleUploadSave({ submitForApproval: true })
+          }
+          renderDocumentPreview={() =>
             isSpreadsheetUploadFile(uploadFile) ? (
               <PoSpreadsheetPreview file={uploadFile} fileURL={uploadFileURL} />
             ) : (
@@ -1791,46 +2176,48 @@ const PurchaseOrdersPage = () => {
                 setPdfZoom={setPdfZoom}
               />
             )
-          )}
-          renderPoForm={() => (
+          }
+          renderPoForm={() =>
             uploadPoForm ? (
               <PoFormDialog
-              embedded
-              plainDataMode
-              showCreateDialog
-              setShowCreateDialog={() => {}}
-              poForm={uploadPoForm}
-              setPoForm={setUploadPoForm}
-              formatConfigs={savedFormatConfigs}
-              activeFormatId={activeFormatId}
-              applyPoFormat={() => {}}
-              updatePoCurrency={updateUploadPoCurrency}
-              vendors={vendors}
-              addLineItem={addUploadLineItem}
-              updateLineItem={updateUploadLineItem}
-              removeLineItem={removeUploadLineItem}
-              formatCurrency={formatCurrency}
-              calculateLineTotal={calculateUploadLineTotal}
-              calculatePOTotal={calculateUploadPOTotal}
-              taxMode={getTaxMode(uploadPoForm.currency)}
-              handleCreatePO={() => {}}
-              createAction={null}
-              onRequestVendor={handleRequestVendorFromUpload}
-              requestingVendor={requestVendorLoading}
-              scannedVendorHint={
-                !uploadPoForm.vendor_id && (uploadPoForm.scanned_vendor_name || uploadPoForm.scanned_vendor_gstin)
-                  ? {
-                    name: uploadPoForm.scanned_vendor_name,
-                    gstin: uploadPoForm.scanned_vendor_gstin,
-                  }
-                  : null
-              }
-              showBranchField={isBranchEnabled}
-              organisationBranches={organisationBranches}
-              isPaymentTermsEnabled={isPaymentTermsEnabled}
-            />
+                embedded
+                plainDataMode
+                showCreateDialog
+                setShowCreateDialog={() => {}}
+                poForm={uploadPoForm}
+                setPoForm={setUploadPoForm}
+                formatConfigs={savedFormatConfigs}
+                activeFormatId={activeFormatId}
+                applyPoFormat={() => {}}
+                updatePoCurrency={updateUploadPoCurrency}
+                vendors={vendors}
+                addLineItem={addUploadLineItem}
+                updateLineItem={updateUploadLineItem}
+                removeLineItem={removeUploadLineItem}
+                formatCurrency={formatCurrency}
+                calculateLineTotal={calculateUploadLineTotal}
+                calculatePOTotal={calculateUploadPOTotal}
+                taxMode={getTaxMode(uploadPoForm.currency)}
+                handleCreatePO={() => {}}
+                createAction={null}
+                onRequestVendor={handleRequestVendorFromUpload}
+                requestingVendor={requestVendorLoading}
+                scannedVendorHint={
+                  !uploadPoForm.vendor_id &&
+                  (uploadPoForm.scanned_vendor_name ||
+                    uploadPoForm.scanned_vendor_gstin)
+                    ? {
+                        name: uploadPoForm.scanned_vendor_name,
+                        gstin: uploadPoForm.scanned_vendor_gstin,
+                      }
+                    : null
+                }
+                showBranchField={isBranchEnabled}
+                organisationBranches={organisationBranches}
+                isPaymentTermsEnabled={isPaymentTermsEnabled}
+              />
             ) : null
-          )}
+          }
         />
       ) : null}
 
@@ -1849,7 +2236,7 @@ const PurchaseOrdersPage = () => {
           setShowCancelDialog(open);
           if (!open) {
             setPoToCancel(null);
-            setCancelReason('');
+            setCancelReason("");
           }
         }}
       >
@@ -1860,9 +2247,12 @@ const PurchaseOrdersPage = () => {
               Cancel Purchase Order
             </DialogTitle>
             <DialogDescription>
-              Are you sure you want to cancel PO{' '}
-              <span className="font-semibold text-foreground">{poToCancel?.po_number || ''}</span>?
-              This will update the purchase order status to CANCELLED and update associated order tracking lifecycle records.
+              Are you sure you want to cancel PO{" "}
+              <span className="font-semibold text-foreground">
+                {poToCancel?.po_number || ""}
+              </span>
+              ? This will update the purchase order status to CANCELLED and
+              update associated order tracking lifecycle records.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 py-2">
@@ -1892,7 +2282,9 @@ const PurchaseOrdersPage = () => {
               disabled={cancellingPO || submitting || !cancelReason.trim()}
               data-testid="confirm-cancel-po-btn"
             >
-              {(cancellingPO || submitting) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+              {(cancellingPO || submitting) && (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              )}
               Confirm Cancellation
             </Button>
           </DialogFooter>

@@ -24,6 +24,7 @@ import InrConversionFields, {
   ConvertedInrAmountSummary,
 } from "../../../components/common/InrConversionFields";
 import PoPaymentScheduleSection from "./PoPaymentScheduleSection";
+import { getPaymentScheduleSummary, validatePaymentScheduleRows } from "../utils/poPaymentSchedule";
 
 const getPoFormLineItemTableHeader = ({ isInr, fieldOn }) => [
   ...(fieldOn("LINE_ITEM", "item_name") ? [{ key: "item_description", title: "Description *", headerClassName: "w-[220px]" }] : []),
@@ -202,6 +203,7 @@ const PoFormDialog = ({
   isPaymentTermsEnabled = false,
 }) => {
   const [previewAction, setPreviewAction] = useState(null);
+  const [paymentScheduleErrors, setPaymentScheduleErrors] = useState([]);
 
   const isInr = taxMode === "GST";
   const selectedFormat = formatConfigs.find((format) => format.id === (poForm.po_format_id || activeFormatId)) || formatConfigs[0] || {};
@@ -376,6 +378,19 @@ const PoFormDialog = ({
   };
 
   const handlePreviewAction = (action) => {
+    setPaymentScheduleErrors([]);
+    if (isPaymentTermsEnabled) {
+      const paymentSchedule = poForm.paymentSchedule || [];
+      const scheduleErrors = validatePaymentScheduleRows(paymentSchedule);
+      const nextScheduleErrors = [...scheduleErrors];
+      const scheduleSummary = getPaymentScheduleSummary(paymentSchedule, displayTotal);
+      if (paymentSchedule.length > 0 && Math.abs(scheduleSummary.difference) > 0.009) {
+        nextScheduleErrors.push("Payment Schedule total must match the document gross total.");
+      }
+      if (nextScheduleErrors.length > 0) {
+        setPaymentScheduleErrors(nextScheduleErrors);
+      }
+    }
     const canPreview = onBeforePreview?.({ submitForApproval: action === "submit" });
     if (canPreview === false) return;
     setPreviewAction(action);
@@ -1067,12 +1082,14 @@ const PoFormDialog = ({
                   poGrossTotal={displayTotal}
                   formatCurrency={formatPoCurrency}
                   readOnly={isPreviewing}
-                  onChange={(paymentSchedule) =>
+                  validationErrors={paymentScheduleErrors}
+                  onChange={(paymentSchedule) => {
+                    setPaymentScheduleErrors([]);
                     setPoForm((prev) => ({
                       ...prev,
                       paymentSchedule,
-                    }))
-                  }
+                    }));
+                  }}
                 />
               ) : null}
               </div>

@@ -28,6 +28,7 @@ const editableHeader = [
 const readOnlyHeader = editableHeader.filter((header) => header.key !== "actions");
 
 const inputClassName = "h-9 bg-white/80 text-sm";
+const errorInputClassName = "border-red-400 bg-red-50 focus-visible:ring-red-300";
 
 const PoPaymentScheduleSection = ({
   rows = [],
@@ -36,8 +37,13 @@ const PoPaymentScheduleSection = ({
   formatCurrency,
   onChange,
   readOnly = false,
+  validationErrors = [],
 }) => {
   const scheduleRows = Array.isArray(rows) ? rows : [];
+  const scheduleErrors = Array.isArray(validationErrors)
+    ? validationErrors.filter(Boolean)
+    : [validationErrors].filter(Boolean);
+  const hasValidationErrors = scheduleErrors.length > 0;
   const grossTotal = documentGrossTotal ?? poGrossTotal;
   const firstRowBasis = inferPaymentScheduleBasis(scheduleRows, grossTotal);
   const [selectedBasis, setSelectedBasis] = useState(firstRowBasis);
@@ -102,6 +108,17 @@ const PoPaymentScheduleSection = ({
 
   const renderRow = (row, index, headers) => {
     const rowLocked = isPaymentScheduleRowLocked(row);
+    const rowErrorPrefix = `Payment Schedule row ${index + 1}:`;
+    const rowErrors = scheduleErrors.filter((error) => error.startsWith(rowErrorPrefix));
+    const hasTotalError = scheduleErrors.includes("Payment Schedule total must match the document gross total.");
+    const hasLabelError = rowErrors.some((error) => error.toLowerCase().includes("label"));
+    const hasValueError =
+      hasTotalError ||
+      rowErrors.some((error) => {
+        const normalizedError = error.toLowerCase();
+        return normalizedError.includes("value") || normalizedError.includes("negative");
+      });
+    const hasTriggerError = rowErrors.some((error) => error.toLowerCase().includes("trigger stage"));
     const lockReason =
       row.lockReason ||
       row.lock_reason ||
@@ -126,7 +143,7 @@ const PoPaymentScheduleSection = ({
             case "triggerStage":
               content = readOnly || rowLocked ? row.triggerStage : (
                 <Select value={row.triggerStage} onValueChange={(value) => updateRow(index, "triggerStage", value)}>
-                  <SelectTrigger className="h-9 bg-white/80">
+                  <SelectTrigger className={`h-9 bg-white/80 ${hasTriggerError ? errorInputClassName : ""}`}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -149,7 +166,7 @@ const PoPaymentScheduleSection = ({
                   value={row.label || ""}
                   onChange={(event) => updateRow(index, "label", event.target.value)}
                   placeholder="Milestone label"
-                  className={inputClassName}
+                  className={`${inputClassName} ${hasLabelError ? errorInputClassName : ""}`}
                 />
               );
               break;
@@ -161,7 +178,7 @@ const PoPaymentScheduleSection = ({
                   step="0.01"
                   value={row.value ?? ""}
                   onChange={(event) => updateRow(index, "value", event.target.value)}
-                  className={inputClassName}
+                  className={`${inputClassName} ${hasValueError ? errorInputClassName : ""}`}
                 />
               );
               break;
@@ -171,7 +188,7 @@ const PoPaymentScheduleSection = ({
                   variant="ghost"
                   size="icon"
                   onClick={() => removeRow(index)}
-                  disabled={scheduleRows.length === 1 || rowLocked}
+                  disabled={rowLocked}
                   title={rowLocked ? lockReason : "Remove milestone"}
                 >
                   <Trash2 className="h-4 w-4 text-destructive" />
@@ -200,7 +217,13 @@ const PoPaymentScheduleSection = ({
   if (readOnly && scheduleRows.length === 0) return null;
 
   return (
-    <section className="mt-6 rounded border bg-slate-50/60 p-4">
+    <section
+      className={`mt-6 rounded border p-4 ${
+        hasValidationErrors
+          ? "border-red-300 bg-red-50/40 ring-1 ring-red-200"
+          : "bg-slate-50/60"
+      }`}
+    >
       <div className="mb-3 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold">Payment Schedule</h3>
@@ -280,6 +303,20 @@ const PoPaymentScheduleSection = ({
           <p>
             Scheduled total must match the document gross total before it can be saved.
           </p>
+        </div>
+      ) : null}
+
+      {hasValidationErrors ? (
+        <div className="mt-3 flex items-start gap-2 rounded border border-red-300 bg-red-50 px-3 py-2 text-sm font-medium text-red-800">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <div className="space-y-1">
+            <p>Fix the Payment Schedule errors below.</p>
+            <ul className="list-disc space-y-0.5 pl-4">
+              {scheduleErrors.map((error) => (
+                <li key={error}>{error}</li>
+              ))}
+            </ul>
+          </div>
         </div>
       ) : null}
 
