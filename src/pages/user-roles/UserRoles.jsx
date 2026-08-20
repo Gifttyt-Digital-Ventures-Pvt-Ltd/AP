@@ -71,6 +71,15 @@ import { FULL_ACCESS_PERMISSION } from "../../constants/rbacPolicy";
 // PAYMENTS ADMIN/REQUESTER/APPROVER and PAYMENT_APPROVAL_WORKFLOW VIEW/MANAGE.
 const ENABLE_LOCAL_PAYMENTS_ROLE_ENTITLEMENT = false;
 const ENABLE_LOCAL_PAYMENT_WORKFLOW_ROLE_ENTITLEMENT = false;
+const CONNECTED_BANKING_PAYMENT_PERMISSION_IDS = new Set([
+  "payments-admin",
+  "payments-requester",
+  "payments-approver",
+]);
+const LEGACY_PAYMENT_PERMISSION_IDS = new Set([
+  "payments-view",
+  "payments-manage",
+]);
 
 const UserRoles = () => {
   const [activeTab, setActiveTab] = useState("users");
@@ -153,6 +162,10 @@ const UserRoles = () => {
   const canUsePaymentApprovalWorkflow =
     isConnectedBankingEnabled &&
     isCorporateSectionEnabled("MANAGE_ROLE_APPROVAL_WORKFLOW");
+  const canUseLegacyPaymentRoles =
+    !isConnectedBankingEnabled &&
+    isCorporateScreenAllowed("PAYMENTS") &&
+    isCorporateSectionEnabled("PAYMENTS_ALL");
   const canViewUsersTab =
     canViewUserRecords && isCorporateSectionEnabled("MANAGE_ROLE_USERS");
   const canViewRolesTab =
@@ -400,6 +413,14 @@ const UserRoles = () => {
         return canUseBillingSettings;
       }
       if (backendEntry.screen === "PAYMENTS") {
+        const isConnectedBankingPaymentPermission = [
+          "ADMIN",
+          "REQUESTER",
+          "APPROVER",
+        ].includes(backendEntry.permissionType);
+        if (isConnectedBankingPaymentPermission && !isConnectedBankingEnabled) {
+          return false;
+        }
         return (
           ENABLE_LOCAL_PAYMENTS_ROLE_ENTITLEMENT ||
           isCorporateScreenAllowed("PAYMENTS") &&
@@ -444,7 +465,9 @@ const UserRoles = () => {
       isCampaignFeatureEnabled,
       isConnectedBankingEnabled,
       canUseManageRoleCategories,
+      canUseManageRoleDepartments,
       canUseBillingSettings,
+      canUsePaymentApprovalWorkflow,
       isCorporateScreenAllowed,
       isCorporateSectionEnabled,
     ],
@@ -513,6 +536,11 @@ const UserRoles = () => {
       keys.add("PAYMENT_APPROVAL_WORKFLOW:MANAGE");
     }
 
+    if (canUseLegacyPaymentRoles) {
+      keys.add("PAYMENTS:VIEW");
+      keys.add("PAYMENTS:MANAGE");
+    }
+
     if (ENABLE_LOCAL_PAYMENTS_ROLE_ENTITLEMENT) {
       keys.add("PAYMENTS:ADMIN");
       keys.add("PAYMENTS:REQUESTER");
@@ -540,6 +568,8 @@ const UserRoles = () => {
     isCorporateSectionEnabled,
     canUseManageRoleCategories,
     canUseBillingSettings,
+    canUseLegacyPaymentRoles,
+    canUsePaymentApprovalWorkflow,
     isCorporateScreenAllowed,
   ]);
 
@@ -600,6 +630,11 @@ const UserRoles = () => {
       keys.add("payment-approval-workflow-manage");
     }
 
+    if (canUseLegacyPaymentRoles) {
+      keys.add("payments-view");
+      keys.add("payments-manage");
+    }
+
     if (ENABLE_LOCAL_PAYMENTS_ROLE_ENTITLEMENT) {
       keys.add("payments-admin");
       keys.add("payments-requester");
@@ -628,6 +663,8 @@ const UserRoles = () => {
     canUseManageRoleCategories,
     canUseManageRoleDepartments,
     canUseBillingSettings,
+    canUseLegacyPaymentRoles,
+    canUsePaymentApprovalWorkflow,
     isCorporateScreenAllowed,
   ]);
 
@@ -638,6 +675,18 @@ const UserRoles = () => {
         const backendEntry = CUSTOM_ROLE_PERMISSION_MAP[permission.id];
         if (!backendEntry) return false;
         if (!isMappedPermissionEntitled(backendEntry)) return false;
+        if (
+          CONNECTED_BANKING_PAYMENT_PERMISSION_IDS.has(permission.id) &&
+          !isConnectedBankingEnabled
+        ) {
+          return false;
+        }
+        if (
+          LEGACY_PAYMENT_PERMISSION_IDS.has(permission.id) &&
+          isConnectedBankingEnabled
+        ) {
+          return false;
+        }
         const isCampaignPermission = CAMPAIGN_PERMISSION_IDS.includes(permission.id);
         const isBillingPermission = BILLING_PERMISSION_IDS.includes(permission.id);
         if (
@@ -656,6 +705,7 @@ const UserRoles = () => {
   }, [
     availablePermissionKeys,
     canUseBillingSettings,
+    isConnectedBankingEnabled,
     isCampaignFeatureEnabled,
     isMappedPermissionEntitled,
   ]);
