@@ -69,15 +69,35 @@ const normalizeReferenceDocumentUrl = (url = "") => {
   return new URL(url, window.location.origin).toString();
 };
 
-const isSpreadsheetReferenceDocument = ({ name = "", type = "" } = {}) => {
+const getReferenceUrlFileName = (url = "") => {
+  if (!url) return "";
+  try {
+    return decodeURIComponent(new URL(url, window.location.origin).pathname.split("/").pop() || "");
+  } catch {
+    return decodeURIComponent(String(url).split("?")[0].split("/").pop() || "");
+  }
+};
+
+const isSpreadsheetReferenceDocument = ({ name = "", type = "", url = "" } = {}) => {
   const normalizedType = String(type || "").trim().toUpperCase();
-  const normalizedName = String(name || "").trim().toLowerCase();
+  const normalizedName = String(name || getReferenceUrlFileName(url)).trim().toLowerCase();
   return (
     normalizedType === "EXCEL" ||
     normalizedType === "SPREADSHEET" ||
     normalizedName.endsWith(".xls") ||
     normalizedName.endsWith(".xlsx") ||
     normalizedName.endsWith(".csv")
+  );
+};
+
+const isPreviewableReferenceDocument = ({ name = "", type = "", url = "" } = {}) => {
+  const normalizedType = String(type || "").trim().toLowerCase();
+  const normalizedName = String(name || getReferenceUrlFileName(url)).trim().toLowerCase();
+  return (
+    normalizedType.includes("pdf") ||
+    normalizedType.includes("image") ||
+    normalizedName.endsWith(".pdf") ||
+    [".png", ".jpg", ".jpeg", ".gif", ".webp"].some((ext) => normalizedName.endsWith(ext))
   );
 };
 
@@ -247,10 +267,12 @@ const PoDetailsDialog = ({
       referenceDocument.url ||
       referenceDocument.s3Key,
   );
-  const hasReferencePreview = Boolean(referenceDocument.url);
   const isSpreadsheetReference = isSpreadsheetReferenceDocument(referenceDocument);
-  const referencePreviewFile = referenceDocument.name
-    ? { name: referenceDocument.name }
+  const canPreviewReference = isPreviewableReferenceDocument(referenceDocument);
+  const referencePreviewName = referenceDocument.name || getReferenceUrlFileName(referenceDocument.url);
+  const hasReferencePreview = Boolean(referenceDocument.url && (canPreviewReference || isSpreadsheetReference));
+  const referencePreviewFile = referencePreviewName
+    ? { name: referencePreviewName }
     : null;
 
   useEffect(() => {
@@ -379,7 +401,7 @@ const PoDetailsDialog = ({
           {hasReferencePreview ? (
             <aside className="h-[420px] min-h-0 w-full shrink-0 border-b bg-white lg:h-auto lg:w-[38%] lg:border-b-0 lg:border-r">
               {isSpreadsheetReference ? (
-                <PoSpreadsheetPreview fileURL={referenceDocument.url} fileName={referenceDocument.name} />
+                <PoSpreadsheetPreview fileURL={referenceDocument.url} fileName={referencePreviewName} />
               ) : (
                 <InvoicePdfPreview
                   fileURL={referenceDocument.url}
@@ -691,6 +713,11 @@ const PoDetailsDialog = ({
                             {!referenceDocument.url && !referenceDocument.s3Key && isSpreadsheetReference ? (
                               <p className="text-xs text-muted-foreground">
                                 Excel metadata was returned, but no preview/download URL was returned.
+                              </p>
+                            ) : null}
+                            {referenceDocument.url && !isSpreadsheetReference && !canPreviewReference ? (
+                              <p className="text-xs text-muted-foreground">
+                                Preview is not available for this reference file type. Use Open Reference when you need to view it.
                               </p>
                             ) : null}
                           </div>

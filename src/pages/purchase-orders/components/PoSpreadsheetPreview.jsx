@@ -5,6 +5,8 @@ import { Button } from "../../../components/ui/button";
 
 const MAX_PREVIEW_ROWS = 60;
 const MAX_PREVIEW_COLUMNS = 16;
+const previewCache = new Map();
+const previewRequestCache = new Map();
 
 const readWorkbookRows = async (file) => {
   const fileName = file?.name || "";
@@ -39,26 +41,57 @@ const normalizeCellValue = (value) => {
   return String(value);
 };
 
+const getPreviewCacheKey = ({ file, fileURL }) => {
+  if (fileURL) return `url:${fileURL}`;
+  if (file) {
+    return `file:${file.name || ""}:${file.size || 0}:${file.lastModified || 0}`;
+  }
+  return "";
+};
+
 const PoSpreadsheetPreview = ({ file, fileURL, fileName }) => {
   const [preview, setPreview] = useState({ sheetName: "", rows: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const cacheKey = getPreviewCacheKey({ file, fileURL });
 
   useEffect(() => {
     let cancelled = false;
 
     const loadPreview = async () => {
       if (!file && !fileURL) return;
+
+      if (cacheKey && previewCache.has(cacheKey)) {
+        setPreview(previewCache.get(cacheKey));
+        setError("");
+        setLoading(false);
+        return;
+      }
+
       setLoading(true);
       setError("");
       try {
-        const result = file && typeof file.arrayBuffer === "function"
-          ? await readWorkbookRows(file)
-          : await readWorkbookRowsFromUrl(fileURL);
+        const existingRequest = cacheKey ? previewRequestCache.get(cacheKey) : null;
+        const request =
+          existingRequest ||
+          (file && typeof file.arrayBuffer === "function"
+            ? readWorkbookRows(file)
+            : readWorkbookRowsFromUrl(fileURL));
+        if (cacheKey && !existingRequest) {
+          previewRequestCache.set(cacheKey, request);
+        }
+        const result = await request;
         if (cancelled) return;
+        if (cacheKey) {
+          previewCache.set(cacheKey, result);
+          previewRequestCache.delete(cacheKey);
+        }
         setPreview(result);
       } catch (err) {
         if (cancelled) return;
+        if (cacheKey) {
+          previewRequestCache.delete(cacheKey);
+        }
         setPreview({ sheetName: "", rows: [] });
         setError("Could not preview this spreadsheet");
       } finally {
@@ -71,7 +104,7 @@ const PoSpreadsheetPreview = ({ file, fileURL, fileName }) => {
     return () => {
       cancelled = true;
     };
-  }, [file, fileURL]);
+  }, [cacheKey, file, fileURL]);
 
   const previewRows = useMemo(
     () => preview.rows.slice(0, MAX_PREVIEW_ROWS),

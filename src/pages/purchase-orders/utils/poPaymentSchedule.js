@@ -226,11 +226,15 @@ export const validatePaymentScheduleRows = (rows = []) => {
   rows.forEach((row, index) => {
     const rowNumber = index + 1;
     const triggerStage = normalizeTriggerStage(row.triggerStage);
+    const hasScheduleValue = hasValue(row.value);
+    const numericValue = Number(row.value);
     if (!String(row.label || "").trim()) {
       errors.push(`Payment Schedule row ${rowNumber}: label is required`);
     }
-    if (!(Number(row.value) > 0)) {
-      errors.push(`Payment Schedule row ${rowNumber}: value must be greater than zero`);
+    if (!hasScheduleValue || !Number.isFinite(numericValue)) {
+      errors.push(`Payment Schedule row ${rowNumber}: value is required`);
+    } else if (numericValue < 0) {
+      errors.push(`Payment Schedule row ${rowNumber}: value cannot be negative`);
     }
     if (Number(row.creditDays) < 0) {
       errors.push(`Payment Schedule row ${rowNumber}: credit days cannot be negative`);
