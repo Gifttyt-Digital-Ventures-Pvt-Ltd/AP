@@ -6,7 +6,6 @@ import {
   FileCheck,
   History,
   Loader2,
-  Pencil,
   RotateCcw,
   Save,
   Truck,
@@ -21,7 +20,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../../components/ui/select';
-import ConnectedVendorPicker from '../../../components/common/ConnectedVendorPicker';
 import { Card, CardContent, CardHeader, CardTitle } from '../../../components/ui/card';
 import {
   Dialog,
@@ -51,22 +49,8 @@ import AccountingLockBanner from '../../../components/AccountingLockBanner';
 import ApprovalHistoryTimeline from '../../../components/common/ApprovalHistoryTimeline';
 import { isAccountingReadyLocked } from '../../../utils/accountingLock';
 import { useGetGrnHistoryQuery } from '../../../Services/apis/goodsReceiptApi';
-import {
-  useGetDocumentPaymentScheduleHistoryQuery,
-  useGetDocumentPaymentScheduleQuery,
-  useUpdateDocumentPaymentScheduleMutation,
-} from '../../../Services/apis/paymentSchedulesApi';
-import usePaymentTermsSubscription from '../../../hooks/usePaymentTermsSubscription';
 import { GRN_SOURCE, GRN_STATUS } from '../constants';
 import { formatCurrency, formatDate } from '../utils';
-import PoPaymentScheduleSection from '../../purchase-orders/components/PoPaymentScheduleSection';
-import {
-  buildPaymentSchedulePayload,
-  getPaymentScheduleSummary,
-  normalizePaymentScheduleRows,
-  validatePaymentScheduleRows,
-} from '../../purchase-orders/utils/poPaymentSchedule';
-import { toast } from 'sonner';
 
 const toDateInputValue = (value) => {
   if (!value) return '';
@@ -99,39 +83,8 @@ const createEditableGrnForm = (grn = {}, formatConfig = {}) => {
     received_by: source.received_by || source.receivedBy || '',
     remarks: source.remarks || '',
     line_items: source.line_items || source.lineItems || [],
-    paymentSchedule: normalizePaymentScheduleRows(source),
   };
 };
-
-const getGrnDocumentTotal = (source = {}) => {
-  const safeSource = source || {};
-  const explicitTotal = Number(
-    safeSource.documentGrossAmount ??
-      safeSource.document_gross_amount ??
-      safeSource.total_received_value ??
-      safeSource.totalReceivedValue ??
-      safeSource.totalAmount ??
-      safeSource.total_amount,
-  );
-  if (explicitTotal > 0) return explicitTotal;
-  return (safeSource.line_items || safeSource.lineItems || []).reduce((sum, line) => {
-    const lineAmount =
-      Number(line.line_amount ?? line.lineAmount) ||
-      (Number(line.received_quantity ?? line.receivedQuantity) || 0) *
-        (Number(line.unit_price ?? line.unitPrice) || 0);
-    const taxAmount = (lineAmount * (Number(line.gst_rate ?? line.gstRate) || 0)) / 100;
-    return sum + lineAmount + taxAmount;
-  }, 0);
-};
-
-const isPaymentScheduleAvailable = (source = {}) =>
-  source?.paymentScheduleAvailable === true;
-
-const mergeHistoryEntries = (...historyLists) =>
-  historyLists
-    .flat()
-    .filter(Boolean)
-    .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0));
 
 const GrnDetailDialog = ({
   grn,
@@ -154,80 +107,20 @@ const GrnDetailDialog = ({
   const [editMode, setEditMode] = useState(false);
   const [viewTab, setViewTab] = useState('details');
   const [draftForm, setDraftForm] = useState(() => createEditableGrnForm(grn, formatConfig));
-  const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
-  const [scheduleDraftRows, setScheduleDraftRows] = useState([]);
-  const { isPaymentTermsEnabled } = usePaymentTermsSubscription();
   const grnId = grn?.id || grn?.grn_id || grn?.grnId;
-  const hasEmbeddedPaymentSchedule = normalizePaymentScheduleRows(grn || {}).length > 0;
-  const grnPaymentScheduleAvailable =
-    isPaymentScheduleAvailable(grn || {}) || hasEmbeddedPaymentSchedule;
   const {
     data: grnHistory = [],
     isLoading: loadingGrnHistory,
   } = useGetGrnHistoryQuery(grnId, {
     skip: !open || !grnId,
   });
-  const {
-    data: documentScheduleData,
-    isFetching: loadingPaymentSchedule,
-  } = useGetDocumentPaymentScheduleQuery(
-    { documentType: 'GRN', documentId: grnId },
-    { skip: !open || !grnId || !isPaymentTermsEnabled || !grnPaymentScheduleAvailable },
-  );
-  const {
-    data: paymentScheduleHistory = [],
-    isLoading: loadingPaymentScheduleHistory,
-  } = useGetDocumentPaymentScheduleHistoryQuery(
-    { documentType: 'GRN', documentId: grnId },
-    {
-      skip:
-        !open ||
-        !grnId ||
-        !grnPaymentScheduleAvailable ||
-        (!isPaymentTermsEnabled && !hasEmbeddedPaymentSchedule),
-    },
-  );
-  const [updateDocumentPaymentSchedule, { isLoading: savingPaymentSchedule }] =
-    useUpdateDocumentPaymentScheduleMutation();
 
   useEffect(() => {
     if (!open || !grn) return;
     setViewTab('details');
     setEditMode(Boolean(initialEditMode));
     setDraftForm(createEditableGrnForm(grn, formatConfig));
-    setScheduleDialogOpen(false);
   }, [formatConfig, grn, initialEditMode, open]);
-
-  const documentScheduleSource = useMemo(
-    () =>
-      Array.isArray(documentScheduleData)
-        ? { paymentSchedule: documentScheduleData }
-        : {
-            ...(documentScheduleData || {}),
-            paymentSchedule:
-              documentScheduleData?.paymentSchedule ??
-              documentScheduleData?.payment_schedule ??
-              documentScheduleData?.rows ??
-              documentScheduleData?.schedule,
-          },
-    [documentScheduleData],
-  );
-  const grnScheduleRows = useMemo(() => {
-    const fetchedRows = normalizePaymentScheduleRows(documentScheduleSource || {});
-    return fetchedRows.length ? fetchedRows : normalizePaymentScheduleRows(grn || {});
-  }, [documentScheduleSource, grn]);
-  const documentScheduleAvailable =
-    isPaymentScheduleAvailable(documentScheduleSource || {}) ||
-    grnPaymentScheduleAvailable ||
-    grnScheduleRows.length > 0;
-  const combinedHistory = useMemo(
-    () => mergeHistoryEntries(grnHistory, paymentScheduleHistory),
-    [grnHistory, paymentScheduleHistory],
-  );
-  const documentGrossTotal = getGrnDocumentTotal(documentScheduleSource) || getGrnDocumentTotal(grn);
-  const canEditPaymentSchedule =
-    Boolean(isPaymentTermsEnabled && grnId && documentScheduleAvailable && grnScheduleRows.length > 0) &&
-    ![GRN_STATUS.CANCELLED, GRN_STATUS.REJECTED].includes(grn?.status);
 
   const isEditable =
     [GRN_STATUS.DRAFT, GRN_STATUS.SENT_BACK].includes(grn?.status) &&
@@ -252,37 +145,6 @@ const GrnDetailDialog = ({
     onSaveAndSubmit?.(draftForm);
   };
 
-  const openScheduleDialog = () => {
-    setScheduleDraftRows(grnScheduleRows);
-    setScheduleDialogOpen(true);
-  };
-
-  const handleSavePaymentSchedule = async () => {
-    const scheduleErrors = validatePaymentScheduleRows(scheduleDraftRows);
-    if (scheduleErrors.length > 0) {
-      toast.error(scheduleErrors[0]);
-      return;
-    }
-
-    const summary = getPaymentScheduleSummary(scheduleDraftRows, documentGrossTotal);
-    if (scheduleDraftRows.length > 0 && Math.abs(summary.difference) > 0.009) {
-      toast.error('Payment Schedule total must match the document gross total.');
-      return;
-    }
-
-    try {
-      await updateDocumentPaymentSchedule({
-        documentType: 'GRN',
-        documentId: grnId,
-        body: { paymentSchedule: buildPaymentSchedulePayload(scheduleDraftRows) },
-      }).unwrap();
-      toast.success('Payment Schedule updated');
-      setScheduleDialogOpen(false);
-    } catch (error) {
-      toast.error(error?.data?.detail || error?.data?.message || 'Failed to update Payment Schedule');
-    }
-  };
-
   const handleSubmit = () => {
     if (editMode && draftChanged) {
       handleSaveAndSubmit();
@@ -292,8 +154,7 @@ const GrnDetailDialog = ({
   };
 
   return (
-    <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         className="flex max-h-[92vh] w-[96vw] max-w-4xl flex-col overflow-hidden p-0"
         data-testid="grn-detail-dialog"
@@ -331,7 +192,7 @@ const GrnDetailDialog = ({
               <TabsTrigger value="details">Details</TabsTrigger>
               <TabsTrigger value="history">
                 <History className="mr-1 h-4 w-4" />
-                History ({combinedHistory.length})
+                History ({grnHistory.length})
               </TabsTrigger>
             </TabsList>
 
@@ -468,17 +329,28 @@ const GrnDetailDialog = ({
                 {canEditVendor ? (
                   <div className="space-y-2">
                     <Label>Vendor *</Label>
-                    <ConnectedVendorPicker
-                      value={draftForm.vendor_name || draftForm.vendor_id}
-                      onSelect={(vendor) => {
+                    <Select
+                      value={draftForm.vendor_id ? String(draftForm.vendor_id) : ''}
+                      onValueChange={(vendorId) => {
+                        const vendor = vendors.find((item) => String(item.id) === String(vendorId));
                         setDraftForm((current) => ({
                           ...current,
-                          vendor_id: vendor?.id || '',
+                          vendor_id: vendorId,
                           vendor_name: vendor?.name ?? vendor?.vendor_name ?? '',
                         }));
                       }}
-                      placeholder="Select vendor"
-                    />
+                    >
+                      <SelectTrigger className="h-9 bg-white/80" data-testid="grn-detail-vendor-select">
+                        <SelectValue placeholder="Select vendor" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {vendors.map((vendor) => (
+                          <SelectItem key={vendor.id} value={String(vendor.id)}>
+                            {vendor.name ?? vendor.vendor_name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 ) : (
                   <div className="rounded-lg border bg-muted/30 p-3">
@@ -548,48 +420,12 @@ const GrnDetailDialog = ({
                   <p className="mt-1 text-sm">{grn.remarks}</p>
                 </div>
               )}
-
-              {!editMode && (documentScheduleAvailable || grnScheduleRows.length || loadingPaymentSchedule) && (
-                <div className="space-y-2">
-                  {canEditPaymentSchedule ? (
-                    <div className="flex justify-end">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={openScheduleDialog}
-                        disabled={savingPaymentSchedule || loadingPaymentSchedule}
-                      >
-                        {savingPaymentSchedule ? (
-                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        ) : (
-                          <Pencil className="mr-2 h-4 w-4" />
-                        )}
-                        Edit Payment Schedule
-                      </Button>
-                    </div>
-                  ) : null}
-                  {grnScheduleRows.length ? (
-                    <PoPaymentScheduleSection
-                      rows={grnScheduleRows}
-                      documentGrossTotal={documentGrossTotal}
-                      formatCurrency={(amount) => formatCurrency(amount, grn.currency)}
-                      readOnly
-                    />
-                  ) : null}
-                  {documentScheduleAvailable && !loadingPaymentSchedule && grnScheduleRows.length === 0 ? (
-                    <div className="rounded border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                      Payment Schedule is available for this matched GRN, but schedule rows were not returned.
-                    </div>
-                  ) : null}
-                </div>
-              )}
             </TabsContent>
 
             <TabsContent value="history" className="m-0">
               <ApprovalHistoryTimeline
-                history={combinedHistory}
-                loading={loadingGrnHistory || loadingPaymentScheduleHistory}
+                history={grnHistory}
+                loading={loadingGrnHistory}
                 emptyMessage="No GRN history records found"
               />
             </TabsContent>
@@ -619,40 +455,7 @@ const GrnDetailDialog = ({
           </div>
         </DialogFooter>
       </DialogContent>
-      </Dialog>
-
-      <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
-        <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>Edit Payment Schedule</DialogTitle>
-          </DialogHeader>
-          <PoPaymentScheduleSection
-            rows={scheduleDraftRows}
-            documentGrossTotal={documentGrossTotal}
-            formatCurrency={(amount) => formatCurrency(amount, grn.currency)}
-            onChange={setScheduleDraftRows}
-          />
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setScheduleDialogOpen(false)}
-              disabled={savingPaymentSchedule}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={handleSavePaymentSchedule}
-              disabled={savingPaymentSchedule}
-            >
-              {savingPaymentSchedule ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              Save Payment Schedule
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
+    </Dialog>
   );
 };
 

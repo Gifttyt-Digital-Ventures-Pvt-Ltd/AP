@@ -79,9 +79,6 @@ const InvoicesDialogs = (props) => {
     canEditInternalChecklist = false,
     onSaveInternalChecklist,
     savingInternalChecklist = false,
-    canEditInvoiceFunding = false,
-    onSaveInvoiceFunding,
-    savingInvoiceFunding = false,
     onMapTaxInvoice,
     onViewLinkedInvoice,
     allInvoices = [],
@@ -181,9 +178,6 @@ const InvoicesDialogs = (props) => {
         canEditInternalChecklist={canEditInternalChecklist}
         onSaveInternalChecklist={onSaveInternalChecklist}
         savingInternalChecklist={savingInternalChecklist}
-        canEditInvoiceFunding={canEditInvoiceFunding}
-        onSaveInvoiceFunding={onSaveInvoiceFunding}
-        savingInvoiceFunding={savingInvoiceFunding}
         onMapTaxInvoice={onMapTaxInvoice}
         onViewLinkedInvoice={onViewLinkedInvoice}
         allInvoices={allInvoices}

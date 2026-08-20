@@ -19,22 +19,8 @@ import {
   useUpdatePurchaseOrderMutation,
   useSubmitPurchaseOrderMutation,
   useApprovePurchaseOrderMutation,
-  useCancelPurchaseOrderMutation,
   useScanPurchaseOrderMutation,
 } from '../../Services/apis/purchaseOrdersMasterDataApi';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '../../components/ui/dialog';
-import { Button } from '../../components/ui/button';
-import { Textarea } from '../../components/ui/textarea';
-import { Label } from '../../components/ui/label';
-import { Loader2, XCircle } from 'lucide-react';
-import { useUpdateDocumentPaymentScheduleMutation } from '../../Services/apis/paymentSchedulesApi';
 import { useRequestAccountingReadyUnlockMutation } from '../../Services/apis/accountingApi';
 import { useGetOrganisationQuery } from '../../Services/apis/settingsApi';
 import { normalizeOrganisationBranchesFromApi } from '../../utils/organisationGst';
@@ -65,7 +51,6 @@ import {
   resolvePoTotals,
 } from './utils/poTotals';
 import {
-  buildPaymentSchedulePayload,
   getPaymentScheduleSummary,
   normalizePaymentScheduleRows,
   validatePaymentScheduleRows,
@@ -150,9 +135,9 @@ const createDefaultPoForm = (defaultCurrency = 'INR', formatId = 'default-format
   vendor_branch_code: '',
   vendor_branch_gstin: '',
   reference_document_type: '',
+  reference_document_no: '',
   reference_document_id: '',
   reference_document_name: '',
-  creation_source: 'MANUAL',
   po_date: new Date().toISOString().split('T')[0],
   valid_till: '',
   expected_delivery_date: '',
@@ -187,9 +172,9 @@ const buildPoEditForm = (po = {}, fallbackFormatId = 'default-format') => ({
   vendor_branch_code: po.vendor_branch_code || po.vendorBranchCode || '',
   vendor_branch_gstin: po.vendor_branch_gstin || po.vendorBranchGstin || '',
   reference_document_type: po.reference_document_type || po.referenceDocumentType || '',
+  reference_document_no: po.reference_document_no || po.referenceDocumentNo || '',
   reference_document_id: po.reference_document_id || po.referenceDocumentId || '',
   reference_document_name: po.reference_document_name || po.referenceDocumentName || '',
-  creation_source: po.creation_source || po.creationSource || '',
   po_date: String(po.po_date || po.poDate || '').slice(0, 10) || new Date().toISOString().split('T')[0],
   valid_till: String(po.valid_till || po.validTill || '').slice(0, 10),
   expected_delivery_date: String(po.expected_delivery_date || po.expectedDeliveryDate || '').slice(0, 10),
@@ -366,7 +351,7 @@ const PurchaseOrdersPage = () => {
     data: vendorsData = EMPTY_LIST,
     isLoading: vendorsLoading,
     refetch: refetchVendors,
-  } = useGetVendorsQuery({ limit: 50, offset: 0 });
+  } = useGetVendorsQuery();
   const { data: organisationData } = useGetOrganisationQuery();
   const organisationBranches = useMemo(
     () => normalizeOrganisationBranchesFromApi(organisationData),
@@ -393,10 +378,8 @@ const PurchaseOrdersPage = () => {
   const [savePurchaseOrderDraft] = useSavePurchaseOrderDraftMutation();
   const [createPurchaseOrder] = useCreatePurchaseOrderMutation();
   const [updatePurchaseOrder] = useUpdatePurchaseOrderMutation();
-  const [updateDocumentPaymentSchedule] = useUpdateDocumentPaymentScheduleMutation();
   const [submitPurchaseOrder] = useSubmitPurchaseOrderMutation();
   const [approvePurchaseOrder] = useApprovePurchaseOrderMutation();
-  const [cancelPurchaseOrder, { isLoading: cancellingPO }] = useCancelPurchaseOrderMutation();
   const [scanPurchaseOrder] = useScanPurchaseOrderMutation();
   const [requestVendorAddition, { isLoading: requestVendorLoading }] =
     useRequestVendorAdditionMutation();
@@ -414,7 +397,6 @@ const PurchaseOrdersPage = () => {
   const [requestVendorForm, setRequestVendorForm] = useState(createEmptyVendorRequestForm);
   const [pdfZoom, setPdfZoom] = useState(100);
   const uploadInProgressRef = useRef(false);
-  const poDetailsRequestRef = useRef(null);
   const poUploadEstimate = useMeteredActionEstimate(CREDIT_ACTION_CODES.PO_UPLOAD, uploadFile ? 1 : 0);
 
   const formatConfig = formatConfigData || DEFAULT_PO_FORMAT_CONFIG;
@@ -431,18 +413,13 @@ const PurchaseOrdersPage = () => {
   const [showViewDialog, setShowViewDialog] = useState(false);
   const [showApprovalDialog, setShowApprovalDialog] = useState(false);
   const [showRaiseAdvanceDialog, setShowRaiseAdvanceDialog] = useState(false);
-  const [showCancelDialog, setShowCancelDialog] = useState(false);
-  const [cancelReason, setCancelReason] = useState('');
-  const [poToCancel, setPoToCancel] = useState(null);
   const [selectedPO, setSelectedPO] = useState(null);
   const [advancePo, setAdvancePo] = useState(null);
   const [editingPO, setEditingPO] = useState(null);
   const [createAction, setCreateAction] = useState(null);
   const [submitting, setSubmitting] = useState(false);
   const [downloadingPoId, setDownloadingPoId] = useState(null);
-  const [loadingPoDetailsId, setLoadingPoDetailsId] = useState(null);
   const [savingDeliveryStatus, setSavingDeliveryStatus] = useState(false);
-  const [savingPaymentSchedule, setSavingPaymentSchedule] = useState(false);
   const [approvalForm, setApprovalForm] = useState({ action: 'Approved', comments: '' });
   const [savedFormatConfigs, setSavedFormatConfigs] = useState(() => [makeFormatConfig(formatConfig)]);
   const [activeFormatId, setActiveFormatId] = useState('default-format');
@@ -666,8 +643,7 @@ const PurchaseOrdersPage = () => {
         resolvePoTotals(form).total_amount,
       );
       if (paymentSchedule.length > 0 && Math.abs(scheduleSummary.difference) > 0.009) {
-        toast.error('Payment Schedule total must match the document gross total.');
-        return false;
+        toast.warning('Payment Schedule total does not match the PO gross total. Draft save is allowed; backend remains authoritative.');
       }
     }
     return true;
@@ -856,60 +832,6 @@ const PurchaseOrdersPage = () => {
     }
   };
 
-  const canEditPaymentScheduleForPo = (po) => {
-    if (!isPaymentTermsEnabled || !po) return false;
-    if (!canManagePo && !canApprovePo) return false;
-    const status = String(po.status || '').trim().toUpperCase();
-    return !['CANCELLED', 'CANCELED', 'REJECTED', 'CLOSED'].includes(status);
-  };
-
-  const handleSavePaymentSchedule = async (po, paymentSchedule = []) => {
-    const poId = getPoId(po);
-    if (!poId) {
-      toast.error('Purchase order id is missing');
-      return false;
-    }
-    if (!canEditPaymentScheduleForPo(po)) {
-      toast.error('Payment Schedule cannot be edited for this purchase order');
-      return false;
-    }
-
-    const scheduleErrors = validatePaymentScheduleRows(paymentSchedule);
-    if (scheduleErrors.length > 0) {
-      toast.error(scheduleErrors[0]);
-      return false;
-    }
-
-    const scheduleSummary = getPaymentScheduleSummary(
-      paymentSchedule,
-      Number(po.total_amount ?? po.totalAmount) || 0,
-    );
-    if (paymentSchedule.length > 0 && Math.abs(scheduleSummary.difference) > 0.009) {
-      toast.error('Payment Schedule total must match the document gross total.');
-      return false;
-    }
-
-    setSavingPaymentSchedule(true);
-    try {
-      const data = await updateDocumentPaymentSchedule({
-        documentType: 'PO',
-        documentId: poId,
-        body: { paymentSchedule: buildPaymentSchedulePayload(paymentSchedule) },
-      }).unwrap();
-      const updatedPo = getCreatedPo(data);
-      const normalizedUpdatedPo = normalizePurchaseOrder(updatedPo || {});
-      setSelectedPO((prev) => (prev ? { ...prev, ...normalizedUpdatedPo, paymentSchedule } : prev));
-      toast.success('Payment Schedule updated');
-      await fetchData();
-      return true;
-    } catch (error) {
-      toast.error(extractApiErrorDetail(error) || 'Failed to update Payment Schedule');
-      return false;
-    } finally {
-      setSavingPaymentSchedule(false);
-    }
-  };
-
   const resetForm = () => {
     setPoForm(createPoFormForFormat(activeFormatConfig.defaultCurrency, activeFormatConfig.id));
   };
@@ -943,73 +865,6 @@ const PurchaseOrdersPage = () => {
     setShowRaiseAdvanceDialog(true);
   };
 
-  const openCancelPoDialog = (po) => {
-    if (!po) return;
-    setPoToCancel(po);
-    setCancelReason('');
-    setShowCancelDialog(true);
-  };
-
-  const handleConfirmCancelPo = async () => {
-    if (!poToCancel) return;
-    const poId = getPoId(poToCancel);
-    if (!poId) {
-      toast.error('Purchase Order ID is missing.');
-      return;
-    }
-    if (!cancelReason.trim()) {
-      toast.error('Please enter a cancellation reason.');
-      return;
-    }
-    try {
-      setSubmitting(true);
-      const res = await cancelPurchaseOrder({
-        id: poId,
-        body: { reason: cancelReason.trim() },
-      }).unwrap();
-
-      toast.success(res?.message || `Purchase Order ${poToCancel.po_number || ''} cancelled successfully.`);
-      setShowCancelDialog(false);
-      setPoToCancel(null);
-      setCancelReason('');
-      setShowViewDialog(false);
-    } catch (err) {
-      const errorMsg = extractApiErrorDetail(err) || 'Failed to cancel Purchase Order.';
-      handleCreditError(err, errorMsg);
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const openPoDetails = useCallback(async (po) => {
-    if (!po) return;
-
-    const poId = getPoId(po);
-    setSelectedPO(po);
-    setShowViewDialog(true);
-
-    if (!poId) return;
-
-    const requestKey = String(poId);
-    poDetailsRequestRef.current = requestKey;
-    setLoadingPoDetailsId(poId);
-    try {
-      const data = await getPurchaseOrderById(poId).unwrap();
-      const fullPo = getCreatedPo(data);
-      if (poDetailsRequestRef.current === requestKey) {
-        setSelectedPO(normalizePurchaseOrder(fullPo || data || po));
-      }
-    } catch (error) {
-      if (poDetailsRequestRef.current === requestKey) {
-        toast.warning('Could not load latest purchase order details. Showing list data.');
-      }
-    } finally {
-      if (poDetailsRequestRef.current === requestKey) {
-        setLoadingPoDetailsId(null);
-      }
-    }
-  }, [getPurchaseOrderById]);
-
   const submitPoFromRow = (po) => {
     const poId = getPoId(po);
     if (!poId) {
@@ -1022,8 +877,6 @@ const PurchaseOrdersPage = () => {
   const closePoViewDialog = useCallback((open) => {
     setShowViewDialog(open);
     if (!open) {
-      poDetailsRequestRef.current = null;
-      setLoadingPoDetailsId(null);
       clearNotificationQueryParams(searchParams, setSearchParams);
     }
   }, [searchParams, setSearchParams]);
@@ -1311,9 +1164,10 @@ const PurchaseOrdersPage = () => {
           vendors,
           defaultCurrency: activeFormatConfig.defaultCurrency,
         }),
-        ...(isPaymentTermsEnabled ? { paymentSchedule: [] } : {}),
-        reference_document_type: referenceDocumentType,
-        creation_source: 'DOCUMENT_UPLOAD',
+        reference_document_type:
+          extracted.referenceDocumentType ||
+          extracted.reference_document_type ||
+          referenceDocumentType,
         reference_document_name:
           extracted.referenceDocumentName ||
           extracted.reference_document_name ||
@@ -1336,9 +1190,7 @@ const PurchaseOrdersPage = () => {
           vendors,
           defaultCurrency: activeFormatConfig.defaultCurrency,
         }),
-        ...(isPaymentTermsEnabled ? { paymentSchedule: [] } : {}),
         reference_document_type: referenceDocumentType,
-        creation_source: 'DOCUMENT_UPLOAD',
         reference_document_name: file.name,
       });
       toast.warning(
@@ -1571,7 +1423,8 @@ const PurchaseOrdersPage = () => {
     );
 
     if (loadedPo) {
-      openPoDetails(loadedPo);
+      setSelectedPO(loadedPo);
+      setShowViewDialog(true);
       return;
     }
 
@@ -1591,7 +1444,6 @@ const PurchaseOrdersPage = () => {
       });
   }, [
     getPurchaseOrderById,
-    openPoDetails,
     notificationAction,
     notificationPoId,
     notificationSource,
@@ -1647,13 +1499,10 @@ const PurchaseOrdersPage = () => {
         canManagePo={canManagePo}
         canSubmitPo={canSubmitPo}
         canApprovePo={canApprovePo}
-        onViewPO={openPoDetails}
         onEditPO={openEditPoDialog}
         onSubmitPO={submitPoFromRow}
         onReviewPO={openPoApprovalDialog}
-        onCancelPO={openCancelPoDialog}
         submitting={submitting}
-        cancelling={cancellingPO}
         onRequestUnlock={handleRequestPoUnlock}
         requestingUnlock={requestAccountingUnlockLoading}
         showBranchField={isBranchEnabled}
@@ -1708,11 +1557,6 @@ const PurchaseOrdersPage = () => {
         showViewDialog={showViewDialog}
         setShowViewDialog={closePoViewDialog}
         selectedPO={selectedPO}
-        loadingDetails={Boolean(
-          loadingPoDetailsId &&
-            selectedPO &&
-            String(loadingPoDetailsId) === String(getPoId(selectedPO)),
-        )}
         statusColors={statusColors}
         formatDate={formatDate}
         formatCurrency={formatCurrency}
@@ -1728,11 +1572,6 @@ const PurchaseOrdersPage = () => {
         savingDeliveryStatus={savingDeliveryStatus}
         canRaiseAdvance={isVendorAdvancesEnabled}
         onRaiseAdvance={openRaiseAdvanceDialog}
-        onCancelPO={openCancelPoDialog}
-        cancelling={cancellingPO}
-        canEditPaymentSchedule={canEditPaymentScheduleForPo(selectedPO)}
-        onSavePaymentSchedule={handleSavePaymentSchedule}
-        savingPaymentSchedule={savingPaymentSchedule}
       />
 
       <PoApprovalDialog
@@ -1827,7 +1666,6 @@ const PurchaseOrdersPage = () => {
               }
               showBranchField={isBranchEnabled}
               organisationBranches={organisationBranches}
-              isPaymentTermsEnabled={isPaymentTermsEnabled}
             />
             ) : null
           )}
@@ -1842,62 +1680,6 @@ const PurchaseOrdersPage = () => {
         onSubmit={handleSubmitVendorRequest}
         submitting={requestVendorLoading}
       />
-
-      <Dialog
-        open={showCancelDialog}
-        onOpenChange={(open) => {
-          setShowCancelDialog(open);
-          if (!open) {
-            setPoToCancel(null);
-            setCancelReason('');
-          }
-        }}
-      >
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-600">
-              <XCircle className="h-5 w-5" />
-              Cancel Purchase Order
-            </DialogTitle>
-            <DialogDescription>
-              Are you sure you want to cancel PO{' '}
-              <span className="font-semibold text-foreground">{poToCancel?.po_number || ''}</span>?
-              This will update the purchase order status to CANCELLED and update associated order tracking lifecycle records.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <Label htmlFor="po-cancel-reason">
-              Cancellation Reason <span className="text-red-500">*</span>
-            </Label>
-            <Textarea
-              id="po-cancel-reason"
-              placeholder="Enter reason for cancelling this purchase order..."
-              value={cancelReason}
-              onChange={(e) => setCancelReason(e.target.value)}
-              rows={3}
-              data-testid="po-cancel-reason-input"
-            />
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowCancelDialog(false)}
-              disabled={cancellingPO || submitting}
-            >
-              Back
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleConfirmCancelPo}
-              disabled={cancellingPO || submitting || !cancelReason.trim()}
-              data-testid="confirm-cancel-po-btn"
-            >
-              {(cancellingPO || submitting) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
-              Confirm Cancellation
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

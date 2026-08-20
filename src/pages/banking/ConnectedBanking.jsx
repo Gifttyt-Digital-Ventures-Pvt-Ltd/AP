@@ -6,6 +6,7 @@ import {
   Building2,
   CreditCard,
   Download,
+  FileText,
   Loader2,
   Plus,
   RefreshCw,
@@ -45,10 +46,7 @@ import {
   useRegisterBeneficiaryMutation,
   useValidateBeneficiaryMutation,
 } from "../../Services/apis/connectedBankingApi";
-import { useGetBankingPortalTransactionsQuery } from "../../Services/apis/approvalsPaymentsBankingApi";
-import { useGetVendorsQuery } from "../../Services/apis/invoicesVendorsApi";
 import { useActionGuard } from "../../hooks/useActionGuard";
-import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { toast } from "sonner";
 import BeneficiariesTable from "./components/BeneficiariesTable";
 import BeneficiaryForm from "./components/BeneficiaryForm";
@@ -114,17 +112,6 @@ const getAccountSelectLabel = (account = {}) =>
   `${getAccountLabel(account)} · ${getMaskedAccount(account)}`;
 
 const BENEFICIARY_PAGE_SIZE = 10;
-const PORTAL_ACTIVITY_PAGE_SIZE = 25;
-const BENEFICIARY_VENDOR_PAGE_SIZE = 20;
-const EMPTY_VENDOR_DIRECTORY = [];
-
-const getVendorOptionKey = (vendor = {}, index = 0, prefix = "") =>
-  String(vendor.id ?? vendor.vendorId ?? vendor.vendor_id ?? `${prefix}${index}`);
-
-const getVendorDirectoryItems = (vendorDirectory) =>
-  Array.isArray(vendorDirectory)
-    ? vendorDirectory.filter(Boolean)
-    : [];
 
 const getVisiblePages = (currentPage, totalPages, maxVisible = 5) => {
   if (totalPages <= 0) return [];
@@ -180,39 +167,6 @@ const normalizeActivityStatus = (status = "") => {
   if (["SUCCESS", "COMPLETED", "PAID", "RELEASED"].includes(value)) return "Success";
   if (["FAILED", "ERROR", "RETURNED", "REJECTED"].includes(value)) return "Failed";
   return "Pending";
-};
-
-const normalizePortalPaymentStatus = (payment = {}) => {
-  const value = String(
-    payment.status ||
-      payment.releaseStatus ||
-      payment.release_status ||
-      payment.paymentStatus ||
-      payment.payment_status ||
-      "",
-  )
-    .trim()
-    .toUpperCase()
-    .replace(/[\s-]+/g, "_");
-
-  if (["FAILED", "ERROR", "RETURNED", "REJECTED"].includes(value)) return "Failed";
-  if (["PENDING", "PROCESSING", "PAYMENT_INITIATED", "WAITING_PAYMENT"].includes(value)) return "Pending";
-  if (
-    ["SUCCESS", "COMPLETED", "PAID", "RELEASED", "PAYMENT_RELEASED", "PAYMENT_PAID"].includes(value) ||
-    payment.utr ||
-    payment.utrNumber ||
-    payment.utr_number ||
-    payment.referenceNumber ||
-    payment.reference_number ||
-    payment.paidOn ||
-    payment.paid_on ||
-    payment.releasedAt ||
-    payment.released_at
-  ) {
-    return "Success";
-  }
-
-  return "Success";
 };
 
 const getActivityDirection = (transaction = {}) => {
@@ -333,64 +287,6 @@ const activityTableHeader = [
   },
 ];
 
-const portalActivityTableHeader = [
-  {
-    key: "date",
-    title: "Date",
-    cellClassName: "text-muted-foreground",
-  },
-  {
-    key: "ref",
-    title: "Reference",
-    cellClassName: "font-mono text-xs",
-  },
-  {
-    key: "type",
-    title: "Source",
-    render: (item) => (
-      <div className="flex items-center gap-2">
-        <span className={`flex h-7 w-7 items-center justify-center rounded-md ${
-          item.status === "Failed" ? "bg-red-50 text-red-600" : "bg-primary/10 text-primary"
-        }`}>
-          <ArrowUpRight className="h-4 w-4" />
-        </span>
-        {item.sourceLabel}
-      </div>
-    ),
-  },
-  {
-    key: "vendor",
-    title: "Vendor",
-    cellClassName: "font-medium",
-  },
-  {
-    key: "batchId",
-    title: "Payrun / Batch",
-    cellClassName: "font-mono text-xs",
-  },
-  {
-    key: "paymentMode",
-    title: "Mode",
-  },
-  {
-    key: "paidFrom",
-    title: "Paid From",
-    cellClassName: "font-medium",
-  },
-  {
-    key: "amount",
-    title: "Amount",
-    headerClassName: "text-right",
-    cellClassName: "text-right font-semibold text-red-600",
-    render: (item) => (item.amount == null ? "—" : `-${formatMoney(item.amount)}`),
-  },
-  {
-    key: "status",
-    title: "Status",
-    render: (item) => <StatusPill status={item.status} />,
-  },
-];
-
 const NoBankState = () => (
   <div className="flex flex-col items-center rounded-lg border border-border bg-card px-6 py-16 text-center shadow-sm">
     <div className="mb-5 flex h-16 w-16 items-center justify-center rounded-full bg-primary/10">
@@ -418,17 +314,11 @@ const ConnectedBanking = () => {
   const [selectedAccountId, setSelectedAccountId] = useState("");
   const [beneficiaryDialogOpen, setBeneficiaryDialogOpen] = useState(false);
   const [bankingTab, setBankingTab] = useState("activity");
-  const [portalActivityPage, setPortalActivityPage] = useState(0);
   const [beneficiaryPage, setBeneficiaryPage] = useState(0);
-  const [beneficiaryVendorSearch, setBeneficiaryVendorSearch] = useState("");
-  const [beneficiaryVendorOffset, setBeneficiaryVendorOffset] = useState(0);
-  const [beneficiaryVendorOptions, setBeneficiaryVendorOptions] = useState([]);
   const { isConnectedBankingEnabled } = useRBAC();
   const { guardAction, canPerformAction } = useActionGuard();
   const skip = !isConnectedBankingEnabled;
-  const portalActivityOffset = portalActivityPage * PORTAL_ACTIVITY_PAGE_SIZE;
   const beneficiaryOffset = beneficiaryPage * BENEFICIARY_PAGE_SIZE;
-  const debouncedBeneficiaryVendorSearch = useDebouncedValue(beneficiaryVendorSearch.trim(), 300);
 
   const {
     accounts,
@@ -446,17 +336,6 @@ const ConnectedBanking = () => {
     beneficiaryLimit: BENEFICIARY_PAGE_SIZE,
     beneficiaryOffset,
   });
-  const {
-    data: vendorDirectory = EMPTY_VENDOR_DIRECTORY,
-    isFetching: vendorsFetching,
-  } = useGetVendorsQuery(
-    {
-      limit: BENEFICIARY_VENDOR_PAGE_SIZE,
-      offset: beneficiaryVendorOffset,
-      ...(debouncedBeneficiaryVendorSearch ? { search: debouncedBeneficiaryVendorSearch } : {}),
-    },
-    { skip: skip || !beneficiaryDialogOpen },
-  );
   const [validateBeneficiary, { isLoading: validatingBeneficiary }] = useValidateBeneficiaryMutation();
   const [registerBeneficiary, { isLoading: savingBeneficiary }] = useRegisterBeneficiaryMutation();
   const canManageBeneficiaries = canPerformAction("banking.addBeneficiary");
@@ -468,17 +347,6 @@ const ConnectedBanking = () => {
   }, [accounts, selectedAccountId]);
   const selectedBalanceAccountId = selectedAccount ? getAccountId(selectedAccount) : "";
   const hasStatementDateRange = Boolean(activityDateFrom && activityDateTo);
-  const vendorDirectoryItems = useMemo(
-    () => getVendorDirectoryItems(vendorDirectory),
-    [vendorDirectory],
-  );
-  const vendorDirectoryTotal = Math.max(
-    Number(vendorDirectory?.total ?? vendorDirectoryItems.length) || 0,
-    vendorDirectoryItems.length,
-  );
-  const hasMoreBeneficiaryVendors = Boolean(
-    vendorDirectory?.hasMore ?? beneficiaryVendorOptions.length < vendorDirectoryTotal,
-  );
   const {
     data: selectedAccountBalance,
     isFetching: isBalanceFetching,
@@ -497,21 +365,6 @@ const ConnectedBanking = () => {
       toDate: activityDateTo,
     },
     { skip: skip || !selectedBalanceAccountId || !hasStatementDateRange },
-  );
-  const {
-    data: bankingPaymentActivityData,
-    isFetching: isPortalActivityFetching,
-    refetch: refetchPortalActivity,
-  } = useGetBankingPortalTransactionsQuery(
-    {
-      limit: PORTAL_ACTIVITY_PAGE_SIZE,
-      offset: portalActivityOffset,
-    },
-    {
-      skip,
-      refetchOnMountOrArgChange: true,
-      refetchOnFocus: true,
-    },
   );
   const selectedAccountWithBalance = useMemo(
     () =>
@@ -568,116 +421,6 @@ const ConnectedBanking = () => {
       }),
     [accountActivity, activityDateFrom, activityDateTo, activitySearch, selectedAccountId],
   );
-
-  const portalPaymentActivity = useMemo(() => {
-    const items = Array.isArray(bankingPaymentActivityData?.items)
-      ? bankingPaymentActivityData.items
-      : Array.isArray(bankingPaymentActivityData)
-      ? bankingPaymentActivityData
-        : [];
-
-    return items.map((payment, index) => {
-      const date =
-        payment.transactionDate ||
-        payment.transaction_date ||
-        payment.paymentDate ||
-        payment.payment_date ||
-        payment.paidOn ||
-        payment.paid_on ||
-        payment.releasedAt ||
-        payment.released_at ||
-        payment.createdAt ||
-        payment.created_at;
-      const status = normalizePortalPaymentStatus(payment);
-      const sourceType = payment.sourceType || payment.source_type || "—";
-      const sourceLabel =
-        payment.sourceLabel ||
-        payment.source_label ||
-        payment.source ||
-        payment.source_name ||
-        (sourceType === "INVOICE"
-          ? "Invoice"
-          : sourceType === "OBLIGATION"
-            ? "Obligation"
-            : sourceType === "ADVANCE"
-              ? "Advance"
-              : "Portal Transaction");
-      const paidFrom =
-        payment.paidFrom ||
-        payment.paid_from ||
-        [
-          payment.sourceBankName || payment.source_bank_name || payment.bankName || payment.bank_name,
-          payment.sourceAccountNumber ||
-            payment.source_account_number ||
-            payment.accountNumber ||
-            payment.account_number,
-        ]
-          .filter(Boolean)
-          .join(" · ") ||
-        "—";
-      return {
-        id: payment.transactionId || payment.transaction_id || payment.id || payment.paymentId || payment.payment_id || `portal-payment-${index}`,
-        isoDate: normalizeStatementDate(date).slice(0, 10),
-        date: formatActivityDate(date),
-        ref:
-          payment.reference ||
-          payment.reference_id ||
-          payment.referenceNumber ||
-          payment.reference_number ||
-          payment.utrNumber ||
-          payment.utr_number ||
-          payment.utr ||
-          payment.batchId ||
-          payment.batch_id ||
-          "—",
-        type: payment.transactionType || payment.transaction_type || "Portal Transaction",
-        sourceType,
-        sourceLabel,
-        vendor: payment.vendorName || payment.vendor_name || payment.payeeName || payment.payee_name || "—",
-        batchId: payment.payrunNumber || payment.payrun_number || payment.batchId || payment.batch_id || "—",
-        paymentMode: payment.paymentMode || payment.payment_mode || "—",
-        paidFrom,
-        amount: payment.amount ?? payment.paymentAmount ?? payment.payment_amount ?? null,
-        status,
-      };
-    });
-  }, [bankingPaymentActivityData]);
-
-  const filteredPortalPaymentActivity = useMemo(
-    () =>
-      portalPaymentActivity.filter((item) => {
-        const query = activitySearch.toLowerCase();
-        if (!query) return true;
-        return (
-          item.ref.toLowerCase().includes(query) ||
-          item.vendor.toLowerCase().includes(query) ||
-          item.batchId.toLowerCase().includes(query) ||
-          item.paymentMode.toLowerCase().includes(query) ||
-          item.paidFrom.toLowerCase().includes(query) ||
-          item.sourceType.toLowerCase().includes(query) ||
-          item.sourceLabel.toLowerCase().includes(query) ||
-          item.type.toLowerCase().includes(query)
-        );
-      }),
-    [activitySearch, portalPaymentActivity],
-  );
-
-  const portalActivityPagination = useMemo(() => {
-    const total = bankingPaymentActivityData?.total ?? portalPaymentActivity.length;
-    const totalPages = Math.max(1, Math.ceil(total / PORTAL_ACTIVITY_PAGE_SIZE));
-    const safePage = Math.min(portalActivityPage, totalPages - 1);
-    const start = safePage * PORTAL_ACTIVITY_PAGE_SIZE;
-    const end = Math.min(start + portalPaymentActivity.length, total);
-    return {
-      total,
-      totalPages,
-      currentPage: safePage,
-      startRecord: total === 0 ? 0 : start + 1,
-      endRecord: end,
-      hasPrevious: safePage > 0,
-      hasNext: safePage < totalPages - 1,
-    };
-  }, [bankingPaymentActivityData?.total, portalActivityPage, portalPaymentActivity.length]);
 
   const beneficiaryRows = useMemo(
     () =>
@@ -741,7 +484,7 @@ const ConnectedBanking = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `banking-statement-${selectedAccountId || "all"}.csv`;
+    link.download = `banking-activity-${selectedAccountId || "all"}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -754,6 +497,12 @@ const ConnectedBanking = () => {
       setRefreshingBalance(false);
     });
   };
+  const handleViewStatement = () => {
+    if (!selectedBalanceAccountId) return;
+    if (!hasStatementDateRange) return;
+    refetchStatement();
+  };
+
   const handleVerifyBeneficiary = async (payload) => {
     if (!guardAction("banking.verifyBeneficiary")) return null;
     try {
@@ -824,58 +573,7 @@ const ConnectedBanking = () => {
     setBeneficiaryPage(Math.max(beneficiaryPagination.totalPages - 1, 0));
   }, [beneficiaryPage, beneficiaryPagination.totalPages]);
 
-  useEffect(() => {
-    if (portalActivityPage <= portalActivityPagination.totalPages - 1) return;
-    setPortalActivityPage(Math.max(portalActivityPagination.totalPages - 1, 0));
-  }, [portalActivityPage, portalActivityPagination.totalPages]);
-
-  const bankingRefreshing = isFetching || isStatementFetching || isPortalActivityFetching || vendorsFetching;
-
-  useEffect(() => {
-    setBeneficiaryVendorOffset(0);
-    setBeneficiaryVendorOptions([]);
-  }, [debouncedBeneficiaryVendorSearch]);
-
-  useEffect(() => {
-    if (!beneficiaryDialogOpen) {
-      setBeneficiaryVendorSearch("");
-      setBeneficiaryVendorOffset(0);
-      setBeneficiaryVendorOptions([]);
-    }
-  }, [beneficiaryDialogOpen]);
-
-  useEffect(() => {
-    if (!beneficiaryDialogOpen) return;
-    if (!Array.isArray(vendorDirectory)) return;
-
-    setBeneficiaryVendorOptions((previous) => {
-      if (beneficiaryVendorOffset === 0) {
-        if (vendorDirectoryItems.length === 0) return previous.length === 0 ? previous : [];
-        const samePage =
-          previous.length === vendorDirectoryItems.length &&
-          previous.every(
-            (vendor, index) =>
-              getVendorOptionKey(vendor, index) === getVendorOptionKey(vendorDirectoryItems[index], index),
-          );
-        return samePage ? previous : vendorDirectoryItems;
-      }
-
-      const merged = new Map(
-        previous.map((vendor, index) => [
-          getVendorOptionKey(vendor, index),
-          vendor,
-        ]),
-      );
-      vendorDirectoryItems.forEach((vendor, index) => {
-        merged.set(
-          getVendorOptionKey(vendor, index, `${beneficiaryVendorOffset}-`),
-          vendor,
-        );
-      });
-      const next = Array.from(merged.values());
-      return next.length === previous.length ? previous : next;
-    });
-  }, [beneficiaryDialogOpen, beneficiaryVendorOffset, vendorDirectory, vendorDirectoryItems]);
+  const bankingRefreshing = isFetching || isStatementFetching;
 
   if (!isConnectedBankingEnabled) {
     return (
@@ -996,6 +694,15 @@ const ConnectedBanking = () => {
                   <RefreshCw className={`mr-2 h-4 w-4 ${refreshingBalance || isBalanceFetching ? "animate-spin" : ""}`} />
                   Refresh Balance
                 </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleViewStatement}
+                  disabled={!selectedBalanceAccountId || !hasStatementDateRange || isStatementFetching}
+                >
+                  <FileText className="mr-2 h-4 w-4" />
+                  {isStatementFetching ? "Loading Statement..." : "View Statement"}
+                </Button>
                 {/* <Button variant="secondary" size="sm">
                   <Eye className="mr-2 h-4 w-4" />
                   Account Details
@@ -1007,108 +714,17 @@ const ConnectedBanking = () => {
           {hasPaymentReadyAccount ? (
             <Tabs value={bankingTab} onValueChange={setBankingTab} className="space-y-4">
               <TabsList>
-                <TabsTrigger value="activity">Portal Transactions</TabsTrigger>
-                <TabsTrigger value="statements">Statements</TabsTrigger>
+                <TabsTrigger value="activity">Recent Activity</TabsTrigger>
                 <TabsTrigger value="beneficiaries">Beneficiaries</TabsTrigger>
               </TabsList>
 
               <TabsContent value="activity" className="mt-0">
                 <section className="rounded-lg border border-border bg-card shadow-sm">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
-                    <div>
-                      <h2 className="font-semibold">Portal Transactions</h2>
-                      <p className="text-sm text-muted-foreground">
-                        Payments made from the AP portal to vendors.
-                      </p>
-                    </div>
-                    <div className="flex w-full flex-wrap items-end justify-end gap-3 lg:w-auto">
-                      <div className="relative w-full sm:w-72">
-                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                          value={activitySearch}
-                          onChange={(event) => setActivitySearch(event.target.value)}
-                          placeholder="Search vendor, source, UTR, batch or bank..."
-                          className="h-9 pl-9"
-                        />
-                      </div>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={refetchPortalActivity}
-                        disabled={isPortalActivityFetching}
-                      >
-                        <RefreshCw className={`mr-2 h-4 w-4 ${isPortalActivityFetching ? "animate-spin" : ""}`} />
-                        Refresh
-                      </Button>
-                    </div>
-                  </div>
-                  <div className="overflow-x-auto px-4 pb-4">
-                    <AppDataTable
-                      tableHeader={portalActivityTableHeader}
-                      tableData={filteredPortalPaymentActivity}
-                      tableClassName="min-w-[1120px]"
-                      tableContainerClassName="overflow-visible"
-                      headClassName="border-b border-border bg-muted shadow-sm"
-                      emptyMessage="No portal payment activity found."
-                      stickyHeader={false}
-                    />
-                  </div>
-                  <div className="flex shrink-0 flex-col gap-3 border-t border-border p-4 sm:flex-row sm:items-center sm:justify-between">
-                    <p className="text-sm text-muted-foreground">
-                      Showing {portalActivityPagination.startRecord}-{portalActivityPagination.endRecord} of{" "}
-                      {portalActivityPagination.total.toLocaleString("en-IN")}
-                    </p>
-                    <Pagination className="mx-0 w-auto justify-start sm:justify-end">
-                      <PaginationContent>
-                        <PaginationItem>
-                          <PaginationPrevious
-                            href="#"
-                            onClick={(event) => {
-                              event.preventDefault();
-                              if (!portalActivityPagination.hasPrevious) return;
-                              setPortalActivityPage((page) => Math.max(page - 1, 0));
-                            }}
-                            className={!portalActivityPagination.hasPrevious ? "pointer-events-none opacity-50" : undefined}
-                          />
-                        </PaginationItem>
-                        {getVisiblePages(portalActivityPagination.currentPage, portalActivityPagination.totalPages).map((pageNumber) => (
-                          <PaginationItem key={pageNumber}>
-                            <PaginationLink
-                              href="#"
-                              isActive={pageNumber === portalActivityPagination.currentPage}
-                              onClick={(event) => {
-                                event.preventDefault();
-                                setPortalActivityPage(pageNumber);
-                              }}
-                            >
-                              {pageNumber + 1}
-                            </PaginationLink>
-                          </PaginationItem>
-                        ))}
-                        <PaginationItem>
-                          <PaginationNext
-                            href="#"
-                            onClick={(event) => {
-                              event.preventDefault();
-                              if (!portalActivityPagination.hasNext) return;
-                              setPortalActivityPage((page) => Math.min(page + 1, portalActivityPagination.totalPages - 1));
-                            }}
-                            className={!portalActivityPagination.hasNext ? "pointer-events-none opacity-50" : undefined}
-                          />
-                        </PaginationItem>
-                      </PaginationContent>
-                    </Pagination>
-                  </div>
-                </section>
-              </TabsContent>
-
-              <TabsContent value="statements" className="mt-0">
-                <section className="rounded-lg border border-border bg-card shadow-sm">
                 <div className="flex flex-wrap items-center justify-between gap-3 border-b px-4 py-3">
                   <div>
-                    <h2 className="font-semibold">Statements</h2>
+                    <h2 className="font-semibold">Recent Banking Activity</h2>
                     <p className="text-sm text-muted-foreground">
-                      Bank statement activity for {selectedAccount ? getAccountSelectLabel(selectedAccount) : "the selected account"}.
+                      Activity for {selectedAccount ? getAccountSelectLabel(selectedAccount) : "the selected account"}.
                     </p>
                   </div>
                   <div className="flex w-full flex-wrap items-end justify-end gap-3 lg:w-auto">
@@ -1156,7 +772,7 @@ const ConnectedBanking = () => {
                       disabled={filteredActivity.length === 0}
                     >
                       <Download className="mr-2 h-4 w-4" />
-                      Export Statement
+                      Export
                     </Button>
                   </div>
                 </div>
@@ -1260,18 +876,11 @@ const ConnectedBanking = () => {
               </DialogHeader>
               <BeneficiaryForm
                 accounts={paymentReadyAccounts}
-                vendors={beneficiaryVendorOptions}
+                vendors={beneficiaryRows}
+                beneficiaries={beneficiaries}
                 canManage={canManageBeneficiaries}
-                vendorSearch={beneficiaryVendorSearch}
-                vendorsFetching={vendorsFetching}
-                hasMoreVendors={hasMoreBeneficiaryVendors}
                 validating={validatingBeneficiary}
                 saving={savingBeneficiary}
-                onVendorSearchChange={setBeneficiaryVendorSearch}
-                onLoadMoreVendors={() => {
-                  if (!hasMoreBeneficiaryVendors || vendorsFetching) return;
-                  setBeneficiaryVendorOffset((offset) => offset + BENEFICIARY_VENDOR_PAGE_SIZE);
-                }}
                 onVerify={handleVerifyBeneficiary}
                 onSave={handleSaveBeneficiary}
                 framed={false}

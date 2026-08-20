@@ -10,19 +10,15 @@ import useZohoIntegrationActive from '../../../hooks/useZohoIntegrationActive';
 import { formatCurrency } from '../../../utils/currency';
 import { withIntegrationTableHeader } from '../../../utils/integrationProvenance';
 import {
+  formatInvoiceAmount,
   sumInvoiceAmountsByCurrency,
 } from '../../invoices/utils/invoiceAmounts';
 import { cn } from '../../../lib/utils';
 import {
   getPayableDisplayLabel,
-  getPayableSelectionKey,
   getSelectablePayableRows,
   isPayableSelectable,
 } from '../utils/payableRows';
-import PayableSourceBadge from './PayableSourceBadge';
-import MilestoneStageChip from './MilestoneStageChip';
-import NetPayableBreakdown from './NetPayableBreakdown';
-import ReleaseBlockerList from './ReleaseBlockerList';
 
 const clippedText = (value) => {
   const text = String(value || '-');
@@ -73,12 +69,11 @@ const renderCurrencyTotals = (totals, className) => {
 };
 
 const basePendingPaymentTableHeader = [
-  { key: 'source', title: 'Source', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'text-left' },
-  { key: 'invoiceNumber', title: 'Reference', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'font-medium text-left' },
+  { key: 'invoiceNumber', title: 'Invoice #', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'font-medium text-left' },
   { key: 'orgBranch', title: 'Branch', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'text-sm text-left' },
   { key: 'vendorName', title: 'Vendor', headerClassName: 'bg-muted text-foreground' },
-  { key: 'stage', title: 'Stage', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'text-left' },
   { key: 'amount', title: 'Net Payable', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'font-semibold text-left' },
+  { key: 'invoiceDate', title: 'Invoice Date', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'text-sm text-muted-foreground text-left' },
   { key: 'dueDate', title: 'Due Date', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'text-sm text-muted-foreground text-left' },
   { key: 'status', title: 'Status', headerClassName: 'bg-muted text-foreground text-left' },
   { key: 'actions', title: 'Actions', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'text-left' },
@@ -121,10 +116,7 @@ const PendingPaymentsTab = ({
     );
   }, [showBranchField, showIntegrationColumn]);
   const selectableInvoices = useMemo(() => getSelectablePayableRows(invoices), [invoices]);
-  const visibleSelectableInvoices = useMemo(() => getSelectablePayableRows(filteredPendingInvoices), [filteredPendingInvoices]);
-  const selectedInvoices = selectableInvoices.filter((invoice) =>
-    selectedInvoiceIds.includes(getPayableSelectionKey(invoice)),
-  );
+  const selectedInvoices = selectableInvoices.filter((invoice) => selectedInvoiceIds.includes(invoice.id));
   const totalPendingByCurrency = useMemo(
     () => sumInvoiceAmountsByCurrency(invoices),
     [invoices],
@@ -134,71 +126,79 @@ const PendingPaymentsTab = ({
     [selectedInvoices],
   );
   const allSelected =
-    visibleSelectableInvoices.length > 0 &&
-    visibleSelectableInvoices.every((invoice) =>
-      selectedInvoiceIds.includes(getPayableSelectionKey(invoice)),
+    selectableInvoices.length > 0 &&
+    selectedInvoiceIds.length === selectableInvoices.length;
+
+  const renderAmountCell = (invoice) => {
+    if (!invoice.hasAdvanceAdjustment) {
+      return clippedText(formatInvoiceAmount(invoice, invoice.amount || 0));
+    }
+
+    return (
+      <div className="min-w-0 space-y-0.5 leading-tight">
+        {invoice.originalAmount !== null && invoice.originalAmount !== undefined ? (
+          <span className="block truncate text-[11px] font-normal text-muted-foreground">
+            Original: {formatInvoiceAmount(invoice, invoice.originalAmount)}
+          </span>
+        ) : null}
+        {invoice.advanceAdjustedTotal !== null && invoice.advanceAdjustedTotal !== undefined ? (
+          <span className="block truncate text-[11px] font-normal text-muted-foreground">
+            Advance Adjusted: -{formatInvoiceAmount(invoice, invoice.advanceAdjustedTotal)}
+          </span>
+        ) : null}
+        <span className="block truncate font-semibold">
+          Net Payable: {formatInvoiceAmount(invoice, invoice.amount || 0)}
+        </span>
+      </div>
     );
-  const renderReferenceCell = (invoice) => (
-    <div className="min-w-0 space-y-0.5">
-      {clippedText(getPayableDisplayLabel(invoice))}
-      {invoice.orderNumber && invoice.orderNumber !== getPayableDisplayLabel(invoice) ? (
-        <span className="block truncate text-[11px] font-normal text-muted-foreground" title={invoice.orderNumber}>
-          {invoice.orderNumber}
-        </span>
-      ) : null}
-      {invoice.milestoneLabel && invoice.sourceType !== 'INVOICE' ? (
-        <span className="block truncate text-[11px] font-normal text-muted-foreground" title={invoice.milestoneLabel}>
-          {invoice.milestoneLabel}
-        </span>
-      ) : null}
-      {!isPayableSelectable(invoice) ? (
-        <span className="block truncate text-[11px] text-amber-700" title={invoice.disabledReason}>
-          {invoice.disabledReason}
-        </span>
-      ) : null}
-    </div>
-  );
+  };
 
   const renderPendingPaymentRow = (invoice, rowIndex, headers) => {
     const selectable = isPayableSelectable(invoice);
-    const selectionKey = getPayableSelectionKey(invoice);
 
     return (
     <TableRow
-      key={selectionKey || invoice.id || rowIndex}
+      key={invoice.id ?? rowIndex}
       data-testid={`pending-invoice-row-${invoice?.id ?? 'unknown'}`}
       className={
-        showRecordPaymentSelection && selectedInvoiceIds.includes(selectionKey) ? 'bg-primary/10' : ''
+        showRecordPaymentSelection && selectedInvoiceIds.includes(invoice.id) ? 'bg-primary/10' : ''
       }
       onClick={
-        showRecordPaymentSelection && selectable ? () => onToggleInvoice?.(selectionKey) : undefined
+        showRecordPaymentSelection && selectable ? () => onToggleInvoice?.(invoice.id) : undefined
       }
     >
       {headers.map((header) => {
         let value;
 
         switch (header.key) {
-          case 'source':
-            value = <PayableSourceBadge sourceType={invoice.sourceType} isAdvance={invoice.isAdvance} />;
-            break;
           case 'invoiceNumber':
             value = showRecordPaymentSelection ? (
               <div className="flex items-center gap-2">
                 <div onClick={(event) => event.stopPropagation()}>
                   <Checkbox
-                    checked={selectedInvoiceIds.includes(selectionKey)}
-                    onCheckedChange={() => onToggleInvoice?.(selectionKey)}
+                    checked={selectedInvoiceIds.includes(invoice.id)}
+                    onCheckedChange={() => onToggleInvoice?.(invoice.id)}
                     disabled={!selectable}
                     title={!selectable ? invoice.disabledReason : undefined}
                     data-testid={`pending-invoice-select-${invoice?.id ?? 'unknown'}`}
                   />
                 </div>
                 <div className="min-w-0">
-                  {renderReferenceCell(invoice)}
+                  {invoice.sourceType && invoice.sourceType !== 'INVOICE' ? (
+                    <span className="mb-0.5 inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                      {invoice.sourceType}
+                    </span>
+                  ) : null}
+                  {clippedText(getPayableDisplayLabel(invoice))}
+                  {!selectable ? (
+                    <span className="block truncate text-[11px] text-muted-foreground" title={invoice.disabledReason}>
+                      {invoice.disabledReason}
+                    </span>
+                  ) : null}
                 </div>
               </div>
             ) : (
-              renderReferenceCell(invoice)
+              clippedText(getPayableDisplayLabel(invoice))
             );
             break;
           case 'vendorName':
@@ -207,20 +207,11 @@ const PendingPaymentsTab = ({
           case 'orgBranch':
             value = clippedText(getBranchLabel(invoice));
             break;
-          case 'stage':
-            value = (
-              <div className="min-w-0 space-y-1">
-                <MilestoneStageChip stage={invoice.triggerStage} sharePct={invoice.sharePct} />
-                {invoice.triggerDocumentRefs?.length ? (
-                  <span className="block truncate text-[11px] text-muted-foreground">
-                    {invoice.triggerDocumentRefs.map((doc) => doc.docNumber || doc.doc_number || doc.docId || doc.doc_id).filter(Boolean).join(', ')}
-                  </span>
-                ) : null}
-              </div>
-            );
-            break;
           case 'amount':
-            value = <NetPayableBreakdown payable={invoice} />;
+            value = renderAmountCell(invoice);
+            break;
+          case 'invoiceDate':
+            value = clippedText(safeFormatDate(invoice.invoiceDate));
             break;
           case 'dueDate':
             value = (
@@ -234,16 +225,9 @@ const PendingPaymentsTab = ({
             break;
           case 'status':
             value = (
-              <div className="min-w-0 space-y-1">
-                <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border bg-blue-100 text-blue-800 border-blue-200">
-                  {invoice.sourceType === 'INVOICE' ? 'Pending Payment' : invoice.status || 'Pending Payment'}
-                </span>
-                <ReleaseBlockerList
-                  blockers={invoice.releaseBlockers}
-                  warnings={invoice.warnings}
-                  disabledReason={!selectable ? invoice.disabledReason : ''}
-                />
-              </div>
+              <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border bg-blue-100 text-blue-800 border-blue-200">
+                {invoice.sourceType === 'INVOICE' ? 'Pending Payment' : invoice.status || 'Pending Payment'}
+              </span>
             );
             break;
           case 'integration':
@@ -390,7 +374,7 @@ const PendingPaymentsTab = ({
             renderRow={renderPendingPaymentRow}
             showCheckbox={showRecordPaymentSelection}
             isChecked={allSelected}
-            onSelectAllChange={() => onSelectAllInvoices?.(visibleSelectableInvoices)}
+            onSelectAllChange={onSelectAllInvoices}
             tableClassName="min-w-[1100px] table-fixed"
             tableContainerClassName="overflow-visible"
             headClassName="border-b border-border bg-muted shadow-sm"

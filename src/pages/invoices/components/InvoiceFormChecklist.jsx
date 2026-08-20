@@ -74,14 +74,12 @@ export const buildInvoiceFormChecklist = (
     Number(formData.subTotal) >= 0 && Number(formData.totalTaxAmount) >= 0;
 
   const hasVendorName = !!formData.vendorName?.trim();
-  const hasVendorId = !!String(formData.vendorId ?? "").trim();
   const vendorUnmatched =
     hasVendorName &&
-    !hasVendorId &&
     !formData.vendorMatched &&
     !formData.vendorRequestSubmitted;
   const vendorResolved =
-    hasVendorId || !!formData.vendorMatched || !!formData.vendorRequestSubmitted;
+    !!formData.vendorMatched || !!formData.vendorRequestSubmitted;
 
   const useInrTax = isInrInvoiceCurrency(formData.currency);
   const isGstinRequired = useInrTax && formData.gstTreatment !== "N/A";

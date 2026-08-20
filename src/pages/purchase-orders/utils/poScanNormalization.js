@@ -183,6 +183,14 @@ const normalizeScannedPurchaseOrder = (scanResponse = {}) => {
       scanResponse?.sourceDocumentType ??
       scanResponse?.source_document_type ??
       '',
+    reference_document_no:
+      scanResponse?.referenceDocumentNo ??
+      scanResponse?.reference_document_no ??
+      scanResponse?.referenceNo ??
+      scanResponse?.reference_no ??
+      scanResponse?.documentNumber ??
+      scanResponse?.document_number ??
+      '',
     reference_document_id:
       scanResponse?.referenceDocumentId ??
       scanResponse?.reference_document_id ??
@@ -253,6 +261,7 @@ export const initializePoFormFromScan = (
     valid_till: scanned.valid_till || '',
     expected_delivery_date: scanned.expected_delivery_date || '',
     reference_document_type: scanned.reference_document_type || '',
+    reference_document_no: scanned.reference_document_no || '',
     reference_document_id: scanned.reference_document_id || '',
     reference_document_name: scanned.reference_document_name || '',
     currency,

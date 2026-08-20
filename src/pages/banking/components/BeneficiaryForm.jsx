@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Loader2, ShieldCheck } from "lucide-react";
 import { Button } from "../../../components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "../../../components/ui/card";
@@ -12,8 +12,20 @@ import {
   SelectValue,
 } from "../../../components/ui/select";
 
+const MANUAL_ACCOUNT_VALUE = "__manual_bank_account__";
+
 const getAccountId = (account = {}, index = 0) =>
   String(account.id || account.accountId || account.accountNumber || index);
+
+const getAccountLabel = (account = {}) => {
+  const bank = account.bankName || account.bank || "Linked Bank";
+  const accountNumber =
+    account.maskedAccountNumber ||
+    account.accountNumber ||
+    account.account_number ||
+    "Account";
+  return `${bank} · ${accountNumber}`;
+};
 
 const getVendorId = (vendor = {}, index = 0) =>
   String(vendor.id ?? vendor.vendorId ?? vendor.vendor_id ?? index);
@@ -32,8 +44,68 @@ const getVendorLabel = (vendor = {}) => {
   return code ? `${name}` : name;
 };
 
+const getVendorBankAccountId = (account = {}, index = 0) =>
+  String(account.id || account.accountId || account.bankAccountId || account.accountNumber || index);
+
+const getVendorBankAccountLabel = (account = {}) => {
+  const bank = account.bankName || account.bank_name || account.bank || "Bank";
+  const accountNumber = account.accountNumber || account.account_number || "Account";
+  const ifsc = account.ifscCode || account.ifsc_code || account.ifsc || "IFSC";
+  return `${bank} · ${accountNumber} · ${ifsc}`;
+};
+
+const normalizeVendorBankAccounts = (vendor = {}) => {
+  if (!vendor || typeof vendor !== "object") return [];
+  const accounts = vendor.bankAccounts || vendor.bank_accounts || vendor.vendorBankAccounts || vendor.vendor_bank_accounts || [];
+  const normalizedAccounts = Array.isArray(accounts) ? accounts : [];
+  if (normalizedAccounts.length > 0) return normalizedAccounts;
+
+  const accountNumber =
+    vendor.accountNumber ||
+    vendor.account_number ||
+    vendor.creditAccountNumber;
+  const ifsc = vendor.ifscCode || vendor.ifsc_code || vendor.ifsc;
+  const bankName = vendor.bankName || vendor.bank_name || vendor.bank;
+  if (!accountNumber && !ifsc && !bankName) return [];
+
+  return [{
+    id:
+      vendor.vendorBankAccountId ||
+      vendor.vendor_bank_account_id ||
+      vendor.bankAccountId ||
+      vendor.bank_account_id ||
+      vendor.bnfId ||
+      vendor.id ||
+      `${vendor.vendorId || vendor.vendor_id || "vendor"}-default-bank`,
+    bankName,
+    accountNumber,
+    ifscCode: ifsc,
+    accountHolderName:
+      vendor.accountHolderName ||
+      vendor.account_holder_name ||
+      vendor.name ||
+      vendor.beneficiaryName ||
+      vendor.beneficiary_name,
+    beneficiaryStatus: vendor.beneficiaryStatus || vendor.beneficiary_status || vendor.status,
+  }];
+};
+
+const isVendorBankAccountUnverified = (account = {}, beneficiaries = [], vendorId) => {
+  const accountNumber = String(account.accountNumber || account.account_number || "").trim();
+  const ifsc = String(account.ifscCode || account.ifsc_code || account.ifsc || "").trim().toUpperCase();
+  const linkedBeneficiary = beneficiaries.find((beneficiary) => {
+    const sameVendor = String(beneficiary.vendorId || beneficiary.vendor_id || "") === String(vendorId);
+    const sameAccount = String(beneficiary.accountNumber || beneficiary.account_number || "").trim() === accountNumber;
+    const sameIfsc = String(beneficiary.ifsc || beneficiary.ifscCode || beneficiary.ifsc_code || "").trim().toUpperCase() === ifsc;
+    return sameVendor && sameAccount && sameIfsc;
+  });
+  if (!linkedBeneficiary) return true;
+  return !["ACTIVE", "VERIFIED", "SUCCESS"].includes(String(linkedBeneficiary.status || "").toUpperCase());
+};
+
 const emptyForm = {
   bankAccountId: "",
+  vendorBankAccountId: "",
   name: "",
   bankName: "",
   accountNumber: "",
@@ -44,33 +116,56 @@ const emptyForm = {
 const BeneficiaryForm = ({
   accounts = [],
   vendors = [],
+  beneficiaries = [],
   canManage = false,
-  vendorSearch = "",
-  vendorsFetching = false,
-  hasMoreVendors = false,
   validating = false,
   saving = false,
-  onVendorSearchChange,
-  onLoadMoreVendors,
   onVerify,
   onSave,
   framed = true,
 }) => {
-  const vendorViewportRef = useRef(null);
-  const lastVendorLoadCountRef = useRef(0);
-  const vendorOptions = useMemo(
-    () => (Array.isArray(vendors) ? vendors.filter(Boolean) : []),
-    [vendors],
-  );
   const [form, setForm] = useState(() => ({
     ...emptyForm,
     bankAccountId: accounts[0] ? getAccountId(accounts[0], 0) : "",
   }));
   const [verifiedBeneficiary, setVerifiedBeneficiary] = useState(null);
+  const [vendorSearch, setVendorSearch] = useState("");
 
   const selectedVendor = useMemo(
-    () => vendorOptions.find((vendor, index) => getVendorId(vendor, index) === form.vendorId) || null,
-    [form.vendorId, vendorOptions],
+    () => vendors.find((vendor, index) => getVendorId(vendor, index) === form.vendorId) || null,
+    [form.vendorId, vendors],
+  );
+
+  const filteredVendors = useMemo(() => {
+    const query = vendorSearch.trim().toLowerCase();
+    if (!query) return vendors;
+    return vendors.filter((vendor) => {
+      const label = getVendorLabel(vendor).toLowerCase();
+      const code = String(vendor.vendorId || vendor.vendor_id || vendor.id || "").toLowerCase();
+      const pan = String(vendor.pan || "").toLowerCase();
+      return label.includes(query) || code.includes(query) || pan.includes(query);
+    });
+  }, [vendorSearch, vendors]);
+
+  const selectedVendorAccounts = useMemo(
+    () => normalizeVendorBankAccounts(selectedVendor),
+    [selectedVendor],
+  );
+
+  const unverifiedVendorAccounts = useMemo(
+    () =>
+      selectedVendorAccounts.filter((account) =>
+        isVendorBankAccountUnverified(account, beneficiaries, form.vendorId),
+      ),
+    [beneficiaries, form.vendorId, selectedVendorAccounts],
+  );
+
+  const selectedVendorBankAccount = useMemo(
+    () =>
+      selectedVendorAccounts.find(
+        (account, index) => getVendorBankAccountId(account, index) === form.vendorBankAccountId,
+      ) || null,
+    [form.vendorBankAccountId, selectedVendorAccounts],
   );
 
   useEffect(() => {
@@ -91,15 +186,42 @@ const BeneficiaryForm = ({
   };
 
   const updateVendor = (vendorId) => {
-    const vendor = vendorOptions.find((item, index) => getVendorId(item, index) === vendorId);
-    if (!vendor) return;
+    const vendor = vendors.find((item, index) => getVendorId(item, index) === vendorId);
     setForm((prev) => ({
       ...prev,
       vendorId,
+      vendorBankAccountId: "",
       name: vendor?.name || vendor?.vendorName || vendor?.vendor_name || "",
       bankName: "",
       accountNumber: "",
       ifsc: "",
+    }));
+    setVerifiedBeneficiary(null);
+  };
+
+  const updateVendorBankAccount = (accountId) => {
+    if (accountId === MANUAL_ACCOUNT_VALUE) {
+      setForm((prev) => ({
+        ...prev,
+        vendorBankAccountId: "",
+        bankName: "",
+        accountNumber: "",
+        ifsc: "",
+      }));
+      setVerifiedBeneficiary(null);
+      return;
+    }
+
+    const account = selectedVendorAccounts.find(
+      (item, index) => getVendorBankAccountId(item, index) === accountId,
+    );
+    setForm((prev) => ({
+      ...prev,
+      vendorBankAccountId: accountId,
+      bankName: account?.bankName || account?.bank_name || account?.bank || "",
+      accountNumber: account?.accountNumber || account?.account_number || "",
+      ifsc: account?.ifscCode || account?.ifsc_code || account?.ifsc || "",
+      name: account?.accountHolderName || account?.account_holder_name || prev.name,
     }));
     setVerifiedBeneficiary(null);
   };
@@ -112,8 +234,13 @@ const BeneficiaryForm = ({
     bankName: form.bankName.trim() || undefined,
     accountNumber: form.accountNumber.trim(),
     ifsc: form.ifsc.trim().toUpperCase(),
-    vendorId: selectedVendor?.id,
-    addToVendor: Boolean(form.vendorId),
+    vendorId:
+      (selectedVendor?.vendorId ??
+        selectedVendor?.vendor_id ??
+        form.vendorId.trim()) ||
+      undefined,
+    vendorBankAccountId: form.vendorBankAccountId || undefined,
+    addToVendor: !form.vendorBankAccountId,
     payeeType: "ACCOUNT",
   });
 
@@ -167,29 +294,6 @@ const BeneficiaryForm = ({
     form.accountNumber.trim() &&
     form.ifsc.trim().length === 11;
 
-  const maybeLoadMoreVendors = useCallback((element) => {
-    if (!hasMoreVendors || vendorsFetching) return;
-    if (!element) return;
-    const { scrollTop, scrollHeight, clientHeight } = element;
-    const scrollableDistance = Math.max(scrollHeight - clientHeight, 0);
-    if (scrollableDistance === 0) return;
-    const remainingDistance = scrollHeight - scrollTop - clientHeight;
-    const bottomThreshold = scrollableDistance * 0.2;
-    if (remainingDistance > bottomThreshold) return;
-    if (lastVendorLoadCountRef.current === vendorOptions.length) return;
-    lastVendorLoadCountRef.current = vendorOptions.length;
-    onLoadMoreVendors?.();
-  }, [hasMoreVendors, onLoadMoreVendors, vendorOptions.length, vendorsFetching]);
-
-  const handleVendorScroll = (event) => {
-    maybeLoadMoreVendors(event.currentTarget);
-  };
-
-  useEffect(() => {
-    if (vendorsFetching) return;
-    lastVendorLoadCountRef.current = 0;
-  }, [vendorOptions.length, vendorSearch, vendorsFetching]);
-
   const formContent = (
     <form onSubmit={handleSubmit} className="grid gap-4 md:grid-cols-2">
       <div className="md:col-span-2">
@@ -197,44 +301,81 @@ const BeneficiaryForm = ({
         <Select
           value={form.vendorId}
           onValueChange={updateVendor}
-          disabled={!canManage}
+          disabled={!canManage || vendors.length === 0}
         >
           <SelectTrigger>
             <SelectValue placeholder="Select vendor" />
           </SelectTrigger>
-          <SelectContent
-            className="max-h-72"
-            viewportRef={vendorViewportRef}
-            viewportClassName="!h-auto max-h-72 overflow-y-auto"
-            viewportProps={{ onScroll: handleVendorScroll }}
-          >
-            <div className="sticky -top-2.5 z-20 -mx-1 -mt-2 border-b bg-popover p-2 shadow-sm">
+          <SelectContent>
+            <div className="sticky top-0 z-10 bg-popover p-2">
               <Input
                 value={vendorSearch}
-                onChange={(event) => onVendorSearchChange?.(event.target.value)}
+                onChange={(event) => setVendorSearch(event.target.value)}
                 onKeyDown={(event) => event.stopPropagation()}
                 placeholder="Search vendor..."
                 className="h-8"
               />
             </div>
-            {vendorOptions.length > 0 ? vendorOptions.map((vendor, index) => (
-              <SelectItem
-                key={getVendorId(vendor, index)}
-                value={getVendorId(vendor, index)}
-                className={index === 0 ? "mt-1" : undefined}
-              >
+            {filteredVendors.length > 0 ? filteredVendors.map((vendor, index) => (
+              <SelectItem key={getVendorId(vendor, index)} value={getVendorId(vendor, index)}>
                 {getVendorLabel(vendor)}
               </SelectItem>
             )) : (
               <div className="px-3 py-2 text-sm text-muted-foreground">
-                {vendorsFetching ? "Loading vendors..." : "No vendors found"}
+                No vendors found
               </div>
             )}
-            {hasMoreVendors ? (
-              <div className="border-t px-3 py-2 text-center text-xs text-muted-foreground">
-                {vendorsFetching ? "Loading vendors..." : "Scroll for more vendors"}
-              </div>
-            ) : null}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {form.vendorId ? (
+        <div className="md:col-span-2">
+          <Label>Vendor Bank Account</Label>
+          <Select
+            value={form.vendorBankAccountId || MANUAL_ACCOUNT_VALUE}
+            onValueChange={updateVendorBankAccount}
+            disabled={!canManage}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select unverified account or add manually" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={MANUAL_ACCOUNT_VALUE}>Add new bank account manually</SelectItem>
+              {unverifiedVendorAccounts.map((account, index) => {
+                const accountId = getVendorBankAccountId(account, index);
+                return (
+                  <SelectItem key={accountId} value={accountId}>
+                    {getVendorBankAccountLabel(account)}
+                  </SelectItem>
+                );
+              })}
+            </SelectContent>
+          </Select>
+          {selectedVendorAccounts.length > 0 && unverifiedVendorAccounts.length === 0 ? (
+            <p className="mt-1 text-xs text-muted-foreground">
+              All saved accounts for this vendor are already verified.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
+      <div>
+        <Label>Debit Account *</Label>
+        <Select
+          value={form.bankAccountId}
+          onValueChange={(value) => updateForm("bankAccountId", value)}
+          disabled={!canManage || accounts.length === 0}
+        >
+          <SelectTrigger>
+            <SelectValue placeholder="Select linked account" />
+          </SelectTrigger>
+          <SelectContent>
+            {accounts.map((account, index) => (
+              <SelectItem key={getAccountId(account, index)} value={getAccountId(account, index)}>
+                {getAccountLabel(account)}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
       </div>
@@ -258,7 +399,7 @@ const BeneficiaryForm = ({
           value={form.bankName}
           onChange={(event) => updateForm("bankName", event.target.value)}
           placeholder="Enter bank name"
-          disabled={!canManage}
+          disabled={!canManage || Boolean(selectedVendorBankAccount)}
         />
       </div>
 
@@ -269,7 +410,7 @@ const BeneficiaryForm = ({
           value={form.accountNumber}
           onChange={(event) => updateForm("accountNumber", event.target.value)}
           placeholder="Enter beneficiary account number"
-          disabled={!canManage}
+          disabled={!canManage || Boolean(selectedVendorBankAccount)}
           required
         />
       </div>
@@ -281,7 +422,7 @@ const BeneficiaryForm = ({
           value={form.ifsc}
           onChange={(event) => updateForm("ifsc", event.target.value.toUpperCase())}
           placeholder="e.g. HDFC0001234"
-          disabled={!canManage}
+          disabled={!canManage || Boolean(selectedVendorBankAccount)}
           maxLength={11}
           required
         />

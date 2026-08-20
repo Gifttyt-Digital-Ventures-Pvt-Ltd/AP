@@ -6,125 +6,34 @@ export const formatDate = (dateStr) => {
   return date.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 };
 
-const firstValue = (...values) => values.find((value) => value !== undefined && value !== null);
-
-const mapDocumentChainSlot = (slot = {}) => ({
-  state: firstValue(slot.state, "NOT_RECEIVED"),
-  documents: Array.isArray(slot.documents) ? slot.documents : [],
-  receivedValue: slot.receivedValue,
-  orderValue: slot.orderValue,
-});
-
 /**
- * API response → OrderTrackingRow. The only place list-row backend field
- * names/casing are read — OrderTrackingTable, FilterBar, SummaryCards, and
- * DocumentChainCell must only ever consume the object this returns (see
- * docs/order-tracking-api-contract.md §7). Kept as the defensive
- * camelCase/snake_case dual-read seam this app's normalizers always use,
- * even though the mock (and the eventual real backend) is expected to
- * already send camelCase.
+ * Maps one raw Order Tracking row (a backend row, per docs/order-tracking-api-contract.md)
+ * into the shape the table/components render. Kept as a defensive seam even
+ * though the backend is expected to already return these exact camelCase
+ * field names — dual-cased the same way the rest of this app's normalizers
+ * handle any camelCase/snake_case drift from an API response.
  */
-export const mapOrderTrackingRow = (row = {}) => ({
-  id: firstValue(row.id, row.orderId, row.order_id),
-  orderNumber: firstValue(row.orderNumber, row.order_number, "-"),
-  poNumber: firstValue(row.poNumber, row.po_number, "-"),
-  vendorId: firstValue(row.vendorId, row.vendor_id, ""),
-  vendorName: firstValue(row.vendorName, row.vendor_name, "-"),
-  isMsme: Boolean(firstValue(row.isMsme, row.is_msme, false)),
-  orderDate: firstValue(row.poDate, row.orderDate, row.po_date, row.order_date, null),
-  orderValue: Number(firstValue(row.poAmount, row.orderValue, row.po_amount, row.order_value, 0)) || 0,
-  currency: firstValue(row.currency, "INR"),
-  amountOutstanding: Number(firstValue(row.amountOutstanding, row.amount_outstanding, 0)) || 0,
-  orderStatus: firstValue(row.orderStatus, row.order_status, null),
-  paymentStatus: firstValue(row.paymentStatus, row.payment_status, null),
-  deliveryStatus: firstValue(row.deliveryStatus, row.delivery_status, null),
-  fundingStatus: firstValue(row.fundingStatus, row.funding_status, null),
-  documentChain: {
-    grn: mapDocumentChainSlot(row.documentChain?.grn),
-    pi: mapDocumentChainSlot(row.documentChain?.pi),
-    ti: mapDocumentChainSlot(row.documentChain?.ti),
-  },
-});
+export const normalizeOrderTrackingRow = (row = {}) => {
+  const scheduledAmount = Number(row.scheduledAmount ?? row.scheduled_amount ?? row.poAmount ?? row.po_amount ?? 0) || 0;
+  const paidAmount = Number(row.paidAmount ?? row.paid_amount ?? 0) || 0;
 
-const mapChecklist = (checklist = {}) => ({
-  items: Array.isArray(checklist.items) ? checklist.items : [],
-  completeCount: Number(checklist.completeCount ?? 0) || 0,
-  totalCount: Number(checklist.totalCount ?? 0) || 0,
-});
-
-const mapDocumentChainDetail = (chain = []) =>
-  (Array.isArray(chain) ? chain : []).map((entry) => ({
-    type: entry.type,
-    documents: Array.isArray(entry.documents) ? entry.documents : [],
-  }));
-
-const mapPaymentObligations = (obligations = []) =>
-  (Array.isArray(obligations) ? obligations : []).map((obligation) => ({
-    stage: obligation.stage ?? "-",
-    scheduled: Number(obligation.scheduled ?? 0) || 0,
-    triggered: Number(obligation.triggered ?? 0) || 0,
-    paid: Number(obligation.paid ?? 0) || 0,
-    status: obligation.status ?? null,
-    dueDate: obligation.dueDate ?? null,
-  }));
-
-/**
- * API detail response → OrderTrackingDetail. The only place drawer-level
- * backend field names are read — OrderTrackingDetailDrawer and its
- * sub-sections must only ever consume the object this returns (see
- * docs/order-tracking-api-contract.md §7).
- */
-export const mapOrderTrackingDetail = (detail = {}) => ({
-  id: firstValue(detail.id, detail.orderId, detail.order_id),
-  orderNumber: firstValue(detail.orderNumber, detail.order_number, "-"),
-  orderStatus: firstValue(detail.orderStatus, detail.order_status, null),
-  orderDate: firstValue(detail.orderDate, detail.order_date, null),
-  vendor: {
-    id: detail.vendor?.id ?? "",
-    name: detail.vendor?.name ?? "-",
-    gstin: detail.vendor?.gstin ?? "",
-    isMsme: Boolean(detail.vendor?.isMsme),
-  },
-  orderValue: Number(firstValue(detail.orderValue, detail.order_value, 0)) || 0,
-  currency: firstValue(detail.currency, "INR"),
-  amountOutstanding: Number(firstValue(detail.amountOutstanding, detail.amount_outstanding, 0)) || 0,
-  paymentStatus: firstValue(detail.paymentStatus, detail.payment_status, null),
-  checklist: mapChecklist(detail.checklist),
-  documentChain: mapDocumentChainDetail(detail.documentChain),
-  paymentObligations: mapPaymentObligations(detail.paymentObligations),
-  delivery: {
-    status: detail.delivery?.status ?? null,
-    remarks: detail.delivery?.remarks ?? "",
-    updatedAt: detail.delivery?.updatedAt ?? null,
-    updatedBy: detail.delivery?.updatedBy ?? null,
-  },
-  funding: {
-    status: detail.funding?.status ?? "NON_FUNDED",
-    praxiaAmount: Number(detail.funding?.praxiaAmount ?? 0) || 0,
-    financierAmount: Number(detail.funding?.financierAmount ?? 0) || 0,
-    currency: detail.funding?.currency ?? detail.currency ?? "INR",
-    history: Array.isArray(detail.funding?.history) ? detail.funding.history : [],
-  },
-  advances: {
-    advanceBalance: Number(detail.advances?.advanceBalance ?? 0) || 0,
-    outstandingAdvanceBalance: Number(detail.advances?.outstandingAdvanceBalance ?? 0) || 0,
-    advances: Array.isArray(detail.advances?.advances) ? detail.advances.advances : [],
-  },
-});
-
-/**
- * API response → summary-card counts (docs/order-tracking-api-contract.md
- * §3.2). Same mapper-boundary rule as the row/detail mappers above — this is
- * the only place OrderTrackingSummaryCards' backend field names are read.
- */
-export const mapOrderTrackingSummary = (summary = {}) => ({
-  openOrders: Number(firstValue(summary.openOrders, summary.open_orders, 0)) || 0,
-  overduePayments: Number(firstValue(summary.overduePayments, summary.overdue_payments, 0)) || 0,
-  pendingDelivery: Number(firstValue(summary.pendingDelivery, summary.pending_delivery, 0)) || 0,
-  fullyClosed: Number(firstValue(summary.fullyClosed, summary.fully_closed, 0)) || 0,
-});
-
-/** API response → filter-options (docs/order-tracking-api-contract.md §3.5). */
-export const mapOrderTrackingFilterOptions = (options = {}) => ({
-  vendors: Array.isArray(options.vendors) ? options.vendors : [],
-});
+  return {
+    id: row.id ?? row.poId ?? row.po_id,
+    poNumber: row.poNumber ?? row.po_number ?? "-",
+    vendorId: row.vendorId ?? row.vendor_id ?? "",
+    vendorName: row.vendorName ?? row.vendor_name ?? "-",
+    branchName: row.branchName ?? row.branch_name ?? "-",
+    poDate: row.poDate ?? row.po_date ?? null,
+    expectedDeliveryDate: row.expectedDeliveryDate ?? row.expected_delivery_date ?? null,
+    poAmount: Number(row.poAmount ?? row.po_amount ?? 0) || 0,
+    currency: row.currency ?? "INR",
+    scheduledAmount,
+    paidAmount,
+    amountOutstanding:
+      row.amountOutstanding ?? row.amount_outstanding ?? scheduledAmount - paidAmount,
+    documentStatus: row.documentStatus ?? row.document_status ?? null,
+    paymentStatus: row.paymentStatus ?? row.payment_status ?? null,
+    deliveryStatus: row.deliveryStatus ?? row.delivery_status ?? null,
+    fundingStatus: row.fundingStatus ?? row.funding_status ?? null,
+  };
+};

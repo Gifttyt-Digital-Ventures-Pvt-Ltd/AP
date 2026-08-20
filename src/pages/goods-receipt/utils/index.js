@@ -1,10 +1,6 @@
 import { GRN_SOURCE, GRN_STATUS } from '../constants';
 import { buildGrnConfigSnapshot, isGrnValuationEnabled } from './grnFormatConfig';
 import { extractListResponse, extractPageContent } from '../../../Services/utils/payloadMappers';
-import {
-  buildPaymentSchedulePayload,
-  normalizePaymentScheduleRows,
-} from '../../purchase-orders/utils/poPaymentSchedule';
 
 export const getListData = extractListResponse;
 export { extractPageContent };
@@ -169,7 +165,6 @@ export const normalizeGrn = (grn = {}) => ({
   created_by_name: grn.created_by_name ?? grn.createdByName ?? '',
   submitted_by_name: grn.submitted_by_name ?? grn.submittedByName ?? '',
   approved_by_name: grn.approved_by_name ?? grn.approvedByName ?? '',
-  paymentSchedule: normalizePaymentScheduleRows(grn),
 });
 
 export const normalizePoLineItem = (item = {}) => ({
@@ -180,15 +175,6 @@ export const normalizePoLineItem = (item = {}) => ({
   unit_price: Number(item.unit_price ?? item.unitPrice ?? 0),
   quantity: Number(item.quantity ?? 0),
   received_quantity: Number(item.received_quantity ?? item.receivedQuantity ?? 0),
-  gst_rate: Number(
-    item.gst_rate ??
-      item.gstRate ??
-      item.gst_percent ??
-      item.gstPercent ??
-      item.tax_rate ??
-      item.taxRate ??
-      0,
-  ),
 });
 
 export const normalizePurchaseOrder = (po = {}) => ({
@@ -203,9 +189,6 @@ export const normalizePurchaseOrder = (po = {}) => ({
   matchingInrValue: po.matchingInrValue ?? po.matching_inr_value ?? '',
   total_amount: Number(po.total_amount ?? po.totalAmount ?? 0),
   status: po.status ?? '',
-  paymentScheduleAvailable:
-    po.paymentScheduleAvailable === true || normalizePaymentScheduleRows(po).length > 0,
-  paymentSchedule: normalizePaymentScheduleRows(po),
   shipping_address: po.shipping_address ?? po.shippingAddress ?? '',
   billing_name: po.billing_name ?? po.billingName ?? po.bill_to_name ?? po.billToName ?? '',
   billing_gstin: po.billing_gstin ?? po.billingGstin ?? po.bill_to_gstin ?? po.billToGstin ?? '',
@@ -254,15 +237,6 @@ export const normalizePoLineReceiptState = (line = {}) => {
     already_received: already,
     pending_quantity: pending,
     unit_price: Number(line.unit_price ?? line.unitPrice ?? 0),
-    gst_rate: Number(
-      line.gst_rate ??
-        line.gstRate ??
-        line.gst_percent ??
-        line.gstPercent ??
-        line.tax_rate ??
-        line.taxRate ??
-        0,
-    ),
   };
 };
 
@@ -297,15 +271,7 @@ export const buildGrnLineItemsFromPo = (po, receiptStateLines = null) => {
       rejected_quantity: 0,
       rejection_reason: '',
       unit_price: line.unit_price,
-      gst_rate: Number(
-        line.gst_rate ??
-          line.gstRate ??
-          line.gst_percent ??
-          line.gstPercent ??
-          line.tax_rate ??
-          line.taxRate ??
-          0,
-      ),
+      gst_rate: Number(line.gst_rate ?? line.gstRate ?? 0),
       line_amount: receivedDefault * Number(line.unit_price || 0),
     };
   });
@@ -390,10 +356,7 @@ export const validateGrnLineItems = (lineItems, { qcEnabled = true } = {}) => {
   return null;
 };
 
-export const buildCreateGrnPayload = (
-  form,
-  { formatConfig, qcEnabled = true, includePaymentSchedule = false } = {},
-) => {
+export const buildCreateGrnPayload = (form, { formatConfig, qcEnabled = true } = {}) => {
   const valuationEnabled = isGrnValuationEnabled(formatConfig);
   const billToEnabled = Boolean(formatConfig?.bill_to_enabled);
   const lineItems = form.line_items
@@ -467,12 +430,6 @@ export const buildCreateGrnPayload = (
     tax_amount: valuationEnabled ? taxAmount : undefined,
     total_received_value: valuationEnabled ? taxableAmount + taxAmount : undefined,
     remarks: form.remarks || undefined,
-    ...(includePaymentSchedule
-      ? {
-          paymentScheduleAvailable: Boolean(form.paymentScheduleAvailable),
-          paymentSchedule: buildPaymentSchedulePayload(form.paymentSchedule || []),
-        }
-      : {}),
     line_items: lineItems,
   };
 };

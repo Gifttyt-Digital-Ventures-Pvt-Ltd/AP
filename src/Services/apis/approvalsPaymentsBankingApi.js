@@ -8,8 +8,6 @@ import {
   toRecordPaymentsApiPayload,
 } from "../utils/payloadMappers";
 import { CREDIT_INVALIDATION_TAGS } from "../../constants/creditActions";
-import { normalizePayablesResponse } from "../../pages/payments/utils/payableNormalizers";
-import { normalizePayrun } from "../../pages/payments/components/payrunUtils";
 
 const normalizePaginatedListResponse = (response, extraKeys = [], mapItem = (item) => item) => {
   const items = extractListResponse(response, extraKeys).map(mapItem);
@@ -45,16 +43,6 @@ const normalizePaginatedListResponse = (response, extraKeys = [], mapItem = (ite
   };
 };
 
-const normalizePayablesListResponse = (response) => {
-  const page = normalizePaginatedListResponse(response, ["payables", "pendingPayments", "pending_payments"]);
-  const items = normalizePayablesResponse(response, { strictMoney: true });
-  return {
-    ...page,
-    items,
-    data: items,
-  };
-};
-
 export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getPendingApprovals: builder.query({
@@ -78,31 +66,11 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
         ),
       providesTags: ["Invoices", "Payments"],
     }),
-    getPayables: builder.query({
-      query: (params) => ({ url: "/payments/payables", method: "GET", params }),
-      transformResponse: normalizePayablesListResponse,
-      providesTags: ["Payments"],
-    }),
-    getPayablesSummary: builder.query({
-      query: (params) => ({ url: "/payments/payables/summary", method: "GET", params }),
-      transformResponse: (response) => response?.data ?? response ?? {},
-      providesTags: ["Payments"],
-    }),
     getReleasedPayments: builder.query({
       query: (params) => ({ url: "/payments/released", method: "GET", params }),
       transformResponse: (response) =>
         normalizePaginatedListResponse(response, ["payments", "releasedPayments", "released_payments"]),
       providesTags: ["Payments"],
-    }),
-    getBankingPortalTransactions: builder.query({
-      query: (params) => ({ url: "/banking/portal-transactions", method: "GET", params }),
-      transformResponse: (response) =>
-        normalizePaginatedListResponse(response, [
-          "transactions",
-          "portalTransactions",
-          "portal_transactions",
-        ]),
-      providesTags: ["Payments", "Banking"],
     }),
     getPayment: builder.query({
       query: (id) => ({ url: `/payments/${id}`, method: "GET" }),
@@ -141,19 +109,6 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
       transformResponse: (response) =>
         normalizePaginatedListResponse(response, ["payruns", "paymentRuns", "payment_runs"]),
       providesTags: ["Payments"],
-    }),
-    getPayrun: builder.query({
-      query: (payrunId) => ({ url: `/payruns/${payrunId}`, method: "GET" }),
-      transformResponse: (response) => {
-        const payload = Array.isArray(response?.data)
-          ? response.data[0]
-          : response?.data?.payrun || response?.payrun || response?.data || response;
-        return normalizePayrun(payload || {});
-      },
-      providesTags: (_result, _error, payrunId) => [
-        "Payments",
-        { type: "Payments", id: `payrun-${payrunId}` },
-      ],
     }),
     createPayrun: builder.mutation({
       query: (body) => ({
@@ -242,10 +197,7 @@ export const {
   useGetPendingApprovalsQuery,
   useGetPaymentsQuery,
   useGetPendingPaymentsQuery,
-  useGetPayablesQuery,
-  useGetPayablesSummaryQuery,
   useGetReleasedPaymentsQuery,
-  useGetBankingPortalTransactionsQuery,
   useGetPaymentQuery,
   useLazyGetPaymentQuery,
   useCreatePaymentMutation,
@@ -253,7 +205,6 @@ export const {
   useRecordPaymentsMutation,
   useGeneratePendingPaymentInvoiceReportMutation,
   useGetPayrunsQuery,
-  useLazyGetPayrunQuery,
   useCreatePayrunMutation,
   useApprovePayrunMutation,
   useRejectPayrunMutation,
