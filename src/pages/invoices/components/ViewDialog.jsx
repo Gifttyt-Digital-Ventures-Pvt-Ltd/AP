@@ -33,7 +33,6 @@ import { formatCurrency, normalizeCurrencyCode } from "../../../utils/currency";
 import AccountingLockBanner from "../../../components/AccountingLockBanner";
 import InvoiceReadOnlyDetails from "./InvoiceReadOnlyDetails";
 import InvoiceChecklist from "./InvoiceFormChecklist";
-import InvoiceFundingEditDialog from "./InvoiceFundingEditDialog";
 import { buildInvoiceEditFormData } from "../utils/invoiceFormData";
 import { isProformaInvoice, canMapTaxInvoiceToProforma } from "../constants/proformaInvoice";
 
@@ -52,14 +51,6 @@ const formatFundingEntryTimestamp = (entry = {}) => {
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return String(value);
   return format(parsed, "dd MMM yyyy, hh:mm a");
-};
-
-const formatFundingEntryDateTime = (entry = {}) => {
-  const formattedTimestamp = formatFundingEntryTimestamp(entry);
-  if (formattedTimestamp) return formattedTimestamp;
-
-  const dateText = [entry.dayOfWeek, entry.date].filter(Boolean).join(", ");
-  return [dateText, entry.time].filter(Boolean).join(" ");
 };
 
 const hasFundingAmount = (value) =>
@@ -94,69 +85,58 @@ const FundingHistoryTimeline = ({
 
   return (
     <div className="space-y-3">
-      {history.map((entry, index) => {
-        const statusValue = entry.isFunded ?? entry.is_funded;
-        const hasStatusValue =
-          statusValue !== undefined && statusValue !== null && statusValue !== "";
-        const orgAmount = entry.orgAmount ?? entry.org_amount;
-        const financierAmount = entry.financierAmount ?? entry.financier_amount;
-        const hasStructuredAmounts =
-          hasFundingAmount(orgAmount) || hasFundingAmount(financierAmount);
-
-        return (
-          <div
-            key={`${entry.id || getFundingEntryTimestamp(entry) || index}-${index}`}
-            className="rounded-lg border bg-background p-4"
-          >
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-foreground">
-                  {entry.message || entry.action || "Funding updated"}
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {entry.updatedByName ||
-                    entry.userName ||
-                    entry.userEmail ||
-                    entry.updatedBy ||
-                    "System"}
-                  {formatFundingEntryDateTime(entry)
-                    ? ` - ${formatFundingEntryDateTime(entry)}`
-                    : ""}
-                </p>
-              </div>
-              {hasStatusValue ? (
-                <span className="rounded-full border px-2 py-0.5 text-xs font-medium text-muted-foreground">
-                  {statusValue ? "Funded" : "Non-Funded"}
-                </span>
-              ) : null}
+      {history.map((entry, index) => (
+        <div
+          key={`${entry.id || getFundingEntryTimestamp(entry) || index}-${index}`}
+          className="rounded-lg border bg-background p-4"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="text-sm font-semibold text-foreground">
+                {entry.message || entry.action || "Funding updated"}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {entry.updatedByName ||
+                  entry.userName ||
+                  entry.userEmail ||
+                  entry.updatedBy ||
+                  "System"}
+                {formatFundingEntryTimestamp(entry)
+                  ? ` - ${formatFundingEntryTimestamp(entry)}`
+                  : ""}
+              </p>
             </div>
-            {hasStructuredAmounts ? (
-              <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                <div className="rounded-md bg-muted/30 px-3 py-2">
-                  <p className="text-[11px] uppercase text-muted-foreground">
-                    Organization Amount
-                  </p>
-                  <p className="text-sm font-semibold">
-                    {hasFundingAmount(orgAmount)
-                      ? formatCurrency(orgAmount, currency)
-                      : "-"}
-                  </p>
-                </div>
-                <div className="rounded-md bg-muted/30 px-3 py-2">
-                  <p className="text-[11px] uppercase text-muted-foreground">
-                    Financier Amount
-                  </p>
-                  <p className="text-sm font-semibold">
-                    {hasFundingAmount(financierAmount)
-                      ? formatCurrency(financierAmount, currency)
-                      : "-"}
-                  </p>
-                </div>
-              </div>
-            ) : null}
+            <span className="rounded-full border px-2 py-0.5 text-xs font-medium text-muted-foreground">
+              {entry.isFunded ?? entry.is_funded ? "Funded" : "Non-Funded"}
+            </span>
           </div>
-        );
-      })}
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            <div className="rounded-md bg-muted/30 px-3 py-2">
+              <p className="text-[11px] uppercase text-muted-foreground">
+                Organization Amount
+              </p>
+              <p className="text-sm font-semibold">
+                {hasFundingAmount(entry.orgAmount ?? entry.org_amount)
+                  ? formatCurrency(entry.orgAmount ?? entry.org_amount, currency)
+                  : "-"}
+              </p>
+            </div>
+            <div className="rounded-md bg-muted/30 px-3 py-2">
+              <p className="text-[11px] uppercase text-muted-foreground">
+                Financier Amount
+              </p>
+              <p className="text-sm font-semibold">
+                {hasFundingAmount(entry.financierAmount ?? entry.financier_amount)
+                  ? formatCurrency(
+                      entry.financierAmount ?? entry.financier_amount,
+                      currency,
+                    )
+                  : "-"}
+              </p>
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   );
 };
@@ -196,9 +176,6 @@ const ViewDialog = ({
   canEditInternalChecklist = false,
   onSaveInternalChecklist,
   savingInternalChecklist = false,
-  canEditInvoiceFunding = false,
-  onSaveInvoiceFunding,
-  savingInvoiceFunding = false,
   onMapTaxInvoice,
   onViewLinkedInvoice,
   allInvoices = [],
@@ -231,18 +208,16 @@ const ViewDialog = ({
     ],
   );
   const [previewOpen, setPreviewOpen] = useState(true);
-  const [fundingEditContext, setFundingEditContext] = useState(null);
   const invoiceIdForFundingHistory =
     selectedInvoice?.id || selectedInvoice?.invoiceId;
   const invoiceCurrency = normalizeCurrencyCode(selectedInvoice?.currency);
-  const selectedIsProformaInvoice = Boolean(selectedInvoice) && isProformaInvoice(selectedInvoice);
-  const effectiveShowInvoiceFunding = Boolean(showInvoiceFunding && !selectedIsProformaInvoice);
   const {
     data: fundingHistory = [],
     isFetching: fundingHistoryLoading,
   } = useGetInvoiceFundingHistoryQuery(invoiceIdForFundingHistory, {
-    skip: !effectiveShowInvoiceFunding || !invoiceIdForFundingHistory,
+    skip: !showInvoiceFunding || !invoiceIdForFundingHistory,
   });
+  const selectedIsProformaInvoice = Boolean(selectedInvoice) && isProformaInvoice(selectedInvoice);
   const accountingObjectType = selectedIsProformaInvoice ? "PI" : "INVOICE";
   const accountingObjectLabel = selectedIsProformaInvoice ? "proforma invoice" : "invoice";
   const renderInvoiceTitle = (titleClassName = "text-2xl", subtitleClassName = "text-xs") => (
@@ -334,7 +309,7 @@ const ViewDialog = ({
                 >
                   <TabsList
                     className={`grid w-full mb-4 ${
-                      effectiveShowInvoiceFunding ? "grid-cols-3" : "grid-cols-2"
+                      showInvoiceFunding ? "grid-cols-3" : "grid-cols-2"
                     }`}
                   >
                     <TabsTrigger value="details">
@@ -345,7 +320,7 @@ const ViewDialog = ({
                       <History className="h-4 w-4 mr-2" />
                       History ({invoiceHistory.length})
                     </TabsTrigger>
-                    {effectiveShowInvoiceFunding ? (
+                    {showInvoiceFunding ? (
                       <TabsTrigger value="funding-history">
                         <Landmark className="h-4 w-4 mr-2" />
                         Funding ({fundingHistory.length})
@@ -374,7 +349,7 @@ const ViewDialog = ({
                           showCampaignField={showCampaignField}
                           isCampaignFeatureEnabled={isCampaignFeatureEnabled}
                           showRefNoField={showRefNoField}
-                          showInvoiceFunding={effectiveShowInvoiceFunding}
+                          showInvoiceFunding={showInvoiceFunding}
                           findVendorByName={findVendorByName}
                           findVendorById={findVendorById}
                           showProformaInvoiceFields={showProformaInvoiceFields}
@@ -384,8 +359,6 @@ const ViewDialog = ({
                           canEditInternalChecklist={canEditInternalChecklist}
                           onSaveInternalChecklist={onSaveInternalChecklist}
                           savingInternalChecklist={savingInternalChecklist}
-                          canEditInvoiceFunding={canEditInvoiceFunding}
-                          onEditInvoiceFunding={setFundingEditContext}
                           onMapTaxInvoice={onMapTaxInvoice}
                           onViewLinkedInvoice={onViewLinkedInvoice}
                           allInvoices={allInvoices}
@@ -411,7 +384,7 @@ const ViewDialog = ({
                       loading={loadingHistory}
                     />
                   </TabsContent>
-                  {effectiveShowInvoiceFunding ? (
+                  {showInvoiceFunding ? (
                     <TabsContent
                       value="funding-history"
                       className="mt-0 flex-1 overflow-y-auto pr-3 scrollbar-thin-muted"
@@ -513,27 +486,9 @@ const ViewDialog = ({
                 )}
               </div>
             </div>
-              </div>
-
-              <InvoiceFundingEditDialog
-                open={Boolean(fundingEditContext)}
-                onOpenChange={(open) => {
-                  if (!open) setFundingEditContext(null);
-                }}
-                invoice={fundingEditContext?.invoice}
-                invoiceTotal={fundingEditContext?.invoiceTotal || 0}
-                currency={fundingEditContext?.currency || invoiceCurrency}
-                saving={savingInvoiceFunding}
-                onSave={async (payload) => {
-                  const saved = await onSaveInvoiceFunding?.(
-                    fundingEditContext?.invoice,
-                    payload,
-                  );
-                  if (saved !== false) setFundingEditContext(null);
-                }}
-              />
             </div>
-          )}
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

@@ -17,7 +17,6 @@ export const PAYMENT_SCHEDULE_BASIS_OPTIONS = [
   { value: "AMOUNT", label: "Amount" },
 ];
 
-export const DEFAULT_PAYMENT_SCHEDULE_BASIS = "AMOUNT";
 export const PAYMENT_SCHEDULE_ADVANCE_TRIGGERS = new Set(["PO", "GRN", "PI"]);
 
 const normalizeTriggerStage = (value = "") => {
@@ -31,7 +30,7 @@ const normalizeBasis = (value = "") => {
   const normalized = String(value || "").trim().toUpperCase();
   return PAYMENT_SCHEDULE_BASIS_OPTIONS.some((option) => option.value === normalized)
     ? normalized
-    : DEFAULT_PAYMENT_SCHEDULE_BASIS;
+    : "PERCENT";
 };
 
 const getScheduleCandidate = (source = {}) => {
@@ -44,149 +43,25 @@ const getScheduleCandidate = (source = {}) => {
 export const getPaymentScheduleRows = getScheduleCandidate;
 
 export const normalizePaymentScheduleBasis = normalizeBasis;
-export const normalizePaymentScheduleTriggerStage = normalizeTriggerStage;
 
-const hasValue = (value) =>
-  value !== undefined && value !== null && value !== "";
-
-const LOCKED_SCHEDULE_STATUSES = new Set([
-  "PAID",
-  "PARTIALLY_PAID",
-  "SETTLED",
-  "PARTIALLY_SETTLED",
-  "RELEASED",
-  "PARTIALLY_RELEASED",
-  "ADVANCE_PAID",
-  "OBLIGATION_PAID",
-  "PAYMENT_RELEASED",
-]);
-
-export const isPaymentScheduleRowLocked = (row = {}) => {
-  const status = String(
-    row.status ??
-      row.rowStatus ??
-      row.row_status ??
-      row.obligationStatus ??
-      row.obligation_status ??
-      "",
-  )
-    .trim()
-    .toUpperCase();
-
-  const explicitLock =
-    row.locked ??
-    row.isLocked ??
-    row.is_locked ??
-    row.paid ??
-    row.isPaid ??
-    row.is_paid ??
-    row.settled ??
-    row.isSettled ??
-    row.is_settled ??
-    row.paymentReleased ??
-    row.payment_released ??
-    false;
-  const paidAmount =
-    Number(
-      row.paidAmount ??
-        row.paid_amount ??
-        row.settledAmount ??
-        row.settled_amount ??
-        row.releasedAmount ??
-        row.released_amount ??
-        0,
-    ) || 0;
-
-  return Boolean(explicitLock || paidAmount > 0 || LOCKED_SCHEDULE_STATUSES.has(status));
-};
-
-export const getPaymentScheduleRowLockReason = (row = {}) => {
-  if (!isPaymentScheduleRowLocked(row)) return "";
-  return (
-    row.lockReason ??
-    row.lock_reason ??
-    row.disabledReason ??
-    row.disabled_reason ??
-    "This milestone already has paid or settled payment activity."
-  );
-};
-
-const getPoGrossTotal = (source = {}) =>
-  Number(
-    source.total_amount ??
-      source.totalAmount ??
-      source.poGrossTotal ??
-      source.po_gross_total ??
-      source.grossTotal ??
-      source.gross_total ??
-      0,
-  ) || 0;
-
-const getRowValue = (row = {}) => Number(row.value ?? row.amount ?? row.scheduledAmount ?? row.scheduled_amount) || 0;
-
-export const inferPaymentScheduleBasis = (rows = [], poGrossTotal = 0) => {
-  const safeRows = Array.isArray(rows) ? rows : [];
-  if (!safeRows.length) return DEFAULT_PAYMENT_SCHEDULE_BASIS;
-
-  const values = safeRows.map(getRowValue);
-  const totalValue = values.reduce((sum, value) => sum + value, 0);
-  const grossTotal = Number(poGrossTotal) || 0;
-  const explicitBases = safeRows
-    .map((row) => row.basis ?? row.basis_type ?? row.basisType)
-    .filter(hasValue)
-    .map(normalizeBasis);
-
-  if (explicitBases.includes("AMOUNT")) return "AMOUNT";
-  if (values.some((value) => value > 100)) return "AMOUNT";
-  if (grossTotal > 0 && Math.abs(totalValue - grossTotal) <= 0.009) return "AMOUNT";
-  if (explicitBases.includes("PERCENT")) return "PERCENT";
-  return DEFAULT_PAYMENT_SCHEDULE_BASIS;
-};
-
-const getDefaultScheduleLabel = (triggerStage = "PO") =>
-  normalizeTriggerStage(triggerStage) === "TI"
-    ? "Payable on invoice"
-    : `Advance on ${normalizeTriggerStage(triggerStage)}`;
-
-export const getNextPaymentScheduleTriggerStage = (rows = []) => {
-  const usedTriggers = new Set(
-    (Array.isArray(rows) ? rows : []).map((row) => normalizeTriggerStage(row.triggerStage)),
-  );
-  return PAYMENT_SCHEDULE_TRIGGER_OPTIONS.find((option) => !usedTriggers.has(option.value))?.value || null;
-};
-
-export const createEmptyPaymentScheduleRow = (
-  sequence = 1,
-  basis = DEFAULT_PAYMENT_SCHEDULE_BASIS,
-  triggerStage,
-) => {
-  const normalizedTriggerStage = normalizeTriggerStage(
-    triggerStage || (sequence === 1 ? "PO" : "TI"),
-  );
-
-  return {
+export const createEmptyPaymentScheduleRow = (sequence = 1, basis = "PERCENT") => ({
   sequence,
-  triggerStage: normalizedTriggerStage,
-  label: getDefaultScheduleLabel(normalizedTriggerStage),
+  triggerStage: sequence === 1 ? "PO" : "TI",
+  label: sequence === 1 ? "Advance on PO" : "Payable on invoice",
   basis: normalizeBasis(basis),
   value: "",
   creditDays: "0",
-  };
-};
+});
 
 export const isAdvanceScheduleTrigger = (triggerStage = "") =>
   PAYMENT_SCHEDULE_ADVANCE_TRIGGERS.has(normalizeTriggerStage(triggerStage));
 
-export const normalizePaymentScheduleRows = (source = {}) => {
-  const rows = getScheduleCandidate(source);
-  const inferredBasis = inferPaymentScheduleBasis(rows, getPoGrossTotal(source));
-
-  return rows.map((row = {}, index) => ({
-    ...row,
+export const normalizePaymentScheduleRows = (source = {}) =>
+  getScheduleCandidate(source).map((row = {}, index) => ({
     sequence: Number(row.sequence ?? row.seq ?? index + 1) || index + 1,
     triggerStage: normalizeTriggerStage(row.triggerStage ?? row.trigger_stage),
     label: row.label ?? row.name ?? row.description ?? "",
-    basis: inferredBasis,
+    basis: normalizeBasis(row.basis),
     value:
       row.value === undefined || row.value === null
         ? ""
@@ -195,10 +70,7 @@ export const normalizePaymentScheduleRows = (source = {}) => {
       row.creditDays === undefined && row.credit_days === undefined
         ? "0"
         : String(row.creditDays ?? row.credit_days),
-    locked: isPaymentScheduleRowLocked(row),
-    lockReason: getPaymentScheduleRowLockReason(row),
   }));
-};
 
 export const getPaymentScheduleComputedAmount = (row = {}, poGrossTotal = 0) => {
   const basis = normalizeBasis(row.basis);
@@ -222,10 +94,8 @@ export const getPaymentScheduleSummary = (rows = [], poGrossTotal = 0) => {
 
 export const validatePaymentScheduleRows = (rows = []) => {
   const errors = [];
-  const triggerRows = new Map();
   rows.forEach((row, index) => {
     const rowNumber = index + 1;
-    const triggerStage = normalizeTriggerStage(row.triggerStage);
     if (!String(row.label || "").trim()) {
       errors.push(`Payment Schedule row ${rowNumber}: label is required`);
     }
@@ -235,17 +105,7 @@ export const validatePaymentScheduleRows = (rows = []) => {
     if (Number(row.creditDays) < 0) {
       errors.push(`Payment Schedule row ${rowNumber}: credit days cannot be negative`);
     }
-    if (triggerRows.has(triggerStage)) {
-      errors.push(
-        `Payment Schedule row ${rowNumber}: trigger stage ${triggerStage} is already used in row ${triggerRows.get(triggerStage)}`,
-      );
-    } else {
-      triggerRows.set(triggerStage, rowNumber);
-    }
   });
-  if (rows.length > 0 && !triggerRows.has("TI")) {
-    errors.push("Payment Schedule must include a TI row for final invoice payment");
-  }
   return errors;
 };
 

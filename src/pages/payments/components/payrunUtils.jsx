@@ -491,18 +491,10 @@ export const normalizePayrun = (payrun = {}) => {
         currency: item.currency || item.currency_code || payrun.currency || payrun.currency_code,
       });
 
-      const itemId =
-        item.payrunItemId ||
-        item.payrun_item_id ||
-        payable.payableKey ||
-        item.invoiceId ||
-        item.invoice_id ||
-        item.id;
-
       return {
         ...item,
         ...payable,
-        id: itemId,
+        id: item.invoiceId || item.invoice_id || item.id || item.payrunItemId || item.payrun_item_id,
         payrunItemId: item.payrunItemId || item.payrun_item_id,
         invoiceNumber: item.invoiceNumber || item.invoice_number || payable.invoiceNumber || '-',
         vendorId: item.vendorId || item.vendor_id,
@@ -511,11 +503,9 @@ export const normalizePayrun = (payrun = {}) => {
         requestedAmount: Number(
           item.requestedAmount ||
             item.requested_amount ||
+            payable.payableAmount ||
             item.paymentAmount ||
             item.payment_amount ||
-            item.netPayableAmount ||
-            item.net_payable_amount ||
-            payable.netPayableAmount ||
             item.amount ||
             0,
         ),

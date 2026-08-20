@@ -28,10 +28,6 @@ import { useVendorGstSelection } from '../../hooks/useVendorGstSelection';
 import { useGstTaxpayerSession } from '../../hooks/useGstTaxpayerSession';
 import VendorGstPickerFields from './VendorGstPickerFields';
 import {
-  getFirstVendorGstin,
-  getVendorGstRegistrations,
-} from '../../../vendors/components/VendorGstRegistrationsPanel';
-import {
   useReconcileGstr2aMutation,
   useFetchGstr2aReconcileHistoryMutation,
   useFetchGstr2aDocumentsMutation,
@@ -572,18 +568,6 @@ const buildSnapshotsFromReconcileResponse = (result, params) => {
   return [current, ...historical];
 };
 
-const normalizeConnectedGstVendor = (vendor = {}) => {
-  const gstRegistrations = getVendorGstRegistrations(vendor);
-  const normalizedVendor = { ...vendor, gstRegistrations };
-  return {
-    ...normalizedVendor,
-    id: String(vendor.id ?? vendor.vendorId ?? vendor.vendor_id ?? ''),
-    name: vendor.name ?? vendor.vendorName ?? vendor.vendor_name ?? '—',
-    gstin: getFirstVendorGstin(normalizedVendor),
-    state: vendor.state || gstRegistrations[0]?.state || '',
-  };
-};
-
 const B2bReconciliationDetail = ({ snapshot, onBack, getVendor }) => {
   const [viewFilter, setViewFilter] = useState('All Invoices');
   const [selected, setSelected] = useState(null);
@@ -861,16 +845,6 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
     vendors,
     getVendor,
   } = orgGst;
-  const [connectedVendor, setConnectedVendor] = useState(null);
-  const effectiveVendors = useMemo(() => {
-    if (!connectedVendor?.id) return vendors;
-    const exists = vendors.some((vendor) => String(vendor.id) === String(connectedVendor.id));
-    return exists ? vendors : [connectedVendor, ...vendors];
-  }, [connectedVendor, vendors]);
-  const getEffectiveVendor = useCallback(
-    (id) => effectiveVendors.find((vendor) => String(vendor.id) === String(id)) ?? getVendor(id),
-    [effectiveVendors, getVendor],
-  );
 
   const {
     vendorId,
@@ -881,7 +855,7 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
     activeGstin,
     gstRegistrations,
     hasMultipleGstins,
-  } = useVendorGstSelection(effectiveVendors);
+  } = useVendorGstSelection(vendors);
   const [month, setMonth] = useState('Sep');
   const [fy, setFy] = useState(DEFAULT_GST_DOC_FY);
   const [dateFrom, setDateFrom] = useState('');
@@ -895,12 +869,6 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
   const [activeSnapshotId, setActiveSnapshotId] = useState(null);
   const [reconcileGstr2a] = useReconcileGstr2aMutation();
   const [fetchReconcileHistory] = useFetchGstr2aReconcileHistoryMutation();
-  const getVendorRef = useRef(getEffectiveVendor);
-  const historyRequestRef = useRef(null);
-
-  useEffect(() => {
-    getVendorRef.current = getEffectiveVendor;
-  }, [getEffectiveVendor]);
 
   const activeSnapshot = fetchHistory.find((entry) => entry.id === activeSnapshotId) ?? null;
 
@@ -920,16 +888,13 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
   };
 
   const loadReconcileHistory = useCallback(async () => {
-    const requestKey = `gstr-2a-b2b-history:${historyPage}`;
-    if (historyRequestRef.current === requestKey) return;
-    historyRequestRef.current = requestKey;
     setHistoryLoading(true);
     try {
       const offset = (historyPage - 1) * HISTORY_PAGE_SIZE;
       const history = await fetchReconcileHistory({ limit: HISTORY_PAGE_SIZE, offset }).unwrap();
       const historyEntries = Array.isArray(history) ? history : [];
       const snapshots = historyEntries.map((entry, index) =>
-        buildB2bSnapshotFromReconcileHistoryEntry(entry, index, getVendorRef.current));
+        buildB2bSnapshotFromReconcileHistoryEntry(entry, index, getVendor));
       setFetchHistory(snapshots);
       setHistoryTotal(getHistoryTotal(history));
     } catch (error) {
@@ -937,10 +902,9 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
       setFetchHistory([]);
       setHistoryTotal(0);
     } finally {
-      historyRequestRef.current = null;
       setHistoryLoading(false);
     }
-  }, [fetchReconcileHistory, historyPage]);
+  }, [fetchReconcileHistory, getVendor, historyPage]);
 
   useEffect(() => {
     loadReconcileHistory();
@@ -959,7 +923,7 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
     otp,
   }) => {
     const portalCredentials = buildGstPortalFetchCredentials(targetOrgCredential);
-    const vendor = getEffectiveVendor(targetVendorId);
+    const vendor = getVendor(targetVendorId);
     const supplierGstin = targetSupplierGstin || vendor?.gstin;
     if (!portalCredentials) return;
 
@@ -988,7 +952,7 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
         orgGst: portalCredentials.gst,
         orgUserName: portalCredentials.userName,
         existingId,
-        getVendor: getEffectiveVendor,
+        getVendor,
       };
       const snapshots = buildSnapshotsFromReconcileResponse(result, snapshotParams);
       setFetchHistory(snapshots);
@@ -1120,8 +1084,6 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
             vendorLabel="Vendor"
             variant="gst-form"
             vendorClassName="min-w-[220px]"
-            useConnectedVendorPicker
-            onVendorSelected={(vendor) => setConnectedVendor(normalizeConnectedGstVendor(vendor))}
           />
           <GstFormField label="Month" required>
             <TaxSelect value={month} onValueChange={setMonth} options={GST_DOC_MONTHS} />
@@ -1919,7 +1881,7 @@ export const GstDocumentsPanel = () => {
   const [subTab, setSubTab] = useState('b2b');
   const session = useGstTaxpayerSession();
   const { credentials, isLoading: credentialsLoading } = useOrganisationGstCredentials();
-  const { vendors } = useGstVendors({ enabled: subTab !== 'b2b' });
+  const { vendors } = useGstVendors();
   const [selectedOrgGst, setSelectedOrgGst] = useState('');
 
   useEffect(() => {

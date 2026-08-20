@@ -162,7 +162,7 @@ const GrnLineItemsEditor = ({
                         value={line.item_code || ''}
                         onChange={(e) => updateLine(index, 'item_code', e.target.value)}
                         className="h-8 min-w-[90px]"
-                        readOnly={readOnly}
+                        readOnly={readOnly || poLinked}
                       />
                     </TableCell>
                   )}
@@ -171,7 +171,7 @@ const GrnLineItemsEditor = ({
                       value={line.item_description || ''}
                       onChange={(e) => updateLine(index, 'item_description', e.target.value)}
                       className="h-8 min-w-[160px]"
-                      readOnly={readOnly}
+                      readOnly={readOnly || poLinked}
                     />
                   </TableCell>
                   {showHsn && (
@@ -180,7 +180,7 @@ const GrnLineItemsEditor = ({
                         value={line.hsn_sac || ''}
                         onChange={(e) => updateLine(index, 'hsn_sac', e.target.value)}
                         className="h-8 w-20"
-                        readOnly={readOnly}
+                        readOnly={readOnly || poLinked}
                       />
                     </TableCell>
                   )}
@@ -190,7 +190,7 @@ const GrnLineItemsEditor = ({
                         value={line.uom || ''}
                         onChange={(e) => updateLine(index, 'uom', e.target.value)}
                         className="h-8 w-16"
-                        readOnly={readOnly}
+                        readOnly={readOnly || poLinked}
                       />
                     </TableCell>
                   )}

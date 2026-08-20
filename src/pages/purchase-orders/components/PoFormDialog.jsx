@@ -5,7 +5,6 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../../../components/ui/select";
-import ConnectedVendorPicker from "../../../components/common/ConnectedVendorPicker";
 import AppDataTable from "../../../components/common/AppDataTable";
 import { TableCell, TableRow } from "../../../components/ui/table";
 import { Textarea } from "../../../components/ui/textarea";
@@ -24,6 +23,13 @@ import InrConversionFields, {
   ConvertedInrAmountSummary,
 } from "../../../components/common/InrConversionFields";
 import PoPaymentScheduleSection from "./PoPaymentScheduleSection";
+
+const PO_REFERENCE_DOCUMENT_TYPE_OPTIONS = [
+  { value: "PI", label: "Proforma Invoice (PI)" },
+  { value: "CUSTOMER_PO", label: "Purchase Order (PO)" },
+  { value: "LOI", label: "Letter of Intent (LOI)" },
+  { value: "EXCEL", label: "Excel" },
+];
 
 const getPoFormLineItemTableHeader = ({ isInr, fieldOn }) => [
   ...(fieldOn("LINE_ITEM", "item_name") ? [{ key: "item_description", title: "Description *", headerClassName: "w-[220px]" }] : []),
@@ -81,7 +87,6 @@ const formatRegistrationLocation = (registration = {}) => {
 };
 
 const formatAddressFromEntity = (entity = {}) => {
-  if (!entity || typeof entity !== "object") return "";
   const directAddress = getRegistrationValue(
     entity,
     "address",
@@ -109,7 +114,6 @@ const formatAddressFromEntity = (entity = {}) => {
 };
 
 const getVendorGstRegistrationsForPo = (vendor = {}) => {
-  if (!vendor || typeof vendor !== "object") return [];
   const registrations = vendor.gstRegistrations ?? vendor.gst_regs ?? vendor.gstRegs ?? vendor.gst_registrations;
   const mapped = Array.isArray(registrations)
     ? registrations
@@ -225,11 +229,7 @@ const PoFormDialog = ({
         tdsRate: poForm.tds_percent,
       })
     : "";
-  const [currentVendorObj, setCurrentVendorObj] = useState(null);
-  const selectedVendor =
-    (currentVendorObj && String(currentVendorObj.id) === String(poForm.vendor_id) ? currentVendorObj : null) ||
-    (Array.isArray(vendors) ? vendors.find((vendor) => String(vendor.id) === String(poForm.vendor_id)) : null) ||
-    currentVendorObj;
+  const selectedVendor = vendors.find((vendor) => String(vendor.id) === String(poForm.vendor_id));
   const vendorGstRegistrations = useMemo(
     () => getVendorGstRegistrationsForPo(selectedVendor),
     [selectedVendor],
@@ -603,7 +603,7 @@ const PoFormDialog = ({
                       <Input
                         value={poForm.po_number || ''}
                         onChange={(e) => setPoForm((prev) => ({ ...prev, po_number: e.target.value }))}
-                        placeholder="Enter Po Number"
+                        placeholder="As on vendor PO"
                         className={inputClassName}
                         data-testid="upload-po-number-input"
                       />
@@ -630,6 +630,31 @@ const PoFormDialog = ({
                     <FieldBlock label="Delivery Date">
                       <Input type="date" value={poForm.expected_delivery_date} onChange={(e) => setPoForm((prev) => ({ ...prev, expected_delivery_date: e.target.value }))} className={inputClassName} data-testid="delivery-date-input" />
                     </FieldBlock>
+                    <FieldBlock label="Reference Document No.">
+                      <Input
+                        value={poForm.reference_document_no || ""}
+                        onChange={(e) => setPoForm((prev) => ({ ...prev, reference_document_no: e.target.value }))}
+                        placeholder="Customer PI / PO / LOI no."
+                        className={inputClassName}
+                        data-testid="po-reference-document-no-input"
+                      />
+                    </FieldBlock>
+                    {poForm.reference_document_type ? (
+                      <FieldBlock label="Reference Type">
+                        <AppSelect
+                          value={poForm.reference_document_type || ""}
+                          onChange={(event) =>
+                            setPoForm((prev) => ({
+                              ...prev,
+                              reference_document_type: event.target.value,
+                            }))
+                          }
+                          options={PO_REFERENCE_DOCUMENT_TYPE_OPTIONS}
+                          className={inputClassName}
+                          data-testid="po-reference-document-type-input"
+                        />
+                      </FieldBlock>
+                    ) : null}
                   </div>
                 </div>
               ) : null}
@@ -689,6 +714,31 @@ const PoFormDialog = ({
                       <FieldBlock label="Delivery Date">
                         <Input type="date" value={poForm.expected_delivery_date} onChange={(e) => setPoForm((prev) => ({ ...prev, expected_delivery_date: e.target.value }))} className={inputClassName} data-testid="delivery-date-input" />
                       </FieldBlock>
+                      <FieldBlock label="Reference Document No.">
+                        <Input
+                          value={poForm.reference_document_no || ""}
+                          onChange={(e) => setPoForm((prev) => ({ ...prev, reference_document_no: e.target.value }))}
+                          placeholder="Customer PI / PO / LOI no."
+                          className={inputClassName}
+                          data-testid="po-reference-document-no-input"
+                        />
+                      </FieldBlock>
+                      {poForm.reference_document_type ? (
+                        <FieldBlock label="Reference Type">
+                          <AppSelect
+                            value={poForm.reference_document_type || ""}
+                            onChange={(event) =>
+                              setPoForm((prev) => ({
+                                ...prev,
+                                reference_document_type: event.target.value,
+                              }))
+                            }
+                            options={PO_REFERENCE_DOCUMENT_TYPE_OPTIONS}
+                            className={inputClassName}
+                            data-testid="po-reference-document-type-input"
+                          />
+                        </FieldBlock>
+                      ) : null}
                     </div>
                   </div>
                 </header>
@@ -699,24 +749,32 @@ const PoFormDialog = ({
                   <section className="rounded border bg-slate-50/60 p-4">
                     <h3 className="mb-3 text-sm font-semibold">Vendor</h3>
                     <FieldBlock label="Vendor">
-                      <ConnectedVendorPicker
-                        value={selectedVendor?.name || poForm.vendor_name || poForm.vendor_id}
-                        onSelect={(vendor) => {
-                          setCurrentVendorObj(vendor);
+                      <Select
+                        value={poForm.vendor_id}
+                        onValueChange={(v) =>
                           setPoForm((prev) => ({
                             ...prev,
-                            vendor_id: vendor?.id ? String(vendor.id) : "",
-                            vendor_name: vendor?.name ?? vendor?.vendor_name ?? "",
+                            vendor_id: v,
                             vendor_gst_registration_id: "",
                             vendor_gstin: "",
                             vendor_pan: "",
                             vendor_branch_name: "",
                             vendor_branch_code: "",
                             vendor_branch_gstin: "",
-                          }));
-                        }}
-                        placeholder="Select vendor"
-                      />
+                          }))
+                        }
+                      >
+                        <SelectTrigger className="h-9 bg-white/80" data-testid="vendor-select">
+                          <SelectValue placeholder="Select vendor" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {vendors.map((v) => (
+                            <SelectItem key={v.id} value={String(v.id)}>
+                              {v.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </FieldBlock>
                     {scannedVendorHint && !poForm.vendor_id ? (
                       <div className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
@@ -847,6 +905,28 @@ const PoFormDialog = ({
                 )}
               </div>
 
+              {!isInr && (
+                <section className="mt-5 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  <div className="grid grid-cols-1 gap-3 md:grid-cols-[1fr_220px] md:items-end">
+                    <p>
+                      Export mode: HSN/SAC, GST, cess, TDS, PAN and GSTIN fields are suppressed.
+                    </p>
+                    <FieldBlock label="Exchange Rate">
+                      <Input
+                        type="number"
+                        min="0"
+                        step="0.0001"
+                        value={poForm.exchange_rate}
+                        onChange={(e) => setPoForm((prev) => ({ ...prev, exchange_rate: e.target.value }))}
+                        placeholder={`1 ${poForm.currency} in INR`}
+                        className={inputClassName}
+                        data-testid="exchange-rate-input"
+                      />
+                    </FieldBlock>
+                  </div>
+                </section>
+              )}
+
               {sectionOn("LINE_ITEM") && (
                 <section className="mt-6">
                   <div className="mb-3 flex items-center justify-between gap-3">
@@ -869,6 +949,21 @@ const PoFormDialog = ({
                   </div>
                 </section>
               )}
+
+              {isPaymentTermsEnabled ? (
+                <PoPaymentScheduleSection
+                  rows={poForm.paymentSchedule || []}
+                  poGrossTotal={displayTotal}
+                  formatCurrency={formatPoCurrency}
+                  readOnly={isPreviewing}
+                  onChange={(paymentSchedule) =>
+                    setPoForm((prev) => ({
+                      ...prev,
+                      paymentSchedule,
+                    }))
+                  }
+                />
+              ) : null}
 
               <div className="mt-6 grid grid-cols-1 gap-5 md:grid-cols-[1fr_320px]">
                 {sectionOn("PAYMENT") && (
@@ -1030,21 +1125,6 @@ const PoFormDialog = ({
                   />
                 </FieldBlock>
               </section>
-
-              {isPaymentTermsEnabled ? (
-                <PoPaymentScheduleSection
-                  rows={poForm.paymentSchedule || []}
-                  poGrossTotal={displayTotal}
-                  formatCurrency={formatPoCurrency}
-                  readOnly={isPreviewing}
-                  onChange={(paymentSchedule) =>
-                    setPoForm((prev) => ({
-                      ...prev,
-                      paymentSchedule,
-                    }))
-                  }
-                />
-              ) : null}
               </div>
             </div>
           </div>

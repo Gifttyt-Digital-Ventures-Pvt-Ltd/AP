@@ -18,8 +18,6 @@ export const formatInvoiceAmount = (invoice, amount) =>
 export const sumInvoiceAmountsByCurrency = (
   invoices = [],
   getAmount = (invoice) =>
-    invoice?.netPayableAmount ??
-    invoice?.net_payable_amount ??
     invoice?.netAmount ??
     invoice?.net_amount ??
     invoice?.netPayable ??

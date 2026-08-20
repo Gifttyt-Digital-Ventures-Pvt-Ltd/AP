@@ -16,8 +16,6 @@ import { formatInvoiceAmount } from '../../invoices/utils/invoiceAmounts';
 
 const safeLower = (value) => String(value ?? '').toLowerCase();
 
-const getInvoiceReportId = (invoice = {}) => invoice.invoiceId || invoice.invoice_id || invoice.id;
-
 const hasAdvanceAdjustment = (invoice = {}) =>
   Boolean(
     invoice.hasAdvanceAdjustment ||
@@ -52,7 +50,7 @@ const PendingPaymentReportDialog = ({
   }, [invoices, searchTerm]);
 
   const selectedInvoices = useMemo(
-    () => invoices.filter((invoice) => selectedInvoiceIds.includes(getInvoiceReportId(invoice))),
+    () => invoices.filter((invoice) => selectedInvoiceIds.includes(invoice.id)),
     [invoices, selectedInvoiceIds],
   );
 
@@ -63,7 +61,7 @@ const PendingPaymentReportDialog = ({
   const selectedCurrency = selectedInvoices[0]?.currency || 'INR';
   const allFilteredSelected =
     filteredInvoices.length > 0 &&
-    filteredInvoices.every((invoice) => selectedInvoiceIds.includes(getInvoiceReportId(invoice)));
+    filteredInvoices.every((invoice) => selectedInvoiceIds.includes(invoice.id));
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -87,7 +85,7 @@ const PendingPaymentReportDialog = ({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={() => onSelectAllInvoices?.(filteredInvoices.map(getInvoiceReportId))}
+                onClick={() => onSelectAllInvoices?.(filteredInvoices.map((invoice) => invoice.id))}
                 disabled={filteredInvoices.length === 0 || downloading}
               >
                 {allFilteredSelected ? 'Clear selection' : 'Select all'}
@@ -113,8 +111,7 @@ const PendingPaymentReportDialog = ({
             {filteredInvoices.length > 0 ? (
               <div className="divide-y divide-border">
                 {filteredInvoices.map((invoice) => {
-                  const invoiceReportId = getInvoiceReportId(invoice);
-                  const checked = selectedInvoiceIds.includes(invoiceReportId);
+                  const checked = selectedInvoiceIds.includes(invoice.id);
                   const vendorGstin =
                     invoice.gstin || invoice.vendorGstin || invoice.vendor_gstin || '-';
 
@@ -122,12 +119,12 @@ const PendingPaymentReportDialog = ({
                     <div
                       role="button"
                       tabIndex={0}
-                      key={invoiceReportId}
-                      onClick={() => onToggleInvoice?.(invoiceReportId)}
+                      key={invoice.id}
+                      onClick={() => onToggleInvoice?.(invoice.id)}
                       onKeyDown={(event) => {
                         if (event.key === 'Enter' || event.key === ' ') {
                           event.preventDefault();
-                          onToggleInvoice?.(invoiceReportId);
+                          onToggleInvoice?.(invoice.id);
                         }
                       }}
                       className={`grid w-full grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 ${
@@ -137,7 +134,7 @@ const PendingPaymentReportDialog = ({
                       <div onClick={(event) => event.stopPropagation()}>
                         <Checkbox
                           checked={checked}
-                          onCheckedChange={() => onToggleInvoice?.(invoiceReportId)}
+                          onCheckedChange={() => onToggleInvoice?.(invoice.id)}
                           aria-label="Select invoice"
                         />
                       </div>

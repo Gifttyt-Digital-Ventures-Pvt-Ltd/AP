@@ -1,7 +1,6 @@
 import React from "react";
-import { Search, X } from "lucide-react";
+import { X } from "lucide-react";
 import { Button } from "../../../components/ui/button";
-import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
 import AppSelect from "../../../components/common/AppSelect";
 import DatePicker from "../../../components/common/DatePicker";
@@ -9,13 +8,9 @@ import TableSortButton from "../../../components/common/TableSortButton";
 import {
   CURRENCY_FILTER_OPTIONS,
   DEFAULT_ORDER_TRACKING_FILTERS,
-  DOCUMENT_CHAIN_FILTER_OPTIONS,
-  DELIVERY_STATUS_OPTIONS,
-  FUNDING_STATUS_OPTIONS,
-  PAYMENT_STATUS_OPTIONS,
-  ORDER_STATUS_OPTIONS,
-  CHECKLIST_COMPLETE_FILTER_OPTIONS,
+  DOCUMENT_STATUS_OPTIONS,
   ORDER_TRACKING_SORT_OPTIONS,
+  PAYMENT_STATUS_OPTIONS,
 } from "../constants";
 
 const isFiltersActive = (filters) =>
@@ -25,8 +20,7 @@ const isFiltersActive = (filters) =>
  * `filters`/`sort` are exactly the shape sent to useGetOrderTrackingQuery
  * (see DEFAULT_ORDER_TRACKING_PARAMS) — this component never filters/sorts
  * anything itself, it only reports the next desired value up to
- * OrderTrackingPage, which owns the single params object. All server-side
- * (spec §13) — search included, no client-side dataset filtering anywhere.
+ * OrderTrackingPage, which owns the single params object.
  */
 const OrderTrackingFilterBar = ({
   filters,
@@ -34,6 +28,8 @@ const OrderTrackingFilterBar = ({
   sort,
   onSortChange,
   vendorOptions = [],
+  deliveryStatusOptions = [],
+  fundingStatusOptions = [],
 }) => {
   const updateFilter = (key, value) => {
     onFiltersChange({ ...filters, [key]: value });
@@ -43,20 +39,9 @@ const OrderTrackingFilterBar = ({
 
   return (
     <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4">
-      <div className="relative w-full sm:max-w-sm">
-        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-        <Input
-          value={filters.search}
-          onChange={(event) => updateFilter("search", event.target.value)}
-          placeholder="Search order no., PO no., or vendor"
-          className="pl-9"
-          data-testid="order-tracking-search"
-        />
-      </div>
-
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex flex-col gap-1">
-          <Label className="text-xs text-muted-foreground">Order Date From</Label>
+          <Label className="text-xs text-muted-foreground">PO Date From</Label>
           <DatePicker
             value={filters.poDateFrom}
             onChange={(value) => updateFilter("poDateFrom", value)}
@@ -66,7 +51,7 @@ const OrderTrackingFilterBar = ({
           />
         </div>
         <div className="flex flex-col gap-1">
-          <Label className="text-xs text-muted-foreground">Order Date To</Label>
+          <Label className="text-xs text-muted-foreground">PO Date To</Label>
           <DatePicker
             value={filters.poDateTo}
             onChange={(value) => updateFilter("poDateTo", value)}
@@ -89,14 +74,14 @@ const OrderTrackingFilterBar = ({
         </div>
 
         <div className="flex flex-col gap-1">
-          <Label className="text-xs text-muted-foreground">Document Chain</Label>
+          <Label className="text-xs text-muted-foreground">Document Status</Label>
           <AppSelect
-            value={filters.documentChain}
-            onChange={(e) => updateFilter("documentChain", e.target.value)}
-            options={DOCUMENT_CHAIN_FILTER_OPTIONS}
-            placeholder="All"
-            className="w-40"
-            data-testid="order-tracking-document-chain-filter"
+            value={filters.documentStatus}
+            onChange={(e) => updateFilter("documentStatus", e.target.value)}
+            options={DOCUMENT_STATUS_OPTIONS}
+            placeholder="All document statuses"
+            className="w-52"
+            data-testid="order-tracking-document-status-filter"
           />
         </div>
 
@@ -105,7 +90,7 @@ const OrderTrackingFilterBar = ({
           <AppSelect
             value={filters.paymentStatus}
             onChange={(e) => updateFilter("paymentStatus", e.target.value)}
-            options={PAYMENT_STATUS_OPTIONS.map((value) => ({ value, label: value }))}
+            options={PAYMENT_STATUS_OPTIONS}
             placeholder="All payment statuses"
             className="w-48"
             data-testid="order-tracking-payment-status-filter"
@@ -117,7 +102,7 @@ const OrderTrackingFilterBar = ({
           <AppSelect
             value={filters.deliveryStatus}
             onChange={(e) => updateFilter("deliveryStatus", e.target.value)}
-            options={DELIVERY_STATUS_OPTIONS}
+            options={deliveryStatusOptions}
             placeholder="All delivery statuses"
             className="w-48"
             data-testid="order-tracking-delivery-status-filter"
@@ -129,34 +114,10 @@ const OrderTrackingFilterBar = ({
           <AppSelect
             value={filters.fundingStatus}
             onChange={(e) => updateFilter("fundingStatus", e.target.value)}
-            options={FUNDING_STATUS_OPTIONS}
-            placeholder="All"
-            className="w-36"
+            options={fundingStatusOptions}
+            placeholder="All funding statuses"
+            className="w-48"
             data-testid="order-tracking-funding-status-filter"
-          />
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <Label className="text-xs text-muted-foreground">Checklist</Label>
-          <AppSelect
-            value={filters.checklistComplete}
-            onChange={(e) => updateFilter("checklistComplete", e.target.value)}
-            options={CHECKLIST_COMPLETE_FILTER_OPTIONS}
-            placeholder="All"
-            className="w-36"
-            data-testid="order-tracking-checklist-filter"
-          />
-        </div>
-
-        <div className="flex flex-col gap-1">
-          <Label className="text-xs text-muted-foreground">Order Status</Label>
-          <AppSelect
-            value={filters.orderStatus}
-            onChange={(e) => updateFilter("orderStatus", e.target.value)}
-            options={ORDER_STATUS_OPTIONS}
-            placeholder="All"
-            className="w-36"
-            data-testid="order-tracking-order-status-filter"
           />
         </div>
 

@@ -14,8 +14,6 @@ import {
 } from '../utils/grnFormatConfig';
 import { formatCurrency } from '../utils';
 import InrConversionFields from '../../../components/common/InrConversionFields';
-import PoPaymentScheduleSection from '../../purchase-orders/components/PoPaymentScheduleSection';
-import { normalizePaymentScheduleRows } from '../../purchase-orders/utils/poPaymentSchedule';
 
 const GrnCreateFormFields = ({
   form,
@@ -26,11 +24,6 @@ const GrnCreateFormFields = ({
   showExtractedBadge = false,
 }) => {
   const qcEnabled = Boolean(formatConfig?.qc_enabled);
-  const paymentScheduleRows = normalizePaymentScheduleRows(form || {});
-  const showPaymentSchedule =
-    Boolean(form.paymentScheduleAvailable) && selectedPo && paymentScheduleRows.length > 0;
-  const paymentScheduleGrossTotal =
-    Number(selectedPo?.total_amount ?? selectedPo?.totalAmount ?? 0) || 0;
 
   return (
     <div className="space-y-6">
@@ -51,17 +44,6 @@ const GrnCreateFormFields = ({
           )}
         </div>
       )}
-
-      {showPaymentSchedule ? (
-        <PoPaymentScheduleSection
-          rows={paymentScheduleRows}
-          documentGrossTotal={paymentScheduleGrossTotal}
-          formatCurrency={(amount) => formatCurrency(amount, selectedPo?.currency || form.currency)}
-          onChange={(paymentSchedule) =>
-            setForm((current) => ({ ...current, paymentSchedule }))
-          }
-        />
-      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
@@ -224,7 +206,6 @@ const GrnCreateFormFields = ({
           )}
         </div>
       )}
-
     </div>
   );
 };

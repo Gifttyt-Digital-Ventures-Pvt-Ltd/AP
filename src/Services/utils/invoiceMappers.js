@@ -260,10 +260,6 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
   const category = invoice.category;
   const categoryId = category?.id ?? invoice.categoryId ?? invoice.category_id;
   const totalAmount = pickInvoiceField(invoice, "totalAmount", "total_amount");
-  const netAmount =
-    pickInvoiceField(invoice, "netAmount", "net_amount") ??
-    pickInvoiceField(invoice, "netPayable", "net_payable") ??
-    pickInvoiceField(invoice, "netPayableAmount", "net_payable_amount");
 
   return {
     ...invoice,
@@ -296,7 +292,7 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
     ),
     ...normalizeInvoiceOverdueFields(invoice),
     totalAmount,
-    amount: totalAmount ?? netAmount,
+    amount: totalAmount ?? invoice.netAmount ?? invoice.net_amount,
     memo: invoice.memo ?? invoice.description,
     billingAddress:
       pickInvoiceField(invoice, "billingAddress", "billing_address") ??
@@ -365,9 +361,7 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
     tdsSectionId: pickInvoiceField(invoice, "tdsSectionId", "tds_section_id"),
     tdsSectionCode: pickInvoiceField(invoice, "tdsSectionCode", "tds_section_code"),
     tdsRate: pickInvoiceField(invoice, "tdsRate", "tds_rate"),
-    netAmount,
-    netPayable: netAmount,
-    netPayableAmount: netAmount,
+    netAmount: pickInvoiceField(invoice, "netAmount", "net_amount"),
     approvalWorkflowName:
       pickInvoiceField(invoice, "approvalWorkflowName", "approval_workflow_name") ??
       pickInvoiceField(invoice, "workflowName", "workflow_name"),
@@ -567,15 +561,6 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
   const category = categoryEnabled ? resolveInvoiceCategoryPayload(invoice) : undefined;
   const normalizedSource = source;
   const dueDate = toLocalDateTimeString(pickInvoiceField(invoice, "dueDate", "due_date", ""));
-  const resolvedDocumentType = pickInvoiceField(
-    invoice,
-    "documentType",
-    "document_type",
-    "TAX_INVOICE",
-  );
-  const fundingAllowed = resolvedDocumentType === "TAX_INVOICE";
-  const resolvedIsFunded =
-    fundingAllowed && Boolean(pickInvoiceField(invoice, "isFunded", "is_funded", false));
 
   return {
     invoiceNumber: pickInvoiceField(invoice, "invoiceNumber", "invoice_number", ""),
@@ -595,11 +580,11 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
       pickInvoiceField(invoice, "invoiceDate", "invoice_date", ""),
     ),
     dueDate: dueDate || null,
-    isFunded: resolvedIsFunded,
-    orgAmount: resolvedIsFunded
+    isFunded: Boolean(pickInvoiceField(invoice, "isFunded", "is_funded", false)),
+    orgAmount: Boolean(pickInvoiceField(invoice, "isFunded", "is_funded", false))
       ? toNullableMoney(pickInvoiceField(invoice, "orgAmount", "org_amount", null))
       : null,
-    financierAmount: resolvedIsFunded
+    financierAmount: Boolean(pickInvoiceField(invoice, "isFunded", "is_funded", false))
       ? toNullableMoney(
           pickInvoiceField(invoice, "financierAmount", "financier_amount", null),
         )
@@ -678,7 +663,7 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
       pickInvoiceField(invoice, "matchingGrnNumber", "matching_grn_number") ??
       pickInvoiceField(invoice, "grnNumber", "grn_number", null),
     matchingId: pickInvoiceField(invoice, "matchingId", "matching_id", ""),
-    documentType: resolvedDocumentType,
+    documentType: pickInvoiceField(invoice, "documentType", "document_type", "TAX_INVOICE"),
     ...(pickInvoiceField(invoice, "linkedProformaInvoiceId", "linked_proforma_invoice_id")
       ? {
           linkedProformaInvoiceId: pickInvoiceField(

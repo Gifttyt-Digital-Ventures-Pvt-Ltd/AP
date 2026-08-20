@@ -1,6 +1,5 @@
 import React from 'react';
 import { Input } from '../../../../components/ui/input';
-import { ConnectedVendorPicker } from '../../../../components/common/ConnectedVendorPicker';
 import { TaxSelect } from '../TaxUi';
 
 const FieldShell = ({
@@ -64,8 +63,6 @@ const VendorGstPickerFields = ({
   gstinClassName = '',
   variant = 'plain',
   onVendorChange,
-  useConnectedVendorPicker = false,
-  onVendorSelected,
 }) => {
   const vendorValue = allowAll
     ? (vendorId || 'all')
@@ -95,16 +92,6 @@ const VendorGstPickerFields = ({
     onVendorChange?.();
   };
 
-  const selectedVendor = vendors.find((vendor) => String(vendor.id) === String(vendorId)) ?? null;
-
-  const handleConnectedVendorSelect = (vendor) => {
-    const nextVendorId = vendor?.id ?? vendor?.vendorId ?? vendor?.vendor_id ?? '';
-    if (!nextVendorId) return;
-    onVendorSelected?.(vendor);
-    onVendorIdChange(String(nextVendorId));
-    onVendorChange?.();
-  };
-
   const gstinDisplay = activeGstin || selectedGstin || '';
   const showGstinField = !allowAll || Boolean(vendorId);
   const gstinSelectValue = activeGstin || selectedGstin || gstRegistrations[0]?.gstin || '';
@@ -118,36 +105,12 @@ const VendorGstPickerFields = ({
         className={vendorClassName}
         variant={variant}
       >
-        {useConnectedVendorPicker ? (
-          <div className="flex min-w-0 gap-2">
-            {allowAll ? (
-              <button
-                type="button"
-                onClick={() => handleVendorChange('all')}
-                className={`h-9 shrink-0 rounded-md border px-3 text-sm ${
-                  !vendorId
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-input bg-background text-foreground'
-                }`}
-              >
-                All Vendors
-              </button>
-            ) : null}
-            <ConnectedVendorPicker
-              value={selectedVendor?.name || ''}
-              onSelect={handleConnectedVendorSelect}
-              placeholder={vendorsLoading ? 'Loading vendors…' : vendorPlaceholder || 'Search vendor'}
-              className="min-w-[220px]"
-            />
-          </div>
-        ) : (
-          <TaxSelect
-            value={vendorValue}
-            onValueChange={handleVendorChange}
-            placeholder={vendorsLoading ? 'Loading vendors…' : vendorPlaceholder}
-            options={vendorOptions}
-          />
-        )}
+        <TaxSelect
+          value={vendorValue}
+          onValueChange={handleVendorChange}
+          placeholder={vendorsLoading ? 'Loading vendors…' : vendorPlaceholder}
+          options={vendorOptions}
+        />
       </FieldShell>
 
       {showGstinField ? (
