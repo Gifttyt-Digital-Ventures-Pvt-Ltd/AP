@@ -79,6 +79,8 @@ import {
 } from "../utils/approvalWorkflowUtils";
 import WorkflowViewDialog from "./WorkflowViewDialog";
 import CurrencySelector from "../../../components/common/CurrencySelector";
+import { ConnectedVendorMultiPicker } from "../../../components/common/ConnectedVendorMultiPicker";
+import { ConnectedVendorPicker } from "../../../components/common/ConnectedVendorPicker";
 import { useCurrencyFilter } from "../../../hooks/useCurrencyFilter";
 import {
   CURRENCY_FILTER_ALL,
@@ -406,7 +408,6 @@ const WorkflowRuleRow = ({
 };
 
 const ApprovalWorkflowTab = ({
-  vendors = [],
   canManageWorkflow = true,
   categoryEnabled = true,
   departmentEnabled = true,
@@ -592,36 +593,6 @@ const ApprovalWorkflowTab = ({
     return [];
   }, [workflowApproversData]);
 
-  const workflowVendors = useMemo(() => {
-    const vendorMap = new Map();
-
-    if (Array.isArray(vendors) && vendors.length > 0) {
-      vendors.forEach((vendor) => {
-        const id = toStringId(vendor.id);
-        const name = String(vendor.name || vendor.vendor_name || "").trim();
-        if (id && name) {
-          vendorMap.set(id, name);
-        }
-      });
-    }
-
-    rules.forEach((rule) => {
-      rule.vendorIds.forEach((vendorId, index) => {
-        if (!vendorMap.has(vendorId)) {
-          vendorMap.set(
-            vendorId,
-            rule.vendorNames[index] || `Vendor ${vendorId}`,
-          );
-        }
-      });
-    });
-
-    if (vendorMap.size === 0) {
-      return [];
-    }
-
-    return Array.from(vendorMap.entries()).map(([id, name]) => ({ id, name }));
-  }, [vendors, rules]);
 
   const workflowDepartments = useMemo(() => {
     if (!departmentEnabled) return [];
@@ -1211,27 +1182,19 @@ const ApprovalWorkflowTab = ({
           >
             <div>
               <Label>Vendor</Label>
-              <Select
-                value={tester.vendorId || ""}
-                onValueChange={(value) =>
-                  setTester((prev) => ({
-                    ...prev,
-                    vendorId: value,
-                    tested: false,
-                  }))
-                }
-              >
-                <SelectTrigger className="mt-1">
-                  <SelectValue placeholder="Select vendor" />
-                </SelectTrigger>
-                <SelectContent>
-                {workflowVendors.map((vendor) => (
-                  <SelectItem key={vendor.id} value={vendor.id}>
-                    {vendor.name}
-                  </SelectItem>
-                ))}
-                </SelectContent>
-              </Select>
+              <div className="mt-1">
+                <ConnectedVendorPicker
+                  value={tester.vendorId || ""}
+                  onSelect={(vendor) =>
+                    setTester((prev) => ({
+                      ...prev,
+                      vendorId: vendor.id,
+                      tested: false,
+                    }))
+                  }
+                  placeholder="Select vendor"
+                />
+              </div>
             </div>
 
             {departmentEnabled && (
@@ -1632,35 +1595,24 @@ const ApprovalWorkflowTab = ({
                 {visibility.showVendor && (
                   <div className="space-y-2">
                     <Label>Vendors</Label>
-                    <div className="max-h-44 overflow-y-auto rounded-md border border-input bg-background p-2 space-y-1">
-                      {workflowVendors.length === 0 ? (
-                        <p className="px-2 py-1 text-sm text-muted-foreground">
-                          No vendors available
-                        </p>
-                      ) : (
-                        workflowVendors.map((vendor) => (
-                          <label
-                            key={vendor.id}
-                            className="flex items-center gap-2 rounded px-2 py-1.5 text-sm hover:bg-muted/60"
-                          >
-                            <Checkbox
-                              checked={(formState.vendorIds || []).includes(
-                                vendor.id,
-                              )}
-                              onCheckedChange={(checked) =>
-                                toggleFormSelection(
-                                  "vendorIds",
-                                  vendor.id,
-                                  Boolean(checked),
-                                )
-                              }
-                              disabled={workflowActionLoading}
-                            />
-                            <span>{vendor.name}</span>
-                          </label>
-                        ))
-                      )}
-                    </div>
+                    <ConnectedVendorMultiPicker
+                      selectedIds={formState.vendorIds || []}
+                      selectedNames={(formState.vendorIds || []).map((id) => {
+                        // Try to find name from already-loaded rules
+                        const ruleWithVendor = rules.find((r) =>
+                          r.vendorIds?.includes(id)
+                        );
+                        if (ruleWithVendor) {
+                          const idx = ruleWithVendor.vendorIds.indexOf(id);
+                          return ruleWithVendor.vendorNames?.[idx] || id;
+                        }
+                        return id;
+                      })}
+                      onChange={(ids) =>
+                        setFormState((prev) => ({ ...prev, vendorIds: ids }))
+                      }
+                      disabled={workflowActionLoading}
+                    />
                   </div>
                 )}
 

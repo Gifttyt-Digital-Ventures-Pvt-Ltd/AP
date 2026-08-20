@@ -302,15 +302,24 @@ const InvoiceReadOnlyDetails = ({
     roundOffValue !== null &&
     roundOffValue !== "" &&
     Number.isFinite(Number(roundOffValue));
-  const fallbackNetPayable =
-    Number(
-      invoice.netAmount ??
-        invoice.net_amount ??
-        invoice.totalAmount ??
-        invoice.total_amount,
-    ) ||
-    Math.max(Math.round((totals.total - tdsAmount) * 100) / 100, 0);
-  const netPayable = getTdsPreviewNetPayable(tdsPreview, fallbackNetPayable);
+  const savedNetPayable =
+    invoice.netAmount ??
+    invoice.net_amount ??
+    invoice.netPayable ??
+    invoice.net_payable ??
+    invoice.netPayableAmount ??
+    invoice.net_payable_amount;
+  const hasSavedNetPayable =
+    savedNetPayable !== undefined &&
+    savedNetPayable !== null &&
+    savedNetPayable !== "";
+  const fallbackNetPayable = hasSavedNetPayable
+    ? Number(savedNetPayable)
+    : Number(invoice.totalAmount ?? invoice.total_amount) ||
+      Math.max(Math.round((totals.total - tdsAmount) * 100) / 100, 0);
+  const netPayable = hasSavedNetPayable
+    ? fallbackNetPayable
+    : getTdsPreviewNetPayable(tdsPreview, fallbackNetPayable);
   const tdsLabel = formatTdsDisplayLabel({
     tds: formData.tds,
     tdsSectionCode: formData.tdsSectionCode,

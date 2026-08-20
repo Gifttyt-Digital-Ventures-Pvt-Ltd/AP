@@ -249,7 +249,14 @@ const getVendorRawBranches = (vendor = {}) => {
     vendor?.branchDetails ??
     vendor?.branch_details ??
     [];
-  return Array.isArray(branches) ? branches : [];
+  const gstRegistrations =
+    vendor?.gstRegistrations ??
+    vendor?.gst_registrations ??
+    [];
+  return [
+    ...(Array.isArray(branches) ? branches : []),
+    ...(Array.isArray(gstRegistrations) ? gstRegistrations : []),
+  ];
 };
 
 const getVendorFirstBranchWithGstin = (vendor = {}) => {
@@ -285,7 +292,7 @@ const formatVendorBranchOptionLabel = (branch = {}) => {
   const name = branch.branchName || "";
   const code = branch.branchCode || "";
   if (name && code) return `${name} (${code})`;
-  return name || code || "Branch";
+  return name || code || branch.gstin || "Branch";
 };
 
 // AppSelect/Radix Select can't use an empty-string item value, so "no branch
@@ -378,6 +385,7 @@ export const InvoiceForm = ({
   const [accountGroupPickerOpenByRow, setAccountGroupPickerOpenByRow] =
     useState({});
   const [isNetPayableManuallyEdited, setIsNetPayableManuallyEdited] = useState(false);
+  const [selectedVendorOverride, setSelectedVendorOverride] = useState(null);
 
 
 
@@ -387,10 +395,24 @@ export const InvoiceForm = ({
 
   const selectedVendor = useMemo(() => {
     if (formData?.vendorId && typeof findVendorById === "function") {
-      return findVendorById(formData.vendorId);
+      const vendor = findVendorById(formData.vendorId);
+      if (vendor) return vendor;
+      if (
+        selectedVendorOverride?.id &&
+        String(selectedVendorOverride.id) === String(formData.vendorId)
+      ) {
+        return selectedVendorOverride;
+      }
     }
     if (formData?.vendorName && typeof findVendorByName === "function") {
-      return findVendorByName(formData.vendorName);
+      const vendor = findVendorByName(formData.vendorName);
+      if (vendor) return vendor;
+      if (
+        selectedVendorOverride?.name &&
+        vendorMatchesInvoiceName(selectedVendorOverride, formData.vendorName)
+      ) {
+        return selectedVendorOverride;
+      }
     }
     return null;
   }, [
@@ -398,20 +420,20 @@ export const InvoiceForm = ({
     formData?.vendorName,
     findVendorById,
     findVendorByName,
+    selectedVendorOverride,
   ]);
 
   const vendorBranches = useMemo(() => {
-    const branches =
-      selectedVendor?.vendorBranches ??
-      selectedVendor?.vendor_branches ??
-      selectedVendor?.branchDetails ??
-      selectedVendor?.branch_details ??
-      [];
+    const branches = getVendorRawBranches(selectedVendor);
     if (!Array.isArray(branches)) return [];
     return branches
       .map((branch) => ({
         branchName: String(
-          branch.branchName ?? branch.branch_name ?? branch.name ?? "",
+          branch.branchName ??
+            branch.branch_name ??
+            branch.name ??
+            branch.state ??
+            "",
         ).trim(),
         branchCode: String(
           branch.branchCode ?? branch.branch_code ?? branch.code ?? "",
@@ -428,7 +450,7 @@ export const InvoiceForm = ({
           .trim()
           .toUpperCase(),
       }))
-      .filter((branch) => branch.branchName || branch.branchCode);
+      .filter((branch) => branch.branchName || branch.branchCode || branch.gstin);
   }, [selectedVendor]);
 
   const vendorBranchOptions = useMemo(
@@ -1104,15 +1126,18 @@ export const InvoiceForm = ({
     formData.netAmount !== ""
       ? Number(formData.netAmount)
       : null;
+  const hasBackendNetPayableValue =
+    Number.isFinite(manualNetPayable) && !isNetPayableManuallyEdited;
   const hasManualNetPayableValue =
     isNetPayableManuallyEdited && Number.isFinite(manualNetPayable);
   const netPayable =
-    canEditNetPayable && hasManualNetPayableValue
+    hasManualNetPayableValue || hasBackendNetPayableValue
       ? manualNetPayable
       : calculatedNetPayable;
-  const payableTotal = calculatedNetPayable;
+  const payableTotal = totals.total;
   useEffect(() => {
     if (!canEditNetPayable || isNetPayableManuallyEdited) return;
+    if (hasBackendNetPayableValue) return;
     const currentNetAmount = Number(formData?.netAmount);
     if (Number.isFinite(currentNetAmount) && currentNetAmount === calculatedNetPayable) return;
     setFormData((currentFormData) => ({
@@ -1123,6 +1148,7 @@ export const InvoiceForm = ({
     calculatedNetPayable,
     canEditNetPayable,
     formData?.netAmount,
+    hasBackendNetPayableValue,
     isNetPayableManuallyEdited,
     setFormData,
   ]);
@@ -1144,8 +1170,17 @@ export const InvoiceForm = ({
 
   if (!formData) return null;
 
-  const applyVendorNameChange = (newName) => {
-    const matched = findVendorByName(newName);
+  const hasResolvedVendor = Boolean(
+    formData.vendorMatched ||
+      formData.vendorRequestSubmitted ||
+      String(formData.vendorId ?? "").trim(),
+  );
+
+  const applyVendorNameChange = (newName, selectedVendorOption = null) => {
+    const matched =
+      selectedVendorOption?.id || selectedVendorOption?.isPendingApproval
+        ? selectedVendorOption
+        : findVendorByName(newName);
     const matchedIsMsme = Boolean(matched?.msme);
     const matchedGstin = matched?.gstin
       ? String(matched.gstin).trim().toUpperCase()
@@ -1153,9 +1188,10 @@ export const InvoiceForm = ({
     const defaultBranch = matchedGstin
       ? null
       : getVendorFirstBranchWithGstin(matched);
+    setSelectedVendorOverride(matched || null);
     setFormData({
       ...formData,
-      vendorName: newName,
+      vendorName: matched?.name || newName,
       vendorId: matched?.id || "",
       vendorMatched: !!matched,
       vendorRequestPending: Boolean(matched?.isPendingApproval),
@@ -1795,7 +1831,7 @@ export const InvoiceForm = ({
               )}
 
             {formData.vendorName &&
-              !formData.vendorMatched &&
+              !hasResolvedVendor &&
               !formData.vendorRequestSubmitted && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -1827,7 +1863,7 @@ export const InvoiceForm = ({
                 </div>
               )}
 
-            {formData.vendorName && formData.vendorMatched && (
+            {formData.vendorName && hasResolvedVendor && (
               <div className="bg-emerald-50 border border-emerald-200 rounded-lg p-2 flex items-center gap-2">
                 <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                 <p className="text-xs text-emerald-700">
@@ -1928,7 +1964,7 @@ export const InvoiceForm = ({
                   value={formData.vendorName || "Switch Vendor"}
                   allowFreeText={true}
                   onSelect={(vendor) => {
-                    applyVendorNameChange(vendor.name);
+                    applyVendorNameChange(vendor.name, vendor);
                   }}
                   triggerContent={
                     <button

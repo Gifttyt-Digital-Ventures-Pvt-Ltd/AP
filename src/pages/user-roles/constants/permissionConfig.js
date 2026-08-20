@@ -72,6 +72,8 @@ export const PERMISSION_GROUPS = [
   {
     title: "Payments",
     permissions: [
+      { id: "payments-view", label: "View Only" },
+      { id: "payments-manage", label: "Manage" },
       { id: "payments-admin", label: "Admin" },
       { id: "payments-requester", label: "Requester" },
       { id: "payments-approver", label: "Approver" },
