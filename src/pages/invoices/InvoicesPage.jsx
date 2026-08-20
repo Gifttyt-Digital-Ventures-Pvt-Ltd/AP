@@ -20,6 +20,7 @@ import {
   useLazyGetInvoiceHistoryQuery,
   useUpdateInvoiceMutation,
   useUpdateInvoiceInternalChecklistMutation,
+  useUpdateInvoiceFundingMutation,
   useForwardInvoiceMutation,
   useDeleteInvoiceMutation,
   useCancelInvoiceMutation,
@@ -219,6 +220,11 @@ import {
 } from "../../utils/accountingLock";
 import { getAccountingErrorMessage } from "../accounting/utils/coaUtils";
 
+const INVOICE_VENDOR_PAGE_SIZE = 20;
+
+const getInvoiceVendorOptionKey = (vendor = {}, index = 0, prefix = "") =>
+  String(vendor.id ?? vendor.vendorId ?? vendor.vendor_id ?? `${prefix}${index}`);
+
 const getApprovalWorkflowName = (invoice) =>
   invoice.approvalWorkflowName ??
   invoice.workflowName ??
@@ -247,6 +253,11 @@ const getInvoiceCancelCapability = (invoice = {}) =>
 const isInvoiceCancellable = (invoice = {}) => {
   const capability = getInvoiceCancelCapability(invoice);
   return capability === true;
+};
+
+const isCancelledInvoiceStatus = (status) => {
+  const normalized = String(status || "").trim().toUpperCase().replace(/\s+/g, "_");
+  return normalized === "CANCELLED" || normalized === "CANCELED";
 };
 
 const createEmptyInvoiceColumnFilters = () => ({
@@ -446,7 +457,11 @@ const InvoicesPage = () => {
   });
   const [searchTerm, setSearchTerm] = useState("");
   const [invoicePageOffset, setInvoicePageOffset] = useState(0);
+  const [invoiceVendorSearch, setInvoiceVendorSearch] = useState("");
+  const [invoiceVendorOffset, setInvoiceVendorOffset] = useState(0);
+  const [invoiceVendorOptions, setInvoiceVendorOptions] = useState([]);
   const debouncedSearchTerm = useDebouncedValue(searchTerm.trim(), 300);
+  const debouncedInvoiceVendorSearch = useDebouncedValue(invoiceVendorSearch.trim(), 300);
   const debouncedInvoiceColumnFilters = useDebouncedValue(
     invoiceColumnFilters,
     300,
@@ -537,7 +552,11 @@ const InvoicesPage = () => {
     data: vendorsData = [],
     isFetching: vendorsFetching,
     refetch: refetchVendors,
-  } = useGetVendorsQuery();
+  } = useGetVendorsQuery({
+    limit: INVOICE_VENDOR_PAGE_SIZE,
+    offset: invoiceVendorOffset,
+    ...(debouncedInvoiceVendorSearch ? { search: debouncedInvoiceVendorSearch } : {}),
+  });
   const { data: departmentsData = [] } = useGetDepartmentsForInvoiceQuery(
     {
       userEmail: invoiceUserEmail,
@@ -590,6 +609,8 @@ const InvoicesPage = () => {
     useUpdateInvoiceMutation();
   const [updateInvoiceInternalChecklist, { isLoading: savingInternalChecklist }] =
     useUpdateInvoiceInternalChecklistMutation();
+  const [updateInvoiceFunding, { isLoading: savingInvoiceFunding }] =
+    useUpdateInvoiceFundingMutation();
   const [performInvoiceMatch, { isLoading: performMatchingLoading }] =
     usePerformInvoiceMatchMutation();
   const [editInvoiceMatch, { isLoading: editMatchingLoading }] =
@@ -644,9 +665,16 @@ const InvoicesPage = () => {
     setInvoicePageOffset(safePage * INVOICE_LIST_PAGE_SIZE);
   }, []);
   const vendors = Array.isArray(vendorsData) ? vendorsData : [];
-  const invoiceVendorOptions = useMemo(
+  const invoiceVendorPageOptions = useMemo(
     () => mergeInvoiceVendorOptions(vendors),
     [vendors],
+  );
+  const invoiceVendorTotal = Math.max(
+    Number(vendorsData?.total ?? invoiceVendorPageOptions.length) || 0,
+    invoiceVendorPageOptions.length,
+  );
+  const hasMoreInvoiceVendors = Boolean(
+    vendorsData?.hasMore ?? invoiceVendorOptions.length < invoiceVendorTotal,
   );
   const invoiceVendorFilterOptions = invoiceFilterOptionsData.vendors;
   const branchFilterOptions = invoiceFilterOptionsData.branches;
@@ -931,6 +959,20 @@ const InvoicesPage = () => {
       isCheckerEditEnabled,
     ],
   );
+  const canEditInvoiceFunding = useMemo(
+    () =>
+      Boolean(
+        showInvoiceFunding &&
+          (canUpdateInvoices || canManageInvoices || isCorporateAdmin || isMasterAdmin),
+      ),
+    [
+      showInvoiceFunding,
+      canUpdateInvoices,
+      canManageInvoices,
+      isCorporateAdmin,
+      isMasterAdmin,
+    ],
+  );
 
   // PDF Zoom
   const [pdfZoom, setPdfZoom] = useState(100);
@@ -985,6 +1027,52 @@ const InvoicesPage = () => {
     setHideSidebar(Boolean(uploadedFile) || editDialogOpen);
     return () => setHideSidebar(false);
   }, [uploadedFile, editDialogOpen, setHideSidebar]);
+
+  useEffect(() => {
+    const invoiceFormOpen = Boolean(uploadedFile) || editDialogOpen;
+    if (!invoiceFormOpen) {
+      setInvoiceVendorSearch("");
+      setInvoiceVendorOffset(0);
+      return;
+    }
+  }, [editDialogOpen, uploadedFile]);
+
+  useEffect(() => {
+    setInvoiceVendorOffset(0);
+  }, [debouncedInvoiceVendorSearch]);
+
+  useEffect(() => {
+    setInvoiceVendorOptions((previous) => {
+      if (invoiceVendorOffset === 0) {
+        if (invoiceVendorPageOptions.length === 0) {
+          return previous.length === 0 ? previous : [];
+        }
+        const samePage =
+          previous.length === invoiceVendorPageOptions.length &&
+          previous.every(
+            (vendor, index) =>
+              getInvoiceVendorOptionKey(vendor, index) ===
+              getInvoiceVendorOptionKey(invoiceVendorPageOptions[index], index),
+          );
+        return samePage ? previous : invoiceVendorPageOptions;
+      }
+
+      const merged = new Map(
+        previous.map((vendor, index) => [
+          getInvoiceVendorOptionKey(vendor, index),
+          vendor,
+        ]),
+      );
+      invoiceVendorPageOptions.forEach((vendor, index) => {
+        merged.set(
+          getInvoiceVendorOptionKey(vendor, index, `${invoiceVendorOffset}-`),
+          vendor,
+        );
+      });
+      const next = Array.from(merged.values());
+      return next.length === previous.length ? previous : next;
+    });
+  }, [invoiceVendorOffset, invoiceVendorPageOptions]);
 
   useEffect(() => {
     setUploadPreviewError(false);
@@ -1974,10 +2062,12 @@ const InvoicesPage = () => {
   };
 
   const validateFundingSplit = (payload, totals) => {
+    const isTaxInvoiceDocument =
+      (payload?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE) === DOCUMENT_TYPE.TAX_INVOICE;
     const fundingError = getInvoiceFundingSplitError(
       payload,
       totals?.total ?? calculateInvoiceDataTotals(payload)?.total,
-      { enabled: showInvoiceFunding },
+      { enabled: showInvoiceFunding && isTaxInvoiceDocument },
     );
     if (!fundingError) return true;
     toast.error(fundingError);
@@ -2015,26 +2105,31 @@ const InvoicesPage = () => {
     return validateMandatoryPayload(payload);
   };
 
-  const canSubmitSavedDraft = (payload) =>
-    Boolean(payload?.vendorName?.trim()) &&
-    (Boolean(payload?.vendorId) || Boolean(payload?.vendorRequestSubmitted)) &&
-    isInvoiceFundingSplitValid(
-      payload,
-      calculateInvoiceDataTotals(payload)?.total,
-      { enabled: showInvoiceFunding },
-    ) &&
-    !getInrConversionValidationError({
-      currency: payload.currency,
-      enabled: isForeignCurrencyInrConversionEnabled,
-      convertToInr: payload.convertToInr,
-      matchingInrValue: payload.matchingInrValue,
-    }) &&
-    !invoiceMandatoryFieldsLoading &&
-    isInvoiceMandatoryFieldsSatisfied(
-      payload,
-      invoiceMandatoryFields,
-      mandatoryFieldOptions,
+  const canSubmitSavedDraft = (payload) => {
+    const isTaxInvoiceDocument =
+      (payload?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE) === DOCUMENT_TYPE.TAX_INVOICE;
+    return (
+      Boolean(payload?.vendorName?.trim()) &&
+      (Boolean(payload?.vendorId) || Boolean(payload?.vendorRequestSubmitted)) &&
+      isInvoiceFundingSplitValid(
+        payload,
+        calculateInvoiceDataTotals(payload)?.total,
+        { enabled: showInvoiceFunding && isTaxInvoiceDocument },
+      ) &&
+      !getInrConversionValidationError({
+        currency: payload.currency,
+        enabled: isForeignCurrencyInrConversionEnabled,
+        convertToInr: payload.convertToInr,
+        matchingInrValue: payload.matchingInrValue,
+      }) &&
+      !invoiceMandatoryFieldsLoading &&
+      isInvoiceMandatoryFieldsSatisfied(
+        payload,
+        invoiceMandatoryFields,
+        mandatoryFieldOptions,
+      )
     );
+  };
 
   const buildUpdateInvoiceBody = (data, { keepSaved = false } = {}) => {
     const totals = calculateTotals(data.lineItems, data.currency);
@@ -2268,7 +2363,6 @@ const InvoicesPage = () => {
     try {
       await Promise.all([
         refetchInvoices(),
-        refetchVendors(),
         refetchInvoiceFilterOptions(),
       ]);
       toast.success("Invoices refreshed");
@@ -2465,13 +2559,32 @@ const InvoicesPage = () => {
     [getInvoiceHistory],
   );
 
-  const handleViewInvoice = async (invoice) => {
+  const handleViewInvoice = useCallback(async (invoice) => {
     setSelectedInvoice(invoice);
     setViewDialogOpen(true);
     setViewTab("details");
     setInvoiceHistory([]);
-    await fetchInvoiceHistory(invoice);
-  };
+    const invoiceId = invoice?.id || invoice?.invoiceId;
+    let invoiceForView = invoice;
+    if (invoiceId) {
+      try {
+        const detailedInvoice = await getInvoice(invoiceId).unwrap();
+        invoiceForView = { ...invoice, ...detailedInvoice };
+        setSelectedInvoice((current) =>
+          current &&
+          String(current.id || current.invoiceId) === String(invoiceId)
+            ? invoiceForView
+            : current,
+        );
+      } catch (error) {
+        toast.error(
+          extractApiErrorDetail(error) ||
+            "Failed to load latest invoice details",
+        );
+      }
+    }
+    await fetchInvoiceHistory(invoiceForView);
+  }, [fetchInvoiceHistory, getInvoice]);
 
   const closeViewDialog = useCallback(
     (open) => {
@@ -2679,6 +2792,54 @@ const InvoicesPage = () => {
     }
   };
 
+  const handleSaveInvoiceFunding = async (invoice, fundingPayload) => {
+    if (!canEditInvoiceFunding) {
+      toast.error("You do not have permission to edit invoice funding");
+      return false;
+    }
+
+    if (isCancelledInvoiceStatus(invoice?.status)) {
+      toast.error("Cancelled invoices cannot be funded");
+      return false;
+    }
+
+    const invoiceId = invoice?.id || invoice?.invoiceId;
+    if (!invoiceId) {
+      toast.error("Invoice id is required to update funding");
+      return false;
+    }
+
+    try {
+      const updatedInvoice = await updateInvoiceFunding({
+        id: invoiceId,
+        body: fundingPayload,
+      }).unwrap();
+
+      let refreshedInvoice = updatedInvoice;
+      try {
+        refreshedInvoice = await getInvoice(invoiceId).unwrap();
+      } catch {
+        // The funding endpoint result is enough to update the visible card;
+        // the list/query invalidation still keeps the rest of the app current.
+      }
+
+      if (refreshedInvoice) {
+        setSelectedInvoice((prev) =>
+          prev && (prev.id === invoiceId || prev.invoiceId === invoiceId)
+            ? { ...prev, ...refreshedInvoice }
+            : prev,
+        );
+      }
+
+      toast.success("Invoice funding updated");
+      await fetchInvoiceHistory(refreshedInvoice || invoice);
+      return true;
+    } catch (error) {
+      toast.error(extractApiErrorDetail(error) || "Failed to update invoice funding");
+      return false;
+    }
+  };
+
   const handleForwardSavedInvoice = async () => {
     if (!guardAction("invoices.update")) return;
     if (!selectedInvoice || !formData) return;
@@ -2872,6 +3033,14 @@ const InvoicesPage = () => {
         departmentMandatory={invoiceMandatoryFields.department}
         categoryMandatory={invoiceMandatoryFields.category}
         vendorOptions={invoiceVendorOptions}
+        vendorSearch={invoiceVendorSearch}
+        vendorsFetching={vendorsFetching}
+        hasMoreVendors={hasMoreInvoiceVendors}
+        onVendorSearchChange={setInvoiceVendorSearch}
+        onLoadMoreVendors={() => {
+          if (!hasMoreInvoiceVendors || vendorsFetching) return;
+          setInvoiceVendorOffset((offset) => offset + INVOICE_VENDOR_PAGE_SIZE);
+        }}
         departments={departments}
         invoiceCategories={invoiceCategories}
         invoiceCategoriesLoading={
@@ -3425,6 +3594,14 @@ const InvoicesPage = () => {
       departmentMandatory={invoiceMandatoryFields.department}
       categoryMandatory={invoiceMandatoryFields.category}
       vendorOptions={invoiceVendorOptions}
+      vendorSearch={invoiceVendorSearch}
+      vendorsFetching={vendorsFetching}
+      hasMoreVendors={hasMoreInvoiceVendors}
+      onVendorSearchChange={setInvoiceVendorSearch}
+      onLoadMoreVendors={() => {
+        if (!hasMoreInvoiceVendors || vendorsFetching) return;
+        setInvoiceVendorOffset((offset) => offset + INVOICE_VENDOR_PAGE_SIZE);
+      }}
       departments={departments}
       invoiceCategories={invoiceCategories}
       invoiceCategoriesLoading={
@@ -3750,6 +3927,9 @@ const InvoicesPage = () => {
         canEditInternalChecklist={canEditInternalChecklist}
         onSaveInternalChecklist={handleSaveInternalChecklist}
         savingInternalChecklist={savingInternalChecklist}
+        canEditInvoiceFunding={canEditInvoiceFunding}
+        onSaveInvoiceFunding={handleSaveInvoiceFunding}
+        savingInvoiceFunding={savingInvoiceFunding}
         onMapTaxInvoice={handleMapTaxInvoice}
         onViewLinkedInvoice={handleViewLinkedInvoice}
         allInvoices={invoices}

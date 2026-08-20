@@ -108,14 +108,16 @@ const getInvoiceBeneficiaryAccounts = (invoice = {}) => {
     return accounts.map((account, index) => {
       const status = account.status || account.validationStatus || account.validation_status || 'UNVERIFIED';
       const statusMeta = getBeneficiaryReleaseStatusMeta(status);
+      const beneficiaryId =
+        account.beneficiaryId ||
+        account.beneficiary_id ||
+        '';
       return {
         id:
-          account.id ||
-          account.beneficiaryId ||
-          account.beneficiary_id ||
-          account.accountId ||
-          account.account_id ||
+          beneficiaryId ||
           `${invoice.id || invoice.invoiceNumber}-beneficiary-${index}`,
+        beneficiaryId,
+        selected: Boolean(account.selected),
         bankName: account.bankName || account.bank_name || account.bank || invoice.vendorBankName || '-',
         accountNumber:
           account.accountNumber ||
@@ -155,6 +157,8 @@ const getInvoiceBeneficiaryAccounts = (invoice = {}) => {
 
   return [{
     id: `${invoice.id || invoice.invoiceNumber}-default-beneficiary`,
+    beneficiaryId: '',
+    selected: false,
     bankName: bankName || '-',
     accountNumber: accountNumber || '-',
     ifsc: ifsc || '-',
@@ -335,7 +339,11 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
       Object.fromEntries(
         (payrun?.invoices || []).map((invoice) => {
           const accounts = getInvoiceBeneficiaryAccounts(invoice);
-          return [invoice.id, accounts[0]?.id || ''];
+          const selectableAccounts = accounts.filter((account) => account.beneficiaryId);
+          const selectedAccount =
+            selectableAccounts.find((account) => account.selected) ||
+            selectableAccounts[0];
+          return [invoice.id, selectedAccount?.id || ''];
         }),
       ),
     );
@@ -426,18 +434,41 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
 
   const getSelectedBeneficiaryForInvoice = (invoice) => {
     const beneficiaryAccounts = getInvoiceBeneficiaryAccounts(invoice);
-    const selectedBeneficiaryId = selectedBeneficiaryAccounts[invoice.id] || beneficiaryAccounts[0]?.id || '';
+    const selectableAccounts = beneficiaryAccounts.filter((account) => account.beneficiaryId);
+    const selectedBeneficiaryId = selectedBeneficiaryAccounts[invoice.id] || '';
+    const selectedBeneficiary = selectableAccounts.find((account) => String(account.id) === String(selectedBeneficiaryId));
+    if (selectedBeneficiary) return selectedBeneficiary;
+    if (selectableAccounts.length > 0) return selectableAccounts[0];
 
-    return (
-      beneficiaryAccounts.find((account) => String(account.id) === String(selectedBeneficiaryId)) ||
-      beneficiaryAccounts[0] ||
-      null
-    );
+    return beneficiaryAccounts[0] || null;
+  };
+
+  const getSelectedBeneficiaryPayload = () => {
+    const selected = (payrun.invoices || []).flatMap((invoice) => {
+      const selectedBeneficiary = getSelectedBeneficiaryForInvoice(invoice) || {};
+      const sourceType = String(invoice?.sourceType || "INVOICE").toUpperCase();
+      if (!selectedBeneficiary.beneficiaryId) return [];
+      return [{
+        // invoiceId: invoice.invoiceId || invoice.invoice_id || invoice.id,
+        payrunItemId: invoice.payrunItemId || invoice.payrun_item_id,
+        beneficiaryId: selectedBeneficiary.beneficiaryId,
+        ...(sourceType === "INVOICE"
+          ? {
+              invoiceId:
+                invoice.invoiceId ||
+                invoice.invoice_id ||
+                invoice.id,
+            }
+          : {}),
+      }];
+    });
+    return selected.length > 0 ? selected : undefined;
   };
 
   const hasReleaseInvoices = Array.isArray(payrun.invoices) && payrun.invoices.length > 0;
   const canContinueReleaseStep =
-    (step === 1 && hasReleaseInvoices) || (step === 2 && hasEligibleBankAccount && selectedAccount && !isBalanceFetching);
+    (step === 1 && hasReleaseInvoices) ||
+    (step === 2 && hasEligibleBankAccount && selectedAccount && !isBalanceFetching);
 
   const getPayrunId = () => payrun.payrunId || payrun.id;
   const getOtpRequestId = (response) =>
@@ -477,12 +508,14 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
         }
       }
 
+      const selectedBeneficiaries = getSelectedBeneficiaryPayload();
       const payload = {
         payrunId,
         bankAccountId: getReleaseBankAccountId(selectedAccount),
         paymentMode: mode,
         amount: Number(payrun.totalAmount || 0),
         currency: payrunCurrency,
+        ...(selectedBeneficiaries ? { beneficiaries: selectedBeneficiaries } : {}),
       };
       const response = resend
         ? await resendReleaseOtp({ ...payload, otpRequestId }).unwrap()
@@ -519,12 +552,14 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
     }
     let releaseResponse;
     try {
+      const selectedBeneficiaries = getSelectedBeneficiaryPayload();
       releaseResponse = await releasePayrunPayment({
         payrunId,
         bankAccountId: getReleaseBankAccountId(selectedAccount),
         paymentMode: mode,
         otpRequestId,
         otp: otp.trim(),
+        ...(selectedBeneficiaries ? { beneficiaries: selectedBeneficiaries } : {}),
       }).unwrap();
     } catch (error) {
       toast.error(error?.data?.message || error?.data?.detail || 'Failed to release payment');
@@ -629,105 +664,114 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
             <div className="space-y-5">
               {renderReleaseSection(
                 hasSourceAwareRows ? 'Payable Details' : 'Invoice Details',
-                <AppDataTable
-                  tableHeader={[
-                    { key: 'vendorName', title: 'Vendor' },
-                    { key: 'invoiceNumber', title: hasSourceAwareRows ? 'Reference' : 'Invoice' },
-                    { key: 'beneficiaryAccount', title: 'Beneficiary Account' },
-                    { key: 'bank', title: 'Bank' },
-                    { key: 'ifsc', title: 'IFSC' },
-                    { key: 'amount', title: 'Amount', headerClassName: 'text-left', cellClassName: 'text-left' },
-                    { key: 'status', title: 'Status' },
-                  ]}
-                  tableData={payrun.invoices}
-                  rowKey="id"
-                  tableClassName="min-w-[920px] table-fixed text-sm"
-                  tableContainerClassName="max-h-[360px] overflow-auto"
-                  emptyMessage="No invoices in this payrun"
-                  renderRow={(invoice) => {
-                    const beneficiaryAccounts = getInvoiceBeneficiaryAccounts(invoice);
-                    const selectedBeneficiaryId = selectedBeneficiaryAccounts[invoice.id] || beneficiaryAccounts[0]?.id || '';
-                    const selectedBeneficiary = getSelectedBeneficiaryForInvoice(invoice) || {};
-                    const hasMultipleAccounts = beneficiaryAccounts.length > 1;
+                <>
+                  <AppDataTable
+                    tableHeader={[
+                      { key: 'vendorName', title: 'Vendor' },
+                      { key: 'invoiceNumber', title: hasSourceAwareRows ? 'Reference' : 'Invoice' },
+                      { key: 'beneficiaryAccount', title: 'Beneficiary Account' },
+                      { key: 'bank', title: 'Bank' },
+                      { key: 'ifsc', title: 'IFSC' },
+                      { key: 'amount', title: 'Amount', headerClassName: 'text-left', cellClassName: 'text-left' },
+                      { key: 'status', title: 'Status' },
+                    ]}
+                    tableData={payrun.invoices}
+                    rowKey="id"
+                    tableClassName="min-w-[920px] table-fixed text-sm"
+                    tableContainerClassName="max-h-[360px] overflow-auto"
+                    emptyMessage="No invoices in this payrun"
+                    renderRow={(invoice) => {
+                      const beneficiaryAccounts = getInvoiceBeneficiaryAccounts(invoice);
+                      const selectableBeneficiaryAccounts = beneficiaryAccounts.filter((account) => account.beneficiaryId);
+                      const hasMultipleAccounts = selectableBeneficiaryAccounts.length > 1;
+                      const selectedBeneficiaryId = selectedBeneficiaryAccounts[invoice.id] || selectableBeneficiaryAccounts[0]?.id || '';
+                      const selectedBeneficiary = getSelectedBeneficiaryForInvoice(invoice) || {};
 
-                    return (
-                      <TableRow key={invoice.id} className="align-top">
-                        <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left font-medium text-slate-900">
-                          {clippedTableText(invoice.vendorName)}
-                        </TableCell>
-                        <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left text-primary">
-                          <div className="min-w-0">
-                            {invoice.sourceType && invoice.sourceType !== 'INVOICE' ? (
-                              <span className="mb-0.5 inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
-                                {invoice.sourceType}
+                      return (
+                        <TableRow key={invoice.id} className="align-top">
+                          <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left font-medium text-slate-900">
+                            {clippedTableText(invoice.vendorName)}
+                          </TableCell>
+                          <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left text-primary">
+                            <div className="min-w-0">
+                              {invoice.sourceType && invoice.sourceType !== 'INVOICE' ? (
+                                <span className="mb-0.5 inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                                  {invoice.sourceType}
+                                </span>
+                              ) : null}
+                              {clippedTableText(getPayableDisplayLabel(invoice))}
+                            </div>
+                          </TableCell>
+                          <TableCell className="max-w-[220px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left">
+                            {hasMultipleAccounts ? (
+                              <Select
+                                value={String(selectedBeneficiaryId)}
+                                onValueChange={(value) =>
+                                  setSelectedBeneficiaryAccounts((prev) => ({
+                                    ...prev,
+                                    [invoice.id]: value,
+                                  }))
+                                }
+                              >
+                                <SelectTrigger className="h-9 w-full min-w-0">
+                                  <SelectValue placeholder="Select account" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {selectableBeneficiaryAccounts.map((account) => {
+                                    const accountLabel = `${account.accountNumber} · ${account.ifsc} · ${account.bankName}`;
+                                    return (
+                                      <SelectItem
+                                        key={getBeneficiaryAccountKey(invoice.id, account.id)}
+                                        value={String(account.id)}
+                                        title={accountLabel}
+                                      >
+                                        <span className="block max-w-[380px] truncate">
+                                          {accountLabel}
+                                        </span>
+                                      </SelectItem>
+                                    );
+                                  })}
+                                </SelectContent>
+                              </Select>
+                            ) : (
+                              <span
+                                className="block min-w-0 truncate font-mono text-xs text-slate-700"
+                                title={selectedBeneficiary.accountNumber || '-'}
+                              >
+                                {selectedBeneficiary.accountNumber || '-'}
                               </span>
-                            ) : null}
-                            {clippedTableText(getPayableDisplayLabel(invoice))}
-                          </div>
-                        </TableCell>
-                        <TableCell className="max-w-[220px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left">
-                          {hasMultipleAccounts ? (
-                            <Select
-                              value={String(selectedBeneficiaryId)}
-                              onValueChange={(value) =>
-                                setSelectedBeneficiaryAccounts((prev) => ({
-                                  ...prev,
-                                  [invoice.id]: value,
-                                }))
-                              }
-                            >
-                              <SelectTrigger className="h-9 min-w-[220px]">
-                                <SelectValue placeholder="Select account" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {beneficiaryAccounts.map((account) => (
-                                  <SelectItem
-                                    key={getBeneficiaryAccountKey(invoice.id, account.id)}
-                                    value={String(account.id)}
-                                  >
-                                    {account.accountNumber}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          ) : (
+                            )}
+                          </TableCell>
+                          <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left text-slate-700">
+                            {clippedTableText(selectedBeneficiary.bankName)}
+                          </TableCell>
+                          <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left font-mono text-xs text-slate-700">
+                            {clippedTableText(selectedBeneficiary.ifsc)}
+                          </TableCell>
+                          <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left font-semibold text-slate-900">
+                            <div className="min-w-0">
+                              {clippedTableText(formatMoney(invoice.requestedAmount, getInvoicePaymentCurrency(invoice, payrunCurrency)))}
+                              {invoice.hasAdvanceAdjustment ? (
+                                <span className="block truncate text-[11px] font-normal text-slate-500">
+                                  Advance Adjusted: -{formatMoney(invoice.advanceAdjustedTotal, invoice.currency)}
+                                </span>
+                              ) : null}
+                            </div>
+                          </TableCell>
+                          <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left">
                             <span
-                              className="block min-w-0 truncate font-mono text-xs text-slate-700"
-                              title={selectedBeneficiary.accountNumber || '-'}
+                              className={`rounded-full px-2 py-1 text-xs font-medium ${
+                                selectedBeneficiary.statusClassName || 'bg-slate-100 text-slate-700'
+                              }`}
                             >
-                              {selectedBeneficiary.accountNumber || '-'}
+                              {selectedBeneficiary.statusLabel || selectedBeneficiary.status || 'Not Verified'}
                             </span>
-                          )}
-                        </TableCell>
-                        <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left text-slate-700">
-                          {clippedTableText(selectedBeneficiary.bankName)}
-                        </TableCell>
-                        <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left font-mono text-xs text-slate-700">
-                          {clippedTableText(selectedBeneficiary.ifsc)}
-                        </TableCell>
-                        <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left font-semibold text-slate-900">
-                          <div className="min-w-0">
-                            {clippedTableText(formatMoney(invoice.requestedAmount, getInvoicePaymentCurrency(invoice, payrunCurrency)))}
-                            {invoice.hasAdvanceAdjustment ? (
-                              <span className="block truncate text-[11px] font-normal text-slate-500">
-                                Advance Adjusted: -{formatMoney(invoice.advanceAdjustedTotal, invoice.currency)}
-                              </span>
-                            ) : null}
-                          </div>
-                        </TableCell>
-                        <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3.5 py-3 text-left">
-                          <span
-                            className={`rounded-full px-2 py-1 text-xs font-medium ${
-                              selectedBeneficiary.statusClassName || 'bg-slate-100 text-slate-700'
-                            }`}
-                          >
-                            {selectedBeneficiary.statusLabel || selectedBeneficiary.status || 'Not Verified'}
-                          </span>
-                        </TableCell>
-                      </TableRow>
-                    );
-                  }}
-                />,
+                          </TableCell>
+                        </TableRow>
+                      );
+                    }}
+                  />
+                </>,
               )}
             </div>
           )}
@@ -894,7 +938,12 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
               {step > 1 && <Button variant="outline" onClick={() => setStep((prev) => prev - 1)}>Back</Button>}
               <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
               {step < 3 ? (
-                <Button onClick={() => setStep((prev) => prev + 1)} disabled={!canContinueReleaseStep}>
+                <Button
+                  onClick={() => {
+                    setStep((prev) => prev + 1);
+                  }}
+                  disabled={!canContinueReleaseStep}
+                >
                   Continue
                 </Button>
               ) : (
@@ -903,7 +952,9 @@ const ReleasePaymentDialog = ({ payrun, open, onOpenChange, bankAccounts, onPaid
                     ? 'Releasing...'
                     : requestingOtp
                       ? 'Sending OTP...'
-                      : 'Release Payment'}
+                      : otpSent
+                        ? 'Release Payment'
+                        : 'Send OTP'}
                 </Button>
               )}
             </DialogFooter>

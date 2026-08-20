@@ -15,6 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '../../../components/ui/select';
+import ConnectedVendorPicker from '../../../components/common/ConnectedVendorPicker';
 import GrnCreateFormFields from './GrnCreateFormFields';
 import { GRN_SOURCE, GRN_SOURCE_LABELS } from '../constants';
 
@@ -82,28 +83,17 @@ const GrnCreateDialog = ({
           {isStandalone && (
             <div className="mb-6 space-y-2">
               <Label>Vendor *</Label>
-              <Select
-                value={form.vendor_id ? String(form.vendor_id) : ''}
-                onValueChange={(vendorId) => {
-                  const vendor = vendors.find((item) => String(item.id) === String(vendorId));
+              <ConnectedVendorPicker
+                value={form.vendor_name || form.vendor_id}
+                onSelect={(vendor) => {
                   setForm((current) => ({
                     ...current,
-                    vendor_id: vendorId,
+                    vendor_id: vendor?.id || '',
                     vendor_name: vendor?.name ?? vendor?.vendor_name ?? '',
                   }));
                 }}
-              >
-                <SelectTrigger className="h-9 bg-white/80" data-testid="grn-vendor-select">
-                  <SelectValue placeholder="Select vendor" />
-                </SelectTrigger>
-                <SelectContent>
-                  {vendors.map((vendor) => (
-                    <SelectItem key={vendor.id} value={String(vendor.id)}>
-                      {vendor.name ?? vendor.vendor_name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                placeholder="Select vendor"
+              />
             </div>
           )}
 

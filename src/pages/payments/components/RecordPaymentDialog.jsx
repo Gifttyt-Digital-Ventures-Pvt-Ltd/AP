@@ -21,9 +21,18 @@ import {
   TooltipTrigger,
 } from '../../../components/ui/tooltip';
 import { formatCurrency } from '../../../utils/currency';
+import PayableSourceBadge from './PayableSourceBadge';
+import MilestoneStageChip from './MilestoneStageChip';
 
 const ClippedInvoiceLabel = ({ invoice }) => {
-  const invoiceNumber = String(invoice?.invoiceNumber || '').trim() || '-';
+  const invoiceNumber = String(
+    invoice?.invoiceNumber ||
+      invoice?.milestoneLabel ||
+      invoice?.advanceNumber ||
+      invoice?.orderNumber ||
+      invoice?.referenceNumber ||
+      '',
+  ).trim() || '-';
   const vendorName = String(invoice?.vendorName || '').trim();
   const label = vendorName
     ? `${invoiceNumber} · ${vendorName}`
@@ -47,14 +56,8 @@ const preventDialogOutsideDismiss = (event) => {
   event.preventDefault();
 };
 
-const hasAdvanceAdjustment = (invoice = {}) =>
-  Boolean(
-    invoice.hasAdvanceAdjustment ||
-      invoice.advanceAdjustedTotal != null ||
-      invoice.advance_adjusted_total != null ||
-      invoice.netPayableAfterAdvance != null ||
-      invoice.net_payable_after_advance != null,
-  );
+const getNetPayableAmount = (invoice = {}) =>
+  Number(invoice.netPayableAmount ?? invoice.net_payable_amount ?? invoice.amount ?? 0);
 
 // Confirm record-payment for invoices selected on the pending list.
 const RecordPaymentDialog = ({
@@ -66,7 +69,7 @@ const RecordPaymentDialog = ({
   handleSubmit,
   submitting = false,
 }) => {
-  const selectedTotal = selectedInvoices.reduce((sum, invoice) => sum + (invoice.amount || 0), 0);
+  const selectedTotal = selectedInvoices.reduce((sum, invoice) => sum + getNetPayableAmount(invoice), 0);
   const hasConvertedInvoice = selectedInvoices.some((invoice) => Boolean(invoice.convertToInr));
   const maxPaymentDate = useMemo(() => {
     const now = new Date();
@@ -89,7 +92,7 @@ const RecordPaymentDialog = ({
 
         <form onSubmit={handleSubmit} className="min-w-0 space-y-4">
           <div className="min-w-0">
-            <Label>Selected Invoices ({selectedInvoices.length})</Label>
+            <Label>Selected Payables ({selectedInvoices.length})</Label>
             <div className="mt-2 max-h-32 max-w-full overflow-x-hidden overflow-y-auto rounded-md border border-input bg-muted/30 px-3 py-2 text-sm">
               {selectedInvoices.length > 0 ? (
                 <ul className="min-w-0 space-y-1">
@@ -99,24 +102,28 @@ const RecordPaymentDialog = ({
                       className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-2"
                     >
                       <div className="min-w-0 flex-1">
+                        <div className="mb-1 flex flex-wrap items-center gap-1">
+                          <PayableSourceBadge sourceType={invoice.sourceType} isAdvance={invoice.isAdvance} />
+                          <MilestoneStageChip stage={invoice.triggerStage} sharePct={invoice.sharePct} />
+                        </div>
                         <ClippedInvoiceLabel invoice={invoice} />
                       </div>
                       <span className="shrink-0 whitespace-nowrap text-muted-foreground">
-                        {formatCurrency(invoice.amount || 0, invoice.currency || 'INR')}
+                        {formatCurrency(getNetPayableAmount(invoice), invoice.currency || 'INR')}
                       </span>
-                      {hasAdvanceAdjustment(invoice) ? (
+                      {Number(invoice.advanceAdjustedAmount ?? invoice.advanceAdjustedTotal ?? 0) > 0 || Number(invoice.tdsAmount ?? 0) > 0 ? (
                         <span className="col-span-2 text-xs text-muted-foreground">
-                          Original: {formatCurrency(
-                            invoice.originalAmount ?? invoice.totalAmount ?? invoice.amount ?? 0,
+                          Gross: {formatCurrency(
+                            invoice.grossAmount ?? invoice.originalAmount ?? invoice.totalAmount ?? invoice.amount ?? 0,
                             invoice.currency || 'INR',
                           )} · Advance Adjusted: -{formatCurrency(
-                            invoice.advanceAdjustedTotal ?? invoice.advance_adjusted_total ?? 0,
+                            invoice.advanceAdjustedAmount ?? invoice.advanceAdjustedTotal ?? invoice.advance_adjusted_total ?? 0,
                             invoice.currency || 'INR',
-                          )} · Net Payable After Advance: {formatCurrency(
-                            invoice.netPayableAfterAdvance ??
-                              invoice.net_payable_after_advance ??
-                              invoice.amount ??
-                              0,
+                          )} · TDS: -{formatCurrency(
+                            invoice.tdsAmount ?? invoice.tds_amount ?? 0,
+                            invoice.currency || 'INR',
+                          )} · Net Payable: {formatCurrency(
+                            getNetPayableAmount(invoice),
                             invoice.currency || 'INR',
                           )}
                         </span>

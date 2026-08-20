@@ -28,7 +28,7 @@ import {
 } from "../utils/msmePaymentDue";
 import { computeLineItemsSummary, resolveLineItemsExpanded } from "../utils/lineItemsSummary";
 import { Button } from "../../../components/ui/button";
-import { Link2, Loader2 } from "lucide-react";
+import { Link2, Loader2, Pencil } from "lucide-react";
 import {
   canMapTaxInvoiceToProforma,
   getDocumentTypeLabel,
@@ -48,6 +48,7 @@ import { buildInternalChecklistState } from "../utils/internalChecklist";
 import { INTERNAL_CHECKLIST_ITEMS } from "../constants/internalChecklist";
 import { normalizeHistoricalAdvanceAdjustment } from "../utils/advanceAdjustment";
 import InternalChecklistSection from "./InternalChecklistSection";
+import InvoicePaymentSchedulePanel from "./InvoicePaymentSchedulePanel";
 
 const formatDisplayDate = (value) => {
   if (!value) return "-";
@@ -64,6 +65,11 @@ const DetailField = ({ label, value, mono = false, className = "" }) => (
     </p>
   </div>
 );
+
+const isCancelledInvoiceStatus = (status) => {
+  const normalized = String(status || "").trim().toUpperCase().replace(/\s+/g, "_");
+  return normalized === "CANCELLED" || normalized === "CANCELED";
+};
 
 const computeTdsAmount = (lineItems = [], tdsValue = "", subTotalOverride, tdsRateOverride = null) => {
   const tdsRate = resolveTdsRate(tdsValue, tdsRateOverride);
@@ -98,6 +104,8 @@ const InvoiceReadOnlyDetails = ({
   canCancelLinkedInvoice = false,
   onCancelLinkedInvoice,
   showInvoiceFunding = false,
+  canEditInvoiceFunding = false,
+  onEditInvoiceFunding,
 }) => {
   const formData = useMemo(
     () =>
@@ -162,6 +170,12 @@ const InvoiceReadOnlyDetails = ({
   const msmePaymentDue = normalizeMsmePaymentDue(invoice);
   const invoiceCurrency = normalizeCurrencyCode(formData.currency);
   const isFunded = Boolean(formData.isFunded ?? invoice?.isFunded ?? invoice?.is_funded);
+  const effectiveShowInvoiceFunding = Boolean(
+    showInvoiceFunding && !isProformaInvoice(invoice),
+  );
+  const canEditFundingForInvoice = Boolean(
+    canEditInvoiceFunding && !isCancelledInvoiceStatus(invoice?.status),
+  );
   const orgAmount = Number(formData.orgAmount ?? invoice?.orgAmount ?? invoice?.org_amount ?? 0) || 0;
   const financierAmount =
     Number(formData.financierAmount ?? invoice?.financierAmount ?? invoice?.financier_amount ?? 0) || 0;
@@ -288,15 +302,24 @@ const InvoiceReadOnlyDetails = ({
     roundOffValue !== null &&
     roundOffValue !== "" &&
     Number.isFinite(Number(roundOffValue));
-  const fallbackNetPayable =
-    Number(
-      invoice.netAmount ??
-        invoice.net_amount ??
-        invoice.totalAmount ??
-        invoice.total_amount,
-    ) ||
-    Math.max(Math.round((totals.total - tdsAmount) * 100) / 100, 0);
-  const netPayable = getTdsPreviewNetPayable(tdsPreview, fallbackNetPayable);
+  const savedNetPayable =
+    invoice.netAmount ??
+    invoice.net_amount ??
+    invoice.netPayable ??
+    invoice.net_payable ??
+    invoice.netPayableAmount ??
+    invoice.net_payable_amount;
+  const hasSavedNetPayable =
+    savedNetPayable !== undefined &&
+    savedNetPayable !== null &&
+    savedNetPayable !== "";
+  const fallbackNetPayable = hasSavedNetPayable
+    ? Number(savedNetPayable)
+    : Number(invoice.totalAmount ?? invoice.total_amount) ||
+      Math.max(Math.round((totals.total - tdsAmount) * 100) / 100, 0);
+  const netPayable = hasSavedNetPayable
+    ? fallbackNetPayable
+    : getTdsPreviewNetPayable(tdsPreview, fallbackNetPayable);
   const tdsLabel = formatTdsDisplayLabel({
     tds: formData.tds,
     tdsSectionCode: formData.tdsSectionCode,
@@ -571,13 +594,33 @@ const InvoiceReadOnlyDetails = ({
           )}
         </div>
 
-        {showInvoiceFunding ? (
+        {effectiveShowInvoiceFunding ? (
           <div className="rounded-lg border border-border bg-muted/20 p-3">
             <div className="mb-2 flex items-center justify-between gap-3">
               <h3 className="text-sm font-semibold text-gray-800">Funding</h3>
-              <Badge variant={isFunded ? "default" : "secondary"}>
-                {isFunded ? "Funded" : "Non-Funded"}
-              </Badge>
+              <div className="flex items-center gap-2">
+                <Badge variant={isFunded ? "default" : "secondary"}>
+                  {isFunded ? "Funded" : "Non-Funded"}
+                </Badge>
+                {canEditFundingForInvoice ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-7 gap-1.5 text-xs"
+                    onClick={() =>
+                      onEditInvoiceFunding?.({
+                        invoice,
+                        invoiceTotal: totals.total,
+                        currency: invoiceCurrency,
+                      })
+                    }
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit Funding
+                  </Button>
+                ) : null}
+              </div>
             </div>
             <div className="grid grid-cols-2 gap-3">
               <DetailField
@@ -629,6 +672,8 @@ const InvoiceReadOnlyDetails = ({
         <div className="grid grid-cols-2 gap-3">
           <DetailField label="Source" value={formData.source} />
         </div>
+
+        <InvoicePaymentSchedulePanel invoice={invoice} />
 
         <div className="grid grid-cols-2 gap-3">
           <DetailField label="Discounts" value={formData.discountsLevel} />

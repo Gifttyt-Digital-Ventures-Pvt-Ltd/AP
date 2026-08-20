@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertDialog,
@@ -12,7 +12,7 @@ import {
 } from "../../../components/ui/alert-dialog";
 import {
   useGetInvoiceMandatoryFieldsQuery,
-  useGetVendorsQuery,
+  useLazyGetVendorQuery,
   useRequestVendorAdditionMutation,
   useUpdateInvoiceMutation,
   useUpdateInvoiceInternalChecklistMutation,
@@ -23,11 +23,7 @@ import {
 } from "../../../Services/apis/corporateApi";
 import { useGetCategoriesForInvoiceQuery } from "../../../Services/apis/categoriesApi";
 import { useGetDepartmentsForInvoiceQuery } from "../../../Services/apis/departmentsApi";
-import { findVendorByInvoiceName } from "../../invoices/utils/vendorMatching";
-import {
-  extractVendorIdFromResponse,
-  mergeInvoiceVendorOptions,
-} from "../../../Services/utils/payloadMappers";
+import { extractVendorIdFromResponse } from "../../../Services/utils/payloadMappers";
 import { useAuth } from "../../../contexts/AuthContext";
 import { useRBAC } from "../../../contexts/RBACContext";
 import { useActionGuard } from "../../../hooks/useActionGuard";
@@ -123,7 +119,27 @@ export const useApprovalsInvoiceEdit = ({
     user?.identifier ||
     "";
 
-  const { data: vendorsData = [] } = useGetVendorsQuery();
+  // Lazy single-vendor fetch — no full-list preload.
+  // ConnectedVendorPicker (inside InvoiceForm) handles search/pagination itself.
+  const [fetchVendorById] = useLazyGetVendorQuery();
+  const vendorCacheRef = useRef({});
+
+  const resolveVendorById = useCallback(
+    async (vendorId) => {
+      if (!vendorId) return null;
+      const key = String(vendorId);
+      if (vendorCacheRef.current[key]) return vendorCacheRef.current[key];
+      try {
+        const result = await fetchVendorById(vendorId).unwrap();
+        if (result) vendorCacheRef.current[key] = result;
+        return result || null;
+      } catch {
+        return null;
+      }
+    },
+    [fetchVendorById],
+  );
+
   const { data: departmentsData = [] } = useGetDepartmentsForInvoiceQuery(
     {
       userEmail: invoiceUserEmail,
@@ -168,13 +184,8 @@ export const useApprovalsInvoiceEdit = ({
     createEmptyVendorRequestForm(),
   );
 
-  const invoiceVendorOptions = useMemo(
-    () =>
-      mergeInvoiceVendorOptions(
-        Array.isArray(vendorsData) ? vendorsData : [],
-      ),
-    [vendorsData],
-  );
+  // No invoiceVendorOptions list — picker fetches on demand.
+  // Currency options come from the app-level currencies prop (already passed in).
   const departments = Array.isArray(departmentsData) ? departmentsData : [];
   const invoiceCategories =
     isCategoryFeatureEnabled && Array.isArray(invoiceCategoriesData)
@@ -251,23 +262,27 @@ export const useApprovalsInvoiceEdit = ({
     ],
   );
 
+  // findVendorByName: check the local cache only (populated when edit dialog opens)
   const findVendorByName = useCallback(
-    (vendorName) => findVendorByInvoiceName(invoiceVendorOptions, vendorName),
-    [invoiceVendorOptions],
-  );
-
-  const findVendorById = useCallback(
-    (vendorId) => {
-      if (vendorId === null || vendorId === undefined || vendorId === "") {
-        return null;
-      }
+    (vendorName) => {
+      if (!vendorName) return null;
+      const lowerName = String(vendorName).toLowerCase().trim();
       return (
-        invoiceVendorOptions.find(
-          (vendor) => String(vendor?.id) === String(vendorId),
+        Object.values(vendorCacheRef.current).find((v) =>
+          String(v?.name ?? v?.vendorName ?? "").toLowerCase().trim() === lowerName,
         ) || null
       );
     },
-    [invoiceVendorOptions],
+    [],
+  );
+
+  // findVendorById: check cache synchronously (populated by resolveVendorById)
+  const findVendorById = useCallback(
+    (vendorId) => {
+      if (vendorId === null || vendorId === undefined || vendorId === "") return null;
+      return vendorCacheRef.current[String(vendorId)] || null;
+    },
+    [],
   );
 
   const getDepartmentNameById = (departmentId) => {
@@ -512,10 +527,17 @@ export const useApprovalsInvoiceEdit = ({
     }
   };
 
-  const handleEditInvoice = (invoice) => {
+  const handleEditInvoice = async (invoice) => {
     if (!canEditInvoice(invoice, invoiceEditContext)) {
       toast.error(getInvoiceEditBlockedMessage(invoice, invoiceEditContext));
       return;
+    }
+
+    // Pre-populate vendor cache so findVendorById/findVendorByName work
+    // immediately when InvoiceForm renders — no full-list fetch needed.
+    const vendorId = invoice?.vendorId ?? invoice?.vendor_id;
+    if (vendorId) {
+      await resolveVendorById(vendorId);
     }
 
     setEditingInvoice(invoice);
@@ -714,7 +736,6 @@ export const useApprovalsInvoiceEdit = ({
         }
         departmentMandatory={invoiceMandatoryFields.department}
         categoryMandatory={invoiceMandatoryFields.category}
-        vendorOptions={invoiceVendorOptions}
         departments={departments}
         invoiceCategories={invoiceCategories}
         invoiceCategoriesLoading={

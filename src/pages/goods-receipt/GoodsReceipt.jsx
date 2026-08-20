@@ -15,6 +15,7 @@ import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import { useCreditErrorHandler } from '../../contexts/CreditErrorContext';
 import { useRBAC } from '../../contexts/RBACContext';
 import useForeignCurrencyInrConversionSubscription from '../../hooks/useForeignCurrencyInrConversionSubscription';
+import usePaymentTermsSubscription from '../../hooks/usePaymentTermsSubscription';
 import {
   getInrConversionValidationError,
   isForeignCurrency,
@@ -50,6 +51,7 @@ import {
   useGetGrnDownloadUrlMutation,
 } from '../../Services/apis/goodsReceiptApi';
 import { useRequestAccountingReadyUnlockMutation } from '../../Services/apis/accountingApi';
+import { useLazyGetDocumentPaymentScheduleQuery } from '../../Services/apis/paymentSchedulesApi';
 import GrnListTab from './components/GrnListTab';
 import GrnFormatBuilderDialog from './components/GrnFormatBuilderDialog';
 import GrnCreateDialog from './components/GrnCreateDialog';
@@ -76,6 +78,9 @@ import {
   normalizeGrnFormatConfig,
   sanitizeGrnFormatName,
 } from './utils/grnFormatConfig';
+import {
+  normalizePaymentScheduleRows,
+} from '../purchase-orders/utils/poPaymentSchedule';
 import {
   buildCreateGrnPayload,
   buildGrnLineItemsFromPo,
@@ -220,6 +225,7 @@ const GoodsReceipt = () => {
   const { handleCreditError } = useCreditErrorHandler();
   const { isCorporateScreenAllowed, isCorporateSectionEnabled } = useRBAC();
   const { isForeignCurrencyInrConversionEnabled } = useForeignCurrencyInrConversionSubscription();
+  const { isPaymentTermsEnabled } = usePaymentTermsSubscription();
   const { setHideSidebar } = useSidebar();
 
   const hasPiSubscription = useProformaInvoiceSubscription().isPiSubscriptionEnabled;
@@ -237,7 +243,7 @@ const GoodsReceipt = () => {
   );
 
   const { data: grnsResponse, isLoading: grnsLoading, refetch: refetchGrns } = useGetGrnsQuery(grnQueryParams);
-  const { data: vendorsData = [] } = useGetVendorsQuery();
+  const { data: vendorsData = [] } = useGetVendorsQuery({ limit: 50, offset: 0 });
   const { data: formatConfigResponse, refetch: refetchFormatConfig } = useGetGrnFormatConfigQuery();
   const {
     data: formatConfigsResponse = [],
@@ -255,6 +261,7 @@ const GoodsReceipt = () => {
   const partialCanonical = useGetPurchaseOrdersQuery({ status: 'PARTIALLY_RECEIVED' });
 
   const [getPurchaseOrderById] = useLazyGetPurchaseOrderByIdQuery();
+  const [getDocumentPaymentSchedule] = useLazyGetDocumentPaymentScheduleQuery();
   const [getPoLinesReceiptState] = useLazyGetPoLinesReceiptStateQuery();
   const [getGrnById] = useLazyGetGrnByIdQuery();
   const [createGrnFormatConfig] = useCreateGrnFormatConfigMutation();
@@ -543,6 +550,31 @@ const GoodsReceipt = () => {
 
       const lineItems = buildGrnLineItemsFromPo(po, receiptStateLines);
       const hasPendingQty = lineItems.some((line) => Number(line.pending_quantity) > 0);
+      let poPaymentScheduleRows = po.paymentSchedule || [];
+      if (isPaymentTermsEnabled && po.paymentScheduleAvailable === true && poPaymentScheduleRows.length === 0) {
+        try {
+          const scheduleResponse = await getDocumentPaymentSchedule({
+            documentType: 'PO',
+            documentId: poId,
+          }).unwrap();
+          poPaymentScheduleRows = normalizePaymentScheduleRows(
+            Array.isArray(scheduleResponse)
+              ? { paymentSchedule: scheduleResponse }
+              : {
+                  ...(scheduleResponse || {}),
+                  paymentSchedule:
+                    scheduleResponse?.paymentSchedule ??
+                    scheduleResponse?.payment_schedule ??
+                    scheduleResponse?.rows ??
+                    scheduleResponse?.schedule,
+                },
+          );
+        } catch {
+          poPaymentScheduleRows = [];
+        }
+      }
+      const poPaymentScheduleAvailable =
+        isPaymentTermsEnabled && po.paymentScheduleAvailable === true && poPaymentScheduleRows.length > 0;
 
       setSelectedPo(po);
       const inheritPoConversion =
@@ -562,6 +594,15 @@ const GoodsReceipt = () => {
         bill_to_name: po.billing_name || current.bill_to_name,
         bill_to_gstin: po.billing_gstin || current.bill_to_gstin,
         bill_to_address: po.billing_address || current.bill_to_address,
+        ...(poPaymentScheduleAvailable
+          ? {
+              paymentScheduleAvailable: true,
+              paymentSchedule: poPaymentScheduleRows,
+            }
+          : {
+              paymentScheduleAvailable: false,
+              paymentSchedule: undefined,
+            }),
         line_items: lineItems,
       }));
 
@@ -610,10 +651,13 @@ const GoodsReceipt = () => {
       toast.error(conversionError);
       return;
     }
-
     const payload = buildCreateGrnPayload(grnForm, {
       formatConfig: selectedFormat,
       qcEnabled: selectedFormat.qc_enabled,
+      includePaymentSchedule:
+        isPaymentTermsEnabled &&
+        grnForm.source_type === GRN_SOURCE.PO &&
+        grnForm.paymentScheduleAvailable === true,
     });
 
     try {
@@ -811,7 +855,6 @@ const GoodsReceipt = () => {
       toast.error(conversionError);
       return;
     }
-
     const payload = buildCreateGrnPayload(
       {
         ...draftGrn,

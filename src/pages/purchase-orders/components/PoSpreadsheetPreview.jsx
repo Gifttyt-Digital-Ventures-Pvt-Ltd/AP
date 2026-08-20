@@ -25,13 +25,21 @@ const readWorkbookRows = async (file) => {
   return { sheetName, rows };
 };
 
+const readWorkbookRowsFromUrl = async (fileURL = "") => {
+  const response = await fetch(fileURL);
+  if (!response.ok) throw new Error("Unable to load spreadsheet");
+  const blob = await response.blob();
+  const fileName = decodeURIComponent(fileURL.split("?")[0].split("/").pop() || "spreadsheet.xlsx");
+  return readWorkbookRows(new File([blob], fileName, { type: blob.type }));
+};
+
 const normalizeCellValue = (value) => {
   if (value === null || value === undefined) return "";
   if (value instanceof Date) return value.toLocaleDateString();
   return String(value);
 };
 
-const PoSpreadsheetPreview = ({ file, fileURL }) => {
+const PoSpreadsheetPreview = ({ file, fileURL, fileName }) => {
   const [preview, setPreview] = useState({ sheetName: "", rows: [] });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -40,11 +48,13 @@ const PoSpreadsheetPreview = ({ file, fileURL }) => {
     let cancelled = false;
 
     const loadPreview = async () => {
-      if (!file) return;
+      if (!file && !fileURL) return;
       setLoading(true);
       setError("");
       try {
-        const result = await readWorkbookRows(file);
+        const result = file && typeof file.arrayBuffer === "function"
+          ? await readWorkbookRows(file)
+          : await readWorkbookRowsFromUrl(fileURL);
         if (cancelled) return;
         setPreview(result);
       } catch (err) {
@@ -61,7 +71,7 @@ const PoSpreadsheetPreview = ({ file, fileURL }) => {
     return () => {
       cancelled = true;
     };
-  }, [file]);
+  }, [file, fileURL]);
 
   const previewRows = useMemo(
     () => preview.rows.slice(0, MAX_PREVIEW_ROWS),
@@ -85,7 +95,7 @@ const PoSpreadsheetPreview = ({ file, fileURL }) => {
       <div className="flex items-center justify-between border-b bg-white px-4 py-2">
         <div className="min-w-0">
           <p className="truncate text-sm font-medium text-gray-700">
-            {file?.name || "Spreadsheet"}
+            {file?.name || fileName || "Spreadsheet"}
           </p>
           <p className="text-xs text-muted-foreground">
             {preview.sheetName || "First sheet"} · showing up to {MAX_PREVIEW_ROWS} rows

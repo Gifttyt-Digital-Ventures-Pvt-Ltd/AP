@@ -115,6 +115,7 @@ import IntegrationSourceBadge from "../../components/integrations/IntegrationSou
 import useZohoIntegrationActive from "../../hooks/useZohoIntegrationActive";
 import { withIntegrationTableHeader } from "../../utils/integrationProvenance";
 import { validateVendorBankAccounts } from "./components/create-vendor/VendorBankDetailsEditor";
+import VendorPagination from "./components/VendorPagination";
 
 const VENDOR_UPLOAD_FIELDS = [
   "vendorId",
@@ -329,6 +330,7 @@ const buildVendorViewData = (vendor) => {
     vendor.branch_details ??
     [];
   return {
+    ...vendor,
     id: vendor.id ?? vendor.vendorId,
     vendorId: vendor.vendorId ?? vendor.id,
     status: vendor.status,
@@ -369,6 +371,9 @@ const buildVendorViewData = (vendor) => {
     ),
   };
 };
+
+const getVendorRecordId = (vendor = {}) =>
+  vendor.id ?? vendor.vendor_id ?? vendor.vendorId;
 
 const Vendors = () => {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -421,6 +426,7 @@ const Vendors = () => {
     sortBy: "createdAt",
     sortDirection: "desc",
   });
+  const [pagination, setPagination] = useState({ page: 0, limit: 20 });
   const deferredSearchTerm = useDeferredValue(searchTerm);
   const vendorQueryParams = useMemo(
     () => ({
@@ -430,8 +436,10 @@ const Vendors = () => {
       ...(typeFilter !== "all" ? { type: typeFilter } : {}),
       sortBy: vendorSort.sortBy,
       sortDirection: vendorSort.sortDirection,
+      limit: pagination.limit,
+      offset: pagination.page * pagination.limit,
     }),
-    [deferredSearchTerm, typeFilter, vendorSort],
+    [deferredSearchTerm, typeFilter, vendorSort, pagination],
   );
   const {
     data: vendorsData = [],
@@ -531,6 +539,34 @@ const Vendors = () => {
     }
   }, [vendorsError]);
 
+  const fetchVendorDetails = useCallback(
+    async (vendor) => {
+      const vendorId = getVendorRecordId(vendor);
+      if (!vendorId) return vendor;
+      try {
+        const details = await getVendor(vendorId).unwrap();
+        return details ? { ...vendor, ...details } : vendor;
+      } catch {
+        return vendor;
+      }
+    },
+    [getVendor],
+  );
+
+  const handleViewVendor = useCallback(
+    async (vendor) => {
+      const vendorId = getVendorRecordId(vendor);
+      setViewingVendor(vendor);
+      const details = await fetchVendorDetails(vendor);
+      setViewingVendor((current) =>
+        String(getVendorRecordId(current) ?? "") === String(vendorId ?? "")
+          ? details
+          : current,
+      );
+    },
+    [fetchVendorDetails],
+  );
+
   useEffect(() => {
     if (!vendorUploadOptionOpen) return undefined;
 
@@ -589,7 +625,8 @@ const Vendors = () => {
 
     const vendorBankError = validateVendorBankAccounts(formData.bankAccounts, {
       foreignVendor: Boolean(formData.foreignVendor),
-      isRequired: (sectionId) => isVendorFieldRequired(sectionId, activeVendorFields),
+      isRequired: (sectionId) =>
+        isVendorFieldRequired(sectionId, activeVendorFields),
     });
     if (vendorBankError) {
       toast.error(vendorBankError);
@@ -673,7 +710,10 @@ const Vendors = () => {
 
   const getBulkVendorPayloadValidationErrors = (vendor, index) => {
     const vendorLabel = `Vendor ${index + 1}${vendor?.name ? ` (${vendor.name})` : ""}: `;
-    const requiredVendorFields = getVendorFormRequiredFields(activeVendorFields, vendor);
+    const requiredVendorFields = getVendorFormRequiredFields(
+      activeVendorFields,
+      vendor,
+    );
     const validationErrors = getVendorValidationErrors(vendor, {
       activeVendorFields: requiredVendorFields,
       vendorFieldConfiguration,
@@ -684,7 +724,8 @@ const Vendors = () => {
     });
     const vendorBankError = validateVendorBankAccounts(vendor.bankAccounts, {
       foreignVendor: Boolean(vendor.foreignVendor),
-      isRequired: (sectionId) => isVendorFieldRequired(sectionId, activeVendorFields),
+      isRequired: (sectionId) =>
+        isVendorFieldRequired(sectionId, activeVendorFields),
     });
     const vendorBranchError = validateVendorBranches(
       vendor.vendorBranches,
@@ -782,7 +823,9 @@ const Vendors = () => {
   };
 
   const downloadVendorTemplate = () => {
-    const headerRow = VENDOR_UPLOAD_FIELDS.map((field) => VENDOR_UPLOAD_HEADER_MAP[field] || field);
+    const headerRow = VENDOR_UPLOAD_FIELDS.map(
+      (field) => VENDOR_UPLOAD_HEADER_MAP[field] || field,
+    );
 
     const guideRows = [
       ["Bulk upload instructions"],
@@ -793,8 +836,20 @@ const Vendors = () => {
         "Row Type = 'GSTIN' (or leave blank) — the row adds one GST registration. Row Type = 'Bank Account' — the row adds one bank account. Row Type = 'Branch' — the row adds one branch/location. Identity fields (Vendor Name, Trade Name, contact, the new scalar fields, etc.) are taken from the first row in each PAN group — repeat Vendor Name and PAN on every row regardless of its type.",
       ],
       [""],
-      ["Example: one vendor, two GSTINs, one bank account, one branch (same PAN on every row)"],
-      ["Vendor Name", "PAN No", "Row Type", "GST no", "State", "City", "Bank Name", "Account Number", "Branch Name"],
+      [
+        "Example: one vendor, two GSTINs, one bank account, one branch (same PAN on every row)",
+      ],
+      [
+        "Vendor Name",
+        "PAN No",
+        "Row Type",
+        "GST no",
+        "State",
+        "City",
+        "Bank Name",
+        "Account Number",
+        "Branch Name",
+      ],
       [
         "Acme India Pvt Ltd",
         "ABCDE1234F",
@@ -856,7 +911,10 @@ const Vendors = () => {
       ["Currency", getUploadGuideType("currency", "Optional")],
       [
         "Address Line 1",
-        getUploadGuideType("address_line1", "Optional. Vendor's own address (first row wins), not a branch's address"),
+        getUploadGuideType(
+          "address_line1",
+          "Optional. Vendor's own address (first row wins), not a branch's address",
+        ),
       ],
       ["Address Line 2", getUploadGuideType("address_line2", "Optional")],
       ["City", getUploadGuideType("city", "Optional")],
@@ -880,30 +938,69 @@ const Vendors = () => {
       ["Payment Terms", getUploadGuideType("paymentTerms", "Optional")],
       ["Mode of Delivery", getUploadGuideType("modeOfDelivery", "Optional")],
       ["Delivery Terms", getUploadGuideType("deliveryTerms", "Optional")],
-      ["Vendor Status", getUploadGuideType("vendorStatus", "Optional (Active/Inactive)")],
-      ["One Time Vendor", getUploadGuideType("oneTimeVendor", "Optional (Yes/No)")],
-      ["Foreign Vendor", getUploadGuideType("foreignVendor", "Optional (Yes/No)")],
-      ["Udyam Registration No.", getUploadGuideType("udyamRegistrationNo", "Optional")],
-      ["MSME Category", getUploadGuideType("msmeCategory", "Optional (Micro/Small/Medium)")],
+      [
+        "Vendor Status",
+        getUploadGuideType("vendorStatus", "Optional (Active/Inactive)"),
+      ],
+      [
+        "One Time Vendor",
+        getUploadGuideType("oneTimeVendor", "Optional (Yes/No)"),
+      ],
+      [
+        "Foreign Vendor",
+        getUploadGuideType("foreignVendor", "Optional (Yes/No)"),
+      ],
+      [
+        "Udyam Registration No.",
+        getUploadGuideType("udyamRegistrationNo", "Optional"),
+      ],
+      [
+        "MSME Category",
+        getUploadGuideType("msmeCategory", "Optional (Micro/Small/Medium)"),
+      ],
       ["IEC Number", getUploadGuideType("iecNumber", "Optional")],
       ["TAN", getUploadGuideType("tan", "Optional")],
       ["TIN", getUploadGuideType("tin", "Optional")],
       ["STC", getUploadGuideType("stc", "Optional")],
-      ["ST Registration Number", getUploadGuideType("stRegistrationNumber", "Optional")],
+      [
+        "ST Registration Number",
+        getUploadGuideType("stRegistrationNumber", "Optional"),
+      ],
       ["PAN Status", getUploadGuideType("panStatus", "Optional")],
       ["PAN Reference No.", getUploadGuideType("panReferenceNo", "Optional")],
-      ["Nature of Assessee", getUploadGuideType("natureOfAssessee", "Optional")],
+      [
+        "Nature of Assessee",
+        getUploadGuideType("natureOfAssessee", "Optional"),
+      ],
       ["TCS Group", getUploadGuideType("tcsGroup", "Optional")],
-      ["Specified Person u/s 206AB", getUploadGuideType("specifiedPerson206AB", "Optional (Yes/No)")],
-      ["TDS Applicable", getUploadGuideType("tdsApplicable", "Optional (Yes/No)")],
-      ["TDS Group/List", getUploadGuideType("tdsGroup", "Optional. Only meaningful when TDS Applicable = Yes")],
+      [
+        "Specified Person u/s 206AB",
+        getUploadGuideType("specifiedPerson206AB", "Optional (Yes/No)"),
+      ],
+      [
+        "TDS Applicable",
+        getUploadGuideType("tdsApplicable", "Optional (Yes/No)"),
+      ],
+      [
+        "TDS Group/List",
+        getUploadGuideType(
+          "tdsGroup",
+          "Optional. Only meaningful when TDS Applicable = Yes",
+        ),
+      ],
       [
         "Low/Nil Deduction Certificate No.",
-        getUploadGuideType("lowNilDeductionCertificateNo", "Optional. Only meaningful when TDS Applicable = Yes"),
+        getUploadGuideType(
+          "lowNilDeductionCertificateNo",
+          "Optional. Only meaningful when TDS Applicable = Yes",
+        ),
       ],
       [
         "Certificate Validity",
-        getUploadGuideType("certificateValidity", "Optional date (YYYY-MM-DD). Only meaningful when TDS Applicable = Yes"),
+        getUploadGuideType(
+          "certificateValidity",
+          "Optional date (YYYY-MM-DD). Only meaningful when TDS Applicable = Yes",
+        ),
       ],
       [
         "Row Type",
@@ -915,8 +1012,14 @@ const Vendors = () => {
       ],
       ["GST Registration Type", "Optional. Only used on GSTIN-type rows"],
       ["HSN/SAC Default Code", "Optional. Only used on GSTIN-type rows"],
-      ["Reverse Charge Applicable", "Optional (Yes/No). Only used on GSTIN-type rows"],
-      ["e-Invoicing Applicable", "Optional (Yes/No). Only used on GSTIN-type rows"],
+      [
+        "Reverse Charge Applicable",
+        "Optional (Yes/No). Only used on GSTIN-type rows",
+      ],
+      [
+        "e-Invoicing Applicable",
+        "Optional (Yes/No). Only used on GSTIN-type rows",
+      ],
       [
         "Account Name",
         getUploadGuideType(
@@ -926,30 +1029,60 @@ const Vendors = () => {
       ],
       [
         "Account Number",
-        getUploadGuideType("account_number", "Optional. Used on Bank Account-type rows"),
+        getUploadGuideType(
+          "account_number",
+          "Optional. Used on Bank Account-type rows",
+        ),
       ],
-      ["IFSC Code", getUploadGuideType("ifsc_code", "Optional. Used on Bank Account-type rows")],
-      ["Bank Name", getUploadGuideType("bank_name", "Optional. Used on Bank Account-type rows")],
+      [
+        "IFSC Code",
+        getUploadGuideType(
+          "ifsc_code",
+          "Optional. Used on Bank Account-type rows",
+        ),
+      ],
+      [
+        "Bank Name",
+        getUploadGuideType(
+          "bank_name",
+          "Optional. Used on Bank Account-type rows",
+        ),
+      ],
       [
         "Branch",
-        getUploadGuideType("branch", "Optional. Legacy per-GSTIN bank branch name (not a vendor branch/location)"),
+        getUploadGuideType(
+          "branch",
+          "Optional. Legacy per-GSTIN bank branch name (not a vendor branch/location)",
+        ),
       ],
-      ["Account Type", "Optional (Savings/Current/Other). Only used on Bank Account-type rows"],
+      [
+        "Account Type",
+        "Optional (Savings/Current/Other). Only used on Bank Account-type rows",
+      ],
       ["Swift Code", "Optional. Only used on Bank Account-type rows"],
       ["Bank Currency", "Optional. Only used on Bank Account-type rows"],
-      ["Bank Active Status", "Optional (Active/Inactive, defaults to Active). Only used on Bank Account-type rows"],
+      [
+        "Bank Active Status",
+        "Optional (Active/Inactive, defaults to Active). Only used on Bank Account-type rows",
+      ],
       ["Bank Contact Details", "Optional. Only used on Bank Account-type rows"],
       ["Bank Address", "Optional. Only used on Bank Account-type rows"],
       ["Branch Name", "Optional. Only used on Branch-type rows"],
       ["Branch Code", "Optional. Only used on Branch-type rows"],
-      ["Branch GSTIN", "Optional. Maps this branch to one of the vendor's GSTINs. Only used on Branch-type rows"],
+      [
+        "Branch GSTIN",
+        "Optional. Maps this branch to one of the vendor's GSTINs. Only used on Branch-type rows",
+      ],
       ["Branch Address Line 1", "Optional. Only used on Branch-type rows"],
       ["Branch Address Line 2", "Optional. Only used on Branch-type rows"],
       ["Branch City", "Optional. Only used on Branch-type rows"],
       ["Branch District", "Optional. Only used on Branch-type rows"],
       ["Branch State", "Optional. Only used on Branch-type rows"],
       ["Branch Pincode", "Optional. Only used on Branch-type rows"],
-      ["Branch Country", "Optional. Only used on Branch-type rows, defaults to India"],
+      [
+        "Branch Country",
+        "Optional. Only used on Branch-type rows, defaults to India",
+      ],
       ["Remarks", getUploadGuideType("notes", "Optional")],
     ];
 
@@ -1039,8 +1172,9 @@ const Vendors = () => {
     return true;
   };
 
-  const handleEdit = (vendor) => {
-    if (!loadVendorIntoForm(vendor)) return;
+  const handleEdit = async (vendor) => {
+    const vendorDetails = await fetchVendorDetails(vendor);
+    if (!loadVendorIntoForm(vendorDetails)) return;
     setViewVendorEditMode(true);
   };
 
@@ -1237,6 +1371,7 @@ const Vendors = () => {
     setSearchTerm("");
     setTypeFilter("all");
     setStatusFilter("all");
+    setPagination((p) => ({ ...p, page: 0 }));
   };
 
   const vendorTotal = Number(vendorsData?.total ?? vendors.length);
@@ -1322,7 +1457,12 @@ const Vendors = () => {
       singleVendorCreateOpen || viewVendorEditMode || Boolean(viewingVendor),
     );
     return () => setHideSidebar(false);
-  }, [singleVendorCreateOpen, viewVendorEditMode, viewingVendor, setHideSidebar]);
+  }, [
+    singleVendorCreateOpen,
+    viewVendorEditMode,
+    viewingVendor,
+    setHideSidebar,
+  ]);
 
   const vendorTypeOptions = useMemo(() => {
     const options = new Map([
@@ -1409,194 +1549,201 @@ const Vendors = () => {
       <TableRow
         key={vendorId}
         className="cursor-pointer border-b border-border transition-colors hover:bg-muted/50"
-        onClick={() => setViewingVendor(vendor)}
+        onClick={() => handleViewVendor(vendor)}
         data-testid={`vendor-row-${vendor?.id ?? "unknown"}`}
       >
         {headers.map((header) => {
-            let value;
+          let value;
 
-            switch (header.key) {
-              case "vendorId":
-                value = vendor.vendorId ?? "-";
-                break;
-              case "vendor":
-                value = <div className="font-medium">{vendor.name}</div>;
-                break;
-              case "type":
-                value = <div className="font-medium">{vendor.vendor_type || "Company"}</div>;
-                break;
-              case "addressState": {
-                const addressStateValue = vendor.state || vendor.address_line1 || "-";
-                value = (
-                  <div
-                    className="max-w-[220px] truncate"
-                    title={addressStateValue !== "-" ? addressStateValue : undefined}
-                  >
-                    {addressStateValue}
-                  </div>
-                );
-                break;
-              }
-              case "status":
-                value = (
-                  <span
-                    className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStatusBadgeClass(vendor.status)}`}
-                  >
-                    {formatWorkflowStatus(vendor.status) || "Pending Approval"}
-                  </span>
-                );
-                break;
-              case "pan":
-                value = vendor.pan || "-";
-                break;
-              case "integration":
-                value = <IntegrationSourceBadge record={vendor} />;
-                break;
-              case "updatedAt": {
-                const updatedAt =
-                  vendor.updatedAt ||
-                  vendor.updated_at ||
-                  vendor.createdAt ||
-                  vendor.created_at;
-                const updatedDate = updatedAt ? new Date(updatedAt) : null;
-                value =
-                  updatedDate && !Number.isNaN(updatedDate.getTime())
-                    ? format(updatedDate, "dd MMM yy, hh:mm a")
-                    : "-";
-                break;
-              }
-              case "actions": {
-                const showApprove =
-                  canApproveVendor && isPendingApprovalVendor(vendor);
-                const showEdit = canEditVendor(vendor, vendorEditContext);
-                const showUnlock =
-                  isAccountingReadyLocked(vendor) &&
-                  canUpdateVendorPermission &&
-                  String(
-                    getAccountingUnlockRequestStatus(vendor) || "",
-                  ).toUpperCase() !== "PENDING";
-                const showMoreMenu = showApprove;
-                const showPlainDelete = !showApprove && canDeleteVendor;
-
-                value = (
-                  <div
-                    className="inline-flex justify-start items-center gap-2"
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    {showApprove && (
-                      <Button
-                        size="sm"
-                        onClick={() =>
-                          openVendorApprovalDialog(vendor, "Approved")
-                        }
-                        data-testid={`approve-vendor-${vendor?.id ?? "unknown"}`}
-                      >
-                        <CircleCheckBig className="h-4 w-4" />
-                        Approve
-                      </Button>
-                    )}
-                    {showEdit && (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => handleEdit(vendor)}
-                        title={
-                          formatWorkflowStatus(vendor.status) ===
-                          NEEDS_CORRECTION_STATUS
-                            ? "Edit vendor (creator)"
-                            : "Edit vendor"
-                        }
-                        data-testid={`edit-vendor-${vendor?.id ?? "unknown"}`}
-                      >
-                        <Pencil className="h-4 w-4" />
-                        Edit
-                      </Button>
-                    )}
-                    {showUnlock && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="w-8 h-8 p-0 rounded-md"
-                        onClick={() => handleRequestVendorUnlock(vendor)}
-                        disabled={requestVendorUnlockLoading}
-                        title="Request accounting unlock"
-                        data-testid={`request-unlock-vendor-${vendor?.id ?? "unknown"}`}
-                      >
-                        <Unlock className="h-4 w-4 text-amber-700" />
-                      </Button>
-                    )}
-                    {showMoreMenu && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="w-8 h-8 p-0 rounded-md"
-                            title="More actions"
-                            data-testid={`vendor-more-actions-${vendor?.id ?? "unknown"}`}
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem
-                            onClick={() =>
-                              openVendorApprovalDialog(vendor, "Rejected")
-                            }
-                            className="text-destructive focus:text-destructive"
-                            data-testid={`reject-vendor-${vendor?.id ?? "unknown"}`}
-                          >
-                            <X className="mr-2 h-4 w-4" />
-                            Reject
-                          </DropdownMenuItem>
-                          {canDeleteVendor && (
-                            <DropdownMenuItem
-                              onClick={() => handleDelete(vendor.id)}
-                              className="text-destructive focus:text-destructive"
-                              data-testid={`delete-vendor-${vendor?.id ?? "unknown"}`}
-                            >
-                              <Trash2 className="mr-2 h-4 w-4" />
-                              Delete
-                            </DropdownMenuItem>
-                          )}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
-                    {showPlainDelete && (
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="w-8 h-8 p-0 rounded-md"
-                        onClick={() => handleDelete(vendor.id)}
-                        title="Delete vendor"
-                        data-testid={`delete-vendor-${vendor?.id ?? "unknown"}`}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    )}
-                  </div>
-                );
-                break;
-              }
-              default:
-                value = "-";
+          switch (header.key) {
+            case "vendorId":
+              value = vendor.vendorId ?? "-";
+              break;
+            case "vendor":
+              value = <div className="font-medium">{vendor.name}</div>;
+              break;
+            case "type":
+              value = (
+                <div className="font-medium">
+                  {vendor.vendor_type || "Company"}
+                </div>
+              );
+              break;
+            case "addressState": {
+              const addressStateValue =
+                vendor.state || vendor.address_line1 || "-";
+              value = (
+                <div
+                  className="max-w-[220px] truncate"
+                  title={
+                    addressStateValue !== "-" ? addressStateValue : undefined
+                  }
+                >
+                  {addressStateValue}
+                </div>
+              );
+              break;
             }
+            case "status":
+              value = (
+                <span
+                  className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border ${getStatusBadgeClass(vendor.status)}`}
+                >
+                  {formatWorkflowStatus(vendor.status) || "Pending Approval"}
+                </span>
+              );
+              break;
+            case "pan":
+              value = vendor.pan || "-";
+              break;
+            case "integration":
+              value = <IntegrationSourceBadge record={vendor} />;
+              break;
+            case "updatedAt": {
+              const updatedAt =
+                vendor.updatedAt ||
+                vendor.updated_at ||
+                vendor.createdAt ||
+                vendor.created_at;
+              const updatedDate = updatedAt ? new Date(updatedAt) : null;
+              value =
+                updatedDate && !Number.isNaN(updatedDate.getTime())
+                  ? format(updatedDate, "dd MMM yy, hh:mm a")
+                  : "-";
+              break;
+            }
+            case "actions": {
+              const showApprove =
+                canApproveVendor && isPendingApprovalVendor(vendor);
+              const showEdit = canEditVendor(vendor, vendorEditContext);
+              const showUnlock =
+                isAccountingReadyLocked(vendor) &&
+                canUpdateVendorPermission &&
+                String(
+                  getAccountingUnlockRequestStatus(vendor) || "",
+                ).toUpperCase() !== "PENDING";
+              const showMoreMenu = showApprove;
+              const showPlainDelete = !showApprove && canDeleteVendor;
 
-            const className = [
-              "border border-table-border",
-              header.cellClassName,
-              header.key === "pan" ? "text-sm" : "",
-              header.key === "actions" ? "text-left" : "",
-            ]
-              .filter(Boolean)
-              .join(" ");
+              value = (
+                <div
+                  className="inline-flex justify-start items-center gap-2"
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  {showApprove && (
+                    <Button
+                      size="sm"
+                      onClick={() =>
+                        openVendorApprovalDialog(vendor, "Approved")
+                      }
+                      data-testid={`approve-vendor-${vendor?.id ?? "unknown"}`}
+                    >
+                      <CircleCheckBig className="h-4 w-4" />
+                      Approve
+                    </Button>
+                  )}
+                  {showEdit && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleEdit(vendor)}
+                      title={
+                        formatWorkflowStatus(vendor.status) ===
+                        NEEDS_CORRECTION_STATUS
+                          ? "Edit vendor (creator)"
+                          : "Edit vendor"
+                      }
+                      data-testid={`edit-vendor-${vendor?.id ?? "unknown"}`}
+                    >
+                      <Pencil className="h-4 w-4" />
+                      Edit
+                    </Button>
+                  )}
+                  {showUnlock && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-8 h-8 p-0 rounded-md"
+                      onClick={() => handleRequestVendorUnlock(vendor)}
+                      disabled={requestVendorUnlockLoading}
+                      title="Request accounting unlock"
+                      data-testid={`request-unlock-vendor-${vendor?.id ?? "unknown"}`}
+                    >
+                      <Unlock className="h-4 w-4 text-amber-700" />
+                    </Button>
+                  )}
+                  {showMoreMenu && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="w-8 h-8 p-0 rounded-md"
+                          title="More actions"
+                          data-testid={`vendor-more-actions-${vendor?.id ?? "unknown"}`}
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onClick={() =>
+                            openVendorApprovalDialog(vendor, "Rejected")
+                          }
+                          className="text-destructive focus:text-destructive"
+                          data-testid={`reject-vendor-${vendor?.id ?? "unknown"}`}
+                        >
+                          <X className="mr-2 h-4 w-4" />
+                          Reject
+                        </DropdownMenuItem>
+                        {canDeleteVendor && (
+                          <DropdownMenuItem
+                            onClick={() => handleDelete(vendor.id)}
+                            className="text-destructive focus:text-destructive"
+                            data-testid={`delete-vendor-${vendor?.id ?? "unknown"}`}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                  {showPlainDelete && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="w-8 h-8 p-0 rounded-md"
+                      onClick={() => handleDelete(vendor.id)}
+                      title="Delete vendor"
+                      data-testid={`delete-vendor-${vendor?.id ?? "unknown"}`}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  )}
+                </div>
+              );
+              break;
+            }
+            default:
+              value = "-";
+          }
 
-            return (
-              <TableCell key={header.key} className={className}>
-                {value}
-              </TableCell>
-            );
-          })}
+          const className = [
+            "border border-table-border",
+            header.cellClassName,
+            header.key === "pan" ? "text-sm" : "",
+            header.key === "actions" ? "text-left" : "",
+          ]
+            .filter(Boolean)
+            .join(" ");
+
+          return (
+            <TableCell key={header.key} className={className}>
+              {value}
+            </TableCell>
+          );
+        })}
       </TableRow>
     );
   };
@@ -1631,7 +1778,9 @@ const Vendors = () => {
             ? "Review imported vendor details, complete GSTIN and documents, then submit for approval."
             : "Update contact details and payment info of this vendor in OptiFii"
         }
-        submitLabel={isEditingSavedVendor ? "Submit for Approval" : "Update Vendor"}
+        submitLabel={
+          isEditingSavedVendor ? "Submit for Approval" : "Update Vendor"
+        }
         submittingLabel={isEditingSavedVendor ? "Submitting…" : "Updating…"}
         testId="edit-vendor-page"
         isEditMode
@@ -1646,11 +1795,7 @@ const Vendors = () => {
         onClose={closeViewVendorPage}
         onEdit={
           canEditVendor(viewingVendor, vendorEditContext)
-            ? () => {
-                if (loadVendorIntoForm(viewingVendor)) {
-                  setViewVendorEditMode(true);
-                }
-              }
+            ? () => handleEdit(viewingVendor)
             : undefined
         }
       />
@@ -1739,7 +1884,10 @@ const Vendors = () => {
               type="button"
               size="sm"
               variant={statusFilter === value ? "default" : "outline"}
-              onClick={() => setStatusFilter(value)}
+              onClick={() => {
+                setStatusFilter(value);
+                setPagination((p) => ({ ...p, page: 0 }));
+              }}
               data-testid={`vendor-filter-${value}`}
             >
               {label} ({count})
@@ -1752,12 +1900,21 @@ const Vendors = () => {
             <Input
               placeholder="Search vendors by name, PAN, GSTIN, state, email, or phone"
               value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setPagination((p) => ({ ...p, page: 0 }));
+              }}
               className="h-9 pl-10"
               data-testid="vendor-search-input"
             />
           </div>
-          <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <Select
+            value={typeFilter}
+            onValueChange={(val) => {
+              setTypeFilter(val);
+              setPagination((p) => ({ ...p, page: 0 }));
+            }}
+          >
             <SelectTrigger
               className="h-9 w-full sm:w-40"
               data-testid="vendor-type-filter"
@@ -1777,9 +1934,10 @@ const Vendors = () => {
             options={vendorSortOptions}
             value={vendorSort.sortBy}
             direction={vendorSort.sortDirection}
-            onChange={({ value, direction }) =>
-              setVendorSort({ sortBy: value, sortDirection: direction })
-            }
+            onChange={({ value, direction }) => {
+              setVendorSort({ sortBy: value, sortDirection: direction });
+              setPagination((p) => ({ ...p, page: 0 }));
+            }}
           />
         </div>
       </div>
@@ -1819,16 +1977,17 @@ const Vendors = () => {
             bordered
           />
         </div>
-        <div className="mt-auto flex shrink-0 border-t border-border p-4">
-          <p
-            className="text-sm text-muted-foreground"
-            data-testid="vendors-table-summary"
-          >
-            {!hasActiveFilters && filteredVendors.length === vendorTotal
-              ? `Showing ${filteredVendors.length.toLocaleString("en-IN")} vendor${filteredVendors.length === 1 ? "" : "s"}`
-              : `${vendorFilterSummary}`}
-          </p>
-        </div>
+        <VendorPagination
+          page={pagination.page}
+          totalPages={Math.ceil(
+            (vendorsData?.total ?? filteredVendors.length) / pagination.limit,
+          )}
+          totalRows={vendorsData?.total ?? filteredVendors.length}
+          pageSize={pagination.limit}
+          onPageChange={(nextPage) =>
+            setPagination((p) => ({ ...p, page: nextPage }))
+          }
+        />
       </div>
 
       <DeleteVendorDialog
@@ -1851,7 +2010,6 @@ const Vendors = () => {
         onConfirm={confirmVendorApprovalAction}
         confirming={approveVendorLoading}
       />
-
     </div>
   );
 };

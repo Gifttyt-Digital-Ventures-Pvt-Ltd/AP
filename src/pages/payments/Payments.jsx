@@ -9,6 +9,7 @@ import {
 import { toInvoiceUiPayload, EMPTY_INVOICE_LIST_RESPONSE, getInvoiceListItems } from '../../Services/utils/payloadMappers';
 import {
   useGetPendingPaymentsQuery,
+  useGetPayablesQuery,
   useGetReleasedPaymentsQuery,
   useLazyGetPaymentQuery,
   useBulkReleasePaymentsMutation,
@@ -18,6 +19,7 @@ import {
   useCancelPayrunMutation,
   useCreatePayrunMutation,
   useGetPayrunsQuery,
+  useLazyGetPayrunQuery,
   useRejectPayrunMutation,
 } from '../../Services/apis/approvalsPaymentsBankingApi';
 import { useCreatePaymentBatchMutation } from '../../Services/apis/paymentBatchesApi';
@@ -95,10 +97,12 @@ import { isInvoiceFundingEnabled as isInvoiceFundingEnabledForCorporate } from '
 import { OrgBranchCell, VendorWithBranchCell } from '../../components/common/BranchTableCells';
 import { clearNotificationQueryParams } from '../../utils/notificationQueryParams';
 import {
+  getPayableSelectionKey,
   getSelectablePayableRows,
   isPayableSelectable,
   normalizePayableRow,
 } from './utils/payableRows';
+import usePayablesSelection from './hooks/usePayablesSelection';
 
 const safeLower = (value) => String(value ?? '').toLowerCase();
 
@@ -398,10 +402,10 @@ const Payments = () => {
     isError: invoicesError,
     isFetching: pendingPaymentInvoicesFetching,
     refetch: refetchPendingPaymentInvoices,
-  } = useGetPendingPaymentsQuery(pendingPaymentsQueryArgs, { skip: !shouldFetchPendingPayments });
+  } = useGetPayablesQuery(pendingPaymentsQueryArgs, { skip: !shouldFetchPendingPayments });
   const {
     data: pendingPaymentCountData = null,
-  } = useGetPendingPaymentsQuery(paymentCountQueryArgs, { skip: shouldFetchPendingPayments });
+  } = useGetPayablesQuery(paymentCountQueryArgs, { skip: shouldFetchPendingPayments });
   const {
     data: paymentsData = [],
     isError: paymentsError,
@@ -450,7 +454,6 @@ const Payments = () => {
   const [creatingBatch, setCreatingBatch] = useState(false);
   const [recordingPayments, setRecordingPayments] = useState(false);
   const [downloadingPaymentReport, setDownloadingPaymentReport] = useState(false);
-  const [recordPaymentInvoiceIds, setRecordPaymentInvoiceIds] = useState([]);
   const [paymentReportInvoiceIds, setPaymentReportInvoiceIds] = useState([]);
   const [recordPaymentForm, setRecordPaymentForm] = useState({
     paymentDate: '',
@@ -482,6 +485,7 @@ const Payments = () => {
   const [approvePayrun] = useApprovePayrunMutation();
   const [rejectPayrun] = useRejectPayrunMutation();
   const [cancelPayrun] = useCancelPayrunMutation();
+  const [getPayrun] = useLazyGetPayrunQuery();
 
   const normalizePayment = (payment = {}) => {
     const payable = normalizePayableRow(payment);
@@ -537,9 +541,10 @@ const Payments = () => {
         normalized.totalAmount ??
         normalized.total_amount,
       originalAmount: payable.originalAmount ?? invoice.amount ?? normalized.originalAmount,
-      amount: Number(payable.payableAmount ?? 0),
-      netAmount: Number(payable.payableAmount ?? 0),
-      netPayable: Number(payable.payableAmount ?? 0),
+      amount: Number(payable.netPayableAmount ?? 0),
+      netAmount: Number(payable.netPayableAmount ?? 0),
+      netPayable: Number(payable.netPayableAmount ?? 0),
+      netPayableAmount: Number(payable.netPayableAmount ?? 0),
       gstAmount: Number(invoice.gstAmount ?? invoice.gst_amount ?? normalized.gstAmount ?? 0),
       vendorBankName: invoice.vendorBankName ?? invoice.vendor_bank_name ?? normalized.vendorBankName,
       vendorAccountNumber:
@@ -559,7 +564,7 @@ const Payments = () => {
     ? releasedPaymentItems.map(normalizePayment)
     : [];
   const pendingPaymentInvoices = pendingPaymentItems.map((invoice) =>
-    normalizePendingPaymentInvoice(invoice),
+    invoice?.payableKey ? invoice : normalizePendingPaymentInvoice(invoice),
   );
   const pendingApproverInvoices = getInvoiceListItems(pendingApproverInvoicesListData).map((invoice) =>
     toInvoiceUiPayload(invoice),
@@ -577,6 +582,12 @@ const Payments = () => {
     () => getSelectablePayableRows(payableInvoices),
     [payableInvoices],
   );
+  const reportableInvoiceRows = useMemo(
+    () => selectablePayableInvoices.filter((invoice) => (invoice.sourceType || 'INVOICE') === 'INVOICE'),
+    [selectablePayableInvoices],
+  );
+  const payableSelection = usePayablesSelection(payableInvoices);
+  const recordPaymentInvoiceIds = payableSelection.selectedKeys;
   const pendingPaymentsPagination = useMemo(
     () =>
       getPaymentTabPagination(
@@ -736,11 +747,11 @@ const Payments = () => {
     });
   };
 
-  const toggleInvoiceSelection = (invoiceId) => {
+  const toggleInvoiceSelection = (payableKey) => {
     setCreateBatchForm((prev) => {
-      const invoiceIds = prev.invoice_ids.includes(invoiceId)
-        ? prev.invoice_ids.filter((id) => id !== invoiceId)
-        : [...prev.invoice_ids, invoiceId];
+      const invoiceIds = prev.invoice_ids.includes(payableKey)
+        ? prev.invoice_ids.filter((id) => id !== payableKey)
+        : [...prev.invoice_ids, payableKey];
       return { ...prev, invoice_ids: invoiceIds };
     });
   };
@@ -750,19 +761,19 @@ const Payments = () => {
       ...prev,
       invoice_ids: prev.invoice_ids.length === batchEligibleInvoices.length
         ? []
-        : batchEligibleInvoices.map((invoice) => invoice.id),
+        : batchEligibleInvoices.map(getPayableSelectionKey),
     }));
   };
 
   const selectedBatchTotal = batchEligibleInvoices
-    .filter((invoice) => createBatchForm.invoice_ids.includes(invoice.id))
+    .filter((invoice) => createBatchForm.invoice_ids.includes(getPayableSelectionKey(invoice)))
     .reduce((sum, invoice) => sum + (invoice.amount || 0), 0);
   const allBatchInvoicesSelected =
     batchEligibleInvoices.length > 0 &&
     createBatchForm.invoice_ids.length === batchEligibleInvoices.length;
 
   const resetRecordPaymentForm = () => {
-    setRecordPaymentInvoiceIds([]);
+    payableSelection.clear();
     setRecordPaymentForm({
       paymentDate: '',
       payment_method: 'Bank Transfer',
@@ -771,22 +782,21 @@ const Payments = () => {
     });
   };
 
-  const selectedRecordPaymentInvoices = selectablePayableInvoices.filter((invoice) =>
-    recordPaymentInvoiceIds.includes(invoice.id),
-  );
+  const selectedRecordPaymentInvoices = payableSelection.selectedRows;
   const selectedRecordPaymentHasConvertedInvoice = selectedRecordPaymentInvoices.some(
     (invoice) => Boolean(invoice.convertToInr),
   );
 
   const openPaymentReportDialog = () => {
     if (!guardAction('payments.create')) return;
-    if (selectablePayableInvoices.length === 0) {
+    if (reportableInvoiceRows.length === 0) {
       toast.error('No pending invoices available for report');
       return;
     }
 
     setPaymentReportInvoiceIds((prev) =>
-      prev.length > 0 ? prev : selectablePayableInvoices.map((invoice) => invoice.id),
+      prev.length > 0 ? prev : reportableInvoiceRows
+        .map((invoice) => invoice.invoiceId || invoice.id),
     );
     setPaymentReportDialogOpen(true);
   };
@@ -889,7 +899,7 @@ const Payments = () => {
 
   const openRecordPaymentDialog = () => {
     if (recordPaymentInvoiceIds.length === 0) {
-      toast.error('Please select at least one invoice from the list');
+      toast.error('Please select at least one payable row from the list');
       return;
     }
     setRecordPaymentForm((prev) => ({
@@ -907,7 +917,7 @@ const Payments = () => {
       return;
     }
     if (recordPaymentInvoiceIds.length === 0) {
-      toast.error('Please select at least one invoice from the list');
+      toast.error('Please select at least one payable row from the list');
       return;
     }
     setRequestPaymentOpen(true);
@@ -916,9 +926,10 @@ const Payments = () => {
   const handleCreatePayrun = async (payload) => {
     try {
       const response = await createPayrun(payload).unwrap();
-      setRecordPaymentInvoiceIds([]);
+      payableSelection.clear();
       setRequestPaymentOpen(false);
       setActivePaymentTab('payruns');
+      await refetchPayruns();
       toast.success(`${response?.payrunNumber || response?.payrun_number || 'Payrun'} created`);
     } catch (error) {
       toast.error(error?.data?.detail || error?.data?.message || 'Failed to create payrun');
@@ -991,13 +1002,24 @@ const Payments = () => {
     setPayrunDetailsOpen(true);
   };
 
-  const openReleasePayrun = (payrun) => {
+  const openReleasePayrun = async (payrun) => {
     if (!guardAction('payments.releasePayrun')) return;
     if (!payrun.allowedActions?.release) {
       toast.error('This payrun is not available for release');
       return;
     }
-    setReleasePayrun(payrun);
+    const payrunId = payrun.payrunId || payrun.id;
+    if (!payrunId) {
+      toast.error('Payrun id is missing');
+      return;
+    }
+    try {
+      const freshPayrun = await getPayrun(payrunId).unwrap();
+      setReleasePayrun(freshPayrun);
+    } catch (error) {
+      toast.error(error?.data?.message || error?.data?.detail || 'Could not load latest payrun details. Using current payrun data.');
+      setReleasePayrun(payrun);
+    }
     setReleasePayrunOpen(true);
   };
 
@@ -1006,37 +1028,48 @@ const Payments = () => {
     toast.success(`${paidPayrun.batchId} paid successfully`);
   };
 
-  const toggleRecordPaymentInvoice = (invoiceId) => {
-    const row = payableInvoices.find((invoice) => invoice.id === invoiceId);
-    if (row && !isPayableSelectable(row)) {
-      toast.error(row.disabledReason || 'This payable row is not available for payment yet');
-      return;
-    }
-    setRecordPaymentInvoiceIds((prev) =>
-      prev.includes(invoiceId)
-        ? prev.filter((id) => id !== invoiceId)
-        : [...prev, invoiceId],
-    );
+  const toggleRecordPaymentInvoice = (payableKey) => {
+    const result = payableSelection.toggle(payableKey);
+    if (!result.ok) toast.error(result.error || 'This payable row is not available for payment yet');
   };
 
-  const selectAllRecordPaymentInvoices = () => {
-    setRecordPaymentInvoiceIds((prev) =>
-      prev.length === selectablePayableInvoices.length
-        ? []
-        : selectablePayableInvoices.map((invoice) => invoice.id),
-    );
+  const selectAllRecordPaymentInvoices = (visibleRows = selectablePayableInvoices) => {
+    const result = payableSelection.selectAll(visibleRows);
+    if (!result.ok) toast.error(result.error || 'Unable to select all payable rows');
   };
 
   const handleRecordPayments = async (event) => {
     event.preventDefault();
     if (!guardAction('payments.create')) return;
 
-    const invoiceNumbers = selectedRecordPaymentInvoices
+    const allSelectedRowsInvoiceBacked = selectedRecordPaymentInvoices.every(
+      (invoice) => (invoice.sourceType || 'INVOICE') === 'INVOICE',
+    );
+    const invoiceNumbers = allSelectedRowsInvoiceBacked ? selectedRecordPaymentInvoices
       .map((invoice) => String(invoice.invoiceNumber || '').trim())
-      .filter(Boolean);
+      .filter(Boolean) : [];
+    const sourceItems = selectedRecordPaymentInvoices.map((invoice) => {
+      const sourceType = invoice.sourceType || 'INVOICE';
+      const sourceId =
+        invoice.sourceId ||
+        (sourceType === 'OBLIGATION' ? invoice.obligationId : undefined) ||
+        (sourceType === 'ADVANCE' ? invoice.advanceId : undefined) ||
+        invoice.invoiceId ||
+        invoice.id;
 
-    if (invoiceNumbers.length === 0) {
-      toast.error('Please select at least one invoice');
+      return {
+        sourceType,
+        ...(sourceType === 'OBLIGATION'
+          ? { sourceId, obligationId: invoice.obligationId || sourceId }
+          : sourceType === 'ADVANCE'
+            ? { sourceId, advanceId: invoice.advanceId || sourceId }
+            : { invoiceId: invoice.invoiceId || invoice.id }),
+        netPayableAmount: Number(invoice.netPayableAmount ?? invoice.amount ?? 0),
+      };
+    });
+
+    if (sourceItems.length === 0) {
+      toast.error('Please select at least one payable row');
       return;
     }
 
@@ -1072,6 +1105,7 @@ const Payments = () => {
         ? Number(recordPaymentForm.actualInrAmount)
         : null;
       const response = await recordPayments({
+        items: sourceItems,
         invoiceNumbers,
         paymentDate: new Date(recordPaymentForm.paymentDate).toISOString(),
         paymentMethod: recordPaymentForm.payment_method,
@@ -1109,7 +1143,34 @@ const Payments = () => {
 
     setCreatingBatch(true);
     try {
-      const batchPayload = { ...createBatchForm };
+      const selectedBatchRows = batchEligibleInvoices.filter((invoice) =>
+        createBatchForm.invoice_ids.includes(getPayableSelectionKey(invoice)),
+      );
+      const batchPayload = {
+        ...createBatchForm,
+        invoice_ids: selectedBatchRows
+          .filter((invoice) => (invoice.sourceType || 'INVOICE') === 'INVOICE')
+          .map((invoice) => invoice.invoiceId || invoice.id),
+        items: selectedBatchRows.map((invoice) => {
+          const sourceType = invoice.sourceType || 'INVOICE';
+          const sourceId =
+            invoice.sourceId ||
+            (sourceType === 'OBLIGATION' ? invoice.obligationId : undefined) ||
+            (sourceType === 'ADVANCE' ? invoice.advanceId : undefined) ||
+            invoice.invoiceId ||
+            invoice.id;
+
+          return {
+            sourceType,
+            ...(sourceType === 'OBLIGATION'
+              ? { sourceId, obligationId: invoice.obligationId || sourceId }
+              : sourceType === 'ADVANCE'
+                ? { sourceId, advanceId: invoice.advanceId || sourceId }
+                : { invoiceId: invoice.invoiceId || invoice.id }),
+            netPayableAmount: Number(invoice.netPayableAmount ?? invoice.amount ?? 0),
+          };
+        }),
+      };
       if (!isConnectedBankingEnabled) {
         delete batchPayload.bank_account_id;
       }
@@ -1357,6 +1418,8 @@ const Payments = () => {
       safeLower(invoice.invoiceNumber).includes(safeLower(searchTerm)) ||
       safeLower(invoice.referenceNumber).includes(safeLower(searchTerm)) ||
       safeLower(invoice.poNumber).includes(safeLower(searchTerm)) ||
+      safeLower(invoice.orderNumber).includes(safeLower(searchTerm)) ||
+      safeLower(invoice.advanceNumber).includes(safeLower(searchTerm)) ||
       safeLower(invoice.milestoneLabel).includes(safeLower(searchTerm))
   );
   const filteredPayruns = payruns.filter((payrun) =>
@@ -1368,9 +1431,9 @@ const Payments = () => {
 
   const renderBatchInvoiceRow = (invoice, rowIndex, headers) => (
     <TableRow
-      key={invoice.id ?? rowIndex}
-      className={createBatchForm.invoice_ids.includes(invoice.id) ? 'bg-primary/10' : ''}
-      onClick={() => toggleInvoiceSelection(invoice.id)}
+      key={getPayableSelectionKey(invoice) || invoice.id || rowIndex}
+      className={createBatchForm.invoice_ids.includes(getPayableSelectionKey(invoice)) ? 'bg-primary/10' : ''}
+      onClick={() => toggleInvoiceSelection(getPayableSelectionKey(invoice))}
     >
       {headers.map((header) => {
         let value;
@@ -1381,8 +1444,8 @@ const Payments = () => {
               <div className="flex items-center gap-2">
                 <div onClick={(e) => e.stopPropagation()}>
                   <Checkbox
-                    checked={createBatchForm.invoice_ids.includes(invoice.id)}
-                    onCheckedChange={() => toggleInvoiceSelection(invoice.id)}
+                    checked={createBatchForm.invoice_ids.includes(getPayableSelectionKey(invoice))}
+                    onCheckedChange={() => toggleInvoiceSelection(getPayableSelectionKey(invoice))}
                     disabled={!canCreateBatch}
                   />
                 </div>
@@ -1542,7 +1605,7 @@ const Payments = () => {
       <div className="shrink-0 relative max-w-sm">
         <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
-          placeholder="Search by vendor or invoice #..."
+          placeholder="Search by vendor, invoice, PO, advance, or milestone..."
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           className="pl-10"
@@ -1720,7 +1783,7 @@ const Payments = () => {
       <PendingPaymentReportDialog
         open={paymentReportDialogOpen}
         onOpenChange={setPaymentReportDialogOpen}
-        invoices={selectablePayableInvoices}
+        invoices={reportableInvoiceRows}
         selectedInvoiceIds={paymentReportInvoiceIds}
         onToggleInvoice={togglePaymentReportInvoice}
         onSelectAllInvoices={selectPaymentReportInvoices}
