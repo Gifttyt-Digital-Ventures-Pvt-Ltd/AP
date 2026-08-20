@@ -260,6 +260,10 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
   const category = invoice.category;
   const categoryId = category?.id ?? invoice.categoryId ?? invoice.category_id;
   const totalAmount = pickInvoiceField(invoice, "totalAmount", "total_amount");
+  const netAmount =
+    pickInvoiceField(invoice, "netAmount", "net_amount") ??
+    pickInvoiceField(invoice, "netPayable", "net_payable") ??
+    pickInvoiceField(invoice, "netPayableAmount", "net_payable_amount");
 
   return {
     ...invoice,
@@ -292,7 +296,7 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
     ),
     ...normalizeInvoiceOverdueFields(invoice),
     totalAmount,
-    amount: totalAmount ?? invoice.netAmount ?? invoice.net_amount,
+    amount: totalAmount ?? netAmount,
     memo: invoice.memo ?? invoice.description,
     billingAddress:
       pickInvoiceField(invoice, "billingAddress", "billing_address") ??
@@ -361,7 +365,9 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
     tdsSectionId: pickInvoiceField(invoice, "tdsSectionId", "tds_section_id"),
     tdsSectionCode: pickInvoiceField(invoice, "tdsSectionCode", "tds_section_code"),
     tdsRate: pickInvoiceField(invoice, "tdsRate", "tds_rate"),
-    netAmount: pickInvoiceField(invoice, "netAmount", "net_amount"),
+    netAmount,
+    netPayable: netAmount,
+    netPayableAmount: netAmount,
     approvalWorkflowName:
       pickInvoiceField(invoice, "approvalWorkflowName", "approval_workflow_name") ??
       pickInvoiceField(invoice, "workflowName", "workflow_name"),

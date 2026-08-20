@@ -2363,7 +2363,6 @@ const InvoicesPage = () => {
     try {
       await Promise.all([
         refetchInvoices(),
-        refetchVendors(),
         refetchInvoiceFilterOptions(),
       ]);
       toast.success("Invoices refreshed");
@@ -2560,13 +2559,32 @@ const InvoicesPage = () => {
     [getInvoiceHistory],
   );
 
-  const handleViewInvoice = async (invoice) => {
+  const handleViewInvoice = useCallback(async (invoice) => {
     setSelectedInvoice(invoice);
     setViewDialogOpen(true);
     setViewTab("details");
     setInvoiceHistory([]);
-    await fetchInvoiceHistory(invoice);
-  };
+    const invoiceId = invoice?.id || invoice?.invoiceId;
+    let invoiceForView = invoice;
+    if (invoiceId) {
+      try {
+        const detailedInvoice = await getInvoice(invoiceId).unwrap();
+        invoiceForView = { ...invoice, ...detailedInvoice };
+        setSelectedInvoice((current) =>
+          current &&
+          String(current.id || current.invoiceId) === String(invoiceId)
+            ? invoiceForView
+            : current,
+        );
+      } catch (error) {
+        toast.error(
+          extractApiErrorDetail(error) ||
+            "Failed to load latest invoice details",
+        );
+      }
+    }
+    await fetchInvoiceHistory(invoiceForView);
+  }, [fetchInvoiceHistory, getInvoice]);
 
   const closeViewDialog = useCallback(
     (open) => {
