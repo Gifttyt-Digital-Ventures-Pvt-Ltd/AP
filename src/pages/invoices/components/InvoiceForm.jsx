@@ -76,6 +76,7 @@ import {
   useGetInvoiceTdsPreviewQuery,
 } from "../../../Services/apis/taxApi";
 import { useGetOrganisationQuery } from "../../../Services/apis/settingsApi";
+import { useGetVendorQuery } from "../../../Services/apis/invoicesVendorsApi";
 import {
   normalizeGstRegistrationsFromApi,
   normalizeOrganisationBranchesFromApi,
@@ -386,6 +387,12 @@ export const InvoiceForm = ({
     useState({});
   const [isNetPayableManuallyEdited, setIsNetPayableManuallyEdited] = useState(false);
   const [selectedVendorOverride, setSelectedVendorOverride] = useState(null);
+  const selectedVendorId = String(formData?.vendorId || "").trim();
+  const {
+    data: fetchedVendorDetails = null,
+  } = useGetVendorQuery(selectedVendorId, {
+    skip: !selectedVendorId,
+  });
 
 
 
@@ -394,6 +401,16 @@ export const InvoiceForm = ({
   }, [formData?.id, formData?.invoiceId]);
 
   const selectedVendor = useMemo(() => {
+    const fetchedVendorId =
+      fetchedVendorDetails?.id ??
+      fetchedVendorDetails?.vendorId ??
+      fetchedVendorDetails?.vendor_id;
+    if (
+      fetchedVendorId &&
+      String(fetchedVendorId) === selectedVendorId
+    ) {
+      return fetchedVendorDetails;
+    }
     if (formData?.vendorId && typeof findVendorById === "function") {
       const vendor = findVendorById(formData.vendorId);
       if (vendor) return vendor;
@@ -416,11 +433,13 @@ export const InvoiceForm = ({
     }
     return null;
   }, [
+    fetchedVendorDetails,
     formData?.vendorId,
     formData?.vendorName,
     findVendorById,
     findVendorByName,
     selectedVendorOverride,
+    selectedVendorId,
   ]);
 
   const vendorBranches = useMemo(() => {
@@ -453,34 +472,70 @@ export const InvoiceForm = ({
       .filter((branch) => branch.branchName || branch.branchCode || branch.gstin);
   }, [selectedVendor]);
 
+  const availableVendorBranches = useMemo(() => {
+    const invoiceBranch = {
+      branchName: String(formData?.vendorBranchName || "").trim(),
+      branchCode: String(formData?.vendorBranchCode || "")
+        .trim()
+        .toUpperCase(),
+      gstin: String(formData?.vendorBranchGstin || "")
+        .trim()
+        .toUpperCase(),
+    };
+
+    if (!invoiceBranch.branchName && !invoiceBranch.branchCode && !invoiceBranch.gstin) {
+      return vendorBranches;
+    }
+
+    const hasInvoiceBranch = vendorBranches.some((branch) => {
+      const branchCode = String(branch.branchCode || "").trim().toUpperCase();
+      const branchName = String(branch.branchName || "").trim();
+      return (
+        (invoiceBranch.branchCode && branchCode === invoiceBranch.branchCode) ||
+        (invoiceBranch.branchName && branchName === invoiceBranch.branchName)
+      );
+    });
+
+    return hasInvoiceBranch ? vendorBranches : [invoiceBranch, ...vendorBranches];
+  }, [
+    formData?.vendorBranchCode,
+    formData?.vendorBranchGstin,
+    formData?.vendorBranchName,
+    vendorBranches,
+  ]);
+
   const vendorBranchOptions = useMemo(
     () => [
       { value: VENDOR_BRANCH_NONE_VALUE, label: "N/A" },
-      ...vendorBranches.map((branch) => ({
+      ...availableVendorBranches.map((branch) => ({
         value: getVendorBranchOptionValue(branch),
         label: formatVendorBranchOptionLabel(branch),
       })),
     ],
-    [vendorBranches],
+    [availableVendorBranches],
   );
 
   const selectedVendorBranchValue = useMemo(() => {
     const code = String(formData?.vendorBranchCode || "").trim();
     if (code) {
-      const byCode = vendorBranches.find(
+      const byCode = availableVendorBranches.find(
         (branch) => branch.branchCode === code,
       );
       if (byCode) return getVendorBranchOptionValue(byCode);
     }
     const name = String(formData?.vendorBranchName || "").trim();
     if (name) {
-      const byName = vendorBranches.find(
+      const byName = availableVendorBranches.find(
         (branch) => branch.branchName === name,
       );
       if (byName) return getVendorBranchOptionValue(byName);
     }
     return "";
-  }, [formData?.vendorBranchCode, formData?.vendorBranchName, vendorBranches]);
+  }, [
+    availableVendorBranches,
+    formData?.vendorBranchCode,
+    formData?.vendorBranchName,
+  ]);
 
   const msmePaymentDue = normalizeMsmePaymentDue(formData);
   const vendorIsMsme =
@@ -679,7 +734,7 @@ export const InvoiceForm = ({
     );
   };
   const applyVendorBranchSelection = (value) => {
-    const branch = vendorBranches.find(
+    const branch = availableVendorBranches.find(
       (entry) => getVendorBranchOptionValue(entry) === value,
     );
     setFormData((prev) => {
@@ -1902,7 +1957,7 @@ export const InvoiceForm = ({
                         ref={gstinTriggerRef}
                         type="button"
                         onClick={() => {
-                          if (vendorBranches.length > 0)
+                          if (availableVendorBranches.length > 0)
                             setGstinPickerOpen((open) => !open);
                         }}
                         className="flex items-center gap-1 text-sm text-muted-foreground"
@@ -1911,12 +1966,12 @@ export const InvoiceForm = ({
                         <span className="truncate">
                           GSTIN No. - {formData.gstin || "-"}
                         </span>
-                        {vendorBranches.length > 0 && (
+                        {availableVendorBranches.length > 0 && (
                           <ChevronDown className="h-3.5 w-3.5 shrink-0" />
                         )}
                       </button>
                     </PopoverAnchor>
-                    {vendorBranches.length > 0 && (
+                    {availableVendorBranches.length > 0 && (
                       <PopoverContent
                         className="z-[120] min-w-[260px] w-[var(--radix-popover-trigger-width)] p-0"
                         align="start"
@@ -1928,7 +1983,7 @@ export const InvoiceForm = ({
                         }}
                       >
                         <div className="max-h-56 overflow-y-auto overscroll-contain py-1">
-                          {vendorBranches.map((branch) => (
+                          {availableVendorBranches.map((branch) => (
                             <button
                               key={getVendorBranchOptionValue(branch)}
                               type="button"
@@ -1981,7 +2036,7 @@ export const InvoiceForm = ({
 
               <div className="grid grid-cols-2 gap-3 border-t border-border pt-3">
                 <div>
-                  {formData.vendorMatched && vendorBranches.length > 0 ? (
+                  {formData.vendorMatched && availableVendorBranches.length > 0 ? (
                     <>
                       <Label className="text-xs">
                         Vendor Branch (Optional)
@@ -2012,7 +2067,7 @@ export const InvoiceForm = ({
                   )}
                 </div>
                 <div>
-                  {formData.vendorMatched && vendorBranches.length > 0 ? (
+                  {formData.vendorMatched && availableVendorBranches.length > 0 ? (
                     <>
                       <RequiredLabel required>GST Treatment</RequiredLabel>
                       <AppSelect
@@ -3017,7 +3072,7 @@ export const InvoiceForm = ({
                   min="0"
                   step="0.01"
                   value={
-                    hasManualNetPayableValue
+                    isNetPayableManuallyEdited
                       ? formData.netAmount
                       : formatNumericInputValue(netPayable)
                   }
