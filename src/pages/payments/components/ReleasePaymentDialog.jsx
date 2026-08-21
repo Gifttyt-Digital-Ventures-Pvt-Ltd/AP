@@ -47,33 +47,39 @@ const clippedTableText = (value, className = '') => {
   );
 };
 
+const PAYMENT_MODE_ELIGIBILITY = {
+  IMPS: (amount) => amount < 500000,
+  NEFT: () => true,
+  RTGS: (amount) => amount >= 200000,
+};
+
+const getEnabledPaymentModes = (amount = 0) => {
+  const total = Number(amount || 0);
+  return Object.entries(PAYMENT_MODE_ELIGIBILITY)
+    .filter(([, isEligible]) => isEligible(total))
+    .map(([paymentMode]) => paymentMode);
+};
+
 const getPaymentModeRecommendation = (amount = 0) => {
   const total = Number(amount || 0);
-  if (total < 200000) {
-    return {
-      recommendedMode: 'IMPS',
-      enabledModes: ['IMPS', 'NEFT', 'RTGS'],
-      reason: 'Fastest option',
-    };
-  }
   if (total < 500000) {
     return {
       recommendedMode: 'IMPS',
-      enabledModes: ['IMPS', 'NEFT'],
-      reason: 'Fastest eligible option',
+      enabledModes: getEnabledPaymentModes(total),
+      reason: 'Fastest option',
     };
   }
   if (total < 1000000) {
     return {
       recommendedMode: 'NEFT',
-      enabledModes: ['NEFT', 'RTGS'],
+      enabledModes: getEnabledPaymentModes(total),
       reason: 'IMPS limit exceeded',
     };
   }
   return {
     recommendedMode: 'RTGS',
-    enabledModes: ['RTGS'],
-    reason: 'Only eligible payment mode',
+    enabledModes: getEnabledPaymentModes(total),
+    reason: 'Preferred for high-value payments',
   };
 };
 

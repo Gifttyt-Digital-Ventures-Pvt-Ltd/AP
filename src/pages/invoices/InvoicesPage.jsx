@@ -2074,6 +2074,21 @@ const InvoicesPage = () => {
     return false;
   };
 
+  const validateNetPayableAmount = (payload) => {
+    if (!isNetPayableEditEnabled) return true;
+    const rawNetAmount = String(payload?.netAmount ?? "").trim();
+    if (rawNetAmount === "") {
+      toast.error("Net payable amount is required.");
+      return false;
+    }
+    const netAmount = Number(rawNetAmount);
+    if (!Number.isFinite(netAmount) || netAmount < 0) {
+      toast.error("Enter a valid net payable amount.");
+      return false;
+    }
+    return true;
+  };
+
   const validateSavedInvoiceEdit = (
     payload,
     { requireBillingGst = false } = {},
@@ -2092,6 +2107,7 @@ const InvoicesPage = () => {
       toast.error("Please select or request a vendor before saving");
       return false;
     }
+    if (!validateNetPayableAmount(payload)) return false;
     const conversionError = getInrConversionValidationError({
       currency: payload.currency,
       enabled: isForeignCurrencyInrConversionEnabled,
@@ -2377,6 +2393,7 @@ const InvoicesPage = () => {
 
     const totals = calculateTotals(formData.lineItems);
     if (!validateFundingSplit(formData, totals)) return;
+    if (!validateNetPayableAmount(formData)) return;
     const isSummaryOnly = formData.lineItemMode === LINE_ITEM_MODE_SUMMARY_ONLY;
     const createLineItems = isSummaryOnly
       ? []
@@ -2732,6 +2749,7 @@ const InvoicesPage = () => {
     if (isSavedDraft) {
       if (!validateSavedInvoiceEdit(formData)) return;
     } else {
+      if (!validateNetPayableAmount(formData)) return;
       if (!validateMandatoryPayload(formData)) return;
     }
 

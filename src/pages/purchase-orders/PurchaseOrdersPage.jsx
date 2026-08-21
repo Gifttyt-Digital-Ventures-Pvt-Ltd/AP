@@ -1553,10 +1553,14 @@ const PurchaseOrdersPage = () => {
   };
 
   const updateLineItem = (index, field, value) => {
+    const patch =
+      field && typeof field === "object" && !Array.isArray(field)
+        ? field
+        : { [field]: value };
     setPoForm((prev) => ({
       ...prev,
       line_items: prev.line_items.map((item, i) =>
-        i === index ? { ...item, [field]: value } : item,
+        i === index ? { ...item, ...patch } : item,
       ),
     }));
   };

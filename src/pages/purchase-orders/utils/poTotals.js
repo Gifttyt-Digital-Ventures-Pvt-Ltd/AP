@@ -46,6 +46,39 @@ export const computeLineTaxAmount = (item = {}, currency = 'INR') => {
   return taxable * (Number(item.gst_rate) || 0) / 100;
 };
 
+const getLineComputedTaxSplit = (item = {}, taxable = 0, currency = 'INR') => {
+  if (!isInrCurrency(currency)) {
+    return { cgst: 0, sgst: 0, igst: 0, cess: 0 };
+  }
+
+  const explicitCgst = toPoAmount(item.cgst_amount) ?? 0;
+  const explicitSgst = toPoAmount(item.sgst_amount) ?? 0;
+  const explicitIgst = toPoAmount(item.igst_amount) ?? 0;
+  const explicitCess = toPoAmount(item.cess_amount) ?? 0;
+  if (explicitCgst + explicitSgst + explicitIgst + explicitCess > 0) {
+    return {
+      cgst: explicitCgst,
+      sgst: explicitSgst,
+      igst: explicitIgst,
+      cess: explicitCess,
+    };
+  }
+
+  const rate = Number(item.gst_rate) || 0;
+  if (rate <= 0) return { cgst: 0, sgst: 0, igst: 0, cess: 0 };
+
+  const label = String(item.gst_tax_label || item.gst_tax_type || '').toUpperCase();
+  const taxAmount = taxable * rate / 100;
+  if (label.includes('IGST')) {
+    return { cgst: 0, sgst: 0, igst: taxAmount, cess: 0 };
+  }
+  if (label.includes('CGST') || label.includes('SGST')) {
+    return { cgst: taxAmount / 2, sgst: taxAmount / 2, igst: 0, cess: 0 };
+  }
+
+  return { cgst: 0, sgst: 0, igst: 0, cess: 0 };
+};
+
 export const computeLineTotal = (item = {}, currency = 'INR') => {
   const scannedTotal = toPoAmount(item.total_amount);
   if (scannedTotal !== null && item.total_amount !== undefined && item.total_amount !== '') {
@@ -80,10 +113,11 @@ export const computePoTotalsFromLines = (form = {}) => {
     totalTaxableValue += taxable;
 
     if (isInrCurrency(currency)) {
-      totalCgst += toPoAmount(item.cgst_amount) ?? 0;
-      totalSgst += toPoAmount(item.sgst_amount) ?? 0;
-      totalIgst += toPoAmount(item.igst_amount) ?? 0;
-      totalCess += toPoAmount(item.cess_amount) ?? 0;
+      const split = getLineComputedTaxSplit(item, taxable, currency);
+      totalCgst += split.cgst;
+      totalSgst += split.sgst;
+      totalIgst += split.igst;
+      totalCess += split.cess;
     }
 
     taxAmount += computeLineTaxAmount(item, currency);
@@ -156,11 +190,15 @@ const LINE_PRICING_FIELDS = new Set([
 ]);
 
 export const applyUploadLineItemUpdate = (form, index, field, value) => {
+  const patch =
+    field && typeof field === 'object' && !Array.isArray(field)
+      ? field
+      : { [field]: value };
   const lineItems = form.line_items.map((item, itemIndex) => {
     if (itemIndex !== index) return item;
 
-    const updated = { ...item, [field]: value };
-    if (LINE_PRICING_FIELDS.has(field)) {
+    const updated = { ...item, ...patch };
+    if (Object.keys(patch).some((key) => LINE_PRICING_FIELDS.has(key))) {
       delete updated.taxable_value;
       delete updated.tax_amount;
       delete updated.total_amount;

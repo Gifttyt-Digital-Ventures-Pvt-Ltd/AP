@@ -509,18 +509,10 @@ const PoFormDialog = ({
                 value={resolvePoGstSelectionValue(item)}
                 onValueChange={(value) => {
                   const nextRate = parseTaxRateFromLabel(value);
-                  setPoForm((prev) => ({
-                    ...prev,
-                    line_items: prev.line_items.map((lineItem, lineIndex) =>
-                      lineIndex === idx
-                        ? {
-                            ...lineItem,
-                            gst_rate: nextRate,
-                            gst_tax_label: value,
-                          }
-                        : lineItem,
-                    ),
-                  }));
+                  updateLineItem(idx, {
+                    gst_rate: nextRate,
+                    gst_tax_label: value,
+                  });
                 }}
               >
                 <SelectTrigger className="h-9 min-w-[150px] bg-white/80">
