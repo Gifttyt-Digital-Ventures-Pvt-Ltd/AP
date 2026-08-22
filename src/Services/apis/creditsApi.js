@@ -21,6 +21,12 @@ const normalizeLedgerResponse = (response = {}) => ({
 const normalizeWalletSummaryResponse = (response = {}) => ({
   ...response,
   subscriptionModel: response?.subscriptionModel ?? response?.billingModel,
+  showBillingInPortal: Boolean(
+    response?.showBillingInPortal ??
+      response?.show_billing_in_portal ??
+      response?.showBilling ??
+      false,
+  ),
   invoiceBillingCycle: response?.invoiceBillingCycle ?? response?.invoice_billing_cycle ?? null,
   cycle: response?.cycle ?? null,
   cycleStartDate: response?.cycleStartDate ?? response?.cycle_start_date ?? null,
@@ -28,6 +34,7 @@ const normalizeWalletSummaryResponse = (response = {}) => ({
   invoiceLimit: response?.invoiceLimit ?? response?.invoice_limit ?? null,
   invoiceProcessed: response?.invoiceProcessed ?? response?.invoice_processed ?? null,
   invoiceFailed: response?.invoiceFailed ?? response?.invoice_failed ?? null,
+  availableInvoiceLimit: response?.availableInvoiceLimit ?? response?.available_invoice_limit ?? null,
   remainingInvoices: response?.remainingInvoices ?? response?.remaining_invoices ?? null,
   additionalInvoiced: response?.additionalInvoiced ?? response?.additional_invoiced ?? null,
   usagePercentage: response?.usagePercentage ?? response?.usage_percentage ?? null,
