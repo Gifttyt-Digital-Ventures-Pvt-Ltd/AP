@@ -15,8 +15,17 @@ import PendingApprovalsAlert from "./components/PendingApprovalsAlert";
 import OverdueInvoicesAlert from "./components/OverdueInvoicesAlert";
 import InvoiceStatusSummaryCard from "./components/InvoiceStatusSummaryCard";
 import PaymentSummaryCard from "./components/PaymentSummaryCard";
+import { useGetClientWalletSummaryQuery } from "../../Services/apis/creditsApi";
+import { useRBAC } from "../../contexts/RBACContext";
 
 const Dashboard = () => {
+  const { isInvoiceBasedSubscription, isLoaded: rbacLoaded } = useRBAC();
+  const { data: invoiceUsageSummary = null } = useGetClientWalletSummaryQuery(
+    undefined,
+    {
+      skip: !rbacLoaded || !isInvoiceBasedSubscription,
+    },
+  );
   const {
     stats,
     charts,
@@ -96,9 +105,11 @@ const Dashboard = () => {
 
       <DashboardStatsGrid
         stats={stats}
-        approvalRate={approvalRate}
         totalValue={totalValue}
+        // approvalRate={approvalRate}
         formatCompactCurrency={formatCompactCurrency}
+        invoiceUsageSummary={invoiceUsageSummary}
+        showInvoiceAvailability={isInvoiceBasedSubscription}
       />
 
       {(showOverdueAlert || showPendingApprovalsAlert) && (

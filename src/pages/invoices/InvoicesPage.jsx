@@ -96,6 +96,7 @@ import {
   mergeInvoiceVendorOptions,
 } from "../../Services/utils/payloadMappers";
 import { useGetCorporateUserDetailsQuery } from "../../Services/apis/corporateApi";
+import { useGetClientWalletSummaryQuery } from "../../Services/apis/creditsApi";
 import { useGetCategoriesForInvoiceQuery } from "../../Services/apis/categoriesApi";
 import { useGetDepartmentsForInvoiceQuery } from "../../Services/apis/departmentsApi";
 import { useAuth } from "../../contexts/AuthContext";
@@ -178,6 +179,7 @@ import { useCreditErrorHandler } from "../../contexts/CreditErrorContext";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import { useRBAC } from "../../contexts/RBACContext";
 import IntegrationSourceBadge from "../../components/integrations/IntegrationSourceBadge";
+import { getInvoiceAvailabilitySummary } from "../../components/billing/InvoiceAvailabilityCard";
 import useZohoIntegrationActive from "../../hooks/useZohoIntegrationActive";
 import { withIntegrationTableHeader } from "../../utils/integrationProvenance";
 import { useCurrencyFilter } from "../../hooks/useCurrencyFilter";
@@ -399,6 +401,8 @@ const InvoicesPage = () => {
     isCorporateSectionEnabled,
     hasPermission,
     isBranchEnabled,
+    isInvoiceBasedSubscription,
+    isLoaded: rbacLoaded,
   } = useRBAC();
   const hasPurchaseOrderSubscription =
     isCorporateScreenAllowed("PURCHASE_ORDER") &&
@@ -422,6 +426,10 @@ const InvoicesPage = () => {
     useForeignCurrencyInrConversionSubscription();
   const { data: corporateUserContext = null } =
     useGetCorporateUserDetailsQuery();
+  const { data: invoiceUsageSummary = null } = useGetClientWalletSummaryQuery(undefined, {
+    skip: !rbacLoaded || !isInvoiceBasedSubscription,
+  });
+  const invoiceAvailabilitySummary = getInvoiceAvailabilitySummary(invoiceUsageSummary);
   const invoiceUserEmail =
     corporateUserContext?.corporateUser?.email ||
     corporateUserContext?.employeeDetails?.email ||
@@ -3656,7 +3664,7 @@ const InvoicesPage = () => {
             Upload and manage all invoices
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-start gap-3">
           <CurrencySelector
             currencies={currencies}
             value={selectedCurrency}
@@ -3674,23 +3682,36 @@ const InvoicesPage = () => {
           >
             Refresh
           </RefreshButton>
-          <Button
-            onClick={() => setInvoiceUploadDialogOpen(true)}
-            data-testid="upload-invoice-button"
-            disabled={scanning || !canUploadInvoices}
-          >
-            {scanning ? (
-              <>
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
-                Extracting...
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4 mr-2" />
-                Upload Invoice
-              </>
+          <div className="flex shrink-0 flex-col items-start gap-1">
+            <Button
+              onClick={() => setInvoiceUploadDialogOpen(true)}
+              data-testid="upload-invoice-button"
+              disabled={scanning || !canUploadInvoices}
+            >
+              {scanning ? (
+                <>
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                  Extracting...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Upload Invoice
+                </>
+              )}
+            </Button>
+            {isInvoiceBasedSubscription && invoiceAvailabilitySummary && (
+              <p
+                className={`whitespace-nowrap text-sm font-medium leading-none ${
+                  invoiceAvailabilitySummary.availableInvoiceLimit < 0
+                    ? "text-red-600"
+                    : "text-muted-foreground"
+                }`}
+              >
+                Available Invoice Scan:{invoiceAvailabilitySummary.availableInvoiceLimit}
+              </p>
             )}
-          </Button>
+          </div>
         </div>
       </div>
 
