@@ -17,6 +17,29 @@ const normalizeLedgerResponse = (response = {}) => ({
   total: Number.isFinite(response?.total) ? response.total : asCreditItems(response).length,
 });
 
+
+const normalizeWalletSummaryResponse = (response = {}) => ({
+  ...response,
+  subscriptionModel: response?.subscriptionModel ?? response?.billingModel,
+  showBillingInPortal: Boolean(
+    response?.showBillingInPortal ??
+      response?.show_billing_in_portal ??
+      response?.showBilling ??
+      false,
+  ),
+  invoiceBillingCycle: response?.invoiceBillingCycle ?? response?.invoice_billing_cycle ?? null,
+  cycle: response?.cycle ?? null,
+  cycleStartDate: response?.cycleStartDate ?? response?.cycle_start_date ?? null,
+  cycleEndDate: response?.cycleEndDate ?? response?.cycle_end_date ?? null,
+  invoiceLimit: response?.invoiceLimit ?? response?.invoice_limit ?? null,
+  invoiceProcessed: response?.invoiceProcessed ?? response?.invoice_processed ?? null,
+  invoiceFailed: response?.invoiceFailed ?? response?.invoice_failed ?? null,
+  availableInvoiceLimit: response?.availableInvoiceLimit ?? response?.available_invoice_limit ?? null,
+  remainingInvoices: response?.remainingInvoices ?? response?.remaining_invoices ?? null,
+  additionalInvoiced: response?.additionalInvoiced ?? response?.additional_invoiced ?? null,
+  usagePercentage: response?.usagePercentage ?? response?.usage_percentage ?? null,
+});
+
 const normalizeActionTypesResponse = (response = {}) => {
   const items = asCreditItems(response).map((item) => ({
     ...item,
@@ -61,6 +84,7 @@ export const creditsApi = serviceApi.injectEndpoints({
         url: `${CLIENT_CREDITS_BASE}/wallet/summary`,
         method: "GET",
       }),
+      transformResponse: normalizeWalletSummaryResponse,
       providesTags: ["Credits"],
     }),
     getClientLedger: builder.query({

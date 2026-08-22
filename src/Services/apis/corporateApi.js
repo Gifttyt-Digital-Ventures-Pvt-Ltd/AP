@@ -56,6 +56,17 @@ const resolveCorporatePayload = (response) => {
 const toBoolean = (value) =>
   value === true || value === "true" || value === 1 || value === "1";
 
+const normalizeInvoiceBillingCycle = (value) => {
+  const normalized = normalizeToken(value);
+  return normalized === "YEARLY" ? "YEARLY" : "MONTHLY";
+};
+
+const normalizeInvoiceCount = (value) => {
+  const count = Number(value);
+  if (!Number.isFinite(count) || count < 0) return 0;
+  return Math.floor(count);
+};
+
 const normalizeCorporateSubscription = (corporate) => {
   if (!corporate || typeof corporate !== "object") {
     return {
@@ -90,6 +101,16 @@ const normalizeCorporateSubscription = (corporate) => {
       corporate.subscriptionModel ??
         corporate.apSubscriptionModel ??
         corporate.billingModel,
+    ),
+    invoiceBillingCycle: normalizeInvoiceBillingCycle(
+      corporate.invoiceBillingCycle ??
+        corporate.invoice_billing_cycle ??
+        corporate.billingCycle,
+    ),
+    invoiceCount: normalizeInvoiceCount(
+      corporate.invoiceCount ??
+        corporate.invoice_count ??
+        corporate.allowedInvoiceCount,
     ),
   };
 };
@@ -415,6 +436,12 @@ const normalizeCorporateScreensResponse = (response = {}) => {
   return {
     raw: response ?? null,
     subscriptionModel,
+    invoiceBillingCycle: normalizeInvoiceBillingCycle(
+      response?.invoiceBillingCycle ?? response?.invoice_billing_cycle,
+    ),
+    invoiceCount: normalizeInvoiceCount(
+      response?.invoiceCount ?? response?.invoice_count,
+    ),
     isTokenBasedSubscription: isTokenBased,
     allowedScreens: Array.from(allowedScreens),
     enabledSections: enabledSectionList,

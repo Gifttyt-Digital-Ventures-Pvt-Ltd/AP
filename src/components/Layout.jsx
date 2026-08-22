@@ -22,6 +22,7 @@ import { redirectToOriginLogin } from "../utils/authRedirect";
 import { formatCredits } from "./credits/CreditAmount";
 import { completeApLogout } from "../utils/logoutFlow";
 import CreditBalanceBadge from "./credits/CreditBalanceBadge";
+import InvoiceAvailabilityCard, { getInvoiceAvailabilitySummary } from "./billing/InvoiceAvailabilityCard";
 import { useNotificationStream } from "../pages/notifications/useNotificationStream";
 import { Button } from "./ui/button";
 import {
@@ -74,6 +75,7 @@ export const Layout = ({ children }) => {
     canAccessRoute,
     isLoaded: rbacLoaded,
     isTokenBasedSubscription,
+    isInvoiceBasedSubscription,
     isCorporateSectionEnabled,
     isBankingEnabled,
   } = useRBAC();
@@ -85,7 +87,7 @@ export const Layout = ({ children }) => {
     isLoading: walletLoading,
     isError: walletError,
   } = useGetClientWalletSummaryQuery(undefined, {
-    skip: !user || !rbacLoaded || !isTokenBasedSubscription,
+    skip: !user || !rbacLoaded || (!isTokenBasedSubscription && !isInvoiceBasedSubscription),
     refetchOnFocus: false,
     refetchOnMountOrArgChange: false,
   });
@@ -122,6 +124,12 @@ export const Layout = ({ children }) => {
   const sidebarPrimaryName = corporateName || userName || "User";
   const sidebarSecondaryLabel = userName;
   const tokenBalance = formatCredits(walletSummary?.balance || 0);
+  const invoiceAvailability = getInvoiceAvailabilitySummary(walletSummary);
+  const showBillingInPortal = walletSummary?.showBillingInPortal === true;
+  const showBillingSummary =
+    (isTokenBasedSubscription || isInvoiceBasedSubscription) &&
+    !walletError &&
+    showBillingInPortal;
   const unreadNotificationCount = Number(
     unreadNotifications?.count ?? unreadNotifications?.unreadCount ?? 0,
   );
@@ -340,8 +348,7 @@ export const Layout = ({ children }) => {
                       </div>
                     </button>
                   ))}
-                {isTokenBasedSubscription &&
-                  !walletError &&
+                {showBillingSummary &&
                   (!sidebarOpen ? (
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -349,24 +356,38 @@ export const Layout = ({ children }) => {
                           type="button"
                           onClick={(event) => event.currentTarget.blur()}
                           className="mb-2 w-full flex items-center justify-start px-2 py-2 rounded-md transition-colors hover:bg-button-primary-hover hover:text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          data-testid="token-balance-button-collapsed"
-                          aria-label={`Tokens ${walletLoading ? "loading" : tokenBalance}`}
+                          data-testid="billing-summary-button-collapsed"
+                          aria-label={
+                            isTokenBasedSubscription
+                              ? `Tokens ${walletLoading ? "loading" : tokenBalance}`
+                              : `Available invoice limit ${walletLoading ? "loading" : invoiceAvailability?.availableInvoiceLimit ?? 0}`
+                          }
                         >
                           <WalletCards className="h-6 w-6" />
                         </button>
                       </TooltipTrigger>
                       <TooltipContent side="right">
-                        {walletLoading ? "Tokens loading" : `${tokenBalance} tokens`}
+                        {walletLoading
+                          ? "Billing summary loading"
+                          : isTokenBasedSubscription
+                            ? `${tokenBalance} tokens`
+                            : `${invoiceAvailability?.availableInvoiceLimit ?? 0} available invoice limit`}
                       </TooltipContent>
                     </Tooltip>
                   ) : (
-                    <div className="mb-2 px-1" data-testid="token-balance-button">
+                    <div className="mb-2 px-1" data-testid="billing-summary-button">
                       {walletLoading ? (
-                        <span className="px-2 text-xs text-muted-foreground">Loading tokens...</span>
-                      ) : (
+                        <span className="px-2 text-xs text-muted-foreground">Loading billing...</span>
+                      ) : isTokenBasedSubscription ? (
                         <CreditBalanceBadge
                           wallet={walletSummary}
                           className="w-full justify-center"
+                        />
+                      ) : (
+                        <InvoiceAvailabilityCard
+                          summary={walletSummary}
+                          compact
+                          className="w-full justify-center text-center"
                         />
                       )}
                     </div>
