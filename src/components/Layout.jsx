@@ -125,7 +125,11 @@ export const Layout = ({ children }) => {
   const sidebarSecondaryLabel = userName;
   const tokenBalance = formatCredits(walletSummary?.balance || 0);
   const invoiceAvailability = getInvoiceAvailabilitySummary(walletSummary);
-  const showBillingSummary = (isTokenBasedSubscription || isInvoiceBasedSubscription) && !walletError;
+  const showBillingInPortal = walletSummary?.showBillingInPortal === true;
+  const showBillingSummary =
+    (isTokenBasedSubscription || isInvoiceBasedSubscription) &&
+    !walletError &&
+    showBillingInPortal;
   const unreadNotificationCount = Number(
     unreadNotifications?.count ?? unreadNotifications?.unreadCount ?? 0,
   );

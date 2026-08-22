@@ -11,7 +11,7 @@ const toNumber = (value, fallback = 0) => {
 
 export const getInvoiceAvailabilitySummary = (summary = null) => {
   const resolvedSummary = summary;
-  if (!resolvedSummary) return null;
+  if (!resolvedSummary || resolvedSummary.showBillingInPortal !== true) return null;
   const subscriptionModel = String(resolvedSummary.subscriptionModel || "").toUpperCase();
   if (subscriptionModel && subscriptionModel !== "INVOICE_BASED") return null;
 

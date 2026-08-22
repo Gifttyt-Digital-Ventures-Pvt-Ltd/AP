@@ -109,7 +109,9 @@ const Dashboard = () => {
         // approvalRate={approvalRate}
         formatCompactCurrency={formatCompactCurrency}
         invoiceUsageSummary={invoiceUsageSummary}
-        showInvoiceAvailability={isInvoiceBasedSubscription}
+        showInvoiceAvailability={
+          isInvoiceBasedSubscription && invoiceUsageSummary?.showBillingInPortal === true
+        }
       />
 
       {(showOverdueAlert || showPendingApprovalsAlert) && (
