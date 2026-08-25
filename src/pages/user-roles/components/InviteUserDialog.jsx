@@ -8,7 +8,7 @@ import {
 } from "../../../components/ui/dialog";
 import { Input } from "../../../components/ui/input";
 import { Label } from "../../../components/ui/label";
-import { UserPlus } from "lucide-react";
+import { Loader2, UserPlus } from "lucide-react";
 
 const InviteUserDialog = ({
   open,
@@ -17,12 +17,12 @@ const InviteUserDialog = ({
   setInviteForm,
   handleInviteUser,
   mode = "add",
+  submitting = false,
 }) => {
   const isEditMode = mode === "edit";
   const isSubmitDisabled =
     !inviteForm.name?.trim() ||
-    !inviteForm.email?.trim() ||
-    !inviteForm.mobile?.trim();
+    !inviteForm.email?.trim();
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -65,7 +65,7 @@ const InviteUserDialog = ({
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="mobile">Mobile Number*</Label>
+              <Label htmlFor="mobile">Mobile Number</Label>
               <Input
                 id="mobile"
                 value={inviteForm.mobile || ""}
@@ -73,8 +73,6 @@ const InviteUserDialog = ({
                   setInviteForm({ ...inviteForm, mobile: e.target.value })
                 }
                 placeholder="Enter mobile number"
-                required
-                disabled={isEditMode}
               />
             </div>
 
@@ -139,10 +137,20 @@ const InviteUserDialog = ({
             <Button
               type="submit"
               className="flex-1"
-              disabled={isSubmitDisabled}
+              disabled={isSubmitDisabled || submitting}
             >
-              <UserPlus className="h-4 w-4 mr-2" />
-              {isEditMode ? "Save Changes" : "Create User"}
+              {submitting ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <UserPlus className="h-4 w-4 mr-2" />
+              )}
+              {submitting
+                ? isEditMode
+                  ? "Saving..."
+                  : "Creating..."
+                : isEditMode
+                  ? "Save Changes"
+                  : "Create User"}
             </Button>
           </div>
         </form>

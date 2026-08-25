@@ -215,7 +215,8 @@ const UserRoles = () => {
     useAssignCustomRoleToEmployeesMutation();
   const [removeCustomRoleFromEmployees] =
     useRemoveCustomRoleFromEmployeesMutation();
-  const [updateCorporateEmployee] = useUpdateCorporateEmployeeMutation();
+  const [updateCorporateEmployee, { isLoading: updateCorporateEmployeeLoading }] =
+    useUpdateCorporateEmployeeMutation();
   const [deleteCorporateEmployee] = useDeleteCorporateEmployeeMutation();
   const [createCustomRole, { isLoading: createCustomRoleLoading }] =
     useCreateCustomRoleMutation();
@@ -874,6 +875,27 @@ const UserRoles = () => {
     setAssignRoleSetsDialogOpen(true);
   };
 
+  const isValidMobileNumber = (mobile) => /^\d{10}$/.test(String(mobile || "").trim());
+
+  const buildEmployeePayload = (employee) => {
+    const mobile = String(employee.mobile || "").trim();
+    const payload = {
+      name: String(employee.name || "").trim(),
+      email: String(employee.email || "").trim(),
+      id: String(employee.id || employee.employeeCode || "").trim(),
+      grade: String(employee.grade || "").trim() || "",
+      department: String(employee.department || "").trim() || "",
+      role: String(employee.role || "").trim(),
+      programType: "VENDOR_PAYMENTS",
+    };
+
+    if (mobile) {
+      payload.mobile = mobile;
+    }
+
+    return payload;
+  };
+
   const handleInviteUser = async (e) => {
     e.preventDefault();
     if (
@@ -882,15 +904,26 @@ const UserRoles = () => {
       )
     )
       return;
+    const mobile = String(inviteForm.mobile || "").trim();
+    if (mobile && !isValidMobileNumber(mobile)) {
+      toast.error("Mobile Number must be exactly 10 digits");
+      return;
+    }
     try {
       if (inviteDialogMode === "edit") {
-        await updateCorporateEmployee({
+        const updatePayload = {
           id: inviteForm.id,
           empId: String(inviteForm.employeeCode || "").trim() || undefined,
           name: inviteForm.name.trim(),
           department: String(inviteForm.department || "").trim(),
           role: String(inviteForm.role || "").trim(),
-        }).unwrap();
+        };
+
+        if (mobile) {
+          updatePayload.mobile = mobile;
+        }
+
+        await updateCorporateEmployee(updatePayload).unwrap();
         toast.success("User updated successfully");
         setInviteDialogOpen(false);
         resetInviteForm();
@@ -900,18 +933,15 @@ const UserRoles = () => {
 
       const payload = {
         type: "EMPLOYEES",
-        employees: [
-          {
-            name: inviteForm.name.trim(),
-            email: inviteForm.email.trim(),
-            mobile: String(inviteForm.mobile || "").trim(),
-            id: String(inviteForm.employeeCode || "").trim(),
-            grade: String(inviteForm.grade || "").trim() || "",
-            department: String(inviteForm.department || "").trim() || "",
-            role: String(inviteForm.role || "").trim(),
-            programType: "VENDOR_PAYMENTS",
-          },
-        ],
+        employees: [buildEmployeePayload({
+          name: inviteForm.name,
+          email: inviteForm.email,
+          mobile,
+          id: inviteForm.employeeCode,
+          grade: inviteForm.grade,
+          department: inviteForm.department,
+          role: inviteForm.role,
+        })],
       };
       const response = await addCorporateUsers(payload).unwrap();
       if (response?.failed?.total > 0) {
@@ -943,16 +973,17 @@ const UserRoles = () => {
   const handleBulkUsersParsed = async (rows = []) => {
     if (!guardAction("roles.invite")) return false;
 
-    const normalizedRows = rows.map((row) => ({
-      name: String(row.name || "").trim(),
-      email: String(row.email || "").trim(),
-      mobile: String(row.mobile || "").trim(),
-      id: String(row.employeeCode || "").trim(),
-      grade: String(row.grade || "").trim(),
-      department: String(row.department || "").trim(),
-      role: String(row.role || "").trim(),
-      programType: "VENDOR_PAYMENTS",
-    }));
+    const normalizedRows = rows.map((row) =>
+      buildEmployeePayload({
+        name: row.name,
+        email: row.email,
+        mobile: row.mobile,
+        id: row.employeeCode,
+        grade: row.grade,
+        department: row.department,
+        role: row.role,
+      }),
+    );
 
     const seenEmails = new Set();
     const duplicateEmails = new Set();
@@ -1509,6 +1540,11 @@ const UserRoles = () => {
         setInviteForm={setInviteForm}
         mode={inviteDialogMode}
         handleInviteUser={handleInviteUser}
+        submitting={
+          inviteDialogMode === "edit"
+            ? updateCorporateEmployeeLoading
+            : addCorporateUsersLoading
+        }
       />
 
       <BulkUsersUploadDialog

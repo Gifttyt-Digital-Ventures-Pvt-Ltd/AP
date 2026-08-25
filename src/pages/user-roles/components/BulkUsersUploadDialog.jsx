@@ -31,7 +31,7 @@ export const USER_UPLOAD_HEADER_MAP = {
   role: "Designation",
 };
 
-const OPTIONAL_USER_UPLOAD_FIELDS = ["employeeCode", "grade", "department", "role"];
+const OPTIONAL_USER_UPLOAD_FIELDS = ["mobile", "employeeCode", "grade", "department", "role"];
 
 const UploadErrorsPanel = ({ errors = [] }) => {
   if (!errors.length) return null;
@@ -60,7 +60,7 @@ const downloadTemplate = () => {
     ["Parameter", "Type"],
     ["Full Name", "Required"],
     ["Email Address", "Required. Must be a valid email address"],
-    ["Mobile Number", "Required. Enter exactly 10 digits"],
+    ["Mobile Number", "Optional. If entered, use exactly 10 digits"],
     ["Employee ID", "Optional"],
     ["Grade", "Optional"],
     ["Department", "Optional"],
@@ -202,7 +202,7 @@ const BulkUsersUploadDialog = ({ open, onOpenChange, onDataParsed, disabled = fa
                     sample spreadsheet
                   </button>{" "}
                   to quickly start your import. Required columns: Full Name,
-                  Email Address, Mobile Number.
+                  Email Address.
                 </p>
 
                 <UploadErrorsPanel errors={uploadErrors} />
