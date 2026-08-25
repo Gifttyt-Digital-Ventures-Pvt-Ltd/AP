@@ -216,7 +216,9 @@ const GrnDetailDialog = ({
     [documentScheduleData],
   );
   const grnScheduleRows = useMemo(() => {
-    if (savedPaymentSchedule?.documentId === grnId) return savedPaymentSchedule.rows;
+    if (savedPaymentSchedule?.documentId === grnId && Array.isArray(savedPaymentSchedule?.rows)) {
+      return savedPaymentSchedule.rows;
+    }
     const fetchedRows = normalizePaymentScheduleRows(documentScheduleSource || {});
     return fetchedRows.length ? fetchedRows : normalizePaymentScheduleRows(grn || {});
   }, [documentScheduleSource, grn, grnId, savedPaymentSchedule]);

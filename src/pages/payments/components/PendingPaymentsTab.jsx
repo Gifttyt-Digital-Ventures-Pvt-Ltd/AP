@@ -104,6 +104,8 @@ const PendingPaymentsTab = ({
   safeFormatDate,
   handleViewInvoice,
   handleDownloadInvoice,
+  canViewPayableSource,
+  handleViewPayableSource,
   canCancelInvoice,
   handleCancelInvoice,
   showBranchField = false,
@@ -290,6 +292,17 @@ const PendingPaymentsTab = ({
                       </Button>
                     )}
                   </>
+                ) : canViewPayableSource?.(invoice) ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleViewPayableSource?.(invoice)}
+                    data-testid={`view-pending-payable-source-${invoice?.id ?? 'unknown'}`}
+                    title="View Source"
+                    className="h-8 w-8 p-0"
+                  >
+                    <Eye className="h-4 w-4" />
+                  </Button>
                 ) : (
                   <span className="text-xs text-muted-foreground">Read only</span>
                 )}

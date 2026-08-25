@@ -1514,6 +1514,80 @@ const Payments = () => {
     await handleViewInvoice(invoice, initialTab, { skipDetailFetch: true });
   };
 
+  const getPendingPayableSourceDocumentType = (payable = {}) => String(
+    payable.triggerDocumentType ||
+      payable.trigger_document_type ||
+      payable.sourceDocumentType ||
+      payable.source_document_type ||
+      payable.documentType ||
+      payable.document_type ||
+      payable.triggerStage ||
+      payable.trigger_stage ||
+      payable.sourceType ||
+      payable.source_type ||
+      '',
+  ).toUpperCase();
+
+  const getPendingPayableSourceId = (payable = {}, sourceDocumentType = '') => {
+    switch (sourceDocumentType) {
+      case 'PO':
+        return payable.triggerDocumentId || payable.trigger_document_id || payable.poId || payable.po_id || payable.orderId || payable.order_id;
+      case 'GRN':
+        return payable.triggerDocumentId || payable.trigger_document_id || payable.grnId || payable.grn_id;
+      case 'PI':
+      case 'TI':
+      case 'INVOICE':
+        return payable.invoiceId || payable.invoice_id || payable.sourceId || payable.source_id;
+      default:
+        return payable.triggerDocumentId || payable.trigger_document_id || payable.sourceId || payable.source_id;
+    }
+  };
+
+  const canViewPendingPayableSource = (payable = {}) => {
+    const sourceDocumentType = getPendingPayableSourceDocumentType(payable);
+    const sourceId = getPendingPayableSourceId(payable, sourceDocumentType);
+    return ['PO', 'GRN', 'PI', 'TI', 'INVOICE'].includes(sourceDocumentType) && Boolean(sourceId);
+  };
+
+  const handleViewPendingPayableSource = async (payable, initialTab = 'details') => {
+    const sourceDocumentType = getPendingPayableSourceDocumentType(payable);
+    const sourceId = getPendingPayableSourceId(payable, sourceDocumentType);
+
+    if (['INVOICE', 'PI', 'TI'].includes(sourceDocumentType)) {
+      await handleViewInvoice(payable, initialTab);
+      return;
+    }
+
+    if (!sourceId) {
+      toast.error('Source details are not available');
+      return;
+    }
+
+    setLoadingReleasedPaymentSource(true);
+    try {
+      if (sourceDocumentType === 'PO') {
+        const po = await getPurchaseOrderById(sourceId).unwrap();
+        setReleasedPaymentPo(po);
+        setReleasedPaymentPoOpen(true);
+        return;
+      }
+
+      if (sourceDocumentType === 'GRN') {
+        const grn = await getGrnById(sourceId).unwrap();
+        setReleasedPaymentGrn(grn);
+        setReleasedPaymentGrnOpen(true);
+        return;
+      }
+
+      toast.error('This payable source type is not available for preview yet');
+    } catch (error) {
+      console.error('Failed to load pending payable source:', error);
+      toast.error('Failed to load source details');
+    } finally {
+      setLoadingReleasedPaymentSource(false);
+    }
+  };
+
   const handleViewReleasedPaymentSource = async (payment, initialTab = 'details') => {
     const sourceDocumentType = getReleasedPaymentSourceDocumentType(payment);
     const sourceId = getReleasedPaymentSourceId(payment, sourceDocumentType);
@@ -1913,6 +1987,8 @@ const Payments = () => {
               safeFormatDate={safeFormatDate}
               handleViewInvoice={handleViewInvoice}
               handleDownloadInvoice={handleDownloadInvoice}
+              canViewPayableSource={canViewPendingPayableSource}
+              handleViewPayableSource={handleViewPendingPayableSource}
               canCancelInvoice={(invoice) =>
                 Boolean(invoice?.id) && isInvoiceCancellable(invoice)
               }

@@ -99,9 +99,10 @@ const InvoicePaymentSchedulePanel = ({ invoice }) => {
     () => normalizePaymentScheduleRows(documentScheduleSource || {}),
     [documentScheduleSource],
   );
+  const savedRows = Array.isArray(savedSchedule?.rows) ? savedSchedule.rows : null;
   const scheduleRows =
     savedSchedule?.documentId === documentId && savedSchedule?.documentType === documentType
-      ? savedSchedule.rows
+      ? savedRows || (documentRows.length ? documentRows : invoiceRows)
       : documentRows.length
         ? documentRows
         : invoiceRows;
