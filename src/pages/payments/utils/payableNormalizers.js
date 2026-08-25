@@ -31,6 +31,29 @@ const getArray = (value) => {
   return value ? [value] : [];
 };
 
+const normalizeMilestoneBreakdownRow = (row = {}) => ({
+  triggerStage: normalizeTriggerStage(firstValue(row.triggerStage, row.trigger_stage)),
+  label: firstValue(row.label, row.milestoneLabel, row.milestone_label, row.name, ""),
+  scheduledAmount: toNumber(firstValue(row.scheduledAmount, row.scheduled_amount, row.amount)),
+  triggeredAmount: toNumber(firstValue(row.triggeredAmount, row.triggered_amount)),
+  paidAmount: toNumber(firstValue(row.paidAmount, row.paid_amount)),
+  remainingAmount: toNumber(firstValue(row.remainingAmount, row.remaining_amount, row.outstandingAmount, row.outstanding_amount)),
+  status: firstValue(row.status, row.rowStatus, row.row_status, ""),
+  isCurrent: Boolean(row.isCurrent ?? row.is_current ?? false),
+});
+
+const getMilestoneBreakdown = (row = {}) =>
+  getArray(
+    firstValue(
+      row.milestoneBreakdown,
+      row.milestone_breakdown,
+      row.paymentScheduleBreakdown,
+      row.payment_schedule_breakdown,
+      row.scheduleBreakdown,
+      row.schedule_breakdown,
+    ),
+  ).map(normalizeMilestoneBreakdownRow);
+
 const getMoneyField = (row, camelKey, snakeKey, fallbackKeys = []) =>
   toNumberOrNull(firstValue(row[camelKey], row[snakeKey], ...fallbackKeys.map((key) => row[key])));
 
@@ -195,6 +218,37 @@ const getBasePayable = (row = {}, options = {}) => {
     obligationFallbackAmount ??
     getFallbackNetPayableAmount(row) ??
     0;
+  const availableVendorAdvance = toNumber(
+    firstValue(row.availableVendorAdvance, row.available_vendor_advance),
+  );
+  const canAdjustFromVendorAdvance = Boolean(
+    row.canAdjustFromVendorAdvance ??
+      row.can_adjust_from_vendor_advance ??
+      availableVendorAdvance > 0,
+  );
+  const vendorAdvanceAppliedAmount = toNumber(
+    firstValue(row.vendorAdvanceAppliedAmount, row.vendor_advance_applied_amount),
+  );
+  const remainingVendorAdvance = toNumber(
+    firstValue(row.remainingVendorAdvance, row.remaining_vendor_advance, availableVendorAdvance),
+  );
+  const grossPayableAmount = toNumber(
+    firstValue(row.grossPayableAmount, row.gross_payable_amount, netPayableAmount),
+  );
+  const bankPaymentAmount = toNumber(
+    firstValue(row.bankPaymentAmount, row.bank_payment_amount, grossPayableAmount),
+  );
+  const milestoneBreakdown = getMilestoneBreakdown(row);
+  const earlierMilestonesPaidAmount = toNumber(
+    firstValue(
+      row.earlierMilestonesPaidAmount,
+      row.earlier_milestones_paid_amount,
+      row.priorMilestonePaidAmount,
+      row.prior_milestone_paid_amount,
+      row.totalPaidBeforeCurrentMilestone,
+      row.total_paid_before_current_milestone,
+    ),
+  );
   const backendSelectable = firstValue(row.isSelectable, row.is_selectable, row.selectable);
   const releaseBlockers = getArray(row.releaseBlockers ?? row.release_blockers);
   const warnings = getArray(row.warnings);
@@ -238,11 +292,25 @@ const getBasePayable = (row = {}, options = {}) => {
     obligationId,
     triggerStage,
     milestoneLabel: firstValue(row.milestoneLabel, row.milestone_label),
+    paymentScheduleId: firstValue(row.paymentScheduleId, row.payment_schedule_id),
+    scheduleRowId: firstValue(row.scheduleRowId, row.schedule_row_id),
     sharePct: toNumberOrNull(firstValue(row.sharePct, row.share_pct, row.sharePercent, row.share_percent)),
     scheduledAmount: toNumber(firstValue(row.scheduledAmount, row.scheduled_amount)),
     triggeredAmount: toNumber(firstValue(row.triggeredAmount, row.triggered_amount)),
     rolledInAmount: toNumber(firstValue(row.rolledInAmount, row.rolled_in_amount)),
     paidAmount: toNumber(firstValue(row.paidAmount, row.paid_amount)),
+    earlierMilestonesPaidAmount,
+    priorMilestonePaidAmount: earlierMilestonesPaidAmount,
+    totalPaidAgainstOrder: toNumber(
+      firstValue(row.totalPaidAgainstOrder, row.total_paid_against_order, row.orderPaidAmount, row.order_paid_amount),
+    ),
+    orderGrossAmount: toNumber(
+      firstValue(row.orderGrossAmount, row.order_gross_amount, row.poGrossAmount, row.po_gross_amount),
+    ),
+    remainingOrderAmount: toNumber(
+      firstValue(row.remainingOrderAmount, row.remaining_order_amount, row.orderOutstandingAmount, row.order_outstanding_amount),
+    ),
+    milestoneBreakdown,
     triggerDocumentRefs: getArray(row.triggerDocumentRefs ?? row.trigger_document_refs),
     invoiceId,
     invoiceNumber: firstValue(row.invoiceNumber, row.invoice_number, sourceType === "INVOICE" ? "-" : ""),
@@ -263,8 +331,14 @@ const getBasePayable = (row = {}, options = {}) => {
         row.milestone_label,
       ) || "-",
     grossAmount,
+    grossPayableAmount,
     advanceAdjustedAmount,
     advanceAdjustedTotal: advanceAdjustedAmount,
+    availableVendorAdvance,
+    canAdjustFromVendorAdvance,
+    vendorAdvanceAppliedAmount,
+    remainingVendorAdvance,
+    bankPaymentAmount,
     payableAmount,
     tdsAmount,
     netPayableAmount,

@@ -81,9 +81,10 @@ const VendorDetailsTab = ({ vendor }) => {
 
     <AdvanceContextPanel
       source={vendor}
-      title="Vendor Advance Balance"
-      description="Read-only vendor advance balance returned by backend."
+      title="Vendor Advance Ledger"
+      description="Cash advanced, recovered through net-off, and still recoverable for this vendor."
       currency={vendor.currency || 'INR'}
+      showRows={false}
     />
 
     <div>

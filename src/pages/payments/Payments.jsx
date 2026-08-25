@@ -21,8 +21,11 @@ import {
   useGetPayrunsQuery,
   useLazyGetPayrunQuery,
   useRejectPayrunMutation,
+  useRetryPayrunMutation,
 } from '../../Services/apis/approvalsPaymentsBankingApi';
 import { useCreatePaymentBatchMutation } from '../../Services/apis/paymentBatchesApi';
+import { useLazyGetPurchaseOrderByIdQuery } from '../../Services/apis/purchaseOrdersMasterDataApi';
+import { useLazyGetGrnByIdQuery } from '../../Services/apis/goodsReceiptApi';
 import { Button } from '../../components/ui/button';
 import {
   AlertDialog,
@@ -76,10 +79,14 @@ import {
   DEFAULT_PAYRUN_APPROVAL_ROUTE,
   getPayrunApprovalRecords,
   normalizePayrun,
+  normalizePayrunStatus,
 } from './components/payrunUtils';
 import CancelInvoiceDialog from '../invoices/components/CancelInvoiceDialog';
 import BankAccountSelectField from '../../components/banking/BankAccountSelectField';
 import ViewDialog from '../invoices/components/ViewDialog';
+import PoDetailsDialog from '../purchase-orders/components/PoDetailsDialog';
+import GrnDetailDialog from '../goods-receipt/components/GrnDetailDialog';
+import { statusColors as poStatusColors } from '../purchase-orders/constants';
 import { InvoicePdfPreview } from '../invoices/components/InvoicePdfPreview';
 import { getInvoiceFileUrl, openInvoiceFileDownload } from '../invoices/utils/invoicePreview';
 import { normalizeInvoiceHistoryEntries } from '../invoices/utils/invoiceHistory';
@@ -92,7 +99,7 @@ import { CREDIT_ACTION_CODES } from '../../constants/creditActions';
 import { useMeteredActionEstimate } from '../../hooks/useMeteredActionEstimate';
 import { useRBAC } from '../../contexts/RBACContext';
 import { useCurrencyFilter } from '../../hooks/useCurrencyFilter';
-import { CURRENCY_SCREENS } from '../../utils/currency';
+import { CURRENCY_SCREENS, formatCurrency } from '../../utils/currency';
 import { isInvoiceFundingEnabled as isInvoiceFundingEnabledForCorporate } from '../../utils/invoiceConfiguration';
 import { OrgBranchCell, VendorWithBranchCell } from '../../components/common/BranchTableCells';
 import { clearNotificationQueryParams } from '../../utils/notificationQueryParams';
@@ -311,6 +318,43 @@ const ApprovalDecisionDialog = ({ decision, open, onOpenChange, onConfirm }) => 
   );
 };
 
+const getPayrunActionCopy = (action) => {
+  const status = normalizePayrunStatus(action?.payrun?.status);
+  if (action?.type === 'retry') {
+    return {
+      title: 'Retry Failed Payments?',
+      description: 'Only failed items from this payrun will be retried. Successfully paid items will not be included.',
+      cancelLabel: 'Close',
+      actionLabel: 'Retry Failed Items',
+    };
+  }
+
+  if (status === 'Partially Completed') {
+    return {
+      title: 'Cancel Partially Completed Payrun?',
+      description: 'Only failed items will be released back to Payables. Successfully paid items will remain in Released Payments.',
+      cancelLabel: 'Keep Payrun',
+      actionLabel: 'Cancel Payrun',
+    };
+  }
+
+  if (status === 'Failed') {
+    return {
+      title: 'Cancel Failed Payrun?',
+      description: 'This will cancel the payrun and release failed items back to Payables. Paid items, if any, will remain in Released Payments.',
+      cancelLabel: 'Keep Payrun',
+      actionLabel: 'Cancel Payrun',
+    };
+  }
+
+  return {
+    title: 'Cancel Payrun?',
+    description: 'This will discard the payrun and release all items back to Payables so they can be included in a new payrun.',
+    cancelLabel: 'Keep Payrun',
+    actionLabel: 'Cancel Payrun',
+  };
+};
+
 const downloadSignedReport = async (downloadUrl, fileName) => {
   const fallbackName = `pending-payment-invoice-report-${new Date().toISOString().slice(0, 10)}.xlsx`;
   const resolvedFileName = fileName || fallbackName;
@@ -460,6 +504,7 @@ const Payments = () => {
     payment_method: 'Bank Transfer',
     reference_number: '',
     actualInrAmount: '',
+    advanceAdjustments: {},
   });
   const [createBatchForm, setCreateBatchForm] = useState({
     payment_method: 'NEFT',
@@ -479,20 +524,69 @@ const Payments = () => {
   const [payrunDetailsOpen, setPayrunDetailsOpen] = useState(false);
   const [approvalDecision, setApprovalDecision] = useState(null);
   const [approvalDecisionOpen, setApprovalDecisionOpen] = useState(false);
+  const [payrunActionConfirm, setPayrunActionConfirm] = useState(null);
   const [releasePayrun, setReleasePayrun] = useState(null);
   const [releasePayrunOpen, setReleasePayrunOpen] = useState(false);
   const [createPayrun, { isLoading: creatingPayrun }] = useCreatePayrunMutation();
   const [approvePayrun] = useApprovePayrunMutation();
   const [rejectPayrun] = useRejectPayrunMutation();
-  const [cancelPayrun] = useCancelPayrunMutation();
+  const [cancelPayrun, { isLoading: cancellingPayrun }] = useCancelPayrunMutation();
+  const [retryPayrun, { isLoading: retryingPayrun }] = useRetryPayrunMutation();
   const [getPayrun] = useLazyGetPayrunQuery();
+  const [getPurchaseOrderById] = useLazyGetPurchaseOrderByIdQuery();
+  const [getGrnById] = useLazyGetGrnByIdQuery();
+  const [releasedPaymentPo, setReleasedPaymentPo] = useState(null);
+  const [releasedPaymentGrn, setReleasedPaymentGrn] = useState(null);
+  const [releasedPaymentPoOpen, setReleasedPaymentPoOpen] = useState(false);
+  const [releasedPaymentGrnOpen, setReleasedPaymentGrnOpen] = useState(false);
+  const [loadingReleasedPaymentSource, setLoadingReleasedPaymentSource] = useState(false);
 
   const normalizePayment = (payment = {}) => {
     const payable = normalizePayableRow(payment);
+    const backendSourceType = payment.sourceType ?? payment.source_type ?? payment.payableType ?? payment.payable_type;
+    const sourceDocumentType =
+      payment.sourceDocumentType ??
+      payment.source_document_type ??
+      payment.documentType ??
+      payment.document_type ??
+      payment.releasedSourceType ??
+      payment.released_source_type;
+    const invoiceId = payment.invoice_id ?? payment.invoiceId;
+    const poId = payment.poId ?? payment.po_id ?? payment.orderId ?? payment.order_id;
+    const grnId = payment.grnId ?? payment.grn_id;
+    const piId = payment.piId ?? payment.pi_id;
+    const obligationId = payment.obligationId ?? payment.obligation_id;
+    const advanceId = payment.advanceId ?? payment.advance_id;
+    const releasedSourceType = backendSourceType
+      ? String(backendSourceType).toUpperCase()
+      : invoiceId
+        ? 'INVOICE'
+        : obligationId
+          ? 'OBLIGATION'
+          : advanceId
+            ? 'ADVANCE'
+            : '';
 
     return {
       ...payable,
-      invoice_id: payment.invoice_id ?? payment.invoiceId,
+      releasedSourceType,
+      sourceDocumentType: sourceDocumentType ? String(sourceDocumentType).toUpperCase() : '',
+      sourceType: releasedSourceType || payable.sourceType,
+      sourceId: payment.sourceId ?? payment.source_id ?? payable.sourceId,
+      invoice_id: invoiceId,
+      invoiceId,
+      poId,
+      grnId,
+      piId,
+      obligationId,
+      advanceId,
+      triggerStage: payment.triggerStage ?? payment.trigger_stage ?? payable.triggerStage,
+      milestoneLabel: payment.milestoneLabel ?? payment.milestone_label ?? payable.milestoneLabel,
+      orderId: payment.orderId ?? payment.order_id ?? payable.orderId,
+      orderNumber: payment.orderNumber ?? payment.order_number ?? payment.poNumber ?? payment.po_number ?? payable.orderNumber,
+      poNumber: payment.poNumber ?? payment.po_number ?? payable.poNumber,
+      paymentScheduleId: payment.paymentScheduleId ?? payment.payment_schedule_id ?? payable.paymentScheduleId,
+      scheduleRowId: payment.scheduleRowId ?? payment.schedule_row_id ?? payable.scheduleRowId,
       invoiceNumber: payment.invoiceNumber ?? payment.invoice_number ?? payable.invoiceNumber,
       vendorName: payment.vendorName ?? payment.vendor_name ?? payable.vendorName,
       batchId:
@@ -700,6 +794,32 @@ const Payments = () => {
     }
   };
 
+  const refreshPayrunRelatedData = useCallback(async (payrunId = null) => {
+    const refreshes = [];
+    if (shouldFetchPayruns) refreshes.push(refetchPayruns());
+    if (shouldFetchPendingPayments) refreshes.push(refetchPendingPaymentInvoices());
+    if (shouldFetchReleasedPayments) refreshes.push(refetchPayments());
+    if (payrunId && payrunDetailsOpen) {
+      refreshes.push(
+        getPayrun(payrunId)
+          .unwrap()
+          .then((freshPayrun) => {
+            setSelectedPayrun(freshPayrun);
+          }),
+      );
+    }
+    await Promise.allSettled(refreshes);
+  }, [
+    getPayrun,
+    payrunDetailsOpen,
+    refetchPayments,
+    refetchPayruns,
+    refetchPendingPaymentInvoices,
+    shouldFetchPayruns,
+    shouldFetchPendingPayments,
+    shouldFetchReleasedPayments,
+  ]);
+
   useEffect(() => {
     if (paymentsError) toast.error('Failed to load payments');
   }, [paymentsError]);
@@ -779,6 +899,7 @@ const Payments = () => {
       payment_method: 'Bank Transfer',
       reference_number: '',
       actualInrAmount: '',
+      advanceAdjustments: {},
     });
   };
 
@@ -924,15 +1045,24 @@ const Payments = () => {
   };
 
   const handleCreatePayrun = async (payload) => {
+    let response;
     try {
-      const response = await createPayrun(payload).unwrap();
-      payableSelection.clear();
-      setRequestPaymentOpen(false);
-      setActivePaymentTab('payruns');
-      await refetchPayruns();
-      toast.success(`${response?.payrunNumber || response?.payrun_number || 'Payrun'} created`);
+      response = await createPayrun(payload).unwrap();
     } catch (error) {
       toast.error(error?.data?.detail || error?.data?.message || 'Failed to create payrun');
+      return;
+    }
+
+    payableSelection.clear();
+    setRequestPaymentOpen(false);
+    setActivePaymentTab('payruns');
+    toast.success(`${response?.payrunNumber || response?.payrun_number || response?.data?.payrunNumber || response?.data?.payrun_number || 'Payrun'} created`);
+
+    try {
+      await refetchPayruns();
+    } catch (error) {
+      console.error('Failed to refresh payruns after create:', error);
+      toast.error('Payrun created, but the list could not be refreshed. Please refresh.');
     }
   };
 
@@ -979,21 +1109,55 @@ const Payments = () => {
     }
   };
 
-  const handleCancelPayrun = async (payrun) => {
+  const openPayrunCancelConfirmation = (payrun) => {
     if (!guardAction('payments.cancelPayrun')) return;
     if (!payrun.allowedActions?.cancel) {
       toast.error('This payrun cannot be cancelled');
       return;
     }
+    setPayrunActionConfirm({ type: 'cancel', payrun });
+  };
+
+  const openPayrunRetryConfirmation = (payrun) => {
+    if (!guardAction('payments.releasePayrun')) return;
+    if (!payrun.allowedActions?.retry) {
+      toast.error('This payrun cannot be retried');
+      return;
+    }
+    setPayrunActionConfirm({ type: 'retry', payrun });
+  };
+
+  const confirmPayrunAction = async () => {
+    if (!payrunActionConfirm?.payrun) return;
+    const { payrun, type } = payrunActionConfirm;
+    const payrunId = payrun.payrunId || payrun.id;
+    if (!payrunId) {
+      toast.error('Payrun id is missing');
+      return;
+    }
     try {
-      await cancelPayrun({
-        payrunId: payrun.payrunId || payrun.id,
-        comments: 'Cancelled by requester',
-      }).unwrap();
-      await refetchPayruns();
-      toast.success('Payrun cancelled');
+      const action = type === 'retry' ? retryPayrun : cancelPayrun;
+      const payload = type === 'retry'
+        ? {
+            payrunId,
+            ...(Array.isArray(payrun.retryableItemIds) && payrun.retryableItemIds.length
+              ? { itemIds: payrun.retryableItemIds }
+              : {}),
+          }
+        : {
+            payrunId,
+            comments: 'Cancelled by user',
+          };
+      const response = await action(payload).unwrap();
+      const normalizedResponsePayrun = response?.payrun || response?.data?.payrun || response?.data || response;
+      if (normalizedResponsePayrun && typeof normalizedResponsePayrun === 'object') {
+        setSelectedPayrun(normalizePayrun(normalizedResponsePayrun));
+      }
+      setPayrunActionConfirm(null);
+      await refreshPayrunRelatedData(payrunId);
+      toast.success(response?.message || response?.data?.message || (type === 'retry' ? 'Payrun retry initiated' : 'Payrun cancelled'));
     } catch (error) {
-      toast.error(error?.data?.detail || error?.data?.message || 'Failed to cancel payrun');
+      toast.error(error?.data?.detail || error?.data?.message || (type === 'retry' ? 'Failed to retry payrun' : 'Failed to cancel payrun'));
     }
   };
 
@@ -1024,8 +1188,10 @@ const Payments = () => {
   };
 
   const handlePayrunPaid = async (paidPayrun) => {
-    setActivePaymentTab('released');
-    toast.success(`${paidPayrun.batchId} paid successfully`);
+    const normalized = normalizePayrun(paidPayrun);
+    setReleasePayrun(normalized);
+    setSelectedPayrun(normalized);
+    await refreshPayrunRelatedData(normalized.payrunId || normalized.id);
   };
 
   const toggleRecordPaymentInvoice = (payableKey) => {
@@ -1056,6 +1222,8 @@ const Payments = () => {
         (sourceType === 'ADVANCE' ? invoice.advanceId : undefined) ||
         invoice.invoiceId ||
         invoice.id;
+      const advanceAdjustment = recordPaymentForm.advanceAdjustments?.[invoice.id] || {};
+      const adjustFromVendorAdvance = Boolean(advanceAdjustment.adjustFromVendorAdvance);
 
       return {
         sourceType,
@@ -1065,6 +1233,11 @@ const Payments = () => {
             ? { sourceId, advanceId: invoice.advanceId || sourceId }
             : { invoiceId: invoice.invoiceId || invoice.id }),
         netPayableAmount: Number(invoice.netPayableAmount ?? invoice.amount ?? 0),
+        ...(adjustFromVendorAdvance
+          ? {
+              adjustFromVendorAdvance: true,
+            }
+          : {}),
       };
     });
 
@@ -1241,8 +1414,46 @@ const Payments = () => {
 
   const loadPaymentInvoice = async (payment) => {
     const fallbackInvoice = resolvePaymentInvoice(payment);
-    const invoiceId = getPaymentInvoicePreviewId(payment) ?? getInvoicePreviewId(fallbackInvoice);
+    const normalizedPayment = normalizePayment(payment);
+    const invoiceId =
+      normalizedPayment.piId ??
+      normalizedPayment.invoiceId ??
+      getPaymentInvoicePreviewId(payment) ??
+      getInvoicePreviewId(fallbackInvoice);
     return loadInvoiceDetailsForPreview(invoiceId, fallbackInvoice);
+  };
+
+  const getReleasedPaymentSourceDocumentType = (payment = {}) => {
+    const normalizedPayment = normalizePayment(payment);
+    const explicitType = normalizedPayment.sourceDocumentType;
+    if (explicitType) return explicitType;
+
+    const sourceType = String(normalizedPayment.releasedSourceType || normalizedPayment.sourceType || '').toUpperCase();
+    if (sourceType === 'INVOICE') return normalizedPayment.triggerStage === 'PI' ? 'PI' : 'INVOICE';
+    if (normalizedPayment.grnId) return 'GRN';
+    if (normalizedPayment.poId) return 'PO';
+    if (normalizedPayment.piId) return 'PI';
+    if (normalizedPayment.advanceId) return 'ADVANCE';
+    return sourceType || '';
+  };
+
+  const getReleasedPaymentSourceId = (payment = {}, sourceDocumentType = '') => {
+    const normalizedPayment = normalizePayment(payment);
+    switch (sourceDocumentType) {
+      case 'PO':
+        return normalizedPayment.poId || normalizedPayment.orderId;
+      case 'GRN':
+        return normalizedPayment.grnId;
+      case 'PI':
+        return normalizedPayment.piId || normalizedPayment.invoiceId || normalizedPayment.sourceId;
+      case 'TI':
+      case 'INVOICE':
+        return normalizedPayment.invoiceId || normalizedPayment.sourceId;
+      case 'ADVANCE':
+        return normalizedPayment.advanceId || normalizedPayment.sourceId;
+      default:
+        return normalizedPayment.sourceId || normalizedPayment.invoiceId;
+    }
   };
 
   const handleViewInvoice = async (invoice, initialTab = 'details', options = {}) => {
@@ -1301,6 +1512,45 @@ const Payments = () => {
       return;
     }
     await handleViewInvoice(invoice, initialTab, { skipDetailFetch: true });
+  };
+
+  const handleViewReleasedPaymentSource = async (payment, initialTab = 'details') => {
+    const sourceDocumentType = getReleasedPaymentSourceDocumentType(payment);
+    const sourceId = getReleasedPaymentSourceId(payment, sourceDocumentType);
+
+    if (['INVOICE', 'PI', 'TI'].includes(sourceDocumentType)) {
+      await handleViewPaymentInvoice(payment, initialTab);
+      return;
+    }
+
+    if (!sourceId) {
+      toast.error('Source details are not available');
+      return;
+    }
+
+    setLoadingReleasedPaymentSource(true);
+    try {
+      if (sourceDocumentType === 'PO') {
+        const po = await getPurchaseOrderById(sourceId).unwrap();
+        setReleasedPaymentPo(po);
+        setReleasedPaymentPoOpen(true);
+        return;
+      }
+
+      if (sourceDocumentType === 'GRN') {
+        const grn = await getGrnById(sourceId).unwrap();
+        setReleasedPaymentGrn(grn);
+        setReleasedPaymentGrnOpen(true);
+        return;
+      }
+
+      toast.error('This payment source type is not available for preview yet');
+    } catch (error) {
+      console.error('Failed to load released payment source:', error);
+      toast.error('Failed to load source details');
+    } finally {
+      setLoadingReleasedPaymentSource(false);
+    }
   };
 
   const closePaymentViewDialog = useCallback((open) => {
@@ -1689,9 +1939,11 @@ const Payments = () => {
                 onApprove={(payrun) => openApprovalDecision(payrun, 'approve')}
                 onReject={(payrun) => openApprovalDecision(payrun, 'reject')}
                 onRelease={openReleasePayrun}
-                onRetry={openReleasePayrun}
+                onRetry={openPayrunRetryConfirmation}
+                onCancel={openPayrunCancelConfirmation}
                 canApprovePayrun={canApprovePayrun}
                 canReleasePayrun={canReleasePayrun}
+                canCancelPayrun={canCancelPayrun}
                 paginationFooter={
                   <PaymentsTabPagination
                     pagination={payrunsPagination}
@@ -1712,7 +1964,7 @@ const Payments = () => {
               totalPayments={payments.length}
               safeFormatDate={safeFormatDate}
               resolvePaymentInvoice={resolvePaymentInvoice}
-              handleViewPaymentInvoice={handleViewPaymentInvoice}
+              handleViewPaymentInvoice={handleViewReleasedPaymentSource}
               handleDownloadPaymentInvoice={handleDownloadPaymentInvoice}
               showBranchField={isBranchEnabled}
               showBatchField={isConnectedBankingEnabled || isPaymentBatchesFeatureEnabled}
@@ -1741,8 +1993,11 @@ const Payments = () => {
         open={payrunDetailsOpen}
         onOpenChange={setPayrunDetailsOpen}
         onRelease={openReleasePayrun}
+        onRetry={openPayrunRetryConfirmation}
+        onCancel={openPayrunCancelConfirmation}
         onViewInvoice={handleViewInvoice}
         canReleasePayrun={canReleasePayrun}
+        canCancelPayrun={canCancelPayrun}
       />
 
       <ApprovalDecisionDialog
@@ -1803,6 +2058,40 @@ const Payments = () => {
         submitting={cancelInvoiceLoading}
       />
 
+      <AlertDialog
+        open={Boolean(payrunActionConfirm)}
+        onOpenChange={(open) => {
+          if (!open) setPayrunActionConfirm(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{getPayrunActionCopy(payrunActionConfirm).title}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {getPayrunActionCopy(payrunActionConfirm).description}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={cancellingPayrun || retryingPayrun}>
+              {getPayrunActionCopy(payrunActionConfirm).cancelLabel}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                confirmPayrunAction();
+              }}
+              disabled={cancellingPayrun || retryingPayrun}
+              className={payrunActionConfirm?.type === 'cancel' ? 'bg-destructive text-destructive-foreground hover:bg-destructive/90' : undefined}
+            >
+              {cancellingPayrun || retryingPayrun ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
+              {getPayrunActionCopy(payrunActionConfirm).actionLabel}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       <AlertDialog open={bulkReleaseConfirmOpen} onOpenChange={setBulkReleaseConfirmOpen}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -1848,6 +2137,58 @@ const Payments = () => {
         showCampaignField={isCampaignFeatureEnabled}
         isCampaignFeatureEnabled={isCampaignFeatureEnabled}
         showInvoiceFunding={showInvoiceFunding}
+      />
+
+      <PoDetailsDialog
+        showViewDialog={releasedPaymentPoOpen}
+        setShowViewDialog={(open) => {
+          setReleasedPaymentPoOpen(open);
+          if (!open) setReleasedPaymentPo(null);
+        }}
+        selectedPO={releasedPaymentPo}
+        loadingDetails={loadingReleasedPaymentSource}
+        statusColors={poStatusColors}
+        formatDate={safeFormatDate}
+        formatCurrency={formatCurrency}
+        handleDownloadPO={() => toast.error('PO download is not available from released payments yet')}
+        handleSubmitForApproval={() => {}}
+        downloadingPoId={null}
+        submitting={false}
+        setShowApprovalDialog={() => {}}
+        canManagePo={false}
+        canApprovePo={false}
+        onEditPO={() => {}}
+        onSaveDeliveryStatus={() => {}}
+        savingDeliveryStatus={false}
+        canRaiseAdvance={false}
+        onRaiseAdvance={() => {}}
+        onCancelPO={() => {}}
+        cancelling={false}
+        canEditPaymentSchedule={false}
+        onSavePaymentSchedule={() => {}}
+        savingPaymentSchedule={false}
+      />
+
+      <GrnDetailDialog
+        grn={releasedPaymentGrn}
+        open={releasedPaymentGrnOpen}
+        onOpenChange={(open) => {
+          setReleasedPaymentGrnOpen(open);
+          if (!open) setReleasedPaymentGrn(null);
+        }}
+        formatConfig={null}
+        vendors={[]}
+        initialEditMode={false}
+        canApprove={false}
+        canPost={false}
+        posting={false}
+        saving={false}
+        onOpenReview={() => {}}
+        onPost={() => {}}
+        onSaveDraft={() => {}}
+        onSaveAndSubmit={() => {}}
+        onDownloadPdf={() => toast.error('GRN download is not available from released payments yet')}
+        downloadingPdf={false}
       />
     </div>
   );

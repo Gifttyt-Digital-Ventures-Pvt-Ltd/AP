@@ -201,6 +201,7 @@ const PoFormDialog = ({
   showBranchField = false,
   organisationBranches = [],
   isPaymentTermsEnabled = false,
+  paymentScheduleEnabledTriggers,
 }) => {
   const [previewAction, setPreviewAction] = useState(null);
   const [paymentScheduleErrors, setPaymentScheduleErrors] = useState([]);
@@ -1015,10 +1016,26 @@ const PoFormDialog = ({
                         </div>
                       </>
                     ) : (
-                      <div className="mt-3 flex justify-between border-t pt-3 text-base font-semibold">
-                        <span>Preview Total</span>
-                        <span>{formatPoCurrency(poPreviewTotal)}</span>
-                      </div>
+                      <>
+                        <div className="mt-3 flex justify-between text-muted-foreground">
+                          <span>Subtotal</span>
+                          <span>{formatPoCurrency(poTotals.subtotal)}</span>
+                        </div>
+                        {poTotals.total_discount > 0 ? (
+                          <div className="mt-1 flex justify-between text-muted-foreground">
+                            <span>Discount</span>
+                            <span>- {formatPoCurrency(poTotals.total_discount)}</span>
+                          </div>
+                        ) : null}
+                        <div className="mt-1 flex justify-between text-muted-foreground">
+                          <span>Tax</span>
+                          <span>{formatPoCurrency(isInr ? poTotals.tax_amount : 0)}</span>
+                        </div>
+                        <div className="mt-3 flex justify-between border-t pt-3 text-base font-semibold">
+                          <span>Preview Total</span>
+                          <span>{formatPoCurrency(poPreviewTotal)}</span>
+                        </div>
+                      </>
                     )}
                     {showTdsPreview && (
                       <>
@@ -1075,6 +1092,7 @@ const PoFormDialog = ({
                   formatCurrency={formatPoCurrency}
                   readOnly={isPreviewing}
                   validationErrors={paymentScheduleErrors}
+                  enabledTriggerStages={paymentScheduleEnabledTriggers}
                   onChange={(paymentSchedule) => {
                     setPaymentScheduleErrors([]);
                     setPoForm((prev) => ({

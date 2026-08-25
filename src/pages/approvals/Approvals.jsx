@@ -150,7 +150,7 @@ const Approvals = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historySheetOpen, setHistorySheetOpen] = useState(false);
   const [historySheetInvoice, setHistorySheetInvoice] = useState(null);
-  const [activeTab, setActiveTab] = useState('pending-approval');
+  const [activeTab, setActiveTab] = useState('pending-checker');
 
   const handleRefreshApprovals = async () => {
     try {
@@ -247,18 +247,19 @@ const Approvals = () => {
 
   const visibleApprovalTabs = useMemo(() => {
     const tabs = [];
+     if (canCheckInvoices) {
+      tabs.push({
+        value: 'pending-checker',
+        label: 'Pending Checker',
+        count: pendingCheckerInvoices.length,
+      });
+    }
+
     if (canApproveInvoices) {
       tabs.push({
         value: 'pending-approval',
         label: 'Pending Approval',
         count: pendingApprovalInvoices.length,
-      });
-    }
-    if (canCheckInvoices) {
-      tabs.push({
-        value: 'pending-checker',
-        label: 'Pending Checker',
-        count: pendingCheckerInvoices.length,
       });
     }
     tabs.push({

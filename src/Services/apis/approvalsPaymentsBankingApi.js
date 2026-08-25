@@ -199,6 +199,14 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
       }),
       invalidatesTags: ["Payments", "Invoices", "Dashboard", "Reports", ...CREDIT_INVALIDATION_TAGS],
     }),
+    retryPayrun: builder.mutation({
+      query: ({ payrunId, ...body }) => ({
+        url: `/payruns/${payrunId}/retry`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: ["Payments", "Invoices", "Dashboard", "Reports", ...CREDIT_INVALIDATION_TAGS],
+    }),
     requestPayrunReleaseOtp: builder.mutation({
       query: ({ payrunId, ...body }) => ({
         url: `/payruns/${payrunId}/release-otp`,
@@ -258,6 +266,7 @@ export const {
   useApprovePayrunMutation,
   useRejectPayrunMutation,
   useCancelPayrunMutation,
+  useRetryPayrunMutation,
   useRequestPayrunReleaseOtpMutation,
   useResendPayrunReleaseOtpMutation,
   useReleasePayrunMutation,
