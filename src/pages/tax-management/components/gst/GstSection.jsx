@@ -17,8 +17,8 @@ import { GstAnalyticsReconciliationProvider } from '../../contexts/GstAnalyticsR
 
 const GST_SUB_TABS = [
   { value: GST_TAB_VALUES.OVERVIEW, label: 'Overview' },
-  { value: GST_TAB_VALUES.RECONCILIATION, label: 'Reconciliation' },
-  { value: GST_TAB_VALUES.RETURNS, label: 'Returns' },
+  // { value: GST_TAB_VALUES.RECONCILIATION, label: 'Reconciliation' },
+  // { value: GST_TAB_VALUES.RETURNS, label: 'Returns' },
   { value: GST_TAB_VALUES.DOCUMENTS, label: 'Documents' },
   { value: GST_TAB_VALUES.LEDGERS, label: 'Ledgers' },
 ];

@@ -132,6 +132,13 @@ const CONTACT_FIELDS = [
 
 const PHONE_INPUT_FIELD_KEYS = new Set(["mobile", "phone"]);
 const sanitizePhoneInput = (value) => String(value ?? "").replace(/[^\d+\-\s()]/g, "");
+const normalizeMsmeCategoryValue = (value) => {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "MICRO") return "Micro";
+  if (normalized === "SMALL") return "Small";
+  if (normalized === "MEDIUM") return "Medium";
+  return value || "";
+};
 
 const CreateVendorPage = ({
   formData,
@@ -223,7 +230,8 @@ const CreateVendorPage = ({
     setFormData((prev) => ({
       ...prev,
       udyamRegistrationNo: response.udyamRegistrationNo || prev.udyamRegistrationNo,
-      msmeCategory: response.msmeCategory || prev.msmeCategory,
+      msmeCategory: normalizeMsmeCategoryValue(response.msmeCategory) || prev.msmeCategory,
+      msmeStatus: response.msmeStatus || prev.msmeStatus || "",
       msmeVerificationStatus: verificationStatus,
       msmeVerificationMode: response.verificationMode || fallbackMode,
       msmeVerifiedAt: response.verifiedAt || "",

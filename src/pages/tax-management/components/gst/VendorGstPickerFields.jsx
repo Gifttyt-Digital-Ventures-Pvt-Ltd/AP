@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import { Input } from '../../../../components/ui/input';
 import { ConnectedVendorPicker } from '../../../../components/common/ConnectedVendorPicker';
 import { TaxSelect } from '../TaxUi';
@@ -67,41 +67,51 @@ const VendorGstPickerFields = ({
   useConnectedVendorPicker = false,
   onVendorSelected,
 }) => {
+  const [connectedVendor, setConnectedVendor] = useState(null);
+  const connectedVendorId = connectedVendor?.id ?? connectedVendor?.vendorId ?? connectedVendor?.vendor_id ?? '';
+  const resolvedVendors = useMemo(() => {
+    if (!connectedVendorId) return vendors;
+    const hasConnectedVendor = vendors.some((vendor) => String(vendor.id ?? vendor.vendorId ?? vendor.vendor_id) === String(connectedVendorId));
+    return hasConnectedVendor ? vendors : [connectedVendor, ...vendors];
+  }, [connectedVendor, connectedVendorId, vendors]);
+
   const vendorValue = allowAll
     ? (vendorId || 'all')
     : (vendorId || 'placeholder');
 
   const vendorOptions = allowAll
-    ? [{ value: 'all', label: 'All Vendors' }, ...vendors.map((vendor) => ({
-      value: vendor.id,
+    ? [{ value: 'all', label: 'All Vendors' }, ...resolvedVendors.map((vendor) => ({
+      value: vendor.id ?? vendor.vendorId ?? vendor.vendor_id,
       label: vendor.gstin ? `${vendor.name} · ${vendor.gstin}` : vendor.name,
     }))]
     : [
       { value: 'placeholder', label: vendorPlaceholder || 'Search or select vendor…' },
-      ...vendors.map((vendor) => ({
-        value: vendor.id,
+      ...resolvedVendors.map((vendor) => ({
+      value: vendor.id ?? vendor.vendorId ?? vendor.vendor_id,
         label: vendor.gstin ? `${vendor.name} · ${vendor.gstin}` : vendor.name,
       })),
     ];
 
   const handleVendorChange = (value) => {
     if (allowAll) {
-      onVendorIdChange(value === 'all' ? '' : value);
+      if (value === 'all') setConnectedVendor(null);
+      onVendorIdChange(value === 'all' ? '' : value, null);
     } else if (value !== 'placeholder') {
-      onVendorIdChange(value);
+      onVendorIdChange(value, null);
     } else {
       return;
     }
     onVendorChange?.();
   };
 
-  const selectedVendor = vendors.find((vendor) => String(vendor.id) === String(vendorId)) ?? null;
+  const selectedVendor = resolvedVendors.find((vendor) => String(vendor.id ?? vendor.vendorId ?? vendor.vendor_id) === String(vendorId)) ?? null;
 
   const handleConnectedVendorSelect = (vendor) => {
     const nextVendorId = vendor?.id ?? vendor?.vendorId ?? vendor?.vendor_id ?? '';
     if (!nextVendorId) return;
+    setConnectedVendor(vendor);
     onVendorSelected?.(vendor);
-    onVendorIdChange(String(nextVendorId));
+    onVendorIdChange(String(nextVendorId), vendor);
     onVendorChange?.();
   };
 

@@ -15,11 +15,22 @@ export const resolveVendorActiveGstin = (vendor, selectedGstin = '') => {
 export function useVendorGstSelection(vendors = [], { initialVendorId = '' } = {}) {
   const [vendorId, setVendorId] = useState(initialVendorId);
   const [selectedGstin, setSelectedGstin] = useState('');
+  const [connectedVendor, setConnectedVendor] = useState(null);
+
+  const effectiveVendors = useMemo(() => {
+    if (!connectedVendor) return vendors;
+    const connectedVendorId = connectedVendor.id ?? connectedVendor.vendorId ?? connectedVendor.vendor_id;
+    if (!connectedVendorId) return vendors;
+    const exists = vendors.some((vendor) =>
+      String(vendor.id ?? vendor.vendorId ?? vendor.vendor_id) === String(connectedVendorId));
+    return exists ? vendors : [connectedVendor, ...vendors];
+  }, [connectedVendor, vendors]);
 
   const selectedVendor = useMemo(() => {
     if (!vendorId || vendorId === 'all') return null;
-    return vendors.find((vendor) => vendor.id === vendorId) ?? null;
-  }, [vendorId, vendors]);
+    return effectiveVendors.find((vendor) =>
+      String(vendor.id ?? vendor.vendorId ?? vendor.vendor_id) === String(vendorId)) ?? null;
+  }, [effectiveVendors, vendorId]);
 
   const gstRegistrations = selectedVendor?.gstRegistrations ?? [];
   const hasMultipleGstins = gstRegistrations.length > 1;
@@ -42,7 +53,12 @@ export function useVendorGstSelection(vendors = [], { initialVendorId = '' } = {
     });
   }, [selectedVendor]);
 
-  const setVendorIdAndReset = (nextVendorId) => {
+  const setVendorIdAndReset = (nextVendorId, vendor = null) => {
+    if (vendor) {
+      setConnectedVendor(vendor);
+    } else if (!nextVendorId || nextVendorId === 'all') {
+      setConnectedVendor(null);
+    }
     setVendorId(nextVendorId);
     setSelectedGstin('');
   };
