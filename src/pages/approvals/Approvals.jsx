@@ -150,7 +150,7 @@ const Approvals = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historySheetOpen, setHistorySheetOpen] = useState(false);
   const [historySheetInvoice, setHistorySheetInvoice] = useState(null);
-  const [activeTab, setActiveTab] = useState('pending-approval');
+  const [activeTab, setActiveTab] = useState('pending-checker');
 
   const handleRefreshApprovals = async () => {
     try {
@@ -585,8 +585,8 @@ const Approvals = () => {
         <div className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap gap-2">
             {[
-              { value: 'pending-approval', label: 'Pending Approval', count: pendingApprovalInvoices.length },
               { value: 'pending-checker', label: 'Pending Checker', count: pendingCheckerInvoices.length },
+              { value: 'pending-approval', label: 'Pending Approval', count: pendingApprovalInvoices.length },
               { value: 'all', label: 'All', count: allInvoicesPagination.total },
             ].map(({ value, label, count }) => (
               <Button

@@ -507,6 +507,9 @@ export const toRecordPaymentsApiPayload = (payment = {}) => {
             ? { advanceId: item.advanceId ?? item.advance_id }
             : {}),
           netPayableAmount: Number(item.netPayableAmount ?? item.net_payable_amount ?? 0),
+          ...(item.adjustFromVendorAdvance === true || item.adjust_from_vendor_advance === true
+            ? { adjustFromVendorAdvance: true }
+            : {}),
         }))
         .filter((item) => item.invoiceId || item.obligationId || item.advanceId)
     : [];

@@ -143,16 +143,17 @@ export const inferPaymentScheduleBasis = (rows = [], poGrossTotal = 0) => {
   return DEFAULT_PAYMENT_SCHEDULE_BASIS;
 };
 
-const getDefaultScheduleLabel = (triggerStage = "PO") =>
-  normalizeTriggerStage(triggerStage) === "TI"
-    ? "Payable on invoice"
-    : `Advance on ${normalizeTriggerStage(triggerStage)}`;
-
-export const getNextPaymentScheduleTriggerStage = (rows = []) => {
+export const getNextPaymentScheduleTriggerStage = (
+  rows = [],
+  triggerOptions = PAYMENT_SCHEDULE_TRIGGER_OPTIONS,
+) => {
   const usedTriggers = new Set(
     (Array.isArray(rows) ? rows : []).map((row) => normalizeTriggerStage(row.triggerStage)),
   );
-  return PAYMENT_SCHEDULE_TRIGGER_OPTIONS.find((option) => !usedTriggers.has(option.value))?.value || null;
+  const safeTriggerOptions = Array.isArray(triggerOptions) && triggerOptions.length
+    ? triggerOptions
+    : PAYMENT_SCHEDULE_TRIGGER_OPTIONS;
+  return safeTriggerOptions.find((option) => !usedTriggers.has(option.value))?.value || null;
 };
 
 export const createEmptyPaymentScheduleRow = (
@@ -167,7 +168,7 @@ export const createEmptyPaymentScheduleRow = (
   return {
   sequence,
   triggerStage: normalizedTriggerStage,
-  label: getDefaultScheduleLabel(normalizedTriggerStage),
+  label: "",
   basis: normalizeBasis(basis),
   value: "",
   creditDays: "0",
@@ -228,9 +229,6 @@ export const validatePaymentScheduleRows = (rows = []) => {
     const triggerStage = normalizeTriggerStage(row.triggerStage);
     const hasScheduleValue = hasValue(row.value);
     const numericValue = Number(row.value);
-    if (!String(row.label || "").trim()) {
-      errors.push(`Payment Schedule row ${rowNumber}: label is required`);
-    }
     if (!hasScheduleValue || !Number.isFinite(numericValue)) {
       errors.push(`Payment Schedule row ${rowNumber}: value is required`);
     } else if (numericValue < 0) {

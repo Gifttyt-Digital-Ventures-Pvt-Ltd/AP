@@ -17,6 +17,7 @@ import {
 import { formatCurrency, normalizeCurrencyCode } from "../../../utils/currency";
 import { extractApiErrorDetail } from "../../../utils/approvalWorkflow";
 import usePaymentTermsSubscription from "../../../hooks/usePaymentTermsSubscription";
+import usePaymentScheduleEnabledTriggers from "../../../hooks/usePaymentScheduleEnabledTriggers";
 import PoPaymentScheduleSection from "../../purchase-orders/components/PoPaymentScheduleSection";
 import { isProformaInvoice } from "../constants/proformaInvoice";
 import {
@@ -61,8 +62,10 @@ const InvoicePaymentSchedulePanel = ({ invoice }) => {
   const documentId = getInvoiceId(invoice);
   const documentType = isProformaInvoice(invoice) ? "PI" : "TI";
   const { isPaymentTermsEnabled } = usePaymentTermsSubscription();
+  const paymentScheduleEnabledTriggers = usePaymentScheduleEnabledTriggers();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [draftRows, setDraftRows] = useState([]);
+  const [savedSchedule, setSavedSchedule] = useState(null);
   const invoiceRows = useMemo(() => normalizePaymentScheduleRows(invoice || {}), [invoice]);
   const invoiceScheduleAvailable =
     isPaymentScheduleAvailable(invoice || {}) || invoiceRows.length > 0;
@@ -96,7 +99,12 @@ const InvoicePaymentSchedulePanel = ({ invoice }) => {
     () => normalizePaymentScheduleRows(documentScheduleSource || {}),
     [documentScheduleSource],
   );
-  const scheduleRows = documentRows.length ? documentRows : invoiceRows;
+  const scheduleRows =
+    savedSchedule?.documentId === documentId && savedSchedule?.documentType === documentType
+      ? savedSchedule.rows
+      : documentRows.length
+        ? documentRows
+        : invoiceRows;
   const documentScheduleAvailable =
     isPaymentScheduleAvailable(documentScheduleSource || {}) ||
     invoiceScheduleAvailable ||
@@ -143,6 +151,7 @@ const InvoicePaymentSchedulePanel = ({ invoice }) => {
         body: { paymentSchedule: buildPaymentSchedulePayload(draftRows) },
       }).unwrap();
       toast.success("Payment Schedule updated");
+      setSavedSchedule({ documentId, documentType, rows: draftRows });
       setDialogOpen(false);
       refetch?.();
     } catch (error) {
@@ -201,10 +210,11 @@ const InvoicePaymentSchedulePanel = ({ invoice }) => {
           documentGrossTotal={documentGrossTotal}
           formatCurrency={(amount) => formatCurrency(amount, currency)}
           readOnly
+          enabledTriggerStages={paymentScheduleEnabledTriggers}
         />
       ) : null}
 
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen} modal={false}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>Edit Payment Schedule</DialogTitle>
@@ -217,6 +227,7 @@ const InvoicePaymentSchedulePanel = ({ invoice }) => {
             documentGrossTotal={documentGrossTotal}
             formatCurrency={(amount) => formatCurrency(amount, currency)}
             onChange={setDraftRows}
+            enabledTriggerStages={paymentScheduleEnabledTriggers}
           />
           <DialogFooter>
             <Button

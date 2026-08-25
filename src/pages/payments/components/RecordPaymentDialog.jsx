@@ -8,6 +8,7 @@ import {
 } from '../../../components/ui/dialog';
 import { Input } from '../../../components/ui/input';
 import { Label } from '../../../components/ui/label';
+import { Checkbox } from '../../../components/ui/checkbox';
 import {
   Select,
   SelectContent,
@@ -23,6 +24,11 @@ import {
 import { formatCurrency } from '../../../utils/currency';
 import PayableSourceBadge from './PayableSourceBadge';
 import MilestoneStageChip from './MilestoneStageChip';
+import {
+  canAdjustFromVendorAdvance,
+  getAvailableVendorAdvance,
+  getVendorAdvanceAdjustmentPreview,
+} from '../utils/vendorAdvanceNetoff';
 
 const ClippedInvoiceLabel = ({ invoice }) => {
   const invoiceNumber = String(
@@ -70,6 +76,37 @@ const RecordPaymentDialog = ({
   submitting = false,
 }) => {
   const selectedTotal = selectedInvoices.reduce((sum, invoice) => sum + getNetPayableAmount(invoice), 0);
+  const getAdjustmentState = (invoice) =>
+    formData.advanceAdjustments?.[invoice.id] || {};
+  const getAdvancePreview = (invoice) => {
+    const state = getAdjustmentState(invoice);
+    return getVendorAdvanceAdjustmentPreview({
+      payable: invoice,
+      enabled: state.adjustFromVendorAdvance,
+      amount: null,
+      grossPayable: getNetPayableAmount(invoice),
+    });
+  };
+  const updateAdvanceAdjustment = (invoice, patch) => {
+    setFormData((prev) => ({
+      ...prev,
+      advanceAdjustments: {
+        ...(prev.advanceAdjustments || {}),
+        [invoice.id]: {
+          ...(prev.advanceAdjustments?.[invoice.id] || {}),
+          ...patch,
+        },
+      },
+    }));
+  };
+  const totalAdvanceApplied = selectedInvoices.reduce(
+    (sum, invoice) => sum + getAdvancePreview(invoice).advanceAppliedAmount,
+    0,
+  );
+  const totalBankPayment = selectedInvoices.reduce(
+    (sum, invoice) => sum + getAdvancePreview(invoice).bankPaymentAmount,
+    0,
+  );
   const hasConvertedInvoice = selectedInvoices.some((invoice) => Boolean(invoice.convertToInr));
   const maxPaymentDate = useMemo(() => {
     const now = new Date();
@@ -133,6 +170,35 @@ const RecordPaymentDialog = ({
                           Converted INR Amount: {formatCurrency(invoice.matchingInrValue, 'INR')}
                         </span>
                       ) : null}
+                      {canAdjustFromVendorAdvance(invoice) ? (
+                        <div className="col-span-2 rounded-md border border-blue-100 bg-blue-50/60 p-2">
+                          <label className="flex items-center gap-2 text-xs font-medium text-blue-950">
+                            <Checkbox
+                              checked={Boolean(getAdjustmentState(invoice).adjustFromVendorAdvance)}
+                              onCheckedChange={(checked) =>
+                                updateAdvanceAdjustment(invoice, {
+                                  adjustFromVendorAdvance: Boolean(checked),
+                                })
+                              }
+                            />
+                            Adjust from vendor advance
+                          </label>
+                          <div className="mt-2 flex items-center justify-between gap-2">
+                            <span className="text-xs text-muted-foreground">
+                              Backend will calculate the applied advance.
+                            </span>
+                            <span className="whitespace-nowrap text-xs font-medium">
+                              Bank: {formatCurrency(getAdvancePreview(invoice).bankPaymentAmount, invoice.currency || 'INR')}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            Available {formatCurrency(getAvailableVendorAdvance(invoice), invoice.currency || 'INR')}
+                            {getAdvancePreview(invoice).advanceAppliedAmount > 0
+                              ? ` · Estimated apply up to ${formatCurrency(getAdvancePreview(invoice).advanceAppliedAmount, invoice.currency || 'INR')}`
+                              : ''}
+                          </p>
+                        </div>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
@@ -143,6 +209,11 @@ const RecordPaymentDialog = ({
             <p className="mt-1 text-xs text-muted-foreground">
               Total: {hasConvertedInvoice ? 'INR payment required' : formatCurrency(selectedTotal, selectedInvoices[0]?.currency || 'INR')} · Status will be set to <strong>PAID</strong>
             </p>
+            {totalAdvanceApplied > 0 ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Vendor Advance Applied: -{formatCurrency(totalAdvanceApplied, selectedInvoices[0]?.currency || 'INR')} · Bank/Cash Amount: {formatCurrency(totalBankPayment, selectedInvoices[0]?.currency || 'INR')}
+              </p>
+            ) : null}
           </div>
 
           <div>
