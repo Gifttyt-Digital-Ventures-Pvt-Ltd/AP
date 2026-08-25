@@ -55,6 +55,14 @@ const MSME_STATUS_STYLES = {
 const normalizeMsmeVerificationStatus = (status) =>
   String(status || "NOT_VERIFIED").trim().toUpperCase() || "NOT_VERIFIED";
 
+const normalizeMsmeCategoryValue = (value) => {
+  const normalized = String(value || "").trim().toUpperCase();
+  if (normalized === "MICRO") return "Micro";
+  if (normalized === "SMALL") return "Small";
+  if (normalized === "MEDIUM") return "Medium";
+  return value || "";
+};
+
 const hasValue = (value) =>
   value !== undefined && value !== null && value !== "";
 
@@ -109,8 +117,9 @@ const GeneralInformationSection = ({
   const showMsmeVerificationControls = Boolean(portalVerificationEnabled && formData.msme);
   const canVerifyMsme = Boolean(showMsmeVerificationControls && onVerifyMsme);
   const hasUdyamRegistrationNo = Boolean(String(formData.udyamRegistrationNo || "").trim());
+  const isMsmeVerified = msmeVerificationStatus === "VERIFIED";
   const fetchUsingPanDisabled = hasUdyamRegistrationNo || isMsmeVerifying;
-  const verifyMsmeDisabled = !hasUdyamRegistrationNo || isMsmeVerifying;
+  const verifyMsmeDisabled = !hasUdyamRegistrationNo || isMsmeVerifying || isMsmeVerified;
 
   const [isOtherCategory, setIsOtherCategory] = useState(
     () => Boolean(formData.category) && !CATEGORY_OPTIONS.includes(formData.category),
@@ -119,6 +128,7 @@ const GeneralInformationSection = ({
   const [panInput, setPanInput] = useState("");
   const [panFetchResult, setPanFetchResult] = useState(null);
   const [panFetchError, setPanFetchError] = useState("");
+  const [panFetchMsmeCategory, setPanFetchMsmeCategory] = useState("");
 
   const { data: availableCurrencies = [] } = useGetAvailableCurrenciesQuery(
     CURRENCY_SCREENS.INVOICE,
@@ -137,18 +147,33 @@ const GeneralInformationSection = ({
     setPanInput(String(formData.pan || "").trim().toUpperCase());
     setPanFetchResult(null);
     setPanFetchError("");
+    setPanFetchMsmeCategory(formData.msmeCategory || "");
     setPanFetchOpen(true);
+  };
+  const removeVerifiedMsme = () => {
+    updateField("udyamRegistrationNo", "");
+    updateField("msmeVerificationStatus", "NOT_VERIFIED");
+    updateField("msmeVerificationMode", "");
+    updateField("msmeVerifiedAt", "");
+    updateField("msmeVerificationMessage", "");
+    updateField("msmeProviderReferenceId", "");
   };
   const handlePanFetch = async () => {
     if (!onFetchMsmeUsingPan || isMsmeVerifying) return;
 
     const response = await onFetchMsmeUsingPan(panInput);
     setPanFetchResult(response);
+    setPanFetchMsmeCategory(
+      normalizeMsmeCategoryValue(response?.msmeCategory) || formData.msmeCategory || "",
+    );
     setPanFetchError(response ? "" : "No verified Udyam details were found for this PAN.");
   };
   const confirmPanFetch = () => {
     if (!panFetchResult || !onApplyFetchedMsme) return;
-    onApplyFetchedMsme(panFetchResult);
+    onApplyFetchedMsme({
+      ...panFetchResult,
+      msmeCategory: panFetchMsmeCategory || panFetchResult.msmeCategory,
+    });
     setPanFetchOpen(false);
   };
   const renderUdyamFetchCta = () => {
@@ -533,6 +558,7 @@ const GeneralInformationSection = ({
                         placeholder="UDYAM-XX-00-0000000"
                         className={`bg-background pr-36 ${errorClass("udyamRegistrationNo")}`}
                         required={isRequired(VENDOR_FIELD_SECTIONS.UDYAM_REGISTRATION_NO)}
+                        disabled={isMsmeVerified}
                       />
                       {renderUdyamFetchCta()}
                     </div>
@@ -561,6 +587,33 @@ const GeneralInformationSection = ({
                     {formData.msmeVerificationMessage}
                   </p>
                 ) : null}
+                {isMsmeVerified ? (
+                  <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-800">
+                          Verified Udyam Registration
+                        </p>
+                        <p className="mt-1 font-mono text-sm font-medium text-foreground">
+                          {formData.udyamRegistrationNo || "—"}
+                        </p>
+                        {formData.msmeCategory ? (
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            MSME Category: {formData.msmeCategory}
+                          </p>
+                        ) : null}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={removeVerifiedMsme}
+                        className="flex shrink-0 items-center gap-1 text-xs font-medium text-destructive"
+                      >
+                        <X className="h-4 w-4" />
+                        Remove
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
                 <div className="mt-3 flex items-center justify-between gap-3">
                   <p className="text-xs leading-4 text-muted-foreground">
                     Confirmed by you as in-scope — drives the mandatory 45-day
@@ -577,7 +630,7 @@ const GeneralInformationSection = ({
                       {isMsmeVerifying ? (
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
                       ) : null}
-                      Verify
+                      {isMsmeVerified ? "Verified" : "Verify"}
                     </Button>
                   ) : null}
                 </div>
@@ -628,9 +681,13 @@ const GeneralInformationSection = ({
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">MSME Category</p>
-                  <p className="mt-1 text-sm font-medium text-foreground">
-                    {panFetchResult.msmeCategory || "-"}
-                  </p>
+                  <AppSelect
+                    value={panFetchMsmeCategory || ""}
+                    onChange={(event) => setPanFetchMsmeCategory(event.target.value)}
+                    options={MSME_CATEGORY_OPTIONS}
+                    placeholder="Select MSME Category"
+                    className="mt-1.5"
+                  />
                 </div>
                 <div>
                   <p className="text-xs text-muted-foreground">Enterprise Name</p>

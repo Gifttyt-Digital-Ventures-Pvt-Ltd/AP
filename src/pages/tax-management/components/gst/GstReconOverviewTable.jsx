@@ -12,12 +12,26 @@ import {
   isPortalOnlyRow,
 } from './gstReconTableHelpers';
 
+const GST_RECON_SOURCE_LABELS = {
+  EFFECTIVE: 'Effective (2A + 2A)',
+  SOURCE_2A: '2A',
+  SOURCE_2B: '2B',
+  GST_PORTAL: 'GST Portal',
+  PLATFORM: 'Platform',
+};
+
+const formatReconSourceLabel = (row = {}, selectedSource = '') => {
+  const source = row.statusSource || row.source || selectedSource;
+  return GST_RECON_SOURCE_LABELS[source] ?? source ?? '-';
+};
+
 // FE §2.2 — the 8 Overview table columns, in spec order.
 const gstOverviewTableHeader = [
   { key: 'sNo', title: 'S.No.' },
   { key: 'invoiceNo', title: 'Invoice Number', cellClassName: 'font-medium' },
   { key: 'vendorName', title: 'Vendor Name', cellClassName: 'max-w-[200px] truncate' },
   { key: 'invoiceDate', title: 'Invoice Date' },
+  { key: 'source', title: 'Source' },
   { key: 'invoiceAmount', title: 'Invoice Amount' },
   { key: 'gstAmount', title: 'GST Amount' },
   { key: 'status', title: 'Reconciliation Status' },
@@ -41,6 +55,7 @@ const GstReconOverviewTable = ({
   page = 1,
   totalPages = 1,
   loading = false,
+  selectedSource = '',
   onPreviousPage,
   onNextPage,
   onView,
@@ -68,6 +83,9 @@ const GstReconOverviewTable = ({
             break;
           case 'invoiceDate':
             value = formatDate(row.invoiceDate);
+            break;
+          case 'source':
+            value = formatReconSourceLabel(row, selectedSource);
             break;
           case 'invoiceAmount':
             value = formatCurrency(row.invoiceAmount);

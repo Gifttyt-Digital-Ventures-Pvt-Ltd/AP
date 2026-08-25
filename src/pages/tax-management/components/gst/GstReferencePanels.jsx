@@ -493,6 +493,7 @@ export const GstReconciliationPanel = () => {
             vendorOptional
             vendorLabel="Supplier"
             vendorPlaceholder="All Suppliers"
+            useConnectedVendorPicker
           />
           <div className="space-y-1.5">
             <label className="text-xs font-medium text-muted-foreground">
@@ -847,6 +848,7 @@ export const GstReturnsPanel = () => {
             hasMultipleGstins={hasMultipleGstins}
             vendorRequired
             vendorLabel="Vendor"
+            useConnectedVendorPicker
             onVendorChange={() => setFetched(false)}
           />
           <div className="space-y-1.5">
