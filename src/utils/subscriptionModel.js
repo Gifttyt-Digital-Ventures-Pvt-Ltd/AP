@@ -1,5 +1,5 @@
 export const AP_SUBSCRIPTION_MODEL = {
-  MONTHLY: "MONTHLY",
+  INVOICE_BASED: "INVOICE_BASED",
   TOKEN_BASED: "TOKEN_BASED",
 };
 
@@ -17,7 +17,7 @@ export const normalizeSubscriptionModel = (value) => {
     return AP_SUBSCRIPTION_MODEL.TOKEN_BASED;
   }
 
-  return AP_SUBSCRIPTION_MODEL.MONTHLY;
+  return AP_SUBSCRIPTION_MODEL.INVOICE_BASED;
 };
 
 export const isTokenBasedSubscription = (value) =>

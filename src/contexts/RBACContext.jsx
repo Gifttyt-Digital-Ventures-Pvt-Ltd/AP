@@ -45,7 +45,8 @@ const RBACContext = createContext({
   isBankingEnabled: false,
   isBillingFeatureEnabled: false,
   isTokenBasedSubscription: false,
-  subscriptionModel: "MONTHLY",
+  isInvoiceBasedSubscription: false,
+  subscriptionModel: "INVOICE_BASED",
   isCorporateAdmin: false,
   backendPermissionsRaw: [],
   canAssignRoleSets: false,
@@ -394,6 +395,11 @@ export const RBACProvider = ({ children }) => {
     [corporateScreens?.isTokenBasedSubscription],
   );
 
+  const isInvoiceBasedSubscriptionEnabled = useMemo(
+    () => !isTokenBasedSubscriptionEnabled,
+    [isTokenBasedSubscriptionEnabled],
+  );
+
   const isBillingFeatureEnabled = useMemo(
     () =>
       isTokenBasedSubscriptionEnabled &&
@@ -580,7 +586,8 @@ export const RBACProvider = ({ children }) => {
     connectedBankingSection: CONNECTED_BANKING_SECTION,
     isBillingFeatureEnabled,
     isTokenBasedSubscription: isTokenBasedSubscriptionEnabled,
-    subscriptionModel: corporateScreens?.subscriptionModel || "MONTHLY",
+    isInvoiceBasedSubscription: isInvoiceBasedSubscriptionEnabled,
+    subscriptionModel: corporateScreens?.subscriptionModel || "INVOICE_BASED",
     permissionLabels: PERMISSION_LABELS,
   };
 

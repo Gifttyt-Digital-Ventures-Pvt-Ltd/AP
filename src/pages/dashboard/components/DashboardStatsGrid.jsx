@@ -1,4 +1,4 @@
-import React from 'react';
+import React from "react";
 import {
   FileText,
   Clock,
@@ -6,11 +6,22 @@ import {
   IndianRupee,
   Users,
   TrendingUp,
-} from 'lucide-react';
-import DashboardMetricCard from './DashboardMetricCard';
+} from "lucide-react";
+import DashboardMetricCard from "./DashboardMetricCard";
+import InvoiceAvailabilityCard from "../../../components/billing/InvoiceAvailabilityCard";
 
-const DashboardStatsGrid = ({ stats, approvalRate, totalValue, formatCompactCurrency }) => (
-  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4" data-testid="stats-grid">
+const DashboardStatsGrid = ({
+  stats,
+  totalValue,
+  approvalRate,
+  formatCompactCurrency,
+  invoiceUsageSummary,
+  showInvoiceAvailability,
+}) => (
+  <div
+    className={`grid grid-cols-2 md:grid-cols-3 lg:${showInvoiceAvailability ? "grid-cols-6" : "grid-cols-5"} gap-4`}
+    data-testid="stats-grid"
+  >
     <DashboardMetricCard
       icon={FileText}
       label="Total Invoices"
@@ -60,7 +71,7 @@ const DashboardStatsGrid = ({ stats, approvalRate, totalValue, formatCompactCurr
       valueClassName="text-emerald-600"
       testId="stat-value-3"
     />
-    <DashboardMetricCard
+    {/* <DashboardMetricCard
       icon={TrendingUp}
       label="Completion Rate"
       value={`${approvalRate}%`}
@@ -68,7 +79,13 @@ const DashboardStatsGrid = ({ stats, approvalRate, totalValue, formatCompactCurr
       iconWrapperClassName="bg-purple-100"
       iconClassName="text-purple-600"
       valueClassName="text-purple-600"
-    />
+    /> */}
+    {showInvoiceAvailability && (
+      <InvoiceAvailabilityCard
+        summary={invoiceUsageSummary}
+        className="h-full"
+      />
+    )}
   </div>
 );
 
