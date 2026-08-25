@@ -264,9 +264,12 @@ const PoDetailsDialog = ({
   const paymentScheduleRows = fetchedPaymentScheduleRows.length
     ? fetchedPaymentScheduleRows
     : embeddedPaymentScheduleRows;
+  const savedPaymentScheduleRows = Array.isArray(savedPaymentSchedule?.rows)
+    ? savedPaymentSchedule.rows
+    : null;
   const visiblePaymentScheduleRows =
-    savedPaymentSchedule?.documentId === selectedPoId
-      ? savedPaymentSchedule.rows
+    savedPaymentSchedule?.documentId === selectedPoId && savedPaymentScheduleRows
+      ? savedPaymentScheduleRows
       : paymentScheduleRows;
   const documentGrossTotal = getDocumentGrossTotal(documentScheduleSource || {}, displayPO || {});
 
