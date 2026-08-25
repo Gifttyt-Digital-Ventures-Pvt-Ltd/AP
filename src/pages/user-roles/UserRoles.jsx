@@ -915,13 +915,10 @@ const UserRoles = () => {
           id: inviteForm.id,
           empId: String(inviteForm.employeeCode || "").trim() || undefined,
           name: inviteForm.name.trim(),
+          mobile: mobile || null,
           department: String(inviteForm.department || "").trim(),
           role: String(inviteForm.role || "").trim(),
         };
-
-        if (mobile) {
-          updatePayload.mobile = mobile;
-        }
 
         await updateCorporateEmployee(updatePayload).unwrap();
         toast.success("User updated successfully");

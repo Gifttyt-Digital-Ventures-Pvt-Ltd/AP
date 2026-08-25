@@ -245,6 +245,42 @@ const Approvals = () => {
     };
   }, [allInvoicesListData, allTabPageOffset, allInvoices.length]);
 
+  const visibleApprovalTabs = useMemo(() => {
+    const tabs = [];
+    if (canApproveInvoices) {
+      tabs.push({
+        value: 'pending-approval',
+        label: 'Pending Approval',
+        count: pendingApprovalInvoices.length,
+      });
+    }
+    if (canCheckInvoices) {
+      tabs.push({
+        value: 'pending-checker',
+        label: 'Pending Checker',
+        count: pendingCheckerInvoices.length,
+      });
+    }
+    tabs.push({
+      value: 'all',
+      label: 'All',
+      count: allInvoicesPagination.total,
+    });
+    return tabs;
+  }, [
+    allInvoicesPagination.total,
+    canApproveInvoices,
+    canCheckInvoices,
+    pendingApprovalInvoices.length,
+    pendingCheckerInvoices.length,
+  ]);
+
+  useEffect(() => {
+    if (!visibleApprovalTabs.some((tab) => tab.value === activeTab)) {
+      setActiveTab(visibleApprovalTabs[0]?.value || 'all');
+    }
+  }, [activeTab, visibleApprovalTabs]);
+
   const visibleAllInvoicePageNumbers = useMemo(() => {
     const { totalPages, currentPage } = allInvoicesPagination;
     if (totalPages <= 5) {
@@ -584,11 +620,7 @@ const Approvals = () => {
       >
         <div className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap gap-2">
-            {[
-              { value: 'pending-approval', label: 'Pending Approval', count: pendingApprovalInvoices.length },
-              { value: 'pending-checker', label: 'Pending Checker', count: pendingCheckerInvoices.length },
-              { value: 'all', label: 'All', count: allInvoicesPagination.total },
-            ].map(({ value, label, count }) => (
+            {visibleApprovalTabs.map(({ value, label, count }) => (
               <Button
                 key={value}
                 type="button"
