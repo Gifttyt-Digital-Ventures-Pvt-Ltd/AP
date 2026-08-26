@@ -19,15 +19,7 @@ import { useMeteredActionEstimate } from '../../../hooks/useMeteredActionEstimat
 export const PO_REFERENCE_DOCUMENT_TYPES = [
   {
     value: 'PI',
-    label: 'Proforma Invoice (PI)',
-  },
-  {
-    value: 'CUSTOMER_PO',
-    label: 'Purchase Order (PO)',
-  },
-  {
-    value: 'LOI',
-    label: 'Letter of Intent (LOI)',
+    label: 'PI / PO / LOI',
   },
   {
     value: 'EXCEL',
