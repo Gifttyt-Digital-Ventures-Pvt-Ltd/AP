@@ -78,11 +78,23 @@ const ChainSegment = ({ label, type, slot, onOpenDocument }) => {
   );
 };
 
-const DocumentChainCell = ({ documentChain, onOpenDocument }) => (
+const DocumentChainCell = ({
+  documentChain,
+  onOpenDocument,
+  canUseGrn = true,
+  canUsePi = true,
+  canUseTi = true,
+}) => (
   <div className="flex w-full items-start justify-start gap-6" data-testid="document-chain-cell">
-    <ChainSegment label="GRN" type="GRN" slot={documentChain.grn} onOpenDocument={onOpenDocument} />
-    <ChainSegment label="PI" type="PI" slot={documentChain.pi} onOpenDocument={onOpenDocument} />
-    <ChainSegment label="TI" type="TI" slot={documentChain.ti} onOpenDocument={onOpenDocument} />
+    {canUseGrn ? (
+      <ChainSegment label="GRN" type="GRN" slot={documentChain.grn} onOpenDocument={onOpenDocument} />
+    ) : null}
+    {canUsePi ? (
+      <ChainSegment label="PI" type="PI" slot={documentChain.pi} onOpenDocument={onOpenDocument} />
+    ) : null}
+    {canUseTi ? (
+      <ChainSegment label="TI" type="TI" slot={documentChain.ti} onOpenDocument={onOpenDocument} />
+    ) : null}
   </div>
 );
 

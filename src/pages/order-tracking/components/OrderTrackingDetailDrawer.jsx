@@ -22,6 +22,7 @@ import OrderTrackingDocumentChainSection from "./OrderTrackingDocumentChainSecti
 import OrderTrackingPaymentObligationsTable from "./OrderTrackingPaymentObligationsTable";
 import OrderTrackingChecklistSection from "./OrderTrackingChecklistSection";
 import OrderTrackingFundingSection from "./OrderTrackingFundingSection";
+import OrderTrackingRemarksSection from "./OrderTrackingRemarksSection";
 
 // `value` is sometimes a Badge (renders a <div>) — a <p> can't legally
 // contain block-level content, so the value wrapper stays a <div>.
@@ -49,8 +50,15 @@ const OrderTrackingDetailDrawer = ({
   isLoading,
   onOpenDocument,
   onCloseOrder,
+  onAddRemark,
+  onSaveInternalChecklist,
   canManageOrder = false,
   closingOrder = false,
+  addingRemark = false,
+  savingInternalChecklist = false,
+  canUseGrn = true,
+  canUsePi = true,
+  canUseTi = true,
 }) => {
   const isFullySettled =
     detail &&
@@ -79,7 +87,7 @@ const OrderTrackingDetailDrawer = ({
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
                   <p className="text-base font-semibold text-foreground">
-                    {detail.orderNumber}
+                    {detail.poNumber || detail.orderNumber}
                   </p>
                   <Badge
                     variant="outline"
@@ -163,6 +171,9 @@ const OrderTrackingDetailDrawer = ({
                 documentChain={detail.documentChain}
                 currency={detail.currency}
                 onOpenDocument={onOpenDocument}
+                canUseGrn={canUseGrn}
+                canUsePi={canUsePi}
+                canUseTi={canUseTi}
               />
             </Section>
 
@@ -195,7 +206,11 @@ const OrderTrackingDetailDrawer = ({
             </Section>
 
             <Section title="Internal Checklist">
-              <OrderTrackingChecklistSection checklist={detail.checklist} />
+              <OrderTrackingChecklistSection
+                checklist={detail.checklist}
+                onSave={(nextChecklist) => onSaveInternalChecklist?.(detail, nextChecklist)}
+                isSaving={savingInternalChecklist}
+              />
             </Section>
 
             <Section title="Delivery">
@@ -226,6 +241,14 @@ const OrderTrackingDetailDrawer = ({
               <OrderTrackingFundingSection
                 funding={detail.funding}
                 currency={detail.currency}
+              />
+            </Section>
+
+            <Section title="Remarks">
+              <OrderTrackingRemarksSection
+                remarks={detail.remarksHistory}
+                onAddRemark={(remark) => onAddRemark?.(detail, remark)}
+                isAdding={addingRemark}
               />
             </Section>
           </div>

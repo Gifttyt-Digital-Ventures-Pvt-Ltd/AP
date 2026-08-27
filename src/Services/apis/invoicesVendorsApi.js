@@ -150,6 +150,7 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
       invalidatesTags: (result, error, { id } = {}) => [
         { type: "Invoices", id },
         "Invoices",
+        "OrderTracking",
       ],
     }),
     // PUT /invoices/{id}/funding
