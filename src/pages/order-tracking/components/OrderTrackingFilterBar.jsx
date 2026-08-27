@@ -34,6 +34,8 @@ const OrderTrackingFilterBar = ({
   sort,
   onSortChange,
   vendorOptions = [],
+  canUseGrn = true,
+  canUseTi = true,
 }) => {
   const updateFilter = (key, value) => {
     onFiltersChange({ ...filters, [key]: value });
@@ -93,7 +95,11 @@ const OrderTrackingFilterBar = ({
           <AppSelect
             value={filters.documentChain}
             onChange={(e) => updateFilter("documentChain", e.target.value)}
-            options={DOCUMENT_CHAIN_FILTER_OPTIONS}
+            options={DOCUMENT_CHAIN_FILTER_OPTIONS.filter(
+              (option) =>
+                (canUseGrn || option.value !== "MISSING_GRN") &&
+                (canUseTi || !["MISSING_TI", "TI_PARTIAL"].includes(option.value)),
+            )}
             placeholder="All"
             className="w-40"
             data-testid="order-tracking-document-chain-filter"

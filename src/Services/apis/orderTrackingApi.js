@@ -72,6 +72,19 @@ export const orderTrackingApi = serviceApi.injectEndpoints({
       ],
     }),
 
+    updateOrderTrackingInternalChecklist: builder.mutation({
+      query: ({ orderId, body }) => ({
+        url: `/order-tracking/${orderId}/internal-checklist`,
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: (_result, _error, { orderId }) => [
+        { type: "OrderTracking", id: "LIST" },
+        { type: "OrderTracking", id: orderId },
+        "Invoices",
+      ],
+    }),
+
     /** response: { vendors } — deliveryStatuses/fundingStatuses dropped, both closed frontend enums now (docs §3.5). */
     getOrderTrackingFilterOptions: builder.query({
       query: () => ({ url: "/order-tracking/filter-options", method: "GET" }),
@@ -97,6 +110,18 @@ export const orderTrackingApi = serviceApi.injectEndpoints({
         { type: "OrderTracking", id: orderId },
       ],
     }),
+
+    addOrderTrackingRemark: builder.mutation({
+      query: ({ orderId, remark }) => ({
+        url: `/order-tracking/${orderId}/remarks`,
+        method: "POST",
+        body: { remark },
+      }),
+      invalidatesTags: (_result, _error, { orderId }) => [
+        { type: "OrderTracking", id: "LIST" },
+        { type: "OrderTracking", id: orderId },
+      ],
+    }),
   }),
 });
 
@@ -105,7 +130,9 @@ export const {
   useGetOrderTrackingSummaryQuery,
   useGetOrderTrackingDetailQuery,
   useUpdateOrderTrackingDeliveryStatusMutation,
+  useUpdateOrderTrackingInternalChecklistMutation,
   useGetOrderTrackingFilterOptionsQuery,
   useExportOrderTrackingReportMutation,
   useCloseOrderTrackingOrderMutation,
+  useAddOrderTrackingRemarkMutation,
 } = orderTrackingApi;

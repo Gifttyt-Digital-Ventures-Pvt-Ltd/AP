@@ -49,55 +49,8 @@ export const normalizePaymentScheduleTriggerStage = normalizeTriggerStage;
 const hasValue = (value) =>
   value !== undefined && value !== null && value !== "";
 
-const LOCKED_SCHEDULE_STATUSES = new Set([
-  "PAID",
-  "PARTIALLY_PAID",
-  "SETTLED",
-  "PARTIALLY_SETTLED",
-  "RELEASED",
-  "PARTIALLY_RELEASED",
-  "ADVANCE_PAID",
-  "OBLIGATION_PAID",
-  "PAYMENT_RELEASED",
-]);
-
 export const isPaymentScheduleRowLocked = (row = {}) => {
-  const status = String(
-    row.status ??
-      row.rowStatus ??
-      row.row_status ??
-      row.obligationStatus ??
-      row.obligation_status ??
-      "",
-  )
-    .trim()
-    .toUpperCase();
-
-  const explicitLock =
-    row.locked ??
-    row.isLocked ??
-    row.is_locked ??
-    row.paid ??
-    row.isPaid ??
-    row.is_paid ??
-    row.settled ??
-    row.isSettled ??
-    row.is_settled ??
-    row.paymentReleased ??
-    row.payment_released ??
-    false;
-  const paidAmount =
-    Number(
-      row.paidAmount ??
-        row.paid_amount ??
-        row.settledAmount ??
-        row.settled_amount ??
-        row.releasedAmount ??
-        row.released_amount ??
-        0,
-    ) || 0;
-
-  return Boolean(explicitLock || paidAmount > 0 || LOCKED_SCHEDULE_STATUSES.has(status));
+  return row.locked === true;
 };
 
 export const getPaymentScheduleRowLockReason = (row = {}) => {
