@@ -1636,8 +1636,15 @@ const Payments = () => {
     pendingPaymentInvoices,
   ]);
 
-  const handleDownloadInvoice = (invoice) => {
-    const preparedInvoice = toInvoiceUiPayload(invoice);
+  const handleDownloadInvoice = async (invoice) => {
+    const invoiceId =
+      invoice?.invoiceId ??
+      invoice?.invoice_id ??
+      getInvoicePreviewId(invoice);
+    const preparedInvoice = await loadInvoiceDetailsForPreview(
+      invoiceId,
+      invoice,
+    );
     if (!openInvoiceFileDownload(preparedInvoice)) {
       toast.error('No invoice file available for download');
     }
@@ -1649,7 +1656,7 @@ const Payments = () => {
       toast.error('Invoice file is not available');
       return;
     }
-    handleDownloadInvoice(invoice);
+    await handleDownloadInvoice(invoice);
   };
 
   const getStatusBadgeClass = (status) => getInvoiceStatusBadgeClass(status);
