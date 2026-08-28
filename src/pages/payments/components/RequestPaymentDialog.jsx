@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
 import {
@@ -313,17 +314,15 @@ const RequestPaymentDialog = ({
                 { key: 'vendorName', title: 'Vendor', headerClassName: 'w-[140px] min-w-[140px] text-left' },
                 { key: 'source', title: 'Source', headerClassName: 'w-[120px] min-w-[120px] text-left' },
                 { key: 'invoiceNumber', title: 'Reference', headerClassName: 'w-[170px] min-w-[170px] text-left' },
-                { key: 'gstValidation', title: 'GST Validation', headerClassName: 'w-[130px] min-w-[130px] text-left' },
                 { key: 'gstAmount', title: 'Tax Amount', headerClassName: 'w-[120px] min-w-[120px] text-left', cellClassName: 'text-left' },
                 { key: 'amountDue', title: 'Net Payable', headerClassName: 'w-[180px] min-w-[180px] text-left', cellClassName: 'text-left font-medium' },
                 { key: 'vendorAdvance', title: 'Vendor Advance', headerClassName: 'w-[170px] min-w-[170px] text-left', cellClassName: 'text-left' },
                 { key: 'requestedAmount', title: 'Requested Amount', headerClassName: 'w-[160px] min-w-[160px] text-left', cellClassName: 'text-left' },
-                { key: 'bankPaymentAmount', title: 'Estimated Bank Amount', headerClassName: 'w-[200px] min-w-[200px] text-left', cellClassName: 'text-left' },
-                { key: 'actions', title: 'Action', headerClassName: 'w-[100px] min-w-[100px] text-left' },
+                { key: 'actions', title: 'Action', headerClassName: 'w-[72px] min-w-[72px] text-center' },
               ]}
               tableData={rows}
               rowKey="id"
-              tableClassName="min-w-[1490px] text-sm"
+              tableClassName="min-w-[1160px] text-sm"
               tableContainerClassName="max-w-full overflow-x-auto"
               emptyMessage="No invoices selected"
               renderRow={(row) => (
@@ -346,15 +345,6 @@ const RequestPaymentDialog = ({
                         </span>
                       ) : null}
                     </div>
-                  </TableCell>
-                  <TableCell className="w-[130px] min-w-[130px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
-                    {isAdvanceStageRow(row) ? (
-                      <span className="text-muted-foreground">-</span>
-                    ) : (
-                      <span className="inline-flex items-center rounded-full border border-green-200 bg-green-50 px-2 py-1 text-xs font-medium text-green-800">
-                        Pass
-                      </span>
-                    )}
                   </TableCell>
                   <TableCell className="w-[120px] min-w-[120px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
                     {clippedTableText(formatMoney(row.gstAmount, row.currency))}
@@ -402,27 +392,17 @@ const RequestPaymentDialog = ({
                       {formatMoney(row.requestedAmount, getPaymentCurrency(row))}
                     </span>
                   </TableCell>
-                  <TableCell className="w-[200px] min-w-[200px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
-                    <div className="space-y-0.5">
-                      <span className="font-medium text-slate-900">
-                        {formatMoney(getPreviewPaymentAmount(row), getPaymentCurrency(row))}
-                      </span>
-                      {getAdvancePreview(row).advanceAppliedAmount > 0 ? (
-                        <span className="block text-[11px] text-muted-foreground">
-                          Estimated advance -{formatMoney(getAdvancePreview(row).advanceAppliedAmount, getPaymentCurrency(row))}
-                        </span>
-                      ) : null}
-                    </div>
-                  </TableCell>
-                  <TableCell className="w-[100px] min-w-[100px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
+                  <TableCell className="w-[72px] min-w-[72px] overflow-hidden whitespace-nowrap px-3 py-3 text-center">
                     {isInrRow(row) ? (
                       <Button
                         type="button"
                         variant="ghost"
-                        size="sm"
+                        size="icon"
                         onClick={() => setRows((prev) => prev.filter((item) => item.id !== row.id))}
+                        aria-label={`Remove ${row.invoiceNumber || 'payable row'}`}
+                        title="Remove"
                       >
-                        Remove
+                        <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     ) : (
                       <span className="text-muted-foreground">-</span>
