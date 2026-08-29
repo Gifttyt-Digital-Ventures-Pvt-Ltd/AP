@@ -174,8 +174,8 @@ const lineItemTableHeader = [
   {
     key: "discount",
     title: "Discount",
-    headerClassName: "w-[120px] min-w-[120px] text-left",
-    cellClassName: "w-[120px] min-w-[120px] align-top",
+    headerClassName: "w-[150px] min-w-[150px] text-left",
+    cellClassName: "w-[150px] min-w-[150px] align-top",
   },
   {
     key: "subtotal",
@@ -1638,7 +1638,7 @@ export const InvoiceForm = ({
               break;
             }
             value = (
-              <div className="flex items-center gap-0.5">
+              <div className="flex items-center gap-2">
                 <Input
                   type="text"
                   inputMode="decimal"
@@ -1650,7 +1650,7 @@ export const InvoiceForm = ({
                       sanitizeNumericInput(e.target.value),
                     )
                   }
-                  className="h-7 text-xs text-right w-12 px-1"
+                  className="h-7 w-14 px-2 text-right text-xs"
                 />
                 <AppSelect
                   value={item.discountType}
@@ -1663,7 +1663,7 @@ export const InvoiceForm = ({
                       ? "₹"
                       : invoiceCurrency,
                   ]}
-                  className="h-7 w-14 justify-between rounded border bg-white pl-2 pr-7 text-xs [&>span]:min-w-0 [&>span]:truncate"
+                  className="h-7 w-20 justify-between rounded border bg-white pl-2 pr-8 text-xs [&>span]:min-w-0 [&>span]:truncate"
                 />
               </div>
             );

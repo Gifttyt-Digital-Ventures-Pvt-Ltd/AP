@@ -299,6 +299,7 @@ const NEW_VENDOR_FIELD_DEFAULTS = {
   foreignVendor: false,
   udyamRegistrationNo: "",
   msmeCategory: "",
+  msmeStatus: "",
   msmeVerificationStatus: "",
   msmeVerificationMode: "",
   msmeVerifiedAt: "",

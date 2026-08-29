@@ -16,11 +16,14 @@ export const formatDate = (dateStr) => {
 };
 
 export const formatRetPeriod = (retPrd) => {
-  if (!retPrd || retPrd.length !== 6) return retPrd || '-';
+  const normalizedPeriod = String(retPrd || '').trim();
+  if (!normalizedPeriod) return '-';
+  if (!/^\d{6}$/.test(normalizedPeriod)) return normalizedPeriod;
   const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  const month = parseInt(retPrd.slice(0, 2), 10);
-  const year = retPrd.slice(2);
-  return `${monthNames[month - 1] || retPrd.slice(0, 2)} 20${year}`;
+  const month = parseInt(normalizedPeriod.slice(0, 2), 10);
+  const yearPart = normalizedPeriod.slice(2);
+  const year = yearPart.length === 4 ? yearPart : `20${yearPart}`;
+  return `${monthNames[month - 1] || normalizedPeriod.slice(0, 2)} ${year}`;
 };
 
 export const formatLakhs = (amountInLakhs) => `₹${Number(amountInLakhs || 0).toFixed(2)}L`;

@@ -26,7 +26,17 @@ import { cn } from "../../../lib/utils";
  * column, per the spec's own recommendation (§13) since Order Status moved
  * to the drawer.
  */
-const OrderTrackingTable = ({ rows, isLoading, onView, onOpenDocument, onDeliveryStatusChange, canEditDelivery }) => {
+const OrderTrackingTable = ({
+  rows,
+  isLoading,
+  onView,
+  onOpenDocument,
+  onDeliveryStatusChange,
+  canEditDelivery,
+  canUseGrn = true,
+  canUsePi = true,
+  canUseTi = true,
+}) => {
   const renderRow = (row, rowIndex, headers) => {
     const isCancelled = row.orderStatus === ORDER_STATUS.CANCELLED;
 
@@ -53,7 +63,15 @@ const OrderTrackingTable = ({ rows, isLoading, onView, onOpenDocument, onDeliver
             </div>
           );
         case "documentChain":
-          return <DocumentChainCell documentChain={row.documentChain} onOpenDocument={onOpenDocument} />;
+          return (
+            <DocumentChainCell
+              documentChain={row.documentChain}
+              onOpenDocument={onOpenDocument}
+              canUseGrn={canUseGrn}
+              canUsePi={canUsePi}
+              canUseTi={canUseTi}
+            />
+          );
         case "orderValue":
           return formatCurrency(row.orderValue, row.currency);
         case "amountOutstanding":

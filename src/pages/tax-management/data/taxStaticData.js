@@ -36,7 +36,7 @@ export const GST_RECON_OVERVIEW_DATE_FILTERS = [
 export const DEFAULT_GST_RECON_OVERVIEW_DATE_FILTER = GST_RECON_OVERVIEW_DATE_FILTERS[0].value;
 
 export const GST_RECON_OVERVIEW_SOURCE_OPTIONS = [
-  { value: 'EFFECTIVE', label: 'Effective (2B → 2A)' },
+  { value: 'EFFECTIVE', label: 'Effective (2A + 2A)' },
   { value: 'SOURCE_2A', label: '2A' },
   { value: 'SOURCE_2B', label: '2B' },
 ];

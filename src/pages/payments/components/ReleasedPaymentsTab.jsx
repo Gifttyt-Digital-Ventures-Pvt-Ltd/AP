@@ -10,6 +10,8 @@ import { withIntegrationTableHeader } from '../../../utils/integrationProvenance
 import { formatInvoiceAmount } from '../../invoices/utils/invoiceAmounts';
 import { cn } from '../../../lib/utils';
 import { getPayableDisplayLabel } from '../utils/payableRows';
+import PayableSourceBadge from './PayableSourceBadge';
+import MilestoneStageChip from './MilestoneStageChip';
 
 const clippedText = (value) => {
   const text = String(value || '-');
@@ -35,8 +37,39 @@ const getVendorLabel = (record = {}, fallbackVendorName) => {
   return branch ? `${name} - ${branch}` : name;
 };
 
+const getReleasedSourceType = (payment = {}) =>
+  String(payment.releasedSourceType || payment.source_type || '').toUpperCase();
+
+const getReleasedSourceDocumentType = (payment = {}) =>
+  String(
+    payment.sourceDocumentType ||
+      payment.source_document_type ||
+      payment.documentType ||
+      payment.document_type ||
+      payment.triggerStage ||
+      payment.trigger_stage ||
+      payment.releasedSourceType ||
+      payment.source_type ||
+      '',
+  ).toUpperCase();
+
+const canViewReleasedInvoice = (payment = {}) =>
+  getReleasedSourceType(payment) === 'INVOICE' && Boolean(payment.invoice_id || payment.invoiceId);
+
+const canViewReleasedSource = (payment = {}) => {
+  const sourceDocumentType = getReleasedSourceDocumentType(payment);
+  if (['INVOICE', 'PI', 'TI'].includes(sourceDocumentType)) {
+    return Boolean(payment.invoice_id || payment.invoiceId || payment.piId || payment.pi_id || payment.sourceId || payment.source_id);
+  }
+  if (sourceDocumentType === 'PO') return Boolean(payment.poId || payment.po_id || payment.orderId || payment.order_id);
+  if (sourceDocumentType === 'GRN') return Boolean(payment.grnId || payment.grn_id);
+  if (sourceDocumentType === 'ADVANCE') return Boolean(payment.advanceId || payment.advance_id || payment.sourceId || payment.source_id);
+  return canViewReleasedInvoice(payment);
+};
+
 const baseReleasedPaymentTableHeader = [
-  { key: 'invoiceNumber', title: 'Invoice #', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'font-medium text-left' },
+  { key: 'invoiceNumber', title: 'Reference', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'font-medium text-left' },
+  { key: 'source', title: 'Source', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'text-left' },
   { key: 'batchId', title: 'Batch', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'font-medium text-left' },
   { key: 'orgBranch', title: 'Branch', headerClassName: 'bg-muted text-foreground text-left', cellClassName: 'text-sm text-left' },
   { key: 'vendorName', title: 'Vendor', headerClassName: 'bg-muted text-foreground text-left' },
@@ -109,16 +142,33 @@ const ReleasedPaymentsTab = ({
           }
           case 'invoiceNumber':
             value = (
-              <div className="min-w-0">
-                {payment.sourceType && payment.sourceType !== 'INVOICE' ? (
-                  <span className="mb-0.5 inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
-                    {payment.sourceType}
+              <div className="min-w-0 space-y-0.5">
+                {clippedText(getPayableDisplayLabel(payment))}
+                {payment.orderNumber || payment.poNumber ? (
+                  <span className="block truncate text-[11px] font-normal text-muted-foreground" title={payment.orderNumber || payment.poNumber}>
+                    {payment.orderNumber || payment.poNumber}
                   </span>
                 ) : null}
-                {clippedText(getPayableDisplayLabel(payment))}
               </div>
             );
             break;
+          case 'source': {
+            const sourceType = getReleasedSourceType(payment);
+            value = sourceType ? (
+              <div className="flex flex-col items-start gap-1">
+                <PayableSourceBadge sourceType={sourceType} isAdvance={payment.isAdvance} />
+                <MilestoneStageChip stage={payment.triggerStage} sharePct={payment.sharePct} />
+                {payment.milestoneLabel ? (
+                  <span className="max-w-full truncate text-[11px] text-muted-foreground" title={payment.milestoneLabel}>
+                    {payment.milestoneLabel}
+                  </span>
+                ) : null}
+              </div>
+            ) : (
+              <span className="text-xs text-muted-foreground">Payment</span>
+            );
+            break;
+          }
           case 'paymentDate':
             value = clippedText(safeFormatDate(payment.paymentDate));
             break;
@@ -141,28 +191,30 @@ const ReleasedPaymentsTab = ({
           case 'actions':
             value = (
               <div className="flex justify-start gap-1">
-                {payment.sourceType === 'INVOICE' ? (
+                {canViewReleasedSource(payment) ? (
                   <>
                     <Button
                       variant="ghost"
                       size="sm"
                       onClick={() => handleViewPaymentInvoice?.(payment)}
                       data-testid={`view-payment-invoice-${payment?.id ?? 'unknown'}`}
-                      title="View Invoice"
+                      title="View Details"
                       className="h-8 w-8 p-0"
                     >
                       <Eye className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleDownloadPaymentInvoice?.(payment)}
-                      data-testid={`download-payment-invoice-${payment?.id ?? 'unknown'}`}
-                      title="Download Invoice"
-                      className="h-8 w-8 p-0"
-                    >
-                      <Download className="h-4 w-4" />
-                    </Button>
+                    {canViewReleasedInvoice(payment) ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDownloadPaymentInvoice?.(payment)}
+                        data-testid={`download-payment-invoice-${payment?.id ?? 'unknown'}`}
+                        title="Download Invoice"
+                        className="h-8 w-8 p-0"
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                    ) : null}
                   </>
                 ) : (
                   <span className="text-xs text-muted-foreground">Read only</span>

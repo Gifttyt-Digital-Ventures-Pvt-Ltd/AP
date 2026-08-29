@@ -40,7 +40,10 @@ import { Button } from "../../components/ui/button";
 import { Textarea } from "../../components/ui/textarea";
 import { Label } from "../../components/ui/label";
 import { Loader2, XCircle } from "lucide-react";
-import { useUpdateDocumentPaymentScheduleMutation } from "../../Services/apis/paymentSchedulesApi";
+import {
+  useLazyGetDocumentPaymentScheduleQuery,
+  useUpdateDocumentPaymentScheduleMutation,
+} from "../../Services/apis/paymentSchedulesApi";
 import { useRequestAccountingReadyUnlockMutation } from "../../Services/apis/accountingApi";
 import { useGetOrganisationQuery } from "../../Services/apis/settingsApi";
 import { normalizeOrganisationBranchesFromApi } from "../../utils/organisationGst";
@@ -99,6 +102,7 @@ import { useCreditErrorHandler } from "../../contexts/CreditErrorContext";
 import { useRBAC } from "../../contexts/RBACContext";
 import useForeignCurrencyInrConversionSubscription from "../../hooks/useForeignCurrencyInrConversionSubscription";
 import usePaymentTermsSubscription from "../../hooks/usePaymentTermsSubscription";
+import usePaymentScheduleEnabledTriggers from "../../hooks/usePaymentScheduleEnabledTriggers";
 import useVendorAdvancesSubscription from "../../hooks/useVendorAdvancesSubscription";
 import {
   getInrConversionValidationError,
@@ -369,6 +373,7 @@ const PurchaseOrdersPage = () => {
   const { isForeignCurrencyInrConversionEnabled } =
     useForeignCurrencyInrConversionSubscription();
   const { isPaymentTermsEnabled } = usePaymentTermsSubscription();
+  const paymentScheduleEnabledTriggers = usePaymentScheduleEnabledTriggers();
   const { isVendorAdvancesEnabled } = useVendorAdvancesSubscription();
   const { setHideSidebar } = useSidebar();
   const canManagePo = canPerformAction("po.create");
@@ -380,7 +385,6 @@ const PurchaseOrdersPage = () => {
     (isCorporateSectionEnabled("PURCHASE_ORDER_UPLOAD") ||
       isCorporateSectionEnabled("PURCHASE_ORDER_ALL"));
   const canApprovePo = canPerformAction("po.approve");
-
   const [deliveryStatusFilter, setDeliveryStatusFilter] = useState("all");
   const purchaseOrdersQueryParams =
     deliveryStatusFilter === "all"
@@ -439,6 +443,7 @@ const PurchaseOrdersPage = () => {
   const [savePurchaseOrderDraft] = useSavePurchaseOrderDraftMutation();
   const [createPurchaseOrder] = useCreatePurchaseOrderMutation();
   const [updatePurchaseOrder] = useUpdatePurchaseOrderMutation();
+  const [getDocumentPaymentSchedule] = useLazyGetDocumentPaymentScheduleQuery();
   const [updateDocumentPaymentSchedule] =
     useUpdateDocumentPaymentScheduleMutation();
   const [submitPurchaseOrder] = useSubmitPurchaseOrderMutation();
@@ -501,6 +506,8 @@ const PurchaseOrdersPage = () => {
   const [cancelReason, setCancelReason] = useState("");
   const [poToCancel, setPoToCancel] = useState(null);
   const [selectedPO, setSelectedPO] = useState(null);
+  const [selectedPoPaymentSchedule, setSelectedPoPaymentSchedule] = useState(null);
+  const [loadingSelectedPoPaymentSchedule, setLoadingSelectedPoPaymentSchedule] = useState(false);
   const [advancePo, setAdvancePo] = useState(null);
   const [editingPO, setEditingPO] = useState(null);
   const [createAction, setCreateAction] = useState(null);
@@ -721,6 +728,26 @@ const PurchaseOrdersPage = () => {
     response?.item ||
     response;
   const getPoId = (po) => po?.id || po?.po_id || po?.poId;
+  const isPoPaymentScheduleAvailable = useCallback((po = {}) =>
+    po?.paymentScheduleAvailable === true ||
+    po?.payment_schedule_available === true ||
+    po?.hasPaymentSchedule === true ||
+    po?.has_payment_schedule === true ||
+    normalizePaymentScheduleRows(po).length > 0, []);
+  const isFullPoDetailResponse = (po = {}) =>
+    Boolean(
+      getPoId(po) &&
+        (
+          po.po_number ||
+          po.poNumber ||
+          po.vendor_name ||
+          po.vendorName ||
+          Array.isArray(po.line_items) ||
+          Array.isArray(po.lineItems) ||
+          po.total_amount !== undefined ||
+          po.totalAmount !== undefined
+        ),
+    );
 
   const getDownloadUrl = (response) =>
     response?.url ||
@@ -999,6 +1026,11 @@ const PurchaseOrdersPage = () => {
       toast.error("Purchase order id is missing");
       return;
     }
+    const status = String(po?.status || "").trim().toUpperCase();
+    if (["CANCELLED", "CANCELED"].includes(status)) {
+      toast.error("Delivery details cannot be edited for a cancelled purchase order");
+      return;
+    }
 
     setSavingDeliveryStatus(true);
     try {
@@ -1086,9 +1118,25 @@ const PurchaseOrdersPage = () => {
         body: { paymentSchedule: buildPaymentSchedulePayload(paymentSchedule) },
       }).unwrap();
       const updatedPo = getCreatedPo(data);
-      const normalizedUpdatedPo = normalizePurchaseOrder(updatedPo || {});
+      const scheduleResponse =
+        data?.paymentSchedule ??
+        data?.payment_schedule ??
+        data?.rows ??
+        data?.schedule ??
+        updatedPo?.paymentSchedule ??
+        updatedPo?.payment_schedule ??
+        updatedPo?.rows ??
+        updatedPo?.schedule ??
+        paymentSchedule;
+      setSelectedPoPaymentSchedule({ paymentSchedule: scheduleResponse });
       setSelectedPO((prev) =>
-        prev ? { ...prev, ...normalizedUpdatedPo, paymentSchedule } : prev,
+        prev
+          ? {
+              ...prev,
+              ...(isFullPoDetailResponse(updatedPo) ? normalizePurchaseOrder(updatedPo) : {}),
+              paymentSchedule,
+            }
+          : prev,
       );
       toast.success("Payment Schedule updated");
       await fetchData();
@@ -1191,6 +1239,8 @@ const PurchaseOrdersPage = () => {
 
       const poId = getPoId(po);
       setSelectedPO(po);
+      setSelectedPoPaymentSchedule(null);
+      setLoadingSelectedPoPaymentSchedule(false);
       setShowViewDialog(true);
 
       if (!poId) return;
@@ -1201,8 +1251,32 @@ const PurchaseOrdersPage = () => {
       try {
         const data = await getPurchaseOrderById(poId).unwrap();
         const fullPo = getCreatedPo(data);
+        const normalizedPo = normalizePurchaseOrder(fullPo || data || po);
         if (poDetailsRequestRef.current === requestKey) {
-          setSelectedPO(normalizePurchaseOrder(fullPo || data || po));
+          setSelectedPO(normalizedPo);
+        }
+
+        if (isPoPaymentScheduleAvailable(normalizedPo)) {
+          if (poDetailsRequestRef.current === requestKey) {
+            setLoadingSelectedPoPaymentSchedule(true);
+          }
+          try {
+            const scheduleData = await getDocumentPaymentSchedule(
+              { documentType: "PO", documentId: poId },
+              true,
+            ).unwrap();
+            if (poDetailsRequestRef.current === requestKey) {
+              setSelectedPoPaymentSchedule(scheduleData);
+            }
+          } catch (scheduleError) {
+            if (poDetailsRequestRef.current === requestKey) {
+              setSelectedPoPaymentSchedule(null);
+            }
+          } finally {
+            if (poDetailsRequestRef.current === requestKey) {
+              setLoadingSelectedPoPaymentSchedule(false);
+            }
+          }
         }
       } catch (error) {
         if (poDetailsRequestRef.current === requestKey) {
@@ -1216,7 +1290,7 @@ const PurchaseOrdersPage = () => {
         }
       }
     },
-    [getPurchaseOrderById],
+    [getDocumentPaymentSchedule, getPurchaseOrderById, isPoPaymentScheduleAvailable],
   );
 
   const submitPoFromRow = (po) => {
@@ -1234,6 +1308,8 @@ const PurchaseOrdersPage = () => {
       if (!open) {
         poDetailsRequestRef.current = null;
         setLoadingPoDetailsId(null);
+        setSelectedPoPaymentSchedule(null);
+        setLoadingSelectedPoPaymentSchedule(false);
         clearNotificationQueryParams(searchParams, setSearchParams);
       }
     },
@@ -2066,6 +2142,7 @@ const PurchaseOrdersPage = () => {
         showBranchField={isBranchEnabled}
         organisationBranches={organisationBranches}
         isPaymentTermsEnabled={isPaymentTermsEnabled}
+        paymentScheduleEnabledTriggers={paymentScheduleEnabledTriggers}
       />
 
       <PoFormatBuilderDialog
@@ -2113,6 +2190,9 @@ const PurchaseOrdersPage = () => {
           canEditPaymentSchedule={canEditPaymentScheduleForPo(selectedPO)}
           onSavePaymentSchedule={handleSavePaymentSchedule}
           savingPaymentSchedule={savingPaymentSchedule}
+          paymentScheduleData={selectedPoPaymentSchedule}
+          loadingPaymentSchedule={loadingSelectedPoPaymentSchedule}
+          paymentScheduleEnabledTriggers={paymentScheduleEnabledTriggers}
         />
       )}
 
@@ -2219,6 +2299,7 @@ const PurchaseOrdersPage = () => {
                 showBranchField={isBranchEnabled}
                 organisationBranches={organisationBranches}
                 isPaymentTermsEnabled={isPaymentTermsEnabled}
+                paymentScheduleEnabledTriggers={paymentScheduleEnabledTriggers}
               />
             ) : null
           }

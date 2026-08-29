@@ -9,7 +9,9 @@ import {
   useGetOrderTrackingFilterOptionsQuery,
   useGetOrderTrackingDetailQuery,
   useUpdateOrderTrackingDeliveryStatusMutation,
+  useUpdateOrderTrackingInternalChecklistMutation,
   useCloseOrderTrackingOrderMutation,
+  useAddOrderTrackingRemarkMutation,
 } from "../../Services/apis/orderTrackingApi";
 import {
   Dialog,
@@ -45,7 +47,7 @@ import { DEFAULT_ORDER_TRACKING_PARAMS, DEFAULT_ORDER_TRACKING_FILTERS } from ".
  * replaces the mock (docs/order-tracking-api-contract.md).
  */
 const OrderTrackingPage = () => {
-  const { hasPermission } = useRBAC();
+  const { hasPermission, isCorporateSectionEnabled } = useRBAC();
   const [params, setParams] = useState(DEFAULT_ORDER_TRACKING_PARAMS);
   const [activeSummaryCardKey, setActiveSummaryCardKey] = useState(null);
   const [selectedOrderId, setSelectedOrderId] = useState(null);
@@ -60,10 +62,16 @@ const OrderTrackingPage = () => {
     skip: !selectedOrderId,
   });
   const [updateDeliveryStatus] = useUpdateOrderTrackingDeliveryStatusMutation();
+  const [updateInternalChecklist, { isLoading: savingInternalChecklist }] =
+    useUpdateOrderTrackingInternalChecklistMutation();
   const [closeOrderTrackingOrder, { isLoading: closingOrder }] = useCloseOrderTrackingOrderMutation();
+  const [addOrderTrackingRemark, { isLoading: addingRemark }] = useAddOrderTrackingRemarkMutation();
 
   const canEditDelivery = hasPermission("order-tracking-manage");
   const canManageOrder = hasPermission("order-tracking-manage");
+  const canUseGrn = isCorporateSectionEnabled("GRN_ALL");
+  const canUsePi = isCorporateSectionEnabled("PI_ALL");
+  const canUseTi = isCorporateSectionEnabled("INVOICES_ALL");
 
   const [showCloseModal, setShowCloseModal] = useState(false);
   const [orderToClose, setOrderToClose] = useState(null);
@@ -129,10 +137,13 @@ const OrderTrackingPage = () => {
       return;
     }
     if (doc.type === "GRN") {
+      if (!canUseGrn) return;
       setPreviewGrnId(doc.id);
       return;
     }
     if (doc.type === "PI" || doc.type === "TI") {
+      if (doc.type === "PI" && !canUsePi) return;
+      if (doc.type === "TI" && !canUseTi) return;
       setPreviewInvoiceId(doc.id);
       return;
     }
@@ -144,6 +155,33 @@ const OrderTrackingPage = () => {
       await updateDeliveryStatus({ orderId: row.id, deliveryStatus: nextStatus }).unwrap();
     } catch (error) {
       toast.error(error?.data?.message || "Failed to update delivery status.");
+    }
+  };
+
+  const handleAddRemark = async (orderDetail, remark) => {
+    if (!orderDetail?.id || !remark?.trim()) return false;
+    try {
+      await addOrderTrackingRemark({ orderId: orderDetail.id, remark: remark.trim() }).unwrap();
+      toast.success("Remark added");
+      return true;
+    } catch (error) {
+      toast.error(error?.data?.message || "Failed to add remark.");
+      return false;
+    }
+  };
+
+  const handleSaveInternalChecklist = async (orderDetail, nextChecklist) => {
+    if (!orderDetail?.id) return false;
+    try {
+      await updateInternalChecklist({
+        orderId: orderDetail.id,
+        body: { internalChecklist: nextChecklist },
+      }).unwrap();
+      toast.success("Internal checklist updated");
+      return true;
+    } catch (error) {
+      toast.error(error?.data?.message || "Failed to update internal checklist.");
+      return false;
     }
   };
 
@@ -177,6 +215,8 @@ const OrderTrackingPage = () => {
         sort={sort}
         onSortChange={handleSortChange}
         vendorOptions={filterOptions?.vendors ?? []}
+        canUseGrn={canUseGrn}
+        canUseTi={canUseTi}
       />
 
       <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
@@ -188,6 +228,9 @@ const OrderTrackingPage = () => {
             onOpenDocument={handleOpenDocument}
             onDeliveryStatusChange={handleDeliveryStatusChange}
             canEditDelivery={canEditDelivery}
+            canUseGrn={canUseGrn}
+            canUsePi={canUsePi}
+            canUseTi={canUseTi}
           />
         </div>
         <OrderTrackingPagination
@@ -208,13 +251,24 @@ const OrderTrackingPage = () => {
         isLoading={isDetailFetching}
         onOpenDocument={handleOpenDocument}
         onCloseOrder={handleOpenCloseModal}
+        onAddRemark={handleAddRemark}
+        onSaveInternalChecklist={handleSaveInternalChecklist}
         canManageOrder={canManageOrder}
         closingOrder={closingOrder}
+        addingRemark={addingRemark}
+        savingInternalChecklist={savingInternalChecklist}
+        canUseGrn={canUseGrn}
+        canUsePi={canUsePi}
+        canUseTi={canUseTi}
       />
 
       <OrderTrackingPoPreviewDialog poId={previewPoId} onClose={() => setPreviewPoId(null)} />
-      <OrderTrackingGrnPreviewDialog grnId={previewGrnId} onClose={() => setPreviewGrnId(null)} />
-      <OrderTrackingInvoicePreviewDialog invoiceId={previewInvoiceId} onClose={() => setPreviewInvoiceId(null)} />
+      {canUseGrn ? (
+        <OrderTrackingGrnPreviewDialog grnId={previewGrnId} onClose={() => setPreviewGrnId(null)} />
+      ) : null}
+      {canUsePi || canUseTi ? (
+        <OrderTrackingInvoicePreviewDialog invoiceId={previewInvoiceId} onClose={() => setPreviewInvoiceId(null)} />
+      ) : null}
 
       {/* Manual Close Order Confirmation Modal */}
       <Dialog

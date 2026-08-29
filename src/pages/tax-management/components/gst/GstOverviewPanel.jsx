@@ -117,6 +117,7 @@ const GstOverviewPanel = () => {
             page={page}
             totalPages={totalPages}
             loading={isLoading}
+            selectedSource={source}
             onPreviousPage={onPreviousPage}
             onNextPage={onNextPage}
             onView={setActiveRow}

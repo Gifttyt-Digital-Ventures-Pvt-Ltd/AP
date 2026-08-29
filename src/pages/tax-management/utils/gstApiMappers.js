@@ -196,6 +196,7 @@ function mapReconOverviewRow(row = {}, index = 0) {
     invoiceAmount: Number(row.invoiceAmount ?? 0),
     gstAmount: Number(row.gstAmount ?? 0),
     status: row.status ?? '',
+    source: row.source ?? '',
     statusSource: row.statusSource ?? '',
     differBadge: Boolean(row.differBadge),
     valueSource: row.valueSource ?? 'PLATFORM',

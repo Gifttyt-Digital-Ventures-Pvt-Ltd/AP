@@ -23,11 +23,15 @@ export const DEFAULT_PAYRUN_APPROVAL_OWNER = {
 export const DEFAULT_PAYRUN_APPROVAL_ROUTE = GENERIC_ADMIN_PAYRUN_ROUTE.name;
 
 const PAYRUN_STATUS_CLASS = {
+  Created: 'bg-slate-100 text-slate-700 border-slate-200',
   'Waiting For Approval': 'bg-amber-100 text-amber-800 border-amber-200',
   Approved: 'bg-blue-100 text-blue-800 border-blue-200',
   'Waiting For Payment': 'bg-purple-100 text-purple-800 border-purple-200',
+  'Payment In Process': 'bg-sky-100 text-sky-800 border-sky-200',
   'Payment Initiated': 'bg-sky-100 text-sky-800 border-sky-200',
+  Completed: 'bg-green-100 text-green-800 border-green-200',
   Paid: 'bg-green-100 text-green-800 border-green-200',
+  'Partially Completed': 'bg-orange-100 text-orange-800 border-orange-200',
   Failed: 'bg-red-100 text-red-800 border-red-200',
   Rejected: 'bg-slate-100 text-slate-700 border-slate-200',
   Cancelled: 'bg-slate-100 text-slate-700 border-slate-200',
@@ -46,15 +50,23 @@ export const PayrunStatusBadge = ({ status }) => (
 );
 
 export const normalizePayrunStatus = (status = '') => {
-  const value = String(status || '').trim().toLowerCase();
-  if (['waiting_approval', 'waiting for approval', 'pending_approval'].includes(value)) return 'Waiting For Approval';
+  const value = String(status || '').trim();
+  const normalized = value
+    .replace(/([a-z])([A-Z])/g, '$1_$2')
+    .replace(/[\s-]+/g, '_')
+    .toLowerCase();
+  if (['created'].includes(normalized)) return 'Created';
+  if (['waiting_approval', 'waiting_for_approval', 'pending_approval'].includes(normalized)) return 'Waiting For Approval';
   if (['approved'].includes(value)) return 'Approved';
-  if (['waiting_payment', 'waiting for payment', 'pending_payment'].includes(value)) return 'Waiting For Payment';
-  if (['rejected'].includes(value)) return 'Rejected';
-  if (['cancelled', 'canceled'].includes(value)) return 'Cancelled';
-  if (['paid', 'released', 'completed', 'success'].includes(value)) return 'Paid';
-  if (['failed', 'release_failed'].includes(value)) return 'Failed';
-  if (['payment_initiated', 'processing', 'release_initiated'].includes(value)) return 'Payment Initiated';
+  if (['approved'].includes(normalized)) return 'Approved';
+  if (['waiting_payment', 'waiting_for_payment', 'pending_payment'].includes(normalized)) return 'Waiting For Payment';
+  if (['rejected'].includes(normalized)) return 'Rejected';
+  if (['cancelled', 'canceled'].includes(normalized)) return 'Cancelled';
+  if (['completed'].includes(normalized)) return 'Completed';
+  if (['paid', 'released', 'success'].includes(normalized)) return 'Paid';
+  if (['partially_completed', 'partial_completed'].includes(normalized)) return 'Partially Completed';
+  if (['failed', 'release_failed'].includes(normalized)) return 'Failed';
+  if (['payrun_initiated', 'payment_initiated', 'processing', 'release_initiated'].includes(normalized)) return 'Payment In Process';
   if (!status) return 'Waiting For Approval';
   return String(status);
 };
@@ -66,14 +78,41 @@ export const normalizeApprovalStatus = (status = '') => {
   return 'Pending';
 };
 
-const toActionFlags = (actions = {}) => ({
-  view: Boolean(actions.view ?? actions.canView),
-  approve: Boolean(actions.approve ?? actions.canApprove),
-  reject: Boolean(actions.reject ?? actions.canReject),
-  release: Boolean(actions.release ?? actions.canRelease),
-  retry: Boolean(actions.retry ?? actions.canRetry),
-  cancel: Boolean(actions.cancel ?? actions.canCancel),
-});
+const hasActionValue = (actions = {}, ...keys) =>
+  keys.some((key) => actions[key] !== undefined && actions[key] !== null);
+
+const resolveActionFlag = (actions = {}, keys = [], fallback = false) => {
+  for (const key of keys) {
+    if (actions[key] !== undefined && actions[key] !== null) return Boolean(actions[key]);
+  }
+  return fallback;
+};
+
+const getFallbackActionFlags = (status) => {
+  // Temporary display fallback until backend consistently returns canCancel/canRetry.
+  // Backend flags remain authoritative whenever present.
+  if (status === 'Failed' || status === 'Partially Completed') {
+    return { cancel: true, retry: true };
+  }
+  if (status === 'Approved' || status === 'Waiting For Payment') {
+    return { cancel: true };
+  }
+  return {};
+};
+
+const toActionFlags = (actions = {}, status) => {
+  const fallback = getFallbackActionFlags(status);
+  return {
+    view: resolveActionFlag(actions, ['view', 'canView']),
+    approve: resolveActionFlag(actions, ['approve', 'canApprove']),
+    reject: resolveActionFlag(actions, ['reject', 'canReject']),
+    release: resolveActionFlag(actions, ['release', 'canRelease']),
+    retry: resolveActionFlag(actions, ['retry', 'canRetry'], fallback.retry),
+    cancel: resolveActionFlag(actions, ['cancel', 'canCancel'], fallback.cancel),
+    hasCancelFlag: hasActionValue(actions, 'cancel', 'canCancel'),
+    hasRetryFlag: hasActionValue(actions, 'retry', 'canRetry'),
+  };
+};
 
 const getBeneficiaryAccounts = (item = {}) => {
   const accounts =
@@ -246,7 +285,7 @@ const getStopTimelineEntry = (payrun = {}, approvals = []) => {
 const getPredefinedTimelineStatus = (stepId, payrun = {}, approvals = [], hasAuditStep = false) => {
   const status = normalizePayrunStatus(payrun.status);
   const stoppedEntry = getStopTimelineEntry(payrun, approvals);
-  const released = status === 'Paid';
+  const released = ['Paid', 'Completed', 'Partially Completed'].includes(status);
   const hasApproved = approvals.some((approval) => approval.status === 'Approved');
   const hasUtr = payrun.invoices?.some((invoice) => Boolean(invoice.utr));
 
@@ -259,7 +298,7 @@ const getPredefinedTimelineStatus = (stepId, payrun = {}, approvals = [], hasAud
   }
 
   if (stepId === 'approved') {
-    return hasApproved || ['Approved', 'Waiting For Payment', 'Payment Initiated', 'Paid', 'Failed'].includes(status)
+    return hasApproved || ['Approved', 'Waiting For Payment', 'Payment In Process', 'Payment Initiated', 'Paid', 'Completed', 'Partially Completed', 'Failed'].includes(status)
       ? 'Completed'
       : 'Pending';
   }
@@ -267,13 +306,14 @@ const getPredefinedTimelineStatus = (stepId, payrun = {}, approvals = [], hasAud
   if (stepId === 'release-otp-requested') {
     if (hasAuditStep) return 'Completed';
     if (status === 'Waiting For Payment') return 'In Progress';
-    if (['Payment Initiated', 'Paid', 'Failed'].includes(status)) return 'Completed';
+    if (['Payment In Process', 'Payment Initiated', 'Paid', 'Completed', 'Partially Completed', 'Failed'].includes(status)) return 'Completed';
     return released ? 'Completed' : 'Pending';
   }
 
   if (stepId === 'payment-initiated') {
     if (status === 'Failed') return 'Rejected';
-    if (['Payment Initiated', 'Paid'].includes(status)) return status === 'Payment Initiated' ? 'In Progress' : 'Completed';
+    if (status === 'Partially Completed') return 'Completed';
+    if (['Payment In Process', 'Payment Initiated', 'Paid', 'Completed'].includes(status)) return ['Payment In Process', 'Payment Initiated'].includes(status) ? 'In Progress' : 'Completed';
     return 'Pending';
   }
 
@@ -399,13 +439,21 @@ export const normalizePayrun = (payrun = {}) => {
       String(entry.event || entry.action || entry.label || '').trim().toLowerCase(),
     ),
   );
-  const allowedActions =
-    payrun.allowedActions ||
-    payrun.allowed_actions ||
-    payrun.actions ||
-    payrun.actionControls ||
-    payrun.action_controls ||
-    {};
+  const allowedActions = {
+    ...(payrun.allowedActions ||
+      payrun.allowed_actions ||
+      payrun.actions ||
+      payrun.actionControls ||
+      payrun.action_controls ||
+      {}),
+    canCancel: payrun.canCancel ?? payrun.can_cancel,
+    canRetry: payrun.canRetry ?? payrun.can_retry,
+    canRelease: payrun.canRelease ?? payrun.can_release,
+    canApprove: payrun.canApprove ?? payrun.can_approve,
+    canReject: payrun.canReject ?? payrun.can_reject,
+    canView: payrun.canView ?? payrun.can_view,
+  };
+  const normalizedStatus = normalizePayrunStatus(payrun.status);
 
   return {
     ...payrun,
@@ -449,8 +497,22 @@ export const normalizePayrun = (payrun = {}) => {
     })),
     approvalRoute: route.workflowName || route.workflow_name || payrun.approvalRoute || payrun.approval_route || DEFAULT_PAYRUN_APPROVAL_ROUTE,
     workflowId: route.workflowId || route.workflow_id || payrun.workflowId || payrun.workflow_id,
-    status: normalizePayrunStatus(payrun.status),
-    allowedActions: toActionFlags(allowedActions),
+    status: normalizedStatus,
+    rawStatus: payrun.status,
+    allowedActions: toActionFlags(allowedActions, normalizedStatus),
+    failedItemIds: payrun.failedItemIds || payrun.failed_item_ids || [],
+    completedItemIds: payrun.completedItemIds || payrun.completed_item_ids || [],
+    retryableItemIds: payrun.retryableItemIds || payrun.retryable_item_ids || [],
+    releasedToPayablesItemIds: payrun.releasedToPayablesItemIds || payrun.released_to_payables_item_ids || [],
+    releasedPaymentsItemIds: payrun.releasedPaymentsItemIds || payrun.released_payments_item_ids || [],
+    statusReason: payrun.statusReason || payrun.status_reason || payrun.message || '',
+    cancellationReason: payrun.cancellationReason || payrun.cancellation_reason || '',
+    completedItemCount: Number(payrun.completedItemCount ?? payrun.completed_item_count ?? 0),
+    failedItemCount: Number(payrun.failedItemCount ?? payrun.failed_item_count ?? 0),
+    totalItemCount: Number(payrun.totalItemCount ?? payrun.total_item_count ?? items.length),
+    paidAmount: Number(payrun.paidAmount ?? payrun.paid_amount ?? 0),
+    failedAmount: Number(payrun.failedAmount ?? payrun.failed_amount ?? 0),
+    retryAmount: Number(payrun.retryAmount ?? payrun.retry_amount ?? 0),
     invoices: items.map((item) => {
       const beneficiaryAccounts = getBeneficiaryAccounts(item);
       const primaryBeneficiaryAccount = beneficiaryAccounts[0] || {};
@@ -511,12 +573,30 @@ export const normalizePayrun = (payrun = {}) => {
         requestedAmount: Number(
           item.requestedAmount ||
             item.requested_amount ||
-            item.paymentAmount ||
-            item.payment_amount ||
+            item.grossPayableAmount ||
+            item.gross_payable_amount ||
             item.netPayableAmount ||
             item.net_payable_amount ||
             payable.netPayableAmount ||
             item.amount ||
+            0,
+        ),
+        paymentAmount: Number(
+          item.paymentAmount ??
+            item.payment_amount ??
+            item.bankPaymentAmount ??
+            item.bank_payment_amount ??
+            item.netPayableAmount ??
+            item.net_payable_amount ??
+            payable.netPayableAmount ??
+            item.amount ??
+            0,
+        ),
+        advanceAppliedAmount: Number(
+          item.advanceAppliedAmount ??
+            item.advance_applied_amount ??
+            item.vendorAdvanceAppliedAmount ??
+            item.vendor_advance_applied_amount ??
             0,
         ),
         convertToInr: Boolean(item.convertToInr ?? item.convert_to_inr ?? false),
@@ -532,6 +612,23 @@ export const normalizePayrun = (payrun = {}) => {
         beneficiaryAccounts,
         utr: item.utr || item.utrNumber || item.utr_number,
         paidOn: item.paidOn || item.paid_on,
+        paymentStatus: normalizePayrunStatus(
+          item.paymentStatus ||
+            item.payment_status ||
+            item.itemPaymentStatus ||
+            item.item_payment_status ||
+            item.itemStatus ||
+            item.item_status ||
+            item.status,
+        ),
+        rawPaymentStatus:
+          item.paymentStatus ||
+          item.payment_status ||
+          item.itemPaymentStatus ||
+          item.item_payment_status ||
+          item.itemStatus ||
+          item.item_status ||
+          item.status,
       };
     }),
     currency: payrun.currency || payrun.currency_code || items.find((item) => item.currency || item.currency_code)?.currency || items.find((item) => item.currency || item.currency_code)?.currency_code,

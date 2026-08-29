@@ -57,6 +57,7 @@ import {
   useUpdateDocumentPaymentScheduleMutation,
 } from '../../../Services/apis/paymentSchedulesApi';
 import usePaymentTermsSubscription from '../../../hooks/usePaymentTermsSubscription';
+import usePaymentScheduleEnabledTriggers from '../../../hooks/usePaymentScheduleEnabledTriggers';
 import { GRN_SOURCE, GRN_STATUS } from '../constants';
 import { formatCurrency, formatDate } from '../utils';
 import PoPaymentScheduleSection from '../../purchase-orders/components/PoPaymentScheduleSection';
@@ -156,7 +157,9 @@ const GrnDetailDialog = ({
   const [draftForm, setDraftForm] = useState(() => createEditableGrnForm(grn, formatConfig));
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [scheduleDraftRows, setScheduleDraftRows] = useState([]);
+  const [savedPaymentSchedule, setSavedPaymentSchedule] = useState(null);
   const { isPaymentTermsEnabled } = usePaymentTermsSubscription();
+  const paymentScheduleEnabledTriggers = usePaymentScheduleEnabledTriggers();
   const grnId = grn?.id || grn?.grn_id || grn?.grnId;
   const hasEmbeddedPaymentSchedule = normalizePaymentScheduleRows(grn || {}).length > 0;
   const grnPaymentScheduleAvailable =
@@ -213,9 +216,11 @@ const GrnDetailDialog = ({
     [documentScheduleData],
   );
   const grnScheduleRows = useMemo(() => {
+    const savedRows = Array.isArray(savedPaymentSchedule?.rows) ? savedPaymentSchedule.rows : null;
+    if (savedPaymentSchedule?.documentId === grnId && savedRows) return savedRows;
     const fetchedRows = normalizePaymentScheduleRows(documentScheduleSource || {});
     return fetchedRows.length ? fetchedRows : normalizePaymentScheduleRows(grn || {});
-  }, [documentScheduleSource, grn]);
+  }, [documentScheduleSource, grn, grnId, savedPaymentSchedule]);
   const documentScheduleAvailable =
     isPaymentScheduleAvailable(documentScheduleSource || {}) ||
     grnPaymentScheduleAvailable ||
@@ -277,6 +282,7 @@ const GrnDetailDialog = ({
         body: { paymentSchedule: buildPaymentSchedulePayload(scheduleDraftRows) },
       }).unwrap();
       toast.success('Payment Schedule updated');
+      setSavedPaymentSchedule({ documentId: grnId, rows: scheduleDraftRows });
       setScheduleDialogOpen(false);
     } catch (error) {
       toast.error(error?.data?.detail || error?.data?.message || 'Failed to update Payment Schedule');
@@ -297,6 +303,9 @@ const GrnDetailDialog = ({
       <DialogContent
         className="flex max-h-[92vh] w-[96vw] max-w-4xl flex-col overflow-hidden p-0"
         data-testid="grn-detail-dialog"
+        onInteractOutside={(event) => {
+          if (scheduleDialogOpen) event.preventDefault();
+        }}
       >
         <DialogHeader className="border-b px-6 pb-3 pt-6">
           <DialogTitle className="flex items-center gap-2">
@@ -575,6 +584,7 @@ const GrnDetailDialog = ({
                       documentGrossTotal={documentGrossTotal}
                       formatCurrency={(amount) => formatCurrency(amount, grn.currency)}
                       readOnly
+                      enabledTriggerStages={paymentScheduleEnabledTriggers}
                     />
                   ) : null}
                   {documentScheduleAvailable && !loadingPaymentSchedule && grnScheduleRows.length === 0 ? (
@@ -621,7 +631,7 @@ const GrnDetailDialog = ({
       </DialogContent>
       </Dialog>
 
-      <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
+      <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen} modal={false}>
         <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit Payment Schedule</DialogTitle>
@@ -631,6 +641,7 @@ const GrnDetailDialog = ({
             documentGrossTotal={documentGrossTotal}
             formatCurrency={(amount) => formatCurrency(amount, grn.currency)}
             onChange={setScheduleDraftRows}
+            enabledTriggerStages={paymentScheduleEnabledTriggers}
           />
           <DialogFooter>
             <Button

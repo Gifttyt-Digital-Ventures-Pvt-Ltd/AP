@@ -20,7 +20,7 @@ import {
 const editableHeader = [
   { key: "sequence", title: "#", headerClassName: "w-[64px]" },
   { key: "triggerStage", title: "Trigger", headerClassName: "w-[120px]" },
-  { key: "label", title: "Label", headerClassName: "w-[220px]" },
+  { key: "label", title: "Remark", headerClassName: "w-[220px]" },
   { key: "value", title: "Value", headerClassName: "w-[120px]" },
   { key: "actions", title: "", headerClassName: "w-[48px]" },
 ];
@@ -38,8 +38,18 @@ const PoPaymentScheduleSection = ({
   onChange,
   readOnly = false,
   validationErrors = [],
+  enabledTriggerStages,
 }) => {
   const scheduleRows = Array.isArray(rows) ? rows : [];
+  const enabledTriggerStageSet = new Set(
+    (Array.isArray(enabledTriggerStages) && enabledTriggerStages.length
+      ? enabledTriggerStages
+      : PAYMENT_SCHEDULE_TRIGGER_OPTIONS.map((option) => option.value)
+    ).map(normalizePaymentScheduleTriggerStage),
+  );
+  const addableTriggerOptions = PAYMENT_SCHEDULE_TRIGGER_OPTIONS.filter((option) =>
+    enabledTriggerStageSet.has(option.value),
+  );
   const scheduleErrors = Array.isArray(validationErrors)
     ? validationErrors.filter(Boolean)
     : [validationErrors].filter(Boolean);
@@ -51,8 +61,14 @@ const PoPaymentScheduleSection = ({
   const effectiveRows = scheduleRows.map((row) => ({ ...row, basis: scheduleBasis }));
   const summary = getPaymentScheduleSummary(effectiveRows, grossTotal);
   const showDifferenceWarning = Math.abs(summary.difference) > 0.009;
-  const canAddMilestone = scheduleRows.length < PAYMENT_SCHEDULE_TRIGGER_OPTIONS.length;
+  const usedAddableTriggerCount = new Set(
+    scheduleRows
+      .map((row) => normalizePaymentScheduleTriggerStage(row.triggerStage))
+      .filter((triggerStage) => enabledTriggerStageSet.has(triggerStage)),
+  ).size;
+  const canAddMilestone = usedAddableTriggerCount < addableTriggerOptions.length;
   const hasLockedRows = effectiveRows.some((row) => isPaymentScheduleRowLocked(row));
+  const showCompactEmptyState = !readOnly && scheduleRows.length === 0 && !hasValidationErrors;
 
   useEffect(() => {
     if (scheduleRows.length) setSelectedBasis(firstRowBasis);
@@ -79,17 +95,13 @@ const PoPaymentScheduleSection = ({
     onChange?.(
       scheduleRows.map((row, rowIndex) => {
         if (rowIndex !== index) return row;
-        const next = { ...row, [field]: value };
-        if (field === "triggerStage") {
-          next.label = next.label || (value === "TI" ? "Payable on invoice" : `Advance on ${value}`);
-        }
-        return next;
+        return { ...row, [field]: value };
       }),
     );
   };
 
   const addRow = () => {
-    const nextTriggerStage = getNextPaymentScheduleTriggerStage(scheduleRows);
+    const nextTriggerStage = getNextPaymentScheduleTriggerStage(scheduleRows, addableTriggerOptions);
     if (!nextTriggerStage) return;
     onChange?.([
       ...scheduleRows,
@@ -111,7 +123,6 @@ const PoPaymentScheduleSection = ({
     const rowErrorPrefix = `Payment Schedule row ${index + 1}:`;
     const rowErrors = scheduleErrors.filter((error) => error.startsWith(rowErrorPrefix));
     const hasTotalError = scheduleErrors.includes("Payment Schedule total must match the document gross total.");
-    const hasLabelError = rowErrors.some((error) => error.toLowerCase().includes("label"));
     const hasValueError =
       hasTotalError ||
       rowErrors.some((error) => {
@@ -131,6 +142,10 @@ const PoPaymentScheduleSection = ({
           rowIndex !== index &&
           normalizePaymentScheduleTriggerStage(scheduleRow.triggerStage) === triggerStage,
       );
+    const rowTriggerStage = normalizePaymentScheduleTriggerStage(row.triggerStage);
+    const rowTriggerOptions = PAYMENT_SCHEDULE_TRIGGER_OPTIONS.filter(
+      (option) => enabledTriggerStageSet.has(option.value) || option.value === rowTriggerStage,
+    );
 
     return (
       <TableRow key={`${row.sequence}-${index}`} className="bg-white">
@@ -147,7 +162,7 @@ const PoPaymentScheduleSection = ({
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {PAYMENT_SCHEDULE_TRIGGER_OPTIONS.map((option) => (
+                    {rowTriggerOptions.map((option) => (
                       <SelectItem
                         key={option.value}
                         value={option.value}
@@ -165,8 +180,8 @@ const PoPaymentScheduleSection = ({
                 <Input
                   value={row.label || ""}
                   onChange={(event) => updateRow(index, "label", event.target.value)}
-                  placeholder="Milestone label"
-                  className={`${inputClassName} ${hasLabelError ? errorInputClassName : ""}`}
+                  placeholder="Optional remark"
+                  className={inputClassName}
                 />
               );
               break;
@@ -229,33 +244,35 @@ const PoPaymentScheduleSection = ({
           <h3 className="text-sm font-semibold">Payment Schedule</h3>
         </div>
         <div className="flex flex-wrap items-end gap-2">
-          <div className="min-w-40">
-            <p className="mb-1 text-xs font-medium text-muted-foreground">Schedule Basis</p>
-            {readOnly ? (
-              <div className="rounded-md border bg-white px-3 py-2 text-sm font-medium">
-                {PAYMENT_SCHEDULE_BASIS_OPTIONS.find((option) => option.value === scheduleBasis)?.label || scheduleBasis}
-              </div>
-            ) : (
-              <Select value={scheduleBasis} onValueChange={updateScheduleBasis} disabled={hasLockedRows}>
-                <SelectTrigger
-                  className={`h-9 ${
-                    hasLockedRows
-                      ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500 opacity-70"
-                      : "bg-white/80"
-                  }`}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {PAYMENT_SCHEDULE_BASIS_OPTIONS.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
+          {!showCompactEmptyState ? (
+            <div className="min-w-40">
+              <p className="mb-1 text-xs font-medium text-muted-foreground">Schedule Basis</p>
+              {readOnly ? (
+                <div className="rounded-md border bg-white px-3 py-2 text-sm font-medium">
+                  {PAYMENT_SCHEDULE_BASIS_OPTIONS.find((option) => option.value === scheduleBasis)?.label || scheduleBasis}
+                </div>
+              ) : (
+                <Select value={scheduleBasis} onValueChange={updateScheduleBasis} disabled={hasLockedRows}>
+                  <SelectTrigger
+                    className={`h-9 ${
+                      hasLockedRows
+                        ? "cursor-not-allowed border-slate-200 bg-slate-100 text-slate-500 opacity-70"
+                        : "bg-white/80"
+                    }`}
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {PAYMENT_SCHEDULE_BASIS_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
+          ) : null}
           {!readOnly ? (
             <Button variant="outline" size="sm" onClick={addRow} disabled={!canAddMilestone}>
               <Plus className="mr-1 h-4 w-4" />
@@ -265,7 +282,7 @@ const PoPaymentScheduleSection = ({
         </div>
       </div>
 
-      {scheduleRows.length ? (
+      {showCompactEmptyState ? null : scheduleRows.length ? (
         <div className="overflow-x-auto rounded border bg-white">
           <AppDataTable
             tableHeader={readOnly ? readOnlyHeader : editableHeader}
@@ -280,6 +297,7 @@ const PoPaymentScheduleSection = ({
         </div>
       )}
 
+      {!showCompactEmptyState ? (
       <div className="mt-4 grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
         <div className="rounded border bg-white px-3 py-2">
           <p className="text-xs text-muted-foreground">Scheduled Total</p>
@@ -296,8 +314,9 @@ const PoPaymentScheduleSection = ({
           </p>
         </div>
       </div>
+      ) : null}
 
-      {showDifferenceWarning ? (
+      {!showCompactEmptyState && showDifferenceWarning ? (
         <div className="mt-3 flex items-start gap-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
