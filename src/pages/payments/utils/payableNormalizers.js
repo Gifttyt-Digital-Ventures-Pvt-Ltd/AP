@@ -26,6 +26,31 @@ const normalizeTriggerStage = (value) => {
   return ["PO", "GRN", "PI", "TI"].includes(normalized) ? normalized : "";
 };
 
+const getTriggerDocumentNumber = (row = {}, triggerStage = "") => {
+  const explicitNumber = firstValue(
+    row.triggerDocumentNumber,
+    row.trigger_document_number,
+    row.documentNumber,
+    row.document_number,
+  );
+  if (explicitNumber) return explicitNumber;
+
+  if (triggerStage === "PO") return firstValue(row.poNumber, row.po_number);
+  if (triggerStage === "GRN") return firstValue(row.grnNumber, row.grn_number);
+  if (triggerStage === "PI") {
+    return firstValue(
+      row.piNumber,
+      row.pi_number,
+      row.invoiceNumber,
+      row.invoice_number,
+    );
+  }
+  if (triggerStage === "TI") {
+    return firstValue(row.invoiceNumber, row.invoice_number);
+  }
+  return null;
+};
+
 const getArray = (value) => {
   if (Array.isArray(value)) return value;
   return value ? [value] : [];
@@ -170,6 +195,7 @@ const getBasePayable = (row = {}, options = {}) => {
     firstValue(row.sourceType, row.source_type, row.payableType, row.payable_type, row.type),
   );
   const triggerStage = normalizeTriggerStage(firstValue(row.triggerStage, row.trigger_stage));
+  const triggerDocumentNumber = getTriggerDocumentNumber(row, triggerStage);
   const isAdvanceStageObligation = sourceType === "OBLIGATION" && triggerStage !== "TI";
   const obligationFallbackAmount = isAdvanceStageObligation ? getFallbackObligationAmount(row) : null;
   const rawSourceId = firstValue(row.sourceId, row.source_id);
@@ -285,12 +311,20 @@ const getBasePayable = (row = {}, options = {}) => {
     orderId: firstValue(row.orderId, row.order_id),
     orderNumber: firstValue(row.orderNumber, row.order_number, row.poNumber, row.po_number),
     poId: firstValue(row.poId, row.po_id),
+    poNumber: firstValue(row.poNumber, row.po_number),
+    grnId: firstValue(row.grnId, row.grn_id),
+    grnNumber: firstValue(row.grnNumber, row.grn_number),
+    piId: firstValue(row.piId, row.pi_id),
+    piNumber: firstValue(row.piNumber, row.pi_number),
     vendorId: firstValue(row.vendorId, row.vendor_id),
     vendorName: firstValue(row.vendorName, row.vendor_name, row.vendor?.name, "-"),
     currency: firstValue(row.currency, row.currencyCode, row.currency_code, "INR"),
     dueDate: firstValue(row.dueDate, row.due_date),
     obligationId,
     triggerStage,
+    triggerDocumentType: firstValue(row.triggerDocumentType, row.trigger_document_type),
+    triggerDocumentId: firstValue(row.triggerDocumentId, row.trigger_document_id),
+    triggerDocumentNumber,
     milestoneLabel: firstValue(row.milestoneLabel, row.milestone_label),
     paymentScheduleId: firstValue(row.paymentScheduleId, row.payment_schedule_id),
     scheduleRowId: firstValue(row.scheduleRowId, row.schedule_row_id),
@@ -326,6 +360,7 @@ const getBasePayable = (row = {}, options = {}) => {
     advanceNumber: firstValue(row.advanceNumber, row.advance_number),
     referenceNumber:
       firstValue(
+        sourceType === "OBLIGATION" ? triggerDocumentNumber : undefined,
         row.referenceNumber,
         row.reference_number,
         row.invoiceNumber,
@@ -395,7 +430,13 @@ export const getPayableDisplayLabel = (row = {}) => {
   if (row.sourceType === "ADVANCE") return row.advanceNumber || row.referenceNumber || row.orderNumber || "Advance";
   if (row.sourceType === "OBLIGATION") {
     if (row.triggerStage === "TI" && row.invoiceNumber) return row.invoiceNumber;
-    return row.milestoneLabel || row.orderNumber || row.referenceNumber || "Obligation";
+    if (row.triggerDocumentNumber) return row.triggerDocumentNumber;
+    if (row.triggerStage === "PO" && row.poNumber) return row.poNumber;
+    if (row.triggerStage === "GRN" && row.grnNumber) return row.grnNumber;
+    if (row.triggerStage === "PI" && (row.piNumber || row.invoiceNumber)) {
+      return row.piNumber || row.invoiceNumber;
+    }
+    return row.referenceNumber || row.milestoneLabel || row.orderNumber || "Obligation";
   }
   return row.invoiceNumber || row.referenceNumber || "-";
 };
