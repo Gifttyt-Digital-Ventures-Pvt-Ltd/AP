@@ -32,6 +32,7 @@ import AllInvoicesTable from './components/AllInvoicesTable';
 import InvoiceHistorySheet from './components/InvoiceHistorySheet';
 import ApprovalDialog from './components/ApprovalDialog';
 import ViewDialog from '../invoices/components/ViewDialog';
+import InvoiceViewFlagsSection from '../invoices/components/flags/InvoiceViewFlagsSection';
 import { InvoicePdfPreview } from '../invoices/components/InvoicePdfPreview';
 import { getInvoiceFileUrl } from '../invoices/utils/invoicePreview';
 import { normalizeInvoiceHistoryEntries } from '../invoices/utils/invoiceHistory';
@@ -381,6 +382,7 @@ const Approvals = () => {
     canEditInternalChecklist,
     handleSaveInternalChecklist,
     savingInternalChecklist,
+    invoiceFlagsOrgContext,
   } = useApprovalsInvoiceEdit({
       currencies,
       currencyParam,
@@ -390,6 +392,7 @@ const Approvals = () => {
       pdfZoom,
       viewPreviewError,
       setViewPreviewError,
+      onViewInvoice: handleViewInvoice,
     });
 
   const submitApproval = async () => {
@@ -742,6 +745,17 @@ const Approvals = () => {
         canEditInternalChecklist={canEditInternalChecklist}
         onSaveInternalChecklist={handleSaveInternalChecklist}
         savingInternalChecklist={savingInternalChecklist}
+        flagsSlot={
+          <InvoiceViewFlagsSection
+            selectedInvoice={viewInvoice}
+            viewDialogOpen={viewDialogOpen}
+            findVendorById={findVendorById}
+            findVendorByName={findVendorByName}
+            isCategoryFeatureEnabled={isCategoryFeatureEnabled}
+            isCampaignFeatureEnabled={isCampaignFeatureEnabled}
+            invoiceFlagsOrgContext={invoiceFlagsOrgContext}
+          />
+        }
       />
 
       {editDialogs}

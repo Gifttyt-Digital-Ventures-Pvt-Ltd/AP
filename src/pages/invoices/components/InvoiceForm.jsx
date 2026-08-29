@@ -64,6 +64,7 @@ import {
 } from "../utils/numericInput";
 import { getInvoiceFundingSplitError } from "../utils/invoiceFunding";
 import InvoiceChecklist from "./InvoiceFormChecklist";
+import InvoiceFlagsStrip from "./flags/InvoiceFlagsStrip";
 import InvoiceCampaignFields from "./InvoiceCampaignFields";
 import InternalChecklistSection from "./InternalChecklistSection";
 import LineItemsSummary, { LineItemsSectionHeader } from "./LineItemsSummary";
@@ -357,6 +358,9 @@ export const InvoiceForm = ({
   showProformaInvoiceFields = false,
   showErpIntegrationFields = false,
   includeLedgerAccountGroups = false,
+  activeFlags = [],
+  isFlagsLowPriorityOnly = false,
+  onOpenInvoiceFlags,
 }) => {
   const canShowBranchField = showBillingGst && showBranchField;
   const {
@@ -1314,6 +1318,7 @@ export const InvoiceForm = ({
                 <div className="flex items-center gap-1 mt-0.5">
                   <span className="text-[10px] text-gray-400">HSN:</span>
                   <Input
+                    id={item.id ? `invoice-field-hsnSac-${item.id}` : undefined}
                     value={item.hsnSac}
                     onChange={(e) =>
                       updateLineItem(index, "hsnSac", e.target.value)
@@ -1403,6 +1408,7 @@ export const InvoiceForm = ({
                 >
                   <PopoverAnchor asChild>
                     <Button
+                      id={item.id ? `invoice-field-accountGroup-${item.id}` : undefined}
                       type="button"
                       variant="outline"
                       onClick={() =>
@@ -1535,6 +1541,7 @@ export const InvoiceForm = ({
           case "expenseType":
             value = (
               <AppSelect
+                id={item.id ? `invoice-field-expenseType-${item.id}` : undefined}
                 value={normalizeExpenseType(item.expenseType) || ""}
                 onChange={(e) =>
                   updateLineItem(
@@ -1733,6 +1740,12 @@ export const InvoiceForm = ({
             </div>
           </div>
 
+          <InvoiceFlagsStrip
+            activeFlags={activeFlags}
+            isLowPriorityOnly={isFlagsLowPriorityOnly}
+            onOpen={onOpenInvoiceFlags}
+          />
+
           {showBillingGst ? (
             <div className="space-y-3">
               <div
@@ -1746,6 +1759,7 @@ export const InvoiceForm = ({
                     ORG GSTIN
                   </RequiredLabel>
                   <AppSelect
+                    id="invoice-field-billingGstin"
                     value={formData.billingGstin || ""}
                     onChange={(event) => {
                       const nextGst = event.target.value;
@@ -1836,7 +1850,7 @@ export const InvoiceForm = ({
 
           {showProformaInvoiceFields && (
             <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2" id="invoice-field-documentType">
                 <InvoiceDocumentTypeFields
                   documentType={
                     formData?.documentType ?? DOCUMENT_TYPE.TAX_INVOICE
@@ -1932,7 +1946,10 @@ export const InvoiceForm = ({
               </div>
             )}
 
-            <div className="rounded-lg border border-border bg-accent/70 p-3 space-y-3">
+            <div
+              id="invoice-field-vendorName"
+              className="rounded-lg border border-border bg-accent/70 p-3 space-y-3"
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 space-y-1">
                   <div className="flex items-center gap-2">
@@ -1954,6 +1971,7 @@ export const InvoiceForm = ({
                   >
                     <PopoverAnchor asChild>
                       <button
+                        id="invoice-field-gstin"
                         ref={gstinTriggerRef}
                         type="button"
                         onClick={() => {
@@ -2056,6 +2074,7 @@ export const InvoiceForm = ({
                     <>
                       <RequiredLabel required>GST Treatment</RequiredLabel>
                       <AppSelect
+                        id="invoice-field-gstTreatment"
                         value={formData.gstTreatment}
                         onChange={(e) =>
                           setFormData({ ...formData, gstTreatment: e.target.value })
@@ -2071,6 +2090,7 @@ export const InvoiceForm = ({
                     <>
                       <RequiredLabel required>GST Treatment</RequiredLabel>
                       <AppSelect
+                        id="invoice-field-gstTreatment"
                         value={formData.gstTreatment}
                         onChange={(e) =>
                           setFormData({ ...formData, gstTreatment: e.target.value })
@@ -2099,8 +2119,9 @@ export const InvoiceForm = ({
             </h3>
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <RequiredLabel required>Inovoice/Bill Number</RequiredLabel>
+                <RequiredLabel required>Invoice/Bill Number</RequiredLabel>
                 <Input
+                  id="invoice-field-invoiceNumber"
                   value={formData.invoiceNumber}
                   onChange={(e) =>
                     setFormData({
@@ -2115,6 +2136,7 @@ export const InvoiceForm = ({
               <div>
                 <RequiredLabel required>Billing Date</RequiredLabel>
                 <Input
+                  id="invoice-field-invoiceDate"
                   type="date"
                   value={formData.invoiceDate}
                   onChange={(e) => {
@@ -2135,6 +2157,7 @@ export const InvoiceForm = ({
               <div>
                 <RequiredLabel>Due Date</RequiredLabel>
                 <Input
+                  id="invoice-field-dueDate"
                   type="date"
                   value={formData.dueDate}
                   min={formData.invoiceDate || undefined}
@@ -2265,6 +2288,7 @@ export const InvoiceForm = ({
                     Department
                   </RequiredLabel>
                   <AppSelect
+                    id="invoice-field-departmentId"
                     value={formData.departmentId || ""}
                     onChange={(e) => {
                       const selectedDepartment = departments.find(
@@ -2309,6 +2333,7 @@ export const InvoiceForm = ({
                     Category
                   </RequiredLabel>
                   <AppSelect
+                    id="invoice-field-categoryId"
                     value={formData.categoryId || ""}
                     onChange={(e) => {
                       const selectedCategory = invoiceCategories.find(
@@ -2650,6 +2675,7 @@ export const InvoiceForm = ({
             >
               <PopoverAnchor asChild>
                 <button
+                  id="invoice-field-currency"
                   ref={currencyTriggerRef}
                   type="button"
                   onClick={() => setCurrencyPickerOpen((open) => !open)}
@@ -2902,6 +2928,7 @@ export const InvoiceForm = ({
                 <div className="max-w-xs">
                   <RequiredLabel>Invoice Tax</RequiredLabel>
                   <AppSelect
+                    id="invoice-field-invoiceTax"
                     value={formData.invoiceTax || DEFAULT_INR_TAX}
                     onChange={(e) =>
                       updateCalculatedFormData({ invoiceTax: e.target.value })
@@ -2915,6 +2942,7 @@ export const InvoiceForm = ({
                   <div>
                     <RequiredLabel>Tax Name</RequiredLabel>
                     <Input
+                      id="invoice-field-invoiceTaxName"
                       value={formData.invoiceTaxName || ""}
                       onChange={(e) =>
                         updateCalculatedFormData({
@@ -2928,6 +2956,7 @@ export const InvoiceForm = ({
                   <div>
                     <RequiredLabel>Tax Rate %</RequiredLabel>
                     <Input
+                      id="invoice-field-invoiceTaxRate"
                       type="text"
                       inputMode="decimal"
                       value={formatNumericInputValue(formData.invoiceTaxRate)}
@@ -3167,7 +3196,9 @@ export const InvoiceForm = ({
         categoryMandatory={categoryMandatory}
         showDepartmentField={showDepartmentField}
         showCategoryField={showCategoryField}
-        showCampaignField={showCampaignField}
+        showBillingGst={showBillingGst}
+        billingGstRequired={billingGstRequired}
+        canShowBranchField={canShowBranchField}
       />
     </div>
     <Dialog

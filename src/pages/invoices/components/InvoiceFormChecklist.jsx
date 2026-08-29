@@ -9,10 +9,11 @@ import {
 } from "lucide-react";
 import { DEFAULT_CURRENCY } from "../../../utils/currency";
 import {
-  INVOICE_LEVEL,
   LINE_ITEM_MODE_SUMMARY_ONLY,
   isInrInvoiceCurrency,
+  isInvoiceLevelSelection,
 } from "../utils/invoiceTax";
+import { EXTRACTED_MISMATCH_HINT, matchesExtracted as matchesExtractedField } from "../utils/extractionComparison";
 
 export const buildInvoiceFormChecklist = (
   formData,
@@ -21,7 +22,9 @@ export const buildInvoiceFormChecklist = (
     categoryMandatory = false,
     showDepartmentField = true,
     showCategoryField = true,
-    showCampaignField = false,
+    showBillingGst = false,
+    billingGstRequired = false,
+    canShowBranchField = false,
   } = {},
 ) => {
   if (!formData) return [];
@@ -29,13 +32,9 @@ export const buildInvoiceFormChecklist = (
   const extractedSnapshot = formData.extractedSnapshot || null;
   // True unless OCR extracted a value for this field AND the user has since
   // changed it to something else — i.e. only flags a real divergence.
-  const matchesExtracted = (field, currentValue) => {
-    if (!extractedSnapshot) return true;
-    const extractedValue = String(extractedSnapshot[field] ?? "").trim();
-    if (!extractedValue) return true;
-    return String(currentValue ?? "").trim() === extractedValue;
-  };
-  const extractedMismatchHint = "differs from scanned invoice";
+  const matchesExtracted = (field, currentValue) =>
+    matchesExtractedField(extractedSnapshot, field, currentValue);
+  const extractedMismatchHint = EXTRACTED_MISMATCH_HINT;
 
   const item = ({
     label,
@@ -85,49 +84,75 @@ export const buildInvoiceFormChecklist = (
 
   const useInrTax = isInrInvoiceCurrency(formData.currency);
   const isGstinRequired = useInrTax && formData.gstTreatment !== "N/A";
-  const isInvoiceLevelTax = formData.taxesLevel === INVOICE_LEVEL; 
+  const isInvoiceLevelTax = isInvoiceLevelSelection(formData.taxesLevel);
+
+  // "Organization Name", "Vendor Selection & Matching", and "Vendor GST" all
+  // suppress their hint tag (hint: "") to match the reference design showing
+  // no (required)/(optional) label on those three — but Vendor GST still
+  // carries real required/warn logic underneath (isGstinRequired, mismatch
+  // detection), only the visible tag text is hidden. Organization Name has
+  // no backing field at all, so it stays a pure placeholder (always done),
+  // per explicit instruction not to validate it until a real field exists.
+  const organizationChecklistItems = [
+    item({ label: "Organization Name", done: true, hint: "" }),
+    item({
+      label: "Organization GST",
+      done: !!String(formData.billingGstin ?? "").trim(),
+      required: billingGstRequired,
+      hidden: !showBillingGst,
+    }),
+    item({
+      label: "Organization Branch",
+      done: !!String(formData.branchCode ?? "").trim(),
+      optional: true,
+      hidden: !canShowBranchField,
+    }),
+    item({
+      label: "Document Type",
+      done: !!formData.documentType,
+      required: true,
+    }),
+  ];
 
   const vendorNameMatches = matchesExtracted("vendorName", formData.vendorName);
+  const gstTreatmentMatches = matchesExtracted("gstTreatment", formData.gstTreatment);
+  const gstinMatches = matchesExtracted("gstin", formData.gstin);
+  const hasVendorBranch =
+    !!formData.vendorBranchCode?.trim() || !!formData.vendorBranchName?.trim();
+
   const vendorChecklistItems = [
     item({
-      label: "Vendor name",
+      label: "Vendor Selection & Matching",
+      done: vendorResolved,
+      hint: "",
+      warn: hasVendorName && vendorUnmatched,
+    }),
+    item({
+      label: "Vendor Name",
       done: hasVendorName && vendorNameMatches,
       required: true,
       hint: hasVendorName && !vendorNameMatches ? extractedMismatchHint : undefined,
     }),
+    item({
+      label: "Vendor GST",
+      done: !!formData.gstin?.trim() && gstinMatches,
+      required: isGstinRequired,
+      hint: formData.gstin?.trim() && !gstinMatches ? extractedMismatchHint : "",
+      warn: (formData.gstin?.trim() && !gstinMatches) || undefined,
+    }),
+    item({
+      label: "Vendor Branch",
+      done: hasVendorBranch,
+      optional: true,
+    }),
+    item({
+      label: "GST Treatment",
+      done: !!formData.gstTreatment && gstTreatmentMatches,
+      required: true,
+      hint: formData.gstTreatment && !gstTreatmentMatches ? extractedMismatchHint : undefined,
+    }),
   ];
 
-  if (showCampaignField) {
-    vendorChecklistItems.push(
-      item({
-        label: "Campaign",
-        done: !!(formData.campaignId || formData.campaignName?.trim()),
-        optional: true,
-      }),
-      item({
-        label: "UAC/Reference No./Coupon Code",
-        done: !!String(formData.referenceNumber ?? "").trim(),
-        optional: true,
-      }),
-    );
-  }
-
-  if (hasVendorName) {
-    vendorChecklistItems.push(
-      item({
-        label: vendorUnmatched
-          ? "Vendor Name not matched"
-          : "Vendor matched in system",
-        done: vendorResolved,
-        required: true,
-        warn: vendorUnmatched,
-        hint: vendorUnmatched ? "action needed" : undefined,
-      }),
-    );
-  }
-
-  const gstTreatmentMatches = matchesExtracted("gstTreatment", formData.gstTreatment);
-  const gstinMatches = matchesExtracted("gstin", formData.gstin);
   const sourceOfSupplyMatches = matchesExtracted("sourceOfSupply", formData.sourceOfSupply);
   const destinationOfSupplyMatches = matchesExtracted(
     "destinationOfSupply",
@@ -136,33 +161,7 @@ export const buildInvoiceFormChecklist = (
   const hasSourceOfSupply = !!String(formData.sourceOfSupply ?? "").trim();
   const hasDestinationOfSupply = !!String(formData.destinationOfSupply ?? "").trim();
 
-  const taxComplianceItems = [
-    item({
-      label: "GST treatment",
-      done: !!formData.gstTreatment && gstTreatmentMatches,
-      required: true,
-      hint: formData.gstTreatment && !gstTreatmentMatches ? extractedMismatchHint : undefined,
-    }),
-    item({
-      label: useInrTax ? "GSTIN" : "GSTIN / Tax ID",
-      done: !!formData.gstin?.trim() && gstinMatches,
-      required: isGstinRequired,
-      hint: formData.gstin?.trim() && !gstinMatches ? extractedMismatchHint : undefined,
-      warn: (formData.gstin?.trim() && !gstinMatches) || undefined,
-    }),
-    item({
-      label: "Source of supply",
-      done: hasSourceOfSupply && sourceOfSupplyMatches,
-      hint: hasSourceOfSupply && !sourceOfSupplyMatches ? extractedMismatchHint : undefined,
-      warn: (hasSourceOfSupply && !sourceOfSupplyMatches) || undefined,
-    }),
-    item({
-      label: "Destination",
-      done: hasDestinationOfSupply && destinationOfSupplyMatches,
-      hint: hasDestinationOfSupply && !destinationOfSupplyMatches ? extractedMismatchHint : undefined,
-      warn: (hasDestinationOfSupply && !destinationOfSupplyMatches) || undefined,
-    }),
-  ];
+  const taxComplianceItems = [];
 
   if (isInvoiceLevelTax) {
     if (useInrTax) {
@@ -200,6 +199,36 @@ export const buildInvoiceFormChecklist = (
         }),
       );
     }
+  } else {
+    // Tax defined per line item rather than once for the whole invoice —
+    // without this branch taxComplianceItems stays empty and the whole
+    // "Tax & Compliance" group disappears (AppDataTable-style groups hide
+    // themselves when they have zero visible items). Still labeled
+    // "Invoice tax" (matching the invoice-level branch above) even though
+    // the underlying check is per line item, per explicit instruction to
+    // keep one consistent label regardless of tax mode.
+    //
+    // Field checked mirrors InvoiceForm.jsx's own line-item tax column
+    // exactly: INR invoices use a single `tax` dropdown (TAX_RATES options),
+    // non-INR invoices split it into `taxName` + `taxRate` inputs instead —
+    // these are two different fields, not two names for the same one.
+    const lineItemsWithTax = validLineItems.filter((lineItem) =>
+      useInrTax
+        ? !!String(lineItem.tax ?? "").trim()
+        : !!String(lineItem.taxName ?? "").trim() &&
+          lineItem.taxRate !== "" &&
+          lineItem.taxRate !== null &&
+          lineItem.taxRate !== undefined,
+    );
+    const allLineItemTaxesValid =
+      validLineItems.length > 0 && lineItemsWithTax.length === validLineItems.length;
+    taxComplianceItems.push(
+      item({
+        label: "Invoice tax",
+        done: allLineItemTaxesValid,
+        required: true,
+      }),
+    );
   }
 
   const invoiceNumberMatches = matchesExtracted("invoiceNumber", formData.invoiceNumber);
@@ -209,14 +238,18 @@ export const buildInvoiceFormChecklist = (
 
   return [
     {
-      group: "Vendor",
+      group: "Org. Details",
+      items: organizationChecklistItems,
+    },
+    {
+      group: "Vendor Details",
       items: vendorChecklistItems,
     },
     {
-      group: "Invoice details",
+      group: "Billing Details",
       items: [
         item({
-          label: "Bill number",
+          label: "Invoice/Bill Number",
           done: !!formData.invoiceNumber?.trim() && invoiceNumberMatches,
           required: true,
           hint:
@@ -225,27 +258,39 @@ export const buildInvoiceFormChecklist = (
               : undefined,
         }),
         item({
-          label: "Billing date",
+          label: "Billing Date",
           done: !!formData.invoiceDate && invoiceDateMatches,
           required: true,
           hint: formData.invoiceDate && !invoiceDateMatches ? extractedMismatchHint : undefined,
         }),
         item({
-          label: "Due date",
+          label: "Due Date",
           done: !!formData.dueDate,
-          required: false,
+          optional: true,
         }),
         item({
-          label: "Currency",
-          done: !!currencyValue && currencyMatches,
-          required: true,
-          hint: currencyValue && !currencyMatches ? extractedMismatchHint : undefined,
+          label: "Billing Address",
+          done: !!String(formData.billingAddress ?? "").trim(),
+          optional: true,
         }),
         item({
-          label: "Department",
-          done: !!formData.departmentId,
-          required: departmentMandatory,
-          hidden: !showDepartmentField,
+          label: "Shipping Address",
+          done: !!String(formData.shippingAddress ?? "").trim(),
+          optional: true,
+        }),
+        item({
+          label: "Source of supply",
+          done: hasSourceOfSupply && sourceOfSupplyMatches,
+          optional: true,
+          hint: hasSourceOfSupply && !sourceOfSupplyMatches ? extractedMismatchHint : undefined,
+          warn: (hasSourceOfSupply && !sourceOfSupplyMatches) || undefined,
+        }),
+        item({
+          label: "Destination",
+          done: hasDestinationOfSupply && destinationOfSupplyMatches,
+          optional: true,
+          hint: hasDestinationOfSupply && !destinationOfSupplyMatches ? extractedMismatchHint : undefined,
+          warn: (hasDestinationOfSupply && !destinationOfSupplyMatches) || undefined,
         }),
         item({
           label: "Category",
@@ -253,25 +298,23 @@ export const buildInvoiceFormChecklist = (
           required: categoryMandatory,
           hidden: !showCategoryField,
         }),
-      ],
-    },
-    {
-      group: "Tax & compliance",
-      items: taxComplianceItems,
-    },
-    {
-      group: "Source",
-      items: [
         item({
-          label: "Source",
-          done: !!formData.source,
-          required: true,
+          label: "Department",
+          done: !!formData.departmentId,
+          required: departmentMandatory,
+          hidden: !showDepartmentField,
         }),
       ],
     },
     {
       group: "Line items",
       items: [
+        item({
+          label: "Currency",
+          done: !!currencyValue && currencyMatches,
+          required: true,
+          hint: currencyValue && !currencyMatches ? extractedMismatchHint : undefined,
+        }),
         item({
           label:
             isSummaryOnlyInvoice
@@ -284,6 +327,10 @@ export const buildInvoiceFormChecklist = (
         }),
       ],
     },
+    {
+      group: "Tax & Compliance",
+      items: taxComplianceItems,
+    },
   ];
 };
 
@@ -293,7 +340,9 @@ export const InvoiceChecklist = ({
   categoryMandatory = false,
   showDepartmentField = true,
   showCategoryField = true,
-  showCampaignField = false,
+  showBillingGst = false,
+  billingGstRequired = false,
+  canShowBranchField = false,
 }) => {
   const [open, setOpen] = useState(true);
 
@@ -304,7 +353,9 @@ export const InvoiceChecklist = ({
         categoryMandatory,
         showDepartmentField,
         showCategoryField,
-        showCampaignField,
+        showBillingGst,
+        billingGstRequired,
+        canShowBranchField,
       }),
     [
       formData,
@@ -312,12 +363,14 @@ export const InvoiceChecklist = ({
       categoryMandatory,
       showDepartmentField,
       showCategoryField,
-      showCampaignField,
+      showBillingGst,
+      billingGstRequired,
+      canShowBranchField,
     ],
   );
 
   const allItems = groups.flatMap((group) =>
-    group.items.filter((item) => !item.hidden && !item.optional),
+    group.items.filter((item) => !item.hidden),
   );
   const doneCount = allItems.filter((item) => item.done).length;
   const totalCount = allItems.length;

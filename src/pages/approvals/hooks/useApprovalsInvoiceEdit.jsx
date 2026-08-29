@@ -13,6 +13,7 @@ import {
 import {
   useGetInvoiceMandatoryFieldsQuery,
   useLazyGetVendorQuery,
+  useLazyGetInvoiceQuery,
   useRequestVendorAdditionMutation,
   useUpdateInvoiceMutation,
   useUpdateInvoiceInternalChecklistMutation,
@@ -30,6 +31,13 @@ import { useActionGuard } from "../../../hooks/useActionGuard";
 import EditDialog from "../../invoices/components/EditDialog";
 import RequestVendorDialog from "../../invoices/components/RequestVendorDialog";
 import { InvoiceForm } from "../../invoices/components/InvoiceForm";
+import InvoiceFlagsDialog from "../../invoices/components/flags/InvoiceFlagsDialog";
+import { useInvoiceFlags } from "../../invoices/hooks/useInvoiceFlags";
+import {
+  scrollToInvoiceField,
+  resolveFixInFormFieldKey,
+  labelForFieldKey,
+} from "../../invoices/utils/invoiceFieldNavigation";
 import {
   GST_TREATMENTS,
   INDIAN_STATES,
@@ -49,6 +57,7 @@ import {
   applyInrLineItemTax,
   calculateInvoiceTotals,
   createDefaultLineItem,
+  getTotalTaxAmountFromTotals,
   INVOICE_LEVEL,
   isInrInvoiceCurrency,
   resolveLineItemSubtotal,
@@ -56,6 +65,7 @@ import {
 } from "../../invoices/utils/invoiceTax";
 import {
   buildToCreateInvoicePayload,
+  calculateInvoiceDataTotals,
   computeTdsAmount,
   normalizeLineItemsForTaxLevel,
 } from "../../invoices/utils/invoicePayloadBuilders";
@@ -74,6 +84,7 @@ import { getActiveInternalChecklistItems } from "../../invoices/utils/internalCh
 import {
   buildCurrentUserIdentity,
   canEditInvoice,
+  canReopenInvoiceFlagsForInvoice,
   extractApiErrorDetail,
   getInvoiceEditBlockedMessage,
   isSavedInvoiceStatus,
@@ -91,6 +102,7 @@ export const useApprovalsInvoiceEdit = ({
   pdfZoom,
   viewPreviewError,
   setViewPreviewError,
+  onViewInvoice,
 }) => {
   const { user } = useAuth();
   const {
@@ -98,15 +110,25 @@ export const useApprovalsInvoiceEdit = ({
     isCategoryFeatureEnabled,
     isDepartmentFeatureEnabled,
     isCampaignFeatureEnabled,
+    isConnectedBankingEnabled,
     isCorporateAdmin,
     hasPermission,
     isBranchEnabled,
+    isCorporateSectionEnabled,
   } = useRBAC();
+  // Same single source of truth InvoicesPage.jsx uses for the maker flow
+  // (showErpIntegrationFields), so the same invoice under the same org
+  // config evaluates LINE_GROUP_BRANCH_UNASSIGNED/EXPENSE_TYPE_UNASSIGNED
+  // identically for maker and reviewer — deliberately not conditioned on
+  // whether this screen's own <InvoiceForm> renders the ERP columns (it
+  // doesn't, a separate pre-existing gap, out of scope here).
+  const isErpIntegrationEnabled = isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
   const { guardAction, canPerformAction } = useActionGuard();
 
   const canUpdateInvoices = canPerformAction("invoices.update");
   const canManageInvoices = canPerformAction("invoices.create");
   const canCheckInvoices = canPerformAction("invoices.check");
+  const canApproveInvoices = canPerformAction("invoices.approve");
   const canAddVendors = canPerformAction("invoices.addVendor");
   const isMasterAdmin = hasPermission("master-admin");
 
@@ -123,6 +145,28 @@ export const useApprovalsInvoiceEdit = ({
   // ConnectedVendorPicker (inside InvoiceForm) handles search/pagination itself.
   const [fetchVendorById] = useLazyGetVendorQuery();
   const vendorCacheRef = useRef({});
+
+  // Duplicate Invoice flag's "view invoice" action (DuplicateInvoicesListDialog)
+  // — same goal as InvoicesPage.jsx's own handleViewLinkedInvoice: open the
+  // colliding invoice in the existing read-only ViewDialog (via the caller's
+  // own onViewInvoice, e.g. Approvals.jsx's handleViewInvoice) instead of a
+  // new tab, so the invoice currently being reviewed is never disturbed.
+  // Unlike InvoicesPage.jsx, this screen has no locally-loaded "all invoices"
+  // list to check first (the checker/approver queue is a different, narrower
+  // list) — always fetches by id.
+  const [fetchInvoiceById] = useLazyGetInvoiceQuery();
+  const handleViewDuplicateInvoice = useCallback(
+    async (match) => {
+      if (!match?.id) return;
+      try {
+        const invoice = await fetchInvoiceById(match.id).unwrap();
+        onViewInvoice?.(invoice);
+      } catch {
+        toast.error("Could not open that invoice.");
+      }
+    },
+    [fetchInvoiceById, onViewInvoice],
+  );
 
   const resolveVendorById = useCallback(
     async (vendorId) => {
@@ -284,6 +328,62 @@ export const useApprovalsInvoiceEdit = ({
     },
     [],
   );
+
+  // Reopen must be gated per-invoice, not per-user-role — see
+  // canReopenInvoiceFlagsForInvoice's own doc comment (utils/approvalWorkflow.js)
+  // for why, and Approvals.jsx's handleApprovalAction/viewInvoiceCanAct for
+  // the pattern this mirrors.
+  const canReopenInvoiceFlags = canReopenInvoiceFlagsForInvoice(editingInvoice, {
+    canCheckInvoices,
+    canApproveInvoices,
+  });
+
+  const invoiceFlags = useInvoiceFlags({
+    formData,
+    setFormData,
+    findVendorById,
+    findVendorByName,
+    excludeInvoiceId: editingInvoice?.id ?? null,
+    checklistOptions: {
+      departmentMandatory: invoiceMandatoryFields.department,
+      categoryMandatory: invoiceMandatoryFields.category,
+      showDepartmentField: isDepartmentFeatureEnabled,
+      showCategoryField: isCategoryFeatureEnabled,
+    },
+    isNetPayableEditEnabled,
+    isCampaignFeatureEnabled,
+    isErpIntegrationEnabled,
+    isBankIntegrationEnabled: isConnectedBankingEnabled,
+    skip: !formData,
+  });
+
+  const handleFixInvoiceFlagInForm = (flag) => {
+    // Tax Total Does Not Reconcile has no single field to jump to — its fix
+    // is to accept the line items' own math as correct and sync the
+    // declared Total Tax to match, which is what actually clears it (see
+    // the design notes in flagRules/taxCompliance.js).
+    if (flag?.key === "TAX_TOTAL_DOES_NOT_RECONCILE") {
+      setFormData((prev) => {
+        if (!prev) return prev;
+        const totals = calculateInvoiceDataTotals(prev);
+        const reconciledTaxTotal = Math.round(getTotalTaxAmountFromTotals(totals) * 100) / 100;
+        return { ...prev, totalTaxAmount: reconciledTaxTotal, lastReconciledTaxTotal: reconciledTaxTotal };
+      });
+      toast.success("Total Tax synced to match the line items.");
+      return;
+    }
+
+    const { fieldKey, lineId } = resolveFixInFormFieldKey(flag);
+    // Small delay so this runs after the Flags dialog's own close animation,
+    // not while its overlay is still covering the field being scrolled to.
+    window.setTimeout(() => {
+      const scrolled = scrollToInvoiceField(fieldKey, lineId);
+      if (!scrolled) {
+        const lineNote = flag?.evidence?.lineNumber ? ` (Line ${flag.evidence.lineNumber})` : "";
+        toast.info(`Check the "${labelForFieldKey(fieldKey) || flag?.title || "flagged"}" details on the invoice.${lineNote}`);
+      }
+    }, 150);
+  };
 
   const getDepartmentNameById = (departmentId) => {
     const selectedDepartment = departments.find(
@@ -582,6 +682,7 @@ export const useApprovalsInvoiceEdit = ({
     } else if (!validateMandatoryPayload(formData)) {
       return;
     }
+    if (!invoiceFlags.guardSubmit()) return;
 
     const isCheckerUpdateFlow =
       shouldCheckerSubmitOnUpdate(editingInvoice, invoiceEditContext) &&
@@ -752,6 +853,9 @@ export const useApprovalsInvoiceEdit = ({
         showBillingGst={isEdit}
         requireBillingGst={isEdit && !isSavedDraft}
         showBranchField={isBranchEnabled}
+        activeFlags={invoiceFlags.activeFlags}
+        isFlagsLowPriorityOnly={invoiceFlags.isLowPriorityOnly}
+        onOpenInvoiceFlags={invoiceFlags.openFlagsDialog}
       />
     );
   };
@@ -772,6 +876,18 @@ export const useApprovalsInvoiceEdit = ({
         viewPreviewError={viewPreviewError}
         setViewPreviewError={setViewPreviewError}
         renderInvoiceForm={renderInvoiceForm}
+      />
+
+      <InvoiceFlagsDialog
+        open={invoiceFlags.dialogOpen}
+        onOpenChange={invoiceFlags.setDialogOpen}
+        activeFlags={invoiceFlags.activeFlags}
+        resolvedFlags={invoiceFlags.resolvedFlags}
+        blockingFlagsResolvedByOthers={invoiceFlags.blockingFlagsResolvedByOthers}
+        onResolveFlag={invoiceFlags.resolveFlag}
+        onFixInForm={handleFixInvoiceFlagInForm}
+        onReopenFlag={canReopenInvoiceFlags ? invoiceFlags.reopenFlag : undefined}
+        onViewDuplicateInvoice={handleViewDuplicateInvoice}
       />
 
       <RequestVendorDialog
@@ -824,5 +940,20 @@ export const useApprovalsInvoiceEdit = ({
     canEditInternalChecklist,
     handleSaveInternalChecklist,
     savingInternalChecklist,
+    // For Approvals.jsx's own <ViewDialog> (the read-only "preview" surface,
+    // separate from this hook's own edit flow above) to wire up
+    // useInvoiceFlags with the same org config this hook already uses —
+    // Approvals.jsx has no independent source for these (confirmed: no
+    // isCorporateSectionEnabled/isConnectedBankingEnabled/invoiceMandatoryFields
+    // at that page level), so they're exposed here rather than recomputed a
+    // second time or left defaulting to the wrong values.
+    invoiceFlagsOrgContext: {
+      isErpIntegrationEnabled,
+      isBankIntegrationEnabled: isConnectedBankingEnabled,
+      departmentMandatory: invoiceMandatoryFields.department,
+      categoryMandatory: invoiceMandatoryFields.category,
+      showDepartmentField: isDepartmentFeatureEnabled,
+      showCategoryField: isCategoryFeatureEnabled,
+    },
   };
 };

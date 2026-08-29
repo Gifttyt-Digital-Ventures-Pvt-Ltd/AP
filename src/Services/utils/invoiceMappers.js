@@ -466,6 +466,24 @@ export const normalizeInvoiceResponse = (invoice = {}) => {
     )
       ? pickInvoiceField(invoice, "internalChecklist", "internal_checklist")
       : [],
+    // Resolutions must round-trip so a "must explain" reason survives a save
+    // and reaches the checker (Invoice_Flags_Business_Guide.md §2/§4) — was
+    // previously dropped here, so a resolved flag reappeared fully ACTIVE
+    // with no reason/name/timestamp the moment the invoice was reloaded.
+    flagResolutions: pickInvoiceField(invoice, "flagResolutions", "flag_resolutions", {}) || {},
+    // AI-extraction baseline — must round-trip so a reloaded/checker-reviewed
+    // invoice can still compare current values against what was originally
+    // scanned (16 flags across flagRules/{extractionMismatch,vendor,
+    // duplicates,completeness,organisationDocument}.js read
+    // formData.extractedSnapshot). null means "no scan baseline" (manual
+    // invoice, or an old invoice saved before this field existed) — every
+    // consumer already treats that as "nothing to compare," so this is
+    // backward compatible by construction.
+    extractedSnapshot: pickInvoiceField(invoice, "extractedSnapshot", "extracted_snapshot", null),
+    // Tax Total Does Not Reconcile's baseline — must round-trip so a
+    // reopened/checker-reviewed invoice still knows what its tax was last
+    // reconciled to.
+    lastReconciledTaxTotal: pickInvoiceField(invoice, "lastReconciledTaxTotal", "last_reconciled_tax_total", null),
     ...normalizeMsmePaymentDue(invoice),
   };
 };
@@ -738,6 +756,18 @@ export const buildInvoiceApiPayload = (invoice = {}, options = {}) => {
     )
       ? pickInvoiceField(invoice, "internalChecklist", "internal_checklist")
       : [],
+    // See the matching comment in normalizeInvoiceResponse above — without
+    // this, a maker's resolution never reaches the saved invoice at all.
+    flagResolutions: pickInvoiceField(invoice, "flagResolutions", "flag_resolutions", {}) || {},
+    // See the matching comment in normalizeInvoiceResponse above — without
+    // this, the AI-extraction baseline never reaches the saved invoice, so
+    // every changed-after-extraction-style flag goes silent the moment the
+    // invoice is reloaded. This function is shared by both create and update
+    // (see buildCreateInvoiceRequestBody/toInvoiceApiPayload aliases below,
+    // and invoicesVendorsApi.js's createInvoice/updateInvoice, both of which
+    // call toInvoiceApiPayload), so both paths get this fix from one place.
+    extractedSnapshot: pickInvoiceField(invoice, "extractedSnapshot", "extracted_snapshot", null),
+    lastReconciledTaxTotal: pickInvoiceField(invoice, "lastReconciledTaxTotal", "last_reconciled_tax_total", null),
   };
 };
 

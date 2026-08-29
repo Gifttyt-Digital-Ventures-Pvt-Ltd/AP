@@ -45,6 +45,7 @@ import {
   calculateInvoiceTotals,
   createDefaultLineItem,
   DEFAULT_INR_TAX,
+  getTotalTaxAmountFromTotals,
   INVOICE_LEVEL,
   isInrInvoiceCurrency,
   LINE_ITEM_MODE_DETAILED,
@@ -167,6 +168,13 @@ import TableColumnFilter from "../../components/common/TableColumnFilter";
 import TableSortButton from "../../components/common/TableSortButton";
 import { InvoicePdfPreview } from "./components/InvoicePdfPreview";
 import { InvoiceForm } from "./components/InvoiceForm";
+import InvoiceFlagsDialog from "./components/flags/InvoiceFlagsDialog";
+import { useInvoiceFlags } from "./hooks/useInvoiceFlags";
+import {
+  scrollToInvoiceField,
+  resolveFixInFormFieldKey,
+  labelForFieldKey,
+} from "./utils/invoiceFieldNavigation";
 import UploadSection from "./components/UploadSection";
 import InvoicesDialogs from "./components/InvoicesDialogs";
 import InvoiceUploadDialog from "./components/InvoiceUploadDialog";
@@ -396,6 +404,7 @@ const InvoicesPage = () => {
     isCategoryFeatureEnabled,
     isDepartmentFeatureEnabled,
     isCampaignFeatureEnabled,
+    isConnectedBankingEnabled,
     isCorporateAdmin,
     isCorporateScreenAllowed,
     isCorporateSectionEnabled,
@@ -1155,6 +1164,53 @@ const InvoicesPage = () => {
     },
     [invoiceVendorOptions],
   );
+
+  const invoiceFlags = useInvoiceFlags({
+    formData,
+    setFormData,
+    findVendorById,
+    findVendorByName,
+    excludeInvoiceId: selectedInvoice?.id ?? null,
+    checklistOptions: {
+      departmentMandatory: invoiceMandatoryFields.department,
+      categoryMandatory: invoiceMandatoryFields.category,
+      showDepartmentField: isDepartmentFeatureEnabled,
+      showCategoryField: isCategoryFeatureEnabled,
+    },
+    isNetPayableEditEnabled,
+    isCampaignFeatureEnabled,
+    isErpIntegrationEnabled: showErpIntegrationFields,
+    isBankIntegrationEnabled: isConnectedBankingEnabled,
+    skip: !formData,
+  });
+
+  const handleFixInvoiceFlagInForm = (flag) => {
+    // Tax Total Does Not Reconcile has no single field to jump to — its fix
+    // is to accept the line items' own math as correct and sync the
+    // declared Total Tax to match, which is what actually clears it (see
+    // the design notes in flagRules/taxCompliance.js).
+    if (flag?.key === "TAX_TOTAL_DOES_NOT_RECONCILE") {
+      setFormData((prev) => {
+        if (!prev) return prev;
+        const totals = calculateInvoiceDataTotals(prev);
+        const reconciledTaxTotal = Math.round(getTotalTaxAmountFromTotals(totals) * 100) / 100;
+        return { ...prev, totalTaxAmount: reconciledTaxTotal, lastReconciledTaxTotal: reconciledTaxTotal };
+      });
+      toast.success("Total Tax synced to match the line items.");
+      return;
+    }
+
+    const { fieldKey, lineId } = resolveFixInFormFieldKey(flag);
+    // Small delay so this runs after the Flags dialog's own close animation,
+    // not while its overlay is still covering the field being scrolled to.
+    window.setTimeout(() => {
+      const scrolled = scrollToInvoiceField(fieldKey, lineId);
+      if (!scrolled) {
+        const lineNote = flag?.evidence?.lineNumber ? ` (Line ${flag.evidence.lineNumber})` : "";
+        toast.info(`Check the "${labelForFieldKey(fieldKey) || flag?.title || "flagged"}" details on the invoice.${lineNote}`);
+      }
+    }, 150);
+  };
 
   const getDepartmentNameById = (departmentId) => {
     const selectedDepartment = departments.find(
@@ -2463,6 +2519,7 @@ const InvoicesPage = () => {
       return;
     }
     if (!validateMandatoryPayload(formData)) return;
+    if (!invoiceFlags.guardSubmit()) return;
 
     try {
       let createResponse = null;
@@ -2760,6 +2817,7 @@ const InvoicesPage = () => {
       if (!validateNetPayableAmount(formData)) return;
       if (!validateMandatoryPayload(formData)) return;
     }
+    if (!invoiceFlags.guardSubmit()) return;
 
     try {
       const updateResponse = await updateInvoice({
@@ -3089,6 +3147,9 @@ const InvoicesPage = () => {
         showProformaInvoiceFields={showProformaInvoiceFields}
         showErpIntegrationFields={showErpIntegrationFields}
         includeLedgerAccountGroups={hasConnectedZoho}
+        activeFlags={invoiceFlags.activeFlags}
+        isFlagsLowPriorityOnly={invoiceFlags.isLowPriorityOnly}
+        onOpenInvoiceFlags={invoiceFlags.openFlagsDialog}
       />
     );
   };
@@ -3905,6 +3966,20 @@ const InvoicesPage = () => {
         canAddInvoice={Boolean(formData)}
       />
 
+      {/* Maker flow — onReopenFlag intentionally omitted. Reopen is a
+          reviewer/checker-approver action only (MD §7); InvoiceFlagsDialog
+          hides the Reopen affordance entirely whenever this prop is absent. */}
+      <InvoiceFlagsDialog
+        open={invoiceFlags.dialogOpen}
+        onOpenChange={invoiceFlags.setDialogOpen}
+        activeFlags={invoiceFlags.activeFlags}
+        resolvedFlags={invoiceFlags.resolvedFlags}
+        blockingFlagsResolvedByOthers={invoiceFlags.blockingFlagsResolvedByOthers}
+        onResolveFlag={invoiceFlags.resolveFlag}
+        onFixInForm={handleFixInvoiceFlagInForm}
+        onViewDuplicateInvoice={handleViewLinkedInvoice}
+      />
+
       <InvoicesDialogs
         bulkExtracting={bulkExtracting}
         bulkExtractTotalFiles={bulkExtractTotalFiles}
@@ -3961,6 +4036,14 @@ const InvoicesPage = () => {
         findVendorById={findVendorById}
         showProformaInvoiceFields={showProformaInvoiceFields}
         showErpIntegrationFields={showErpIntegrationFields}
+        invoiceFlagsOrgContext={{
+          isErpIntegrationEnabled: showErpIntegrationFields,
+          isBankIntegrationEnabled: isConnectedBankingEnabled,
+          departmentMandatory: invoiceMandatoryFields?.department,
+          categoryMandatory: invoiceMandatoryFields?.category,
+          showDepartmentField: isDepartmentFeatureEnabled,
+          showCategoryField: isCategoryFeatureEnabled,
+        }}
         showInternalChecklist={isInternalChecklistEnabled}
         internalChecklistItems={internalChecklistItems}
         canEditInternalChecklist={canEditInternalChecklist}
