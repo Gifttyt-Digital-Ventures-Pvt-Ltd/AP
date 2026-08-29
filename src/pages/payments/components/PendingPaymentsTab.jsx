@@ -141,9 +141,14 @@ const PendingPaymentsTab = ({
   const renderReferenceCell = (invoice) => (
     <div className="min-w-0 space-y-0.5">
       {clippedText(getPayableDisplayLabel(invoice))}
+      {invoice.sourceType !== 'INVOICE' && invoice.poNumber && invoice.poNumber !== getPayableDisplayLabel(invoice) ? (
+        <span className="block truncate text-[11px] font-normal text-muted-foreground" title={invoice.poNumber}>
+          PO: {invoice.poNumber}
+        </span>
+      ) : null}
       {invoice.orderNumber && invoice.orderNumber !== getPayableDisplayLabel(invoice) ? (
         <span className="block truncate text-[11px] font-normal text-muted-foreground" title={invoice.orderNumber}>
-          {invoice.orderNumber}
+          Order: {invoice.orderNumber}
         </span>
       ) : null}
       {invoice.milestoneLabel && invoice.sourceType !== 'INVOICE' ? (
