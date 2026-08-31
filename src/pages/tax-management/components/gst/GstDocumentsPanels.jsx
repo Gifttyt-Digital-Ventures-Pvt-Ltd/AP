@@ -50,6 +50,7 @@ import {
 } from '../../utils/gstApiMappers';
 import OrgGstCredentialFields from './OrgGstCredentialFields';
 import GstPortalOtpDialog from './GstPortalOtpDialog';
+import { GstReconChecklistTable, GstReconSplitPanel } from './GstReconChecklistPanel';
 import { getApiErrorMessage } from '../../hooks/useGstTaxpayerSession';
 import { toast } from 'sonner';
 import { formatCurrency } from '../../utils/taxFormatting';
@@ -164,6 +165,55 @@ const getGstDocumentVendorLabel = (row = {}, vendors = []) => {
   });
 
   return matchedVendor?.name ?? '—';
+};
+
+const getDocumentReconCriteria = (doc = {}) => {
+  const criteria =
+    doc.criteria ??
+    doc.reconciliationCriteria ??
+    doc.reconciliation_criteria ??
+    doc.checklist ??
+    doc.reconciliationChecklist ??
+    doc.reconciliation_checklist;
+  return Array.isArray(criteria) ? criteria : [];
+};
+
+const getDocumentReconSplit = (doc = {}) =>
+  doc.split ??
+  doc.taxSplit ??
+  doc.tax_split ??
+  doc.reconciliationSplit ??
+  doc.reconciliation_split ??
+  null;
+
+const getDocumentReconSlabs = (doc = {}) =>
+  doc.slabs ??
+  doc.rateSlabs ??
+  doc.rate_slabs ??
+  doc.reconciliationSlabs ??
+  doc.reconciliation_slabs ??
+  null;
+
+const DocumentReconComparisonSection = ({ doc }) => {
+  const criteria = getDocumentReconCriteria(doc);
+  const split = getDocumentReconSplit(doc);
+  const slabs = getDocumentReconSlabs(doc);
+  const hasComparison = criteria.length > 0 || Boolean(split) || Boolean(slabs);
+
+  if (!hasComparison) return null;
+
+  return (
+    <div className="space-y-3 rounded-md border bg-white p-3">
+      <div>
+        <p className="text-sm font-semibold">Reconciliation Comparison</p>
+        <p className="text-xs text-muted-foreground">
+          Platform values compared with GST portal values for this document.
+        </p>
+      </div>
+      {criteria.length > 0 ? <GstReconChecklistTable criteria={criteria} /> : null}
+      {split || slabs ? <GstReconSplitPanel split={split} slabs={slabs} /> : null}
+    </div>
+  );
 };
 
 const getDocumentHistoryVendor = (entry) => {
@@ -394,6 +444,8 @@ const Gst2ADocDrawerContent = ({ doc, vendor }) => {
           <p className="text-sm text-muted-foreground">No matching AP invoice found for this document.</p>
         )} */}
       </div>
+
+      <DocumentReconComparisonSection doc={doc} />
     </div>
   );
 };
@@ -474,6 +526,8 @@ const Gst2BDocDrawerContent = ({ doc }) => {
           <p className="text-sm text-muted-foreground">No AP invoice linked — pending review.</p>
         )}
       </div>
+
+      <DocumentReconComparisonSection doc={doc} />
     </div>
   );
 };
