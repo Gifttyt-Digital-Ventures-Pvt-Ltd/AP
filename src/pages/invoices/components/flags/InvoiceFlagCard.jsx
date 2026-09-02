@@ -7,36 +7,27 @@ const InvoiceFlagCard = ({ flag, onResolveClick, onFixInFormClick, onViewAndReso
   const isResolvedTab = flag.status !== INVOICE_FLAG_STATUS.ACTIVE;
   const description = flag.describe ? flag.describe(flag.evidence) : "";
 
-  const actionLabel =
-    flag.actionKind === INVOICE_FLAG_ACTION.FIX_IN_FORM
-      ? "Fix in form"
-      : flag.actionKind === INVOICE_FLAG_ACTION.VIEW_AND_RESOLVE
-        ? "View and Resolve"
-        : "Resolve";
-
-  // Whichever callback actually corresponds to this flag's own actionKind —
-  // not just "is any callback present." A caller that wants a fully
-  // read-only card (e.g. the View Invoice page) simply omits all three
-  // callbacks, and the action row disappears on its own; a caller that only
-  // wants some actions (already true for onReopenClick below, which has
-  // always been conditional) gets that for free too, with no separate
-  // "read-only mode" flag anywhere.
-  const relevantActionCallback =
-    flag.actionKind === INVOICE_FLAG_ACTION.FIX_IN_FORM
-      ? onFixInFormClick
-      : flag.actionKind === INVOICE_FLAG_ACTION.VIEW_AND_RESOLVE
-        ? onViewAndResolveClick
-        : onResolveClick;
-
-  const handleActionClick = () => {
-    if (flag.actionKind === INVOICE_FLAG_ACTION.FIX_IN_FORM) {
-      onFixInFormClick?.(flag);
-    } else if (flag.actionKind === INVOICE_FLAG_ACTION.VIEW_AND_RESOLVE) {
-      onViewAndResolveClick?.(flag);
-    } else {
-      onResolveClick?.(flag);
-    }
-  };
+  // Each possible action is independently gated on (a) this flag's own
+  // actionKind actually offering it, and (b) the caller having actually
+  // supplied the matching callback — not just "is any callback present." A
+  // caller that wants a fully read-only card (e.g. the View Invoice page)
+  // simply omits all callbacks, and every action row disappears on its own;
+  // a caller that only wants some actions (already true for onReopenClick
+  // below, which has always been conditional) gets that for free too, with
+  // no separate "read-only mode" flag anywhere. FIX_OR_RESOLVE is the only
+  // actionKind where more than one of these can be true at once — Due Date
+  // Not Set is the first flag to use it, so both buttons render side by side.
+  const showFixInForm =
+    (flag.actionKind === INVOICE_FLAG_ACTION.FIX_IN_FORM ||
+      flag.actionKind === INVOICE_FLAG_ACTION.FIX_OR_RESOLVE) &&
+    Boolean(onFixInFormClick);
+  const showResolve =
+    (flag.actionKind === INVOICE_FLAG_ACTION.RESOLVE ||
+      flag.actionKind === INVOICE_FLAG_ACTION.FIX_OR_RESOLVE) &&
+    Boolean(onResolveClick);
+  const showViewAndResolve =
+    flag.actionKind === INVOICE_FLAG_ACTION.VIEW_AND_RESOLVE && Boolean(onViewAndResolveClick);
+  const hasAnyAction = showFixInForm || showResolve || showViewAndResolve;
 
   return (
     <div
@@ -77,15 +68,39 @@ const InvoiceFlagCard = ({ flag, onResolveClick, onFixInFormClick, onViewAndReso
             </>
           )}
         </div>
-      ) : relevantActionCallback ? (
-        <button
-          type="button"
-          onClick={handleActionClick}
-          className="text-sm font-medium text-button-primary underline-offset-2 hover:underline"
-          data-testid={`invoice-flag-action-${flag.key}`}
-        >
-          {actionLabel}
-        </button>
+      ) : hasAnyAction ? (
+        <div className="flex items-center gap-4">
+          {showFixInForm ? (
+            <button
+              type="button"
+              onClick={() => onFixInFormClick(flag)}
+              className="text-sm font-medium text-button-primary underline-offset-2 hover:underline"
+              data-testid={`invoice-flag-action-${flag.key}`}
+            >
+              Fix in form
+            </button>
+          ) : null}
+          {showResolve ? (
+            <button
+              type="button"
+              onClick={() => onResolveClick(flag)}
+              className="text-sm font-medium text-button-primary underline-offset-2 hover:underline"
+              data-testid={`invoice-flag-resolve-action-${flag.key}`}
+            >
+              Resolve
+            </button>
+          ) : null}
+          {showViewAndResolve ? (
+            <button
+              type="button"
+              onClick={() => onViewAndResolveClick(flag)}
+              className="text-sm font-medium text-button-primary underline-offset-2 hover:underline"
+              data-testid={`invoice-flag-action-${flag.key}`}
+            >
+              View and Resolve
+            </button>
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

@@ -46,6 +46,14 @@ const ResolveFlagDialog = ({ flag, open, onOpenChange, onConfirm, submitting = f
           </Badge>
         ) : null}
 
+        {/* Opt-in, per-flag — only Due Date Not Set sets this today. Generic
+            rather than hardcoded to one flag key, so any future flag that
+            needs the same "here's exactly what resolving will and won't do"
+            clarity can reuse it the same way. */}
+        {flag?.resolveWarning ? (
+          <p className="text-sm text-muted-foreground">{flag.resolveWarning}</p>
+        ) : null}
+
         <div className="space-y-1.5">
           <Label htmlFor="resolve-flag-reason" className="text-sm">
             Reason For Resolving This Flag <span className="text-destructive">*</span>

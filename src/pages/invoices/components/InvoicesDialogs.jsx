@@ -68,6 +68,9 @@ const InvoicesDialogs = (props) => {
     invoiceHistory,
     loadingHistory,
     canEdit,
+    canResolveFlags,
+    onFixInFormNavigate,
+    onFlagResolutionsSynced,
     handleEditInvoice,
     canCancel,
     handleCancelInvoice,
@@ -198,6 +201,10 @@ const InvoicesDialogs = (props) => {
             isCategoryFeatureEnabled={isCategoryFeatureEnabled}
             isCampaignFeatureEnabled={isCampaignFeatureEnabled}
             invoiceFlagsOrgContext={invoiceFlagsOrgContext}
+            canResolveInvoiceFlags={canResolveFlags(selectedInvoice)}
+            canEditSelectedInvoice={canEdit(selectedInvoice)}
+            onFixInFormNavigate={onFixInFormNavigate}
+            onFlagResolutionsSynced={onFlagResolutionsSynced}
           />
         }
         canCancelLinkedInvoice={canCancelLinkedInvoice}

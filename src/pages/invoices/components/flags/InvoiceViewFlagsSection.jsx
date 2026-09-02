@@ -1,14 +1,22 @@
-import React, { useMemo } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import InvoiceFlagsStrip from "./InvoiceFlagsStrip";
 import InvoiceFlagsDialog from "./InvoiceFlagsDialog";
 import { useInvoiceFlags } from "../../hooks/useInvoiceFlags";
 import { buildInvoiceEditFormData } from "../../utils/invoiceFormData";
+import { useUpdateInvoiceFlagResolutionsMutation } from "../../../../Services/apis/invoicesVendorsApi";
+import { extractApiErrorDetail } from "../../../../utils/approvalWorkflow";
 
 /**
- * Read-only Invoice Flags for the View Invoice page — the maker's own
- * "View" and the checker/approver's "View" (including the surface where
- * Verify/Approve/Reject buttons render directly, see ViewDialog.jsx's own
- * approvalActionConfig).
+ * Invoice Flags for the View Invoice page — the maker's own "View" and the
+ * checker/approver's "View" (including the surface where Verify/Approve/
+ * Reject buttons render directly, see ViewDialog.jsx's own
+ * approvalActionConfig). Read-only for the invoice itself — Resolve is the
+ * one mutation this screen allows, persisted via a dedicated endpoint
+ * (PUT /invoices/{id}/flags/resolutions) rather than the normal invoice
+ * Save, since View Invoice has no Save action. Fix in Form never edits
+ * anything here — it navigates to Edit Invoice and reuses that flow's own
+ * field-navigation behavior (see onFixInFormNavigate).
  *
  * Deliberately self-contained rather than sharing ViewDialog's own
  * checklistFormData: keeping useInvoiceFlags/InvoiceFlagsStrip/
@@ -23,13 +31,14 @@ import { buildInvoiceEditFormData } from "../../utils/invoiceFormData";
  * time counting that one) is a small, cheap, synchronous cost in exchange
  * for ViewDialog never importing this feature's code at all.
  *
- * Read-only by omission, not a mode flag: no onResolveFlag/onFixInForm/
- * onReopenFlag is ever passed to InvoiceFlagsDialog below, so none of those
- * actions render — see InvoiceFlagCard.jsx/InvoiceFlagsDialog.jsx/
- * DuplicateInvoicesListDialog.jsx's own conditional-callback logic. "View
- * and Resolve" flags (Duplicate Invoice / Duplicate Avoided By Edit) still
- * let you open the evidence list — that's inspection, not a mutation — but
- * the Resolve button inside that evidence dialog is hidden the same way.
+ * Owning the mutation call directly here (rather than threading it through
+ * InvoicesPage.jsx/useApprovalsInvoiceEdit.jsx as a callback prop, the way
+ * internal-checklist/funding do) is deliberate: this component already owns
+ * the only state (formData.flagResolutions, built by useInvoiceFlags'
+ * unmodified resolveFlag) the request body needs, and it's the one shared
+ * component for both the maker and checker/approver View surfaces — putting
+ * the mutation call here avoids duplicating a near-identical handler in both
+ * owner files for no benefit.
  */
 const InvoiceViewFlagsSection = ({
   selectedInvoice,
@@ -39,8 +48,30 @@ const InvoiceViewFlagsSection = ({
   isCategoryFeatureEnabled,
   isCampaignFeatureEnabled,
   invoiceFlagsOrgContext = {},
+  // Gates Resolve — per the confirmed backend contract's own permission/
+  // status rules (Maker/Checker/Corp-Admin/Master-Admin, excludes
+  // Approvers, allowed through Approved/Pending Payment, blocked on
+  // Paid/Cancelled/Rejected/Vendor Rejected). Computed by the caller via
+  // canResolveInvoiceFlag(selectedInvoice, identity).
+  canResolveInvoiceFlags = false,
+  // Gates Fix in Form — the existing canEditInvoice permission/status
+  // logic, computed by the caller via canEdit(selectedInvoice). The button
+  // must not render at all for a user who can't actually edit the
+  // invoice — never shown-then-refused with a toast.
+  canEditSelectedInvoice = false,
+  // Navigates to Edit Invoice and reuses the existing Fix-in-Form field
+  // navigation there (see InvoicesPage.jsx's handleFixInvoiceFlagInFormFromView
+  // / useApprovalsInvoiceEdit.jsx's counterpart). Only ever invoked when
+  // canEditSelectedInvoice is true, since it's only ever wired up then.
+  onFixInFormNavigate,
+  // Called after a Resolve successfully persists, with the backend's
+  // returned flagResolutions map, so the caller can sync its own
+  // selectedInvoice/viewInvoice state — otherwise a subsequent Fix in Form
+  // (which reopens Edit from that same state) would reflect a stale,
+  // pre-resolve snapshot.
+  onFlagResolutionsSynced,
 }) => {
-  const formData = useMemo(
+  const seedFormData = useMemo(
     () =>
       selectedInvoice
         ? buildInvoiceEditFormData(selectedInvoice, {
@@ -59,15 +90,70 @@ const InvoiceViewFlagsSection = ({
     ],
   );
 
+  const [formData, setLocalFormData] = useState(seedFormData);
+
+  // Resets local state to match whenever the caller hands us a different
+  // invoice (or a freshly-synced one, see onFlagResolutionsSynced) — the
+  // only local mutation this component ever makes (flagResolutions, via
+  // resolveFlag below) is immediately persisted, so there's never an
+  // unsaved local change this reset could clobber.
+  useEffect(() => {
+    setLocalFormData(seedFormData);
+  }, [seedFormData]);
+
+  const [updateInvoiceFlagResolutions] = useUpdateInvoiceFlagResolutionsMutation();
+
+  const persistFlagResolutions = useCallback(
+    async (invoiceId, nextFlagResolutions, previousFlagResolutions) => {
+      try {
+        const response = await updateInvoiceFlagResolutions({
+          id: invoiceId,
+          // Complete map, exactly as resolveFlag constructed it — never
+          // reduced to just the newly-resolved entry, per the contract.
+          body: { flagResolutions: nextFlagResolutions },
+        }).unwrap();
+        onFlagResolutionsSynced?.(response?.flagResolutions ?? nextFlagResolutions);
+      } catch (error) {
+        toast.error(extractApiErrorDetail(error) || "Failed to save flag resolution");
+        setLocalFormData((prev) =>
+          prev ? { ...prev, flagResolutions: previousFlagResolutions } : prev,
+        );
+      }
+    },
+    [updateInvoiceFlagResolutions, onFlagResolutionsSynced],
+  );
+
+  // The setFormData useInvoiceFlags is given — resolveFlag itself is
+  // completely unmodified (still just calls setFormData(prev => ({...prev,
+  // flagResolutions: next}))), this wrapper only watches for that one field
+  // changing and persists it. No resolve-record-building logic is
+  // duplicated here; this only reacts to what resolveFlag already built.
+  const setFormData = useCallback(
+    (updater) => {
+      setLocalFormData((prev) => {
+        const next = typeof updater === "function" ? updater(prev) : updater;
+        if (
+          prev &&
+          next &&
+          next.flagResolutions !== prev.flagResolutions &&
+          selectedInvoice?.id
+        ) {
+          persistFlagResolutions(selectedInvoice.id, next.flagResolutions, prev.flagResolutions);
+        }
+        return next;
+      });
+    },
+    [persistFlagResolutions, selectedInvoice?.id],
+  );
+
   // Same evaluateInvoiceFlags + mergeFlagsWithResolutions lifecycle the
   // maker/checker edit forms use, same live org/vendor context, scoped to
   // whichever invoice this dialog is currently showing — not the caller's
   // own in-progress edit-form formData, if any (a linked-invoice "View" can
-  // be open for a different invoice entirely). setFormData is a no-op:
-  // nothing here ever renders a control that could call it.
+  // be open for a different invoice entirely).
   const invoiceFlags = useInvoiceFlags({
     formData,
-    setFormData: () => {},
+    setFormData,
     findVendorById,
     findVendorByName,
     excludeInvoiceId: selectedInvoice?.id ?? null,
@@ -80,6 +166,7 @@ const InvoiceViewFlagsSection = ({
     isCampaignFeatureEnabled,
     isErpIntegrationEnabled: invoiceFlagsOrgContext.isErpIntegrationEnabled,
     isBankIntegrationEnabled: invoiceFlagsOrgContext.isBankIntegrationEnabled,
+    isChecklistFlagsEnabled: invoiceFlagsOrgContext.isChecklistFlagsEnabled,
     skip: !viewDialogOpen || !selectedInvoice,
   });
 
@@ -116,6 +203,8 @@ const InvoiceViewFlagsSection = ({
         activeFlags={invoiceFlags.activeFlags}
         resolvedFlags={invoiceFlags.resolvedFlags}
         blockingFlagsResolvedByOthers={invoiceFlags.blockingFlagsResolvedByOthers}
+        onResolveFlag={canResolveInvoiceFlags ? invoiceFlags.resolveFlag : undefined}
+        onFixInForm={canEditSelectedInvoice ? onFixInFormNavigate : undefined}
       />
     </>
   );

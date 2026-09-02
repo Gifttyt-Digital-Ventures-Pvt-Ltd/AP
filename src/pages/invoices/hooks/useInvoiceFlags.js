@@ -59,13 +59,28 @@ export const useInvoiceFlags = ({
   isCampaignFeatureEnabled = false,
   isErpIntegrationEnabled = false,
   isBankIntegrationEnabled = false,
+  // Fail-closed, matching the other feature-gate params in this same
+  // signature (isCampaignFeatureEnabled/isErpIntegrationEnabled/
+  // isBankIntegrationEnabled all default false) — an org with no
+  // CHECKLIST_FLAGS entry in activeInvoiceConfiguration must get the
+  // feature OFF, not silently on.
+  isChecklistFlagsEnabled = false,
   skip = false,
 }) => {
   const { user } = useAuth();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [duplicateListOpen, setDuplicateListOpen] = useState(false);
 
-  const { data: organisationGstCredentials } = useGetOrganisationGstCredentialsQuery(undefined, { skip });
+  // Single combined gate: either the caller's own skip condition (no
+  // invoice being edited yet, dialog not open, etc.) or the subscription
+  // being off. Every query below uses this instead of the raw `skip` param,
+  // so a disabled subscription stops all network activity exactly like an
+  // already-skipped call does today — not a second, parallel skip system.
+  const effectiveSkip = skip || !isChecklistFlagsEnabled;
+
+  const { data: organisationGstCredentials } = useGetOrganisationGstCredentialsQuery(undefined, {
+    skip: effectiveSkip,
+  });
   const organisationGstins = useMemo(
     () =>
       (organisationGstCredentials || [])
@@ -74,14 +89,14 @@ export const useInvoiceFlags = ({
     [organisationGstCredentials],
   );
 
-  const { data: referenceData } = useGetInvoiceFlagReferenceDataQuery(undefined, { skip });
+  const { data: referenceData } = useGetInvoiceFlagReferenceDataQuery(undefined, { skip: effectiveSkip });
 
   const debouncedInvoiceNumber = useDebouncedValue(formData?.invoiceNumber, 400);
   const debouncedAmount = useDebouncedValue(formData?.amount, 400);
   const debouncedInvoiceDate = useDebouncedValue(formData?.invoiceDate, 400);
 
   const shouldLookupDuplicates =
-    !skip &&
+    !effectiveSkip &&
     Boolean(String(debouncedInvoiceNumber ?? "").trim()) &&
     Boolean(formData?.vendorId || formData?.vendorName);
 
@@ -108,7 +123,7 @@ export const useInvoiceFlags = ({
   // this would just duplicate the query above.
   const extractedInvoiceNumber = formData?.extractedSnapshot?.invoiceNumber;
   const shouldLookupExtractedNumberDuplicates =
-    !skip &&
+    !effectiveSkip &&
     Boolean(String(extractedInvoiceNumber ?? "").trim()) &&
     Boolean(formData?.vendorId || formData?.vendorName) &&
     normalizeInvoiceNumberForCompare(extractedInvoiceNumber) !==
@@ -133,7 +148,7 @@ export const useInvoiceFlags = ({
   // for this org, or no vendor is selected yet; context.approvedCampaigns
   // staying undefined (vs. an empty array once genuinely loaded) is what
   // lets the rule tell "hasn't loaded" apart from "vendor has none."
-  const shouldLookupCampaigns = !skip && isCampaignFeatureEnabled && Boolean(formData?.vendorId);
+  const shouldLookupCampaigns = !effectiveSkip && isCampaignFeatureEnabled && Boolean(formData?.vendorId);
   const { data: approvedCampaigns } = useGetVendorCampaignsQuery(formData?.vendorId, {
     skip: !shouldLookupCampaigns,
   });
@@ -152,7 +167,7 @@ export const useInvoiceFlags = ({
   // against that call instead of firing a second network request.
   const selectedVendorId = String(formData?.vendorId || "").trim();
   const { data: selectedVendorDetail = null } = useGetVendorQuery(selectedVendorId, {
-    skip: skip || !selectedVendorId,
+    skip: effectiveSkip || !selectedVendorId,
   });
 
   // TDS Rate Overridden needs the statutory section→rate registry. Same
@@ -160,7 +175,7 @@ export const useInvoiceFlags = ({
   // fallback) as TdsSelectionField.jsx's own buildTdsOptions(tdsSectionsData,
   // ...) call — not a second normalization system, just reusing the raw
   // rows the dropdown itself already fetches.
-  const { data: tdsSectionsData = [] } = useGetTdsSectionsQuery(undefined, { skip });
+  const { data: tdsSectionsData = [] } = useGetTdsSectionsQuery(undefined, { skip: effectiveSkip });
   const tdsSections = useMemo(
     () => [...(tdsSectionsData || []), ...DEFAULT_TDS_SECTIONS],
     [tdsSectionsData],
@@ -170,7 +185,7 @@ export const useInvoiceFlags = ({
   // query InvoiceForm.jsx uses for its own branch picker
   // (useGetOrganisationQuery), same normalizer (normalizeOrganisationBranchesFromApi)
   // — not a second source of truth for org branches.
-  const { data: organisationData } = useGetOrganisationQuery(undefined, { skip });
+  const { data: organisationData } = useGetOrganisationQuery(undefined, { skip: effectiveSkip });
   const organisationBranches = useMemo(
     () => normalizeOrganisationBranchesFromApi(organisationData),
     [organisationData],
@@ -219,10 +234,22 @@ export const useInvoiceFlags = ({
     ],
   );
 
-  const evaluatedInstances = useMemo(() => evaluateInvoiceFlags(formData, context), [formData, context]);
+  // Short-circuit both steps (not just evaluation) when the subscription is
+  // off: evaluatedInstances=[] alone would still let mergeFlagsWithResolutions
+  // surface old formData.flagResolutions entries as AUTO_CLEARED history —
+  // correct behavior for "nothing currently fires" but wrong for "the
+  // feature is off." flagResolutions itself is left completely untouched in
+  // formData either way, so it's still there, unaffected, if re-enabled.
+  const evaluatedInstances = useMemo(
+    () => (isChecklistFlagsEnabled ? evaluateInvoiceFlags(formData, context) : []),
+    [formData, context, isChecklistFlagsEnabled],
+  );
   const mergedFlags = useMemo(
-    () => mergeFlagsWithResolutions(evaluatedInstances, formData?.flagResolutions || {}),
-    [evaluatedInstances, formData?.flagResolutions],
+    () =>
+      isChecklistFlagsEnabled
+        ? mergeFlagsWithResolutions(evaluatedInstances, formData?.flagResolutions || {})
+        : [],
+    [evaluatedInstances, formData?.flagResolutions, isChecklistFlagsEnabled],
   );
 
   const flags = useMemo(

@@ -121,6 +121,7 @@ import {
 } from "./constants/proformaInvoice";
 import { useProformaInvoiceSubscription } from "../../hooks/useProformaInvoiceSubscription";
 import useForeignCurrencyInrConversionSubscription from "../../hooks/useForeignCurrencyInrConversionSubscription";
+import useChecklistFlagsSubscription from "../../hooks/useChecklistFlagsSubscription";
 import {
   filterInvoicesForDocumentTab,
   getLinkedTaxInvoiceCount,
@@ -215,6 +216,7 @@ import {
   buildCurrentUserIdentity,
   canDeleteInvoice,
   canEditInvoice,
+  canResolveInvoiceFlag,
   extractApiErrorDetail,
   formatWorkflowStatus,
   getInvoiceEditBlockedMessage,
@@ -433,6 +435,7 @@ const InvoicesPage = () => {
   const showErpIntegrationFields = isCorporateSectionEnabled("SETTINGS_INTEGRATIONS");
   const { isForeignCurrencyInrConversionEnabled } =
     useForeignCurrencyInrConversionSubscription();
+  const { isChecklistFlagsEnabled } = useChecklistFlagsSubscription();
   const { data: corporateUserContext = null } =
     useGetCorporateUserDetailsQuery();
   const { data: invoiceUsageSummary = null } = useGetClientWalletSummaryQuery(undefined, {
@@ -1000,6 +1003,10 @@ const InvoicesPage = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [uploadPreviewError, setUploadPreviewError] = useState(false);
   const [viewPreviewError, setViewPreviewError] = useState(false);
+  // View Invoice -> Fix in Form: the target flag to scroll to once the Edit
+  // dialog this opens has actually mounted (see the effect near
+  // handleFixInvoiceFlagInFormFromView below).
+  const [pendingFixInFormFlag, setPendingFixInFormFlag] = useState(null);
 
   // Enhanced form data for both upload and edit
   const [formData, setFormData] = useState(null);
@@ -1181,6 +1188,7 @@ const InvoicesPage = () => {
     isCampaignFeatureEnabled,
     isErpIntegrationEnabled: showErpIntegrationFields,
     isBankIntegrationEnabled: isConnectedBankingEnabled,
+    isChecklistFlagsEnabled,
     skip: !formData,
   });
 
@@ -2777,6 +2785,46 @@ const InvoicesPage = () => {
     setEditDialogOpen(true);
   };
 
+  // View Invoice -> Fix in Form: closes View, opens Edit for the same
+  // invoice (reusing handleEditInvoice unchanged — the same function the
+  // ViewDialog "Edit" button itself already calls), then records which flag
+  // to scroll to once the Edit form has actually mounted. Only ever wired
+  // up when canEdit(selectedInvoice) is true (see the InvoicesDialogs props
+  // below), so handleEditInvoice's own permission check here is a redundant
+  // safety net, not the primary gate.
+  const handleFixInvoiceFlagInFormFromView = (flag) => {
+    setViewDialogOpen(false);
+    handleEditInvoice(selectedInvoice);
+    setPendingFixInFormFlag(flag);
+  };
+
+  // Fires once the Edit dialog opened above has actually mounted formData
+  // (EditDialog is a plain conditional-render Dialog, no async gating) —
+  // then reuses handleFixInvoiceFlagInForm completely unchanged, including
+  // its TAX_TOTAL_DOES_NOT_RECONCILE special case and its own 150ms delay
+  // for the dialog's own open animation.
+  useEffect(() => {
+    if (!editDialogOpen || !formData || !pendingFixInFormFlag) return;
+    const flag = pendingFixInFormFlag;
+    setPendingFixInFormFlag(null);
+    handleFixInvoiceFlagInForm(flag);
+  }, [editDialogOpen, formData, pendingFixInFormFlag]);
+
+  // View Invoice -> Resolve: keeps selectedInvoice's flagResolutions in sync
+  // after InvoiceViewFlagsSection persists a resolve via the dedicated
+  // endpoint, so a subsequent Fix in Form (which reopens Edit from this same
+  // selectedInvoice) reflects the just-resolved flag rather than a stale
+  // pre-resolve snapshot. Same guarded-functional-update shape as
+  // handleSaveInvoiceFunding's own selectedInvoice sync above.
+  const handleFlagResolutionsSyncedFromView = useCallback(
+    (nextFlagResolutions) => {
+      setSelectedInvoice((prev) =>
+        prev ? { ...prev, flagResolutions: nextFlagResolutions } : prev,
+      );
+    },
+    [],
+  );
+
   const handleRequestInvoiceUnlock = async (invoice) => {
     if (!canUpdateInvoices) {
       toast.error("You need invoice edit access to request unlock");
@@ -3037,6 +3085,11 @@ const InvoicesPage = () => {
   };
 
   const canEdit = (invoice) => canEditInvoice(invoice, invoiceEditContext);
+  // Checklist Flags "Resolve" from View Invoice — its own separate
+  // permission/status rules per the confirmed backend contract, not a
+  // variant of canEditInvoice above (allowed through Approved/Pending
+  // Payment where canEdit is false; excludes pure Approvers).
+  const canResolveFlags = (invoice) => canResolveInvoiceFlag(invoice, invoiceEditContext);
   const canDelete = (status) => canDeleteInvoice(status, canDeleteInvoices);
   const canCancel = (invoice) =>
     Boolean(invoice?.id) && isInvoiceCancellable(invoice);
@@ -4029,6 +4082,9 @@ const InvoicesPage = () => {
         invoiceHistory={invoiceHistory}
         loadingHistory={loadingHistory}
         canEdit={canEdit}
+        canResolveFlags={canResolveFlags}
+        onFixInFormNavigate={handleFixInvoiceFlagInFormFromView}
+        onFlagResolutionsSynced={handleFlagResolutionsSyncedFromView}
         handleEditInvoice={handleEditInvoice}
         canCancel={canCancel}
         handleCancelInvoice={handleCancelInvoice}
@@ -4039,6 +4095,7 @@ const InvoicesPage = () => {
         invoiceFlagsOrgContext={{
           isErpIntegrationEnabled: showErpIntegrationFields,
           isBankIntegrationEnabled: isConnectedBankingEnabled,
+          isChecklistFlagsEnabled,
           departmentMandatory: invoiceMandatoryFields?.department,
           categoryMandatory: invoiceMandatoryFields?.category,
           showDepartmentField: isDepartmentFeatureEnabled,

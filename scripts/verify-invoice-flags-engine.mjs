@@ -16,13 +16,13 @@ import {
   evaluateInvoiceFlags,
   mergeFlagsWithResolutions,
 } from "../src/pages/invoices/utils/invoiceFlagsEngine.js";
-import { INVOICE_FLAG_CATALOG, INVOICE_FLAG_SEVERITY } from "../src/pages/invoices/constants/invoiceFlags.js";
+import { INVOICE_FLAG_CATALOG, INVOICE_FLAG_SEVERITY, INVOICE_FLAG_ACTION } from "../src/pages/invoices/constants/invoiceFlags.js";
 import { calculateInvoiceDataTotals } from "../src/pages/invoices/utils/invoicePayloadBuilders.js";
 import { LINE_ITEM_MODE_SUMMARY_ONLY } from "../src/pages/invoices/utils/invoiceTax.js";
 import { resolveTdsRate, CUSTOM_TDS_SECTION_ID } from "../src/pages/invoices/utils/tds.js";
 import { buildInvoiceEditFormData } from "../src/pages/invoices/utils/invoiceFormData.js";
 import { selectBlockingFlagsResolvedByOthers, BLOCKING_SEVERITIES } from "../src/pages/invoices/utils/flagLifecycleSelectors.js";
-import { canReopenInvoiceFlagsForInvoice } from "../src/utils/approvalWorkflow.js";
+import { canReopenInvoiceFlagsForInvoice, canResolveInvoiceFlag } from "../src/utils/approvalWorkflow.js";
 import {
   buildInvoiceApiPayload,
   buildCreateInvoiceRequestBody,
@@ -30,6 +30,10 @@ import {
   normalizeInvoiceResponse,
 } from "../src/Services/utils/invoiceMappers.js";
 import { resolveFixInFormFieldKey } from "../src/pages/invoices/utils/invoiceFieldNavigation.js";
+import {
+  INVOICE_CONFIG_SECTIONS,
+  isChecklistFlagsEnabled,
+} from "../src/utils/invoiceConfiguration.js";
 
 let passed = 0;
 const check = (label, fn) => {
@@ -240,6 +244,66 @@ check("ALREADY_PAST_DUE and DUE_DATE_NOT_SET are mutually exclusive", () => {
   const notSet = evaluateInvoiceFlags({ invoiceDate: PINNED_TODAY, dueDate: "" }, { today: PINNED_TODAY });
   assert.ok(keysOf(notSet).includes("DUE_DATE_NOT_SET"));
   assert.ok(!keysOf(notSet).includes("ALREADY_PAST_DUE"));
+});
+
+check("DUE_DATE_NOT_SET is FIX_OR_RESOLVE, offers both actions, and carries a resolveWarning explaining the date stays empty", () => {
+  const entry = INVOICE_FLAG_CATALOG.DUE_DATE_NOT_SET;
+  assert.equal(entry.actionKind, "FIX_OR_RESOLVE");
+  assert.equal(typeof entry.resolveWarning, "string");
+  assert.ok(entry.resolveWarning.length > 0);
+});
+
+check("DUE_DATE_NOT_SET resolved with the date still empty stays RESOLVED after an unrelated edit (real path: raw invoice -> buildInvoiceEditFormData -> evaluateInvoiceFlags -> mergeFlagsWithResolutions)", () => {
+  const rawInvoice = {
+    invoiceDate: PINNED_TODAY,
+    dueDate: "",
+    description: "Consulting services", // the "unrelated edit"
+  };
+  const formData = buildInvoiceEditFormData(rawInvoice, {});
+  const instances = evaluateInvoiceFlags(formData, { today: PINNED_TODAY });
+  assert.ok(keysOf(instances).includes("DUE_DATE_NOT_SET"), "sanity: still genuinely firing (date still empty)");
+
+  const signature = instances.find((i) => i.key === "DUE_DATE_NOT_SET").situationSignature;
+  const resolutions = {
+    DUE_DATE_NOT_SET: {
+      key: "DUE_DATE_NOT_SET",
+      status: "RESOLVED",
+      reason: "No due date on the vendor's document; confirmed with vendor none applies.",
+      resolvedSituationSignature: signature,
+    },
+  };
+  const merged = mergeFlagsWithResolutions(instances, resolutions);
+  assert.equal(merged.find((i) => i.key === "DUE_DATE_NOT_SET").status, "RESOLVED");
+});
+
+check("DUE_DATE_NOT_SET resolved with the date still empty auto-clears once a real due date is later entered (lifecycle-consistent with every other flag, no special-casing)", () => {
+  const resolutions = {
+    DUE_DATE_NOT_SET: {
+      key: "DUE_DATE_NOT_SET",
+      status: "RESOLVED",
+      reason: "No due date on the vendor's document.",
+      resolvedSituationSignature: {},
+    },
+  };
+  const afterDueDateAdded = evaluateInvoiceFlags(
+    { invoiceDate: PINNED_TODAY, dueDate: isoDaysFrom(PINNED_TODAY, 30) },
+    { today: PINNED_TODAY },
+  );
+  assert.ok(!keysOf(afterDueDateAdded).includes("DUE_DATE_NOT_SET"), "sanity: no longer genuinely firing");
+  const merged = mergeFlagsWithResolutions(afterDueDateAdded, resolutions);
+  assert.equal(merged.find((i) => i.key === "DUE_DATE_NOT_SET").status, "AUTO_CLEARED");
+});
+
+check("DUE_DATE_NOT_SET fixed directly (never resolved) simply stops firing — no orphaned record, no Resolved-tab entry", () => {
+  const beforeFix = evaluateInvoiceFlags({ invoiceDate: PINNED_TODAY, dueDate: "" }, { today: PINNED_TODAY });
+  assert.ok(keysOf(beforeFix).includes("DUE_DATE_NOT_SET"));
+
+  const afterFix = evaluateInvoiceFlags(
+    { invoiceDate: PINNED_TODAY, dueDate: isoDaysFrom(PINNED_TODAY, 30) },
+    { today: PINNED_TODAY },
+  );
+  const merged = mergeFlagsWithResolutions(afterFix, {}); // no resolution was ever recorded
+  assert.ok(!merged.some((i) => i.key === "DUE_DATE_NOT_SET"), "no instance, no record -> nothing to show in either tab");
 });
 
 check("INVOICE_OLDER_THAN_THRESHOLD does not fire at exactly the default 90-day threshold", () => {
@@ -1808,7 +1872,7 @@ check("regression guard: no other catalog entry's severity or actionKind changed
   const expectedSeverityActionPairs = {
     GSTIN_MISMATCH: ["MUST_EXPLAIN", "RESOLVE"],
     DOCUMENT_TYPE_MISMATCH: ["WORTH_CHECKING", "RESOLVE"],
-    BRANCH_GSTIN_CONFLICT: ["MUST_FIX", "FIX_IN_FORM"],
+    BRANCH_GSTIN_CONFLICT: ["MUST_FIX", "FIX_OR_RESOLVE"],
     LOW_EXTRACTION_CONFIDENCE: ["WORTH_CHECKING", "RESOLVE"],
     DUPLICATE_INVOICE: ["MUST_EXPLAIN", "VIEW_AND_RESOLVE"],
     DUPLICATE_INVOICE_CROSS_YEAR: ["WORTH_CHECKING", "RESOLVE"],
@@ -1825,18 +1889,18 @@ check("regression guard: no other catalog entry's severity or actionKind changed
     TDS_MAPPING_NOT_APPLIED: ["WORTH_CHECKING", "RESOLVE"],
     VENDOR_BANK_DETAILS_MISSING: ["WORTH_CHECKING", "RESOLVE"],
     VENDOR_MISMATCH: ["MUST_EXPLAIN", "RESOLVE"],
-    DUE_DATE_PRECEDES_BILLING_DATE: ["MUST_FIX", "FIX_IN_FORM"],
+    DUE_DATE_PRECEDES_BILLING_DATE: ["MUST_FIX", "FIX_OR_RESOLVE"],
     FUTURE_DATED_INVOICE: ["MUST_EXPLAIN", "RESOLVE"],
-    DUE_DATE_NOT_SET: ["MUST_FIX", "FIX_IN_FORM"],
+    DUE_DATE_NOT_SET: ["MUST_FIX", "FIX_OR_RESOLVE"],
     ALREADY_PAST_DUE: ["WORTH_CHECKING", "RESOLVE"],
     INVOICE_OLDER_THAN_THRESHOLD: ["WORTH_CHECKING", "RESOLVE"],
     ITC_CLAIM_WINDOW_AT_RISK: ["WORTH_CHECKING", "RESOLVE"],
-    REQUIRED_DETAILS_MISSING: ["MUST_FIX", "FIX_IN_FORM"],
-    RECOMMENDED_DETAILS_MISSING: ["MUST_FIX", "FIX_IN_FORM"],
+    REQUIRED_DETAILS_MISSING: ["MUST_FIX", "FIX_OR_RESOLVE"],
+    RECOMMENDED_DETAILS_MISSING: ["MUST_FIX", "FIX_OR_RESOLVE"],
     SHIPPING_ADDRESS_MISSING: ["JUST_SO_YOU_KNOW", "RESOLVE"],
     BILLING_ADDRESS_DIFFERS_FROM_DOCUMENT: ["WORTH_CHECKING", "RESOLVE"],
-    LINE_GROUP_BRANCH_UNASSIGNED: ["MUST_FIX", "FIX_IN_FORM"],
-    EXPENSE_TYPE_UNASSIGNED: ["MUST_FIX", "FIX_IN_FORM"],
+    LINE_GROUP_BRANCH_UNASSIGNED: ["MUST_FIX", "FIX_OR_RESOLVE"],
+    EXPENSE_TYPE_UNASSIGNED: ["MUST_FIX", "FIX_OR_RESOLVE"],
     INVOICE_NUMBER_CHANGED_AFTER_EXTRACTION: ["MUST_EXPLAIN", "RESOLVE"],
     BILLING_DATE_CHANGED_AFTER_EXTRACTION: ["MUST_EXPLAIN", "RESOLVE"],
     ORGANISATION_GSTIN_CHANGED_AFTER_EXTRACTION: ["MUST_EXPLAIN", "RESOLVE"],
@@ -1848,14 +1912,14 @@ check("regression guard: no other catalog entry's severity or actionKind changed
     VENDOR_SWITCHED_AFTER_EXTRACTION: ["MUST_EXPLAIN", "RESOLVE"],
     TAX_CHANGED_AFTER_EXTRACTION: ["MUST_EXPLAIN", "RESOLVE"],
     FORM_TOTAL_DIFFERS_FROM_DOCUMENT: ["MUST_EXPLAIN", "RESOLVE"],
-    GST_TREATMENT_NOT_SET: ["MUST_FIX", "FIX_IN_FORM"],
-    TAX_TOTAL_DOES_NOT_RECONCILE: ["MUST_FIX", "FIX_IN_FORM"],
+    GST_TREATMENT_NOT_SET: ["MUST_FIX", "FIX_OR_RESOLVE"],
+    TAX_TOTAL_DOES_NOT_RECONCILE: ["MUST_FIX", "FIX_OR_RESOLVE"],
     NET_PAYABLE_MANUALLY_OVERRIDDEN: ["MUST_EXPLAIN", "RESOLVE"],
     TAX_TYPE_CONTRADICTS_PLACE_OF_SUPPLY: ["MUST_EXPLAIN", "RESOLVE"],
     TAX_CHARGED_BY_UNREGISTERED_VENDOR: ["MUST_EXPLAIN", "RESOLVE"],
     TDS_SECTION_DIFFERS_FROM_VENDOR_MASTER: ["WORTH_CHECKING", "RESOLVE"],
     TDS_RATE_OVERRIDDEN: ["WORTH_CHECKING", "RESOLVE"],
-    HSN_SAC_CODE_MISSING: ["MUST_FIX", "FIX_IN_FORM"],
+    HSN_SAC_CODE_MISSING: ["MUST_FIX", "FIX_OR_RESOLVE"],
     UNUSUAL_TAX_RATE: ["WORTH_CHECKING", "RESOLVE"],
   };
   const actualKeys = Object.keys(INVOICE_FLAG_CATALOG).sort();
@@ -3580,6 +3644,77 @@ check("no invoice loaded (null) -> cannot reopen", () => {
 });
 
 // ---------------------------------------------------------------------------
+console.log("canResolveInvoiceFlag — View Invoice Resolve gate (confirmed backend contract)");
+
+const MAKER_IDENTITY = { canManageInvoices: true };
+const CHECKER_IDENTITY = { canCheckInvoices: true };
+const ADMIN_IDENTITY = { isCorporateAdmin: true };
+const MASTER_ADMIN_IDENTITY = { isMasterAdmin: true };
+const APPROVER_ONLY_IDENTITY = { canApproveInvoices: true };
+
+[
+  ["Saved", true],
+  ["Draft", true],
+  ["Needs Correction", true],
+  ["Pending Checker", true],
+  ["Pending Approval", true],
+  ["Vendor Approval Pending", true],
+  ["Approved", true],
+  ["Pending Payment", true],
+].forEach(([status, expected]) => {
+  check(`Maker on "${status}" -> ${expected}`, () => {
+    assert.equal(canResolveInvoiceFlag({ status }, MAKER_IDENTITY), expected);
+  });
+});
+
+[
+  ["Paid", false],
+  ["Cancelled", false],
+  ["Canceled", false],
+  ["Rejected", false],
+  ["Vendor Rejected", false],
+].forEach(([status, expected]) => {
+  check(`Maker on "${status}" -> ${expected} (blocked regardless of role)`, () => {
+    assert.equal(canResolveInvoiceFlag({ status }, MAKER_IDENTITY), expected);
+    assert.equal(canResolveInvoiceFlag({ status }, ADMIN_IDENTITY), expected);
+  });
+});
+
+check("Checker on an allowed status -> true", () => {
+  assert.equal(canResolveInvoiceFlag({ status: "Pending Checker" }, CHECKER_IDENTITY), true);
+});
+
+check("Corp Admin on an allowed status -> true", () => {
+  assert.equal(canResolveInvoiceFlag({ status: "Approved" }, ADMIN_IDENTITY), true);
+});
+
+check("Master Admin on an allowed status -> true", () => {
+  assert.equal(canResolveInvoiceFlag({ status: "Pending Payment" }, MASTER_ADMIN_IDENTITY), true);
+});
+
+check("pure Approver (no maker/checker/admin) -> false, even on an otherwise-allowed status", () => {
+  assert.equal(canResolveInvoiceFlag({ status: "Pending Approval" }, APPROVER_ONLY_IDENTITY), false);
+});
+
+check("a Checker who also happens to hold Approver permission is still allowed via canCheckInvoices", () => {
+  assert.equal(
+    canResolveInvoiceFlag({ status: "Pending Approval" }, { canCheckInvoices: true, canApproveInvoices: true }),
+    true,
+  );
+});
+
+check("no identity at all -> false", () => {
+  assert.equal(canResolveInvoiceFlag({ status: "Saved" }, {}), false);
+  assert.equal(canResolveInvoiceFlag({ status: "Saved" }), false);
+});
+
+check("unrecognised/missing status -> false (fail-closed allowlist, not a blocklist)", () => {
+  assert.equal(canResolveInvoiceFlag({ status: "Some Future Status" }, MAKER_IDENTITY), false);
+  assert.equal(canResolveInvoiceFlag({ status: "" }, MAKER_IDENTITY), false);
+  assert.equal(canResolveInvoiceFlag(null, MAKER_IDENTITY), false);
+});
+
+// ---------------------------------------------------------------------------
 console.log("selectBlockingFlagsResolvedByOthers — resolved-by-maker callout counting");
 
 const makeResolvedFlag = (overrides = {}) => ({
@@ -3803,6 +3938,135 @@ check("a per-line flag with no lineId in evidence (defensive fixture) resolves l
 });
 
 // ---------------------------------------------------------------------------
+console.log("FIX_OR_RESOLVE rollout — all remaining Fix-in-Form flags now also support Resolve");
+
+// Every flag that used to be plain FIX_IN_FORM (DUE_DATE_NOT_SET was
+// converted separately, earlier) is now FIX_OR_RESOLVE, with a
+// resolveWarning explaining what resolving does and doesn't change. One
+// loop-based check covers all 9 rather than 9 near-identical ones — the
+// underlying mechanism (dual-button rendering, signature-based lifecycle)
+// is already proven generic by DUE_DATE_NOT_SET's own dedicated tests
+// above; what's left to prove here is that the catalog conversion itself
+// landed correctly for every flag, and that the genuinely different
+// situationSignature shapes among these 9 (multi-value, data-bearing,
+// per-line) still behave correctly once paired with FIX_OR_RESOLVE.
+const NEWLY_CONVERTED_FIX_OR_RESOLVE_FLAGS = [
+  "BRANCH_GSTIN_CONFLICT",
+  "DUE_DATE_PRECEDES_BILLING_DATE",
+  "REQUIRED_DETAILS_MISSING",
+  "RECOMMENDED_DETAILS_MISSING",
+  "LINE_GROUP_BRANCH_UNASSIGNED",
+  "EXPENSE_TYPE_UNASSIGNED",
+  "GST_TREATMENT_NOT_SET",
+  "HSN_SAC_CODE_MISSING",
+  "TAX_TOTAL_DOES_NOT_RECONCILE",
+];
+
+check("all 9 newly-converted flags are FIX_OR_RESOLVE with a non-empty resolveWarning; DUE_DATE_NOT_SET (converted earlier) is unchanged", () => {
+  NEWLY_CONVERTED_FIX_OR_RESOLVE_FLAGS.forEach((key) => {
+    const entry = INVOICE_FLAG_CATALOG[key];
+    assert.ok(entry, `${key}: missing from the catalog entirely`);
+    assert.equal(entry.actionKind, INVOICE_FLAG_ACTION.FIX_OR_RESOLVE, `${key}: actionKind`);
+    assert.equal(typeof entry.resolveWarning, "string", `${key}: resolveWarning`);
+    assert.ok(entry.resolveWarning.length > 0, `${key}: resolveWarning is empty`);
+  });
+  assert.equal(INVOICE_FLAG_CATALOG.DUE_DATE_NOT_SET.actionKind, INVOICE_FLAG_ACTION.FIX_OR_RESOLVE);
+});
+
+check("no other catalog entry was accidentally left on or moved to FIX_IN_FORM — the rollout was exhaustive", () => {
+  const stillFixInFormOnly = Object.values(INVOICE_FLAG_CATALOG).filter(
+    (entry) => entry.actionKind === INVOICE_FLAG_ACTION.FIX_IN_FORM,
+  );
+  assert.deepEqual(stillFixInFormOnly, [], "every flag that had FIX_IN_FORM should now be FIX_OR_RESOLVE");
+});
+
+check("HSN_SAC_CODE_MISSING (per-line): resolving line A does not affect line B's flag, same as the pre-existing per-line RESOLVE precedent (UNUSUAL_TAX_RATE), now proven for FIX_OR_RESOLVE too", () => {
+  const twoLines = {
+    currency: "INR",
+    lineItemMode: "DETAILED",
+    lineItems: [
+      { id: "line-a", description: "Item A", hsnSac: "", tax: "CGST + SGST 18%" },
+      { id: "line-b", description: "Item B", hsnSac: "", tax: "CGST + SGST 18%" },
+    ],
+  };
+  const instances = evaluateInvoiceFlags(twoLines, {});
+  const lineA = instances.find((i) => i.instanceId === "HSN_SAC_CODE_MISSING:line-a");
+  assert.ok(lineA, "sanity: line-a fires");
+  const resolutions = {
+    "HSN_SAC_CODE_MISSING:line-a": {
+      key: "HSN_SAC_CODE_MISSING",
+      status: "RESOLVED",
+      reason: "Vendor confirmed this line is exempt; no HSN applies.",
+      resolvedSituationSignature: lineA.situationSignature,
+    },
+  };
+  const merged = mergeFlagsWithResolutions(instances, resolutions);
+  assert.equal(merged.find((i) => i.instanceId === "HSN_SAC_CODE_MISSING:line-a").status, "RESOLVED");
+  assert.equal(merged.find((i) => i.instanceId === "HSN_SAC_CODE_MISSING:line-b").status, "ACTIVE");
+});
+
+check("REQUIRED_DETAILS_MISSING resolved while 2 fields are missing reopens once only 1 of the 2 is fixed (materially different situation — the existing 'resolve then change to a different form of the same problem' rule, unaffected by this rollout)", () => {
+  const bothMissing = evaluateInvoiceFlags(
+    { ...baseFormDataForChecklist, invoiceNumber: "", gstTreatment: "" },
+    { checklistOptions: {} },
+  );
+  const originalSignature = bothMissing.find((i) => i.key === "REQUIRED_DETAILS_MISSING").situationSignature;
+  const resolutions = {
+    REQUIRED_DETAILS_MISSING: {
+      key: "REQUIRED_DETAILS_MISSING",
+      status: "RESOLVED",
+      reason: "Invoice number and GST Treatment will be added once the vendor confirms.",
+      resolvedSituationSignature: originalSignature,
+    },
+  };
+
+  const onlyGstTreatmentStillMissing = evaluateInvoiceFlags(
+    { ...baseFormDataForChecklist, invoiceNumber: "INV-002", gstTreatment: "" },
+    { checklistOptions: {} },
+  );
+  const merged = mergeFlagsWithResolutions(onlyGstTreatmentStillMissing, resolutions);
+  assert.equal(
+    merged.find((i) => i.key === "REQUIRED_DETAILS_MISSING").status,
+    "ACTIVE",
+    "the missing-fields set changed (invoiceNumber fixed, gstTreatment didn't) -> old reason no longer covers it -> reopens",
+  );
+});
+
+check("TAX_TOTAL_DOES_NOT_RECONCILE resolved stays resolved if the exact same mismatch persists, but reopens if the mismatch amount changes", () => {
+  const originalMismatch = evaluateInvoiceFlags(
+    { ...baseFormDataForChecklist, totalTaxAmount: 100, lastReconciledTaxTotal: 180 },
+    { checklistOptions: {} },
+  );
+  const signature = originalMismatch.find((i) => i.key === "TAX_TOTAL_DOES_NOT_RECONCILE").situationSignature;
+  const resolutions = {
+    TAX_TOTAL_DOES_NOT_RECONCILE: {
+      key: "TAX_TOTAL_DOES_NOT_RECONCILE",
+      status: "RESOLVED",
+      reason: "Confirmed with finance this was a known OCR misread on the original document; the invoice is correct as filed.",
+      resolvedSituationSignature: signature,
+    },
+  };
+
+  const sameMismatchAgain = evaluateInvoiceFlags(
+    { ...baseFormDataForChecklist, totalTaxAmount: 100, lastReconciledTaxTotal: 180 },
+    { checklistOptions: {} },
+  );
+  const mergedSame = mergeFlagsWithResolutions(sameMismatchAgain, resolutions);
+  assert.equal(mergedSame.find((i) => i.key === "TAX_TOTAL_DOES_NOT_RECONCILE").status, "RESOLVED");
+
+  const differentMismatch = evaluateInvoiceFlags(
+    { ...baseFormDataForChecklist, totalTaxAmount: 50, lastReconciledTaxTotal: 180 },
+    { checklistOptions: {} },
+  );
+  const mergedDifferent = mergeFlagsWithResolutions(differentMismatch, resolutions);
+  assert.equal(
+    mergedDifferent.find((i) => i.key === "TAX_TOTAL_DOES_NOT_RECONCILE").status,
+    "ACTIVE",
+    "a genuinely different mismatch amount is a different situation -> the old resolution doesn't cover it -> reopens",
+  );
+});
+
+// ---------------------------------------------------------------------------
 console.log("catalog schema sanity check");
 
 check("every catalog entry has the required shape, no contradictions", () => {
@@ -3818,6 +4082,35 @@ check("every catalog entry has the required shape, no contradictions", () => {
       `${key}: cannot be both neverDisableable and canDisable`,
     );
   });
+});
+
+// ---------------------------------------------------------------------------
+console.log("CHECKLIST_FLAGS subscription gate — activeInvoiceConfiguration parsing");
+
+// isChecklistFlagsEnabled is the pure, RTK/React-free half of the
+// subscription gate (useChecklistFlagsSubscription.js just wraps this with
+// useRBAC() to read corporateScreens.activeInvoiceConfiguration, which isn't
+// unit-testable here without a React harness). This pins the fail-closed
+// contract: an org with no CHECKLIST_FLAGS entry — including one that has
+// never sent activeInvoiceConfiguration at all — must resolve to disabled,
+// not enabled.
+check("isChecklistFlagsEnabled: absent/empty activeInvoiceConfiguration -> false (fail-closed)", () => {
+  assert.equal(isChecklistFlagsEnabled([]), false);
+  assert.equal(isChecklistFlagsEnabled(undefined), false);
+});
+
+check("isChecklistFlagsEnabled: CHECKLIST_FLAGS present -> true", () => {
+  assert.equal(isChecklistFlagsEnabled(["CHECKLIST_FLAGS"]), true);
+  assert.equal(isChecklistFlagsEnabled([INVOICE_CONFIG_SECTIONS.CHECKLIST_FLAGS]), true);
+});
+
+check("isChecklistFlagsEnabled: other sections present but not CHECKLIST_FLAGS -> false", () => {
+  assert.equal(isChecklistFlagsEnabled(["INTERNAL_CHECKLIST", "REF_NO"]), false);
+});
+
+check("isChecklistFlagsEnabled: is case/whitespace-normalizing, same as its sibling INVOICE_CONFIG_SECTIONS checks", () => {
+  assert.equal(isChecklistFlagsEnabled(["checklist_flags"]), true);
+  assert.equal(isChecklistFlagsEnabled([" Checklist-Flags "]), true);
 });
 
 // ---------------------------------------------------------------------------

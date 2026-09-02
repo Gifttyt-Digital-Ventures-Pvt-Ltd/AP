@@ -174,6 +174,28 @@ export const invoicesVendorsApi = serviceApi.injectEndpoints({
         "Reports",
       ],
     }),
+    // PUT /invoices/{id}/flags/resolutions
+    // Dedicated endpoint for View Invoice's read-only Resolve action —
+    // independent of the invoice editable-status gate (allowed through
+    // Approved/Pending Payment, where canEditInvoice is false), per the
+    // confirmed backend contract. Body must be the COMPLETE flagResolutions
+    // map (a full replace, not a per-flag patch) — callers are responsible
+    // for sending the whole map, this endpoint does not merge server-side.
+    // Response is { flagResolutions }, not the full invoice. Edit Invoice's
+    // own Save continues to go through the plain updateInvoice mutation
+    // above and must never call this endpoint.
+    updateInvoiceFlagResolutions: builder.mutation({
+      query: ({ id, body }) => ({
+        url: `/invoices/${id}/flags/resolutions`,
+        method: "PUT",
+        body,
+      }),
+      invalidatesTags: (result, error, { id } = {}) => [
+        { type: "Invoices", id },
+        "Invoices",
+        "Approvals",
+      ],
+    }),
     forwardInvoice: builder.mutation({
       query: (body) => ({
         url: "/invoices/forward",
@@ -410,6 +432,7 @@ export const {
   useUpdateInvoiceMutation,
   useUpdateInvoiceInternalChecklistMutation,
   useUpdateInvoiceFundingMutation,
+  useUpdateInvoiceFlagResolutionsMutation,
   useForwardInvoiceMutation,
   useDeleteInvoiceMutation,
   useCancelInvoiceMutation,

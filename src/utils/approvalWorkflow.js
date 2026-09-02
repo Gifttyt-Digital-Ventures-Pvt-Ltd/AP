@@ -391,6 +391,39 @@ export const getInvoiceEditBlockedMessage = (invoice, identity = {}) => {
   return `Invoices in ${status || 'this'} status cannot be edited`;
 };
 
+/**
+ * Checklist Flags "Resolve" gate — deliberately NOT derived from
+ * canEditInvoice above: Resolve is allowed on Approved/Pending Payment
+ * (canEditInvoice is not), bypasses the Accounting Ready lock and
+ * checker-edit-config gate entirely, and excludes pure Approvers (who CAN
+ * edit under some canEditInvoice paths via canCheckInvoices overlap, but
+ * must not resolve per the confirmed backend contract). Fail-closed
+ * allowlist, not a blocklist: an unrecognised/future status is blocked by
+ * default rather than silently permitted.
+ */
+const FLAG_RESOLUTION_ALLOWED_STATUSES = new Set([
+  "SAVED",
+  "DRAFT",
+  "NEEDS_CORRECTION",
+  "PENDING_CHECKER",
+  "PENDING_APPROVAL",
+  "PENDING_APPROVER", // alias normalizeWorkflowStatus itself also recognises
+  "VENDOR_APPROVAL_PENDING",
+  "APPROVED",
+  "PENDING_PAYMENT",
+]);
+
+export const canResolveInvoiceFlag = (invoice, identity = {}) => {
+  const normalizedStatus = String(invoice?.status || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "_");
+  if (!FLAG_RESOLUTION_ALLOWED_STATUSES.has(normalizedStatus)) return false;
+
+  const { canManageInvoices, canCheckInvoices, isCorporateAdmin, isMasterAdmin } = identity;
+  return Boolean(canManageInvoices || canCheckInvoices || isCorporateAdmin || isMasterAdmin);
+};
+
 export const canDeleteInvoice = (status, canDeleteInvoices) => {
   if (!canDeleteInvoices) return false;
   return INVOICE_DELETABLE_STATUSES.has(normalizeWorkflowStatus(status));

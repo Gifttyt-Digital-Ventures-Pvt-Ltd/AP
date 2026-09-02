@@ -363,6 +363,25 @@ const Approvals = () => {
     }
   }, [searchParams, setSearchParams]);
 
+  // View Invoice -> Fix in Form: closes View, then hands off to the hook's
+  // own handleFixInvoiceFlagInFormFromView (which opens Edit for this same
+  // invoice and reuses the existing field-navigation behavior once the Edit
+  // form mounts) — viewDialogOpen/viewInvoice live here in Approvals.jsx,
+  // not in the hook, so only the "close View" half belongs in this file.
+  const handleFixInFormFromView = (flag) => {
+    setViewDialogOpen(false);
+    handleFixInvoiceFlagInFormFromView(viewInvoice, flag);
+  };
+
+  // View Invoice -> Resolve: keeps viewInvoice's flagResolutions in sync
+  // after InvoiceViewFlagsSection persists a resolve via the dedicated
+  // endpoint, so a subsequent Fix in Form (which reopens Edit from this same
+  // viewInvoice) reflects the just-resolved flag rather than a stale
+  // pre-resolve snapshot.
+  const handleFlagResolutionsSyncedFromView = useCallback((nextFlagResolutions) => {
+    setViewInvoice((prev) => (prev ? { ...prev, flagResolutions: nextFlagResolutions } : prev));
+  }, []);
+
   const handleOpenInvoiceHistory = async (invoice) => {
     setHistorySheetInvoice(normalizeInvoice(invoice));
     setHistorySheetOpen(true);
@@ -410,7 +429,9 @@ const Approvals = () => {
 
   const {
     canEdit,
+    canResolveFlags,
     handleEditInvoice,
+    handleFixInvoiceFlagInFormFromView,
     findVendorByName,
     findVendorById,
     editDialogs,
@@ -787,6 +808,10 @@ const Approvals = () => {
             isCategoryFeatureEnabled={isCategoryFeatureEnabled}
             isCampaignFeatureEnabled={isCampaignFeatureEnabled}
             invoiceFlagsOrgContext={invoiceFlagsOrgContext}
+            canResolveInvoiceFlags={canResolveFlags(viewInvoice)}
+            canEditSelectedInvoice={canEdit(viewInvoice)}
+            onFixInFormNavigate={handleFixInFormFromView}
+            onFlagResolutionsSynced={handleFlagResolutionsSyncedFromView}
           />
         }
       />

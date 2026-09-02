@@ -36,6 +36,10 @@ export const INVOICE_FLAG_ACTION = {
   FIX_IN_FORM: "FIX_IN_FORM",
   RESOLVE: "RESOLVE",
   VIEW_AND_RESOLVE: "VIEW_AND_RESOLVE",
+  // Offers both actions side by side — for a flag where the underlying data
+  // is sometimes genuinely unavailable (e.g. Due Date Not Set), so the user
+  // isn't forced to invent a value just to clear it. See InvoiceFlagCard.jsx.
+  FIX_OR_RESOLVE: "FIX_OR_RESOLVE",
 };
 
 export const INVOICE_FLAG_GROUP = {
@@ -55,7 +59,7 @@ export const INVOICE_FLAG_STATUS = {
 };
 
 const { MUST_FIX, MUST_EXPLAIN, WORTH_CHECKING, JUST_SO_YOU_KNOW } = INVOICE_FLAG_SEVERITY;
-const { FIX_IN_FORM, RESOLVE, VIEW_AND_RESOLVE } = INVOICE_FLAG_ACTION;
+const { FIX_IN_FORM, RESOLVE, VIEW_AND_RESOLVE, FIX_OR_RESOLVE } = INVOICE_FLAG_ACTION;
 const {
   ORG_DOCUMENT,
   VENDOR,
@@ -129,7 +133,8 @@ export const INVOICE_FLAG_CATALOG = {
     group: ORG_DOCUMENT,
     title: "Branch / GSTIN Conflict",
     severity: MUST_FIX,
-    actionKind: FIX_IN_FORM,
+    actionKind: FIX_OR_RESOLVE,
+    resolveWarning: "Resolving does not change the selected branch or GSTIN. The conflict will remain on this invoice.",
     fields: ["billingGstin"],
     describe: (ctx) =>
       `The selected branch is registered under ${ctx?.registeredGstin ?? ""}; the invoice has ${ctx?.billingGstin ?? ""} selected.`,
@@ -414,7 +419,8 @@ export const INVOICE_FLAG_CATALOG = {
     group: DATES_PERIOD,
     title: "Due Date Precedes Billing Date",
     severity: MUST_FIX,
-    actionKind: FIX_IN_FORM,
+    actionKind: FIX_OR_RESOLVE,
+    resolveWarning: "Resolving does not change the due date or billing date. The dates will remain as entered.",
     fields: ["dueDate", "invoiceDate"],
     describe: () => "The due date is earlier than the billing date.",
     canDisable: false,
@@ -439,14 +445,25 @@ export const INVOICE_FLAG_CATALOG = {
   },
   // Deliberately independent of the checklist's own Due Date required/optional
   // designation, which stays optional — see flagRules/datesAccountingPeriod.js.
+  // FIX_OR_RESOLVE (not plain FIX_IN_FORM): a due date isn't always knowable
+  // — the user shouldn't have to invent one just to clear this. "Fix in
+  // form" still jumps to the Due Date field for when a real date exists;
+  // "Resolve" lets the maker explicitly acknowledge there isn't one, without
+  // writing anything into dueDate. Both share the exact same lifecycle
+  // record/merge behavior every other flag already uses — situationSignature
+  // is always {} here (there's only one way to be "missing"), so once
+  // resolved it stays resolved regardless of unrelated edits, and
+  // auto-clears the moment a real due date is actually entered later — see
+  // mergeFlagsWithResolutions, unchanged.
   DUE_DATE_NOT_SET: {
     key: "DUE_DATE_NOT_SET",
     group: DATES_PERIOD,
     title: "Due Date Not Set",
     severity: MUST_FIX,
-    actionKind: FIX_IN_FORM,
+    actionKind: FIX_OR_RESOLVE,
     fields: ["dueDate"],
     describe: () => "No due date is set, and none could be determined automatically.",
+    resolveWarning: "The due date will remain empty. You can add it later by editing this invoice.",
     canDisable: false,
     neverDisableable: false,
     configurableStrictness: false,
@@ -507,7 +524,8 @@ export const INVOICE_FLAG_CATALOG = {
     group: COMPLETENESS,
     title: "Required Details Missing",
     severity: MUST_FIX,
-    actionKind: FIX_IN_FORM,
+    actionKind: FIX_OR_RESOLVE,
+    resolveWarning: "Resolving does not fill in the missing required details. They will remain empty on this invoice.",
     fields: [], // deliberately empty — "fix in form" here just closes the dialog, checklist shows which ones
     describe: (ctx) =>
       `${ctx?.missingRequiredLabels?.length || 0} required checklist item(s) still empty.`,
@@ -522,7 +540,8 @@ export const INVOICE_FLAG_CATALOG = {
     group: COMPLETENESS,
     title: "Recommended Details Missing",
     severity: MUST_FIX,
-    actionKind: FIX_IN_FORM,
+    actionKind: FIX_OR_RESOLVE,
+    resolveWarning: "Resolving does not fill in Category or Department. They will remain empty on this invoice.",
     fields: ["categoryId", "departmentId"],
     describe: () => "Category or Department is empty where your organisation expects them for reporting.",
     canDisable: false,
@@ -577,7 +596,8 @@ export const INVOICE_FLAG_CATALOG = {
     group: COMPLETENESS,
     title: "Line Group/Branch Unassigned",
     severity: MUST_FIX,
-    actionKind: FIX_IN_FORM,
+    actionKind: FIX_OR_RESOLVE,
+    resolveWarning: "Resolving does not assign a group or branch to this line. It will remain unassigned.",
     fields: [],
     describe: (ctx) =>
       `Line ${ctx?.lineNumber ?? "?"}${ctx?.lineDescription ? ` (${ctx.lineDescription})` : ""} has no group or branch selected.`,
@@ -594,7 +614,8 @@ export const INVOICE_FLAG_CATALOG = {
     group: COMPLETENESS,
     title: "Expense Type Unassigned",
     severity: MUST_FIX,
-    actionKind: FIX_IN_FORM,
+    actionKind: FIX_OR_RESOLVE,
+    resolveWarning: "Resolving does not assign an expense type to this line. It will remain unassigned.",
     fields: [],
     describe: (ctx) =>
       `Line ${ctx?.lineNumber ?? "?"}${ctx?.lineDescription ? ` (${ctx.lineDescription})` : ""} has no expense type selected.`,
@@ -757,7 +778,8 @@ export const INVOICE_FLAG_CATALOG = {
     group: TAX_COMPLIANCE,
     title: "GST Treatment Not Set",
     severity: MUST_FIX,
-    actionKind: FIX_IN_FORM,
+    actionKind: FIX_OR_RESOLVE,
+    resolveWarning: "Resolving does not set GST Treatment. It will remain N/A on this invoice.",
     fields: ["gstTreatment"],
     describe: () => "Both the organisation and the vendor are GST-registered, but GST Treatment is still N/A.",
     canDisable: false,
@@ -766,12 +788,23 @@ export const INVOICE_FLAG_CATALOG = {
     requiresReasonAlways: false,
     suppresses: [],
   },
+  // FIX_OR_RESOLVE by explicit product decision, despite neverDisableable —
+  // "neverDisableable" only means an organisation can't turn the flag off
+  // org-wide; it's orthogonal to whether one instance can be individually
+  // resolved with a reason (GSTIN_MISMATCH, DUPLICATE_INVOICE, and
+  // NET_PAYABLE_MANUALLY_OVERRIDDEN are all also neverDisableable and
+  // already RESOLVE-capable). "Fix in form" here stays the pre-existing
+  // special case (see handleFixInvoiceFlagInForm in InvoicesPage.jsx /
+  // useApprovalsInvoiceEdit.jsx) — it syncs Total Tax to the line items
+  // directly rather than scrolling anywhere; Resolve is the new addition,
+  // for when the mismatch itself needs a written explanation instead.
   TAX_TOTAL_DOES_NOT_RECONCILE: {
     key: "TAX_TOTAL_DOES_NOT_RECONCILE",
     group: TAX_COMPLIANCE,
     title: "Tax Total Does Not Reconcile",
     severity: MUST_FIX,
-    actionKind: FIX_IN_FORM,
+    actionKind: FIX_OR_RESOLVE,
+    resolveWarning: "Resolving does not change the Total Tax or reconcile it with the line items. The mismatch will remain on this invoice.",
     fields: [], // no single field to jump to — same "closes the dialog" pattern as REQUIRED_DETAILS_MISSING
     describe: (ctx) =>
       `The declared Total Tax (${ctx?.declaredTaxTotal ?? ""}) doesn't match what the line items compute to (${ctx?.reconciledTaxTotal ?? ""}).`,
@@ -873,7 +906,8 @@ export const INVOICE_FLAG_CATALOG = {
     group: TAX_COMPLIANCE,
     title: "HSN/SAC Code Missing",
     severity: MUST_FIX,
-    actionKind: FIX_IN_FORM,
+    actionKind: FIX_OR_RESOLVE,
+    resolveWarning: "Resolving does not add an HSN/SAC code to this line. It will remain missing.",
     fields: [],
     describe: (ctx) =>
       `Line ${ctx?.lineNumber ?? "?"}${ctx?.lineDescription ? ` (${ctx.lineDescription})` : ""} has tax applied but no HSN/SAC code.`,
