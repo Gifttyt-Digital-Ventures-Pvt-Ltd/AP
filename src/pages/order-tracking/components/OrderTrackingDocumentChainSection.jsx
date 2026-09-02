@@ -11,9 +11,21 @@ const CHAIN_TYPE_LABELS = { PO: "Purchase Order", GRN: "Goods Receipt", PI: "Pro
  * state plus number/date/value, multi-document safe (no assumption of
  * exactly one GRN/TI per order). Document numbers are clickable.
  */
-const OrderTrackingDocumentChainSection = ({ documentChain, currency, onOpenDocument }) => (
+const OrderTrackingDocumentChainSection = ({
+  documentChain,
+  currency,
+  onOpenDocument,
+  canUseGrn = true,
+  canUsePi = true,
+  canUseTi = true,
+}) => (
   <div className="space-y-2" data-testid="order-tracking-document-chain-section">
-    {documentChain.map((entry) => {
+    {documentChain.filter((entry) => {
+      if (entry.type === "GRN") return canUseGrn;
+      if (entry.type === "PI") return canUsePi;
+      if (entry.type === "TI") return canUseTi;
+      return true;
+    }).map((entry) => {
       const documents = (entry.documents || []).filter(
         (doc) => doc.state !== "UNLINKED"
       );

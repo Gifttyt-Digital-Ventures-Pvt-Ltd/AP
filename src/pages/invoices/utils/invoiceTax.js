@@ -27,6 +27,12 @@ export const isLineItemLevelSelection = (value = "") => {
 export const isInrInvoiceCurrency = (currency) =>
   normalizeCurrencyCode(currency) === DEFAULT_CURRENCY;
 
+/** One combined tax figure out of a calculateInvoiceTotals() result — the same INR/foreign branch repeated at several call sites, centralized here to avoid them drifting apart. */
+export const getTotalTaxAmountFromTotals = (totals) =>
+  totals?.isInr
+    ? (Number(totals.cgst) || 0) + (Number(totals.sgst) || 0) + (Number(totals.igst) || 0)
+    : Number(totals?.foreignTax) || 0;
+
 export const normalizeLineItemDiscountTypeForForm = (
   discountType = "%",
   currency = DEFAULT_CURRENCY,
@@ -105,8 +111,18 @@ export const applyInrLineItemTax = (item, tax = DEFAULT_INR_TAX) => ({
   taxRate: "",
 });
 
+// Stable per-line identity, same shape/precedent as vendor bank accounts'
+// own generated id (VendorBankDetailsEditor.jsx's createEmptyBankAccount) —
+// frontend-only, generated once at creation, never regenerated. Needed so
+// per-line invoice flags (HSN/SAC Code Missing, Unusual Tax Rate) have a
+// stable instanceId that survives edits/reordering instead of the array
+// index the rest of this file's line-item handlers use.
+export const generateLineItemId = () =>
+  `line-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+
 export const createDefaultLineItem = (currency = DEFAULT_CURRENCY) => {
   const base = {
+    id: generateLineItemId(),
     description: "",
     ledger: "",
     ledgerId: "",
@@ -433,6 +449,11 @@ export const mapExtractedLineItemToForm = (
         : 0;
 
   return {
+    // Reuses the backend's own line-item id when this is an existing/saved
+    // invoice being re-hydrated for edit (so identity survives a reload,
+    // not just an in-session edit); generates a stable frontend-only id
+    // otherwise (OCR-extracted line, never saved before).
+    id: item.id || item.lineItemId || generateLineItemId(),
     description: item.description || "",
     ledger: item.ledger || item.ledgerName || item.ledger_name || "",
     ledgerName: item.ledgerName || item.ledger_name || item.ledger || "",
@@ -705,6 +726,11 @@ export const calculateInvoiceTotals = ({
     invoiceDiscountAmount: boundedInvoiceDiscountAmount,
     roundOff: normalizedRoundOff,
     total,
+    // Pure line-item-driven total, before the scanned-total override above —
+    // `total` pins itself to invoiceTotal whenever one is supplied, so it can
+    // never disagree with the document by construction. Invoice Flags'
+    // "Form Total Differs From Document" needs this unpinned figure instead.
+    calculatedTotal,
     isInr: isInrInvoiceCurrency(currency),
   };
 };

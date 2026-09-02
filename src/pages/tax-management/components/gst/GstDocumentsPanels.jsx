@@ -50,6 +50,7 @@ import {
 } from '../../utils/gstApiMappers';
 import OrgGstCredentialFields from './OrgGstCredentialFields';
 import GstPortalOtpDialog from './GstPortalOtpDialog';
+import { GstReconChecklistTable, GstReconSplitPanel } from './GstReconChecklistPanel';
 import { getApiErrorMessage } from '../../hooks/useGstTaxpayerSession';
 import { toast } from 'sonner';
 import { formatCurrency } from '../../utils/taxFormatting';
@@ -113,11 +114,113 @@ const getHistoryMetaValue = (entry, keys) => {
   return '';
 };
 
+const normalizeGstinValue = (value) => String(value ?? '').trim().toUpperCase();
+
+const getGstDocumentSupplierGstin = (doc = {}) => (
+  doc.supplierGstin ??
+  doc.supplier_gstin ??
+  doc.gstin ??
+  doc.supplierGSTIN ??
+  ''
+);
+
+const getGstDocumentVendorName = (doc = {}) => (
+  doc.vendorName ??
+  doc.vendor_name ??
+  doc.supplierName ??
+  doc.supplier_name ??
+  doc.legalName ??
+  doc.legal_name ??
+  doc.tradeName ??
+  doc.trade_name ??
+  doc.vendor ??
+  ''
+);
+
+const getMatchingSelectedVendor = (doc, vendor) => {
+  if (!vendor) return null;
+  const docGstin = normalizeGstinValue(getGstDocumentSupplierGstin(doc));
+  const vendorGstin = normalizeGstinValue(vendor.gstin ?? vendor.supplierGstin ?? vendor.supplier_gstin);
+  return docGstin && vendorGstin && docGstin === vendorGstin ? vendor : null;
+};
+
+const getGstDocumentVendorInfo = (doc = {}, vendor = null) => {
+  const matchedVendor = getMatchingSelectedVendor(doc, vendor);
+  return {
+    name: getGstDocumentVendorName(doc) || matchedVendor?.name || null,
+    gstin: getGstDocumentSupplierGstin(doc) || matchedVendor?.gstin || null,
+  };
+};
+
+const getGstDocumentVendorLabel = (row = {}, vendors = []) => {
+  const rowName = getGstDocumentVendorName(row);
+  if (rowName) return rowName;
+
+  const rowVendorId = row.vendorId ?? row.vendor_id;
+  const rowGstin = normalizeGstinValue(getGstDocumentSupplierGstin(row));
+  const matchedVendor = vendors.find((entry) => {
+    const entryId = entry.id ?? entry.vendorId ?? entry.vendor_id;
+    const entryGstin = normalizeGstinValue(entry.gstin ?? entry.supplierGstin ?? entry.supplier_gstin);
+    return (rowVendorId && String(entryId) === String(rowVendorId)) || (rowGstin && entryGstin === rowGstin);
+  });
+
+  return matchedVendor?.name ?? '—';
+};
+
+const getDocumentReconCriteria = (doc = {}) => {
+  const criteria =
+    doc.criteria ??
+    doc.reconciliationCriteria ??
+    doc.reconciliation_criteria ??
+    doc.checklist ??
+    doc.reconciliationChecklist ??
+    doc.reconciliation_checklist;
+  return Array.isArray(criteria) ? criteria : [];
+};
+
+const getDocumentReconSplit = (doc = {}) =>
+  doc.split ??
+  doc.taxSplit ??
+  doc.tax_split ??
+  doc.reconciliationSplit ??
+  doc.reconciliation_split ??
+  null;
+
+const getDocumentReconSlabs = (doc = {}) =>
+  doc.slabs ??
+  doc.rateSlabs ??
+  doc.rate_slabs ??
+  doc.reconciliationSlabs ??
+  doc.reconciliation_slabs ??
+  null;
+
+const DocumentReconComparisonSection = ({ doc }) => {
+  const criteria = getDocumentReconCriteria(doc);
+  const split = getDocumentReconSplit(doc);
+  const slabs = getDocumentReconSlabs(doc);
+  const hasComparison = criteria.length > 0 || Boolean(split) || Boolean(slabs);
+
+  if (!hasComparison) return null;
+
+  return (
+    <div className="space-y-3 rounded-md border bg-white p-3">
+      <div>
+        <p className="text-sm font-semibold">Reconciliation Comparison</p>
+        <p className="text-xs text-muted-foreground">
+          Platform values compared with GST portal values for this document.
+        </p>
+      </div>
+      {criteria.length > 0 ? <GstReconChecklistTable criteria={criteria} /> : null}
+      {split || slabs ? <GstReconSplitPanel split={split} slabs={slabs} /> : null}
+    </div>
+  );
+};
+
 const getDocumentHistoryVendor = (entry) => {
   const vendorName = getHistoryMetaValue(entry, ['vendorName', 'vendor_name', 'vendor']);
   const supplierGstin = getHistoryMetaValue(entry, ['supplierGstin', 'supplier_gstin', 'gstin']);
   if (vendorName && supplierGstin) return `${vendorName} · ${supplierGstin}`;
-  return vendorName || supplierGstin || 'All Vendors';
+  return vendorName || supplierGstin || '—';
 };
 
 const GST_MONTH_NUMBER_LABELS = {
@@ -281,13 +384,13 @@ const B2bInvoiceDrawerContent = ({ record, vendor }) => {
 
 const Gst2ADocDrawerContent = ({ doc, vendor }) => {
   const totalGst = docTotalGst(doc);
-  const vendorInfo = vendor || { name: doc.vendor, gstin: doc.gstin ?? doc.supplierGstin };
+  const vendorInfo = getGstDocumentVendorInfo(doc, vendor);
 
   return (
     <div className="space-y-4">
       <div className="rounded-md border bg-muted/20 p-4">
         <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vendor Information</p>
-        <p className="mt-2 font-semibold">{vendorInfo?.name ?? 'All Vendors'}</p>
+        <p className="mt-2 font-semibold">{vendorInfo.name ?? '—'}</p>
         <p className="font-mono text-xs text-muted-foreground">{vendorInfo?.gstin ?? '—'}</p>
         <div className="mt-3 flex flex-wrap gap-2">
           <TaxStatusBadge status={doc.documentType} />
@@ -329,7 +432,7 @@ const Gst2ADocDrawerContent = ({ doc, vendor }) => {
           <span className="text-sm">AP Match:</span>
           <TaxStatusBadge status={doc.apStatus} />
         </div>
-        {doc.apInvoiceNumber ? (
+        {/* {doc.apInvoiceNumber ? (
           <TaxDetailGrid
             items={[
               { label: 'AP Invoice', value: doc.apInvoiceNumber, mono: true },
@@ -339,14 +442,16 @@ const Gst2ADocDrawerContent = ({ doc, vendor }) => {
           />
         ) : (
           <p className="text-sm text-muted-foreground">No matching AP invoice found for this document.</p>
-        )}
+        )} */}
       </div>
+
+      <DocumentReconComparisonSection doc={doc} />
     </div>
   );
 };
 
 const Gst2BDocDrawerContent = ({ doc }) => {
-  const vendor = { name: doc.vendor, gstin: doc.gstin ?? doc.supplierGstin };
+  const vendor = getGstDocumentVendorInfo(doc);
   const totalGst = docTotalGst(doc);
   const itcStatus = doc.itcEligibility ?? doc.itc_status;
 
@@ -421,6 +526,8 @@ const Gst2BDocDrawerContent = ({ doc }) => {
           <p className="text-sm text-muted-foreground">No AP invoice linked — pending review.</p>
         )}
       </div>
+
+      <DocumentReconComparisonSection doc={doc} />
     </div>
   );
 };
@@ -507,7 +614,7 @@ const createB2bSnapshot = ({
   return {
     id: existingId ?? `snap-${orgGst}-${vendorId}-${month}-${fy}-${Date.now()}`,
     vendorId,
-    vendorName: vendor?.name ?? vendorName ?? 'All Vendors',
+    vendorName: vendor?.name ?? vendorName ?? '—',
     gstin: supplierGstin || vendor?.gstin || '—',
     orgGst,
     orgUserName,
@@ -543,7 +650,7 @@ const buildB2bSnapshotFromReconcileHistoryEntry = (entry, index, getVendor) => {
 
   return buildB2bSnapshotFromReconcileData(responseData, {
     vendorId: entry?.vendorId ?? entry?.vendor_id ?? responseData?.vendorId ?? responseData?.vendor_id ?? '',
-    vendorName: entry?.vendorName ?? entry?.vendor_name ?? responseData?.vendorName ?? responseData?.vendor_name ?? 'All Vendors',
+    vendorName: entry?.vendorName ?? entry?.vendor_name ?? responseData?.vendorName ?? responseData?.vendor_name ?? '—',
     month: displayMonth,
     fy: entry?.financialYear ?? entry?.financial_year ?? responseData?.financialYear ?? responseData?.financial_year ?? responseData?.fy ?? '',
     dateFrom: entry?.dateFrom ?? entry?.startDate ?? responseData?.dateFrom ?? responseData?.startDate ?? '',
@@ -614,7 +721,7 @@ const B2bReconciliationDetail = ({ snapshot, onBack, getVendor }) => {
       header: 'Supplier',
       render: (row) => (
         <div>
-          <p className="font-medium">{row.vendor ?? selectedVendor?.name ?? snapshot.vendorName ?? 'All Vendors'}</p>
+          <p className="font-medium">{row.vendor ?? selectedVendor?.name ?? snapshot.vendorName ?? '—'}</p>
           <p className="font-mono text-xs text-muted-foreground">{row.supplierGstin ?? row.gstin ?? snapshot.gstin ?? '—'}</p>
         </div>
       ),
@@ -1158,7 +1265,7 @@ const GstB2bTab = ({ orgGst, runWithSession }) => {
         <TaxEmptyState
           icon={ArrowUpDown}
           title="Select organisation GSTIN and reporting period"
-          description="Vendor is optional. Leave it as All Vendors to fetch the full GSTR-2A B2B reconciliation for the organisation GSTIN."
+          description="Vendor is optional. Leave it blank to fetch the full GSTR-2A B2B reconciliation for the organisation GSTIN."
         >
           <Button onClick={handleFetch} disabled={!canFetchWithOrgGst}><Play className="mr-2 h-4 w-4" />Fetch GST Records</Button>
         </TaxEmptyState>
@@ -1335,7 +1442,7 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
   const docColumns = [
     { key: 'documentType', header: 'Type', render: (row) => <TaxStatusBadge status={row.documentType} /> },
     { key: 'invoiceNumber', header: 'Document No.', cellClassName: 'font-mono text-xs' },
-    { key: 'vendor', header: 'Vendor', render: (row) => row.vendor ?? vendors.find((entry) => entry.id === row.vendor_id)?.name ?? '—' },
+    { key: 'vendor', header: 'Vendor', render: (row) => getGstDocumentVendorLabel(row, vendors) },
     { key: 'documentDate', header: 'Date' },
     { key: 'taxableValue', header: 'Taxable', render: (row) => formatCurrency(row.taxableValue), cellClassName: 'text-right' },
     { key: 'gst', header: 'GST', render: (row) => formatCurrency(docTotalGst(row)), cellClassName: 'text-right font-medium text-primary' },
@@ -1436,6 +1543,7 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
             vendorLabel="Vendor"
             variant="gst-form"
             vendorClassName="min-w-[210px]"
+            useConnectedVendorPicker
             onVendorChange={() => setFetched(false)}
           />
           <GstFormField label="Month" required>
@@ -1512,7 +1620,7 @@ const Gst2ADocumentsTab = ({ orgGst, runWithSession }) => {
 
           <TaxSectionCard
             title="GSTR-2A Document Register"
-            description={selectedVendor ? `${selectedVendor.name} · ${month} FY ${fy}` : `All vendors · ${month} FY ${fy}`}
+            description={selectedVendor ? `${selectedVendor.name} · ${month} FY ${fy}` : `${month} FY ${fy}`}
             actions={(
               <Button type="button" variant="outline" size="sm" onClick={() => setFetched(false)}>
                 <ArrowLeft className="mr-2 h-4 w-4" />
@@ -1709,7 +1817,7 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
   const b2bColumns = [
     { key: 'documentType', header: 'Type', render: (row) => <TaxStatusBadge status={row.documentType} /> },
     { key: 'invoiceNumber', header: 'Document No.', cellClassName: 'font-mono text-xs' },
-    { key: 'vendor', header: 'Vendor', render: (row) => row.vendor ?? '—' },
+    { key: 'vendor', header: 'Vendor', render: (row) => getGstDocumentVendorLabel(row, vendors) },
     { key: 'documentDate', header: 'Date' },
     { key: 'taxableValue', header: 'Taxable', render: (row) => formatCurrency(row.taxableValue), cellClassName: 'text-right' },
     { key: 'gst', header: 'GST', render: (row) => formatCurrency(docTotalGst(row)), cellClassName: 'text-right font-medium text-primary' },
@@ -1817,6 +1925,7 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
             vendorLabel="Vendor"
             variant="gst-form"
             vendorClassName="min-w-[200px]"
+            useConnectedVendorPicker
             onVendorChange={() => setFetched(false)}
           />
           <GstFormField label="Document Type">
@@ -1887,7 +1996,7 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
 
           <TaxSectionCard
             title="GSTR-2B Document Register"
-            description={`${month} FY ${fy}${selectedVendor ? ` · ${selectedVendor.name}` : ' · All vendors'}`}
+            description={`${month} FY ${fy}${selectedVendor ? ` · ${selectedVendor.name}` : ''}`}
             actions={(
               <Button type="button" variant="outline" size="sm" onClick={() => setFetched(false)}>
                 <ArrowLeft className="mr-2 h-4 w-4" />
@@ -1916,7 +2025,7 @@ const Gst2BDocumentsTab = ({ orgGst, runWithSession }) => {
 };
 
 export const GstDocumentsPanel = () => {
-  const [subTab, setSubTab] = useState('b2b');
+  const [subTab, setSubTab] = useState('2a-docs');
   const session = useGstTaxpayerSession();
   const { credentials, isLoading: credentialsLoading } = useOrganisationGstCredentials();
   const { vendors } = useGstVendors({ enabled: subTab !== 'b2b' });
@@ -1948,8 +2057,8 @@ export const GstDocumentsPanel = () => {
     <TabsContent value="documents" className="space-y-4">
       <GstPortalOtpDialog {...session.otpDialogProps} />
       <Tabs value={subTab} onValueChange={setSubTab} className="space-y-4">
-        <TabsList className="grid w-full max-w-2xl grid-cols-3">
-          <TabsTrigger value="b2b">GSTR-2A B2B</TabsTrigger>
+        <TabsList className="grid w-full max-w-2xl grid-cols-2">
+          {/* <TabsTrigger value="b2b">GSTR-2A B2B</TabsTrigger> */}
           <TabsTrigger value="2a-docs">GSTR-2A Documents</TabsTrigger>
           <TabsTrigger value="2b-docs">GSTR-2B Documents</TabsTrigger>
         </TabsList>

@@ -55,7 +55,6 @@ import ApprovalHistoryTimeline from "../../../components/common/ApprovalHistoryT
 import { useGetPurchaseOrderHistoryQuery } from "../../../Services/apis/purchaseOrdersMasterDataApi";
 import {
   useGetDocumentPaymentScheduleHistoryQuery,
-  useGetDocumentPaymentScheduleQuery,
 } from "../../../Services/apis/paymentSchedulesApi";
 import PoPaymentScheduleSection from "./PoPaymentScheduleSection";
 import { normalizePaymentScheduleRows } from "../utils/poPaymentSchedule";
@@ -114,6 +113,49 @@ const getDocumentGrossTotal = (document = {}, po = {}) =>
       0,
   ) || 0;
 
+const normalizePoDetailForDisplay = (po = {}) => {
+  const vendorSnapshot = po.vendorSnapshot || po.vendor_snapshot || {};
+  const lineItems = po.line_items || po.lineItems || [];
+
+  return {
+    ...po,
+    po_id: po.po_id ?? po.poId ?? po.id,
+    po_number: po.po_number ?? po.poNumber,
+    po_date: po.po_date ?? po.poDate,
+    valid_till: po.valid_till ?? po.validTill,
+    tax_mode: po.tax_mode ?? po.taxMode,
+    vendor_name: po.vendor_name ?? po.vendorName ?? vendorSnapshot.name,
+    vendor_gstin: po.vendor_gstin ?? po.vendorGstin ?? vendorSnapshot.gstin,
+    vendor_pan: po.vendor_pan ?? po.vendorPan ?? vendorSnapshot.pan,
+    vendor_address:
+      po.vendor_address ??
+      po.vendorAddress ??
+      vendorSnapshot.address ??
+      [vendorSnapshot.state, vendorSnapshot.country].filter(Boolean).join(", "),
+    shipping_address: po.shipping_address ?? po.shippingAddress,
+    billing_address: po.billing_address ?? po.billingAddress,
+    place_of_supply: po.place_of_supply ?? po.placeOfSupply,
+    expected_delivery_date: po.expected_delivery_date ?? po.expectedDeliveryDate,
+    delivery_terms: po.delivery_terms ?? po.deliveryTerms,
+    freight_terms: po.freight_terms ?? po.freightTerms,
+    payment_terms: po.payment_terms ?? po.paymentTerms,
+    subtotal: po.subtotal ?? po.subTotal ?? po.sub_total ?? 0,
+    tax_amount: po.tax_amount ?? po.taxAmount ?? 0,
+    total_amount: po.total_amount ?? po.totalAmount ?? 0,
+    tds_amount: po.tds_amount ?? po.tdsAmount ?? 0,
+    net_payable: po.net_payable ?? po.netPayable ?? po.netPayableAmount,
+    line_items: lineItems,
+    po_format_name: po.po_format_name ?? po.poFormatName ?? po.formatName,
+    pdf_url: po.pdf_url ?? po.pdfUrl,
+    pdfS3Key: po.pdfS3Key ?? po.pdf_s3_key,
+    reference_document_name: po.reference_document_name ?? po.referenceDocumentName,
+    reference_document_url: po.reference_document_url ?? po.referenceDocumentUrl,
+    delivery_status: po.delivery_status ?? po.deliveryStatus,
+    delivery_remarks: po.delivery_remarks ?? po.deliveryRemarks,
+    matchingInrValue: po.matchingInrValue ?? po.matching_inr_value,
+  };
+};
+
 const PoDetailsDialog = ({
   showViewDialog,
   setShowViewDialog,
@@ -139,104 +181,124 @@ const PoDetailsDialog = ({
   canEditPaymentSchedule = false,
   onSavePaymentSchedule,
   savingPaymentSchedule = false,
+  paymentScheduleData,
+  loadingPaymentSchedule = false,
+  paymentScheduleEnabledTriggers,
 }) => {
+  const displayPO = useMemo(() => normalizePoDetailForDisplay(selectedPO || {}), [selectedPO]);
   const selectedPoId =
-    selectedPO?.id ||
-    selectedPO?.po_id ||
-    selectedPO?.poId ||
-    selectedPO?.purchaseOrderId ||
-    selectedPO?.purchase_order_id;
+    displayPO?.id ||
+    displayPO?.po_id ||
+    displayPO?.poId ||
+    displayPO?.purchaseOrderId ||
+    displayPO?.purchase_order_id;
+  const embeddedPaymentScheduleRows = useMemo(
+    () => normalizePaymentScheduleRows(displayPO || {}),
+    [displayPO],
+  );
+  const hasEmbeddedPaymentSchedule = embeddedPaymentScheduleRows.length > 0;
+  const poPaymentScheduleAvailable =
+    displayPO?.paymentScheduleAvailable === true ||
+    displayPO?.payment_schedule_available === true ||
+    displayPO?.hasPaymentSchedule === true ||
+    displayPO?.has_payment_schedule === true ||
+    hasEmbeddedPaymentSchedule;
   const [viewTab, setViewTab] = useState("details");
-  const [deliveryStatus, setDeliveryStatus] = useState(selectedPO?.delivery_status || "");
-  const [deliveryRemarks, setDeliveryRemarks] = useState(selectedPO?.delivery_remarks || "");
+  const [deliveryStatus, setDeliveryStatus] = useState(displayPO?.delivery_status || "");
+  const [deliveryRemarks, setDeliveryRemarks] = useState(displayPO?.delivery_remarks || "");
   const [scheduleDialogOpen, setScheduleDialogOpen] = useState(false);
   const [scheduleDraftRows, setScheduleDraftRows] = useState([]);
+  const [savedPaymentSchedule, setSavedPaymentSchedule] = useState(null);
   const [referencePreviewZoom, setReferencePreviewZoom] = useState(100);
   const [referencePreviewError, setReferencePreviewError] = useState(false);
   const {
     data: approvalHistory = [],
     isLoading: loadingApprovalHistory,
   } = useGetPurchaseOrderHistoryQuery(selectedPoId, {
-    skip: !showViewDialog || !selectedPoId,
+    skip: !showViewDialog || !selectedPoId || viewTab !== "history",
   });
   const {
     data: paymentScheduleHistory = [],
     isLoading: loadingPaymentScheduleHistory,
   } = useGetDocumentPaymentScheduleHistoryQuery(
     { documentType: "PO", documentId: selectedPoId },
-    { skip: !showViewDialog || !selectedPoId },
+    {
+      skip:
+        !showViewDialog ||
+        !selectedPoId ||
+        !poPaymentScheduleAvailable ||
+        viewTab !== "schedule-history",
+    },
   );
-  const {
-    data: documentScheduleData,
-    isFetching: loadingPaymentSchedule,
-  } = useGetDocumentPaymentScheduleQuery(
-    { documentType: "PO", documentId: selectedPoId },
-    { skip: !showViewDialog || !selectedPoId },
-  );
-
   useEffect(() => {
-    setDeliveryStatus(selectedPO?.delivery_status || "");
-    setDeliveryRemarks(selectedPO?.delivery_remarks || "");
-  }, [selectedPoId]);
+    setDeliveryStatus(displayPO?.delivery_status || "");
+    setDeliveryRemarks(displayPO?.delivery_remarks || "");
+  }, [displayPO?.delivery_remarks, displayPO?.delivery_status, selectedPoId]);
   const isDownloading = Boolean(
     selectedPoId && downloadingPoId === selectedPoId,
   );
-  const poCurrency = selectedPO?.currency || "INR";
+  const poStatus = String(displayPO?.status || "").trim().toUpperCase();
+  const isPoCancelled = ["CANCELLED", "CANCELED"].includes(poStatus);
+  const poCurrency = displayPO?.currency || "INR";
   const isInr = poCurrency === "INR";
   const documentBorderClass = "border";
   const headerBorderClass = "border-b";
   const documentScheduleSource = useMemo(
     () =>
-      Array.isArray(documentScheduleData)
-        ? { paymentSchedule: documentScheduleData }
+      Array.isArray(paymentScheduleData)
+        ? { paymentSchedule: paymentScheduleData }
         : {
-            ...(documentScheduleData || {}),
+            ...(paymentScheduleData || {}),
             paymentSchedule:
-              documentScheduleData?.paymentSchedule ??
-              documentScheduleData?.payment_schedule ??
-              documentScheduleData?.rows ??
-              documentScheduleData?.schedule,
+              paymentScheduleData?.paymentSchedule ??
+              paymentScheduleData?.payment_schedule ??
+              paymentScheduleData?.rows ??
+              paymentScheduleData?.schedule,
           },
-    [documentScheduleData],
+    [paymentScheduleData],
   );
   const fetchedPaymentScheduleRows = useMemo(
     () => normalizePaymentScheduleRows(documentScheduleSource || {}),
     [documentScheduleSource],
   );
-  const embeddedPaymentScheduleRows = useMemo(
-    () => normalizePaymentScheduleRows(selectedPO || {}),
-    [selectedPO],
-  );
   const paymentScheduleRows = fetchedPaymentScheduleRows.length
     ? fetchedPaymentScheduleRows
     : embeddedPaymentScheduleRows;
-  const documentGrossTotal = getDocumentGrossTotal(documentScheduleSource || {}, selectedPO || {});
+  const savedPaymentScheduleRows = Array.isArray(savedPaymentSchedule?.rows)
+    ? savedPaymentSchedule.rows
+    : null;
+  const visiblePaymentScheduleRows =
+    savedPaymentSchedule?.documentId === selectedPoId && savedPaymentScheduleRows
+      ? savedPaymentScheduleRows
+      : paymentScheduleRows;
+  const documentGrossTotal = getDocumentGrossTotal(documentScheduleSource || {}, displayPO || {});
 
   useEffect(() => {
     if (!scheduleDialogOpen) {
-      setScheduleDraftRows(paymentScheduleRows);
+      setScheduleDraftRows(visiblePaymentScheduleRows);
     }
-  }, [paymentScheduleRows, scheduleDialogOpen]);
+  }, [visiblePaymentScheduleRows, scheduleDialogOpen]);
 
   const openScheduleDialog = () => {
-    setScheduleDraftRows(paymentScheduleRows);
+    setScheduleDraftRows(visiblePaymentScheduleRows);
     setScheduleDialogOpen(true);
   };
 
   const handleSaveSchedule = async () => {
-    const saved = await onSavePaymentSchedule?.(selectedPO, scheduleDraftRows);
+    const saved = await onSavePaymentSchedule?.(displayPO, scheduleDraftRows);
     if (saved !== false) {
+      setSavedPaymentSchedule({ documentId: selectedPoId, rows: scheduleDraftRows });
       setScheduleDialogOpen(false);
     }
   };
 
   const selectedFormat =
-    selectedPO?.formatConfigSnapshot ||
-    selectedPO?.format_snapshot ||
-    selectedPO?.formatSnapshot ||
-    selectedPO?.po_format_config ||
-    selectedPO?.poFormatConfig ||
-    selectedPO?.formatConfig ||
+    displayPO?.formatConfigSnapshot ||
+    displayPO?.format_snapshot ||
+    displayPO?.formatSnapshot ||
+    displayPO?.po_format_config ||
+    displayPO?.poFormatConfig ||
+    displayPO?.formatConfig ||
     null;
 
   const sectionOn = (sectionKey) =>
@@ -247,20 +309,20 @@ const PoDetailsDialog = ({
       : true;
   const poCompanyName =
     selectedFormat?.companyName ||
-    selectedPO?.company_name ||
-    selectedPO?.companyName ||
+    displayPO?.company_name ||
+    displayPO?.companyName ||
     "Company Name";
   const poLogoUrl =
     selectedFormat?.logoUrl ||
     selectedFormat?.logo_url ||
-    selectedPO?.logoUrl ||
-    selectedPO?.logo_url ||
+    displayPO?.logoUrl ||
+    displayPO?.logo_url ||
     null;
   const referenceDocument = {
-    type: getPoReferenceDocumentType(selectedPO),
-    name: getPoReferenceDocumentName(selectedPO),
-    url: normalizeReferenceDocumentUrl(getPoReferenceDocumentUrl(selectedPO)),
-    s3Key: getPoReferenceDocumentS3Key(selectedPO),
+    type: getPoReferenceDocumentType(displayPO),
+    name: getPoReferenceDocumentName(displayPO),
+    url: normalizeReferenceDocumentUrl(getPoReferenceDocumentUrl(displayPO)),
+    s3Key: getPoReferenceDocumentS3Key(displayPO),
   };
   const hasReferenceDocument = Boolean(
     referenceDocument.name ||
@@ -280,23 +342,23 @@ const PoDetailsDialog = ({
     setReferencePreviewError(false);
   }, [selectedPoId, referenceDocument.url]);
   const vendorAddress =
-    selectedPO?.vendor_address ||
-    selectedPO?.vendorAddress ||
-    selectedPO?.vendor_billing_address ||
-    selectedPO?.vendorBillingAddress ||
+    displayPO?.vendor_address ||
+    displayPO?.vendorAddress ||
+    displayPO?.vendor_billing_address ||
+    displayPO?.vendorBillingAddress ||
     [
-      selectedPO?.vendorSnapshot?.addressLine1 ?? selectedPO?.vendorSnapshot?.address_line1,
-      selectedPO?.vendorSnapshot?.addressLine2 ?? selectedPO?.vendorSnapshot?.address_line2,
-      selectedPO?.vendorSnapshot?.city,
-      selectedPO?.vendorSnapshot?.state,
-      selectedPO?.vendorSnapshot?.pincode ??
-        selectedPO?.vendorSnapshot?.postalCode ??
-        selectedPO?.vendorSnapshot?.postal_code,
-      selectedPO?.vendorSnapshot?.country,
+      displayPO?.vendorSnapshot?.addressLine1 ?? displayPO?.vendorSnapshot?.address_line1,
+      displayPO?.vendorSnapshot?.addressLine2 ?? displayPO?.vendorSnapshot?.address_line2,
+      displayPO?.vendorSnapshot?.city,
+      displayPO?.vendorSnapshot?.state,
+      displayPO?.vendorSnapshot?.pincode ??
+        displayPO?.vendorSnapshot?.postalCode ??
+        displayPO?.vendorSnapshot?.postal_code,
+      displayPO?.vendorSnapshot?.country,
     ]
       .filter(Boolean)
       .join(", ");
-  const hideStatusInDocument = ["Approved", "Issued"].includes(selectedPO?.status);
+  const hideStatusInDocument = ["Approved", "Issued"].includes(displayPO?.status);
   const poLineItemTableHeader = [
     { key: "lineNumber", title: "#" },
     ...(fieldOn("LINE_ITEM", "item_name")
@@ -379,11 +441,14 @@ const PoDetailsDialog = ({
         className={`flex max-h-[92vh] flex-col overflow-hidden p-0 ${
           hasReferencePreview ? "w-[96vw] max-w-[96vw]" : "max-w-6xl"
         }`}
+        onInteractOutside={(event) => {
+          if (scheduleDialogOpen) event.preventDefault();
+        }}
       >
         <DialogHeader className="shrink-0">
           <DialogTitle className="flex items-center gap-2 px-6 pt-6 pb-3 border-b">
             <FileText className="h-5 w-5" />
-            Purchase Order: {selectedPO?.po_number}
+            Purchase Order: {displayPO?.po_number}
             {loadingDetails ? (
               <span className="ml-auto flex items-center gap-2 text-xs font-normal text-muted-foreground">
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -419,10 +484,10 @@ const PoDetailsDialog = ({
           {selectedPO ? (
             <div className="bg-background px-6 pt-4">
               <AccountingLockBanner
-                record={selectedPO}
+                record={displayPO}
                 objectLabel="purchase order"
                 objectType="PO"
-                objectId={selectedPO?.id}
+                objectId={displayPO?.id}
               />
             </div>
           ) : null}
@@ -461,7 +526,7 @@ const PoDetailsDialog = ({
                               Purchase Order
                             </p>
                             <p className="mt-2 text-xs text-muted-foreground">
-                              {selectedPO.po_format_name || "PO Format"}
+                              {displayPO.po_format_name || "PO Format"}
                             </p>
                           </div>
                         </div>
@@ -474,9 +539,9 @@ const PoDetailsDialog = ({
                               </span>{" "}
                               <Badge
                                 variant="outline"
-                                className={`border-0 font-semibold ${statusColors[selectedPO.status] || statusColors.Draft}`}
+                                className={`border-0 font-semibold ${statusColors[displayPO.status] || statusColors.Draft}`}
                               >
-                                {selectedPO.status}
+                                {displayPO.status}
                               </Badge>
                             </div>
                           )}
@@ -485,7 +550,7 @@ const PoDetailsDialog = ({
                               <span className="text-muted-foreground">
                                 PO No:
                               </span>{" "}
-                              {selectedPO.po_number || "-"}
+                              {displayPO.po_number || "-"}
                             </p>
                           )}
                           {fieldOn("HEADER", "po_date") && (
@@ -493,7 +558,7 @@ const PoDetailsDialog = ({
                               <span className="text-muted-foreground">
                                 Date:
                               </span>{" "}
-                              {formatDate(selectedPO.po_date)}
+                              {formatDate(displayPO.po_date)}
                             </p>
                           )}
                           {fieldOn("HEADER", "valid_till") && (
@@ -501,20 +566,20 @@ const PoDetailsDialog = ({
                               <span className="text-muted-foreground">
                                 Valid Till:
                               </span>{" "}
-                              {formatDate(selectedPO.valid_till)}
+                              {formatDate(displayPO.valid_till)}
                             </p>
                           )}
                           <p>
                             <span className="text-muted-foreground">
                               Currency:
                             </span>{" "}
-                            {selectedPO.currency || "INR"}
+                            {displayPO.currency || "INR"}
                           </p>
                           <p>
                             <span className="text-muted-foreground">
                               Tax Mode:
                             </span>{" "}
-                            {selectedPO.tax_mode || "-"}
+                            {displayPO.tax_mode || "-"}
                           </p>
                         </div>
                       </div>
@@ -530,7 +595,7 @@ const PoDetailsDialog = ({
                         </h3>
                         {fieldOn("VENDOR", "vendor_name") && (
                           <p className="font-medium">
-                            {selectedPO.vendor_name || "-"}
+                            {displayPO.vendor_name || "-"}
                           </p>
                         )}
                         {vendorAddress ? (
@@ -540,20 +605,20 @@ const PoDetailsDialog = ({
                         ) : null}
                         {isInr &&
                           fieldOn("VENDOR", "vendor_gstin") &&
-                          selectedPO.vendor_gstin && (
+                          displayPO.vendor_gstin && (
                             <p className="text-sm text-muted-foreground">
-                              GSTIN: {selectedPO.vendor_gstin}
+                              GSTIN: {displayPO.vendor_gstin}
                             </p>
                           )}
                         {isInr &&
                           fieldOn("VENDOR", "vendor_pan") &&
-                          selectedPO.vendor_pan && (
+                          displayPO.vendor_pan && (
                             <p className="text-sm text-muted-foreground">
-                              PAN: {selectedPO.vendor_pan}
+                              PAN: {displayPO.vendor_pan}
                             </p>
                           )}
-                        <OrgBranchDetail record={selectedPO} label="Organisation Branch" />
-                        <VendorBranchDetail record={selectedPO} label="Vendor Branch" />
+                        <OrgBranchDetail record={displayPO} label="Organisation Branch" />
+                        <VendorBranchDetail record={displayPO} label="Vendor Branch" />
                       </section>
                     )}
 
@@ -564,22 +629,22 @@ const PoDetailsDialog = ({
                         </h3>
                         {fieldOn("SHIP_BILL", "ship_to_address") && (
                           <p className="text-sm">
-                            Ship To: {selectedPO.shipping_address || "-"}
+                            Ship To: {displayPO.shipping_address || "-"}
                           </p>
                         )}
                         {fieldOn("SHIP_BILL", "billing_address") && (
                           <p className="text-sm">
-                            Bill To: {selectedPO.billing_address || "-"}
+                            Bill To: {displayPO.billing_address || "-"}
                           </p>
                         )}
                         {isInr && fieldOn("SHIP_BILL", "place_of_supply") && (
                           <p className="text-sm text-muted-foreground">
-                            Place of Supply: {selectedPO.place_of_supply || "-"}
+                            Place of Supply: {displayPO.place_of_supply || "-"}
                           </p>
                         )}
                         <p className="text-sm text-muted-foreground mt-1">
                           Delivery Date:{" "}
-                          {formatDate(selectedPO.expected_delivery_date)}
+                          {formatDate(displayPO.expected_delivery_date)}
                         </p>
                       </section>
                     )}
@@ -594,7 +659,7 @@ const PoDetailsDialog = ({
                       <div className="overflow-x-auto rounded border">
                         <AppDataTable
                           tableHeader={poLineItemTableHeader}
-                          tableData={selectedPO.line_items || []}
+                          tableData={displayPO.line_items || []}
                           renderRow={renderLineItemRow}
                           emptyMessage="No line items found"
                         />
@@ -603,7 +668,7 @@ const PoDetailsDialog = ({
                   )}
 
                   {/* <AdvanceContextPanel
-                    source={selectedPO}
+                    source={displayPO}
                     title="PO Advance Context"
                     description="Read-only PO-linked advance summary and history from backend."
                     currency={poCurrency}
@@ -617,17 +682,17 @@ const PoDetailsDialog = ({
                         <div className="space-y-2 text-sm">
                           {fieldOn("PAYMENT", "delivery_terms") && (
                             <p>
-                              Delivery Terms: {selectedPO.delivery_terms || "-"}
+                              Delivery Terms: {displayPO.delivery_terms || "-"}
                             </p>
                           )}
                           {fieldOn("PAYMENT", "freight_terms") && (
                             <p>
-                              Freight Terms: {selectedPO.freight_terms || "-"}
+                              Freight Terms: {displayPO.freight_terms || "-"}
                             </p>
                           )}
                           {fieldOn("PAYMENT", "payment_terms") && (
                             <p>
-                              Payment Terms: {selectedPO.payment_terms || "-"}
+                              Payment Terms: {displayPO.payment_terms || "-"}
                             </p>
                           )}
                         </div>
@@ -638,35 +703,35 @@ const PoDetailsDialog = ({
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Subtotal</span>
                         <span>
-                          {formatCurrency(selectedPO.subtotal, poCurrency)}
+                          {formatCurrency(displayPO.subtotal, poCurrency)}
                         </span>
                       </div>
                       <div className="flex justify-between mt-1">
                         <span className="text-muted-foreground">Tax</span>
                         <span>
-                          {formatCurrency(selectedPO.tax_amount, poCurrency)}
+                          {formatCurrency(displayPO.tax_amount, poCurrency)}
                         </span>
                       </div>
                       <div className="mt-3 flex justify-between border-t pt-3 text-base font-semibold">
                         <span>Total</span>
                         <span>
-                          {formatCurrency(selectedPO.total_amount, poCurrency)}
+                          {formatCurrency(displayPO.total_amount, poCurrency)}
                         </span>
                       </div>
-                      {selectedPO.convertToInr && Number(selectedPO.matchingInrValue) > 0 ? (
+                      {displayPO.convertToInr && Number(displayPO.matchingInrValue) > 0 ? (
                         <div className="mt-2 flex justify-between text-sm font-semibold text-primary">
                           <span>Converted INR Amount</span>
-                          <span>{formatCurrency(selectedPO.matchingInrValue, "INR")}</span>
+                          <span>{formatCurrency(displayPO.matchingInrValue, "INR")}</span>
                         </div>
                       ) : null}
-                      {selectedPO.tds_amount > 0 && (
+                      {displayPO.tds_amount > 0 && (
                         <>
                           <div className="mt-2 flex justify-between text-muted-foreground">
                             <span>Less: TDS</span>
                             <span>
                               -{" "}
                               {formatCurrency(
-                                selectedPO.tds_amount,
+                                displayPO.tds_amount,
                                 poCurrency,
                               )}
                             </span>
@@ -675,7 +740,7 @@ const PoDetailsDialog = ({
                             <span>Net Payable</span>
                             <span>
                               {formatCurrency(
-                                selectedPO.net_payable,
+                                displayPO.net_payable,
                                 poCurrency,
                               )}
                             </span>
@@ -685,12 +750,12 @@ const PoDetailsDialog = ({
                     </section>
                   </div>
 
-                  {selectedPO.remarks && (
+                  {displayPO.remarks && (
                     <section className="mt-6 rounded border bg-slate-50/60 p-4 text-sm">
                       <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground mb-1">
                         Remarks
                       </p>
-                      <p>{selectedPO.remarks}</p>
+                      <p>{displayPO.remarks}</p>
                     </section>
                   )}
 
@@ -737,7 +802,7 @@ const PoDetailsDialog = ({
                     </section>
                   ) : null}
 
-                  {paymentScheduleRows.length || canEditPaymentSchedule ? (
+                  {visiblePaymentScheduleRows.length || canEditPaymentSchedule ? (
                     <div className="mt-6">
                       {canEditPaymentSchedule ? (
                         <div className="mb-2 flex justify-end">
@@ -752,15 +817,16 @@ const PoDetailsDialog = ({
                           </Button>
                         </div>
                       ) : null}
-                      {paymentScheduleRows.length ? (
+                      {visiblePaymentScheduleRows.length ? (
                         <PoPaymentScheduleSection
-                          rows={paymentScheduleRows}
+                          rows={visiblePaymentScheduleRows}
                           documentGrossTotal={documentGrossTotal}
                           formatCurrency={(amount) => formatCurrency(amount, poCurrency)}
                           readOnly
+                          enabledTriggerStages={paymentScheduleEnabledTriggers}
                         />
                       ) : null}
-                      {loadingPaymentSchedule && !paymentScheduleRows.length ? (
+                      {loadingPaymentSchedule && !visiblePaymentScheduleRows.length ? (
                         <div className="rounded border bg-slate-50/60 p-4 text-sm text-muted-foreground">
                           Loading payment schedule...
                         </div>
@@ -775,8 +841,16 @@ const PoDetailsDialog = ({
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-[260px_1fr]">
                       <div className="space-y-1.5">
                         <Label htmlFor="po-delivery-status">Delivery Status</Label>
-                        <Select value={deliveryStatus} onValueChange={setDeliveryStatus}>
-                          <SelectTrigger id="po-delivery-status" className="bg-white" data-testid="delivery-status-select">
+                        <Select
+                          value={deliveryStatus}
+                          onValueChange={setDeliveryStatus}
+                          disabled={isPoCancelled}
+                        >
+                          <SelectTrigger
+                            id="po-delivery-status"
+                            className={isPoCancelled ? "cursor-not-allowed bg-slate-100 text-slate-500" : "bg-white"}
+                            data-testid="delivery-status-select"
+                          >
                             <SelectValue placeholder="Select delivery status" />
                           </SelectTrigger>
                           <SelectContent>
@@ -796,7 +870,8 @@ const PoDetailsDialog = ({
                           onChange={(e) => setDeliveryRemarks(e.target.value)}
                           rows={2}
                           placeholder="Optional notes about asset delivery"
-                          className="bg-white"
+                          disabled={isPoCancelled}
+                          className={isPoCancelled ? "cursor-not-allowed bg-slate-100 text-slate-500" : "bg-white"}
                         />
                       </div>
                     </div>
@@ -804,7 +879,7 @@ const PoDetailsDialog = ({
                       <Button
                         type="button"
                         size="sm"
-                        disabled={savingDeliveryStatus}
+                        disabled={savingDeliveryStatus || isPoCancelled}
                         data-testid="save-delivery-status-btn"
                         onClick={() =>
                           onSaveDeliveryStatus?.(selectedPO, {
@@ -886,7 +961,7 @@ const PoDetailsDialog = ({
               Cancel PO
             </Button>
           ) : null}
-          {["Draft", "Sent Back"].includes(selectedPO?.status) &&
+          {["Draft", "Sent Back"].includes(displayPO?.status) &&
             canManagePo &&
             !isAccountingReadyLocked(selectedPO) && (
             <Button
@@ -899,7 +974,7 @@ const PoDetailsDialog = ({
               Submit for Approval
             </Button>
           )}
-          {["Draft", "Sent Back"].includes(selectedPO?.status) &&
+          {["Draft", "Sent Back"].includes(displayPO?.status) &&
             canManagePo &&
             !isAccountingReadyLocked(selectedPO) && (
             <Button
@@ -911,7 +986,7 @@ const PoDetailsDialog = ({
               Edit PO
             </Button>
           )}
-          {selectedPO?.status === "Pending Approval" && canApprovePo && (
+          {displayPO?.status === "Pending Approval" && canApprovePo && (
             <Button
               onClick={() => {
                 setShowViewDialog(false);
@@ -924,7 +999,7 @@ const PoDetailsDialog = ({
           )}
         </DialogFooter>
       </DialogContent>
-      <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen}>
+      <Dialog open={scheduleDialogOpen} onOpenChange={setScheduleDialogOpen} modal={false}>
         <DialogContent className="max-w-4xl">
           <DialogHeader>
             <DialogTitle>Edit Payment Schedule</DialogTitle>
@@ -937,6 +1012,7 @@ const PoDetailsDialog = ({
             documentGrossTotal={documentGrossTotal}
             formatCurrency={(amount) => formatCurrency(amount, poCurrency)}
             onChange={setScheduleDraftRows}
+            enabledTriggerStages={paymentScheduleEnabledTriggers}
           />
           <DialogFooter>
             <Button

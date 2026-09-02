@@ -170,11 +170,17 @@ export const toVendorApiPayload = (vendor = {}) => {
     foreignVendor,
     udyamRegistrationNo,
     msmeCategory,
+    msmeStatus,
     msmeVerificationStatus,
     msmeVerificationMode,
     msmeVerifiedAt,
     msmeVerificationMessage,
     msmeProviderReferenceId,
+    verificationStatus,
+    verificationMode,
+    verifiedAt,
+    verificationMessage,
+    providerReferenceId,
     iecNumber,
     tan,
     tin,
@@ -240,11 +246,12 @@ export const toVendorApiPayload = (vendor = {}) => {
     foreignVendor: Boolean(foreignVendor),
     udyamRegistrationNo,
     msmeCategory,
-    msmeVerificationStatus,
-    msmeVerificationMode,
-    msmeVerifiedAt,
-    msmeVerificationMessage,
-    msmeProviderReferenceId,
+    msmeStatus,
+    msmeVerificationStatus: msmeVerificationStatus ?? verificationStatus,
+    msmeVerificationMode: msmeVerificationMode ?? verificationMode,
+    msmeVerifiedAt: msmeVerifiedAt ?? verifiedAt,
+    msmeVerificationMessage: msmeVerificationMessage ?? verificationMessage,
+    msmeProviderReferenceId: msmeProviderReferenceId ?? providerReferenceId,
     iecNumber,
     tan,
     tin,
@@ -369,14 +376,39 @@ export const toVendorUiPayload = (vendor = {}) => ({
   msme: parseMsmeValue(vendor.msme ?? vendor.is_msme) === true,
   udyamRegistrationNo: vendor.udyamRegistrationNo ?? vendor.udyam_registration_no ?? '',
   msmeCategory: vendor.msmeCategory ?? vendor.msme_category ?? '',
+  msmeStatus: vendor.msmeStatus ?? vendor.msme_status ?? '',
   msmeVerificationStatus:
     vendor.msmeVerificationStatus ??
     vendor.msme_verification_status ??
+    vendor.verificationStatus ??
+    vendor.verification_status ??
+    (vendor.verified === true ? 'VERIFIED' : null) ??
+    (String(vendor.msmeStatus ?? vendor.msme_status ?? '').toUpperCase() === 'REGISTERED' ? 'VERIFIED' : null) ??
     (parseMsmeValue(vendor.msme ?? vendor.is_msme) === true ? 'NOT_VERIFIED' : ''),
-  msmeVerificationMode: vendor.msmeVerificationMode ?? vendor.msme_verification_mode ?? '',
-  msmeVerifiedAt: vendor.msmeVerifiedAt ?? vendor.msme_verified_at ?? '',
-  msmeVerificationMessage: vendor.msmeVerificationMessage ?? vendor.msme_verification_message ?? '',
-  msmeProviderReferenceId: vendor.msmeProviderReferenceId ?? vendor.msme_provider_reference_id ?? '',
+  msmeVerificationMode:
+    vendor.msmeVerificationMode ??
+    vendor.msme_verification_mode ??
+    vendor.verificationMode ??
+    vendor.verification_mode ??
+    '',
+  msmeVerifiedAt:
+    vendor.msmeVerifiedAt ??
+    vendor.msme_verified_at ??
+    vendor.verifiedAt ??
+    vendor.verified_at ??
+    '',
+  msmeVerificationMessage:
+    vendor.msmeVerificationMessage ??
+    vendor.msme_verification_message ??
+    vendor.verificationMessage ??
+    vendor.verification_message ??
+    '',
+  msmeProviderReferenceId:
+    vendor.msmeProviderReferenceId ??
+    vendor.msme_provider_reference_id ??
+    vendor.providerReferenceId ??
+    vendor.provider_reference_id ??
+    '',
   trade_name: vendor.trade_name ?? vendor.tradeName ?? '',
   address_line1: vendor.address_line1 ?? vendor.addressLine1,
   address_line2: vendor.address_line2 ?? vendor.addressLine2,
@@ -507,6 +539,9 @@ export const toRecordPaymentsApiPayload = (payment = {}) => {
             ? { advanceId: item.advanceId ?? item.advance_id }
             : {}),
           netPayableAmount: Number(item.netPayableAmount ?? item.net_payable_amount ?? 0),
+          ...(item.adjustFromVendorAdvance === true || item.adjust_from_vendor_advance === true
+            ? { adjustFromVendorAdvance: true }
+            : {}),
         }))
         .filter((item) => item.invoiceId || item.obligationId || item.advanceId)
     : [];

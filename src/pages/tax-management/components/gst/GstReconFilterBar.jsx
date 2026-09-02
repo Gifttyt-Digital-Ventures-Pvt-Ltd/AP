@@ -1,5 +1,5 @@
 import React from 'react';
-import { TaxFilterBar, TaxSearchInput, TaxSelect, TaxViewFilterPills } from '../TaxUi';
+import { TaxFilterBar, TaxSearchInput, TaxSelect } from '../TaxUi';
 import RefreshButton from '../../../../components/common/RefreshButton';
 import {
   GST_RECON_OVERVIEW_DATE_FILTERS,
@@ -45,10 +45,10 @@ const GstReconFilterBar = ({
 
     <div className="space-y-1.5">
       <label className="text-xs font-medium text-muted-foreground">Source</label>
-      <TaxViewFilterPills
-        options={GST_RECON_OVERVIEW_SOURCE_OPTIONS}
+      <TaxSelect
         value={source}
-        onChange={onSourceChange}
+        onValueChange={onSourceChange}
+        options={GST_RECON_OVERVIEW_SOURCE_OPTIONS}
       />
     </div>
 

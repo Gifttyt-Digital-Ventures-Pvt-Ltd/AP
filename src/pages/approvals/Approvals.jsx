@@ -32,6 +32,7 @@ import AllInvoicesTable from './components/AllInvoicesTable';
 import InvoiceHistorySheet from './components/InvoiceHistorySheet';
 import ApprovalDialog from './components/ApprovalDialog';
 import ViewDialog from '../invoices/components/ViewDialog';
+import InvoiceViewFlagsSection from '../invoices/components/flags/InvoiceViewFlagsSection';
 import { InvoicePdfPreview } from '../invoices/components/InvoicePdfPreview';
 import { getInvoiceFileUrl } from '../invoices/utils/invoicePreview';
 import { normalizeInvoiceHistoryEntries } from '../invoices/utils/invoiceHistory';
@@ -150,7 +151,7 @@ const Approvals = () => {
   const [loadingHistory, setLoadingHistory] = useState(false);
   const [historySheetOpen, setHistorySheetOpen] = useState(false);
   const [historySheetInvoice, setHistorySheetInvoice] = useState(null);
-  const [activeTab, setActiveTab] = useState('pending-approval');
+  const [activeTab, setActiveTab] = useState('pending-checker');
 
   const handleRefreshApprovals = async () => {
     try {
@@ -245,6 +246,43 @@ const Approvals = () => {
     };
   }, [allInvoicesListData, allTabPageOffset, allInvoices.length]);
 
+  const visibleApprovalTabs = useMemo(() => {
+    const tabs = [];
+     if (canCheckInvoices) {
+      tabs.push({
+        value: 'pending-checker',
+        label: 'Pending Checker',
+        count: pendingCheckerInvoices.length,
+      });
+    }
+
+    if (canApproveInvoices) {
+      tabs.push({
+        value: 'pending-approval',
+        label: 'Pending Approval',
+        count: pendingApprovalInvoices.length,
+      });
+    }
+    tabs.push({
+      value: 'all',
+      label: 'All',
+      count: allInvoicesPagination.total,
+    });
+    return tabs;
+  }, [
+    allInvoicesPagination.total,
+    canApproveInvoices,
+    canCheckInvoices,
+    pendingApprovalInvoices.length,
+    pendingCheckerInvoices.length,
+  ]);
+
+  useEffect(() => {
+    if (!visibleApprovalTabs.some((tab) => tab.value === activeTab)) {
+      setActiveTab(visibleApprovalTabs[0]?.value || 'all');
+    }
+  }, [activeTab, visibleApprovalTabs]);
+
   const visibleAllInvoicePageNumbers = useMemo(() => {
     const { totalPages, currentPage } = allInvoicesPagination;
     if (totalPages <= 5) {
@@ -325,6 +363,25 @@ const Approvals = () => {
     }
   }, [searchParams, setSearchParams]);
 
+  // View Invoice -> Fix in Form: closes View, then hands off to the hook's
+  // own handleFixInvoiceFlagInFormFromView (which opens Edit for this same
+  // invoice and reuses the existing field-navigation behavior once the Edit
+  // form mounts) — viewDialogOpen/viewInvoice live here in Approvals.jsx,
+  // not in the hook, so only the "close View" half belongs in this file.
+  const handleFixInFormFromView = (flag) => {
+    setViewDialogOpen(false);
+    handleFixInvoiceFlagInFormFromView(viewInvoice, flag);
+  };
+
+  // View Invoice -> Resolve: keeps viewInvoice's flagResolutions in sync
+  // after InvoiceViewFlagsSection persists a resolve via the dedicated
+  // endpoint, so a subsequent Fix in Form (which reopens Edit from this same
+  // viewInvoice) reflects the just-resolved flag rather than a stale
+  // pre-resolve snapshot.
+  const handleFlagResolutionsSyncedFromView = useCallback((nextFlagResolutions) => {
+    setViewInvoice((prev) => (prev ? { ...prev, flagResolutions: nextFlagResolutions } : prev));
+  }, []);
+
   const handleOpenInvoiceHistory = async (invoice) => {
     setHistorySheetInvoice(normalizeInvoice(invoice));
     setHistorySheetOpen(true);
@@ -372,7 +429,9 @@ const Approvals = () => {
 
   const {
     canEdit,
+    canResolveFlags,
     handleEditInvoice,
+    handleFixInvoiceFlagInFormFromView,
     findVendorByName,
     findVendorById,
     editDialogs,
@@ -381,6 +440,7 @@ const Approvals = () => {
     canEditInternalChecklist,
     handleSaveInternalChecklist,
     savingInternalChecklist,
+    invoiceFlagsOrgContext,
   } = useApprovalsInvoiceEdit({
       currencies,
       currencyParam,
@@ -390,6 +450,7 @@ const Approvals = () => {
       pdfZoom,
       viewPreviewError,
       setViewPreviewError,
+      onViewInvoice: handleViewInvoice,
     });
 
   const submitApproval = async () => {
@@ -584,11 +645,7 @@ const Approvals = () => {
       >
         <div className="flex shrink-0 flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex flex-wrap gap-2">
-            {[
-              { value: 'pending-approval', label: 'Pending Approval', count: pendingApprovalInvoices.length },
-              { value: 'pending-checker', label: 'Pending Checker', count: pendingCheckerInvoices.length },
-              { value: 'all', label: 'All', count: allInvoicesPagination.total },
-            ].map(({ value, label, count }) => (
+            {visibleApprovalTabs.map(({ value, label, count }) => (
               <Button
                 key={value}
                 type="button"
@@ -742,6 +799,21 @@ const Approvals = () => {
         canEditInternalChecklist={canEditInternalChecklist}
         onSaveInternalChecklist={handleSaveInternalChecklist}
         savingInternalChecklist={savingInternalChecklist}
+        flagsSlot={
+          <InvoiceViewFlagsSection
+            selectedInvoice={viewInvoice}
+            viewDialogOpen={viewDialogOpen}
+            findVendorById={findVendorById}
+            findVendorByName={findVendorByName}
+            isCategoryFeatureEnabled={isCategoryFeatureEnabled}
+            isCampaignFeatureEnabled={isCampaignFeatureEnabled}
+            invoiceFlagsOrgContext={invoiceFlagsOrgContext}
+            canResolveInvoiceFlags={canResolveFlags(viewInvoice)}
+            canEditSelectedInvoice={canEdit(viewInvoice)}
+            onFixInFormNavigate={handleFixInFormFromView}
+            onFlagResolutionsSynced={handleFlagResolutionsSyncedFromView}
+          />
+        }
       />
 
       {editDialogs}

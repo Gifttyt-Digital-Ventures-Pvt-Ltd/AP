@@ -14,7 +14,7 @@ const formatDate = (value) => {
   return parsed.toLocaleDateString();
 };
 
-const Stat = ({ label, value, currency }) => {
+const Stat = ({ label, value, currency, description }) => {
   if (!hasValue(value)) return null;
 
   return (
@@ -23,6 +23,9 @@ const Stat = ({ label, value, currency }) => {
       <p className="mt-1 text-sm font-semibold text-foreground">
         {formatCurrency(value, currency)}
       </p>
+      {description ? (
+        <p className="mt-1 text-[11px] leading-snug text-muted-foreground">{description}</p>
+      ) : null}
     </div>
   );
 };
@@ -48,10 +51,9 @@ const AdvanceRows = ({ rows, currency, showPo = false }) => {
             </div>
             {row.status ? <Badge variant="outline">{row.status}</Badge> : null}
           </div>
-          <div className="mt-2 grid gap-2 sm:grid-cols-4">
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
             <span>Paid: {formatCurrency(row.paidAmount ?? 0, currency)}</span>
             <span>Adjusted: {formatCurrency(row.adjustedAmount ?? 0, currency)}</span>
-            <span>Refunded: {formatCurrency(row.refundedAmount ?? 0, currency)}</span>
             <span>Outstanding: {formatCurrency(row.outstandingAmount ?? 0, currency)}</span>
           </div>
           {row.paidAt ? (
@@ -69,9 +71,11 @@ const AdvanceContextPanel = ({
   description = "Read-only advance context returned by backend.",
   currency = "INR",
   className = "",
+  showRows = true,
 }) => {
   const context = normalizeAdvanceContext(source);
   if (!context.hasContext) return null;
+  const totalCashAdvanced = context.totalAdvancesPaid ?? context.advanceBalance;
 
   return (
     <section className={className}>
@@ -85,22 +89,29 @@ const AdvanceContextPanel = ({
         </div>
 
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <Stat label="Advance Balance" value={context.advanceBalance} currency={currency} />
           <Stat
-            label="Outstanding Advance"
-            value={context.outstandingAdvanceBalance}
+            label="Cash Advanced"
+            value={totalCashAdvanced}
             currency={currency}
+            description="Total advance cash already paid to this vendor."
           />
-          <Stat label="Paid Advances" value={context.totalAdvancesPaid} currency={currency} />
           <Stat
-            label="Adjusted Advances"
+            label="Recovered via Net-off"
             value={context.totalAdvancesAdjusted}
             currency={currency}
+            description="Advance recovered by reducing later invoice, GRN, or PI payments."
           />
           <Stat
-            label="Refunded Advances"
-            value={context.totalAdvancesRefunded}
+            label="Still Recoverable"
+            value={context.outstandingAdvanceBalance}
             currency={currency}
+            description="Unused advance still with the vendor, including PO-held and pool balances."
+          />
+          <Stat
+            label="Free Pool Balance"
+            value={context.poolOutstandingBalance}
+            currency={currency}
+            description="Unallocated advance usable across this vendor's future payables."
           />
           <Stat label="Manual Advances" value={context.manualAdvancesTotal} currency={currency} />
           <Stat
@@ -110,10 +121,12 @@ const AdvanceContextPanel = ({
           />
         </div>
 
-        <div className="mt-3">
-          <AdvanceRows rows={context.advancesByPo} currency={currency} showPo />
-          <AdvanceRows rows={context.advances} currency={currency} />
-        </div>
+        {showRows ? (
+          <div className="mt-3">
+            <AdvanceRows rows={context.advancesByPo} currency={currency} showPo />
+            <AdvanceRows rows={context.advances} currency={currency} />
+          </div>
+        ) : null}
       </div>
     </section>
   );

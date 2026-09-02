@@ -29,8 +29,10 @@ const PayrunsTab = ({
   onReject,
   onRelease,
   onRetry,
+  onCancel,
   canApprovePayrun,
   canReleasePayrun,
+  canCancelPayrun,
   paginationFooter = null,
 }) => (
   <div className="flex flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm">
@@ -58,6 +60,7 @@ const PayrunsTab = ({
         const canRejectAction = Boolean(actions.reject) && canApprovePayrun;
         const canReleaseAction = Boolean(actions.release) && canReleasePayrun;
         const canRetryAction = Boolean(actions.retry) && canReleasePayrun;
+        const canCancelAction = Boolean(actions.cancel) && canCancelPayrun;
         return (
           <TableRow key={payrun.id}>
             <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3 py-3 text-left font-semibold text-primary">
@@ -107,8 +110,13 @@ const PayrunsTab = ({
                   </Button>
                 )}
                 {canRetryAction && (
-                  <Button size="sm" onClick={() => onRetry(payrun)}>
+                  <Button variant="outline" size="sm" onClick={() => onRetry(payrun)}>
                     <RotateCcw className="mr-1 h-4 w-4" /> Retry
+                  </Button>
+                )}
+                {canCancelAction && (
+                  <Button variant="outline" size="sm" onClick={() => onCancel(payrun)}>
+                    <XCircle className="mr-1 h-4 w-4" /> Cancel
                   </Button>
                 )}
               </div>

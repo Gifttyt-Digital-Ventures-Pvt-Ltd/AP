@@ -206,10 +206,11 @@ const ViewVendorPage = ({ formData, onClose, onEdit, embedded = false }) => {
 
                   <AdvanceContextPanel
                     source={formData}
-                    title="Vendor Advance Balance"
-                    description="Read-only vendor advance balance and PO-wise context from backend."
+                    title="Vendor Advance Ledger"
+                    description="Cash advanced, recovered through net-off, and still recoverable for this vendor."
                     currency={formData.currency || "INR"}
                     className="-mx-6 px-10"
+                    showRows={false}
                   />
 
                   <div id="address-branch-information" className="scroll-mt-4">

@@ -47,7 +47,14 @@ export const mapOrderTrackingRow = (row = {}) => ({
 });
 
 const mapChecklist = (checklist = {}) => ({
-  items: Array.isArray(checklist.items) ? checklist.items : [],
+  items: Array.isArray(checklist.items)
+    ? checklist.items.map((item) => ({
+        itemId: firstValue(item.itemId, item.item_id, item.id),
+        label: firstValue(item.label, item.name, item.itemName, item.item_name, ""),
+        isChecked: Boolean(firstValue(item.isChecked, item.is_checked, item.checked, false)),
+        note: firstValue(item.note, item.remarks, item.remark, ""),
+      }))
+    : [],
   completeCount: Number(checklist.completeCount ?? 0) || 0,
   totalCount: Number(checklist.totalCount ?? 0) || 0,
 });
@@ -94,6 +101,16 @@ const mapPaymentObligations = (obligations = []) =>
           : [],
   }));
 
+const mapRemarksHistory = (remarks = []) =>
+  (Array.isArray(remarks) ? remarks : []).map((entry, index) => ({
+    id: firstValue(entry.id, entry.remarkId, entry.remark_id, `${index}`),
+    remark: firstValue(entry.remark, entry.message, entry.description, ""),
+    userId: firstValue(entry.userId, entry.user_id, ""),
+    userName: firstValue(entry.userName, entry.user_name, entry.createdBy?.name, ""),
+    userEmail: firstValue(entry.userEmail, entry.user_email, entry.createdBy?.email, ""),
+    timestamp: firstValue(entry.timestamp, entry.createdAt, entry.created_at, ""),
+  }));
+
 /**
  * API detail response → OrderTrackingDetail. The only place drawer-level
  * backend field names are read — OrderTrackingDetailDrawer and its
@@ -103,6 +120,8 @@ const mapPaymentObligations = (obligations = []) =>
 export const mapOrderTrackingDetail = (detail = {}) => ({
   id: firstValue(detail.id, detail.orderId, detail.order_id),
   orderNumber: firstValue(detail.orderNumber, detail.order_number, "-"),
+  poId: firstValue(detail.poId, detail.po_id, ""),
+  poNumber: firstValue(detail.poNumber, detail.po_number, ""),
   orderStatus: firstValue(detail.orderStatus, detail.order_status, null),
   orderDate: firstValue(detail.orderDate, detail.order_date, null),
   vendor: {
@@ -136,6 +155,9 @@ export const mapOrderTrackingDetail = (detail = {}) => ({
     outstandingAdvanceBalance: Number(detail.advances?.outstandingAdvanceBalance ?? 0) || 0,
     advances: Array.isArray(detail.advances?.advances) ? detail.advances.advances : [],
   },
+  remarksHistory: mapRemarksHistory(
+    firstValue(detail.remarksHistory, detail.remarks_history, detail.orderRemarks, detail.order_remarks, []),
+  ),
 });
 
 /**

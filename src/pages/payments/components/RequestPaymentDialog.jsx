@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '../../../components/ui/button';
 import {
@@ -18,6 +19,12 @@ import { DEFAULT_CURRENCY, formatCurrency, normalizeCurrencyCode } from '../../.
 import PayableSourceBadge from './PayableSourceBadge';
 import MilestoneStageChip from './MilestoneStageChip';
 import NetPayableBreakdown from './NetPayableBreakdown';
+import {
+  canAdjustFromVendorAdvance,
+  getAvailableVendorAdvance,
+  getGrossPayableAmount,
+  getVendorAdvanceAdjustmentPreview,
+} from '../utils/vendorAdvanceNetoff';
 
 const preventDialogOutsideDismiss = (event) => {
   event.preventDefault();
@@ -141,6 +148,18 @@ const RequestPaymentDialog = ({
           sharePct: invoice.sharePct,
           milestoneLabel: invoice.milestoneLabel,
           orderNumber: invoice.orderNumber,
+          paymentScheduleId: invoice.paymentScheduleId,
+          scheduleRowId: invoice.scheduleRowId,
+          scheduledAmount: invoice.scheduledAmount,
+          triggeredAmount: invoice.triggeredAmount,
+          rolledInAmount: invoice.rolledInAmount,
+          paidAmount: invoice.paidAmount,
+          earlierMilestonesPaidAmount: invoice.earlierMilestonesPaidAmount,
+          priorMilestonePaidAmount: invoice.priorMilestonePaidAmount,
+          totalPaidAgainstOrder: invoice.totalPaidAgainstOrder,
+          orderGrossAmount: invoice.orderGrossAmount,
+          remainingOrderAmount: invoice.remainingOrderAmount,
+          milestoneBreakdown: invoice.milestoneBreakdown,
           grossAmount: invoice.grossAmount,
           advanceAdjustedAmount: invoice.advanceAdjustedAmount,
           payableAmount: invoice.payableAmount,
@@ -192,6 +211,11 @@ const RequestPaymentDialog = ({
               invoice.net_payable_after_advance != null,
           ),
           bankDetails: invoice.accountNumber || invoice.bankAccount || 'Beneficiary verified',
+          availableVendorAdvance: getAvailableVendorAdvance(invoice),
+          canAdjustFromVendorAdvance: canAdjustFromVendorAdvance(invoice),
+          grossPayableAmount: getGrossPayableAmount(invoice),
+          bankPaymentAmount: invoice.bankPaymentAmount ?? invoice.bank_payment_amount ?? requestedAmount,
+          adjustFromVendorAdvance: false,
         };
       }),
     );
@@ -200,9 +224,21 @@ const RequestPaymentDialog = ({
   const getPayableAmount = (row) =>
     Math.max(0, Number(row.amountDue || 0) - (row.holdGst ? Number(row.gstAmount || 0) : 0));
 
+  const getAdvancePreview = (row) =>
+    getVendorAdvanceAdjustmentPreview({
+      payable: row,
+      enabled: row.adjustFromVendorAdvance,
+      amount: null,
+      grossPayable: row.requestedAmount,
+    });
+
   const getPaymentAmount = (row) => Number(row.requestedAmount || 0);
 
+  const getPreviewPaymentAmount = (row) => getAdvancePreview(row).bankPaymentAmount;
+
   const totalRequested = rows.reduce((sum, row) => sum + Number(row.requestedAmount || 0), 0);
+  const totalBankPayment = rows.reduce((sum, row) => sum + getPreviewPaymentAmount(row), 0);
+  const totalAdvanceApplied = rows.reduce((sum, row) => sum + getAdvancePreview(row).advanceAppliedAmount, 0);
 
   const updateRow = (rowId, updater) => {
     setRows((prev) => prev.map((row) => (row.id === rowId ? updater(row) : row)));
@@ -248,6 +284,11 @@ const RequestPaymentDialog = ({
           holdGst: row.holdGst,
           gstAmount: row.holdGst ? Number(row.gstAmount || 0) : 0,
           paymentAmount: getPaymentAmount(row),
+          ...(getAdvancePreview(row).adjustFromVendorAdvance
+            ? {
+                adjustFromVendorAdvance: true,
+              }
+            : {}),
           ...(row.convertToInr
             ? { actualInrAmount: Number(row.requestedAmount || 0) }
             : {}),
@@ -259,44 +300,43 @@ const RequestPaymentDialog = ({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        className="max-h-[90vh] max-w-6xl overflow-y-auto"
+        className="flex max-h-[90vh] max-w-6xl flex-col overflow-hidden"
         onInteractOutside={preventDialogOutsideDismiss}
       >
-        <DialogHeader>
+        <DialogHeader className="shrink-0">
           <DialogTitle>Review & Confirm Payment Request</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-4">
-          <div className="overflow-hidden rounded-lg border">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+          <div className="min-w-0 overflow-hidden rounded-lg border">
             <AppDataTable
               tableHeader={[
-                { key: 'vendorName', title: 'Vendor' },
-                { key: 'source', title: 'Source' },
-                { key: 'invoiceNumber', title: 'Reference' },
-                { key: 'gstValidation', title: 'GST Validation' },
-                { key: 'holdGst', title: 'Hold GST' },
-                { key: 'gstAmount', title: 'Tax Amount', headerClassName: 'text-left', cellClassName: 'text-left' },
-                { key: 'amountDue', title: 'Net Payable', headerClassName: 'text-left', cellClassName: 'text-left font-medium' },
-                { key: 'requestedAmount', title: 'Requested Amount', headerClassName: 'text-left', cellClassName: 'text-left' },
-                { key: 'actions', title: '' },
+                { key: 'vendorName', title: 'Vendor', headerClassName: 'w-[140px] min-w-[140px] text-left' },
+                { key: 'source', title: 'Source', headerClassName: 'w-[120px] min-w-[120px] text-left' },
+                { key: 'invoiceNumber', title: 'Reference', headerClassName: 'w-[170px] min-w-[170px] text-left' },
+                { key: 'gstAmount', title: 'Tax Amount', headerClassName: 'w-[120px] min-w-[120px] text-left', cellClassName: 'text-left' },
+                { key: 'amountDue', title: 'Net Payable', headerClassName: 'w-[180px] min-w-[180px] text-left', cellClassName: 'text-left font-medium' },
+                { key: 'vendorAdvance', title: 'Vendor Advance', headerClassName: 'w-[170px] min-w-[170px] text-left', cellClassName: 'text-left' },
+                { key: 'requestedAmount', title: 'Requested Amount', headerClassName: 'w-[160px] min-w-[160px] text-left', cellClassName: 'text-left' },
+                { key: 'actions', title: 'Action', headerClassName: 'w-[72px] min-w-[72px] text-center' },
               ]}
               tableData={rows}
               rowKey="id"
-              tableClassName="min-w-[980px] table-fixed text-sm"
-              tableContainerClassName="overflow-x-auto"
+              tableClassName="min-w-[1160px] text-sm"
+              tableContainerClassName="max-w-full overflow-x-auto"
               emptyMessage="No invoices selected"
               renderRow={(row) => (
                 <TableRow key={row.id}>
-                  <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3 py-3 text-left font-medium">
+                  <TableCell className="w-[140px] min-w-[140px] overflow-hidden whitespace-nowrap px-3 py-3 text-left font-medium">
                     {clippedTableText(row.vendorName)}
                   </TableCell>
-                  <TableCell className="max-w-[180px] overflow-hidden px-3 py-3 text-left">
+                  <TableCell className="w-[120px] min-w-[120px] overflow-hidden px-3 py-3 text-left">
                     <div className="space-y-1">
                       <PayableSourceBadge sourceType={row.sourceType} isAdvance={row.isAdvance} />
                       <MilestoneStageChip stage={row.triggerStage} sharePct={row.sharePct} />
                     </div>
                   </TableCell>
-                  <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
+                  <TableCell className="w-[170px] min-w-[170px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
                     <div className="min-w-0 space-y-0.5">
                       {clippedTableText(row.invoiceNumber)}
                       {row.orderNumber ? (
@@ -306,38 +346,10 @@ const RequestPaymentDialog = ({
                       ) : null}
                     </div>
                   </TableCell>
-                  <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
-                    {isAdvanceStageRow(row) ? (
-                      <span className="text-muted-foreground">-</span>
-                    ) : (
-                      <span className="inline-flex items-center rounded-full border border-green-200 bg-green-50 px-2 py-1 text-xs font-medium text-green-800">
-                        Pass
-                      </span>
-                    )}
-                  </TableCell>
-                  <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
-                    {isInrRow(row) && !isAdvanceStageRow(row) ? (
-                      <Checkbox
-                        checked={row.holdGst}
-                        onCheckedChange={(checked) =>
-                          updateRow(row.id, (current) => ({
-                            ...current,
-                            holdGst: Boolean(checked),
-                            requestedAmount: getPayableAmount({
-                              ...current,
-                              holdGst: Boolean(checked),
-                            }),
-                          }))
-                        }
-                      />
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
+                  <TableCell className="w-[120px] min-w-[120px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
                     {clippedTableText(formatMoney(row.gstAmount, row.currency))}
                   </TableCell>
-                  <TableCell className="max-w-[180px] overflow-hidden px-3 py-3 text-left font-medium">
+                  <TableCell className="w-[180px] min-w-[180px] overflow-hidden px-3 py-3 text-left font-medium">
                     <div className="min-w-0 space-y-1 leading-tight">
                       <NetPayableBreakdown payable={row} />
                       {row.convertToInr && row.matchingInrValue > 0 ? (
@@ -347,20 +359,50 @@ const RequestPaymentDialog = ({
                       ) : null}
                     </div>
                   </TableCell>
-                  <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
+                  <TableCell className="w-[170px] min-w-[170px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
+                    {row.canAdjustFromVendorAdvance ? (
+                      <div className="space-y-2">
+                        <label className="flex items-center gap-2 text-xs font-medium">
+                          <Checkbox
+                            checked={row.adjustFromVendorAdvance}
+                            onCheckedChange={(checked) =>
+                              updateRow(row.id, (current) => ({
+                                ...current,
+                                adjustFromVendorAdvance: Boolean(checked),
+                              }))
+                            }
+                          />
+                          Adjust
+                        </label>
+                        <span className="block text-[11px] text-muted-foreground">
+                          Available {formatMoney(row.availableVendorAdvance, row.currency)}
+                        </span>
+                        {row.adjustFromVendorAdvance ? (
+                          <span className="block text-[11px] text-muted-foreground">
+                            Estimated apply up to {formatMoney(getAdvancePreview(row).advanceAppliedAmount, row.currency)}
+                          </span>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">No advance</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="w-[160px] min-w-[160px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
                     <span className="font-medium text-slate-900">
                       {formatMoney(row.requestedAmount, getPaymentCurrency(row))}
                     </span>
                   </TableCell>
-                  <TableCell className="max-w-[180px] overflow-hidden whitespace-nowrap px-3 py-3 text-left">
+                  <TableCell className="w-[72px] min-w-[72px] overflow-hidden whitespace-nowrap px-3 py-3 text-center">
                     {isInrRow(row) ? (
                       <Button
                         type="button"
                         variant="ghost"
-                        size="sm"
+                        size="icon"
                         onClick={() => setRows((prev) => prev.filter((item) => item.id !== row.id))}
+                        aria-label={`Remove ${row.invoiceNumber || 'payable row'}`}
+                        title="Remove"
                       >
-                        Remove
+                        <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     ) : (
                       <span className="text-muted-foreground">-</span>
@@ -371,8 +413,23 @@ const RequestPaymentDialog = ({
             />
           </div>
           <div className="flex items-center justify-end rounded-lg bg-muted px-4 py-3">
-            <span className="text-sm text-muted-foreground">Total Requested Amount:&nbsp;</span>
-            <strong>{formatMoney(totalRequested, resolvePayrunCurrency(rows))}</strong>
+            <div className="text-right text-sm">
+              <div>
+                <span className="text-muted-foreground">Total Requested Amount:&nbsp;</span>
+                <strong>{formatMoney(totalRequested, resolvePayrunCurrency(rows))}</strong>
+              </div>
+              {totalAdvanceApplied > 0 ? (
+                <>
+                  <div className="text-muted-foreground">
+                    Vendor Advance Applied: -{formatMoney(totalAdvanceApplied, resolvePayrunCurrency(rows))}
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Estimated Bank Payment Amount:&nbsp;</span>
+                    <strong>{formatMoney(totalBankPayment, resolvePayrunCurrency(rows))}</strong>
+                  </div>
+                </>
+              ) : null}
+            </div>
           </div>
           <div className="space-y-2">
             <Label>Remarks</Label>
@@ -387,7 +444,7 @@ const RequestPaymentDialog = ({
           </div>
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>

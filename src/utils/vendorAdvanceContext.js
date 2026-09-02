@@ -119,6 +119,18 @@ export const normalizeAdvanceContext = (source = {}) => {
         summary.refunded_advance_total,
       ),
     ),
+    poolOutstandingBalance: toNumberOrNull(
+      firstValue(
+        source.poolOutstandingBalance,
+        source.pool_outstanding_balance,
+        source.vendorAdvancePoolBalance,
+        source.vendor_advance_pool_balance,
+        summary.poolOutstandingBalance,
+        summary.pool_outstanding_balance,
+        summary.vendorAdvancePoolBalance,
+        summary.vendor_advance_pool_balance,
+      ),
+    ),
     manualAdvancesTotal: toNumberOrNull(
       firstValue(
         source.manualAdvancesTotal,

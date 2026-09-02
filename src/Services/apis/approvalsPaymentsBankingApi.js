@@ -55,6 +55,17 @@ const normalizePayablesListResponse = (response) => {
   };
 };
 
+const PAYMENT_FLOW_INVALIDATION_TAGS = [
+  "Payments",
+  "Batches",
+  "PaymentSchedules",
+  "OrderTracking",
+  "Invoices",
+  "Dashboard",
+  "Reports",
+  ...CREDIT_INVALIDATION_TAGS,
+];
+
 export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
   endpoints: (builder) => ({
     getPendingApprovals: builder.query({
@@ -161,7 +172,7 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Payments", "Invoices", "Dashboard", "Reports", ...CREDIT_INVALIDATION_TAGS],
+      invalidatesTags: PAYMENT_FLOW_INVALIDATION_TAGS,
     }),
     approvePayrun: builder.mutation({
       query: ({ payrunId, invoiceIds: _invoiceIds, ...body }) => ({
@@ -171,6 +182,9 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { invoiceIds = [] } = {}) => [
         "Payments",
+        "Batches",
+        "PaymentSchedules",
+        "OrderTracking",
         "Invoices",
         ...invoiceIds.map((id) => ({ type: "Invoices", id })),
         "Dashboard",
@@ -185,6 +199,9 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
       }),
       invalidatesTags: (_result, _error, { invoiceIds = [] } = {}) => [
         "Payments",
+        "Batches",
+        "PaymentSchedules",
+        "OrderTracking",
         "Invoices",
         ...invoiceIds.map((id) => ({ type: "Invoices", id })),
         "Dashboard",
@@ -197,7 +214,15 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Payments", "Invoices", "Dashboard", "Reports", ...CREDIT_INVALIDATION_TAGS],
+      invalidatesTags: PAYMENT_FLOW_INVALIDATION_TAGS,
+    }),
+    retryPayrun: builder.mutation({
+      query: ({ payrunId, ...body }) => ({
+        url: `/payruns/${payrunId}/retry`,
+        method: "POST",
+        body,
+      }),
+      invalidatesTags: PAYMENT_FLOW_INVALIDATION_TAGS,
     }),
     requestPayrunReleaseOtp: builder.mutation({
       query: ({ payrunId, ...body }) => ({
@@ -219,7 +244,7 @@ export const approvalsPaymentsBankingApi = serviceApi.injectEndpoints({
         method: "POST",
         body,
       }),
-      invalidatesTags: ["Payments", "Invoices", "Dashboard", "Reports", ...CREDIT_INVALIDATION_TAGS],
+      invalidatesTags: PAYMENT_FLOW_INVALIDATION_TAGS,
     }),
     getBankAccounts: builder.query({
       query: () => ({ url: "/bank-accounts", method: "GET" }),
@@ -258,6 +283,7 @@ export const {
   useApprovePayrunMutation,
   useRejectPayrunMutation,
   useCancelPayrunMutation,
+  useRetryPayrunMutation,
   useRequestPayrunReleaseOtpMutation,
   useResendPayrunReleaseOtpMutation,
   useReleasePayrunMutation,

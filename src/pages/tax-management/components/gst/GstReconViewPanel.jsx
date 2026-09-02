@@ -11,7 +11,7 @@ import GstReconNoInvoiceFoundFlow from './GstReconNoInvoiceFoundFlow';
 import GstReconOverrideDialog from './GstReconOverrideDialog';
 import { useGstReconDetail } from '../../hooks/useGstReconDetail';
 import { getApiErrorMessage } from '../../hooks/useGstTaxpayerSession';
-import { formatCurrency, formatDate } from '../../utils/taxFormatting';
+import { formatCurrency, formatDate, formatRetPeriod } from '../../utils/taxFormatting';
 import {
   useLazyGetInvoiceQuery,
   useLazyGetInvoiceHistoryQuery,
@@ -28,7 +28,7 @@ const PAIRING_METHOD_LABELS = {
 };
 
 const GST_SOURCE_LABELS = {
-  EFFECTIVE: 'Effective',
+  EFFECTIVE: 'Effective (2A + 2A)',
   SOURCE_2A: '2A',
   SOURCE_2B: '2B',
 };
@@ -110,6 +110,8 @@ const GstReconViewPanel = ({ row, source, onBack }) => {
   };
 
   const status = detail?.header?.status ?? row?.status;
+  const formattedPeriod = formatRetPeriod(period);
+  const selectedSourceLabel = formatGstSourceLabel(source);
   const pairingLabel = PAIRING_METHOD_LABELS[detail?.pairing?.method] ?? detail?.pairing?.method;
   const similarity = detail?.pairing?.similarity;
   const pairingStatus = detail?.pairing?.status;
@@ -157,10 +159,10 @@ const GstReconViewPanel = ({ row, source, onBack }) => {
           { label: 'Vendor', value: row?.vendorName },
           { label: 'Invoice Date', value: formatDate(row?.invoiceDate) },
           { label: 'Invoice Amount', value: formatCurrency(row?.invoiceAmount) },
-          { label: 'Period', value: period },
+          { label: 'Period', value: formattedPeriod },
           {
             label: 'Source',
-            value: <Badge variant="outline">{formatGstSourceLabel(detailSource)}</Badge>,
+            value: <Badge variant="outline">{selectedSourceLabel}</Badge>,
           },
           { label: 'Pairing', value: pairingValue },
         ]}
@@ -189,7 +191,7 @@ const GstReconViewPanel = ({ row, source, onBack }) => {
         </div>
       ) : status === 'NOT_IN_GST' ? (
         <TaxAlertBanner tone="red">
-          Not reported by the supplier in {detailSource} for {period} — ITC at risk.
+          Not reported by the supplier in {formatGstSourceLabel(detailSource)} for {formattedPeriod} — ITC at risk.
         </TaxAlertBanner>
       ) : status === 'NOT_RECONCILED' ? (
         <TaxEmptyState

@@ -50,6 +50,36 @@ const getObligationRowKey = (row = {}, rowIndex = 0) =>
 const normalizeAdvanceState = (value) =>
   String(value || "").trim().toUpperCase();
 
+const normalizeObligationStatus = (value) =>
+  String(value || "").trim().toUpperCase();
+
+const getDisplayAdvanceState = ({ advanceState, status, triggered, paid }) => {
+  const normalizedAdvanceState = normalizeAdvanceState(advanceState);
+  const normalizedStatus = normalizeObligationStatus(status);
+
+  if (
+    paid > 0 ||
+    normalizedStatus === "PAID" ||
+    normalizedAdvanceState === "ADVANCE_PAID"
+  ) {
+    return "ADVANCE_PAID";
+  }
+
+  if (
+    triggered > 0 ||
+    normalizedStatus === "TRIGGERED" ||
+    normalizedAdvanceState === "ADVANCE_DUE"
+  ) {
+    return "ADVANCE_DUE";
+  }
+
+  if (normalizedAdvanceState && ADVANCE_STATE_LABELS[normalizedAdvanceState]) {
+    return normalizedAdvanceState;
+  }
+
+  return normalizedStatus || "PENDING";
+};
+
 const getHistoryMessage = (entry = {}) =>
   entry.message ||
   entry.description ||
@@ -132,17 +162,17 @@ const OrderTrackingPaymentObligationsTable = ({
         0,
         (triggered > 0 ? triggered : scheduled) - availableAdvance - paid,
       );
-    const isTriggered =
-      triggered > 0 || String(row.status || "").toUpperCase() === "TRIGGERED";
-    const advanceState = normalizeAdvanceState(row.advanceState);
+    const displayState = getDisplayAdvanceState({
+      advanceState: row.advanceState,
+      status: row.status,
+      triggered,
+      paid,
+    });
+    const isTriggered = displayState === "ADVANCE_DUE" || displayState === "ADVANCE_PAID";
     const displayStatus =
-      advanceState && ADVANCE_STATE_LABELS[advanceState]
-        ? ADVANCE_STATE_LABELS[advanceState]
-        : isTriggered
-          ? row.status || "TRIGGERED"
-          : "PENDING";
+      ADVANCE_STATE_LABELS[displayState] || row.status || displayState || "PENDING";
     const statusClassName =
-      (advanceState && ADVANCE_STATE_COLORS[advanceState]) ||
+      ADVANCE_STATE_COLORS[displayState] ||
       OBLIGATION_STATUS_COLORS[row.status] ||
       "";
     const untriggeredReason =

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Eye } from 'lucide-react';
+import { Eye, RotateCcw, XCircle } from 'lucide-react';
 import { Button } from '../../../components/ui/button';
 import {
   Sheet,
@@ -44,6 +44,9 @@ const getInvoiceStatusLabel = (status = '') => {
   const value = String(status || 'ready').trim().toLowerCase();
   if (value === 'approved') return 'Approved';
   if (value === 'paid') return 'Paid';
+  if (value === 'completed') return 'Completed';
+  if (value === 'partially completed') return 'Partially Completed';
+  if (value === 'payment in process') return 'Payment In Process';
   if (value === 'failed') return 'Failed';
   if (value === 'pending') return 'Pending';
   if (value === 'ready') return 'Ready';
@@ -56,7 +59,9 @@ const getInvoiceStatusLabel = (status = '') => {
 
 const getInvoiceStatusClass = (status = '') => {
   const value = String(status || 'ready').trim().toLowerCase();
-  if (value === 'approved' || value === 'paid') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (value === 'approved' || value === 'paid' || value === 'completed') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+  if (value === 'partially completed') return 'bg-orange-50 text-orange-700 border-orange-200';
+  if (value === 'payment in process') return 'bg-sky-50 text-sky-700 border-sky-200';
   if (value === 'failed') return 'bg-red-50 text-red-700 border-red-200';
   if (value === 'pending') return 'bg-amber-50 text-amber-700 border-amber-200';
   return 'bg-slate-50 text-slate-700 border-slate-200';
@@ -81,12 +86,17 @@ const PayrunDetailsSheet = ({
   open,
   onOpenChange,
   onRelease,
+  onRetry,
+  onCancel,
   onViewInvoice,
   canReleasePayrun,
+  canCancelPayrun,
 }) => {
   if (!payrun) return null;
   const approvals = getPayrunApprovalRecords(payrun);
   const canShowReleaseAction = Boolean(payrun.allowedActions?.release) && canReleasePayrun;
+  const canShowRetryAction = Boolean(payrun.allowedActions?.retry) && canReleasePayrun;
+  const canShowCancelAction = Boolean(payrun.allowedActions?.cancel) && canCancelPayrun;
   const hasSourceAwareRows = payrun.invoices.some((invoice) => invoice.sourceType && invoice.sourceType !== 'INVOICE');
   const detailRows = [
     ['Created By', payrun.createdBy],
@@ -129,6 +139,9 @@ const PayrunDetailsSheet = ({
           <p className="mt-1 text-[13px] text-slate-500">
             {payrun.batchId} · {payrun.invoices.length} {hasSourceAwareRows ? 'payable' : 'invoice'}{payrun.invoices.length === 1 ? '' : 's'}
           </p>
+          {payrun.statusReason ? (
+            <p className="mt-1 text-[12px] text-slate-500">{payrun.statusReason}</p>
+          ) : null}
         </SheetHeader>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
@@ -137,6 +150,14 @@ const PayrunDetailsSheet = ({
               <p className="mb-0.5 text-xs text-slate-500">Amount</p>
               <p className="m-0 text-[22px] font-extrabold text-slate-900">{formatMoney(payrun.totalAmount, payrun.currency)}</p>
             </div>
+            {(payrun.completedItemCount > 0 || payrun.failedItemCount > 0) ? (
+              <div className="grid grid-cols-2 gap-2 text-right text-xs text-slate-600">
+                <span>Completed</span>
+                <strong className="text-emerald-700">{payrun.completedItemCount}</strong>
+                <span>Failed</span>
+                <strong className="text-red-700">{payrun.failedItemCount}</strong>
+              </div>
+            ) : null}
           </div>
 
           <PayrunAuditTimeline payrun={payrun} approvals={approvals} />
@@ -211,8 +232,8 @@ const PayrunDetailsSheet = ({
                     </span>
                     <span className="col-span-2 inline-flex items-center gap-2">
                       <span>Status:</span>
-                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${getInvoiceStatusClass(invoice.status)}`}>
-                        {getInvoiceStatusLabel(invoice.status)}
+                      <span className={`inline-flex rounded-full border px-2 py-0.5 text-[11px] font-medium ${getInvoiceStatusClass(invoice.paymentStatus || invoice.status)}`}>
+                        {getInvoiceStatusLabel(invoice.paymentStatus || invoice.status)}
                       </span>
                     </span>
                   </div>
@@ -224,6 +245,18 @@ const PayrunDetailsSheet = ({
 
         <SheetFooter className="shrink-0 border-t border-slate-200 px-6 pb-6 pt-4">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Close</Button>
+          {canShowCancelAction && (
+            <Button variant="outline" onClick={() => onCancel(payrun)}>
+              <XCircle className="mr-1 h-4 w-4" />
+              Cancel Payrun
+            </Button>
+          )}
+          {canShowRetryAction && (
+            <Button variant="outline" onClick={() => onRetry(payrun)}>
+              <RotateCcw className="mr-1 h-4 w-4" />
+              Retry Payrun
+            </Button>
+          )}
           {canShowReleaseAction && (
             <Button onClick={() => onRelease(payrun)}>Release Payment</Button>
           )}
