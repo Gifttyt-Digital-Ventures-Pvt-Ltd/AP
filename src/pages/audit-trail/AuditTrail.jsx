@@ -827,9 +827,15 @@ const AuditTrail = () => {
                     className={page === 0 ? "pointer-events-none opacity-50" : undefined}
                   />
                 </PaginationItem>
-                {Array.from({ length: Math.min(totalPages, 5) }).map((_, index) => {
-                  const pageNumber = totalPages <= 5 ? index : Math.min(Math.max(page - 2, 0) + index, totalPages - 1);
-                  return (
+                {(() => {
+                  const start = totalPages <= 5
+                    ? 0
+                    : Math.min(Math.max(page - 2, 0), totalPages - 5);
+                  const visiblePageNumbers = Array.from(
+                    { length: Math.min(totalPages, 5) },
+                    (_, index) => start + index,
+                  );
+                  return visiblePageNumbers.map((pageNumber) => (
                     <PaginationItem key={pageNumber}>
                       <PaginationLink
                         href="#"
@@ -842,8 +848,8 @@ const AuditTrail = () => {
                         {pageNumber + 1}
                       </PaginationLink>
                     </PaginationItem>
-                  );
-                })}
+                  ));
+                })()}
                 {totalPages > 5 && (
                   <PaginationItem>
                     <PaginationEllipsis />
