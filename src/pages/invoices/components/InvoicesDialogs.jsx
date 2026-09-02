@@ -13,6 +13,7 @@ import BulkExtractLoaderDialog from './BulkExtractLoaderDialog';
 import BulkPreviewDialog from './BulkPreviewDialog';
 import BulkEditDialog from './BulkEditDialog';
 import ViewDialog from './ViewDialog';
+import InvoiceViewFlagsSection from './flags/InvoiceViewFlagsSection';
 import EditDialog from './EditDialog';
 import RequestVendorDialog from './RequestVendorDialog';
 import CancelInvoiceDialog from './CancelInvoiceDialog';
@@ -67,6 +68,9 @@ const InvoicesDialogs = (props) => {
     invoiceHistory,
     loadingHistory,
     canEdit,
+    canResolveFlags,
+    onFixInFormNavigate,
+    onFlagResolutionsSynced,
     handleEditInvoice,
     canCancel,
     handleCancelInvoice,
@@ -110,6 +114,7 @@ const InvoicesDialogs = (props) => {
     setInvoiceCancelReason,
     confirmCancelInvoice,
     cancelInvoiceLoading,
+    invoiceFlagsOrgContext,
   } = props;
 
   return (
@@ -187,6 +192,21 @@ const InvoicesDialogs = (props) => {
         onMapTaxInvoice={onMapTaxInvoice}
         onViewLinkedInvoice={onViewLinkedInvoice}
         allInvoices={allInvoices}
+        flagsSlot={
+          <InvoiceViewFlagsSection
+            selectedInvoice={selectedInvoice}
+            viewDialogOpen={viewDialogOpen}
+            findVendorById={findVendorById}
+            findVendorByName={findVendorByName}
+            isCategoryFeatureEnabled={isCategoryFeatureEnabled}
+            isCampaignFeatureEnabled={isCampaignFeatureEnabled}
+            invoiceFlagsOrgContext={invoiceFlagsOrgContext}
+            canResolveInvoiceFlags={canResolveFlags(selectedInvoice)}
+            canEditSelectedInvoice={canEdit(selectedInvoice)}
+            onFixInFormNavigate={onFixInFormNavigate}
+            onFlagResolutionsSynced={onFlagResolutionsSynced}
+          />
+        }
         canCancelLinkedInvoice={canCancelLinkedInvoice}
         onCancelLinkedInvoice={onCancelLinkedInvoice}
       />

@@ -7,6 +7,7 @@ export const INVOICE_CONFIG_SECTIONS = {
   INVOICE_FUNDING: 'INVOICE_FUNDING',
   ALLOW_INVOICE_LINE_ITEM_REMOVAL: 'ALLOW_INVOICE_LINE_ITEM_REMOVAL',
   INTERNAL_CHECKLIST: 'INTERNAL_CHECKLIST',
+  CHECKLIST_FLAGS: 'CHECKLIST_FLAGS',
 };
 
 const INVOICE_LINE_ITEM_REMOVAL_SECTION_ALIASES = [
@@ -47,6 +48,11 @@ export const DEFAULT_INVOICE_CONFIGURATION = [
     displayName: 'Internal Checklist',
     screen: 'INVOICE',
     section: INVOICE_CONFIG_SECTIONS.INTERNAL_CHECKLIST,
+  },
+  {
+    displayName: 'Checklist Flags',
+    screen: 'INVOICE',
+    section: INVOICE_CONFIG_SECTIONS.CHECKLIST_FLAGS,
   },
 ];
 
@@ -137,6 +143,12 @@ export const isInvoiceLineItemRemovalEnabled = (activeInvoiceConfiguration = [])
 export const isInternalChecklistEnabled = (activeInvoiceConfiguration = []) =>
   isInvoiceConfigurationEnabled(
     INVOICE_CONFIG_SECTIONS.INTERNAL_CHECKLIST,
+    activeInvoiceConfiguration,
+  );
+
+export const isChecklistFlagsEnabled = (activeInvoiceConfiguration = []) =>
+  isInvoiceConfigurationEnabled(
+    INVOICE_CONFIG_SECTIONS.CHECKLIST_FLAGS,
     activeInvoiceConfiguration,
   );
 

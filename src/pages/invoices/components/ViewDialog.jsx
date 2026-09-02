@@ -209,6 +209,15 @@ const ViewDialog = ({
   // Optional — only used by GST Overview's "View" flow. Absent for every other ViewDialog
   // caller, so this section renders nothing and existing behavior is unchanged.
   gstReconDetail = null,
+  // Generic content slot, rendered exactly where the Invoice Flags strip
+  // used to be wired in directly. ViewDialog deliberately has zero
+  // knowledge of what this is — only InvoicesDialogs.jsx (maker) and
+  // Approvals.jsx (checker/approver) pass a value (InvoiceViewFlagsSection),
+  // so useInvoiceFlags/InvoiceFlagsStrip/InvoiceFlagsDialog and their
+  // dependency graph are never imported here, and never bundled into the
+  // other 6 ViewDialog callers (Payments, Accounting, Order Tracking, Tax
+  // Management, GST Recon, Campaigns) that never pass this prop.
+  flagsSlot = null,
 }) => {
   // Normalize the raw invoice into form-data shape so checklist fields
   // like `vendorMatched` are properly resolved (raw invoice only has `vendorId`).
@@ -230,6 +239,7 @@ const ViewDialog = ({
       findVendorById,
     ],
   );
+
   const [previewOpen, setPreviewOpen] = useState(true);
   const [fundingEditContext, setFundingEditContext] = useState(null);
   const invoiceIdForFundingHistory =
@@ -326,6 +336,8 @@ const ViewDialog = ({
                     objectId={selectedInvoice?.id}
                   />
                 )}
+
+                {flagsSlot}
 
                 <Tabs
                   value={viewTab}

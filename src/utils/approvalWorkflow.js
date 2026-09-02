@@ -64,6 +64,25 @@ const INVOICE_APPROVAL_ACTIONABLE_STATUSES = new Set([
 export const isInvoiceAwaitingApproval = (status) =>
   INVOICE_APPROVAL_ACTIONABLE_STATUSES.has(normalizeWorkflowStatus(status));
 
+/**
+ * Reviewer reopen-flags gate (Invoice Flags MD §7) — per-invoice, not
+ * per-user-role: the same reviewer can be a checker for one invoice and an
+ * approver for another. Mirrors Approvals.jsx's own
+ * handleApprovalAction/viewInvoiceCanAct pattern exactly: "Pending Checker"
+ * status requires invoices.check, any other awaiting-approval status
+ * requires invoices.approve. Not available at all once the invoice has left
+ * the awaiting-approval stage (approved/paid/rejected) — reopening a
+ * decision that's already final isn't part of this flow.
+ */
+export const canReopenInvoiceFlagsForInvoice = (
+  invoice,
+  { canCheckInvoices = false, canApproveInvoices = false } = {},
+) => {
+  if (!isInvoiceAwaitingApproval(invoice?.status)) return false;
+  const isCheckerStage = normalizeWorkflowStatus(invoice?.status) === "Pending Checker";
+  return isCheckerStage ? canCheckInvoices : canApproveInvoices;
+};
+
 export const isInvoicePaid = (status) => normalizeWorkflowStatus(status) === PAID_STATUS;
 
 export const normalizeHistoryActionType = (actionType) => {
@@ -370,6 +389,39 @@ export const getInvoiceEditBlockedMessage = (invoice, identity = {}) => {
   }
 
   return `Invoices in ${status || 'this'} status cannot be edited`;
+};
+
+/**
+ * Checklist Flags "Resolve" gate — deliberately NOT derived from
+ * canEditInvoice above: Resolve is allowed on Approved/Pending Payment
+ * (canEditInvoice is not), bypasses the Accounting Ready lock and
+ * checker-edit-config gate entirely, and excludes pure Approvers (who CAN
+ * edit under some canEditInvoice paths via canCheckInvoices overlap, but
+ * must not resolve per the confirmed backend contract). Fail-closed
+ * allowlist, not a blocklist: an unrecognised/future status is blocked by
+ * default rather than silently permitted.
+ */
+const FLAG_RESOLUTION_ALLOWED_STATUSES = new Set([
+  "SAVED",
+  "DRAFT",
+  "NEEDS_CORRECTION",
+  "PENDING_CHECKER",
+  "PENDING_APPROVAL",
+  "PENDING_APPROVER", // alias normalizeWorkflowStatus itself also recognises
+  "VENDOR_APPROVAL_PENDING",
+  "APPROVED",
+  "PENDING_PAYMENT",
+]);
+
+export const canResolveInvoiceFlag = (invoice, identity = {}) => {
+  const normalizedStatus = String(invoice?.status || "")
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "_");
+  if (!FLAG_RESOLUTION_ALLOWED_STATUSES.has(normalizedStatus)) return false;
+
+  const { canManageInvoices, canCheckInvoices, isCorporateAdmin, isMasterAdmin } = identity;
+  return Boolean(canManageInvoices || canCheckInvoices || isCorporateAdmin || isMasterAdmin);
 };
 
 export const canDeleteInvoice = (status, canDeleteInvoices) => {

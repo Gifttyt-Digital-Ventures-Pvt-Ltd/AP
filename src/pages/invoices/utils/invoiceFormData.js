@@ -338,5 +338,24 @@ export const buildInvoiceEditFormData = (
     internalChecklist: buildInternalChecklistState(
       invoice.internalChecklist ?? invoice.internal_checklist,
     ),
+    // Invoice Flags resolution log — must round-trip so a "must explain"
+    // reason survives a save and reaches the checker (Invoice_Flags_Business_Guide.md
+    // §2/§4), same principle as internalChecklist just above. This is the
+    // one missing link in an otherwise-complete round trip: the save side
+    // (buildInvoiceApiPayload, Services/utils/invoiceMappers.js) already
+    // sends flagResolutions, and the read side (normalizeInvoiceResponse,
+    // same file) already reads it back off the raw response — this
+    // function was the only place still dropping it before it reached
+    // formData.
+    flagResolutions: invoice.flagResolutions ?? invoice.flag_resolutions ?? {},
+    // AI-extraction baseline — same missing-link shape as flagResolutions
+    // just above: buildInvoiceApiPayload/normalizeInvoiceResponse
+    // (Services/utils/invoiceMappers.js) already send/read extractedSnapshot;
+    // this function was the only place still dropping it before it reached
+    // formData. null (not {}) means "no scan baseline," matching
+    // initializeInvoiceFormData's own convention (invoicePayloadBuilders.js)
+    // for a manual invoice — every flagRules/*.js consumer already treats
+    // null/undefined as "nothing to compare."
+    extractedSnapshot: invoice.extractedSnapshot ?? invoice.extracted_snapshot ?? null,
   };
 };
