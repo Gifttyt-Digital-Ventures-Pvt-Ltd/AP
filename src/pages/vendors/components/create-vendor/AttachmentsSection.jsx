@@ -33,7 +33,6 @@ const AttachmentsSection = ({
           onChange={onChange}
           disabled={disabled}
           visibleDocumentTypes={visibleDocumentTypes}
-          gridClassName="grid w-full grid-cols-1 gap-4 sm:grid-cols-2"
         />
       </div>
     ) : null}

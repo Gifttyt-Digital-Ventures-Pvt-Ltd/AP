@@ -179,8 +179,8 @@ export const buildVendorMultipartPayload = (vendor = {}, overrides = {}) => {
     new Blob([JSON.stringify(payload)], { type: 'application/json' }),
   );
 
-  getVendorDocumentFileEntries(vendor.documents).forEach(({ key, file }) => {
-    formData.append(`documents[${key}]`, file);
+  getVendorDocumentFileEntries(vendor.documents).forEach(({ index, file }) => {
+    formData.append(`documents[${index}].file`, file);
   });
 
   getVendorCertificateFileEntries(vendor.tdsCertificates).forEach(({ certificate, index }) => {

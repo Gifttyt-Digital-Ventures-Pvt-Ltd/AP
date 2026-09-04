@@ -17,7 +17,11 @@ const isImageDocument = (fileName = "", mimeType = "") =>
   [".png", ".jpg", ".jpeg", ".gif", ".webp"].some((ext) => fileName.toLowerCase().endsWith(ext));
 
 const VendorDocumentPreviewDialog = ({ open, onOpenChange, label, document }) => {
-  const fileUrl = document?.fileUrl ? resolveVendorDocumentUrl(document.fileUrl) : "";
+  // Prefer the human-facing downloadUrl; fall back to storageKey only if no downloadUrl is
+  // present (storageKey is an opaque backend reference, not guaranteed to be directly viewable,
+  // but it's the best available fallback when downloadUrl is missing).
+  const previewSource = document?.downloadUrl || document?.storageKey || "";
+  const fileUrl = previewSource ? resolveVendorDocumentUrl(previewSource) : "";
   const fileName = document?.fileName || "Document";
   const mimeType = document?.mimeType || "";
 
