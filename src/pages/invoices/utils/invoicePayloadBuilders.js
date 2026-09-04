@@ -7,6 +7,7 @@ import {
   calculateInvoiceTotals,
   createDefaultLineItem,
   DEFAULT_INR_TAX,
+  getTotalTaxAmountFromTotals,
   INVOICE_LEVEL,
   isInrInvoiceCurrency,
   LINE_ITEM_MODE_DETAILED,
@@ -421,6 +422,13 @@ export const initializeInvoiceFormData = (
     internalChecklist: buildInternalChecklistState(
       extractedData?.internalChecklist ?? extractedData?.internal_checklist,
     ),
+    // Invoice Flags resolution log, keyed by flag key — local-first (written
+    // directly via setFormData, no network round trip for a not-yet-created
+    // invoice). Seeded from a loaded invoice's own record on edit; unlike
+    // internalChecklist/extractedSnapshot this is NOT part of the
+    // create/update payload today (no backend endpoint exists yet — see
+    // docs/invoice-flags-api-contract.md).
+    flagResolutions: extractedData?.flagResolutions ?? extractedData?.flag_resolutions ?? {},
   };
 
   // Baseline of what OCR actually extracted, so the checklist can tell a
@@ -431,21 +439,109 @@ export const initializeInvoiceFormData = (
     ? {
         invoiceNumber: extractedData?.invoiceNumber || "",
         invoiceDate: extractedData?.invoiceDate || "",
+        // Same source as formData.documentType's own init below — DOCUMENT_TYPE_MISMATCH
+        // (organisationDocument.js) and DOCUMENT_TYPE_CHANGED_AFTER_EXTRACTION
+        // (extractionMismatch.js) both compare formData.documentType against this.
+        documentType: extractedData?.documentType || "",
         currency: extractedData?.currency
           ? normalizeCurrencyCode(extractedData.currency)
           : "",
         vendorName: extractedData?.vendorName || "",
+        // vendorId/vendorName here mean "who OCR/matching resolved this
+        // invoice to at extraction time" — the baseline §5.7's "Vendor
+        // Switched After Extraction" compares the current vendor selection
+        // against, distinct from gstin/gstTreatment which are raw scanned text.
+        vendorId: matchedVendor?.id || null,
+        // gstin is a merged org-then-vendor fallback kept for the checklist's
+        // single "Vendor GST" hint (matchesExtracted("gstin", ...) below) —
+        // billingGstin/vendorGstin are the raw, unmerged values §5.7 needs to
+        // tell "Organisation GSTIN Changed" apart from "Vendor GSTIN Changed."
         gstin: extractedGstin,
+        billingGstin:
+          extractedData?.billingGstin || extractedData?.billing_gstin || "",
+        vendorGstin: extractedData?.vendorGstin || "",
         gstTreatment: extractedData?.gstTreatment || "",
         sourceOfSupply: extractedSourceOfSupply,
         destinationOfSupply: extractedDestinationOfSupply,
+        // Deliberately NOT the same as formResult.billingAddress above —
+        // that one falls back to vendorAddress for a reasonable starting
+        // edit value; this snapshot must only reflect what the document
+        // itself actually said was the billing address, or Billing Address
+        // Differs From Document / Changed After Extraction would false-fire
+        // the moment the user edits away from a coincidentally-reused
+        // vendor address.
+        billingAddress: extractedData?.billingAddress || extractedData?.billing_address || "",
+        shippingAddress: extractedData?.shippingAddress || extractedData?.shipping_address || "",
         invoiceTax: extractedData?.invoiceTax || extractedData?.invoice_tax || "",
         invoiceTaxName:
           extractedData?.invoiceTaxName || extractedData?.invoice_tax_name || "",
         invoiceTaxRate:
           extractedData?.invoiceTaxRate ?? extractedData?.invoice_tax_rate ?? "",
+        // Durable amount baselines — same sources as scannedTotal/
+        // scannedTaxAmount above, but unlike those two, NEVER cleared by
+        // clearScannedTaxSummary() (InvoicesPage.jsx / useApprovalsInvoiceEdit.jsx
+        // / InvoiceSingleUploadLayer.jsx) on a line-item edit. scannedTotal/
+        // scannedTaxAmount exist purely to override the *displayed* total
+        // while an invoice is still untouched (see calculateInvoiceTotals in
+        // invoiceTax.js) and are deliberately wiped the moment the user
+        // starts hand-editing amounts — exactly the moment a "does this still
+        // match the document" comparison needs its baseline to survive.
+        // Form Total Differs From Document / Tax Changed After Extraction
+        // read these, not scannedTotal/scannedTaxAmount.
+        total:
+          extractedData?.totalAmount ??
+          extractedData?.total_amount ??
+          extractedData?.invoiceTotal ??
+          null,
+        taxAmount:
+          extractedData?.invoiceTaxAmount ??
+          extractedData?.totalTaxAmount ??
+          extractedData?.total_tax_amount ??
+          extractedData?.gstAmount ??
+          extractedData?.gst_amount ??
+          null,
+        // Per-field OCR confidence (0-100), when the extraction service
+        // provides it — it doesn't yet (see docs/invoice-flags-api-contract.md),
+        // so this is always {} today. Correcting an unconfident field should
+        // never raise a flag (§5.7 "When the AI wasn't sure").
+        fieldConfidence: extractedData?.fieldConfidence || extractedData?.field_confidence || {},
       }
     : null;
+
+  // Tax Total Does Not Reconcile's baseline — "what the line items say the
+  // tax should be, as of the last reconciliation checkpoint." Deliberately
+  // NOT part of extractedSnapshot: it needs to work for existing invoices
+  // being reloaded too (extractedSnapshot only exists for a freshly-scanned
+  // upload), and unlike extractedSnapshot it round-trips through save/reload
+  // (see invoiceMappers.js) so it stays meaningful for a checker reopening
+  // the invoice later. Prefer whatever was last persisted (an existing
+  // invoice's own record); only compute fresh from the as-loaded line items
+  // for a brand-new upload/manual invoice, which has nothing persisted yet.
+  // Refreshed again at every successful save — see buildToCreateInvoicePayload.
+  const persistedLastReconciledTaxTotal =
+    extractedData?.lastReconciledTaxTotal ?? extractedData?.last_reconciled_tax_total;
+  formResult.lastReconciledTaxTotal =
+    persistedLastReconciledTaxTotal !== undefined && persistedLastReconciledTaxTotal !== null
+      ? Number(persistedLastReconciledTaxTotal)
+      : formResult.lineItems.length > 0
+        ? Math.round(
+            getTotalTaxAmountFromTotals(calculateInvoiceTotals({
+              lineItems: formResult.lineItems,
+              currency: formResult.currency || DEFAULT_CURRENCY,
+              calculateLineItemSubtotal: (item) => resolveLineItemSubtotal(item),
+              taxRates: TAX_RATES,
+              invoiceTaxAmount: formResult.scannedTaxAmount,
+              invoiceTaxName: formResult.invoiceTaxName,
+              invoiceTaxRate: formResult.invoiceTaxRate,
+              invoiceTax: formResult.invoiceTax,
+              taxesLevel: formResult.taxesLevel,
+              discountsLevel: formResult.discountsLevel,
+              invoiceDiscount: formResult.invoiceDiscount,
+              invoiceDiscountType: formResult.invoiceDiscountType,
+              roundOff: formResult.roundOff,
+            })) * 100,
+          ) / 100
+        : null;
 
   return formResult;
 };
@@ -533,6 +629,17 @@ export const buildToCreateInvoicePayload = (
       lineItemsRemoved: isSummaryOnly ? invoiceData.lineItemsRemoved === true : false,
       subTotal: isSummaryOnly ? summarySubTotal : invoiceData.subTotal,
       totalTaxAmount: isSummaryOnly ? summaryTaxAmount : invoiceData.totalTaxAmount,
+      // Refresh Tax Total Does Not Reconcile's baseline at every successful
+      // save — submission was already blocked while it disagreed with
+      // totalTaxAmount (guardSubmit), so by the time we reach here the tax
+      // is known-consistent; this captures that as the new checkpoint.
+      // Summary-only mode has no line items to reconcile against, so its
+      // baseline just passes through unchanged.
+      lastReconciledTaxTotal: isSummaryOnly
+        ? invoiceData.lastReconciledTaxTotal ?? null
+        : totals
+          ? Math.round(getTotalTaxAmountFromTotals(totals) * 100) / 100
+          : invoiceData.lastReconciledTaxTotal ?? null,
       vendorId: invoiceData.vendorId || findVendorByName(invoiceData.vendorName)?.id || "",
       status: invoiceData.status ?? options.status,
       departmentName:
